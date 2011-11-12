@@ -2,7 +2,7 @@ from rdb import conn
 from pickle import loads, dumps
 
 def queue_daemon(app, queue_keys, rv_ttl=500):
-    """Naive implementation of a Redis queue worker, based on
+    """Simple implementation of a Redis queue worker, based on
     http://flask.pocoo.org/snippets/73/
 
     Will listen endlessly on the given queue keys.
