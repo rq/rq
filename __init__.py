@@ -15,4 +15,7 @@ def queue_daemon(app, queue_keys, rv_ttl=500):
         except Exception, e:
             rv = e
         if rv is not None:
-            conn.setex(key, rv_ttl, dumps(rv))
+            p = conn.pipeline()
+            conn.set(key, dumps(rv))
+            conn.expire(key, rv_ttl)
+            p.execute()
