@@ -44,9 +44,9 @@ class Worker(object):
         while True:
             self.procline('Waiting on %s' % (', '.join(self.queue_names),))
             queue, msg = conn.blpop(self.queue_keys)
-            self.fork_and_perform_task(queue, msg)
+            self.fork_and_perform_job(queue, msg)
 
-    def fork_and_perform_task(self, queue, msg):
+    def fork_and_perform_job(self, queue, msg):
         child_pid = os.fork()
         if child_pid == 0:
             random.seed()
@@ -54,7 +54,7 @@ class Worker(object):
             try:
                 self.procline('Processing work since %d' % (time.time(),))
                 self._working = True
-                self.perform_task(queue, msg)
+                self.perform_job(queue, msg)
             except Exception, e:
                 self.log.exception(e)
                 sys.exit(1)
@@ -64,7 +64,7 @@ class Worker(object):
             os.waitpid(child_pid, 0)
             self._working = False
 
-    def perform_task(self, queue, msg):
+    def perform_job(self, queue, msg):
         func, key, args, kwargs = loads(msg)
         self.procline('Processing %s from %s since %s' % (func.__name__, queue, time.time()))
         try:

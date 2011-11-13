@@ -20,7 +20,7 @@ class DelayedResult(object):
         return self._rv
 
 
-class task(object):
+class job(object):
     def __init__(self, queue='normal'):
         self.queue = queue
 
