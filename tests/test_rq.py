@@ -1,24 +1,42 @@
 import unittest
 from blinker import signal
 from redis import Redis
-
-testconn = Redis()
+import rq
+from rq import Queue
 
 class RQTestCase(unittest.TestCase):
     def setUp(self):
         super(RQTestCase, self).setUp()
-        testconn.flushdb()
+
+        rq.push_connection(Redis())
+        self.conn = rq.current_connection()
+
+        self.conn.flushdb()
         signal('setup').send(self)
 
     def tearDown(self):
         signal('teardown').send(self)
-        testconn.flushdb()
+
+        self.conn.flushdb()
+        conn = rq.pop_connection()
+        assert conn == self.conn
+
         super(RQTestCase, self).tearDown()
 
 
-class TestRQ(RQTestCase):
-    def test_math(self):
-        assert 1 + 2 == 3
+class TestQueue(RQTestCase):
+    def test_create_queue(self):
+        """Creating queues."""
+        q = Queue('my-queue')
+        self.assertEquals(q.name, 'my-queue')
+
+    def test_queue_empty(self):
+        """Detecting empty queues."""
+        q = Queue('my-queue')
+        self.assertEquals(q.empty, True)
+
+        self.conn.rpush('rq:my-queue', 'some val')
+        self.assertEquals(q.empty, False)
 
 
 if __name__ == '__main__':
