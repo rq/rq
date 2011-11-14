@@ -8,16 +8,6 @@ queue provider.
 
 # Putting jobs on queues
 
-Some terminology before we get started:
-
-* *Queues* are queues, in the computer science way.  Technically, they are
-  Redis lists where work is `rpush`'ed on and `lpop`'ed from.
-* *Jobs* are a definitions of work that can be carried out by a different
-  processes.  Technically, they are just plain old Python function calls, with
-  arguments and return values and the like.
-* *Workers* are processes that pop off work from queues and start
-  executing them.  They report back return values or exceptions.
-
 To put work on queues, tag a Python function call as a job, like so:
 
     @job('default')
