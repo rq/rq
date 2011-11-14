@@ -1,7 +1,9 @@
 from redis import Redis
-from rq import push_connection
+from rq import conn
 from rq.daemon import run_daemon
 
-push_connection(Redis())
+# Tell rq what Redis connection to use
+conn.push(Redis())
 
-run_daemon(['default'])
+listen_on_queues = ['default']
+run_daemon(listen_on_queues)
