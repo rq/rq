@@ -73,6 +73,12 @@ class Worker(object):
             rv = func(*args, **kwargs)
         except Exception, e:
             rv = e
+            self.log.exception(e)
+        else:
+            if rv is not None:
+                self.log.info('Job result = %s' % (rv,))
+            else:
+                self.log.info('Job ended normally without result')
         if rv is not None:
             p = conn.pipeline()
             conn.set(key, dumps(rv))
