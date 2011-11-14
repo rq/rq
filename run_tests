@@ -1,0 +1,12 @@
+#!/bin/sh
+check_redis_running() {
+    redis-cli echo "just checking" > /dev/null
+    return $?
+}
+
+if check_redis_running; then
+    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_'
+else
+    echo "Redis not running." >&2
+    return 2
+fi
