@@ -1,4 +1,7 @@
-from logbook import Logger
+try:
+    from logbook import Logger
+except ImportError:
+    from logging import Logger
 from .worker import Worker
 
 def run_daemon(queue_keys, rv_ttl=500):

@@ -3,7 +3,10 @@ import os
 import random
 import time
 import procname
-from logbook import Logger
+try:
+    from logbook import Logger
+except ImportError:
+    from logging import Logger
 from pickle import loads, dumps
 from .queue import Queue
 from .proxy import conn
