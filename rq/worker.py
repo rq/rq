@@ -5,8 +5,8 @@ import time
 import procname
 from logbook import Logger
 from pickle import loads, dumps
-from rdb import conn
 from .queue import Queue
+from .conn import current_connection
 
 class NoQueueError(Exception): pass
 
@@ -45,7 +45,7 @@ class Worker(object):
     def work(self):
         while True:
             self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
-            queue, msg = conn.blpop(self.queue_keys())
+            queue, msg = current_connection().blpop(self.queue_keys())
             self.fork_and_perform_job(queue, msg)
 
     def fork_and_perform_job(self, queue, msg):
@@ -80,7 +80,7 @@ class Worker(object):
             else:
                 self.log.info('Job ended normally without result')
         if rv is not None:
-            p = conn.pipeline()
-            conn.set(key, dumps(rv))
-            conn.expire(key, self.rv_ttl)
+            p = current_connection().pipeline()
+            p.set(key, dumps(rv))
+            p.expire(key, self.rv_ttl)
             p.execute()

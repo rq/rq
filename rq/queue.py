@@ -1,3 +1,5 @@
+from . import current_connection
+
 def to_queue_key(queue_name):
     return 'rq:%s' % (queue_name,)
 
@@ -12,6 +14,10 @@ class Queue(object):
     @property
     def key(self):
         return self._key
+
+    @property
+    def empty(self):
+        return current_connection().llen(self.key) == 0
 
     def __str__(self):
         return self.name

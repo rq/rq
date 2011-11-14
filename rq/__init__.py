@@ -1,6 +1,7 @@
 import uuid
 from pickle import loads, dumps
-from rdb import conn
+from .conn import current_connection, push_connection, pop_connection
+from .queue import Queue
 
 def to_queue_key(queue_name):
     return 'rq:%s' % (queue_name,)
@@ -13,7 +14,7 @@ class DelayedResult(object):
     @property
     def return_value(self):
         if self._rv is None:
-            rv = conn.get(self.key)
+            rv = current_connection().get(self.key)
             if rv is not None:
                 # cache the result
                 self._rv = loads(rv)
@@ -31,10 +32,8 @@ class job(object):
             if f.__module__ == '__main__':
                 raise ValueError('Functions from the __main__ module cannot be processed by workers.')
             s = dumps((f, key, args, kwargs))
-            conn.rpush(queue_key, s)
+            current_connection().rpush(queue_key, s)
             return DelayedResult(key)
         f.delay = delay
         return f
-
-
 
