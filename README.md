@@ -2,13 +2,12 @@
 
 # rq — Simple job queues for Python
 
-**rq** is an attempt at a lightweight Python job queue, using Redis as the
-queue provider.
+**rq** is a lightweight Python job queue, based on Redis.
 
 
 # Putting jobs on queues
 
-To put work on queues, tag a Python function call as a job, like so:
+To put jobs on queues, first declare a Python function call as a job, like so:
 
     @job('default')
     def slow_fib(n):
@@ -23,9 +22,8 @@ You can still call the function synchronously:
     slow_fib(4)
 
 You can find an example implementation in the `examples/` directory.  To run
-it, open three terminal windows and run the following commands in them:
+it, open two terminal windows and run the following commands in them:
 
-1. `python example/run_worker.py`
 1. `python example/run_worker.py`
 1. `python example/run_example.py`
 
