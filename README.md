@@ -11,7 +11,7 @@ queue provider.
 Some terminology before we get started:
 
 * *Queues* are queues, in the computer science way.  Technically, they are
-  Redis lists where work is `lpush`'ed on and `rpop`'ed from.
+  Redis lists where work is `rpush`'ed on and `lpop`'ed from.
 * *Jobs* are a definitions of work that can be carried out by a different
   process.  Technically, they are just plain old Python function calls, with
   arguments and return values and the like.
