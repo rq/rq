@@ -6,25 +6,27 @@ import procname
 from logbook import Logger
 from pickle import loads, dumps
 from rdb import conn
-from . import to_queue_key
+from .queue import Queue
 
 class NoQueueError(Exception): pass
 
 class Worker(object):
     def __init__(self, queue_names, rv_ttl=500):
-        self.queue_names = queue_names
+        self.queues = map(Queue, queue_names)
         self.rv_ttl = rv_ttl
         self._working = False
         self.log = Logger('worker')
         self.validate_queues()
 
     def validate_queues(self):
-        if not self.queue_names:
+        if not self.queues:
             raise NoQueueError('Give each worker at least one queue.')
 
-    @property
+    def queue_names(self):
+        return map(lambda q: q.name, self.queues)
+
     def queue_keys(self):
-        return map(to_queue_key, self.queue_names)
+        return map(lambda q: q.key, self.queues)
 
     def is_idle(self):
         return not self.is_working()
@@ -42,8 +44,8 @@ class Worker(object):
 
     def work(self):
         while True:
-            self.procline('Waiting on %s' % (', '.join(self.queue_names),))
-            queue, msg = conn.blpop(self.queue_keys)
+            self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
+            queue, msg = conn.blpop(self.queue_keys())
             self.fork_and_perform_job(queue, msg)
 
     def fork_and_perform_job(self, queue, msg):
