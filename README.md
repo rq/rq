@@ -31,7 +31,7 @@ This starts two workers and starts crunching the fibonacci calculations in the
 background, while the script shows the crunched data updates every second.
 
 
-### Installation
+# Installation
 
 Simply use the following command to install the latest released version:
 
