@@ -1,4 +1,4 @@
-from . import current_connection
+from .proxy import conn
 
 def to_queue_key(queue_name):
     return 'rq:%s' % (queue_name,)
@@ -17,7 +17,7 @@ class Queue(object):
 
     @property
     def empty(self):
-        return current_connection().llen(self.key) == 0
+        return conn.llen(self.key) == 0
 
     def __str__(self):
         return self.name
