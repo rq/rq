@@ -4,7 +4,7 @@ except ImportError:
     from logging import Logger
 from .worker import Worker
 
-def run_daemon(queue_keys, rv_ttl=500):
+def run_daemon(queue_keys, rv_ttl=500, quit_when_done=False):
     """Simple implementation of a Redis queue worker, based on
     http://flask.pocoo.org/snippets/73/
 
@@ -17,4 +17,4 @@ def run_daemon(queue_keys, rv_ttl=500):
     for key in queue_keys:
         log.info('- %s' % (key,))
 
-    worker.work()
+    worker.work(quit_when_done)

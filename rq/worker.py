@@ -45,10 +45,16 @@ class Worker(object):
         self.log.debug(message)
         procname.setprocname('rq: %s' % (message,))
 
-    def work(self):
+    def work(self, quit_when_done=False):
         while True:
             self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
-            queue, msg = conn.blpop(self.queue_keys())
+            if quit_when_done:
+                value = conn.lpop(self.queue_keys())
+                if value is None:
+                    break  # No more work, so quitting
+                queue, msg = value
+            else:
+                queue, msg = conn.blpop(self.queue_keys())
             self.fork_and_perform_job(queue, msg)
 
     def fork_and_perform_job(self, queue, msg):
