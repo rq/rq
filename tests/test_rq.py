@@ -70,7 +70,8 @@ class TestQueue(RQTestCase):
         conn.rpush('rq:my-queue', 'some val')
         self.assertEquals(q.empty, False)
 
-    def test_put_work_on_queue(self):
+
+    def test_enqueue(self):
         """Putting work on queues using delay."""
         q = Queue('my-queue')
         self.assertEquals(q.empty, True)
@@ -80,7 +81,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 
-    def test_put_work_on_different_queue(self):
+    def test_enqueue_to_different_queue(self):
         """Putting work on alternative queues using enqueue."""
 
         # Override testjob spec holds which queue
@@ -90,7 +91,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 
-    def test_put_work_on_different_queue_reverse(self):
+    def test_enqueue_to_different_queue_reverse(self):
         """Putting work on specific queues using the Queue object."""
 
         q = Queue('alt-queue')
@@ -98,6 +99,7 @@ class TestQueue(RQTestCase):
         q.enqueue(testjob)
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
+
 
     def test_dequeue(self):
         """Fetching work from specific queue."""
@@ -108,6 +110,7 @@ class TestQueue(RQTestCase):
         f, rv_key, args, kwargs = q.dequeue()
         self.assertEquals(f, testjob)
         self.assertEquals(args[0], 'Rick')
+
 
 class TestJob(RQTestCase):
     def test_job_methods(self):
