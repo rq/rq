@@ -1,3 +1,4 @@
+from pickle import loads
 from .proxy import conn
 
 def to_queue_key(queue_name):
@@ -29,6 +30,10 @@ class Queue(object):
 
     def enqueue(self, job):
         return job.enqueue(self)
+
+    def dequeue(self):
+        s = conn.lpop(self.key)
+        return loads(s)
 
     def __str__(self):
         return self.name

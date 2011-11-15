@@ -99,6 +99,15 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 
+    def test_dequeue(self):
+        """Fetching work from specific queue."""
+        q = Queue('foo')
+        testjob.enqueue(q, 'Rick')
+
+        # Pull it off the queue (normally, a worker would do this)
+        f, rv_key, args, kwargs = q.dequeue()
+        self.assertEquals(f, testjob)
+        self.assertEquals(args[0], 'Rick')
 
 class TestJob(RQTestCase):
     def test_job_methods(self):

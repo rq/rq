@@ -48,4 +48,3 @@ class job(object):
             return f.enqueue(self.queue, *args, **kwargs)
         f.delay = delay
         return f
-
