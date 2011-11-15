@@ -24,13 +24,19 @@ class job(object):
         self.queue = Queue(queue_name)
 
     def __call__(self, f):
-        def delay(*args, **kwargs):
-            rv_key = '%s:result:%s' % (self.queue.key, str(uuid.uuid4()))
+        def enqueue(queue, *args, **kwargs):
+            if not isinstance(queue, Queue):
+                raise ValueError('Argument queue must be a Queue.')
+            rv_key = '%s:result:%s' % (queue.key, str(uuid.uuid4()))
             if f.__module__ == '__main__':
                 raise ValueError('Functions from the __main__ module cannot be processed by workers.')
             s = dumps((f, rv_key, args, kwargs))
-            conn.rpush(self.queue.key, s)
+            conn.rpush(queue.key, s)
             return DelayedResult(rv_key)
+        f.enqueue = enqueue
+
+        def delay(*args, **kwargs):
+            return f.enqueue(self.queue, *args, **kwargs)
         f.delay = delay
         return f
 

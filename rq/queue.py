@@ -17,11 +17,18 @@ class Queue(object):
 
     @property
     def empty(self):
-        return conn.llen(self.key) == 0
+        return self.count == 0
 
     @property
     def messages(self):
         return conn.lrange(self.key, 0, -1)
+
+    @property
+    def count(self):
+        return conn.llen(self.key)
+
+    def enqueue(self, job):
+        return job.enqueue(self)
 
     def __str__(self):
         return self.name

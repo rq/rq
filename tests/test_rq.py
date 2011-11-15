@@ -5,8 +5,10 @@ from redis import Redis
 from rq import conn, Queue, job
 
 @job('my-queue')
-def testjob():
-    return 'hi there'
+def testjob(name=None):
+    if name is None:
+        name = 'Stranger'
+    return 'Hi there, %s!' % (name,)
 
 
 class RQTestCase(unittest.TestCase):
@@ -62,11 +64,31 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.empty, False)
 
     def test_put_work_on_queue(self):
-        """Putting work on queues."""
+        """Putting work on queues using delay."""
         q = Queue('my-queue')
         self.assertEquals(q.empty, True)
 
+        # testjob spec holds which queue this is sent to
         testjob.delay()
+        self.assertEquals(q.empty, False)
+        self.assertQueueContains(q, testjob)
+
+    def test_put_work_on_different_queue(self):
+        """Putting work on alternative queues using enqueue."""
+
+        # Override testjob spec holds which queue
+        q = Queue('different-queue')
+        self.assertEquals(q.empty, True)
+        testjob.enqueue(q)
+        self.assertEquals(q.empty, False)
+        self.assertQueueContains(q, testjob)
+
+    def test_put_work_on_different_queue_reverse(self):
+        """Putting work on specific queues using the Queue object."""
+
+        q = Queue('alt-queue')
+        self.assertEquals(q.empty, True)
+        q.enqueue(testjob)
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 
