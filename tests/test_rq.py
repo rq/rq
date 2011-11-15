@@ -87,7 +87,7 @@ class TestQueue(RQTestCase):
         # Override testjob spec holds which queue
         q = Queue('different-queue')
         self.assertEquals(q.empty, True)
-        testjob.enqueue(q)
+        testjob.enqueue(q, 'Nick')
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 
