@@ -39,6 +39,41 @@ own desire.  Common patterns are to name your queues after priorities (e.g.
 `high`, `medium`, `low`).
 
 
+# The worker
+
+**NOTE: You currently need to create the worker yourself, which is extremely
+easy, but RQ will create a custom script soon that can be used to start
+arbitrary workers without writing any code.**
+
+Creating a worker daemon is also extremely easy.  Create a file `worker.py`
+with the following content:
+
+    from rq import Queue, Worker
+
+    q = Queue()
+    Worker(q).work_forever()
+
+After that, start a worker instance:
+
+    python worker.py
+
+This will wait for work on the default queue and start processing it as soon as
+messages arrive.
+
+You can even watch several queues at the same time and start processing from
+them:
+
+    from rq import Queue, Worker
+
+    queues = map(Queue, ['high', 'normal', 'low'])
+    Worker(queues).work()
+
+Which will keep working as long as there is work on any of the three queues,
+giving precedence to the `high` queue on each cycle, and will quit when there
+is no more work (contrast this to the previous worker example, which will wait
+for new work when called with `Worker.work_forever()`.
+
+
 # Installation
 
 Simply use the following command to install the latest released version:
