@@ -157,7 +157,7 @@ class TestJob(RQTestCase):
 
         q = Queue('alt-queue')
         self.assertEquals(q.empty, True)
-        q.enqueue(testjob)
+        q.enqueue(testjob, 'Simon')
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 

@@ -28,8 +28,8 @@ class Queue(object):
     def count(self):
         return conn.llen(self.key)
 
-    def enqueue(self, job):
-        return job.enqueue(self)
+    def enqueue(self, job, *args, **kwargs):
+        return job.enqueue(self, *args, **kwargs)
 
     def dequeue(self):
         s = conn.lpop(self.key)
