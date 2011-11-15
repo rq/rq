@@ -19,5 +19,9 @@ class Queue(object):
     def empty(self):
         return conn.llen(self.key) == 0
 
+    @property
+    def messages(self):
+        return conn.lrange(self.key, 0, -1)
+
     def __str__(self):
         return self.name
