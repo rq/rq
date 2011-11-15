@@ -1,18 +1,9 @@
 # WARNING: DON'T USE THIS IN PRODUCTION (yet)
 
-# RQ — Simple job queues for Python
+# RQ: Simple job queues for Python
 
 **RQ** is a lightweight Python library for queueing work and processing them in
 workers.  It is backed by Redis.
-
-This project is inspired by the good parts of [Celery][1], [Resque][2] and
-[this snippet][3], and has been created as a lightweight alternative to the
-heaviness of Celery.
-
-[1]: http://www.celeryproject.org/
-[2]: https://github.com/defunkt/resque
-[3]: http://flask.pocoo.org/snippets/73/
-
 
 # Putting jobs on queues
 
@@ -77,10 +68,10 @@ them:
     queues = map(Queue, ['high', 'normal', 'low'])
     Worker(queues).work()
 
-Which will keep working as long as there is work on any of the three queues,
-giving precedence to the `high` queue on each cycle, and will quit when there
-is no more work (contrast this to the previous worker example, which will wait
-for new work when called with `Worker.work_forever()`.
+Which will keep popping jobs from the given queues, giving precedence to the
+`high` queue, then `normal`, etc.  It will return when there are no more jobs
+left (contrast this to the previous example using `Worker.work_forever()`,
+which will never return since it keeps waiting for new work to arrive).
 
 
 # Installation
@@ -93,3 +84,24 @@ If you want the cutting edge version (that may well be broken), use this:
 
     pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
 
+
+# Project History
+
+This project has been inspired by the good parts of [Celery][1], [Resque][2]
+and [this snippet][3], and has been created as a lightweight alternative to the
+heaviness of Celery or other AMQP-based queueing implementations.
+
+[1]: http://www.celeryproject.org/
+[2]: https://github.com/defunkt/resque
+[3]: http://flask.pocoo.org/snippets/73/
+
+Project values:
+
+* Simplicity over completeness
+* Fail-safety over performance
+* Runtime insight over static configuration upfront
+
+This means that, to use RQ, you don't have to set up any queues up front, and
+you don't have to specify any channels, exchanges, or whatnot.  You can put
+jobs onto any queue you want, at runtime.  As soon as you enqueue a job, it is
+created on the fly.
