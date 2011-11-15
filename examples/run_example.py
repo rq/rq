@@ -1,23 +1,29 @@
 import os
 import time
-from rq import conn
-from redis import Redis
+from rq import Queue
 from fib import slow_fib
 
-# Tell rq what Redis connection to use
+# Tell RQ what Redis connection to use
+from redis import Redis
+from rq import conn
 conn.push(Redis())
+
+# Range of Fibonacci numbers to compute
+fib_range = range(20, 34)
 
 # Kick off the tasks asynchronously
 async_results = {}
-for x in range(20, 30):
-    async_results[x] = slow_fib.delay(x)
+q = Queue()
+for x in fib_range:
+    async_results[x] = q.enqueue(slow_fib, x)
 
+start_time = time.time()
 done = False
 while not done:
     os.system('clear')
-    print 'Asynchronously: (now = %s)' % time.time()
+    print 'Asynchronously: (now = %.2f)' % (time.time() - start_time)
     done = True
-    for x in range(20, 30):
+    for x in fib_range:
         result = async_results[x].return_value
         if result is None:
             done = False
@@ -26,6 +32,6 @@ while not done:
     print ''
     print 'To start the actual in the background, run a worker:'
     print '    python examples/run_worker.py'
-    time.sleep(1)
+    time.sleep(0.2)
 
 print 'Done'

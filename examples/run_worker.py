@@ -1,9 +1,10 @@
-from redis import Redis
-from rq import conn
-from rq.daemon import run_daemon
+from rq import Queue, Worker
 
 # Tell rq what Redis connection to use
+from redis import Redis
+from rq import conn
 conn.push(Redis())
 
-listen_on_queues = ['default']
-run_daemon(listen_on_queues)
+if __name__ == '__main__':
+    q = Queue()
+    Worker(q).work_forever()

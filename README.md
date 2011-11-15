@@ -7,28 +7,36 @@
 
 # Putting jobs on queues
 
-To put jobs on queues, first declare a Python function call as a job, like so:
+To put jobs on queues, first declare a Python function to be called on
+a background process:
 
-    @job('default')
     def slow_fib(n):
         if n <= 1:
             return 1
         else:
             return slow_fib(n-1) + slow_fib(n-2)
 
-You can still call the function synchronously:
+Notice anything?  There's nothing special about a job!  Any Python function can
+be put on an RQ queue, as long as the function is in a module that is
+accessible from the worker process.
 
+To calculate the 36th Fibonacci number in the background, simply do this:
+
+    from rq import Queue
     from fib import slow_fib
-    slow_fib(4)
+    
+    # Calculate the 36th Fibonacci number in the background
+    q = Queue()
+    q.enqueue(slow_fib, 36)
 
-You can find an example implementation in the `examples/` directory.  To run
-it, open two terminal windows and run the following commands in them:
+If you want to put the work on a specific queue, simply specify its name:
 
-1. `python example/run_worker.py`
-1. `python example/run_example.py`
+    q = Queue('math')
+    q.enqueue(slow_fib, 36)
 
-This starts two workers and starts crunching the fibonacci calculations in the
-background, while the script shows the crunched data updates every second.
+You can use any queue name, so you can quite flexibly distribute work to your
+own desire.  Common patterns are to name your queues after priorities (e.g.
+`high`, `medium`, `low`).
 
 
 # Installation

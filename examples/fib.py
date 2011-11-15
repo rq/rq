@@ -1,6 +1,3 @@
-from rq import job
-
-@job('default')
 def slow_fib(n):
     if n <= 1:
         return 1
