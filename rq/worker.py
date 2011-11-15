@@ -54,7 +54,7 @@ class Worker(object):
         for queue in queues:
             value = conn.lpop(queue)
             if value is not None:
-                return value
+                return (queue, value)
         return None
 
     def pop_next_job(self, blocking):
@@ -65,7 +65,7 @@ class Worker(object):
             value = self.multi_lpop(queues)
             if value is None:
                 raise NoMoreWorkError('No more work.')
-            queue, msg = queue, value
+            queue, msg = value
         return (queue, msg)
 
     def work(self, quit_when_done=False):
