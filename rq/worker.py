@@ -80,17 +80,20 @@ class Worker(object):
         return (queue, msg)
 
     def _work(self, quit_when_done=False):
+        did_work = False
         while True:
             self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
             try:
                 wait_for_job = not quit_when_done
                 queue, msg = self.pop_next_job(wait_for_job)
+                did_work = True
             except NoMoreWorkError:
                 break
             self.fork_and_perform_job(queue, msg)
+        return did_work
 
     def work_forever(self):
-        return self._work(False)
+        self._work(False)
 
     def work(self):
         return self._work(True)
