@@ -18,7 +18,7 @@ a background process:
 
 Notice anything?  There's nothing special about a job!  Any Python function can
 be put on an RQ queue, as long as the function is in a module that is
-accessible from the worker process.
+importable from the worker process.
 
 To calculate the 36th Fibonacci number in the background, simply do this:
 
@@ -42,7 +42,7 @@ own desire.  Common patterns are to name your queues after priorities (e.g.
 # The worker
 
 **NOTE: You currently need to create the worker yourself, which is extremely
-easy, but RQ will create a custom script soon that can be used to start
+easy, but RQ will include a custom script soon that can be used to start
 arbitrary workers without writing any code.**
 
 Creating a worker daemon is also extremely easy.  Create a file `worker.py`
