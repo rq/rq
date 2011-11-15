@@ -20,8 +20,15 @@ class DelayedResult(object):
 
 
 class job(object):
-    def __init__(self, queue_name='default'):
-        self.queue = Queue(queue_name)
+    """The @job decorator extends the given function with two new methods:
+    `delay` and `enqueue`.
+    """
+
+    def __init__(self, queue_name=None):
+        if queue_name is not None:
+            self.queue = Queue(queue_name)
+        else:
+            self.queue = None
 
     def __call__(self, f):
         def enqueue(queue, *args, **kwargs):
@@ -36,6 +43,8 @@ class job(object):
         f.enqueue = enqueue
 
         def delay(*args, **kwargs):
+            if self.queue is None:
+                raise ValueError('This job has no default queue set.')
             return f.enqueue(self.queue, *args, **kwargs)
         f.delay = delay
         return f

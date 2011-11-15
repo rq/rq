@@ -4,8 +4,15 @@ from blinker import signal
 from redis import Redis
 from rq import conn, Queue, job
 
+# Test data
 @job('my-queue')
 def testjob(name=None):
+    if name is None:
+        name = 'Stranger'
+    return 'Hi there, %s!' % (name,)
+
+@job() # no queue spec'ed
+def queueless_job(name=None):
     if name is None:
         name = 'Stranger'
     return 'Hi there, %s!' % (name,)
@@ -72,6 +79,56 @@ class TestQueue(RQTestCase):
         testjob.delay()
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
+
+    def test_put_work_on_different_queue(self):
+        """Putting work on alternative queues using enqueue."""
+
+        # Override testjob spec holds which queue
+        q = Queue('different-queue')
+        self.assertEquals(q.empty, True)
+        testjob.enqueue(q)
+        self.assertEquals(q.empty, False)
+        self.assertQueueContains(q, testjob)
+
+    def test_put_work_on_different_queue_reverse(self):
+        """Putting work on specific queues using the Queue object."""
+
+        q = Queue('alt-queue')
+        self.assertEquals(q.empty, True)
+        q.enqueue(testjob)
+        self.assertEquals(q.empty, False)
+        self.assertQueueContains(q, testjob)
+
+
+class TestJob(RQTestCase):
+    def test_job_methods(self):
+        """Jobs have methods to enqueue them."""
+        self.assertTrue(hasattr(testjob, 'delay'))
+        self.assertTrue(hasattr(testjob, 'enqueue'))
+        self.assertTrue(hasattr(queueless_job, 'delay'))
+        self.assertTrue(hasattr(queueless_job, 'enqueue'))
+
+    def test_queue_empty(self):
+        """Detecting empty queues."""
+        q = Queue('my-queue')
+        self.assertEquals(q.empty, True)
+
+        conn.rpush('rq:my-queue', 'some val')
+        self.assertEquals(q.empty, False)
+
+    def test_put_work_on_queue(self):
+        """Putting work on queues using delay."""
+        q = Queue('my-queue')
+        self.assertEquals(q.empty, True)
+
+        # testjob spec holds which queue this is sent to
+        testjob.delay()
+        self.assertEquals(q.empty, False)
+        self.assertQueueContains(q, testjob)
+
+    def test_put_work_on_queue_fails_for_queueless_jobs(self):
+        """Putting work on queues using delay fails for queueless jobs."""
+        self.assertRaises(ValueError, queueless_job.delay, 'Rick')
 
     def test_put_work_on_different_queue(self):
         """Putting work on alternative queues using enqueue."""
