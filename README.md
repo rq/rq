@@ -1,8 +1,17 @@
 # WARNING: DON'T USE THIS IN PRODUCTION (yet)
 
-# rq — Simple job queues for Python
+# RQ — Simple job queues for Python
 
-**rq** is a lightweight Python job queue, based on Redis.
+**RQ** is a lightweight Python library for queueing work and processing them in
+workers.  It is backed by Redis.
+
+This project is inspired by the good parts of [Celery][1], [Resque][2] and
+[this snippet][3], and has been created as a lightweight alternative to the
+heaviness of Celery.
+
+[1]: http://www.celeryproject.org/
+[2]: https://github.com/defunkt/resque
+[3]: http://flask.pocoo.org/snippets/73/
 
 
 # Putting jobs on queues
