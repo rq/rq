@@ -3,14 +3,14 @@ import os
 import random
 import time
 import procname
+from pickle import dumps
 try:
     from logbook import Logger
 except ImportError:
     from logging import Logger
-from pickle import loads, dumps
 from .queue import Queue
 from .proxy import conn
-from .exceptions import NoMoreWorkError, NoQueueError
+from .exceptions import NoQueueError
 
 def iterable(x):
     return hasattr(x, '__iter__')
@@ -59,13 +59,12 @@ class Worker(object):
         did_work = False
         while True:
             self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
-            try:
-                wait_for_job = not quit_when_done
-                queue, msg = Queue.dequeue_any(self.queues, wait_for_job)
-                did_work = True
-            except NoMoreWorkError:
+            wait_for_job = not quit_when_done
+            job = Queue.dequeue_any(self.queues, wait_for_job)
+            if job is None:
                 break
-            self.fork_and_perform_job(queue, msg)
+            did_work = True
+            self.fork_and_perform_job(job)
         return did_work
 
     def work_forever(self):
@@ -74,7 +73,7 @@ class Worker(object):
     def work(self):
         return self._work(True)
 
-    def fork_and_perform_job(self, queue, msg):
+    def fork_and_perform_job(self, job):
         child_pid = os.fork()
         if child_pid == 0:
             random.seed()
@@ -82,7 +81,7 @@ class Worker(object):
             try:
                 self.procline('Processing work since %d' % (time.time(),))
                 self._working = True
-                self.perform_job(queue, msg)
+                self.perform_job(job)
             except Exception, e:
                 self.log.exception(e)
                 sys.exit(1)
@@ -92,11 +91,10 @@ class Worker(object):
             os.waitpid(child_pid, 0)
             self._working = False
 
-    def perform_job(self, queue, msg):
-        func, args, kwargs, rv_key = loads(msg)
-        self.procline('Processing %s from %s since %s' % (func.__name__, queue, time.time()))
+    def perform_job(self, job):
+        self.procline('Processing %s from %s since %s' % (job.func.__name__, job.origin.name, time.time()))
         try:
-            rv = func(*args, **kwargs)
+            rv = job.perform()
         except Exception, e:
             rv = e
             self.log.exception(e)
@@ -107,6 +105,6 @@ class Worker(object):
                 self.log.info('Job ended normally without result')
         if rv is not None:
             p = conn.pipeline()
-            p.set(rv_key, dumps(rv))
-            p.expire(rv_key, self.rv_ttl)
+            p.set(job.rv_key, dumps(rv))
+            p.expire(job.rv_key, self.rv_ttl)
             p.execute()

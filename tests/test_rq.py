@@ -2,7 +2,7 @@ import unittest
 from pickle import loads
 from blinker import signal
 from redis import Redis
-from rq import conn, Queue
+from rq import conn, Queue, Worker
 
 # Test data
 def testjob(name=None):
@@ -85,10 +85,55 @@ class TestQueue(RQTestCase):
         q.enqueue(testjob, 'Rick', foo='bar')
 
         # Pull it off the queue (normally, a worker would do this)
-        f, args, kwargs, rv_key = q.dequeue()
-        self.assertEquals(f, testjob)
-        self.assertEquals(args[0], 'Rick')
-        self.assertEquals(kwargs['foo'], 'bar')
+        job = q.dequeue()
+        self.assertEquals(job.func, testjob)
+        self.assertEquals(job.origin, q)
+        self.assertEquals(job.args[0], 'Rick')
+        self.assertEquals(job.kwargs['foo'], 'bar')
+
+
+    def test_dequeue_any(self):
+        """Fetching work from any given queue."""
+        fooq = Queue('foo')
+        barq = Queue('bar')
+
+        self.assertEquals(Queue.dequeue_any([fooq, barq], False), None)
+
+        # Enqueue a single item
+        barq.enqueue(testjob)
+        job = Queue.dequeue_any([fooq, barq], False)
+        self.assertEquals(job.func, testjob)
+
+        # Enqueue items on both queues
+        barq.enqueue(testjob, 'for Bar')
+        fooq.enqueue(testjob, 'for Foo')
+
+        job = Queue.dequeue_any([fooq, barq], False)
+        self.assertEquals(job.func, testjob)
+        self.assertEquals(job.origin, fooq)
+        self.assertEquals(job.args[0], 'for Foo', 'Foo should be dequeued first.')
+
+        job = Queue.dequeue_any([fooq, barq], False)
+        self.assertEquals(job.func, testjob)
+        self.assertEquals(job.origin, barq)
+        self.assertEquals(job.args[0], 'for Bar', 'Bar should be dequeued second.')
+
+
+class TestWorker(RQTestCase):
+    def test_create_worker(self):
+        """Worker creation."""
+        fooq, barq = Queue('foo'), Queue('bar')
+        w = Worker([fooq, barq])
+        self.assertEquals(w.queues, [fooq, barq])
+
+    def test_work_and_quit(self):
+        """Worker processes work, then quits."""
+        fooq, barq = Queue('foo'), Queue('bar')
+        w = Worker([fooq, barq])
+        self.assertEquals(w.work(), False, 'Did not expect any work on the queue.')
+
+        fooq.enqueue(testjob, name='Frank')
+        self.assertEquals(w.work(), True, 'Expected at least some work done.')
 
 
 if __name__ == '__main__':
