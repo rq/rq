@@ -73,11 +73,11 @@ class Queue(object):
     def count(self):
         return conn.llen(self.key)
 
-    def enqueue(self, job, *args, **kwargs):
+    def enqueue(self, f, *args, **kwargs):
         rv_key = '%s:result:%s' % (self.key, str(uuid.uuid4()))
-        if job.__module__ == '__main__':
+        if f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed by workers.')
-        message = dumps((job, args, kwargs, rv_key))
+        message = dumps((f, args, kwargs, rv_key))
         conn.rpush(self.key, message)
         return DelayedResult(rv_key)
 
