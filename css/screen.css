@@ -1,0 +1,115 @@
+@import url("reset.css");
+
+html
+{
+    font-size: 62.5%;
+    webkit-text-size-adjust: 110%;
+}
+
+body
+{
+    background: #fff;
+    font-family: Lato, Helvetica, Arial, sans-serif;
+    font-size: 150%;
+    font-weight: 300;
+    line-height: 1.55;
+    padding: 120px 30px 80px;
+}
+
+.card
+{
+    margin: 0 auto;
+    max-width: 429px;
+    width: 100%;
+}
+
+pre
+{
+    margin: 0 0 1em 1em;
+}
+
+code
+{
+    font-family: 'Droid Sans Mono', Helvetica, Arial, sans-serif;
+    font-weight: 400;
+    font-size: 80%;
+}
+
+h1
+{
+    font-size: 280%;
+    font-weight: 400;
+    margin: 0 0 0.4em;
+}
+
+/*
+h1:hover:after
+{
+    color: rgba(0, 0, 0, 0.3);
+    content: attr(title);
+    font-size: 60%;
+    font-weight: 300;
+    margin: 0 0 0 0.5em;
+}
+*/
+
+p
+{
+    color: rgba(0, 0, 0, 0.7);
+    margin: 0 0 1em;
+}
+
+p:last-child
+{
+    margin-bottom: 0;
+}
+
+img
+{
+    border-radius: 4px;
+    float: left;
+    margin: 6px 12px 15px 0;
+    moz-border-radius: 4px;
+    webkit-border-radius: 4px;
+}
+
+a
+{
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.6);
+    font-weight: 600;
+    moz-transition: color linear 0.1s;
+    text-decoration: none;
+    transition: color linear 0.1s;
+    webkit-transition: color linear 0.1s;
+}
+
+a:hover
+{
+    border-bottom-color: rgba(0, 0, 0, 0.05);
+    color: rgba(0, 0, 0, 0.4);
+}
+
+acronym
+{
+    border-bottom: 1px dotted rgba(0, 0, 0, 0.1);
+    cursor: help;
+}
+
+@media screen and (max-width: 1400px)
+{
+    body
+    {
+        padding-bottom: 60px;
+        padding-top: 60px;
+    }
+}
+
+@media screen and (max-width: 600px)
+{
+    body
+    {
+        padding-bottom: 40px;
+        padding-top: 30px;
+    }
+}
