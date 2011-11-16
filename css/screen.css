@@ -110,7 +110,7 @@ blockquote, pre
     color: #222;
     border-bottom: 1px solid #ccc;
     border-right: 1px solid #ccc;
-    background: #F3F3F0 url(./img/bq.gif) top left no-repeat;
+    background: #F3F3F0 url(../img/bq.gif) top left no-repeat;
 }
 
 blockquote
