@@ -1,7 +1,7 @@
 import uuid
 from pickle import loads, dumps
 from .proxy import conn
-
+from .exceptions import NoMoreWorkError
 
 class DelayedResult(object):
     def __init__(self, key):
@@ -16,7 +16,6 @@ class DelayedResult(object):
                 # cache the result
                 self._rv = loads(rv)
         return self._rv
-
 
 
 def to_queue_key(queue_name):
@@ -55,6 +54,29 @@ class Queue(object):
     def dequeue(self):
         s = conn.lpop(self.key)
         return loads(s)
+
+    @classmethod
+    def _dequeue_any(cls, queues):
+        # Redis' BLPOP command takes multiple queue arguments, but LPOP can
+        # only take a single queue.  Therefore, we need to loop over all
+        # queues manually, in order, and return None if no more work is
+        # available
+        for queue in queues:
+            value = conn.lpop(queue)
+            if value is not None:
+                return (queue, value)
+        return None
+
+    @classmethod
+    def dequeue_any(cls, queues, blocking):
+        if blocking:
+            queue, msg = conn.blpop(queues)
+        else:
+            value = cls._dequeue_any(queues)
+            if value is None:
+                raise NoMoreWorkError('No more work.')
+            queue, msg = value
+        return (queue, msg)
 
     def __str__(self):
         return self.name

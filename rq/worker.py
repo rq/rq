@@ -10,12 +10,10 @@ except ImportError:
 from pickle import loads, dumps
 from .queue import Queue
 from .proxy import conn
+from .exceptions import NoMoreWorkError, NoQueueError
 
 def iterable(x):
     return hasattr(x, '__iter__')
-
-class NoQueueError(Exception): pass
-class NoMoreWorkError(Exception): pass
 
 class Worker(object):
     def __init__(self, queues, rv_ttl=500):
@@ -57,35 +55,13 @@ class Worker(object):
         procname.setprocname('rq: %s' % (message,))
 
 
-    def multi_lpop(self, queues):
-        # Redis' BLPOP command takes multiple queue arguments, but LPOP can
-        # only take a single queue.  Therefore, we need to loop over all
-        # queues manually, in order, and raise an exception is no more work
-        # is available
-        for queue in queues:
-            value = conn.lpop(queue)
-            if value is not None:
-                return (queue, value)
-        return None
-
-    def pop_next_job(self, blocking):
-        queues = self.queue_keys()
-        if blocking:
-            queue, msg = conn.blpop(queues)
-        else:
-            value = self.multi_lpop(queues)
-            if value is None:
-                raise NoMoreWorkError('No more work.')
-            queue, msg = value
-        return (queue, msg)
-
     def _work(self, quit_when_done=False):
         did_work = False
         while True:
             self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
             try:
                 wait_for_job = not quit_when_done
-                queue, msg = self.pop_next_job(wait_for_job)
+                queue, msg = Queue.dequeue_any(self.queues, wait_for_job)
                 did_work = True
             except NoMoreWorkError:
                 break
