@@ -60,6 +60,19 @@ class TestQueue(RQTestCase):
         q = Queue()
         self.assertEquals(q.name, 'default')
 
+
+    def test_equality(self):
+        """Mathematical equality of queues."""
+        q1 = Queue('foo')
+        q2 = Queue('foo')
+        q3 = Queue('bar')
+
+        self.assertEquals(q1, q2)
+        self.assertEquals(q2, q1)
+        self.assertNotEquals(q1, q3)
+        self.assertNotEquals(q2, q3)
+
+
     def test_queue_empty(self):
         """Detecting empty queues."""
         q = Queue('my-queue')
