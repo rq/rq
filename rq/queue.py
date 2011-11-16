@@ -17,9 +17,11 @@ class DelayedResult(object):
                 self._rv = loads(rv)
         return self._rv
 
+
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+    __slots__ = ['func', 'args', 'kwargs', 'rv_key', 'origin']
 
     @classmethod
     def unpickle(cls, pickle_data):
