@@ -136,5 +136,8 @@ class Queue(object):
         return hash(self.name)
 
 
+    def __repr__(self):
+        return 'Queue(%r)' % (self.name,)
+
     def __str__(self):
-        return self.name
+        return '<Queue \'%s\'>' % (self.name,)
