@@ -53,6 +53,13 @@ h1:hover:after
 }
 */
 
+h2
+{
+    font-size: 200%;
+    font-weight: 400;
+    margin: 0 0 0.4em;
+}
+
 p
 {
     color: rgba(0, 0, 0, 0.7);
@@ -75,8 +82,8 @@ img
 
 a
 {
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    color: rgba(0, 0, 0, 0.6);
+    border-bottom: 1px solid rgba(65, 131, 196, 0.1);
+    color: rgb(65, 131, 196);
     font-weight: 600;
     moz-transition: color linear 0.1s;
     text-decoration: none;
@@ -86,7 +93,7 @@ a
 
 a:hover
 {
-    border-bottom-color: rgba(0, 0, 0, 0.05);
+    border-bottom-color: rgba(0, 0, 0, 0.1);
     color: rgba(0, 0, 0, 0.4);
 }
 
@@ -95,6 +102,40 @@ acronym
     border-bottom: 1px dotted rgba(0, 0, 0, 0.1);
     cursor: help;
 }
+
+blockquote, pre
+{
+    margin: 0 0 1em 1em;
+    padding: 1em 2em;
+    color: #222;
+    border-bottom: 1px solid #ccc;
+    border-right: 1px solid #ccc;
+    background: #F3F3F0 url(/img/bq.gif) top left no-repeat;
+}
+
+blockquote
+{
+    font-style: italic;
+    padding: 1em;
+}
+
+pre
+{
+    overflow: auto;
+}
+
+ul
+{
+    list-style: circle;
+    margin: 0 0 1em 2em;
+    color: rgba(0, 0, 0, 0.7);
+}
+
+li
+{
+    font-size: 100%;
+}
+
 
 @media screen and (max-width: 1400px)
 {
