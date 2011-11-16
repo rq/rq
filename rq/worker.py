@@ -6,6 +6,7 @@ import procname
 from pickle import dumps
 try:
     from logbook import Logger
+    Logger = Logger    # Does nothing except it shuts up pyflakes annoying error
 except ImportError:
     from logging import Logger
 from .queue import Queue
