@@ -130,6 +130,11 @@ img
     webkit-border-radius: 4px;
 }
 
+.nomargin
+{
+    margin: 0;
+}
+
 a
 {
     border-bottom: 1px solid rgba(65, 131, 196, 0.1);
