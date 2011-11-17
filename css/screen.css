@@ -3,12 +3,12 @@
 html
 {
     font-size: 62.5%;
-    webkit-text-size-adjust: 110%;
+    -webkit-text-size-adjust: 110%;
 }
 
 body
 {
-    background: #DBE0DF url('../img/bg.png') 50% 0 repeat-y !important;
+    background: #DBE0DF url(../img/bg.png) 50% 0 repeat-y !important;
     height: 100%;
     font-family: Lato, sans-serif;
     font-size: 150%;
@@ -126,8 +126,8 @@ img
     border-radius: 4px;
     float: left;
     margin: 6px 12px 15px 0;
-    moz-border-radius: 4px;
-    webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
+    -webkit-border-radius: 4px;
 }
 
 .nomargin
@@ -140,16 +140,27 @@ a
     border-bottom: 1px solid rgba(65, 131, 196, 0.1);
     color: rgb(65, 131, 196);
     font-weight: 600;
-    moz-transition: color linear 0.1s;
     text-decoration: none;
     transition: color linear 0.1s;
-    webkit-transition: color linear 0.1s;
+    -webkit-transition: color linear 0.1s;
+    -moz-transition: color linear 0.1s;
 }
 
 a:hover
 {
     border-bottom-color: rgba(0, 0, 0, 0.1);
     color: rgba(0, 0, 0, 0.4);
+}
+
+em
+{
+    font-style: italic;
+}
+
+strong
+{
+    font-weight: 600;
+    text-shadow: 1px 1px 1px #ddd;
 }
 
 acronym
