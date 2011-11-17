@@ -20,7 +20,7 @@ body
 header
 {
     margin: 0 auto 2em auto;
-    max-width: 560px;
+    max-width: 430px;
     width: 100%;
 }
 
@@ -112,7 +112,7 @@ h1
 h1#logo
 {
     margin: 0 auto;
-    width: 517px;;
+    width: 430px;
     height: 144px;
     background-image: url(../img/logo.png);
 }
