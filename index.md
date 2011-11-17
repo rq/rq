@@ -67,7 +67,21 @@ you can quite flexibly distribute work to your own desire.  A common naming
 pattern is to name your queues after priorities (e.g.  `high`, `medium`,
 `low`).
 
-[m]: http://pypi.python.org/pypi/mailer
+
+
+### On the Design
+
+With RQ, you don't have to set up any queues upfront, and you don't have to
+specify any channels, exchanges, routing rules, or whatnot.  You can just put
+jobs onto any queue you want.  As soon as you enqueue a job to a queue that
+does not exist yet, it is created on the fly.
+
+RQ does _not_ use a broker to do the message routing for you.  You may consider
+this an awesome advantage or a handicap, depending on the problem you're
+solving.
+
+Lastly, it does not speak a portable protocol, since it uses [pickle][p] to
+serialize the jobs, so it's a Python-only system.
 
 
 ## The worker
@@ -145,17 +159,14 @@ This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
-[1]: http://www.celeryproject.org/
-[2]: https://github.com/defunkt/resque
-[3]: http://flask.pocoo.org/snippets/73/
-
 Project values:
 
 * Simplicity over completeness
 * Fail-safety over performance
 * Runtime insight over static configuration upfront
 
-This means that, to use RQ, you don't have to set up any queues up front, and
-you don't have to specify any channels, exchanges, or whatnot.  You can put
-jobs onto any queue you want, at runtime.  As soon as you enqueue a job, it is
-created on the fly.
+[m]: http://pypi.python.org/pypi/mailer
+[p]: http://docs.python.org/library/pickle.html
+[1]: http://www.celeryproject.org/
+[2]: https://github.com/defunkt/resque
+[3]: http://flask.pocoo.org/snippets/73/
