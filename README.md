@@ -51,7 +51,7 @@ with the following content:
     from rq import Queue, Worker
 
     q = Queue()
-    Worker(q).work_forever()
+    Worker(q).work()
 
 After that, start a worker instance:
 
@@ -66,12 +66,12 @@ them:
     from rq import Queue, Worker
 
     queues = map(Queue, ['high', 'normal', 'low'])
-    Worker(queues).work()
+    Worker(queues).work_burst()
 
 Which will keep popping jobs from the given queues, giving precedence to the
 `high` queue, then `normal`, etc.  It will return when there are no more jobs
-left (contrast this to the previous example using `Worker.work_forever()`,
-which will never return since it keeps waiting for new work to arrive).
+left (contrast this to the previous example using `Worker.work()`, which will
+never return since it keeps waiting for new work to arrive).
 
 
 # Installation

@@ -7,4 +7,4 @@ conn.push(Redis())
 
 if __name__ == '__main__':
     q = Queue()
-    Worker(q).work_forever()
+    Worker(q).work()

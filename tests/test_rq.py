@@ -143,10 +143,10 @@ class TestWorker(RQTestCase):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
-        self.assertEquals(w.work(), False, 'Did not expect any work on the queue.')
+        self.assertEquals(w.work_burst(), False, 'Did not expect any work on the queue.')
 
         fooq.enqueue(testjob, name='Frank')
-        self.assertEquals(w.work(), True, 'Expected at least some work done.')
+        self.assertEquals(w.work_burst(), True, 'Expected at least some work done.')
 
 
 if __name__ == '__main__':

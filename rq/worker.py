@@ -68,10 +68,10 @@ class Worker(object):
             self.fork_and_perform_job(job)
         return did_work
 
-    def work_forever(self):
+    def work(self):
         self._work(False)
 
-    def work(self):
+    def work_burst(self):
         return self._work(True)
 
     def fork_and_perform_job(self, job):
