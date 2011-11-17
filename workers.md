@@ -83,7 +83,7 @@ life-cycle of a worker consists of a few phases:
 
 ### Worker names
 
-Workers are recognizable by their names, see [monitoring](./monitoring.html).
+Workers are registered under their names, see [monitoring](./monitoring.html).
 By default, the name of a worker is equal to the concatenation of the current
 hostname and the current PID.  To override this default, specify the name when
 starting the worker, using the `--name` option.
