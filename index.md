@@ -3,8 +3,6 @@ title: "RQ: Simple job queues for Python"
 layout: default
 ---
 
-# RQ: Simple job queues
-
 RQ is a lightweight Python library for queueing work and processing them in
 workers.  It is backed by Redis and it is extremely simple to use.
 

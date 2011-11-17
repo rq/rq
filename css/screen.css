@@ -17,10 +17,17 @@ body
     padding: 120px 30px 80px;
 }
 
-.card
+header
+{
+    margin: 0 auto 2em auto;
+    max-width: 560px;
+    width: 100%;
+}
+
+.container
 {
     margin: 0 auto;
-    max-width: 429px;
+    max-width: 430px;
     width: 100%;
 }
 
@@ -40,7 +47,31 @@ h1
 {
     font-size: 280%;
     font-weight: 400;
-    margin: 0 0 0.4em;
+}
+
+.ir
+{
+    display: block;
+    border: 0;
+    text-indent: -999em;
+    overflow: hidden;
+    background-color: transparent;
+    background-repeat: no-repeat;
+    text-align: left;
+    direction: ltr;
+}
+
+.ir br
+{
+    display: none;
+}
+
+h1#logo
+{
+    margin: 0 auto;
+    width: 517px;;
+    height: 144px;
+    background-image: url(../img/logo.png);
 }
 
 /*
