@@ -103,6 +103,25 @@ left (contrast this to the previous example using `Worker.work_forever()`,
 which will never return since it keeps waiting for new work to arrive).
 
 
+## Considerations for jobs
+
+Technically, you can put any Python function call on a queue, but that does not
+mean it's always wise to do so.  Some things to consider before putting a job
+on a queue:
+
+* Make sure that the function's `__module__` is importable by the worker.  In
+  particular, this means that you cannot enqueue functions that are declared in
+  the `__main__` module.
+* Make sure that the worker and the work generator share _exactly_ the same
+  source code.
+* Make sure that the function call does not depend on its context.  In
+  particular, global variables are evil (as always), but also _any_ state that
+  the function depends on (for example a "current" user or "current" web
+  request) is not there when the worker will process it.  If you want work done
+  for the "current" user, you should resolve that user to a concrete instance
+  and pass a reference to that user object to the job as an argument.
+
+
 ## Installation
 
 Simply use the following command to install the latest released version:
