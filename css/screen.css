@@ -103,6 +103,13 @@ h2
     margin: 0 0 0.4em;
 }
 
+h3
+{
+    font-size: 135%;
+    font-weight: 400;
+    margin: 0 0 0.25em;
+}
+
 p
 {
     color: rgba(0, 0, 0, 0.7);
