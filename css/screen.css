@@ -218,6 +218,18 @@ li
     font-size: 100%;
 }
 
+ol
+{
+    list-style-type: decimal;
+    margin: 0 0 1em 2em;
+    color: rgba(0, 0, 0, 0.7);
+}
+
+li
+{
+    font-size: 100%;
+}
+
 .warning
 {
   position: relative;
