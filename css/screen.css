@@ -31,6 +31,29 @@ header
     width: 100%;
 }
 
+footer
+{
+    margin: 2em auto;
+    max-width: 430px;
+    width: 100%;
+
+    border-top: 1px dashed #e1e1e1;
+    padding-top: 1em;
+}
+
+footer p
+{
+    text-align: center;
+    font-size: 90%;
+    font-style: italic;
+    margin-bottom: 0;
+}
+
+footer a
+{
+    font-weight: 400;
+}
+
 pre
 {
     margin: 0 0 1em 1em;
