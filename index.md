@@ -8,10 +8,11 @@ processing them in workers.  It is backed by Redis and it is extremely simple
 to use.
 
 <div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: 58px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
+    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
     <strong>Work in Progress™</strong>
     <p>To see what we're still working on, please click any of the following topics:</p>
     <ul>
+      <li><a href="./workers.html">Workers</a></li>
       <li><a href="./monitoring.html">Monitoring</a></li>
     </ul>
 </div>
@@ -96,9 +97,12 @@ serialize the jobs, so it's a Python-only system.
 
 ## The worker
 
-**NOTE: You currently need to create the worker yourself, which is extremely
-easy, but RQ will include a custom script soon that can be used to start
-arbitrary workers without writing any code.**
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
+    <strong>NOTE:</strong>
+    <p>You currently need to create the worker yourself, which is extremely easy, but RQ will include a custom script soon that can be used to start arbitrary workers without writing any code.</p>
+    <p>See also, the Work In Progress™ documentation on <a href="./workers.html">workers</a>.</p>
+</div>
 
 Creating a worker daemon is also extremely easy.  Create a file `worker.py`
 with the following content:

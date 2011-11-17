@@ -4,10 +4,9 @@ layout: default
 ---
 
 <div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: 38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
+    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
     <strong>Be warned!</strong>
-    <p>The stuff below does not exist yet!</p>
-    <p>I merely use this page to daydream about features and to do some document-driven design.</p>
+    <p>The stuff below does not exist yet!  I merely use this page to daydream about features and to do some document-driven design.</p>
 </div>
 
 Monitoring is where RQ shines.
