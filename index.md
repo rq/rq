@@ -21,8 +21,11 @@ call can be put on an RQ queue.
 To multiply two numbers in the background, simply do this:
 
 {% highlight python %}
-from rq import Queue
-from stupidity import multiply
+from rq import use_redis, Queue
+from stupid import multiply
+
+# Tell RQ what Redis connection to use
+rq.use_redis()  # no args uses Redis on localhost:6379
 
 # Delay calculation of the multiplication
 q = Queue()
