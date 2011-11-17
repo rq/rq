@@ -8,7 +8,8 @@ html
 
 body
 {
-    background: #fff;
+    background: #DBE0DF url('../img/bg.png') 50% 0 repeat-y !important;
+    height: 100%;
     font-family: Lato, Helvetica, Arial, sans-serif;
     font-size: 150%;
     font-weight: 300;
