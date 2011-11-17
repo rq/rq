@@ -52,6 +52,11 @@ foobar.2658     default           1      idle
 4 workers listening on 4 queues
 {% endhighlight %}
 
+The states (_starting_, _idle_, _busy_, or _dead_) indicate the phase of the
+worker life-cycle (see [workers](./workers.html)).
+
+In the future, _paused_ would be a useful state, too.
+
 
 {% highlight console %}
 $ rqinfo --workers --verbose
