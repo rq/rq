@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+import optparse
+from rq import use_redis, Queue, Worker
+
+def parse_args():
+    parser = optparse.OptionParser()
+    parser.add_option('-b', '--burst', dest='burst',
+            action='store_true', default=False,
+            help='Run in burst mode (quit after all work is done).')
+    parser.add_option('-n', '--name', dest='name',
+            action='store', type='string', default=None,
+            help='Specify a different name.')
+    opts, args = parser.parse_args()
+    return (opts, args, parser)
+
+def main():
+    opts, args, parser = parse_args()
+
+    use_redis()
+
+    if len(args) == 0:
+        # Use the default queue
+        queues = [Queue()]
+    else:
+        queues = map(Queue, args)
+
+    w = Worker(queues, name=opts.name)
+    if opts.burst:
+        w.work_burst()
+    else:
+        w.work()
+
+if __name__ == '__main__':
+    main()

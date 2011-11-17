@@ -3,6 +3,7 @@ import os
 import random
 import time
 import procname
+import socket
 from pickle import dumps
 try:
     from logbook import Logger
@@ -17,14 +18,16 @@ def iterable(x):
     return hasattr(x, '__iter__')
 
 class Worker(object):
-    def __init__(self, queues, rv_ttl=500):
+    def __init__(self, queues, name=None, rv_ttl=500):
         if isinstance(queues, Queue):
             queues = [queues]
+        self._name = name
         self.queues = queues
         self.validate_queues()
         self.rv_ttl = rv_ttl
         self._working = False
         self.log = Logger('worker')
+
 
     def validate_queues(self):
         if not iterable(self.queues):
@@ -40,12 +43,13 @@ class Worker(object):
         return map(lambda q: q.key, self.queues)
 
 
-    def is_idle(self):
-        return not self.is_working()
-
-    def is_working(self):
-        return self._working
-
+    @property
+    def name(self):
+        if self._name is None:
+            hostname = socket.gethostname()
+            shortname, _, _ = hostname.partition('.')
+            self._name = '%s.%s' % (shortname, self.pid)
+        return self._name
 
     @property
     def pid(self):
