@@ -3,35 +3,47 @@ title: "RQ: Simple job queues for Python"
 layout: default
 ---
 
-RQ is a lightweight Python library for queueing work and processing them in
+RQ is a lightweight Python library for queueing jobs and processing them in
 workers.  It is backed by Redis and it is extremely simple to use.
 
 ## Putting jobs on queues
 
-To put jobs on queues, first declare a Python function to be called on
-a background process:
+To put jobs on queues, first declare a job:
 
 {% highlight python %}
-def slow_fib(n):
-    if n <= 1:
-        return 1
-    else:
-        return slow_fib(n-1) + slow_fib(n-2)
+def multiply(x, y):
+    return x + y
 {% endhighlight %}
 
-Notice anything?  There's nothing special about a job!  Any Python function can
-be put on an RQ queue, as long as the function is in a module that is
-importable from the worker process.
+Noticed anything?  There's nothing special about a job!  Any Python function
+call can be put on an RQ queue.
 
-To calculate the 36th Fibonacci number in the background, simply do this:
+To multiply two numbers in the background, simply do this:
 
 {% highlight python %}
 from rq import Queue
-from fib import slow_fib
+from stupidity import multiply
 
-# Delay calculation of the 36th Fibonacci number
+# Delay calculation of the multiplication
 q = Queue()
-q.enqueue(slow_fib, 36)
+result = q.enqueue(multiply, 20, 40)
+print result.return_value   # => None
+
+# Now, wait a while, until the worker is finished
+print result.return_value   # => 800
+{% endhighlight %}
+
+Of course, multiplying does not make any sense to do in a worker, at all.
+A more useful example where you would use jobs instead is for sending mail in
+the background.  Here, we use the Python [mailer][m] package:
+
+{% highlight python %}
+import mailer
+
+def send_mail(message):
+    from my_config import smtp_settings
+    sender = mailer.Mailer(**smtp_settings)
+    sender.send(message)
 {% endhighlight %}
 
 If you want to put the work on a specific queue, simply specify its name:
@@ -44,6 +56,8 @@ q.enqueue(slow_fib, 36)
 You can use any queue name, so you can quite flexibly distribute work to your
 own desire.  Common patterns are to name your queues after priorities (e.g.
 `high`, `medium`, `low`).
+
+[m]: http://pypi.python.org/pypi/mailer
 
 
 ## The worker
