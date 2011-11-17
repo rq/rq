@@ -53,13 +53,19 @@ def send_mail(message):
 If you want to put the work on a specific queue, simply specify its name:
 
 {% highlight python %}
-q = Queue('math')
-q.enqueue(slow_fib, 36)
+msg = mailer.Message()
+msg.To = 'me@nvie.com'
+msg.Subject = 'RQ is awesome!'
+msg.Body = 'Can I please contribute to RQ?'
+
+q = Queue('low')
+q.enqueue(send_mail, msg)
 {% endhighlight %}
 
-You can use any queue name, so you can quite flexibly distribute work to your
-own desire.  Common patterns are to name your queues after priorities (e.g.
-`high`, `medium`, `low`).
+Notice the `Queue('low')` in the example above?  You can use any queue name, so
+you can quite flexibly distribute work to your own desire.  A common naming
+pattern is to name your queues after priorities (e.g.  `high`, `medium`,
+`low`).
 
 [m]: http://pypi.python.org/pypi/mailer
 
