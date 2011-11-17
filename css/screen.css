@@ -57,6 +57,13 @@ footer a
 pre
 {
     margin: 0 0 1em 1em;
+    padding: 1em 1.8em;
+    color: #222;
+    border-bottom: 1px solid #ccc;
+    border-right: 1px solid #ccc;
+    background: #F3F3F0 url(../img/bq.png) top left no-repeat;
+    line-height: 1.15em;
+    overflow: auto;
 }
 
 code
@@ -64,6 +71,8 @@ code
     font-family: 'Droid Sans Mono', monospace;
     font-weight: 400;
     font-size: 80%;
+
+    line-height: 0.5em;
 
     border: 1px solid #efeaea;
     background-color: #fffafa;
@@ -192,25 +201,10 @@ acronym
     cursor: help;
 }
 
-blockquote, pre
-{
-    margin: 0 0 1em 1em;
-    padding: 1em 2em;
-    color: #222;
-    border-bottom: 1px solid #ccc;
-    border-right: 1px solid #ccc;
-    background: #F3F3F0 url(../img/bq.png) top left no-repeat;
-}
-
 blockquote
 {
     font-style: italic;
     padding: 1em;
-}
-
-pre
-{
-    overflow: auto;
 }
 
 ul
