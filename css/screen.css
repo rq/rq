@@ -41,6 +41,17 @@ code
     font-family: 'Droid Sans Mono', monospace;
     font-weight: 400;
     font-size: 80%;
+
+    border: 1px solid #efeaea;
+    background-color: #fffafa;
+    padding: 0.2em 0.4em;
+}
+
+pre code
+{
+    border: none;
+    background-color: inherit;
+    padding: 0;
 }
 
 h1
@@ -142,7 +153,7 @@ blockquote, pre
     color: #222;
     border-bottom: 1px solid #ccc;
     border-right: 1px solid #ccc;
-    background: #F3F3F0 url(../img/bq.gif) top left no-repeat;
+    background: #F3F3F0 url(../img/bq.png) top left no-repeat;
 }
 
 blockquote
