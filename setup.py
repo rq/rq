@@ -19,6 +19,7 @@ setup(
     zip_safe=False,
     platforms='any',
     install_requires=['redis', 'logbook', 'blinker'],
+    scripts=['bin/rqinfo', 'bin/rqworker'],
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
         'Development Status :: 2 - Pre-Alpha',

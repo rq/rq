@@ -40,7 +40,14 @@ class Job(object):
 
 @total_ordering
 class Queue(object):
-    redis_queue_namespace_prefix = 'rq:'
+    redis_queue_namespace_prefix = 'rq:queue:'
+
+    @classmethod
+    def all(cls):
+        """Returns an iterable of all Queues.
+        """
+        prefix = cls.redis_queue_namespace_prefix
+        return map(cls.from_queue_key, conn.keys('%s*' % prefix))
 
     @classmethod
     def from_queue_key(cls, queue_key):
@@ -76,7 +83,7 @@ class Queue(object):
         return conn.llen(self.key)
 
     def enqueue(self, f, *args, **kwargs):
-        rv_key = '%s:result:%s' % (self.key, str(uuid.uuid4()))
+        rv_key = 'rq:result:%s:%s' % (self.name, str(uuid.uuid4()))
         if f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed by workers.')
         message = dumps((f, args, kwargs, rv_key))

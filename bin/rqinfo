@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import optparse
+from rq import use_redis, Queue, Worker
+from rq.dummy import *
+
+
+def parse_args():
+    parser = optparse.OptionParser()
+    parser.add_option('-q', '--queues', dest='subcmd',
+            action='store_const', const='queues',
+            help='Shows stats for queues.')
+    parser.add_option('-w', '--workers', dest='subcmd',
+            action='store_const', const='workers',
+            help='Shows stats for workers.')
+    opts, args = parser.parse_args()
+    return (opts, args, parser)
+
+def main():
+    opts, args, parser = parse_args()
+
+    if not opts.subcmd:
+        parser.error('Specify either --queues or --workers.')
+
+    use_redis()
+
+    if opts.subcmd == 'workers':
+        raise NotImplementedError()
+    elif opts.subcmd == 'queues':
+        #q = Queue('foo')
+        #q.enqueue(do_nothing)
+        #q.enqueue(sleep, 3)
+        #q = Queue('bar')
+        #q.enqueue(yield_stuff)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        qs = Queue.all()
+        num_jobs = 0
+        for q in qs:
+            count = q.count
+            chart = '█' * count
+            print('%-12s %3d |%s' % (q.name, count, chart))
+            num_jobs += count
+        print('%d queues, %d jobs total' % (len(qs), num_jobs))
+
+if __name__ == '__main__':
+    main()

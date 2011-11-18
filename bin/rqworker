@@ -2,6 +2,7 @@
 import optparse
 from rq import use_redis, Queue, Worker
 
+
 def parse_args():
     parser = optparse.OptionParser()
     parser.add_option('-b', '--burst', dest='burst',

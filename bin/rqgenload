@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+import optparse
+from rq import use_redis, Queue, Worker
+from rq import dummy
+
+
+def parse_args():
+    parser = optparse.OptionParser()
+    parser.add_option('-n', '--count', type='int', dest='count', default=1)
+    opts, args = parser.parse_args()
+    return (opts, args, parser)
+
+def main():
+    opts, args, parser = parse_args()
+
+    use_redis()
+
+    #funcs = filter(lambda s: not s.startswith('_'), dir(rq.dummy))
+    #print(funcs)
+
+    queues = ('default', 'foo', 'bar', 'qux', 'high', 'normal', 'low')
+
+    sample_calls = [
+            (dummy.do_nothing, [], {}),
+            (dummy.sleep, [1], {}),
+            (dummy.sleep, [2], {}),
+    ]
+
+    for i in range(opts.count):
+        import random
+        f, args, kwargs = random.choice(sample_calls)
+
+        q = Queue(random.choice(queues))
+        q.enqueue(f, *args, **kwargs)
+
+        #q = Queue('foo')
+        #q.enqueue(do_nothing)
+        #q.enqueue(sleep, 3)
+        #q = Queue('bar')
+        #q.enqueue(yield_stuff)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+        #q.enqueue(do_nothing)
+
+if __name__ == '__main__':
+    main()
