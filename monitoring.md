@@ -12,31 +12,41 @@ layout: default
 Monitoring is where RQ shines.
 
 
-## Seeing what queues exist
+## Showing queues
 
 To see what queues exist (and how many jobs there are to process them):
 
 {% highlight console %}
 $ rqinfo --queues
-high
-low
-normal
-default
-4 queues
-{% endhighlight %}
-
-
-{% highlight console %}
-$ rqinfo --queues
-high         20 |██████████████████████████
-low          12 |██████████████
-normal        8 |█████████
-default       0 |
+high       20
+low        12
+normal     8
+default    0
 4 queues, 45 jobs total
 {% endhighlight %}
 
 
-## Seeing active workers
+{% highlight console %}
+$ rqinfo --queues --graph
+high       |██████████████████████████ 20
+low        |██████████████ 12
+normal     |█████████ 8
+default    | 0
+4 queues, 45 jobs total
+{% endhighlight %}
+
+
+You can also query for a subset of queues, if you're looking for specific ones:
+
+{% highlight console %}
+$ rqinfo --queues --graph high normal
+high       |██████████████████████████ 20
+normal     |█████████ 8
+2 queues, 28 jobs total
+{% endhighlight %}
+
+
+## Showing active workers
 
 To see what workers are currently active:
 
