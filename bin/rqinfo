@@ -1,8 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import os
+import time
 import optparse
-from rq import use_redis, Queue, Worker
-from rq.dummy import *
+from rq import use_redis, Queue
+from rq.utils import gettermsize, colorize
+
+
+def get_scale(x):
+    """Finds the lowest scale where x <= scale."""
+    scales = [20, 50, 100, 200, 400, 600, 800, 1000]
+    for scale in scales:
+        if x <= scale:
+            return scale
+    return x
 
 
 def parse_args():
@@ -13,8 +24,58 @@ def parse_args():
     parser.add_option('-w', '--workers', dest='subcmd',
             action='store_const', const='workers',
             help='Shows stats for workers.')
+    parser.add_option('-n', '--interval', dest='interval',
+            type='float',
+            help='The interval between polls, in seconds.  Does not poll if 0.')
+    parser.add_option('-g', '--graph', dest='graph',
+            action='store_true', default=False,
+            help='Shows bar chart graphs where possible.')
     opts, args = parser.parse_args()
     return (opts, args, parser)
+
+def show_queues(opts, args, parser):
+    while True:
+        if len(args):
+            qs = map(Queue, args)
+        else:
+            qs = Queue.all()
+
+        num_jobs = 0
+        termwidth, _ = gettermsize()
+        chartwidth = min(20, termwidth - 20)
+
+        max_count = 0
+        counts = dict()
+        for q in qs:
+            count = q.count
+            counts[q] = count
+            max_count = max(max_count, count)
+        scale = get_scale(max_count)
+        ratio = chartwidth * 1.0 / scale
+
+        if opts.interval:
+            os.system('clear')
+
+        print('scale = %d' % scale)
+        for q in qs:
+            count = counts[q]
+            if opts.graph:
+                chart = colorize('darkgreen', '|' + '█' * int(ratio * count))
+                line = '%-12s %s %d' % (q.name, chart, count)
+            else:
+                line = '%-12s %d' % (q.name, count)
+            print(line)
+
+            num_jobs += count
+        print('%d queues, %d jobs total' % (len(qs), num_jobs))
+
+        if opts.interval:
+            time.sleep(opts.interval)
+        else:
+            break
+
+def show_workers(opts, args, parser):
+    raise NotImplementedError()
 
 def main():
     opts, args, parser = parse_args()
@@ -25,37 +86,10 @@ def main():
     use_redis()
 
     if opts.subcmd == 'workers':
-        raise NotImplementedError()
+        show_workers(opts, args, parser)
     elif opts.subcmd == 'queues':
-        #q = Queue('foo')
-        #q.enqueue(do_nothing)
-        #q.enqueue(sleep, 3)
-        #q = Queue('bar')
-        #q.enqueue(yield_stuff)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        #q.enqueue(do_nothing)
-        qs = Queue.all()
-        num_jobs = 0
-        for q in qs:
-            count = q.count
-            chart = '█' * count
-            print('%-12s %3d |%s' % (q.name, count, chart))
-            num_jobs += count
-        print('%d queues, %d jobs total' % (len(qs), num_jobs))
+        show_queues(opts, args, parser)
+
 
 if __name__ == '__main__':
     main()

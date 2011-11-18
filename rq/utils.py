@@ -1,0 +1,99 @@
+# -*- coding: utf-8 -*-
+"""
+    pygments.console
+    ~~~~~~~~~~~~~~~~
+
+    Format colored console output.
+
+    :copyright: Copyright 2006-2011 by the Pygments team, see AUTHORS.
+    :license: BSD, see LICENSE for details.
+"""
+import os
+
+def gettermsize():
+    def ioctl_GWINSZ(fd):
+        try:
+            import fcntl, termios, struct
+            cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ,
+        '1234'))
+        except:
+            return None
+        return cr
+    cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+    if not cr:
+        try:
+            fd = os.open(os.ctermid(), os.O_RDONLY)
+            cr = ioctl_GWINSZ(fd)
+            os.close(fd)
+        except:
+            pass
+    if not cr:
+        try:
+            cr = (os.environ['LINES'], os.environ['COLUMNS'])
+        except:
+            cr = (25, 80)
+    return int(cr[1]), int(cr[0])
+
+esc = "\x1b["
+
+codes = {}
+codes[""]          = ""
+codes["reset"]     = esc + "39;49;00m"
+
+codes["bold"]      = esc + "01m"
+codes["faint"]     = esc + "02m"
+codes["standout"]  = esc + "03m"
+codes["underline"] = esc + "04m"
+codes["blink"]     = esc + "05m"
+codes["overline"]  = esc + "06m"
+
+dark_colors  = ["black", "darkred", "darkgreen", "brown", "darkblue",
+                "purple", "teal", "lightgray"]
+light_colors = ["darkgray", "red", "green", "yellow", "blue",
+                "fuchsia", "turquoise", "white"]
+
+x = 30
+for d, l in zip(dark_colors, light_colors):
+    codes[d] = esc + "%im" % x
+    codes[l] = esc + "%i;01m" % x
+    x += 1
+
+del d, l, x
+
+codes["darkteal"]   = codes["turquoise"]
+codes["darkyellow"] = codes["brown"]
+codes["fuscia"]     = codes["fuchsia"]
+codes["white"]      = codes["bold"]
+
+
+def reset_color():
+    return codes["reset"]
+
+
+def colorize(color_key, text):
+    return codes[color_key] + text + codes["reset"]
+
+
+def ansiformat(attr, text):
+    """
+    Format ``text`` with a color and/or some attributes::
+
+        color       normal color
+        *color*     bold color
+        _color_     underlined color
+        +color+     blinking color
+    """
+    result = []
+    if attr[:1] == attr[-1:] == '+':
+        result.append(codes['blink'])
+        attr = attr[1:-1]
+    if attr[:1] == attr[-1:] == '*':
+        result.append(codes['bold'])
+        attr = attr[1:-1]
+    if attr[:1] == attr[-1:] == '_':
+        result.append(codes['underline'])
+        attr = attr[1:-1]
+    result.append(codes[attr])
+    result.append(text)
+    result.append(codes['reset'])
+    return ''.join(result)
