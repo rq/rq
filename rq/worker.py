@@ -25,7 +25,6 @@ class Worker(object):
         self.queues = queues
         self.validate_queues()
         self.rv_ttl = rv_ttl
-        self._working = False
         self.log = Logger('worker')
 
 
@@ -85,7 +84,6 @@ class Worker(object):
             self.log = Logger('horse')
             try:
                 self.procline('Processing work since %d' % (time.time(),))
-                self._working = True
                 self.perform_job(job)
             except Exception, e:
                 self.log.exception(e)
@@ -94,7 +92,6 @@ class Worker(object):
         else:
             self.procline('Forked %d at %d' % (child_pid, time.time()))
             os.waitpid(child_pid, 0)
-            self._working = False
 
     def perform_job(self, job):
         self.procline('Processing %s from %s since %s' % (job.func.__name__, job.origin.name, time.time()))
