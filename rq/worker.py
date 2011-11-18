@@ -18,6 +18,29 @@ def iterable(x):
     return hasattr(x, '__iter__')
 
 class Worker(object):
+    redis_worker_namespace_prefix = 'rq:worker:'
+
+    @classmethod
+    def all(cls):
+        """Returns an iterable of all Workers.
+        """
+        prefix = cls.redis_worker_namespace_prefix
+        return map(cls.from_worker_key, conn.keys('%s*' % prefix))
+
+    @classmethod
+    def from_worker_key(cls, worker_key):
+        """Returns a Worker instance, based on the naming conventions for naming
+        the internal Redis keys.  Can be used to reverse-lookup Queues by their
+        Redis keys.
+        """
+        prefix = cls.redis_worker_namespace_prefix
+        name = worker_key[len(prefix):]
+        if not worker_key.startswith(prefix):
+            raise ValueError('Not a valid RQ worker key: %s' % (worker_key,))
+        name = worker_key[len(prefix):]
+        return Worker([], name)
+
+
     def __init__(self, queues, name=None, rv_ttl=500):
         if isinstance(queues, Queue):
             queues = [queues]
