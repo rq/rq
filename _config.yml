@@ -1,3 +1,3 @@
-exclude: rq-logo.psd
+exclude: rq-logo.psd, rq-logo2.psd
 markdown: redcarpet
 pygments: true
