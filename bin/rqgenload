@@ -18,12 +18,15 @@ def main():
     #funcs = filter(lambda s: not s.startswith('_'), dir(rq.dummy))
     #print(funcs)
 
-    queues = ('default', 'foo', 'bar', 'qux', 'high', 'normal', 'low')
+    queues = ('default', 'high', 'normal', 'low')
 
     sample_calls = [
             (dummy.do_nothing, [], {}),
+            (dummy.do_nothing, [], {}),
+            (dummy.do_nothing, [], {}),
+            (dummy.do_nothing, [], {}),
+            (dummy.do_nothing, [], {}),
             (dummy.sleep, [1], {}),
-            (dummy.sleep, [2], {}),
     ]
 
     for i in range(opts.count):
