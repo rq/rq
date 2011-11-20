@@ -1,3 +1,11 @@
 exclude: design
 markdown: redcarpet
 pygments: true
+
+navigation:
+- text: About
+  url: ./about.html
+- text: Docs
+  url: ./docs.html
+- text: Source
+  url: http://git.io/rq

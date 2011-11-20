@@ -54,6 +54,14 @@ header a
     -moz-transition: color linear 0.1s;
 }
 
+header a.current
+{
+    color: #d31f21;
+    /*background: url(../img/arrow.png) 50% 80px no-repeat;*/
+    padding-bottom: 40px;
+    background: url(http://www.lobguides.org.uk/themes/lobguides/images/arrow-down.png) no-repeat 50% 24px;
+}
+
 header a:hover
 {
     border-bottom-color: rgba(0, 0, 0, 0.1);
