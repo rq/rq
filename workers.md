@@ -16,7 +16,7 @@ To start crunching work, simply start a worker from the root of your project
 directory:
 
 {% highlight console %}
-$ rqworker high,normal,low
+$ rqworker high normal low
 Starting worker...
 Loading environment...
 Getting ready to start working...
@@ -41,7 +41,7 @@ finish all currently available work and quit as soon as all given queues are
 emptied.
 
 {% highlight console %}
-$ rqworker --burst high,normal,low
+$ rqworker --burst high normal low
 Starting worker...
 Loading environment...
 Getting ready to start working...
@@ -83,10 +83,12 @@ life-cycle of a worker consists of a few phases:
 
 ### Worker names
 
-Workers are registered under their names, see [monitoring](./monitoring.html).
-By default, the name of a worker is equal to the concatenation of the current
+Workers are registered under their names, see
+[monitoring][m].  By default, the name of a worker is equal to the concatenation of the current
 hostname and the current PID.  To override this default, specify the name when
 starting the worker, using the `--name` option.
+
+[m]: {{site.baseurl}}monitoring/
 
 
 ## Taking down workers

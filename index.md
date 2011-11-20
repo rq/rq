@@ -12,8 +12,8 @@ to use.
     <strong>Work in Progress™</strong>
     <p>To see what we're still working on, please click any of the following topics:</p>
     <ul>
-      <li><a href="./workers.html">Workers</a></li>
-      <li><a href="./monitoring.html">Monitoring</a></li>
+      <li><a href="{{site.baseurl}}workers/">Workers</a></li>
+      <li><a href="{{site.baseurl}}monitoring/">Monitoring</a></li>
     </ul>
 </div>
 

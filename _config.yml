@@ -1,11 +1,13 @@
+baseurl: /rq/
 exclude: design
+permalink: pretty
 markdown: redcarpet
 pygments: true
 
 navigation:
-- text: About
-  url: ./about.html
+- text: Home
+  url: /rq/
 - text: Docs
-  url: ./docs.html
+  url: /rq/docs/
 - text: Source
   url: http://git.io/rq
