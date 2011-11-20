@@ -14,14 +14,50 @@ body
     font-size: 150%;
     font-weight: 300;
     line-height: 1.55;
-    padding: 120px 30px 80px;
+    padding: 0 30px 80px;
 }
 
 header
 {
-    margin: 0 auto 2em auto;
+    background: url(../img/ribbon.png) no-repeat 50% 0;
     max-width: 430px;
     width: 100%;
+    text-align: center;
+
+    padding: 240px 0 1em 0;
+    border-bottom: 1px dashed #e1e1e1;
+    margin: 0 auto 2em auto;
+}
+
+header ul
+{
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+
+header ul li
+{
+    display: inline;
+    margin: 0 10px;
+}
+
+header a
+{
+    color: #3a3a3a;
+    border: 0;
+    font-size: 110%;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color linear 0.1s;
+    -webkit-transition: color linear 0.1s;
+    -moz-transition: color linear 0.1s;
+}
+
+header a:hover
+{
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.4);
 }
 
 .container
@@ -36,7 +72,6 @@ footer
     margin: 2em auto;
     max-width: 430px;
     width: 100%;
-
     border-top: 1px dashed #e1e1e1;
     padding-top: 1em;
 }
@@ -270,6 +305,7 @@ li
 
 }
 
+/*
 @media screen and (max-width: 1400px)
 {
     body
@@ -287,3 +323,4 @@ li
         padding-top: 30px;
     }
 }
+*/
