@@ -9,5 +9,7 @@ navigation:
   url: /rq/
 - text: Docs
   url: /rq/docs/
+- text: Contributing
+  url: /rq/contrib/
 - text: Source
   url: http://git.io/rq
