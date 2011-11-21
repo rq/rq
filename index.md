@@ -87,12 +87,6 @@ This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
-Project values:
-
-* Simplicity over completeness
-* Fail-safety over performance
-* Runtime insight over static configuration upfront
-
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
 [1]: http://www.celeryproject.org/
