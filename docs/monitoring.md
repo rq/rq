@@ -1,6 +1,6 @@
 ---
 title: "RQ: Monitoring"
-layout: default
+layout: docs
 ---
 
 <div class="warning">

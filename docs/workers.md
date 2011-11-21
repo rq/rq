@@ -1,6 +1,6 @@
 ---
 title: "RQ: Simple job queues for Python"
-layout: default
+layout: docs
 ---
 
 A worker is a Python process that typically runs in the background and exists
