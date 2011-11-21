@@ -4,7 +4,9 @@ import os
 import time
 import optparse
 from rq import use_redis, Queue
-from rq.utils import gettermsize, colorize
+from rq.utils import gettermsize, make_colorizer
+
+green = make_colorizer('darkgreen')
 
 
 def get_scale(x):
@@ -60,7 +62,7 @@ def show_queues(opts, args, parser):
         for q in qs:
             count = counts[q]
             if opts.graph:
-                chart = colorize('darkgreen', '|' + '█' * int(ratio * count))
+                chart = green('|' + '█' * int(ratio * count))
                 line = '%-12s %s %d' % (q.name, chart, count)
             else:
                 line = '%-12s %d' % (q.name, count)

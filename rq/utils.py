@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-    pygments.console
-    ~~~~~~~~~~~~~~~~
+Formatter for ANSI colored console output.
 
-    Format colored console output.
-
-    :copyright: Copyright 2006-2011 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
+Based heavily on Pygments terminal colorizing code, originally by Georg Brandl.
 """
 import os
 
@@ -34,66 +30,85 @@ def gettermsize():
             cr = (25, 80)
     return int(cr[1]), int(cr[0])
 
-esc = "\x1b["
 
-codes = {}
-codes[""]          = ""
-codes["reset"]     = esc + "39;49;00m"
+class _Colorizer(object):
+    def __init__(self):
+        esc = "\x1b["
 
-codes["bold"]      = esc + "01m"
-codes["faint"]     = esc + "02m"
-codes["standout"]  = esc + "03m"
-codes["underline"] = esc + "04m"
-codes["blink"]     = esc + "05m"
-codes["overline"]  = esc + "06m"
+        self.codes = {}
+        self.codes[""]          = ""
+        self.codes["reset"]     = esc + "39;49;00m"
 
-dark_colors  = ["black", "darkred", "darkgreen", "brown", "darkblue",
-                "purple", "teal", "lightgray"]
-light_colors = ["darkgray", "red", "green", "yellow", "blue",
-                "fuchsia", "turquoise", "white"]
+        self.codes["bold"]      = esc + "01m"
+        self.codes["faint"]     = esc + "02m"
+        self.codes["standout"]  = esc + "03m"
+        self.codes["underline"] = esc + "04m"
+        self.codes["blink"]     = esc + "05m"
+        self.codes["overline"]  = esc + "06m"
 
-x = 30
-for d, l in zip(dark_colors, light_colors):
-    codes[d] = esc + "%im" % x
-    codes[l] = esc + "%i;01m" % x
-    x += 1
+        dark_colors  = ["black", "darkred", "darkgreen", "brown", "darkblue",
+                        "purple", "teal", "lightgray"]
+        light_colors = ["darkgray", "red", "green", "yellow", "blue",
+                        "fuchsia", "turquoise", "white"]
 
-del d, l, x
+        x = 30
+        for d, l in zip(dark_colors, light_colors):
+            self.codes[d] = esc + "%im" % x
+            self.codes[l] = esc + "%i;01m" % x
+            x += 1
 
-codes["darkteal"]   = codes["turquoise"]
-codes["darkyellow"] = codes["brown"]
-codes["fuscia"]     = codes["fuchsia"]
-codes["white"]      = codes["bold"]
+        del d, l, x
+
+        self.codes["darkteal"]   = self.codes["turquoise"]
+        self.codes["darkyellow"] = self.codes["brown"]
+        self.codes["fuscia"]     = self.codes["fuchsia"]
+        self.codes["white"]      = self.codes["bold"]
+
+    def reset_color(self):
+        return self.codes["reset"]
+
+    def colorize(self, color_key, text):
+        return self.codes[color_key] + text + self.codes["reset"]
+
+    def ansiformat(self, attr, text):
+        """
+        Format ``text`` with a color and/or some attributes::
+
+            color       normal color
+            *color*     bold color
+            _color_     underlined color
+            +color+     blinking color
+        """
+        result = []
+        if attr[:1] == attr[-1:] == '+':
+            result.append(self.codes['blink'])
+            attr = attr[1:-1]
+        if attr[:1] == attr[-1:] == '*':
+            result.append(self.codes['bold'])
+            attr = attr[1:-1]
+        if attr[:1] == attr[-1:] == '_':
+            result.append(self.codes['underline'])
+            attr = attr[1:-1]
+        result.append(self.codes[attr])
+        result.append(text)
+        result.append(self.codes['reset'])
+        return ''.join(result)
 
 
-def reset_color():
-    return codes["reset"]
+colorizer = _Colorizer()
 
+def make_colorizer(color):
+    """Creates a function that colorizes text with the given color.
 
-def colorize(color_key, text):
-    return codes[color_key] + text + codes["reset"]
+    For example:
 
+        green = make_colorizer('darkgreen')
+        red = make_colorizer('red')
 
-def ansiformat(attr, text):
+    Then, you can use:
+
+        print "It's either " + green('OK') + ' or ' + red('Oops')
     """
-    Format ``text`` with a color and/or some attributes::
-
-        color       normal color
-        *color*     bold color
-        _color_     underlined color
-        +color+     blinking color
-    """
-    result = []
-    if attr[:1] == attr[-1:] == '+':
-        result.append(codes['blink'])
-        attr = attr[1:-1]
-    if attr[:1] == attr[-1:] == '*':
-        result.append(codes['bold'])
-        attr = attr[1:-1]
-    if attr[:1] == attr[-1:] == '_':
-        result.append(codes['underline'])
-        attr = attr[1:-1]
-    result.append(codes[attr])
-    result.append(text)
-    result.append(codes['reset'])
-    return ''.join(result)
+    def inner(text):
+        return colorizer.colorize(color, text)
+    return inner
