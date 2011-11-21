@@ -118,14 +118,12 @@ code
     line-height: 0.5em;
 
     border: 1px solid #efeaea;
-    background-color: #fffafa;
     padding: 0.2em 0.4em;
 }
 
 pre code
 {
     border: none;
-    background-color: inherit;
     padding: 0;
 }
 
