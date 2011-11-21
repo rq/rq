@@ -57,8 +57,9 @@ class Job(object):
         return self.func(*self.args, **self.kwargs)
 
     def __str__(self):
-        arg_list = map(repr, self.args)
-        arg_list += map(lambda key, val: '%s=%r' % (key, val), self.kwargs.items())
+        arg_list = map(repr, self.args) + \
+                   map(lambda tup: '%s=%r' % (tup[0], tup[1]),
+                       self.kwargs.items())
         return '<Job %s(%s)>' % (
                 self.func.__name__,
                 ', '.join(arg_list))
