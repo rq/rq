@@ -78,7 +78,7 @@ class TestQueue(RQTestCase):
         q = Queue('my-queue')
         self.assertEquals(q.empty, True)
 
-        conn.rpush('rq:my-queue', 'some val')
+        conn.rpush('rq:queue:my-queue', 'some val')
         self.assertEquals(q.empty, False)
 
 
