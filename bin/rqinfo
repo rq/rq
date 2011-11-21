@@ -3,11 +3,17 @@
 import os
 import time
 import optparse
-from rq import use_redis, Queue
+from rq import use_redis, Queue, Worker
 from rq.utils import gettermsize, make_colorizer
 
+red = make_colorizer('darkred')
 green = make_colorizer('darkgreen')
+yellow = make_colorizer('darkyellow')
 
+
+def pad(s, pad_to_length):
+    """Pads the given string to the given length."""
+    return ('%-' + '%ds' % pad_to_length) % (s,)
 
 def get_scale(x):
     """Finds the lowest scale where x <= scale."""
@@ -76,8 +82,50 @@ def show_queues(opts, args, parser):
         else:
             break
 
+def state_symbol(state):
+    symbols = {
+        'busy': red(u'\u25CF'),
+        'idle': green(u'\u25CB'),
+    }
+    try:
+        return symbols[state]
+    except KeyError:
+        return state
+
 def show_workers(opts, args, parser):
-    raise NotImplementedError()
+    while True:
+        qs = Queue.all()
+        ws = Worker.all()
+
+        if opts.interval:
+            os.system('clear')
+
+        queues = {qname: [] for qname in qs}
+        for w in ws:
+            for q in w.queues:
+                if not q in queues:
+                    queues[q] = []
+                queues[q].append(w)
+
+        by_worker = False
+        if by_worker:
+            for w in ws:
+                print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(w.queue_names()))
+        else:
+            max_qname = max(map(lambda q: len(q.name), queues.keys()))
+            for q in queues:
+                if queues[q]:
+                    queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.state)), queues[q])))
+                else:
+                    queues_str = '–'
+                print '%s %s' % (pad(q.name + ':', max_qname + 1), queues_str)
+        print '%d workers, watching %d queues' % (len(ws), len(queues))
+
+        if opts.interval:
+            time.sleep(opts.interval)
+        else:
+            break
+
 
 def main():
     opts, args, parser = parse_args()
