@@ -38,6 +38,9 @@ def parse_args():
     parser.add_option('-g', '--graph', dest='graph',
             action='store_true', default=False,
             help='Shows bar chart graphs where possible.')
+    parser.add_option('-Q', '--by-queue', dest='by_queue',
+            default=False, action='store_true',
+            help='Shows workers by queue.')
     opts, args = parser.parse_args()
     return (opts, args, parser)
 
@@ -107,11 +110,7 @@ def show_workers(opts, args, parser):
                     queues[q] = []
                 queues[q].append(w)
 
-        by_worker = False
-        if by_worker:
-            for w in ws:
-                print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(w.queue_names()))
-        else:
+        if opts.by_queue:
             max_qname = max(map(lambda q: len(q.name), queues.keys()))
             for q in queues:
                 if queues[q]:
@@ -119,6 +118,9 @@ def show_workers(opts, args, parser):
                 else:
                     queues_str = '–'
                 print '%s %s' % (pad(q.name + ':', max_qname + 1), queues_str)
+        else:
+            for w in ws:
+                print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(w.queue_names()))
         print '%d workers, watching %d queues' % (len(ws), len(queues))
 
         if opts.interval:
