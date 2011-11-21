@@ -57,11 +57,11 @@ class Job(object):
         return self.func(*self.args, **self.kwargs)
 
     def __str__(self):
-        return '<Job %s(%s, %s)>' % (
+        arg_list = map(repr, self.args)
+        arg_list += map(lambda key, val: '%s=%r' % (key, val), self.kwargs.items())
+        return '<Job %s(%s)>' % (
                 self.func.__name__,
-                ', '.join(
-                    map(repr, self.args) +
-                    map(lambda key, val: '%s=%r' % (key, val), self.kwargs.items())))
+                ', '.join(arg_list))
 
 
 @total_ordering

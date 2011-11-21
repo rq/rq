@@ -117,7 +117,6 @@ class Worker(object):
 
         This can be used to make `ps -ef` output more readable.
         """
-        self.log.debug(message)
         procname.setprocname('rq: %s' % (message,))
 
 
@@ -164,7 +163,9 @@ class Worker(object):
         try:
             while True:
                 self.state = 'idle'
-                self.procline('Waiting on %s' % (', '.join(self.queue_names()),))
+                qnames = ', '.join(self.queue_names())
+                self.procline('Waiting on %s' % (qnames,))
+                self.log.info('Watching queues: %s' % (qnames,))
                 wait_for_job = not quit_when_done
                 job = Queue.dequeue_any(self.queues, wait_for_job)
                 if job is None:
@@ -199,7 +200,6 @@ class Worker(object):
             random.seed()
             self.log = Logger('horse')
             try:
-                self.procline('Processing work since %d' % (time.time(),))
                 self.perform_job(job)
             except Exception, e:
                 self.log.exception(e)
@@ -211,6 +211,8 @@ class Worker(object):
 
     def perform_job(self, job):
         self.procline('Processing %s from %s since %s' % (job.func.__name__, job.origin.name, time.time()))
+        msg = 'Processing job %s from queue %s' % (job, job.origin.name)
+        self.log.debug(msg)
         try:
             rv = job.perform()
         except Exception, e:
