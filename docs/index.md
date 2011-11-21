@@ -101,44 +101,9 @@ serialize the jobs, so it's a Python-only system.
 
 ## The worker
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
-    <strong>NOTE:</strong>
-    <p>You currently need to create the worker yourself, which is extremely easy, but RQ will include a custom script soon that can be used to start arbitrary workers without writing any code.</p>
-    <p>See also, the Work In Progress™ documentation on <a href="./workers.html">workers</a>.</p>
-</div>
+To learn about workers, see the [workers][w] documentation.
 
-Creating a worker daemon is also extremely easy.  Create a file `worker.py`
-with the following content:
-
-{% highlight python %}
-from rq import Queue, Worker
-
-q = Queue()
-Worker(q).work_forever()
-{% endhighlight %}
-
-After that, start a worker instance:
-
-    python worker.py
-
-This will wait for work on the default queue and start processing it as soon as
-messages arrive.
-
-You can even watch several queues at the same time and start processing from
-them:
-
-{% highlight python %}
-from rq import Queue, Worker
-
-queues = map(Queue, ['high', 'normal', 'low'])
-Worker(queues).work()
-{% endhighlight %}
-
-Which will keep popping jobs from the given queues, giving precedence to the
-`high` queue, then `normal`, etc.  It will return when there are no more jobs
-left (contrast this to the previous example using `Worker.work_forever()`,
-which will never return since it keeps waiting for new work to arrive).
+[w]: {{site.baseurl}}docs/workers/
 
 
 ## Considerations for jobs
