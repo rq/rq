@@ -56,13 +56,18 @@ class Job(object):
         """
         return self.func(*self.args, **self.kwargs)
 
+    @property
+    def call_string(self):
+        """Returns a string representation of the call, formatted as a regular
+        Python function invocation statement.
+        """
+        arg_list = map(repr, self.args)
+        arg_list += map(lambda tup: '%s=%r' % (tup[0], tup[1]),
+                self.kwargs.items())
+        return '%s(%s)' % (self.func.__name__, ', '.join(arg_list))
+
     def __str__(self):
-        arg_list = map(repr, self.args) + \
-                   map(lambda tup: '%s=%r' % (tup[0], tup[1]),
-                       self.kwargs.items())
-        return '<Job %s(%s)>' % (
-                self.func.__name__,
-                ', '.join(arg_list))
+        return '<Job %s>' % self.call_string
 
 
 @total_ordering
