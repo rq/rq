@@ -31,7 +31,7 @@ class Worker(object):
     @classmethod
     def from_worker_key(cls, worker_key):
         """Returns a Worker instance, based on the naming conventions for naming
-        the internal Redis keys.  Can be used to reverse-lookup Queues by their
+        the internal Redis keys.  Can be used to reverse-lookup Workers by their
         Redis keys.
         """
         prefix = cls.redis_worker_namespace_prefix
@@ -117,7 +117,7 @@ class Worker(object):
             p.execute()
 
     def register_death(self):
-        """Registers its own birth."""
+        """Registers its own death."""
         self.log.error('Registering death')
         with conn.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
