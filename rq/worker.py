@@ -163,9 +163,9 @@ class Worker(object):
         try:
             while True:
                 self.state = 'idle'
-                qnames = ', '.join(self.queue_names())
-                self.procline('Waiting on %s' % (qnames,))
-                self.log.info('Waiting for jobs on %s' % (qnames,))
+                qnames = self.queue_names()
+                self.procline('Listening on %s' % (','.join(qnames)))
+                self.log.info('*** Listening for work on %s' % (', '.join(qnames)))
                 wait_for_job = not quit_when_done
                 job = Queue.dequeue_any(self.queues, wait_for_job)
                 if job is None:
@@ -213,10 +213,10 @@ class Worker(object):
         self.procline('Processing %s from %s since %s' % (
             job.func.__name__,
             job.origin.name, time.time()))
-        msg = 'Processing job %s from queue %s' % (
+        msg = 'Got job %s from queue %s' % (
                 job.call_string,
                 job.origin.name)
-        self.log.debug(msg)
+        self.log.info(msg)
         try:
             rv = job.perform()
         except Exception, e:
