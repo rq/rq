@@ -46,40 +46,55 @@ normal     |█████████ 8
 {% endhighlight %}
 
 
+### Interval polling
+
+By default, `rqinfo` prints the stats and exists.  You can however tell it to
+keep polling for the same data periodically, by using the `--interval` flag.
+`rqinfo` then puts itself into an endless polling loop, which is especially
+attractive when used together with the `--graph` option.
+
+{% highlight console %}
+$ rqinfo --queues --graph --interval 1
+{% endhighlight %}
+
+`rqinfo` will now update the screen with the new info every second.  If you
+feel the need, you can specify fractions of seconds (although this might incur
+some extra polling load):
+
+{% highlight console %}
+$ rqinfo --queues --graph --interval 0.5
+{% endhighlight %}
+
+
 ## Showing active workers
 
-To see what workers are currently active:
+To see what workers are currently active, and what queues they operate on:
 
 {% highlight console %}
 $ rqinfo --workers
-worker          queues            jobs   state
---------------- ----------------- ------ --------
-mickey.27939    high,normal,low   34     busy
-mickey.8239     high,normal,low   120    busy
-turkish.32682   high              200    idle
-bricktop.2682   weekly            1      starting
-foobar.2658     default           1      idle
-4 workers listening on 4 queues
+Mickey.26421 ●: high, normal, default
+Bricktop.25458 ●: high, normal, low
+Turkish.25812 ●: high, normal
+3 workers, 4 queues
 {% endhighlight %}
 
-The states (_starting_, _idle_, _busy_, or _dead_) indicate the phase of the
-worker life-cycle (see [workers][w]).
-
-[w]: {{site.baseurl}}workers/
-
-In the future, _paused_ would be a useful state, too.
-
+To see the same data, but organised by queue, use the `-Q` (or `--by-queue`) flag:
 
 {% highlight console %}
-$ rqinfo --workers --verbose
-worker          queues            jobs   since      state
---------------- ----------------- ------ ---------- --------
-mickey.27939    high,normal,low   34     4d 11h 6m  busy
-mickey.8239     high,normal,low   120    21d 2h 4m  busy
-turkish.32682   high              200    1h 7m 3s   idle
-bricktop.2682   weekly            1      1m 7s      starting
-foobar.2658     default           1      1m 7s      idle
-4 workers listening on 4 queues
+$ bin/rqinfo --workers -Q
+default: Mickey.26421 (●)
+high:    Bricktop.25458 (●), Mickey.26421 (●), Turkish.25812 (●)
+low:     Bricktop.25458 (●)
+normal:  Bricktop.25458 (●), Mickey.26421 (●), Turkish.25812 (●)
+3 workers, 4 queues
 {% endhighlight %}
 
+The dots behind the worker names indicate the current state of the worker.
+A open green dot means idle and a filled red dot means busy.
+
+
+### Interval polling
+
+Just like with `rqinfo --queues`, you can use the `--interval` option to keep
+polling for the worker stats at a regular interval.
 

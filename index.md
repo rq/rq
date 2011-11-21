@@ -61,10 +61,10 @@ from your project's directory:
 
 {% highlight console %}
 $ rqworker
-worker: Waiting for jobs on default
-horse: Processing count_words_at_url('http://nvie.com') from default
-horse: Job result = 818
-worker: Waiting for jobs on default
+*** Listening for work on default
+Got count_words_at_url('http://nvie.com') from default
+Job result = 818
+*** Listening for work on default
 {% endhighlight %}
 
 That's about it.
