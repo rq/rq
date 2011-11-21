@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Formatter for ANSI colored console output.
+Miscellaneous helper functions.
 
-Based heavily on Pygments terminal colorizing code, originally by Georg Brandl.
+The formatter for ANSI colored console output is heavily based on Pygments terminal
+colorizing code, originally by Georg Brandl.
 """
 import os
 
