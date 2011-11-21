@@ -3,10 +3,6 @@ title: "RQ: Documentation"
 layout: default
 ---
 
-RQ (_Redis Queue_) is a lightweight Python library for queueing jobs and
-processing them in workers.  It is backed by Redis and it is extremely simple
-to use.
-
 <div class="warning">
     <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
     <strong>Work in Progress™</strong>
@@ -18,7 +14,15 @@ to use.
 </div>
 
 
-## Putting jobs on queues
+## Jobs
+
+A job is a Python function that is invoked asynchronously in a worker
+(background) process.  Any Python function can be invoked asynchronously, by
+simply pushing a reference to the function and its arguments onto a queue.
+This is called _enqueueing_.
+
+
+## Enqueueing jobs
 
 To put jobs on queues, first declare a job:
 
@@ -49,14 +53,14 @@ print result.return_value   # => 800
 {% endhighlight %}
 
 Of course, multiplying does not make any sense to do in a worker, at all.
-A more useful example where you would use jobs instead is for sending mail in
-the background.  Here, we use the Python [mailer][m] package:
+Instead, you would typically enqueue jobs that are lengthy or blocking.  For
+example, sending email.  Here, we use the Python [mailer][m] package:
 
 {% highlight python %}
 import mailer
+from my_config import smtp_settings
 
 def send_mail(message):
-    from my_config import smtp_settings
     sender = mailer.Mailer(**smtp_settings)
     sender.send(message)
 {% endhighlight %}
@@ -87,9 +91,9 @@ specify any channels, exchanges, routing rules, or whatnot.  You can just put
 jobs onto any queue you want.  As soon as you enqueue a job to a queue that
 does not exist yet, it is created on the fly.
 
-RQ does _not_ use a broker to do the message routing for you.  You may consider
-this an awesome advantage or a handicap, depending on the problem you're
-solving.
+RQ does _not_ use an advanced broker to do the message routing for you.  You
+may consider this an awesome advantage or a handicap, depending on the problem
+you're solving.
 
 Lastly, it does not speak a portable protocol, since it uses [pickle][p] to
 serialize the jobs, so it's a Python-only system.
@@ -156,31 +160,10 @@ on a queue:
   and pass a reference to that user object to the job as an argument.
 
 
-## Installation
+## Limitations
 
-Simply use the following command to install the latest released version:
+Currently, it is impossible to enqueue instance methods.
 
-    pip install rq
-
-If you want the cutting edge version (that may well be broken), use this:
-
-    pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
-
-
-## Project history
-
-This project has been inspired by the good parts of [Celery][1], [Resque][2]
-and [this snippet][3], and has been created as a lightweight alternative to the
-heaviness of Celery or other AMQP-based queueing implementations.
-
-Project values:
-
-* Simplicity over completeness
-* Fail-safety over performance
-* Runtime insight over static configuration upfront
 
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
-[1]: http://www.celeryproject.org/
-[2]: https://github.com/defunkt/resque
-[3]: http://flask.pocoo.org/snippets/73/

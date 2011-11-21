@@ -4,8 +4,8 @@ layout: default
 ---
 
 RQ (_Redis Queue_) is a lightweight Python library for queueing jobs and
-processing them in workers.  It is backed by Redis and it is extremely simple
-to use.
+processing them in the background with workers.  It is backed by Redis and it
+is extremely simple to use.
 
 
 ## Getting started
@@ -45,8 +45,8 @@ And enqueue the function call:
 
 {% highlight python %}
 from my_module import count_words_at_url
-result = q.enqueue(count_words_at_url,
-                       'http://nvie.com')
+result = q.enqueue(
+             count_words_at_url, 'http://nvie.com')
 {% endhighlight %}
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
