@@ -17,6 +17,9 @@ from .exceptions import NoQueueError
 def iterable(x):
     return hasattr(x, '__iter__')
 
+def compact(l):
+    return [x for x in l if x is not None]
+
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
@@ -26,10 +29,10 @@ class Worker(object):
         """Returns an iterable of all Workers.
         """
         reported_working = conn.smembers(cls.redis_workers_keys)
-        return map(cls.from_worker_key, reported_working)
+        return compact(map(cls.find_by_key, reported_working))
 
     @classmethod
-    def from_worker_key(cls, worker_key):
+    def find_by_key(cls, worker_key):
         """Returns a Worker instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Workers by their
         Redis keys.
@@ -38,8 +41,17 @@ class Worker(object):
         name = worker_key[len(prefix):]
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % (worker_key,))
+
+        if not conn.exists(worker_key):
+            return None
+
         name = worker_key[len(prefix):]
-        return Worker([], name)
+        worker = Worker([], name)
+        queues = conn.hget(worker.key, 'queues')
+        worker._state = conn.hget(worker.key, 'state') or '?'
+        if queues:
+            worker.queues = map(Queue, queues.split(','))
+        return worker
 
 
     def __init__(self, queues, name=None, rv_ttl=500):
