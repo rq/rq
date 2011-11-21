@@ -62,7 +62,7 @@ from your project's directory:
 {% highlight console %}
 $ rqworker
 worker: Waiting for jobs on default
-horse: Processing count_words_at_url('http://nvie.com') from default since 1321825763.68
+horse: Processing count_words_at_url('http://nvie.com') from default
 horse: Job result = 818
 worker: Waiting for jobs on default
 {% endhighlight %}
