@@ -10,25 +10,43 @@ to use.
 
 ## Getting started
 
+First, run a Redis server, of course:
+
+{% highlight console %}
+$ redis-server
+{% endhighlight %}
+
 To put jobs on queues, you don't have to do anything special, just define
-a function:
+your typically lengthy or blocking function:
 
 {% highlight python %}
-def multiply(x, y):
-    return x + y
+import urllib2
+
+def count_words_at_url(url):
+    f = urllib2.urlopen(url)
+    count = 0
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        count += len(line.split())
+    return count
 {% endhighlight %}
 
 Then, create a RQ queue:
 
 {% highlight python %}
-from rq import Queue
+import rq import *
+use_redis()
 q = Queue()
 {% endhighlight %}
 
 And enqueue the function call:
 
 {% highlight python %}
-result = q.enqueue(multiply, 20, 40)
+from my_module import count_words_at_url
+result = q.enqueue(count_words_at_url,
+                   'http://nvie.com')
 {% endhighlight %}
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
@@ -43,11 +61,9 @@ a worker from your project's directory:
 
 {% highlight console %}
 $ rqworker
-worker: Waiting on default
-worker: Forked 76397 at 1321825763
-horse: Processing work since 1321825763
+worker: Watching queues: default
 horse: Processing multiply from default since 1321825763.68
-horse: result = 800
+horse: Job result = 800
 {% endhighlight %}
 
 That's about it.
