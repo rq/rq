@@ -46,7 +46,7 @@ And enqueue the function call:
 {% highlight python %}
 from my_module import count_words_at_url
 result = q.enqueue(count_words_at_url,
-                   'http://nvie.com')
+                       'http://nvie.com')
 {% endhighlight %}
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
@@ -56,14 +56,15 @@ For a more complete example, refer to the [docs][d].  But this is the essence.
 
 ## The worker
 
-To start executing the enqueued function calls in the background, start
-a worker from your project's directory:
+To start executing enqueued function calls in the background, start a worker
+from your project's directory:
 
 {% highlight console %}
 $ rqworker
-worker: Watching queues: default
-horse: Processing multiply from default since 1321825763.68
-horse: Job result = 800
+worker: Waiting for jobs on default
+horse: Processing count_words_at_url('http://nvie.com') from default since 1321825763.68
+horse: Job result = 818
+worker: Waiting for jobs on default
 {% endhighlight %}
 
 That's about it.
