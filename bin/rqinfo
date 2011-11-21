@@ -121,7 +121,7 @@ def show_workers(opts, args, parser):
         else:
             for w in ws:
                 print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(w.queue_names()))
-        print '%d workers, watching %d queues' % (len(ws), len(queues))
+        print '%d workers, %d queues' % (len(ws), len(queues))
 
         if opts.interval:
             time.sleep(opts.interval)
