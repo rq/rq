@@ -213,7 +213,7 @@ class Worker(object):
         self.procline('Processing %s from %s since %s' % (
             job.func.__name__,
             job.origin.name, time.time()))
-        msg = 'Got job %s from queue %s' % (
+        msg = 'Got job %s from %s' % (
                 job.call_string,
                 job.origin.name)
         self.log.info(msg)
