@@ -145,6 +145,7 @@ class Worker(object):
 
     def register_birth(self):
         """Registers its own birth."""
+        self.log.debug('Registering birth of worker %s' % (self.name,))
         if conn.exists(self.key) and not conn.hexists(self.key, 'death'):
             raise ValueError('There exists an active worker named \'%s\' alread.' % (self.name,))
         key = self.key
@@ -159,7 +160,7 @@ class Worker(object):
 
     def register_death(self):
         """Registers its own death."""
-        self.log.error('Registering death')
+        self.log.debug('Registering death')
         with conn.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
