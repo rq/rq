@@ -255,9 +255,13 @@ class Worker(object):
                     os.waitpid(child_pid, 0)
                     break
                 except OSError as e:
-                    if e.errno == errno.EINTR:
-                        self.log.info('Not waiting for child.... received SIGINT.')
-                    else:
+                    # In case we encountered an OSError due to EINTR (which is
+                    # caused by a SIGINT signal during os.waitpid()), we simply
+                    # ignore it and enter the next iteration of the loop,
+                    # waiting for the child to end.  In any other case, this is
+                    # some other unexpected OS error, which we don't want to
+                    # catch, so we re-raise those ones.
+                    if e.errno != errno.EINTR:
                         raise
 
     def perform_job(self, job):
