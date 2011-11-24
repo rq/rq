@@ -244,7 +244,15 @@ class Worker(object):
             sys.exit(0)
         else:
             self.procline('Forked %d at %d' % (child_pid, time.time()))
-            os.waitpid(child_pid, 0)
+            while True:
+                try:
+                    os.waitpid(child_pid, 0)
+                    break
+                except OSError as e:
+                    if e.errno == errno.EINTR:
+                        self.log.info('Not waiting for child.... received SIGINT.')
+                    else:
+                        raise
 
     def perform_job(self, job):
         self.procline('Processing %s from %s since %s' % (
