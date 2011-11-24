@@ -28,4 +28,4 @@ code_locs() {
 }
 
 echo "Size: $(code_size) kB"
-echo "Lines: $(code_locs) kB"
+echo "Lines of code: $(code_locs)"
