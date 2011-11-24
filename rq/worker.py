@@ -161,8 +161,10 @@ class Worker(object):
     def stopped(self):
         return self._stopped
 
-    def _install_sigint_handler(self):
-        """Installs signal handlers for handling SIGINT."""
+    def _install_signal_handlers(self):
+        """Installs signal handlers for handling SIGINT and SIGTERM
+        gracefully.
+        """
 
         def request_force_stop(signum, frame):
             """Terminates the application (cold shutdown).
@@ -175,9 +177,10 @@ class Worker(object):
             end gracefully (warm shutdown).
             """
             signal.signal(signal.SIGINT, request_force_stop)
+            signal.signal(signal.SIGTERM, request_force_stop)
 
             if self.is_horse:
-                self.log.debug('Ignoring SIGINT.')
+                self.log.debug('Ignoring interrupt.')
                 return
 
             self.log.warning('Warm shut down. Press Ctrl+C again for a cold shutdown.')
@@ -188,12 +191,13 @@ class Worker(object):
             self.log.debug('Stopping after current horse is finished.')
 
         signal.signal(signal.SIGINT, request_stop)
+        signal.signal(signal.SIGTERM, request_stop)
 
 
     def _work(self, quit_when_done=False):
         """This method starts the work loop.
         """
-        self._install_sigint_handler()
+        self._install_signal_handlers()
 
         did_work = False
         self.register_birth()
@@ -256,11 +260,11 @@ class Worker(object):
                     break
                 except OSError as e:
                     # In case we encountered an OSError due to EINTR (which is
-                    # caused by a SIGINT signal during os.waitpid()), we simply
-                    # ignore it and enter the next iteration of the loop,
-                    # waiting for the child to end.  In any other case, this is
-                    # some other unexpected OS error, which we don't want to
-                    # catch, so we re-raise those ones.
+                    # caused by a SIGINT or SIGTERM signal during os.waitpid()),
+                    # we simply ignore it and enter the next iteration of the
+                    # loop, waiting for the child to end.  In any other case,
+                    # this is some other unexpected OS error, which we don't
+                    # want to catch, so we re-raise those ones.
                     if e.errno != errno.EINTR:
                         raise
 
