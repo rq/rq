@@ -161,13 +161,19 @@ class Worker(object):
     def stopped(self):
         return self._stopped
 
-    def install_sigint_handler(self):
+    def _install_sigint_handler(self):
+        """Installs signal handlers for handling SIGINT."""
+
         def request_force_stop(signum, frame):
-            """Terminates the application."""
+            """Terminates the application (cold shutdown).
+            """
             self.log.warning('Cold shut down.')
             raise SystemExit()
 
         def request_stop(signum, frame):
+            """Stops the current worker loop but waits for child processes to
+            end gracefully (warm shutdown).
+            """
             signal.signal(signal.SIGINT, request_force_stop)
 
             if self.is_horse:
@@ -187,7 +193,7 @@ class Worker(object):
     def _work(self, quit_when_done=False):
         """This method starts the work loop.
         """
-        self.install_sigint_handler()
+        self._install_sigint_handler()
 
         did_work = False
         self.register_birth()
