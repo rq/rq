@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import optparse
+import logbook
+from logbook import handlers
 from rq import use_redis, Queue, Worker
 
 
@@ -11,13 +13,49 @@ def parse_args():
     parser.add_option('-n', '--name', dest='name',
             action='store', type='string', default=None,
             help='Specify a different name.')
+    parser.add_option('-v', '--verbose', dest='verbose',
+            action='store_true', default=False,
+            help='Show more output.')
     opts, args = parser.parse_args()
     return (opts, args, parser)
+
+
+def format_colors(record, handler):
+    from rq.utils import make_colorizer
+    if record.level == logbook.WARNING:
+        colorize = make_colorizer('darkyellow')
+    elif record.level >= logbook.ERROR:
+        colorize = make_colorizer('darkred')
+    else:
+        colorize = lambda x: x
+    return '%s: %s' % (record.time.strftime('%H:%M:%S'), colorize(record.msg))
+
+
+def setup_loghandlers(opts):
+    if opts.verbose:
+        loglevel = logbook.DEBUG
+        formatter = None
+    else:
+        loglevel = logbook.INFO
+        formatter = format_colors
+
+    import sys
+    handlers.NullHandler(bubble=False).push_application()
+    handler = handlers.StreamHandler(sys.stdout, level=loglevel, bubble=False)
+    if formatter:
+        handler.formatter = formatter
+    handler.push_application()
+    handler = handlers.StderrHandler(level=logbook.WARNING, bubble=False)
+    if formatter:
+        handler.formatter = formatter
+    handler.push_application()
+
 
 def main():
     opts, args, parser = parse_args()
 
     use_redis()
+    setup_loghandlers(opts)
 
     if len(args) == 0:
         # Use the default queue
