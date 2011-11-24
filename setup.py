@@ -18,7 +18,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     platforms='any',
-    install_requires=['redis', 'logbook', 'blinker'],
+    install_requires=['redis', 'logbook'],
     scripts=['bin/rqinfo', 'bin/rqworker'],
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers

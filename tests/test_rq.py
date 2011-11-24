@@ -1,6 +1,5 @@
 import unittest
 from pickle import loads
-from blinker import signal
 from redis import Redis
 from rq import conn, Queue, Worker
 
@@ -21,14 +20,11 @@ class RQTestCase(unittest.TestCase):
 
         # Flush beforewards (we like our hygiene)
         conn.flushdb()
-        signal('setup').send(self)
 
         # Store the connection (for sanity checking)
         self.testconn = testconn
 
     def tearDown(self):
-        signal('teardown').send(self)
-
         # Flush afterwards
         conn.flushdb()
 
