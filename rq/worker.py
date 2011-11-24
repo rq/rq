@@ -22,6 +22,18 @@ def iterable(x):
 def compact(l):
     return [x for x in l if x is not None]
 
+_signames = dict((getattr(signal, signame), signame) \
+                    for signame in dir(signal) \
+                    if signame.startswith('SIG') and '_' not in signame)
+
+def signal_name(signum):
+    # Hackety-hack-hack: is there really no better way to reverse lookup the
+    # signal name?  If you read this and know a way: please provide a patch :)
+    try:
+        return _signames[signum]
+    except KeyError:
+        return 'SIG_UNKNOWN'
+
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
@@ -176,6 +188,8 @@ class Worker(object):
             """Stops the current worker loop but waits for child processes to
             end gracefully (warm shutdown).
             """
+            self.log.debug('Got %s signal.' % signal_name(signum))
+
             signal.signal(signal.SIGINT, request_force_stop)
             signal.signal(signal.SIGTERM, request_force_stop)
 
