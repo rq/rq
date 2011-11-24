@@ -77,6 +77,7 @@ class Worker(object):
         self.rv_ttl = rv_ttl
         self._state = 'starting'
         self._is_horse = False
+        self._horse_pid = 0
         self._stopped = False
         self.log = Logger('worker')
 
@@ -121,6 +122,13 @@ class Worker(object):
     def pid(self):
         """The current process ID."""
         return os.getpid()
+
+    @property
+    def horse_pid(self):
+        """The horse's process ID.  Only available in the worker.  Will return
+        0 in the horse part of the fork.
+        """
+        return self._horse_pid
 
     @property
     def is_horse(self):
@@ -182,6 +190,11 @@ class Worker(object):
             """Terminates the application (cold shutdown).
             """
             self.log.warning('Cold shut down.')
+
+            # Take down the horse with the worker
+            if self.horse_pid:
+                self.log.debug('Taking down horse %d with me.' % self.horse_pid)
+                os.kill(self.horse_pid, signal.SIGKILL)
             raise SystemExit()
 
         def request_stop(signum, frame):
@@ -267,6 +280,7 @@ class Worker(object):
                 sys.exit(1)
             sys.exit(0)
         else:
+            self._horse_pid = child_pid
             self.procline('Forked %d at %d' % (child_pid, time.time()))
             while True:
                 try:
