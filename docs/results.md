@@ -90,4 +90,37 @@ Just sayin'.
 
 ## Dealing with job timeouts
 
-...
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
+    <strong>Be warned!</strong>
+    <p>This timeout stuff does not exist yet.</p>
+</div>
+
+By default, jobs should execute within 180 seconds.  After that, the worker
+kills the work horse and puts the job onto the `failed` queue, indicating the
+job timed out.
+
+If a job requires more (or less) time to complete, the default timeout period
+can be loosened (or tightened), by specifying it as a keyword argument to the
+`Queue.enqueue()` call, like so:
+
+{% highlight python %}
+q = Queue()
+q.enqueue(mytask, foo, bar=qux, timeout='10m')
+{% endhighlight console %}
+
+You can also change the default timeout for a whole queue at once, which can be
+useful for patterns like this:
+
+{% highlight python %}
+# High prio jobs should end in 8 secs, while low prio
+# work may take up to 10 mins
+high = Queue('high', timeout=8)
+low = Queue('low', timeout='10m')
+
+# Individual jobs can still override these defaults
+low.enqueue(really_really_slow, timeout='1h')
+{% endhighlight console %}
+
+Individual jobs can still specify an alternative timeout, as workers will
+respect these.
