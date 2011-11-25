@@ -29,14 +29,14 @@ header
     margin: 0 auto 2em auto;
 }
 
-header ul
+ul.inline
 {
     list-style-type: none;
     margin: 0;
     padding: 0;
 }
 
-header ul li
+ul.inline li
 {
     display: inline;
     margin: 0 10px;
@@ -66,6 +66,13 @@ header a:hover
 {
     border-bottom-color: rgba(0, 0, 0, 0.1);
     color: rgba(0, 0, 0, 0.4);
+}
+
+.subnav
+{
+    text-align: center;
+    font-size: 94%;
+    margin: -2em auto 1em auto;
 }
 
 .container
