@@ -3,17 +3,6 @@ title: "RQ: Documentation"
 layout: docs
 ---
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
-    <strong>Work in Progress™</strong>
-    <p>To see what we're still working on, please click any of the following topics:</p>
-    <ul>
-      <li><a href="{{site.baseurl}}docs/workers/">Workers</a></li>
-      <li><a href="{{site.baseurl}}docs/monitoring/">Monitoring</a></li>
-    </ul>
-</div>
-
-
 ## Jobs
 
 A job is a Python function that is invoked asynchronously in a worker
