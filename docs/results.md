@@ -3,15 +3,15 @@ title: "RQ: Documentation"
 layout: docs
 ---
 
-Enqueueing jobs means delayed execution of function calls.  This means we're
+Enqueueing jobs is delayed execution of function calls.  This means we're
 solving a problem, but are getting back a few in return.
 
 
 ## Dealing with results
 
 Python functions may have return values, so jobs can have them, too.  If a job
-returns a return value, the worker will write that return value back to a Redis
-key with a limited lifetime (_500 seconds by default_).
+returns a non-`None` return value, the worker will write that return value back
+to a Redis key with a limited lifetime (_500 seconds by default_).
 
 The key it uses for this purpose is specified in the
 <a href="{{site.baseurl}}docs/internals/#job-tuple">job tuple</a>, as the
@@ -30,8 +30,8 @@ with that UUID, to be able to poll for results.
 Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
-The TTL of these keys cannot be changed currently, nor can the expiration be
-disabled.  If this introduces any real life problems, we might support
+The TTL value of these keys cannot be changed currently, nor can it be disabled
+altogether.  If this introduces any real life problems, we might support
 specifying it in the future.  For now, we're keeping it simple.
 
 
@@ -62,15 +62,16 @@ jobs.  Typically, this is something that needs manual interpretation, since
 there is no automatic or reliable way of letting RQ judge whether it is safe
 for certain tasks to be retried or not.
 
-Therefore, when an exception is thrown, the following info is serialized to
+Therefore, when an exception is thrown, the following data is serialized to
 a special RQ queue called `failed`:
 
-    (worker, queue, exc_info, job_tuple)
+* the worker that processed the job
+* the originating queue
+* the exception information
+* the original <a href="{{site.baseurl}}docs/internals/#job-tuple">job tuple</a>
 
-This tuple holds the worker name, originating queue name, exception information
-and the original <a href="{{site.baseurl}}docs/internals/#job-tuple">job
-tuple</a>, which makes it possible to interpret the problem and possibly
-resubmit the job.
+This makes it possible to inspect and interpret the problem manually and
+possibly resubmit the job.
 
 
 ## Dealing with interruption
