@@ -3,8 +3,6 @@ title: "RQ: Documentation"
 layout: docs
 ---
 
-## Jobs
-
 A job is a Python function that is invoked asynchronously in a worker
 (background) process.  Any Python function can be invoked asynchronously, by
 simply pushing a reference to the function and its arguments onto a queue.
@@ -117,6 +115,9 @@ on a queue:
 ## Limitations
 
 Currently, it is impossible to enqueue instance methods.
+
+Furthermore, RQ workers will only run on systems that implement `fork()`.  Most
+notably, this means it is not possible to run the workers on Windows.
 
 
 [m]: http://pypi.python.org/pypi/mailer
