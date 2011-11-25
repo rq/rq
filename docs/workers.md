@@ -89,13 +89,6 @@ starting the worker, using the `--name` option.
 
 ## Taking down workers
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
-    <strong>Be warned!</strong>
-    <p>The stuff in this section is not implemented yet.  I'm merely jotting this down here as a form of document-driven design.</p>
-</div>
-
-
 If, at any time, the worker receives `SIGINT` (via Ctrl+C) or `SIGTERM` (via
 `kill`), the worker tries to make sure to gracefully finish the currently
 running task and stop looping, gracefully registering its own death.
