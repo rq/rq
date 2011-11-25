@@ -57,7 +57,7 @@ For a more complete example, refer to the [docs][d].  But this is the essence.
 [d]: {{site.baseurl}}docs/
 
 
-## The worker
+### The worker
 
 To start executing enqueued function calls in the background, start a worker
 from your project's directory:
