@@ -212,9 +212,6 @@ class Worker(object):
                 return
 
             self.log.warning('Warm shut down. Press Ctrl+C again for a cold shutdown.')
-
-            #if self.state == 'idle':
-            #    raise SystemExit()
             self._stopped = True
             self.log.debug('Stopping after current horse is finished.')
 
