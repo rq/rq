@@ -88,8 +88,8 @@ starting the worker, using the `--name` option.
 ## Taking down workers
 
 If, at any time, the worker receives `SIGINT` (via Ctrl+C) or `SIGTERM` (via
-`kill`), the worker tries to make sure to gracefully finish the currently
-running task and stop looping, gracefully registering its own death.
+`kill`), the worker wait until the currently running task is finished, stop
+the work loop and gracefully register its own death.
 
 If, during this takedown phase, `SIGINT` or `SIGTERM` is received again, the
 worker will forcefully terminate the child process (sending it `SIGKILL`), but
