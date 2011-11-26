@@ -96,22 +96,22 @@ For this purpose, it has a convenience `return_value` accessor property, which
 will return `None` when the job is not yet finished, or a non-`None` value when
 the job has finished (and has a return value, of course).
 
-{% highlight python %}
+{% highlight pycon %}
 >>> q = Queue()
 >>> result = q.enqueue(say_hello, 'Vincent')
 >>> while not result.return_value:
 ...     print('Job not finished yet.')
 ...     time.sleep(1)
+Job not finished yet.
+Job not finished yet.
 >>> print(result.return_value)
-Job not finished yet.
-Job not finished yet.
 Hello, Vincent!
 {% endhighlight %}
 
 In case you are interested in the value of the internally used Redis key, you
 can access it through the `key` property:
 
-{% highlight python %}
+{% highlight pycon %}
 >>> result.key
 rq:result:fd50ef88-1f5f-4468-9027-6ed85fcd2b14
 {% endhighlight %}
