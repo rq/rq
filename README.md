@@ -1,11 +1,9 @@
-# WARNING: DON'T USE THIS IN PRODUCTION (yet)
-
 RQ (_Redis Queue_) is a lightweight<sup>*</sup> Python library for queueing
 jobs and processing them in the background with workers.  It is backed by Redis
 and it is extremely simple to use.
 
 <p style="font-size: 80%; text-align: right; font-style: italic">
-<sup>*</sup> It is under 20 kB in size and under 500 lines of code.</p>
+<sup>*</sup> It is under 20 kB in size and just over 500 lines of code.</p>
 
 
 ## Getting started
