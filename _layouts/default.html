@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<base href="/rq/" />
 <html lang="en">
   <head>
     <meta charset="UTF-8">
@@ -7,9 +8,9 @@
     <meta content="all" name="robots">
     <link href="http://fonts.googleapis.com/css?family=Lato:light,regular,regularitalic,lightitalic,bold&amp;v1" media="all" rel="stylesheet" type="text/css">
     <link href='http://fonts.googleapis.com/css?family=Droid+Sans+Mono' media="all" rel='stylesheet' type='text/css'>
-    <link href="{{ site.baseurl }}css/screen.css" media="screen" rel="stylesheet" type="text/css">
-    <link href="{{ site.baseurl }}css/syntax.css" media="screen" rel="stylesheet" type="text/css">
-    <link href="{{ site.baseurl }}favicon.png" rel="icon" type="image/png">
+    <link href="css/screen.css" media="screen" rel="stylesheet" type="text/css">
+    <link href="css/syntax.css" media="screen" rel="stylesheet" type="text/css">
+    <link href="favicon.png" rel="icon" type="image/png">
   </head>
   <body>
     <header>
@@ -17,12 +18,7 @@
 
         <ul class="inline">
         {% for link in site.navigation %}
-            {% assign current = nil %}
-            {% if page.url == link.url or page.layout == link.layout %}
-                {% assign current = 'current' %}
-            {% endif %}
-
-            <li><a class="{{ current }}" href="{{ link.url }}">{{ link.text }}</a></li>
+            <li><a href="{{ link.url }}">{{ link.text }}</a></li>
         {% endfor %}
         </ul>
     </header>

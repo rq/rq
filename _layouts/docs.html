@@ -3,11 +3,13 @@ layout: default
 ---
 <div class="subnav">
     <ul class="inline">
-        <li><a href="{{site.baseurl}}docs/">Jobs</a></li>
-        <li><a href="{{site.baseurl}}docs/workers/">Workers</a></li>
-        <li><a href="{{site.baseurl}}docs/results/">Results</a></li>
-        <li><a href="{{site.baseurl}}docs/monitoring/">Monitoring</a></li>
-        <li><a href="{{site.baseurl}}docs/internals/">Internals</a></li>
+    {% for link in site.navigation %}
+        {% if link.url == "docs/" %}
+            {% for sublink in link.subs %}
+                <li><a href="{{ sublink.url }}">{{ sublink.text }}</a></li>
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
     </ul>
 </div>
 

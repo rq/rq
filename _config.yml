@@ -6,8 +6,19 @@ pygments: true
 
 navigation:
 - text: Home
-  url: /rq/
+  url: 
 - text: Docs
-  url: /rq/docs/
+  url: docs/
+  subs:
+  - text: Jobs
+    url: docs/
+  - text: Workers
+    url: docs/workers/
+  - text: Results
+    url: docs/results/
+  - text: Monitoring
+    url: docs/monitoring/
+  - text: Internals
+    url: docs/internals/
 - text: Contributing
-  url: /rq/contrib/
+  url: contrib/

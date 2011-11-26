@@ -54,12 +54,11 @@ header a
     -moz-transition: color linear 0.1s;
 }
 
-header a.current
+header li.active a
 {
     color: #d31f21;
-    /*background: url(../img/arrow.png) 50% 80px no-repeat;*/
+    text-decoration: underline;
     padding-bottom: 40px;
-    background: url(http://www.lobguides.org.uk/themes/lobguides/images/arrow-down.png) no-repeat 50% 24px;
 }
 
 header a:hover
@@ -72,7 +71,25 @@ header a:hover
 {
     text-align: center;
     font-size: 94%;
-    margin: -2em auto 1em auto;
+    margin: -3em auto 2em auto;
+}
+
+.subnav li
+{
+    background-color: white;
+    padding: 0 4px;
+}
+
+.subnav a
+{
+    text-decoration: none;
+}
+
+.subnav li.active a
+{
+    pointer: none;
+    color: #666;
+    /*background-image: url();*/
 }
 
 .container
