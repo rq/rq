@@ -1,80 +1,76 @@
 # WARNING: DON'T USE THIS IN PRODUCTION (yet)
 
-# RQ: Simple job queues for Python
+RQ (_Redis Queue_) is a lightweight<sup>*</sup> Python library for queueing
+jobs and processing them in the background with workers.  It is backed by Redis
+and it is extremely simple to use.
 
-**RQ** is a lightweight Python library for queueing work and processing them in
-workers.  It is backed by Redis.
-
-# Putting jobs on queues
-
-To put jobs on queues, first declare a Python function to be called on
-a background process:
-
-    def slow_fib(n):
-        if n <= 1:
-            return 1
-        else:
-            return slow_fib(n-1) + slow_fib(n-2)
-
-Notice anything?  There's nothing special about a job!  Any Python function can
-be put on an RQ queue, as long as the function is in a module that is
-importable from the worker process.
-
-To calculate the 36th Fibonacci number in the background, simply do this:
-
-    from rq import Queue
-    from fib import slow_fib
-    
-    # Calculate the 36th Fibonacci number in the background
-    q = Queue()
-    q.enqueue(slow_fib, 36)
-
-If you want to put the work on a specific queue, simply specify its name:
-
-    q = Queue('math')
-    q.enqueue(slow_fib, 36)
-
-You can use any queue name, so you can quite flexibly distribute work to your
-own desire.  Common patterns are to name your queues after priorities (e.g.
-`high`, `medium`, `low`).
+<p style="font-size: 80%; text-align: right; font-style: italic">
+<sup>*</sup> It is under 20 kB in size and under 500 lines of code.</p>
 
 
-# The worker
+## Getting started
 
-**NOTE: You currently need to create the worker yourself, which is extremely
-easy, but RQ will include a custom script soon that can be used to start
-arbitrary workers without writing any code.**
+First, run a Redis server, of course:
 
-Creating a worker daemon is also extremely easy.  Create a file `worker.py`
-with the following content:
+{% highlight console %}
+$ redis-server
+{% endhighlight %}
 
-    from rq import Queue, Worker
+To put jobs on queues, you don't have to do anything special, just define
+your typically lengthy or blocking function:
 
-    q = Queue()
-    Worker(q).work()
+{% highlight python %}
+import urllib2
 
-After that, start a worker instance:
+def count_words_at_url(url):
+    f = urllib2.urlopen(url)
+    count = 0
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        count += len(line.split())
+    return count
+{% endhighlight %}
 
-    python worker.py
+Then, create a RQ queue:
 
-This will wait for work on the default queue and start processing it as soon as
-messages arrive.
+{% highlight python %}
+import rq import *
+use_redis()
+q = Queue()
+{% endhighlight %}
 
-You can even watch several queues at the same time and start processing from
-them:
+And enqueue the function call:
 
-    from rq import Queue, Worker
+{% highlight python %}
+from my_module import count_words_at_url
+result = q.enqueue(
+             count_words_at_url, 'http://nvie.com')
+{% endhighlight %}
 
-    queues = map(Queue, ['high', 'normal', 'low'])
-    Worker(queues).work_burst()
+For a more complete example, refer to the [docs][d].  But this is the essence.
 
-Which will keep popping jobs from the given queues, giving precedence to the
-`high` queue, then `normal`, etc.  It will return when there are no more jobs
-left (contrast this to the previous example using `Worker.work()`, which will
-never return since it keeps waiting for new work to arrive).
+[d]: {{site.baseurl}}docs/
 
 
-# Installation
+### The worker
+
+To start executing enqueued function calls in the background, start a worker
+from your project's directory:
+
+{% highlight console %}
+$ rqworker
+*** Listening for work on default
+Got count_words_at_url('http://nvie.com') from default
+Job result = 818
+*** Listening for work on default
+{% endhighlight %}
+
+That's about it.
+
+
+## Installation
 
 Simply use the following command to install the latest released version:
 
@@ -85,23 +81,14 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
 
 
-# Project History
+## Project history
 
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
+[m]: http://pypi.python.org/pypi/mailer
+[p]: http://docs.python.org/library/pickle.html
 [1]: http://www.celeryproject.org/
 [2]: https://github.com/defunkt/resque
 [3]: http://flask.pocoo.org/snippets/73/
-
-Project values:
-
-* Simplicity over completeness
-* Fail-safety over performance
-* Runtime insight over static configuration upfront
-
-This means that, to use RQ, you don't have to set up any queues up front, and
-you don't have to specify any channels, exchanges, or whatnot.  You can put
-jobs onto any queue you want, at runtime.  As soon as you enqueue a job, it is
-created on the fly.
