@@ -1,6 +1,6 @@
 ---
 title: "RQ: Documentation"
-layout: docs
+layout: contrib
 ---
 
 The following section elaborates on some implementation details, which might be

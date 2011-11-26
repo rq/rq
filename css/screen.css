@@ -54,13 +54,6 @@ header a
     -moz-transition: color linear 0.1s;
 }
 
-header li.active a
-{
-    color: #d31f21;
-    text-decoration: underline;
-    padding-bottom: 40px;
-}
-
 header a:hover
 {
     border-bottom-color: rgba(0, 0, 0, 0.1);
@@ -83,13 +76,6 @@ header a:hover
 .subnav a
 {
     text-decoration: none;
-}
-
-.subnav li.active a
-{
-    pointer: none;
-    color: #666;
-    /*background-image: url();*/
 }
 
 .container
