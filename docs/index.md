@@ -86,11 +86,35 @@ Lastly, it does not speak a portable protocol, since it uses [pickle][p] to
 serialize the jobs, so it's a Python-only system.
 
 
-## The `DelayedResult`
+## The delayed result
 
-When jobs get enqueued, the result is a `DelayedResult` instance.  This
-is nothing more than a proxy object that can be used to check the outcome of
-the actual job. It has 
+When jobs get enqueued, the `queue.enqueue()` method returns a `DelayedResult`
+instance.  This is nothing more than a proxy object that can be used to check
+the outcome of the actual job.
+
+For this purpose, it has a convenience `return_value` accessor property, which
+will return `None` when the job is not yet finished, or a non-`None` value when
+the job has finished (and has a return value, of course).
+
+{% highlight python %}
+>>> q = Queue()
+>>> result = q.enqueue(say_hello, 'Vincent')
+>>> while not result.return_value:
+...     print('Job not finished yet.')
+...     time.sleep(1)
+>>> print(result.return_value)
+Job not finished yet.
+Job not finished yet.
+Hello, Vincent!
+{% endhighlight %}
+
+In case you are interested in the value of the internally used Redis key, you
+can access it through the `key` property:
+
+{% highlight python %}
+>>> result.key
+rq:result:fd50ef88-1f5f-4468-9027-6ed85fcd2b14
+{% endhighlight %}
 
 
 ## The worker
