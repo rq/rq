@@ -41,7 +41,7 @@ Jobs can fail and throw exceptions.  This is a fact of life.  RQ deals with
 this in the following way.
 
 <div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
     <strong>Be warned!</strong>
     <p>This is the current implementation, not the desired future implementation.</p>
 </div>
@@ -92,7 +92,7 @@ Just sayin'.
 ## Dealing with job timeouts
 
 <div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px; height: 100px;" src="http://a.dryicons.com/images/icon_sets/colorful_stickers_icons_set/png/256x256/warning.png" />
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
     <strong>Be warned!</strong>
     <p>This timeout stuff does not exist yet.</p>
 </div>
