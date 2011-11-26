@@ -1,6 +1,7 @@
 import unittest
 from pickle import loads
 from redis import Redis
+from logbook import NullHandler
 from rq import conn, Queue, Worker
 
 # Test data
@@ -24,7 +25,13 @@ class RQTestCase(unittest.TestCase):
         # Store the connection (for sanity checking)
         self.testconn = testconn
 
+        # Shut up logbook
+        self.log_handler = NullHandler()
+        self.log_handler.push_thread()
+
     def tearDown(self):
+        self.log_handler.pop_thread()
+
         # Flush afterwards
         conn.flushdb()
 
