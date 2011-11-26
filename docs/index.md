@@ -86,6 +86,13 @@ Lastly, it does not speak a portable protocol, since it uses [pickle][p] to
 serialize the jobs, so it's a Python-only system.
 
 
+## The `DelayedResult`
+
+When jobs get enqueued, the result is a `DelayedResult` instance.  This
+is nothing more than a proxy object that can be used to check the outcome of
+the actual job. It has 
+
+
 ## The worker
 
 To learn about workers, see the [workers][w] documentation.
