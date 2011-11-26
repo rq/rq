@@ -14,7 +14,7 @@ returns a non-`None` return value, the worker will write that return value back
 to a Redis key with a limited lifetime (_500 seconds by default_).
 
 The key it uses for this purpose is specified in the
-<a href="{{site.baseurl}}docs/internals/#job-tuple">job tuple</a>, as the
+<a href="{{site.baseurl}}contrib/internals/#job-tuple">job tuple</a>, as the
 second element.  That key is generated upon job enqueuement and is a random
 UUID, for example:
 
@@ -68,7 +68,7 @@ a special RQ queue called `failed`:
 * the worker that processed the job
 * the originating queue
 * the exception information
-* the original <a href="{{site.baseurl}}docs/internals/#job-tuple">job tuple</a>
+* the original <a href="{{site.baseurl}}contrib/internals/#job-tuple">job tuple</a>
 
 This makes it possible to inspect and interpret the problem manually and
 possibly resubmit the job.
