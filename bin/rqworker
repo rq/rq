@@ -64,10 +64,7 @@ def main():
         queues = map(Queue, args)
 
     w = Worker(queues, name=opts.name)
-    if opts.burst:
-        w.work_burst()
-    else:
-        w.work()
+    w.work(burst=opts.burst)
 
 if __name__ == '__main__':
     main()

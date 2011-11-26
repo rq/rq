@@ -219,8 +219,14 @@ class Worker(object):
         signal.signal(signal.SIGTERM, request_stop)
 
 
-    def _work(self, quit_when_done=False):
-        """This method starts the work loop.
+    def work(self, burst=False):
+        """Starts the work loop.
+
+        Pops and performs all jobs on the current list of queues.  When all
+        queues are empty, block and wait for new jobs to arrive on any of the
+        queues, unless `burst` is True.
+
+        The return value indicates whether any jobs were processed.
         """
         self._install_signal_handlers()
 
@@ -236,7 +242,7 @@ class Worker(object):
                 qnames = self.queue_names()
                 self.procline('Listening on %s' % (','.join(qnames)))
                 self.log.info('*** Listening for work on %s' % (', '.join(qnames)))
-                wait_for_job = not quit_when_done
+                wait_for_job = not burst
                 job = Queue.dequeue_any(self.queues, wait_for_job)
                 if job is None:
                     break
@@ -249,21 +255,6 @@ class Worker(object):
             if not self.is_horse:
                 self.register_death()
         return did_work
-
-    def work(self):
-        """Pop and perform all jobs on the current list of queues.  When all
-        queues are empty, block and wait for new jobs to arrive on any of the
-        queues.
-        """
-        self._work(False)
-
-    def work_burst(self):
-        """Pop and perform all jobs on the current list of queues.  When all
-        queues are empty, return.
-
-        The return value indicates whether any jobs were processed.
-        """
-        return self._work(True)
 
     def fork_and_perform_job(self, job):
         child_pid = os.fork()
