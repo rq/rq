@@ -54,9 +54,7 @@ just to scale up your workers temporarily during peak periods.
 
 ### The worker life-cycle
 
-The worker life-cycle is started by the `Worker.work()` (default worker
-invocation) or `Worker.work_burst()` (invoked via `--burst`) methods.  The
-life-cycle of a worker consists of a few phases:
+The life-cycle of a worker consists of a few phases:
 
 1. _Boot_. Loading the Python environment.
 2. _Birth registration_. The worker registers itself to the system so it knows
