@@ -12,34 +12,34 @@ def testjob(name=None):
 
 
 class RQTestCase(unittest.TestCase):
-    def setUp(self):
-        super(RQTestCase, self).setUp()
-
+    @classmethod
+    def setUpClass(cls):
         # Set up connection to Redis
         testconn = Redis()
         conn.push(testconn)
 
+        # Store the connection (for sanity checking)
+        cls.testconn = testconn
+
+        # Shut up logbook
+        cls.log_handler = NullHandler()
+        cls.log_handler.push_thread()
+
+    def setUp(self):
         # Flush beforewards (we like our hygiene)
         conn.flushdb()
 
-        # Store the connection (for sanity checking)
-        self.testconn = testconn
-
-        # Shut up logbook
-        self.log_handler = NullHandler()
-        self.log_handler.push_thread()
-
     def tearDown(self):
-        self.log_handler.pop_thread()
-
         # Flush afterwards
         conn.flushdb()
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.log_handler.pop_thread()
+
         # Pop the connection to Redis
         testconn = conn.pop()
-        assert testconn == self.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
-
-        super(RQTestCase, self).tearDown()
+        assert testconn == cls.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
 
 
     def assertQueueContains(self, queue, that_func):
