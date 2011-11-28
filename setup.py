@@ -29,7 +29,7 @@ setup(
     license='BSD',
     author='Vincent Driessen',
     author_email='vincent@3rdcloud.com',
-    description='rq is a simple, lightweight, library for creating background '
+    description='RQ is a simple, lightweight, library for creating background '
                 'jobs, and processing them.',
     long_description=__doc__,
     packages=['rq'],
