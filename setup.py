@@ -2,6 +2,7 @@
 rq is a simple, lightweight, library for creating background jobs, and
 processing them.
 """
+import sys
 import os
 from setuptools import setup
 
@@ -12,6 +13,14 @@ def get_version():
         exec(f.read())
         return VERSION
     raise RuntimeError('No version info found.')
+
+def get_dependencies():
+    deps = ['redis']
+    deps += ['logbook', 'procname']  # should be soft dependencies
+    if sys.version_info < (2, 7) or \
+       sys.version_info >= (3, 0) and sys.version_info < (3, 2):
+        deps += ['argparse']
+    return deps
 
 setup(
     name='rq',
@@ -27,7 +36,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     platforms='any',
-    install_requires=['redis', 'logbook', 'procname'],
+    install_requires=get_dependencies(),
     scripts=['bin/rqinfo', 'bin/rqworker'],
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
