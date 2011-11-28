@@ -114,7 +114,7 @@ def show_workers(args):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='awesome')
+    parser = argparse.ArgumentParser(description='RQ command-line monitor.')
     parser.add_argument('--host', '-H', default='localhost', help='The Redis hostname (default: localhost)')
     parser.add_argument('--port', '-p', type=int, default=6379, help='The Redis portnumber (default: 6379)')
 
