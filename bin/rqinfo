@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import time
-import optparse
+import argparse
 from rq import use_redis, Queue, Worker
 from rq.utils import gettermsize, make_colorizer
 
@@ -34,30 +34,10 @@ def state_symbol(state):
         return state
 
 
-def parse_args():
-    parser = optparse.OptionParser()
-    parser.add_option('-q', '--queues', dest='subcmd',
-            action='store_const', const='queues',
-            help='Shows stats for queues.')
-    parser.add_option('-w', '--workers', dest='subcmd',
-            action='store_const', const='workers',
-            help='Shows stats for workers.')
-    parser.add_option('-n', '--interval', dest='interval',
-            type='float',
-            help='The interval between polls, in seconds.  Does not poll if 0.')
-    parser.add_option('-r', '--raw', dest='raw',
-            action='store_true', default=False,
-            help='Print only the raw numbers, no bar charts.')
-    parser.add_option('-Q', '--by-queue', dest='by_queue',
-            default=False, action='store_true',
-            help='Shows workers by queue.')
-    opts, args = parser.parse_args()
-    return (opts, args, parser)
-
-def show_queues(opts, args, parser):
+def show_queues(args):
     while True:
-        if len(args):
-            qs = map(Queue, args)
+        if len(args.queues):
+            qs = map(Queue, args.queues)
         else:
             qs = Queue.all()
 
@@ -74,12 +54,12 @@ def show_queues(opts, args, parser):
         scale = get_scale(max_count)
         ratio = chartwidth * 1.0 / scale
 
-        if opts.interval:
+        if args.interval:
             os.system('clear')
 
         for q in qs:
             count = counts[q]
-            if not opts.raw:
+            if not args.raw:
                 chart = green('|' + '█' * int(ratio * count))
                 line = '%-12s %s %d' % (q.name, chart, count)
             else:
@@ -87,19 +67,22 @@ def show_queues(opts, args, parser):
             print(line)
 
             num_jobs += count
-        print('%d queues, %d jobs total' % (len(qs), num_jobs))
 
-        if opts.interval:
-            time.sleep(opts.interval)
+        # Print summary when not in raw mode
+        if not args.raw:
+            print('%d queues, %d jobs total' % (len(qs), num_jobs))
+
+        if args.interval:
+            time.sleep(args.interval)
         else:
             break
 
-def show_workers(opts, args, parser):
+def show_workers(args):
     while True:
         qs = Queue.all()
         ws = Worker.all()
 
-        if opts.interval:
+        if args.interval:
             os.system('clear')
 
         queues = {qname: [] for qname in qs}
@@ -109,7 +92,7 @@ def show_workers(opts, args, parser):
                     queues[q] = []
                 queues[q].append(w)
 
-        if opts.by_queue:
+        if args.by_queue:
             max_qname = max(map(lambda q: len(q.name), queues.keys()))
             for q in queues:
                 if queues[q]:
@@ -122,25 +105,36 @@ def show_workers(opts, args, parser):
                 print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(w.queue_names()))
         print '%d workers, %d queues' % (len(ws), len(queues))
 
-        if opts.interval:
-            time.sleep(opts.interval)
+        if args.interval:
+            time.sleep(args.interval)
         else:
             break
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='awesome')
+
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument('--interval', '-i', metavar='N', type=float, default=0, help='Updates stats every N seconds (default: don\'t poll)')
+
+    subparsers = parser.add_subparsers()
+
+    queues_p = subparsers.add_parser('queues', parents=[parent_parser], help='Show queue info')
+    queues_p.add_argument('--raw', '-r', action='store_true', default=False, help='Print only the raw numbers, no bar charts')
+    queues_p.add_argument('queues', nargs='*', help='The queues to poll')
+    queues_p.set_defaults(func=show_queues)
+
+    workers_p = subparsers.add_parser('workers', parents=[parent_parser], help='Show worker activity')
+    workers_p.add_argument('--by-queue', '-Q', dest='by_queue', default=False, action='store_true', help='Shows workers by queue')
+    workers_p.set_defaults(func=show_workers)
+
+    return parser.parse_args()
+
+
 def main():
-    opts, args, parser = parse_args()
-
-    if not opts.subcmd:
-        parser.error('Specify either --queues or --workers.')
-
+    args = parse_args()
     use_redis()
-
-    if opts.subcmd == 'workers':
-        show_workers(opts, args, parser)
-    elif opts.subcmd == 'queues':
-        show_queues(opts, args, parser)
-
+    args.func(args)
 
 if __name__ == '__main__':
     main()
