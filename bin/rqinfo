@@ -23,6 +23,16 @@ def get_scale(x):
             return scale
     return x
 
+def state_symbol(state):
+    symbols = {
+        'busy': red(u'\u25CF'),
+        'idle': green(u'\u25CB'),
+    }
+    try:
+        return symbols[state]
+    except KeyError:
+        return state
+
 
 def parse_args():
     parser = optparse.OptionParser()
@@ -84,16 +94,6 @@ def show_queues(opts, args, parser):
             time.sleep(opts.interval)
         else:
             break
-
-def state_symbol(state):
-    symbols = {
-        'busy': red(u'\u25CF'),
-        'idle': green(u'\u25CB'),
-    }
-    try:
-        return symbols[state]
-    except KeyError:
-        return state
 
 def show_workers(opts, args, parser):
     while True:
