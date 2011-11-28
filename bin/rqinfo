@@ -45,9 +45,9 @@ def parse_args():
     parser.add_option('-n', '--interval', dest='interval',
             type='float',
             help='The interval between polls, in seconds.  Does not poll if 0.')
-    parser.add_option('-g', '--graph', dest='graph',
+    parser.add_option('-r', '--raw', dest='raw',
             action='store_true', default=False,
-            help='Shows bar chart graphs where possible.')
+            help='Print only the raw numbers, no bar charts.')
     parser.add_option('-Q', '--by-queue', dest='by_queue',
             default=False, action='store_true',
             help='Shows workers by queue.')
@@ -77,10 +77,9 @@ def show_queues(opts, args, parser):
         if opts.interval:
             os.system('clear')
 
-        print('scale = %d' % scale)
         for q in qs:
             count = counts[q]
-            if opts.graph:
+            if not opts.raw:
                 chart = green('|' + '█' * int(ratio * count))
                 line = '%-12s %s %d' % (q.name, chart, count)
             else:
