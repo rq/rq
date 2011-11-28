@@ -22,12 +22,30 @@ setup(
     scripts=['bin/rqinfo', 'bin/rqworker'],
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
+        #'Development Status :: 1 - Planning',
         'Development Status :: 2 - Pre-Alpha',
+        #'Development Status :: 3 - Alpha',
+        #'Development Status :: 4 - Beta',
+        #'Development Status :: 5 - Production/Stable',
+        #'Development Status :: 6 - Mature',
+        #'Development Status :: 7 - Inactive',
         'Intended Audience :: Developers',
+        'Intended Audience :: End Users/Desktop',
+        'Intended Audience :: Information Technology',
+        'Intended Audience :: Science/Research',
+        'Intended Audience :: System Administrators',
         'License :: OSI Approved :: BSD License',
-        'Operating System :: OS Independent',
+        'Operating System :: POSIX',
+        'Operating System :: MacOS',
+        'Operating System :: Unix',
         'Programming Language :: Python',
         'Topic :: Software Development :: Libraries :: Python Modules'
+        'Topic :: Internet',
+        'Topic :: Scientific/Engineering',
+        'Topic :: System :: Distributed Computing',
+        'Topic :: System :: Systems Administration',
+        'Topic :: System :: Monitoring',
+
     ]
 )
 
