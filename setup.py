@@ -2,11 +2,20 @@
 rq is a simple, lightweight, library for creating background jobs, and
 processing them.
 """
-from setuptools import Command, setup
+import os
+from setuptools import setup
+
+def get_version():
+    basedir = os.path.dirname(__file__)
+    with open(os.path.join(basedir, 'rq/version.py')) as f:
+        VERSION = None
+        exec(f.read())
+        return VERSION
+    raise RuntimeError('No version info found.')
 
 setup(
     name='rq',
-    version='0.1-dev',
+    version=get_version(),
     url='https://github.com/nvie/rq/',
     license='BSD',
     author='Vincent Driessen',

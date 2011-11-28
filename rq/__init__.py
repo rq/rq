@@ -2,6 +2,7 @@ from redis import Redis
 from .proxy import conn
 from .queue import Queue
 from .worker import Worker
+from .version import VERSION
 
 def use_redis(redis=None):
     """Pushes the given Redis connection (a redis.Redis instance) onto the
@@ -18,3 +19,4 @@ def use_redis(redis=None):
     conn.push(redis)
 
 __all__ = ['conn', 'Queue', 'Worker', 'use_redis']
+__version__ = VERSION
