@@ -1,23 +1,8 @@
 #!/usr/bin/env python
-import optparse
+import argparse
 import logbook
 from logbook import handlers
 from rq import use_redis, Queue, Worker
-
-
-def parse_args():
-    parser = optparse.OptionParser()
-    parser.add_option('-b', '--burst', dest='burst',
-            action='store_true', default=False,
-            help='Run in burst mode (quit after all work is done).')
-    parser.add_option('-n', '--name', dest='name',
-            action='store', type='string', default=None,
-            help='Specify a different name.')
-    parser.add_option('-v', '--verbose', dest='verbose',
-            action='store_true', default=False,
-            help='Show more output.')
-    opts, args = parser.parse_args()
-    return (opts, args, parser)
 
 
 def format_colors(record, handler):
@@ -30,9 +15,8 @@ def format_colors(record, handler):
         colorize = lambda x: x
     return '%s: %s' % (record.time.strftime('%H:%M:%S'), colorize(record.msg))
 
-
-def setup_loghandlers(opts):
-    if opts.verbose:
+def setup_loghandlers(args):
+    if args.verbose:
         loglevel = logbook.DEBUG
         formatter = None
     else:
@@ -51,20 +35,28 @@ def setup_loghandlers(opts):
     handler.push_application()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Starts an RQ worker.')
+    parser.add_argument('--host', '-H', default='localhost', help='The Redis hostname (default: localhost)')
+    parser.add_argument('--port', '-p', type=int, default=6379, help='The Redis portnumber (default: 6379)')
+
+    parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')
+    parser.add_argument('--name', '-n', default=None, help='Specify a different name')
+    parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
+    parser.add_argument('queues', nargs='*', default=['default'], help='The queues to listen on (default: \'default\')')
+
+    return parser.parse_args()
+
+
 def main():
-    opts, args, parser = parse_args()
+    args = parse_args()
 
     use_redis()
-    setup_loghandlers(opts)
+    setup_loghandlers(args)
 
-    if len(args) == 0:
-        # Use the default queue
-        queues = [Queue()]
-    else:
-        queues = map(Queue, args)
-
-    w = Worker(queues, name=opts.name)
-    w.work(burst=opts.burst)
+    queues = map(Queue, args.queues)
+    w = Worker(queues, name=args.name)
+    w.work(burst=args.burst)
 
 if __name__ == '__main__':
     main()
