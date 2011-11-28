@@ -241,7 +241,7 @@ class Worker(object):
                 self.state = 'idle'
                 qnames = self.queue_names()
                 self.procline('Listening on %s' % (','.join(qnames)))
-                self.log.info('*** Listening for work on %s' % (', '.join(qnames)))
+                self.log.info('*** Listening for work on %s...' % (', '.join(qnames)))
                 wait_for_job = not burst
                 job = Queue.dequeue_any(self.queues, wait_for_job)
                 if job is None:
