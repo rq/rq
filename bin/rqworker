@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 import argparse
 import logbook
+import redis
 from logbook import handlers
 from rq import use_redis, Queue, Worker
+from redis.exceptions import ConnectionError
 
 
 def format_colors(record, handler):
@@ -14,6 +16,7 @@ def format_colors(record, handler):
     else:
         colorize = lambda x: x
     return '%s: %s' % (record.time.strftime('%H:%M:%S'), colorize(record.msg))
+
 
 def setup_loghandlers(args):
     if args.verbose:
@@ -39,6 +42,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Starts an RQ worker.')
     parser.add_argument('--host', '-H', default='localhost', help='The Redis hostname (default: localhost)')
     parser.add_argument('--port', '-p', type=int, default=6379, help='The Redis portnumber (default: 6379)')
+    parser.add_argument('--db', '-d', type=int, default=0, help='The Redis database (default: 0)')
 
     parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
@@ -51,12 +55,18 @@ def parse_args():
 def main():
     args = parse_args()
 
-    use_redis()
     setup_loghandlers(args)
 
-    queues = map(Queue, args.queues)
-    w = Worker(queues, name=args.name)
-    w.work(burst=args.burst)
+    # Setup connection to Redis
+    redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db)
+    use_redis(redis_conn)
+    try:
+        queues = map(Queue, args.queues)
+        w = Worker(queues, name=args.name)
+        w.work(burst=args.burst)
+    except ConnectionError as e:
+        print(e)
+
 
 if __name__ == '__main__':
     main()
