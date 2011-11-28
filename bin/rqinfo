@@ -95,7 +95,7 @@ def show_workers(args):
                 queues[q].append(w)
 
         if args.by_queue:
-            max_qname = max(map(lambda q: len(q.name), queues.keys()))
+            max_qname = max(map(lambda q: len(q.name), queues.keys())) if queues else 0
             for q in queues:
                 if queues[q]:
                     queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.state)), queues[q])))
