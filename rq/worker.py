@@ -195,7 +195,13 @@ class Worker(object):
             # Take down the horse with the worker
             if self.horse_pid:
                 self.log.debug('Taking down horse %d with me.' % self.horse_pid)
-                os.kill(self.horse_pid, signal.SIGKILL)
+                try:
+                    os.kill(self.horse_pid, signal.SIGKILL)
+                except OSError as e:
+                    # ESRCH ("No such process") is fine with us
+                    if e.errno != errno.ESRCH:
+                        self.log.debug('Horse already down.')
+                        raise
             raise SystemExit()
 
         def request_stop(signum, frame):
