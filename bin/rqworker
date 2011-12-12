@@ -53,6 +53,9 @@ def parse_args():
 
 
 def main():
+    import sys
+    sys.path.insert(0, '.')
+
     args = parse_args()
 
     setup_loghandlers(args)

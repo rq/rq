@@ -11,6 +11,9 @@ def parse_args():
     return (opts, args, parser)
 
 def main():
+    import sys
+    sys.path.insert(0, '.')
+
     opts, args, parser = parse_args()
 
     use_redis()
