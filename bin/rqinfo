@@ -118,6 +118,7 @@ def parse_args():
     parser.add_argument('--host', '-H', default='localhost', help='The Redis hostname (default: localhost)')
     parser.add_argument('--port', '-p', type=int, default=6379, help='The Redis portnumber (default: 6379)')
     parser.add_argument('--db', '-d', type=int, default=0, help='The Redis database (default: 0)')
+    parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
 
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument('--interval', '-i', metavar='N', type=float, default=0, help='Updates stats every N seconds (default: don\'t poll)')
@@ -137,10 +138,10 @@ def parse_args():
 
 
 def main():
-    import sys
-    sys.path.insert(0, '.')
-
     args = parse_args()
+
+    if args.path:
+        sys.path = args.path.split(':') + sys.path
 
     # Setup connection to Redis
     redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db)
