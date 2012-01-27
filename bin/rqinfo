@@ -28,8 +28,8 @@ def get_scale(x):
 
 def state_symbol(state):
     symbols = {
-        'busy': red(u'\u25CF'),
-        'idle': green(u'\u25CB'),
+        'busy': red('busy'),
+        'idle': green('idle'),
     }
     try:
         return symbols[state]
