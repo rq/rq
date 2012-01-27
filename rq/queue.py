@@ -191,7 +191,7 @@ class Queue(object):
     def __lt__(self, other):
         if not isinstance(other, Queue):
             raise TypeError('Cannot compare queues to other objects.')
-        return self.name <= other.name
+        return self.name < other.name
 
     def __hash__(self):
         return hash(self.name)
