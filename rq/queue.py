@@ -2,6 +2,7 @@ import uuid
 from functools import total_ordering
 from pickle import loads, dumps
 from .proxy import conn
+from .exceptions import DequeueError
 
 class DelayedResult(object):
     """Proxy object that is returned as a result of `Queue.enqueue()` calls.
@@ -44,8 +45,11 @@ class Job(object):
     @classmethod
     def unpickle(cls, pickle_data):
         """Constructs a Job instance form the given pickle'd job tuple data."""
-        job_tuple = loads(pickle_data)
-        return Job(job_tuple)
+        try:
+            job_tuple = loads(pickle_data)
+            return Job(job_tuple)
+        except (AttributeError, ValueError, IndexError):
+            raise DequeueError('Could not decode job tuple.')
 
     def __init__(self, job_tuple, origin=None):
         self.func, self.args, self.kwargs, self.rv_key = job_tuple

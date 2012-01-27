@@ -1,8 +1,9 @@
 import unittest
-from pickle import loads
+from pickle import loads, dumps
 from redis import Redis
 from logbook import NullHandler
 from rq import conn, Queue, Worker
+from rq.exceptions import DequeueError
 
 # Test data
 def testjob(name=None):
@@ -133,6 +134,37 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.func, testjob)
         self.assertEquals(job.origin, barq)
         self.assertEquals(job.args[0], 'for Bar', 'Bar should be dequeued second.')
+
+
+    def test_dequeue_unpicklable_data(self):
+        """Error handling of invalid pickle data."""
+
+        # Push non-pickle data on the queue
+        q = Queue('foo')
+        blob = 'this is nothing like pickled data'
+        self.testconn.rpush(q._key, blob)
+
+        with self.assertRaises(DequeueError):
+            q.dequeue()  # error occurs when perform()'ing
+
+        # Push value pickle data, but not representing a job tuple
+        q = Queue('foo')
+        blob = dumps('this is not a job tuple')
+        self.testconn.rpush(q._key, blob)
+
+        with self.assertRaises(DequeueError):
+            q.dequeue()  # error occurs when perform()'ing
+
+        # Push slightly incorrect pickled data onto the queue (simulate
+        # a function that can't be imported from the worker)
+        q = Queue('foo')
+
+        job_tuple = dumps((testjob, [], dict(name='Frank'), 'unused'))
+        blob = job_tuple.replace('testjob', 'fooobar')
+        self.testconn.rpush(q._key, blob)
+
+        with self.assertRaises(DequeueError):
+            q.dequeue()  # error occurs when dequeue()'ing
 
 
 class TestWorker(RQTestCase):
