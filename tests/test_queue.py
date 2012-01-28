@@ -1,56 +1,8 @@
-import unittest
-from pickle import loads, dumps
-from redis import Redis
-from logbook import NullHandler
-from rq import conn, Queue, Worker
+from tests import RQTestCase
+from tests import testjob
+from pickle import dumps
+from rq import Queue
 from rq.exceptions import DequeueError
-
-# Test data
-def testjob(name=None):
-    if name is None:
-        name = 'Stranger'
-    return 'Hi there, %s!' % (name,)
-
-
-class RQTestCase(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # Set up connection to Redis
-        testconn = Redis()
-        conn.push(testconn)
-
-        # Store the connection (for sanity checking)
-        cls.testconn = testconn
-
-        # Shut up logbook
-        cls.log_handler = NullHandler()
-        cls.log_handler.push_thread()
-
-    def setUp(self):
-        # Flush beforewards (we like our hygiene)
-        conn.flushdb()
-
-    def tearDown(self):
-        # Flush afterwards
-        conn.flushdb()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.log_handler.pop_thread()
-
-        # Pop the connection to Redis
-        testconn = conn.pop()
-        assert testconn == cls.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
-
-
-    def assertQueueContains(self, queue, that_func):
-        # Do a queue scan (this is O(n), but we're in a test, so hey)
-        for message in queue.messages:
-            f, _, args, kwargs = loads(message)
-            if f == that_func:
-                return
-        self.fail('Queue %s does not contain message for function %s' %
-                (queue.key, that_func))
 
 
 class TestQueue(RQTestCase):
@@ -82,7 +34,7 @@ class TestQueue(RQTestCase):
         q = Queue('my-queue')
         self.assertEquals(q.empty, True)
 
-        conn.rpush('rq:queue:my-queue', 'some val')
+        self.testconn.rpush('rq:queue:my-queue', 'some val')
         self.assertEquals(q.empty, False)
 
 
@@ -166,23 +118,3 @@ class TestQueue(RQTestCase):
         with self.assertRaises(DequeueError):
             q.dequeue()  # error occurs when dequeue()'ing
 
-
-class TestWorker(RQTestCase):
-    def test_create_worker(self):
-        """Worker creation."""
-        fooq, barq = Queue('foo'), Queue('bar')
-        w = Worker([fooq, barq])
-        self.assertEquals(w.queues, [fooq, barq])
-
-    def test_work_and_quit(self):
-        """Worker processes work, then quits."""
-        fooq, barq = Queue('foo'), Queue('bar')
-        w = Worker([fooq, barq])
-        self.assertEquals(w.work(burst=True), False, 'Did not expect any work on the queue.')
-
-        fooq.enqueue(testjob, name='Frank')
-        self.assertEquals(w.work(burst=True), True, 'Expected at least some work done.')
-
-
-if __name__ == '__main__':
-    unittest.main()
