@@ -1,24 +1,25 @@
 from pickle import loads
-from .exceptions import DequeueError
+from .exceptions import UnpickleError
 
 
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
-    __slots__ = ['func', 'args', 'kwargs', 'rv_key', 'origin']
-
     @classmethod
     def unpickle(cls, pickle_data):
         """Constructs a Job instance form the given pickle'd job tuple data."""
         try:
-            job_tuple = loads(pickle_data)
-            return Job(job_tuple)
-        except (AttributeError, ValueError, IndexError):
-            raise DequeueError('Could not decode job tuple.')
+            return loads(pickle_data)
+        except (AttributeError, IndexError, TypeError):
+            raise UnpickleError('Could not decode job tuple.')
 
-    def __init__(self, job_tuple, origin=None):
-        self.func, self.args, self.kwargs, self.rv_key = job_tuple
-        self.origin = origin
+    def __init__(self, func, *args, **kwargs):
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.rv_key = None
+        self.origin = None
+        self.timestamp = None
 
     def perform(self):
         """Invokes the job function with the job arguments.
@@ -37,5 +38,4 @@ class Job(object):
 
     def __str__(self):
         return '<Job %s>' % self.call_string
-
 
