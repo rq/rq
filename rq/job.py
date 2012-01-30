@@ -1,4 +1,6 @@
-from pickle import loads
+from datetime import datetime
+from uuid import uuid4
+from pickle import loads, dumps
 from .exceptions import UnpickleError
 
 
@@ -9,17 +11,34 @@ class Job(object):
     def unpickle(cls, pickle_data):
         """Constructs a Job instance form the given pickle'd job tuple data."""
         try:
-            return loads(pickle_data)
-        except (AttributeError, IndexError, TypeError):
-            raise UnpickleError('Could not decode job tuple.')
+            unpickled_obj = loads(pickle_data)
+            assert isinstance(unpickled_obj, Job)
+            return unpickled_obj
+        except (AssertionError, AttributeError, IndexError, TypeError):
+            raise UnpickleError('Could not unpickle Job.')
 
     def __init__(self, func, *args, **kwargs):
+        self._id = unicode(uuid4())
         self.func = func
         self.args = args
         self.kwargs = kwargs
-        self.rv_key = None
         self.origin = None
-        self.timestamp = None
+        self.created_at = datetime.utcnow()
+        self.enqueued_at = None
+
+    def pickle(self):
+        """Returns the pickle'd string represenation of a Job.  Suitable for writing to Redis."""
+        return dumps(self)
+
+    @property
+    def rv_key(self):
+        """Returns the Redis key under which the Job's result will be stored, if applicable."""
+        return 'rq:result:%s' % (self._id,)
+
+    @property
+    def id(self):
+        """Returns the Job's internal ID."""
+        return self._id
 
     def perform(self):
         """Invokes the job function with the job arguments.
@@ -37,5 +56,7 @@ class Job(object):
         return '%s(%s)' % (self.func.__name__, ', '.join(arg_list))
 
     def __str__(self):
-        return '<Job %s>' % self.call_string
+        return '<Job %s: %s>' % (self.id, self.call_string)
 
+    def __eq__(self, other):
+        return cmp(self.id, other.id)

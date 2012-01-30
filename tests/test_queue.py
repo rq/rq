@@ -2,7 +2,7 @@ from tests import RQTestCase
 from tests import testjob
 from pickle import dumps
 from rq import Queue
-from rq.exceptions import DequeueError
+from rq.exceptions import UnpickleError
 
 
 class TestQueue(RQTestCase):
@@ -96,15 +96,15 @@ class TestQueue(RQTestCase):
         blob = 'this is nothing like pickled data'
         self.testconn.rpush(q._key, blob)
 
-        with self.assertRaises(DequeueError):
+        with self.assertRaises(UnpickleError):
             q.dequeue()  # error occurs when perform()'ing
 
         # Push value pickle data, but not representing a job tuple
         q = Queue('foo')
-        blob = dumps('this is not a job tuple')
+        blob = dumps('this is pickled, but not a job tuple')
         self.testconn.rpush(q._key, blob)
 
-        with self.assertRaises(DequeueError):
+        with self.assertRaises(UnpickleError):
             q.dequeue()  # error occurs when perform()'ing
 
         # Push slightly incorrect pickled data onto the queue (simulate
@@ -115,6 +115,6 @@ class TestQueue(RQTestCase):
         blob = job_tuple.replace('testjob', 'fooobar')
         self.testconn.rpush(q._key, blob)
 
-        with self.assertRaises(DequeueError):
+        with self.assertRaises(UnpickleError):
             q.dequeue()  # error occurs when dequeue()'ing
 

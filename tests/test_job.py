@@ -17,8 +17,9 @@ class TestJob(RQTestCase):
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, {'z': 2})
         self.assertIsNone(job.origin)
-        self.assertIsNone(job.timestamp)
-        self.assertIsNone(job.rv_key)
+        self.assertIsNotNone(job.created_at)
+        self.assertIsNone(job.enqueued_at)
+        self.assertIsNotNone(job.rv_key)
 
     def test_pickle_job(self):
         """Pickling of jobs."""

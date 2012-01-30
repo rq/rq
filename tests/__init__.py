@@ -1,5 +1,4 @@
 import unittest
-from pickle import loads
 from redis import Redis
 from logbook import NullHandler
 from rq import conn
@@ -53,9 +52,8 @@ class RQTestCase(unittest.TestCase):
 
     def assertQueueContains(self, queue, that_func):
         # Do a queue scan (this is O(n), but we're in a test, so hey)
-        for message in queue.messages:
-            f, _, args, kwargs = loads(message)
-            if f == that_func:
+        for job in queue.jobs:
+            if job.func == that_func:
                 return
         self.fail('Queue %s does not contain message for function %s' %
                 (queue.key, that_func))

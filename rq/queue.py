@@ -1,6 +1,6 @@
-import uuid
+from datetime import datetime
 from functools import total_ordering
-from pickle import loads, dumps
+from pickle import loads
 from .proxy import conn
 from .job import Job
 
@@ -78,13 +78,30 @@ class Queue(object):
 
     @property
     def messages(self):
-        """Returns a list of all messages in the queue."""
+        """Returns a list of all messages (pickled job data) in the queue."""
         return conn.lrange(self.key, 0, -1)
+
+    @property
+    def jobs(self):
+        """Returns a list of all jobs in the queue."""
+        return map(Job.unpickle, self.messages)
 
     @property
     def count(self):
         """Returns a count of all messages in the queue."""
         return conn.llen(self.key)
+
+
+    def _create_job(self, f, *args, **kwargs):
+        """Creates a Job instance for the given function call and attaches queue
+        meta data to it.
+        """
+        if f.__module__ == '__main__':
+            raise ValueError('Functions from the __main__ module cannot be processed by workers.')
+
+        job = Job(f, *args, **kwargs)
+        job.origin = self.name
+        return job
 
     def enqueue(self, f, *args, **kwargs):
         """Enqueues a function call for delayed execution.
@@ -92,12 +109,14 @@ class Queue(object):
         Expects the function to call, along with the arguments and keyword
         arguments.
         """
-        rv_key = 'rq:result:%s:%s' % (self.name, str(uuid.uuid4()))
-        if f.__module__ == '__main__':
-            raise ValueError('Functions from the __main__ module cannot be processed by workers.')
-        message = dumps((f, args, kwargs, rv_key))
-        conn.rpush(self.key, message)
-        return DelayedResult(rv_key)
+        job = self._create_job(f, *args, **kwargs)
+        job.enqueued_at = datetime.utcnow()
+        conn.rpush(self.key, job.pickle())
+        return DelayedResult(job.rv_key)
+
+    def requeue(self, job):
+        """Requeues an existing (typically a failed job) onto the queue."""
+        pass
 
     def dequeue(self):
         """Dequeues the function call at the front of this Queue.

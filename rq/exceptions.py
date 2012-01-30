@@ -4,6 +4,3 @@ class NoQueueError(Exception):
 class UnpickleError(Exception):
     pass
 
-class DequeueError(Exception):
-    pass
-
