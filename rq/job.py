@@ -15,7 +15,7 @@ class Job(object):
             assert isinstance(unpickled_obj, Job)
             return unpickled_obj
         except (AssertionError, AttributeError, IndexError, TypeError):
-            raise UnpickleError('Could not unpickle Job.')
+            raise UnpickleError('Could not unpickle Job.', pickle_data)
 
     def __init__(self, func, *args, **kwargs):
         self._id = unicode(uuid4())

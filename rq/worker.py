@@ -14,7 +14,7 @@ except ImportError:
     from logging import Logger
 from .queue import Queue
 from .proxy import conn
-from .exceptions import NoQueueError
+from .exceptions import NoQueueError, UnpickleError
 
 def iterable(x):
     return hasattr(x, '__iter__')
@@ -33,6 +33,7 @@ def signal_name(signum):
         return _signames[signum]
     except KeyError:
         return 'SIG_UNKNOWN'
+
 
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
@@ -249,7 +250,18 @@ class Worker(object):
                 self.procline('Listening on %s' % (','.join(qnames)))
                 self.log.info('*** Listening for work on %s...' % (', '.join(qnames)))
                 wait_for_job = not burst
-                job = Queue.dequeue_any(self.queues, wait_for_job)
+                try:
+                    job = Queue.dequeue_any(self.queues, wait_for_job)
+                except UnpickleError as e:
+                    self.log.warning('*** Ignoring unpickleable data on %s.', e.queue)
+                    self.log.debug('Data follows:')
+                    self.log.debug(e.raw_data)
+                    self.log.debug('End of unreadable data.')
+
+                    q = Queue('failure')
+                    q._push(e.raw_data)
+                    continue
+
                 if job is None:
                     break
                 self.state = 'busy'

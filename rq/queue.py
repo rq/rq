@@ -3,6 +3,7 @@ from functools import total_ordering
 from pickle import loads
 from .proxy import conn
 from .job import Job
+from .exceptions import UnpickleError
 
 
 class DelayedResult(object):
@@ -103,6 +104,10 @@ class Queue(object):
         job.origin = self.name
         return job
 
+    def _push(self, pickled_job):
+        """Enqueues a pickled_job on the corresponding Redis queue."""
+        conn.rpush(self.key, pickled_job)
+
     def enqueue(self, f, *args, **kwargs):
         """Enqueues a function call for delayed execution.
 
@@ -111,7 +116,7 @@ class Queue(object):
         """
         job = self._create_job(f, *args, **kwargs)
         job.enqueued_at = datetime.utcnow()
-        conn.rpush(self.key, job.pickle())
+        self._push(job.pickle())
         return DelayedResult(job.rv_key)
 
     def requeue(self, job):
@@ -126,7 +131,13 @@ class Queue(object):
         blob = conn.lpop(self.key)
         if blob is None:
             return None
-        job = Job.unpickle(blob)
+        try:
+            job = Job.unpickle(blob)
+        except UnpickleError as e:
+            # Attach queue information on the exception for improved error
+            # reporting
+            e.queue = self
+            raise e
         job.origin = self
         return job
 
@@ -162,8 +173,14 @@ class Queue(object):
                 return None
             queue_key, blob = redis_result
 
-        job = Job.unpickle(blob)
         queue = Queue.from_queue_key(queue_key)
+        try:
+            job = Job.unpickle(blob)
+        except UnpickleError as e:
+            # Attach queue information on the exception for improved error
+            # reporting
+            e.queue = queue
+            raise e
         job.origin = queue
         return job
 

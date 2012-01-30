@@ -48,6 +48,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.empty, False)
         self.assertQueueContains(q, testjob)
 
+
     def test_dequeue(self):
         """Fetching work from specific queue."""
         q = Queue('foo')
@@ -59,7 +60,6 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.origin, q)
         self.assertEquals(job.args[0], 'Rick')
         self.assertEquals(job.kwargs['foo'], 'bar')
-
 
     def test_dequeue_any(self):
         """Fetching work from any given queue."""
@@ -86,7 +86,6 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.func, testjob)
         self.assertEquals(job.origin, barq)
         self.assertEquals(job.args[0], 'for Bar', 'Bar should be dequeued second.')
-
 
     def test_dequeue_unpicklable_data(self):
         """Error handling of invalid pickle data."""

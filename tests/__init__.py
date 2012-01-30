@@ -9,6 +9,10 @@ def testjob(name=None):
         name = 'Stranger'
     return 'Hi there, %s!' % (name,)
 
+def failing_job(x):
+    # Will throw a division-by-zero error
+    return x / 0
+
 
 class RQTestCase(unittest.TestCase):
     """Base class to inherit test cases from for RQ.
