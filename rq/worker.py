@@ -1,6 +1,7 @@
 import sys
 import os
 import errno
+import datetime
 import random
 import time
 import procname
@@ -81,6 +82,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stopped = False
         self.log = Logger('worker')
+        self.failure_queue = Queue('failure')
 
 
     def validate_queues(self):
@@ -253,13 +255,13 @@ class Worker(object):
                 try:
                     job = Queue.dequeue_any(self.queues, wait_for_job)
                 except UnpickleError as e:
-                    self.log.warning('*** Ignoring unpickleable data on %s.', e.queue)
+                    self.log.warning('*** Ignoring unpickleable data on %s.' % (e.queue.name,))
                     self.log.debug('Data follows:')
                     self.log.debug(e.raw_data)
                     self.log.debug('End of unreadable data.')
 
-                    q = Queue('failure')
-                    q._push(e.raw_data)
+                    fq = self.failure_queue
+                    fq._push(e.raw_data)
                     continue
 
                 if job is None:
@@ -313,9 +315,15 @@ class Worker(object):
         self.log.info(msg)
         try:
             rv = job.perform()
-        except Exception, e:
+        except Exception as e:
             rv = e
             self.log.exception(e)
+
+            fq = self.failure_queue
+            self.log.warning('Moving job to %s queue.' % (fq.name,))
+            job.ended_at = datetime.datetime.utcnow()
+            job.exc_info = e
+            fq._push(job.pickle())
         else:
             if rv is not None:
                 self.log.info('Job result = %s' % (rv,))

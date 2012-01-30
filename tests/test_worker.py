@@ -49,4 +49,21 @@ class TestWorker(RQTestCase):
 
         self.assertEquals(failure_q.count, 1)
 
+    def test_work_fails(self):
+        """Worker processes failing job."""
+        q = Queue()
+        failure_q = Queue('failure')
+
+        self.assertEquals(failure_q.count, 0)
+        self.assertEquals(q.count, 0)
+
+        q.enqueue(failing_job)
+
+        self.assertEquals(q.count, 1)
+        w = Worker([q])
+        w.work(burst=True)  # should silently pass
+        self.assertEquals(q.count, 0)
+
+        self.assertEquals(failure_q.count, 1)
+
 
