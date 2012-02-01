@@ -25,6 +25,7 @@ class Job(object):
         self.origin = None
         self.created_at = datetime.utcnow()
         self.enqueued_at = None
+        self.exc_info = None
 
     def pickle(self):
         """Returns the pickle'd string represenation of a Job.  Suitable for writing to Redis."""
