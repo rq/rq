@@ -121,7 +121,7 @@ class Queue(object):
 
     def requeue(self, job):
         """Requeues an existing (typically a failed job) onto the queue."""
-        pass
+        raise NotImplementedError('Implement this')
 
     def dequeue(self):
         """Dequeues the function call at the front of this Queue.
