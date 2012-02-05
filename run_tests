@@ -4,8 +4,15 @@ check_redis_running() {
     return $?
 }
 
+if which -s rg; then
+    safe_rg=rg
+else
+    # Fall back for systems that don't have rg installed
+    safe_rg=cat
+fi
+
 if check_redis_running; then
-    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_'
+    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_' | $safe_rg
 else
     echo "Redis not running." >&2
     exit 2
