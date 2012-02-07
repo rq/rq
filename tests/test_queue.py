@@ -46,7 +46,11 @@ class TestQueue(RQTestCase):
         # testjob spec holds which queue this is sent to
         q.enqueue(testjob, 'Nick', foo='bar')
         self.assertEquals(q.is_empty(), False)
-        self.assertQueueContains(q, testjob)
+        for job in q.jobs:
+            if job.func == testjob:
+                break
+        else:
+            self.fail('Job not found on queue.')
 
 
     def test_dequeue(self):

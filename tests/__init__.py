@@ -53,12 +53,3 @@ class RQTestCase(unittest.TestCase):
         testconn = conn.pop()
         assert testconn == cls.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
 
-
-    def assertQueueContains(self, queue, that_func):
-        # Do a queue scan (this is O(n), but we're in a test, so hey)
-        for job in queue.jobs:
-            if job.func == that_func:
-                return
-        self.fail('Queue %s does not contain message for function %s' %
-                (queue.key, that_func))
-
