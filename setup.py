@@ -15,7 +15,7 @@ def get_version():
     raise RuntimeError('No version info found.')
 
 def get_dependencies():
-    deps = ['redis', 'procname']
+    deps = ['redis', 'procname', 'times']
     deps += ['logbook']  # should be soft dependency?
     if sys.version_info < (2, 7) or \
        sys.version_info >= (3, 0) and sys.version_info < (3, 2):

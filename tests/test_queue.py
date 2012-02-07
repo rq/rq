@@ -31,26 +31,26 @@ class TestQueue(RQTestCase):
 
     def test_queue_empty(self):
         """Detecting empty queues."""
-        q = Queue('my-queue')
+        q = Queue('example')
         self.assertEquals(q.is_empty(), True)
 
-        self.testconn.rpush('rq:queue:my-queue', 'some val')
+        self.testconn.rpush('rq:queue:example', 'sentinel message')
         self.assertEquals(q.is_empty(), False)
 
 
     def test_enqueue(self):
-        """Putting work on queues."""
-        q = Queue('my-queue')
+        """Enqueueing writes job IDs to queues."""
+        q = Queue()
         self.assertEquals(q.is_empty(), True)
 
         # testjob spec holds which queue this is sent to
-        q.enqueue(testjob, 'Nick', foo='bar')
-        self.assertEquals(q.is_empty(), False)
-        for job in q.jobs:
-            if job.func == testjob:
-                break
-        else:
-            self.fail('Job not found on queue.')
+        job = q.enqueue(testjob, 'Nick', foo='bar')
+        job_id = job.id
+
+        # Inspect data inside Redis
+        q_key = 'rq:queue:default'
+        self.assertEquals(self.testconn.llen(q_key), 1)
+        self.assertEquals(self.testconn.lrange(q_key, 0, -1)[0], job_id)
 
 
     def test_dequeue(self):

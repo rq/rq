@@ -1,51 +1,131 @@
-from datetime import datetime
+import times
 from uuid import uuid4
 from pickle import loads, dumps
-from .exceptions import UnpickleError
+from .proxy import conn
+from .exceptions import UnpickleError, NoSuchJobError
 
 
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
-    @classmethod
-    def unpickle(cls, pickle_data):
-        """Constructs a Job instance form the given pickle'd job tuple data."""
-        try:
-            unpickled_obj = loads(pickle_data)
-            assert isinstance(unpickled_obj, Job)
-            return unpickled_obj
-        except (AssertionError, AttributeError, IndexError, TypeError, KeyError):
-            raise UnpickleError('Could not unpickle Job.', pickle_data)
 
-    def __init__(self, func, *args, **kwargs):
-        self._id = unicode(uuid4())
-        self.func = func
-        self.args = args
-        self.kwargs = kwargs
+    # Job construction
+    @classmethod
+    def for_call(cls, func, *args, **kwargs):
+        """Creates a new Job instance for the given function, arguments, and
+        keyword arguments.
+        """
+        job = Job()
+        job.func = func
+        job.args = args
+        job.kwargs = kwargs
+        return job
+
+    @classmethod
+    def fetch(cls, id):
+        """Fetches a persisted job from its corresponding Redis key and
+        instantiates it.
+        """
+        job = Job(id)
+        job.refresh()
+        return job
+
+    def __init__(self, id=None):
+        self._id = id
+        self.func = None
+        self.args = None
+        self.kwargs = None
         self.origin = None
-        self.created_at = datetime.utcnow()
+        self.created_at = times.now()
         self.enqueued_at = None
+        self.result = None
         self.exc_info = None
 
-    def pickle(self):
-        """Returns the pickle'd string represenation of a Job.  Suitable for writing to Redis."""
-        return dumps(self)
 
-    @property
-    def rv_key(self):
-        """Returns the Redis key under which the Job's result will be stored, if applicable."""
-        return 'rq:result:%s' % (self._id,)
-
-    @property
-    def id(self):
-        """Returns the Job's internal ID."""
+    # Data access
+    def get_id(self):
+        """The job ID for this job instance. Generates an ID lazily the
+        first time the ID is requested.
+        """
+        if self._id is None:
+            self._id = unicode(uuid4())
         return self._id
 
+    def set_id(self, value):
+        """Sets a job ID for the given job."""
+        self._id = value
+
+    id = property(get_id, set_id)
+
+    @property
+    def key(self):
+        """The Redis key that is used to store job data under."""
+        return 'rq:job:%s' % (self.id,)
+
+
+    @property
+    def job_tuple(self):
+        """Returns the job tuple that encodes the actual function call that this job represents."""
+        return (self.func, self.args, self.kwargs)
+
+    @property
+    def return_value(self):
+        """Returns the return value of the job.
+
+        Initially, right after enqueueing a job, the return value will be None.
+        But when the job has been executed, and had a return value or exception,
+        this will return that value or exception.
+
+        Note that, when the job has no return value (i.e. returns None), the
+        ReadOnlyJob object is useless, as the result won't be written back to
+        Redis.
+
+        Also note that you cannot draw the conclusion that a job has _not_ been
+        executed when its return value is None, since return values written back
+        to Redis will expire after a given amount of time (500 seconds by
+        default).
+        """
+        if self._cached_result is None:
+            rv = conn.hget(self.key, 'result')
+            if rv is not None:
+                # cache the result
+                self._cached_result = loads(rv)
+        return self._cached_result
+
+
+    # Persistence
+    def refresh(self):
+        """Overwrite the current instance's properties with the values in the
+        corresponding Redis key.
+
+        Will raise a NoSuchJobError if no corresponding Redis key exists.
+        """
+        key = self.key
+        pickled_data = conn.hget(key, 'data')
+        if pickled_data is None:
+            raise NoSuchJobError('No such job: %s' % (key,))
+
+        self.func, self.args, self.kwargs = loads(pickled_data)
+
+        self.created_at = times.to_universal(conn.hget(key, 'created_at'))
+
+    def save(self):
+        """Persists the current job instance to its corresponding Redis key."""
+        pickled_data = dumps(self.job_tuple)
+
+        key = self.key
+        conn.hset(key, 'data', pickled_data)
+        conn.hset(key, 'created_at', times.format(self.created_at, 'UTC'))
+
+
+    # Job execution
     def perform(self):
         """Invokes the job function with the job arguments.
         """
         return self.func(*self.args, **self.kwargs)
 
+
+    # Representation
     @property
     def call_string(self):
         """Returns a string representation of the call, formatted as a regular
@@ -59,5 +139,31 @@ class Job(object):
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.call_string)
 
+
+    # Job equality
     def __eq__(self, other):
-        return cmp(self.id, other.id)
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash(self.id)
+
+
+    # TODO: TO REFACTOR / REMOVE
+    def pickle(self):
+        """Returns the pickle'd string represenation of a Job.  Suitable for
+        writing to Redis.
+        """
+        return dumps(self)
+
+    @classmethod
+    def unpickle(cls, pickle_data):
+        """Constructs a Job instance form the given pickle'd job tuple data."""
+        try:
+            unpickled_obj = loads(pickle_data)
+            assert isinstance(unpickled_obj, Job)
+            return unpickled_obj
+        except (AssertionError, AttributeError, IndexError, TypeError, KeyError):
+
+            raise UnpickleError('Could not unpickle Job.', pickle_data)
+
+

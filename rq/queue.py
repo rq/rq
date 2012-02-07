@@ -1,42 +1,8 @@
 from datetime import datetime
 from functools import total_ordering
-from pickle import loads
 from .proxy import conn
 from .job import Job
 from .exceptions import UnpickleError
-
-
-class DelayedResult(object):
-    """Proxy object that is returned as a result of `Queue.enqueue()` calls.
-    Instances of DelayedResult can be polled for their return values.
-    """
-    def __init__(self, key):
-        self.key = key
-        self._rv = None
-
-    @property
-    def return_value(self):
-        """Returns the return value of the job.
-
-        Initially, right after enqueueing a job, the return value will be None.
-        But when the job has been executed, and had a return value or exception,
-        this will return that value or exception.
-
-        Note that, when the job has no return value (i.e. returns None), the
-        DelayedResult object is useless, as the result won't be written back to
-        Redis.
-
-        Also note that you cannot draw the conclusion that a job has _not_ been
-        executed when its return value is None, since return values written back
-        to Redis will expire after a given amount of time (500 seconds by
-        default).
-        """
-        if self._rv is None:
-            rv = conn.get(self.key)
-            if rv is not None:
-                # cache the result
-                self._rv = loads(rv)
-        return self._rv
 
 
 @total_ordering
@@ -99,13 +65,14 @@ class Queue(object):
         if f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed by workers.')
 
-        job = Job(f, *args, **kwargs)
+        job = Job.for_call(f, *args, **kwargs)
         job.origin = self.name
         return job
 
-    def _push(self, pickled_job):
+    def enqueue_job(self, job):
         """Enqueues a pickled_job on the corresponding Redis queue."""
-        conn.rpush(self.key, pickled_job)
+        job.save()
+        conn.rpush(self.key, job.id)
 
     def enqueue(self, f, *args, **kwargs):
         """Enqueues a function call for delayed execution.
@@ -115,8 +82,8 @@ class Queue(object):
         """
         job = self._create_job(f, *args, **kwargs)
         job.enqueued_at = datetime.utcnow()
-        self._push(job.pickle())
-        return DelayedResult(job.rv_key)
+        self.enqueue_job(job)
+        return Job(job.id)
 
     def requeue(self, job):
         """Requeues an existing (typically a failed job) onto the queue."""

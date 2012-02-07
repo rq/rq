@@ -1,3 +1,6 @@
+class NoSuchJobError(Exception):
+    pass
+
 class NoQueueError(Exception):
     pass
 
