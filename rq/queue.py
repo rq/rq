@@ -72,8 +72,7 @@ class Queue(object):
         """Returns the Redis key for this Queue."""
         return self._key
 
-    @property
-    def empty(self):
+    def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0
 

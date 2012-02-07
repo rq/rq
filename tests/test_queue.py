@@ -32,20 +32,20 @@ class TestQueue(RQTestCase):
     def test_queue_empty(self):
         """Detecting empty queues."""
         q = Queue('my-queue')
-        self.assertEquals(q.empty, True)
+        self.assertEquals(q.is_empty(), True)
 
         self.testconn.rpush('rq:queue:my-queue', 'some val')
-        self.assertEquals(q.empty, False)
+        self.assertEquals(q.is_empty(), False)
 
 
     def test_enqueue(self):
         """Putting work on queues."""
         q = Queue('my-queue')
-        self.assertEquals(q.empty, True)
+        self.assertEquals(q.is_empty(), True)
 
         # testjob spec holds which queue this is sent to
         q.enqueue(testjob, 'Nick', foo='bar')
-        self.assertEquals(q.empty, False)
+        self.assertEquals(q.is_empty(), False)
         self.assertQueueContains(q, testjob)
 
 
