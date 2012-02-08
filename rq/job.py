@@ -120,8 +120,8 @@ class Job(object):
         if pickled_data is None:
             raise NoSuchJobError('No such job: %s' % (key,))
 
+        self.origin = conn.hget(key, 'origin')
         self.func, self.args, self.kwargs = unpickle(pickled_data)
-
         self.created_at = times.to_universal(conn.hget(key, 'created_at'))
 
     def save(self):
@@ -130,6 +130,7 @@ class Job(object):
 
         key = self.key
         conn.hset(key, 'data', pickled_data)
+        conn.hset(key, 'origin', self.origin)
         conn.hset(key, 'created_at', times.format(self.created_at, 'UTC'))
 
 

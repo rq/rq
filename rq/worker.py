@@ -15,7 +15,10 @@ except ImportError:
     from logging import Logger
 from .queue import Queue
 from .proxy import conn
+from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
+
+green = make_colorizer('darkgreen')
 
 def iterable(x):
     return hasattr(x, '__iter__')
@@ -239,7 +242,7 @@ class Worker(object):
         """
         self._install_signal_handlers()
 
-        did_work = False
+        did_perform_work = False
         self.register_birth()
         self.state = 'starting'
         try:
@@ -253,7 +256,11 @@ class Worker(object):
                 self.log.info('*** Listening for work on %s...' % (', '.join(qnames)))
                 wait_for_job = not burst
                 try:
-                    job = Queue.dequeue_any(self.queues, wait_for_job)
+                    result = Queue.dequeue_any(self.queues, wait_for_job)
+                    if result is None:
+                        break
+                    job, queue = result
+                    self.log.info('%s: %s' % (green(queue.name), job))
                 except UnpickleError as e:
                     self.log.warning('*** Ignoring unpickleable data on %s.' % (e.queue.name,))
                     self.log.debug('Data follows:')
@@ -262,17 +269,14 @@ class Worker(object):
                     self.failure_queue.push_job_id(e.job_id)
                     continue
 
-                if job is None:
-                    break
                 self.state = 'busy'
-
                 self.fork_and_perform_job(job)
 
-                did_work = True
+                did_perform_work = True
         finally:
             if not self.is_horse:
                 self.register_death()
-        return did_work
+        return did_perform_work
 
     def fork_and_perform_job(self, job):
         child_pid = os.fork()

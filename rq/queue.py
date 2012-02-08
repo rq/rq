@@ -5,6 +5,10 @@ from .job import Job
 from .exceptions import NoSuchJobError, UnpickleError
 
 
+def compact(lst):
+    return [item for item in lst if item is not None]
+
+
 @total_ordering
 class Queue(object):
     redis_queue_namespace_prefix = 'rq:queue:'
@@ -43,14 +47,21 @@ class Queue(object):
         return self.count == 0
 
     @property
-    def messages(self):
-        """Returns a list of all messages (pickled job data) in the queue."""
+    def job_ids(self):
+        """Returns a list of all job IDS in the queue."""
         return conn.lrange(self.key, 0, -1)
 
     @property
     def jobs(self):
-        """Returns a list of all jobs in the queue."""
-        return map(Job.unpickle, self.messages)
+        """Returns a list of all (valid) jobs in the queue."""
+        def safe_fetch(job_id):
+            try:
+                job = Job.fetch(job_id)
+            except UnpickleError:
+                return None
+            return job
+
+        return compact([safe_fetch(job_id) for job_id in self.job_ids])
 
     @property
     def count(self):
@@ -98,6 +109,7 @@ class Queue(object):
         """
         if blocking:
             queue_key, job_id = conn.blpop(queue_keys)
+            return queue_key, job_id
         else:
             for queue_key in queue_keys:
                 blob = conn.lpop(queue_key)
@@ -124,7 +136,6 @@ class Queue(object):
             # reporting
             e.queue = self
             raise e
-        job.origin = self
         return job
 
     @classmethod
@@ -154,8 +165,7 @@ class Queue(object):
             e.job_id = job_id
             e.queue = queue
             raise e
-        job.origin = queue
-        return job
+        return job, queue
 
 
     # Total ordering defition (the rest of the required Python methods are

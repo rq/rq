@@ -76,7 +76,7 @@ class TestQueue(RQTestCase):
         job = q.dequeue()
         self.assertEquals(job.id, result.id)
         self.assertEquals(job.func, testjob)
-        self.assertEquals(job.origin, q)
+        self.assertEquals(job.origin, q.name)
         self.assertEquals(job.args[0], 'Rick')
         self.assertEquals(job.kwargs['foo'], 'bar')
 
@@ -108,21 +108,24 @@ class TestQueue(RQTestCase):
 
         # Enqueue a single item
         barq.enqueue(testjob)
-        job = Queue.dequeue_any([fooq, barq], False)
+        job, queue = Queue.dequeue_any([fooq, barq], False)
         self.assertEquals(job.func, testjob)
+        self.assertEquals(queue, barq)
 
         # Enqueue items on both queues
         barq.enqueue(testjob, 'for Bar')
         fooq.enqueue(testjob, 'for Foo')
 
-        job = Queue.dequeue_any([fooq, barq], False)
+        job, queue = Queue.dequeue_any([fooq, barq], False)
+        self.assertEquals(queue, fooq)
         self.assertEquals(job.func, testjob)
-        self.assertEquals(job.origin, fooq)
+        self.assertEquals(job.origin, fooq.name)
         self.assertEquals(job.args[0], 'for Foo', 'Foo should be dequeued first.')
 
-        job = Queue.dequeue_any([fooq, barq], False)
+        job, queue = Queue.dequeue_any([fooq, barq], False)
+        self.assertEquals(queue, barq)
         self.assertEquals(job.func, testjob)
-        self.assertEquals(job.origin, barq)
+        self.assertEquals(job.origin, barq.name)
         self.assertEquals(job.args[0], 'for Bar', 'Bar should be dequeued second.')
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
