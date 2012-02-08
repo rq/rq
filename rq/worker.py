@@ -259,9 +259,7 @@ class Worker(object):
                     self.log.debug('Data follows:')
                     self.log.debug(e.raw_data)
                     self.log.debug('End of unreadable data.')
-
-                    fq = self.failure_queue
-                    fq._push(e.raw_data)
+                    self.failure_queue.push_job_id(e.job_id)
                     continue
 
                 if job is None:
@@ -286,6 +284,13 @@ class Worker(object):
                 self.perform_job(job)
             except Exception as e:
                 self.log.exception(e)
+
+                # Store the exception information...
+                job.exc_info = e
+                job.save()
+
+                # ...and put the job on the failure queue
+                self.failure_queue.push_job_id(job.id)
                 sys.exit(1)
             sys.exit(0)
         else:

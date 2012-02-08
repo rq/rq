@@ -1,8 +1,6 @@
 from tests import RQTestCase
 from tests import testjob
-from pickle import dumps
 from rq import Queue
-from rq.exceptions import UnpickleError
 
 
 class TestQueue(RQTestCase):
@@ -67,7 +65,6 @@ class TestQueue(RQTestCase):
         # ...and assert the queue count when down
         self.assertEquals(q.count, 0)
 
-
     def test_dequeue(self):
         """Dequeueing jobs from queues."""
         # Set up
@@ -92,10 +89,14 @@ class TestQueue(RQTestCase):
         q = Queue()
         uuid = '49f205ab-8ea3-47dd-a1b5-bfa186870fc8'
         q.push_job_id(uuid)
+        q.push_job_id(uuid)
+        result = q.enqueue(testjob, 'Nick', foo='bar')
+        q.push_job_id(uuid)
 
         # Dequeue simply ignores the missing job and returns None
-        self.assertEquals(q.count, 1)
-        self.assertEquals(q.dequeue(), None)
+        self.assertEquals(q.count, 4)
+        self.assertEquals(q.dequeue().id, result.id)
+        self.assertIsNone(q.dequeue())
         self.assertEquals(q.count, 0)
 
     def test_dequeue_any(self):

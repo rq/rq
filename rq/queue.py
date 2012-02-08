@@ -116,7 +116,9 @@ class Queue(object):
         try:
             job = Job.fetch(job_id)
         except NoSuchJobError as e:
-            return None
+            # Silently pass on jobs that don't exist (anymore),
+            # and continue by reinvoking itself recursively
+            return self.dequeue()
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
@@ -143,11 +145,13 @@ class Queue(object):
         try:
             job = Job.fetch(job_id)
         except NoSuchJobError:
-            # Silently pass on jobs that don't exist (anymore)
-            return None
+            # Silently pass on jobs that don't exist (anymore),
+            # and continue by reinvoking the same function recursively
+            return cls.dequeue_any(queues, blocking)
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
+            e.job_id = job_id
             e.queue = queue
             raise e
         job.origin = queue

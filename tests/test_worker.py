@@ -21,7 +21,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(w.work(burst=True), True, 'Expected at least some work done.')
 
     def test_work_is_unreadable(self):
-        """Worker ignores unreadable job."""
+        """Unreadable jobs are put on the failure queue."""
         q = Queue()
         failure_q = Queue('failure')
 
@@ -39,7 +39,7 @@ class TestWorker(RQTestCase):
 
         # We use the low-level internal function to enqueue any data (bypassing
         # validity checks)
-        q.push_job_id(invalid_data)
+        q.push_job_id(job.id)
 
         self.assertEquals(q.count, 1)
 
@@ -51,7 +51,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(failure_q.count, 1)
 
     def test_work_fails(self):
-        """Worker processes failing job."""
+        """Failing jobs are put on the failure queue."""
         q = Queue()
         failure_q = Queue('failure')
 
@@ -59,12 +59,11 @@ class TestWorker(RQTestCase):
         self.assertEquals(q.count, 0)
 
         q.enqueue(failing_job)
-
         self.assertEquals(q.count, 1)
+
         w = Worker([q])
         w.work(burst=True)  # should silently pass
         self.assertEquals(q.count, 0)
-
         self.assertEquals(failure_q.count, 1)
 
 
