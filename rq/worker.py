@@ -1,9 +1,9 @@
 import sys
 import os
 import errno
-import datetime
 import random
 import time
+import times
 import procname
 import socket
 import signal
@@ -233,7 +233,7 @@ class Worker(object):
 
         Pops and performs all jobs on the current list of queues.  When all
         queues are empty, block and wait for new jobs to arrive on any of the
-        queues, unless `burst` is True.
+        queues, unless `burst` mode is enabled.
 
         The return value indicates whether any jobs were processed.
         """
@@ -249,7 +249,7 @@ class Worker(object):
                     break
                 self.state = 'idle'
                 qnames = self.queue_names()
-                self.procline('Listening on %s' % (','.join(qnames)))
+                self.procline('Listening on %s' % ','.join(qnames))
                 self.log.info('*** Listening for work on %s...' % (', '.join(qnames)))
                 wait_for_job = not burst
                 try:
@@ -321,7 +321,7 @@ class Worker(object):
 
             fq = self.failure_queue
             self.log.warning('Moving job to %s queue.' % (fq.name,))
-            job.ended_at = datetime.datetime.utcnow()
+            job.ended_at = times.now()
             job.exc_info = e
             fq._push(job.pickle())
         else:

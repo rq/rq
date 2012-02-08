@@ -1,6 +1,6 @@
 from datetime import datetime
 from tests import RQTestCase
-from pickle import dumps, loads
+from pickle import loads
 from rq.job import Job
 from rq.exceptions import NoSuchJobError, UnpickleError
 
@@ -95,16 +95,26 @@ class TestJob(RQTestCase):
             Job.fetch('b4a44d44-da16-4620-90a6-798e8cd72ca0')
 
 
-    def test_unpickle_errors(self):
-        """Handling of unpickl'ing errors."""
-        with self.assertRaises(UnpickleError):
-            Job.unpickle('this is no pickle data')
+    def test_dequeue_unreadable_data(self):
+        """Dequeue fails on unreadable data."""
+        # Set up
+        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job.save()
 
+        # Just replace the data hkey with some random noise
+        self.testconn.hset(job.key, 'data', 'this is no pickle string')
         with self.assertRaises(UnpickleError):
-            Job.unpickle(13)
+            job.refresh()
 
-        pickle_data = dumps(Job.for_call(arbitrary_function, 2, 3))
-        corrupt_data = pickle_data.replace('arbitrary', 'b0rken')
+        # Set up (part B)
+        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job.save()
+
+        # Now slightly modify the job to make it unpickl'able (this is
+        # equivalent to a worker not having the most up-to-date source code and
+        # unable to import the function)
+        data = self.testconn.hget(job.key, 'data')
+        unimportable_data = data.replace('arbitrary_function', 'broken')
+        self.testconn.hset(job.key, 'data', unimportable_data)
         with self.assertRaises(UnpickleError):
-            Job.unpickle(corrupt_data)
-
+            job.refresh()

@@ -39,7 +39,7 @@ class TestQueue(RQTestCase):
 
 
     def test_enqueue(self):
-        """Enqueueing writes job IDs to queues."""
+        """Enqueueing job onto queues."""
         q = Queue()
         self.assertEquals(q.is_empty(), True)
 
@@ -53,17 +53,50 @@ class TestQueue(RQTestCase):
         self.assertEquals(self.testconn.lrange(q_key, 0, -1)[0], job_id)
 
 
-    def test_dequeue(self):
-        """Fetching work from specific queue."""
-        q = Queue('foo')
-        q.enqueue(testjob, 'Rick', foo='bar')
+    def test_pop_job_id(self):
+        """Popping job IDs from queues."""
+        # Set up
+        q = Queue()
+        uuid = '112188ae-4e9d-4a5b-a5b3-f26f2cb054da'
+        q.push_job_id(uuid)
 
-        # Pull it off the queue (normally, a worker would do this)
+        # Pop it off the queue...
+        self.assertEquals(q.count, 1)
+        self.assertEquals(q.pop_job_id(), uuid)
+
+        # ...and assert the queue count when down
+        self.assertEquals(q.count, 0)
+
+
+    def test_dequeue(self):
+        """Dequeueing jobs from queues."""
+        # Set up
+        q = Queue()
+        result = q.enqueue(testjob, 'Rick', foo='bar')
+
+        # Dequeue a job (not a job ID) off the queue
+        self.assertEquals(q.count, 1)
         job = q.dequeue()
+        self.assertEquals(job.id, result.id)
         self.assertEquals(job.func, testjob)
         self.assertEquals(job.origin, q)
         self.assertEquals(job.args[0], 'Rick')
         self.assertEquals(job.kwargs['foo'], 'bar')
+
+        # ...and assert the queue count when down
+        self.assertEquals(q.count, 0)
+
+    def test_dequeue_ignores_nonexisting_jobs(self):
+        """Dequeuing silently ignores non-existing jobs."""
+
+        q = Queue()
+        uuid = '49f205ab-8ea3-47dd-a1b5-bfa186870fc8'
+        q.push_job_id(uuid)
+
+        # Dequeue simply ignores the missing job and returns None
+        self.assertEquals(q.count, 1)
+        self.assertEquals(q.dequeue(), None)
+        self.assertEquals(q.count, 0)
 
     def test_dequeue_any(self):
         """Fetching work from any given queue."""
@@ -91,33 +124,15 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.origin, barq)
         self.assertEquals(job.args[0], 'for Bar', 'Bar should be dequeued second.')
 
-    def test_dequeue_unpicklable_data(self):
-        """Error handling of invalid pickle data."""
+    def test_dequeue_any_ignores_nonexisting_jobs(self):
+        """Dequeuing (from any queue) silently ignores non-existing jobs."""
 
-        # Push non-pickle data on the queue
-        q = Queue('foo')
-        blob = 'this is nothing like pickled data'
-        self.testconn.rpush(q._key, blob)
+        q = Queue('low')
+        uuid = '49f205ab-8ea3-47dd-a1b5-bfa186870fc8'
+        q.push_job_id(uuid)
 
-        with self.assertRaises(UnpickleError):
-            q.dequeue()  # error occurs when perform()'ing
-
-        # Push value pickle data, but not representing a job tuple
-        q = Queue('foo')
-        blob = dumps('this is pickled, but not a job tuple')
-        self.testconn.rpush(q._key, blob)
-
-        with self.assertRaises(UnpickleError):
-            q.dequeue()  # error occurs when perform()'ing
-
-        # Push slightly incorrect pickled data onto the queue (simulate
-        # a function that can't be imported from the worker)
-        q = Queue('foo')
-
-        job_tuple = dumps((testjob, [], dict(name='Frank'), 'unused'))
-        blob = job_tuple.replace('testjob', 'fooobar')
-        self.testconn.rpush(q._key, blob)
-
-        with self.assertRaises(UnpickleError):
-            q.dequeue()  # error occurs when dequeue()'ing
+        # Dequeue simply ignores the missing job and returns None
+        self.assertEquals(q.count, 1)
+        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False), None)
+        self.assertEquals(q.count, 0)
 

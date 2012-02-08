@@ -1,8 +1,8 @@
-from datetime import datetime
+import times
 from functools import total_ordering
 from .proxy import conn
 from .job import Job
-from .exceptions import UnpickleError
+from .exceptions import NoSuchJobError, UnpickleError
 
 
 @total_ordering
@@ -58,21 +58,9 @@ class Queue(object):
         return conn.llen(self.key)
 
 
-    def _create_job(self, f, *args, **kwargs):
-        """Creates a Job instance for the given function call and attaches queue
-        meta data to it.
-        """
-        if f.__module__ == '__main__':
-            raise ValueError('Functions from the __main__ module cannot be processed by workers.')
-
-        job = Job.for_call(f, *args, **kwargs)
-        job.origin = self.name
-        return job
-
-    def enqueue_job(self, job):
-        """Enqueues a pickled_job on the corresponding Redis queue."""
-        job.save()
-        conn.rpush(self.key, job.id)
+    def push_job_id(self, job_id):
+        """Pushes a job ID on the corresponding Redis queue."""
+        conn.rpush(self.key, job_id)
 
     def enqueue(self, f, *args, **kwargs):
         """Enqueues a function call for delayed execution.
@@ -80,25 +68,55 @@ class Queue(object):
         Expects the function to call, along with the arguments and keyword
         arguments.
         """
-        job = self._create_job(f, *args, **kwargs)
-        job.enqueued_at = datetime.utcnow()
-        self.enqueue_job(job)
+        if f.__module__ == '__main__':
+            raise ValueError('Functions from the __main__ module cannot be processed by workers.')
+
+        job = Job.for_call(f, *args, **kwargs)
+        job.origin = self.name
+        job.enqueued_at = times.now()
+        job.save()
+        self.push_job_id(job.id)
         return Job(job.id)
 
     def requeue(self, job):
         """Requeues an existing (typically a failed job) onto the queue."""
         raise NotImplementedError('Implement this')
 
+    def pop_job_id(self):
+        """Pops a given job ID from this Redis queue."""
+        return conn.lpop(self.key)
+
+    @classmethod
+    def lpop(cls, queue_keys, blocking):
+        """Helper method.  Intermediate method to abstract away from some Redis
+        API details, where LPOP accepts only a single key, whereas BLPOP accepts
+        multiple.  So if we want the non-blocking LPOP, we need to iterate over
+        all queues, do individual LPOPs, and return the result.
+
+        Until Redis receives a specific method for this, we'll have to wrap it
+        this way.
+        """
+        if blocking:
+            queue_key, job_id = conn.blpop(queue_keys)
+        else:
+            for queue_key in queue_keys:
+                blob = conn.lpop(queue_key)
+                if blob is not None:
+                    return queue_key, blob
+            return None
+
     def dequeue(self):
-        """Dequeues the function call at the front of this Queue.
+        """Dequeues the front-most job from this queue.
 
         Returns a Job instance, which can be executed or inspected.
         """
-        blob = conn.lpop(self.key)
-        if blob is None:
+        job_id = self.pop_job_id()
+        if job_id is None:
             return None
         try:
-            job = Job.unpickle(blob)
+            job = Job.fetch(job_id)
+        except NoSuchJobError as e:
+            return None
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
@@ -106,20 +124,6 @@ class Queue(object):
             raise e
         job.origin = self
         return job
-
-    @classmethod
-    def _lpop_any(cls, queue_keys):
-        """Helper method.  You should not call this directly.
-
-        Redis' BLPOP command takes multiple queue arguments, but LPOP can only
-        take a single queue.  Therefore, we need to loop over all queues
-        manually, in order, and return None if no more work is available.
-        """
-        for queue_key in queue_keys:
-            blob = conn.lpop(queue_key)
-            if blob is not None:
-                return (queue_key, blob)
-        return None
 
     @classmethod
     def dequeue_any(cls, queues, blocking):
@@ -130,18 +134,17 @@ class Queue(object):
         either blocks execution of this function until new messages arrive on
         any of the queues, or returns None.
         """
-        queue_keys = map(lambda q: q.key, queues)
-        if blocking:
-            queue_key, blob = conn.blpop(queue_keys)
-        else:
-            redis_result = cls._lpop_any(queue_keys)
-            if redis_result is None:
-                return None
-            queue_key, blob = redis_result
-
+        queue_keys = [q.key for q in queues]
+        result = cls.lpop(queue_keys, blocking)
+        if result is None:
+            return None
+        queue_key, job_id = result
         queue = Queue.from_queue_key(queue_key)
         try:
-            job = Job.unpickle(blob)
+            job = Job.fetch(job_id)
+        except NoSuchJobError:
+            # Silently pass on jobs that don't exist (anymore)
+            return None
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting

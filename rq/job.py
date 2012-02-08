@@ -5,6 +5,21 @@ from .proxy import conn
 from .exceptions import UnpickleError, NoSuchJobError
 
 
+def unpickle(pickled_string):
+    """Unpickles a string, but raises a unified UnpickleError in case anything
+    fails.
+
+    This is a helper method to not have to deal with the fact that `loads()`
+    potentially raises many types of exceptions (e.g. AttributeError,
+    IndexError, TypeError, KeyError, etc.)
+    """
+    try:
+        obj = loads(pickled_string)
+    except StandardError:
+        raise UnpickleError('Could not unpickle.', pickled_string)
+    return obj
+
+
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
@@ -105,7 +120,7 @@ class Job(object):
         if pickled_data is None:
             raise NoSuchJobError('No such job: %s' % (key,))
 
-        self.func, self.args, self.kwargs = loads(pickled_data)
+        self.func, self.args, self.kwargs = unpickle(pickled_data)
 
         self.created_at = times.to_universal(conn.hget(key, 'created_at'))
 
@@ -154,16 +169,4 @@ class Job(object):
         writing to Redis.
         """
         return dumps(self)
-
-    @classmethod
-    def unpickle(cls, pickle_data):
-        """Constructs a Job instance form the given pickle'd job tuple data."""
-        try:
-            unpickled_obj = loads(pickle_data)
-            assert isinstance(unpickled_obj, Job)
-            return unpickled_obj
-        except (AssertionError, AttributeError, IndexError, TypeError, KeyError):
-
-            raise UnpickleError('Could not unpickle Job.', pickle_data)
-
 
