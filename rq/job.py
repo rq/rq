@@ -154,7 +154,6 @@ class Job(object):
         self.result = result
         self.exc_info = exc_info
 
-
     def save(self):
         """Persists the current job instance to its corresponding Redis key."""
         key = self.key
@@ -210,12 +209,4 @@ class Job(object):
 
     def __hash__(self):
         return hash(self.id)
-
-
-    # TODO: TO REFACTOR / REMOVE
-    def pickle(self):
-        """Returns the pickle'd string represenation of a Job.  Suitable for
-        writing to Redis.
-        """
-        return dumps(self)
 
