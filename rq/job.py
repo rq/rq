@@ -131,21 +131,53 @@ class Job(object):
         Will raise a NoSuchJobError if no corresponding Redis key exists.
         """
         key = self.key
-        pickled_data = conn.hget(key, 'data')
-        if pickled_data is None:
+        properties = ['data', 'created_at', 'origin', 'description',
+                'enqueued_at', 'ended_at', 'result', 'exc_info']
+        data, created_at, origin, description, \
+                enqueued_at, ended_at, result, \
+                exc_info = conn.hmget(key, properties)
+        if data is None:
             raise NoSuchJobError('No such job: %s' % (key,))
 
-        self.origin = conn.hget(key, 'origin')
+        def to_date(date_str):
+            if date_str is None:
+                return None
+            else:
+                return times.to_universal(date_str)
+
         self._func, self._args, self._kwargs = unpickle(data)
-        self.created_at = times.to_universal(conn.hget(key, 'created_at'))
+        self.created_at = to_date(created_at)
+        self.origin = origin
+        self.description = description
+        self.enqueued_at = to_date(enqueued_at)
+        self.ended_at = to_date(ended_at)
+        self.result = result
+        self.exc_info = exc_info
 
 
     def save(self):
         """Persists the current job instance to its corresponding Redis key."""
         key = self.key
-        conn.hset(key, 'data', pickled_data)
-        conn.hset(key, 'origin', self.origin)
-        conn.hset(key, 'created_at', times.format(self.created_at, 'UTC'))
+
+        obj = {}
+        obj['created_at'] = times.format(self.created_at, 'UTC')
+
+        if self.func is not None:
+            obj['data'] = dumps(self.job_tuple)
+        if self.origin is not None:
+            obj['origin'] = self.origin
+        if self.description is not None:
+            obj['description'] = self.description
+        if self.enqueued_at is not None:
+            obj['enqueued_at'] = times.format(self.enqueued_at, 'UTC')
+        if self.ended_at is not None:
+            obj['ended_at'] = times.format(self.ended_at, 'UTC')
+        if self.result is not None:
+            obj['result'] = self.result
+        if self.exc_info is not None:
+            obj['exc_info'] = self.exc_info
+
+        conn.hmset(key, obj)
 
 
     # Job execution

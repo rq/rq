@@ -1,5 +1,6 @@
 from tests import RQTestCase
 from tests import testjob, failing_job
+from tests.helpers import strip_milliseconds
 from rq import Queue, Worker
 from rq.job import Job
 

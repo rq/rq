@@ -1,5 +1,7 @@
+import times
 from datetime import datetime
 from tests import RQTestCase
+from tests.helpers import strip_milliseconds
 from pickle import loads
 from rq.job import Job
 from rq.exceptions import NoSuchJobError, UnpickleError
@@ -14,28 +16,28 @@ class TestJob(RQTestCase):
         """Creation of new empty jobs."""
         job = Job()
 
-        # Jobs have a random UUID
+        # Jobs have a random UUID and a creation date
         self.assertIsNotNone(job.id)
-
-        # Jobs have no data yet...
-        self.assertEquals(job.func, None)
-        self.assertEquals(job.args, None)
-        self.assertEquals(job.kwargs, None)
-        self.assertEquals(job.origin, None)
-        self.assertEquals(job.enqueued_at, None)
-        self.assertEquals(job.result, None)
-        self.assertEquals(job.exc_info, None)
-
-        # ...except for a created_at property
         self.assertIsNotNone(job.created_at)
 
-    def test_create_normal_job(self):
+        # ...and nothing else
+        self.assertIsNone(job.func, None)
+        self.assertIsNone(job.args, None)
+        self.assertIsNone(job.kwargs, None)
+        self.assertIsNone(job.origin, None)
+        self.assertIsNone(job.enqueued_at, None)
+        self.assertIsNone(job.ended_at, None)
+        self.assertIsNone(job.result, None)
+        self.assertIsNone(job.exc_info, None)
+
+    def test_create_typical_job(self):
         """Creation of jobs for function calls."""
         job = Job.for_call(arbitrary_function, 3, 4, z=2)
 
         # Jobs have a random UUID
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
+        self.assertIsNotNone(job.description)
 
         # Job data is set...
         self.assertEquals(job.func, arbitrary_function)
@@ -76,8 +78,39 @@ class TestJob(RQTestCase):
         self.assertEquals(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
 
 
-    def test_persistence_of_jobs(self):
-        """Storing and fetching of jobs."""
+    def test_persistence_of_empty_jobs(self):
+        """Storing empty jobs."""
+        job = Job()
+        job.save()
+
+        expected_date = strip_milliseconds(job.created_at)
+        stored_date = self.testconn.hget(job.key, 'created_at')
+        self.assertEquals(
+                times.to_universal(stored_date),
+                expected_date)
+
+        # ... and no other keys are stored
+        self.assertItemsEqual(
+                self.testconn.hkeys(job.key),
+                ['created_at'])
+
+    def test_persistence_of_typical_jobs(self):
+        """Storing typical jobs."""
+        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job.save()
+
+        expected_date = strip_milliseconds(job.created_at)
+        stored_date = self.testconn.hget(job.key, 'created_at')
+        self.assertEquals(
+                times.to_universal(stored_date),
+                expected_date)
+
+        # ... and no other keys are stored
+        self.assertItemsEqual(
+                self.testconn.hkeys(job.key),
+                ['created_at', 'data', 'description'])
+
+    def test_store_then_fetch(self):
         job = Job.for_call(arbitrary_function, 3, 4, z=2)
         job.save()
 
@@ -94,9 +127,8 @@ class TestJob(RQTestCase):
         with self.assertRaises(NoSuchJobError):
             Job.fetch('b4a44d44-da16-4620-90a6-798e8cd72ca0')
 
-
-    def test_dequeue_unreadable_data(self):
-        """Dequeue fails on unreadable data."""
+    def test_fetching_unreadable_data(self):
+        """Fetching fails on unreadable data."""
         # Set up
         job = Job.for_call(arbitrary_function, 3, 4, z=2)
         job.save()
