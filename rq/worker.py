@@ -7,6 +7,7 @@ import times
 import procname
 import socket
 import signal
+import traceback
 from pickle import dumps
 try:
     from logbook import Logger
@@ -284,19 +285,9 @@ class Worker(object):
             self._is_horse = True
             random.seed()
             self.log = Logger('horse')
-            try:
-                self.perform_job(job)
-            except Exception as e:
-                self.log.exception(e)
 
-                # Store the exception information...
-                job.exc_info = e
-                job.save()
-
-                # ...and put the job on the failure queue
-                self.failure_queue.push_job_id(job.id)
-                sys.exit(1)
-            sys.exit(0)
+            success = self.perform_job(job)
+            sys.exit(int(not success))
         else:
             self._horse_pid = child_pid
             self.procline('Forked %d at %d' % (child_pid, time.time()))
@@ -317,29 +308,35 @@ class Worker(object):
     def perform_job(self, job):
         self.procline('Processing %s from %s since %s' % (
             job.func.__name__,
-            job.origin.name, time.time()))
+            job.origin, time.time()))
         msg = 'Got job %s from %s' % (
                 job.description,
-                job.origin.name)
+                job.origin)
         self.log.info(msg)
         try:
             rv = job.perform()
         except Exception as e:
-            rv = e
-            self.log.exception(e)
-
             fq = self.failure_queue
+            self.log.exception(e)
             self.log.warning('Moving job to %s queue.' % (fq.name,))
+
+            # Store the exception information...
             job.ended_at = times.now()
-            job.exc_info = e
-            fq._push(job.pickle())
+            job.exc_info = traceback.format_exc()
+
+            # ------ REFACTOR THIS -------------------------
+            job.save()
+            # ...and put the job on the failure queue
+            fq.push_job_id(job.id)
+            # ------ UNTIL HERE ----------------------------
+            # (should be as easy as fq.enqueue(job) or so)
+
+            return False
         else:
-            if rv is not None:
-                self.log.info('Job result = %s' % (rv,))
-            else:
-                self.log.info('Job ended normally without result')
+            self.log.info('Job OK, result = %s' % (rv,))
         if rv is not None:
             p = conn.pipeline()
-            p.set(job.rv_key, dumps(rv))
-            p.expire(job.rv_key, self.rv_ttl)
+            p.set(job.result, dumps(rv))
+            p.expire(job.result, self.rv_ttl)
             p.execute()
+        return True

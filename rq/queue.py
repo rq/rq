@@ -83,11 +83,15 @@ class Queue(object):
             raise ValueError('Functions from the __main__ module cannot be processed by workers.')
 
         job = Job.for_call(f, *args, **kwargs)
+        return self.enqueue_job(job)
+
+    def enqueue_job(self, job):
+        """Enqueues a job for delayed execution."""
         job.origin = self.name
         job.enqueued_at = times.now()
         job.save()
         self.push_job_id(job.id)
-        return Job(job.id)
+        return job
 
     def requeue(self, job):
         """Requeues an existing (typically a failed job) onto the queue."""

@@ -1,6 +1,7 @@
 from tests import RQTestCase
 from tests import testjob
 from rq import Queue
+from rq.job import Job
 
 
 class TestQueue(RQTestCase):
@@ -49,6 +50,22 @@ class TestQueue(RQTestCase):
         q_key = 'rq:queue:default'
         self.assertEquals(self.testconn.llen(q_key), 1)
         self.assertEquals(self.testconn.lrange(q_key, 0, -1)[0], job_id)
+
+    def test_enqueue_sets_metadata(self):
+        """Enqueueing job onto queues modifies meta data."""
+        q = Queue()
+        job = Job.for_call(testjob, 'Nick', foo='bar')
+
+        # Preconditions
+        self.assertIsNone(job.origin)
+        self.assertIsNone(job.enqueued_at)
+
+        # Action
+        q.enqueue_job(job)
+
+        # Postconditions
+        self.assertEquals(job.origin, q.name)
+        self.assertIsNotNone(job.enqueued_at)
 
 
     def test_pop_job_id(self):

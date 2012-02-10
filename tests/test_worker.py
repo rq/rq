@@ -56,15 +56,29 @@ class TestWorker(RQTestCase):
         q = Queue()
         failure_q = Queue('failure')
 
+        # Preconditions
         self.assertEquals(failure_q.count, 0)
         self.assertEquals(q.count, 0)
 
-        q.enqueue(failing_job)
+        # Action
+        job = q.enqueue(failing_job)
         self.assertEquals(q.count, 1)
+
+        # keep for later
+        enqueued_at_date = strip_milliseconds(job.enqueued_at)
 
         w = Worker([q])
         w.work(burst=True)  # should silently pass
+
+        # Postconditions
         self.assertEquals(q.count, 0)
         self.assertEquals(failure_q.count, 1)
 
+        # Check the job
+        job = Job.fetch(job.id)
+        self.assertEquals(job.origin, q.name)
+
+        # should be the original enqueued_at date, not the date of enqueueing to the failure queue
+        self.assertEquals(job.enqueued_at, enqueued_at_date)
+        self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
