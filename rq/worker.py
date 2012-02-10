@@ -319,7 +319,7 @@ class Worker(object):
             job.func.__name__,
             job.origin.name, time.time()))
         msg = 'Got job %s from %s' % (
-                job.call_string,
+                job.description,
                 job.origin.name)
         self.log.info(msg)
         try:

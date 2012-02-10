@@ -31,10 +31,23 @@ class Job(object):
         keyword arguments.
         """
         job = Job()
-        job.func = func
-        job.args = args
-        job.kwargs = kwargs
+        job._func = func
+        job._args = args
+        job._kwargs = kwargs
+        job.description = job.get_call_string()
         return job
+
+    @property
+    def func(self):
+        return self._func
+
+    @property
+    def args(self):
+        return self._args
+
+    @property
+    def kwargs(self):
+        return self._kwargs
 
     @classmethod
     def fetch(cls, id):
@@ -47,12 +60,14 @@ class Job(object):
 
     def __init__(self, id=None):
         self._id = id
-        self.func = None
-        self.args = None
-        self.kwargs = None
-        self.origin = None
         self.created_at = times.now()
+        self._func = None
+        self._args = None
+        self._kwargs = None
+        self.description = None
+        self.origin = None
         self.enqueued_at = None
+        self.ended_at = None
         self.result = None
         self.exc_info = None
 
@@ -121,13 +136,12 @@ class Job(object):
             raise NoSuchJobError('No such job: %s' % (key,))
 
         self.origin = conn.hget(key, 'origin')
-        self.func, self.args, self.kwargs = unpickle(pickled_data)
+        self._func, self._args, self._kwargs = unpickle(data)
         self.created_at = times.to_universal(conn.hget(key, 'created_at'))
+
 
     def save(self):
         """Persists the current job instance to its corresponding Redis key."""
-        pickled_data = dumps(self.job_tuple)
-
         key = self.key
         conn.hset(key, 'data', pickled_data)
         conn.hset(key, 'origin', self.origin)
@@ -142,18 +156,20 @@ class Job(object):
 
 
     # Representation
-    @property
-    def call_string(self):
+    def get_call_string(self):
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        arg_list = map(repr, self.args)
-        arg_list += map(lambda tup: '%s=%r' % (tup[0], tup[1]),
-                self.kwargs.items())
-        return '%s(%s)' % (self.func.__name__, ', '.join(arg_list))
+        if self.func is None:
+            return None
+
+        arg_list = [repr(arg) for arg in self.args]
+        arg_list += ['%s=%r' % (k, v) for k, v in self.kwargs.items()]
+        args = ', '.join(arg_list)
+        return '%s(%s)' % (self.func.__name__, args)
 
     def __str__(self):
-        return '<Job %s: %s>' % (self.id, self.call_string)
+        return '<Job %s: %s>' % (self.id, self.description)
 
 
     # Job equality

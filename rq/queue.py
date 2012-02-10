@@ -74,7 +74,7 @@ class Queue(object):
         conn.rpush(self.key, job_id)
 
     def enqueue(self, f, *args, **kwargs):
-        """Enqueues a function call for delayed execution.
+        """Creates a job to represent the delayed function call and enqueues it.
 
         Expects the function to call, along with the arguments and keyword
         arguments.
