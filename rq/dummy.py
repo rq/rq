@@ -21,6 +21,12 @@ def endless_loop():
 def div_by_zero():
     1/0
 
+def fib(n):
+    if n <= 1:
+        return 1
+    else:
+        return fib(n-2) + fib(n-1)
+
 def yield_stuff():
     yield 7
     yield 'foo'
