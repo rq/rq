@@ -1,8 +1,18 @@
+import os
 from tests import RQTestCase
 from tests import testjob, failing_job
 from tests.helpers import strip_milliseconds
 from rq import Queue, Worker
 from rq.job import Job
+
+
+SENTINEL_FILE = '/tmp/rq-tests.txt'
+
+
+def create_sentinel():
+    # Create some evidence that the job ran
+    with open(SENTINEL_FILE, 'w') as f:
+        f.write('Just a sentinel.')
 
 
 class TestWorker(RQTestCase):
@@ -82,4 +92,29 @@ class TestWorker(RQTestCase):
         # the failed queue
         self.assertEquals(job.enqueued_at, enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
+
+
+    def test_cancelled_jobs_arent_executed(self):
+        """Cancelling jobs."""
+        try:
+            # Remove the sentinel if it is leftover from a previous test run
+            os.remove(SENTINEL_FILE)
+        except OSError as e:
+            if e.errno != 2:
+                raise
+
+        q = Queue()
+        result = q.enqueue(create_sentinel)
+
+        # Here, we cancel the job, so the sentinel file may not be created
+        assert q.count == 1
+        result.cancel()
+        assert q.count == 1
+
+        w = Worker([q])
+        w.work(burst=True)
+        assert q.count == 0
+
+        # Should not have created evidence of execution
+        self.assertEquals(os.path.exists(SENTINEL_FILE), False)
 

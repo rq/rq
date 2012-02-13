@@ -179,6 +179,20 @@ class Job(object):
 
         conn.hmset(key, obj)
 
+    def cancel(self):
+        """Cancels the given job, which will prevent the job from ever being
+        ran (or inspected).
+
+        This method merely exists as a high-level API call to cancel jobs
+        without worrying about the internals required to implement job
+        cancellation.  Technically, this call is (currently) the same as just
+        deleting the job hash.
+        """
+        self.delete()
+
+    def delete(self):
+        """Deletes the job hash from Redis."""
+        conn.delete(self.key)
 
     # Job execution
     def perform(self):  # noqa
