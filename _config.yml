@@ -18,10 +18,7 @@ navigation:
     url: docs/results/
   - text: Monitoring
     url: docs/monitoring/
+  - text: Internals
+    url: docs/internals/
 - text: Contributing
   url: contrib/
-  subs:
-  - text: Contributing
-    url: contrib/
-  - text: Internals
-    url: contrib/internals/

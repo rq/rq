@@ -14,54 +14,41 @@ arguments onto a queue.  This is called _enqueueing_.
 To put jobs on queues, first declare a function:
 
 {% highlight python %}
-def multiply(x, y):
-    return x + y
+import requests
+
+def count_words_at_url(url):
+    resp = requests.get(url)
+    return len(resp.text.split())
 {% endhighlight %}
 
 Noticed anything?  There's nothing special about this function!  Any Python
 function call can be put on an RQ queue.
 
-To multiply two numbers in the background, simply do this:
+To put this potentially expensive word count for a given URL in the background,
+simply do this:
 
 {% highlight python %}
 from rq import use_redis, Queue
-from stupid import multiply
+from somewhere import count_words_at_url
 
 # Tell RQ what Redis connection to use
 rq.use_redis()  # no args uses Redis on localhost:6379
 
 # Delay calculation of the multiplication
 q = Queue()
-result = q.enqueue(multiply, 20, 40)
+result = q.enqueue(count_words_at_url, 'http://nvie.com')
 print result.return_value   # => None
 
 # Now, wait a while, until the worker is finished
-print result.return_value   # => 800
-{% endhighlight %}
-
-Of course, multiplying does not make any sense to do in a worker, at all.
-Instead, you would typically enqueue jobs that are lengthy or blocking.  For
-example, sending email.  Here, we use the Python [mailer][m] package:
-
-{% highlight python %}
-import mailer
-from my_config import smtp_settings
-
-def send_mail(message):
-    sender = mailer.Mailer(**smtp_settings)
-    sender.send(message)
+time.sleep(2)
+print result.return_value   # => 889
 {% endhighlight %}
 
 If you want to put the work on a specific queue, simply specify its name:
 
 {% highlight python %}
-msg = mailer.Message()
-msg.To = 'me@nvie.com'
-msg.Subject = 'RQ is awesome!'
-msg.Body = 'Can I please contribute to RQ?'
-
 q = Queue('low')
-q.enqueue(send_mail, msg)
+q.enqueue(count_words_at_url, 'http://nvie.com')
 {% endhighlight %}
 
 Notice the `Queue('low')` in the example above?  You can use any queue name, so
@@ -82,39 +69,20 @@ RQ does _not_ use an advanced broker to do the message routing for you.  You
 may consider this an awesome advantage or a handicap, depending on the problem
 you're solving.
 
-Lastly, it does not speak a portable protocol, since it uses [pickle][p] to
-serialize the jobs, so it's a Python-only system.
+Lastly, it does not speak a portable protocol, since it depends on [pickle][p]
+to serialize the jobs, so it's a Python-only system.
 
 
 ## The delayed result
 
-When jobs get enqueued, the `queue.enqueue()` method returns a `DelayedResult`
-instance.  This is nothing more than a proxy object that can be used to check
-the outcome of the actual job.
+When jobs get enqueued, the `queue.enqueue()` method returns a `Job` instance.
+This is nothing more than a proxy object that can be used to check the outcome
+of the actual job.
 
-For this purpose, it has a convenience `return_value` accessor property, which
+For this purpose, it has a convenience `return_value` accessor property, that
 will return `None` when the job is not yet finished, or a non-`None` value when
-the job has finished (and has a return value, of course).
-
-{% highlight pycon %}
->>> q = Queue()
->>> result = q.enqueue(say_hello, 'Vincent')
->>> while not result.return_value:
-...     print('Job not finished yet.')
-...     time.sleep(1)
-Job not finished yet.
-Job not finished yet.
->>> print(result.return_value)
-Hello, Vincent!
-{% endhighlight %}
-
-In case you are interested in the value of the internally used Redis key, you
-can access it through the `key` property:
-
-{% highlight pycon %}
->>> result.key
-rq:result:fd50ef88-1f5f-4468-9027-6ed85fcd2b14
-{% endhighlight %}
+the job has finished (assuming the job _has_ a return value in the first place,
+of course).
 
 
 ## The worker
