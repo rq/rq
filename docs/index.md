@@ -3,23 +3,23 @@ title: "RQ: Documentation"
 layout: docs
 ---
 
-A job is a Python function that is invoked asynchronously in a worker
-(background) process.  Any Python function can be invoked asynchronously, by
-simply pushing a reference to the function and its arguments onto a queue.
-This is called _enqueueing_.
+A job is a Python object, representing a function that is invoked
+asynchronously in a worker (background) process.  Any Python function can be
+invoked asynchronously, by simply pushing a reference to the function and its
+arguments onto a queue.  This is called _enqueueing_.
 
 
 ## Enqueueing jobs
 
-To put jobs on queues, first declare a job:
+To put jobs on queues, first declare a function:
 
 {% highlight python %}
 def multiply(x, y):
     return x + y
 {% endhighlight %}
 
-Noticed anything?  There's nothing special about a job!  Any Python function
-call can be put on an RQ queue.
+Noticed anything?  There's nothing special about this function!  Any Python
+function call can be put on an RQ queue.
 
 To multiply two numbers in the background, simply do this:
 

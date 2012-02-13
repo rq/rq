@@ -11,18 +11,12 @@ solving a problem, but are getting back a few in return.
 
 Python functions may have return values, so jobs can have them, too.  If a job
 returns a non-`None` return value, the worker will write that return value back
-to a Redis key with a limited lifetime (_500 seconds by default_).
+to the job's Redis hash under the `result` key.  The job's Redis hash itself
+will expire after 500 seconds after the job is finished.
 
-The key it uses for this purpose is specified in the
-<a href="{{site.baseurl}}contrib/internals/#job-tuple">job tuple</a>, as the
-second element.  That key is generated upon job enqueuement and is a random
-UUID, for example:
-
-    rq:result:e3f3d953-8910-4ace-9a5f-7d361221a590
-
-The party that enqueued the job gets back a `DelayedResult` object as a result
-of the enqueueing itself.  Such a `DelayedResult` object is tightly coupled
-with that UUID, to be able to poll for results.
+The party that enqueued the job gets back a `Job` instance as a result of the
+enqueueing itself.  Such a `Job` object is a proxy object that is tied to the
+job's ID, to be able to poll for results.
 
 
 ### On the return value's TTL
@@ -40,35 +34,23 @@ specifying it in the future.  For now, we're keeping it simple.
 Jobs can fail and throw exceptions.  This is a fact of life.  RQ deals with
 this in the following way.
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
-    <strong>Be warned!</strong>
-    <p>This is the current implementation, not the desired future implementation.</p>
-</div>
-
-When an exception is thrown inside a job, it is caught by the worker,
-serialized and stored in the return value key.  In that sense, the only way to
-distinguish from a failed job or a job with a return value is to check the type
-of the returned value.  If it is an exception, it was a failed job.
-
-This is not the desirable final implementation.
-
-
-### The desired implementation
-
 Job failure is too important not to be noticed and therefore the job's return
 value should never expire.  Furthermore, it should be possible to retry failed
 jobs.  Typically, this is something that needs manual interpretation, since
 there is no automatic or reliable way of letting RQ judge whether it is safe
 for certain tasks to be retried or not.
 
-Therefore, when an exception is thrown, the following data is serialized to
-a special RQ queue called `failed`:
+When an exception is thrown inside a job, it is caught by the worker,
+serialized and stored under the job's Redis hash's `exc_info` key.  A reference
+to the job is put on the `failure` queue.
 
-* the worker that processed the job
+The job itself has some useful properties that can be used to aid inspection:
+
+* the original creation time of the job
+* the last enqueue date
 * the originating queue
+* a textual description of the desired function invocation
 * the exception information
-* the original <a href="{{site.baseurl}}contrib/internals/#job-tuple">job tuple</a>
 
 This makes it possible to inspect and interpret the problem manually and
 possibly resubmit the job.
