@@ -50,7 +50,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.return_value)
 
 
-    def test_save(self):
+    def test_save(self):  # noqa
         """Storing jobs."""
         job = Job.for_call(arbitrary_function, 3, 4, z=2)
 
@@ -66,8 +66,10 @@ class TestJob(RQTestCase):
     def test_fetch(self):
         """Fetching jobs."""
         # Prepare test
-        self.testconn.hset('rq:job:some_id', 'data', "(ctest_job\narbitrary_function\np0\n(I3\nI4\ntp1\n(dp2\nS'z'\np3\nI2\nstp4\n.")
-        self.testconn.hset('rq:job:some_id', 'created_at', "2012-02-07 22:13:24+0000")
+        self.testconn.hset('rq:job:some_id', 'data',
+                "(ctest_job\narbitrary_function\np0\n(I3\nI4\ntp1\n(dp2\nS'z'\np3\nI2\nstp4\n.")  # noqa
+        self.testconn.hset('rq:job:some_id', 'created_at',
+                "2012-02-07 22:13:24+0000")
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -78,7 +80,7 @@ class TestJob(RQTestCase):
         self.assertEquals(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
 
 
-    def test_persistence_of_empty_jobs(self):
+    def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
         job = Job()
         job.save()
