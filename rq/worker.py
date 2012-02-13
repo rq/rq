@@ -339,7 +339,7 @@ class Worker(object):
                 self.log.info('Job OK, result = %s' % (yellow(rv),))
         if rv is not None:
             p = conn.pipeline()
-            p.set(job.result, dumps(rv))
-            p.expire(job.result, self.rv_ttl)
+            p.hset(job.key, 'result', dumps(rv))
+            p.expire(job.key, self.rv_ttl)
             p.execute()
         return True
