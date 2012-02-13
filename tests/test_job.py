@@ -27,7 +27,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.origin, None)
         self.assertIsNone(job.enqueued_at, None)
         self.assertIsNone(job.ended_at, None)
-        self.assertIsNone(job.result, None)
+        self.assertIsNone(job.return_value, None)
         self.assertIsNone(job.exc_info, None)
 
     def test_create_typical_job(self):
@@ -47,7 +47,7 @@ class TestJob(RQTestCase):
         # ...but metadata is not
         self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
-        self.assertIsNone(job.result)
+        self.assertIsNone(job.return_value)
 
 
     def test_save(self):

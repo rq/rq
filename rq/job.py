@@ -68,7 +68,7 @@ class Job(object):
         self.origin = None
         self.enqueued_at = None
         self.ended_at = None
-        self.result = None
+        self._result = None
         self.exc_info = None
 
 
@@ -116,12 +116,12 @@ class Job(object):
         written back to Redis will expire after a given amount of time (500
         seconds by default).
         """
-        if self._cached_result is None:
+        if self._result is None:
             rv = conn.hget(self.key, 'result')
             if rv is not None:
                 # cache the result
-                self._cached_result = loads(rv)
-        return self._cached_result
+                self._result = loads(rv)
+        return self._result
 
 
     # Persistence
@@ -152,7 +152,7 @@ class Job(object):
         self.description = description
         self.enqueued_at = to_date(enqueued_at)
         self.ended_at = to_date(ended_at)
-        self.result = result
+        self._result = result
         self.exc_info = exc_info
 
     def save(self):
@@ -172,8 +172,8 @@ class Job(object):
             obj['enqueued_at'] = times.format(self.enqueued_at, 'UTC')
         if self.ended_at is not None:
             obj['ended_at'] = times.format(self.ended_at, 'UTC')
-        if self.result is not None:
-            obj['result'] = self.result
+        if self._result is not None:
+            obj['result'] = self._result
         if self.exc_info is not None:
             obj['exc_info'] = self.exc_info
 
