@@ -22,11 +22,11 @@ class TestWorker(RQTestCase):
         self.assertEquals(w.work(burst=True), True, 'Expected at least some work done.')
 
     def test_work_is_unreadable(self):
-        """Unreadable jobs are put on the failure queue."""
+        """Unreadable jobs are put on the failed queue."""
         q = Queue()
-        failure_q = Queue('failure')
+        failed_q = Queue('failed')
 
-        self.assertEquals(failure_q.count, 0)
+        self.assertEquals(failed_q.count, 0)
         self.assertEquals(q.count, 0)
 
         # NOTE: We have to fake this enqueueing for this test case.
@@ -49,15 +49,15 @@ class TestWorker(RQTestCase):
         w.work(burst=True)   # should silently pass
         self.assertEquals(q.count, 0)
 
-        self.assertEquals(failure_q.count, 1)
+        self.assertEquals(failed_q.count, 1)
 
     def test_work_fails(self):
-        """Failing jobs are put on the failure queue."""
+        """Failing jobs are put on the failed queue."""
         q = Queue()
-        failure_q = Queue('failure')
+        failed_q = Queue('failed')
 
         # Preconditions
-        self.assertEquals(failure_q.count, 0)
+        self.assertEquals(failed_q.count, 0)
         self.assertEquals(q.count, 0)
 
         # Action
@@ -72,13 +72,14 @@ class TestWorker(RQTestCase):
 
         # Postconditions
         self.assertEquals(q.count, 0)
-        self.assertEquals(failure_q.count, 1)
+        self.assertEquals(failed_q.count, 1)
 
         # Check the job
         job = Job.fetch(job.id)
         self.assertEquals(job.origin, q.name)
 
-        # should be the original enqueued_at date, not the date of enqueueing to the failure queue
+        # should be the original enqueued_at date, not the date of enqueueing to
+        # the failed queue
         self.assertEquals(job.enqueued_at, enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 

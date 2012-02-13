@@ -88,7 +88,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stopped = False
         self.log = Logger('worker')
-        self.failure_queue = Queue('failure')
+        self.failed_queue = Queue('failed')
 
 
     def validate_queues(self):
@@ -268,7 +268,7 @@ class Worker(object):
                     self.log.debug('Data follows:')
                     self.log.debug(e.raw_data)
                     self.log.debug('End of unreadable data.')
-                    self.failure_queue.push_job_id(e.job_id)
+                    self.failed_queue.push_job_id(e.job_id)
                     continue
 
                 job, queue = result
@@ -316,7 +316,7 @@ class Worker(object):
         try:
             rv = job.perform()
         except Exception as e:
-            fq = self.failure_queue
+            fq = self.failed_queue
             self.log.exception(e)
             self.log.warning('Moving job to %s queue.' % (fq.name,))
 
@@ -326,7 +326,7 @@ class Worker(object):
 
             # ------ REFACTOR THIS -------------------------
             job.save()
-            # ...and put the job on the failure queue
+            # ...and put the job on the failed queue
             fq.push_job_id(job.id)
             # ------ UNTIL HERE ----------------------------
             # (should be as easy as fq.enqueue(job) or so)
