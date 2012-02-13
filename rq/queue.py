@@ -85,10 +85,15 @@ class Queue(object):
         job = Job.for_call(f, *args, **kwargs)
         return self.enqueue_job(job)
 
-    def enqueue_job(self, job):
-        """Enqueues a job for delayed execution."""
-        job.origin = self.name
-        job.enqueued_at = times.now()
+    def enqueue_job(self, job, to_failed=False):
+        """Enqueues a job for delayed execution.
+
+        If the `to_failed` argument is `True`, it won't update the origin or
+        enqueued_at properties.
+        """
+        if not to_failed:
+            job.origin = self.name
+            job.enqueued_at = times.now()
         job.save()
         self.push_job_id(job.id)
         return job

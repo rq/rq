@@ -324,13 +324,7 @@ class Worker(object):
             job.ended_at = times.now()
             job.exc_info = traceback.format_exc()
 
-            # ------ REFACTOR THIS -------------------------
-            job.save()
-            # ...and put the job on the failed queue
-            fq.push_job_id(job.id)
-            # ------ UNTIL HERE ----------------------------
-            # (should be as easy as fq.enqueue(job) or so)
-
+            fq.enqueue_job(job, to_failed=True)
             return False
         else:
             if rv is None:
