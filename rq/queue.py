@@ -1,42 +1,12 @@
-from datetime import datetime
+import times
 from functools import total_ordering
-from pickle import loads
 from .proxy import conn
 from .job import Job
-from .exceptions import UnpickleError
+from .exceptions import NoSuchJobError, UnpickleError
 
 
-class DelayedResult(object):
-    """Proxy object that is returned as a result of `Queue.enqueue()` calls.
-    Instances of DelayedResult can be polled for their return values.
-    """
-    def __init__(self, key):
-        self.key = key
-        self._rv = None
-
-    @property
-    def return_value(self):
-        """Returns the return value of the job.
-
-        Initially, right after enqueueing a job, the return value will be None.
-        But when the job has been executed, and had a return value or exception,
-        this will return that value or exception.
-
-        Note that, when the job has no return value (i.e. returns None), the
-        DelayedResult object is useless, as the result won't be written back to
-        Redis.
-
-        Also note that you cannot draw the conclusion that a job has _not_ been
-        executed when its return value is None, since return values written back
-        to Redis will expire after a given amount of time (500 seconds by
-        default).
-        """
-        if self._rv is None:
-            rv = conn.get(self.key)
-            if rv is not None:
-                # cache the result
-                self._rv = loads(rv)
-        return self._rv
+def compact(lst):
+    return [item for item in lst if item is not None]
 
 
 @total_ordering
@@ -72,20 +42,26 @@ class Queue(object):
         """Returns the Redis key for this Queue."""
         return self._key
 
-    @property
-    def empty(self):
+    def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0
 
     @property
-    def messages(self):
-        """Returns a list of all messages (pickled job data) in the queue."""
+    def job_ids(self):
+        """Returns a list of all job IDS in the queue."""
         return conn.lrange(self.key, 0, -1)
 
     @property
     def jobs(self):
-        """Returns a list of all jobs in the queue."""
-        return map(Job.unpickle, self.messages)
+        """Returns a list of all (valid) jobs in the queue."""
+        def safe_fetch(job_id):
+            try:
+                job = Job.fetch(job_id)
+            except UnpickleError:
+                return None
+            return job
+
+        return compact([safe_fetch(job_id) for job_id in self.job_ids])
 
     @property
     def count(self):
@@ -93,67 +69,78 @@ class Queue(object):
         return conn.llen(self.key)
 
 
-    def _create_job(self, f, *args, **kwargs):
-        """Creates a Job instance for the given function call and attaches queue
-        meta data to it.
-        """
-        if f.__module__ == '__main__':
-            raise ValueError('Functions from the __main__ module cannot be processed by workers.')
-
-        job = Job(f, *args, **kwargs)
-        job.origin = self.name
-        return job
-
-    def _push(self, pickled_job):
-        """Enqueues a pickled_job on the corresponding Redis queue."""
-        conn.rpush(self.key, pickled_job)
+    def push_job_id(self, job_id):
+        """Pushes a job ID on the corresponding Redis queue."""
+        conn.rpush(self.key, job_id)
 
     def enqueue(self, f, *args, **kwargs):
-        """Enqueues a function call for delayed execution.
+        """Creates a job to represent the delayed function call and enqueues it.
 
         Expects the function to call, along with the arguments and keyword
         arguments.
         """
-        job = self._create_job(f, *args, **kwargs)
-        job.enqueued_at = datetime.utcnow()
-        self._push(job.pickle())
-        return DelayedResult(job.rv_key)
+        if f.__module__ == '__main__':
+            raise ValueError('Functions from the __main__ module cannot be processed by workers.')
+
+        job = Job.for_call(f, *args, **kwargs)
+        return self.enqueue_job(job)
+
+    def enqueue_job(self, job):
+        """Enqueues a job for delayed execution."""
+        job.origin = self.name
+        job.enqueued_at = times.now()
+        job.save()
+        self.push_job_id(job.id)
+        return job
 
     def requeue(self, job):
         """Requeues an existing (typically a failed job) onto the queue."""
         raise NotImplementedError('Implement this')
 
+    def pop_job_id(self):
+        """Pops a given job ID from this Redis queue."""
+        return conn.lpop(self.key)
+
+    @classmethod
+    def lpop(cls, queue_keys, blocking):
+        """Helper method.  Intermediate method to abstract away from some Redis
+        API details, where LPOP accepts only a single key, whereas BLPOP accepts
+        multiple.  So if we want the non-blocking LPOP, we need to iterate over
+        all queues, do individual LPOPs, and return the result.
+
+        Until Redis receives a specific method for this, we'll have to wrap it
+        this way.
+        """
+        if blocking:
+            queue_key, job_id = conn.blpop(queue_keys)
+            return queue_key, job_id
+        else:
+            for queue_key in queue_keys:
+                blob = conn.lpop(queue_key)
+                if blob is not None:
+                    return queue_key, blob
+            return None
+
     def dequeue(self):
-        """Dequeues the function call at the front of this Queue.
+        """Dequeues the front-most job from this queue.
 
         Returns a Job instance, which can be executed or inspected.
         """
-        blob = conn.lpop(self.key)
-        if blob is None:
+        job_id = self.pop_job_id()
+        if job_id is None:
             return None
         try:
-            job = Job.unpickle(blob)
+            job = Job.fetch(job_id)
+        except NoSuchJobError as e:
+            # Silently pass on jobs that don't exist (anymore),
+            # and continue by reinvoking itself recursively
+            return self.dequeue()
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
             e.queue = self
             raise e
-        job.origin = self
         return job
-
-    @classmethod
-    def _lpop_any(cls, queue_keys):
-        """Helper method.  You should not call this directly.
-
-        Redis' BLPOP command takes multiple queue arguments, but LPOP can only
-        take a single queue.  Therefore, we need to loop over all queues
-        manually, in order, and return None if no more work is available.
-        """
-        for queue_key in queue_keys:
-            blob = conn.lpop(queue_key)
-            if blob is not None:
-                return (queue_key, blob)
-        return None
 
     @classmethod
     def dequeue_any(cls, queues, blocking):
@@ -164,25 +151,25 @@ class Queue(object):
         either blocks execution of this function until new messages arrive on
         any of the queues, or returns None.
         """
-        queue_keys = map(lambda q: q.key, queues)
-        if blocking:
-            queue_key, blob = conn.blpop(queue_keys)
-        else:
-            redis_result = cls._lpop_any(queue_keys)
-            if redis_result is None:
-                return None
-            queue_key, blob = redis_result
-
+        queue_keys = [q.key for q in queues]
+        result = cls.lpop(queue_keys, blocking)
+        if result is None:
+            return None
+        queue_key, job_id = result
         queue = Queue.from_queue_key(queue_key)
         try:
-            job = Job.unpickle(blob)
+            job = Job.fetch(job_id)
+        except NoSuchJobError:
+            # Silently pass on jobs that don't exist (anymore),
+            # and continue by reinvoking the same function recursively
+            return cls.dequeue_any(queues, blocking)
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
+            e.job_id = job_id
             e.queue = queue
             raise e
-        job.origin = queue
-        return job
+        return job, queue
 
 
     # Total ordering defition (the rest of the required Python methods are

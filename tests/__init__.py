@@ -14,6 +14,18 @@ def failing_job(x):
     return x / 0
 
 
+def find_empty_redis_database():
+    """Tries to connect to a random Redis database (starting from 4), and
+    will use/connect it when no keys are in there.
+    """
+    for dbnum in range(4, 17):
+        testconn = Redis(db=dbnum)
+        empty = len(testconn.keys('*')) == 0
+        if empty:
+            return testconn
+    assert False, 'No empty Redis database found to run tests in.'
+
+
 class RQTestCase(unittest.TestCase):
     """Base class to inherit test cases from for RQ.
 
@@ -27,7 +39,7 @@ class RQTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Set up connection to Redis
-        testconn = Redis()
+        testconn = find_empty_redis_database()
         conn.push(testconn)
 
         # Store the connection (for sanity checking)
@@ -52,13 +64,4 @@ class RQTestCase(unittest.TestCase):
         # Pop the connection to Redis
         testconn = conn.pop()
         assert testconn == cls.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
-
-
-    def assertQueueContains(self, queue, that_func):
-        # Do a queue scan (this is O(n), but we're in a test, so hey)
-        for job in queue.jobs:
-            if job.func == that_func:
-                return
-        self.fail('Queue %s does not contain message for function %s' %
-                (queue.key, that_func))
 

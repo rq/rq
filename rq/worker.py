@@ -1,12 +1,13 @@
 import sys
 import os
 import errno
-import datetime
 import random
 import time
+import times
 import procname
 import socket
 import signal
+import traceback
 from pickle import dumps
 try:
     from logbook import Logger
@@ -15,7 +16,12 @@ except ImportError:
     from logging import Logger
 from .queue import Queue
 from .proxy import conn
+from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
+
+green = make_colorizer('darkgreen')
+yellow = make_colorizer('darkyellow')
+blue = make_colorizer('darkblue')
 
 def iterable(x):
     return hasattr(x, '__iter__')
@@ -233,13 +239,13 @@ class Worker(object):
 
         Pops and performs all jobs on the current list of queues.  When all
         queues are empty, block and wait for new jobs to arrive on any of the
-        queues, unless `burst` is True.
+        queues, unless `burst` mode is enabled.
 
         The return value indicates whether any jobs were processed.
         """
         self._install_signal_handlers()
 
-        did_work = False
+        did_perform_work = False
         self.register_birth()
         self.state = 'starting'
         try:
@@ -249,32 +255,33 @@ class Worker(object):
                     break
                 self.state = 'idle'
                 qnames = self.queue_names()
-                self.procline('Listening on %s' % (','.join(qnames)))
-                self.log.info('*** Listening for work on %s...' % (', '.join(qnames)))
+                self.procline('Listening on %s' % ','.join(qnames))
+                self.log.info('')
+                self.log.info('*** Listening on %s...' % (green(', '.join(qnames))))
                 wait_for_job = not burst
                 try:
-                    job = Queue.dequeue_any(self.queues, wait_for_job)
+                    result = Queue.dequeue_any(self.queues, wait_for_job)
+                    if result is None:
+                        break
                 except UnpickleError as e:
                     self.log.warning('*** Ignoring unpickleable data on %s.' % (e.queue.name,))
                     self.log.debug('Data follows:')
                     self.log.debug(e.raw_data)
                     self.log.debug('End of unreadable data.')
-
-                    fq = self.failure_queue
-                    fq._push(e.raw_data)
+                    self.failure_queue.push_job_id(e.job_id)
                     continue
 
-                if job is None:
-                    break
-                self.state = 'busy'
+                job, queue = result
+                self.log.info('%s: %s (%s)' % (green(queue.name), blue(job.description), job.id))
 
+                self.state = 'busy'
                 self.fork_and_perform_job(job)
 
-                did_work = True
+                did_perform_work = True
         finally:
             if not self.is_horse:
                 self.register_death()
-        return did_work
+        return did_perform_work
 
     def fork_and_perform_job(self, job):
         child_pid = os.fork()
@@ -282,12 +289,9 @@ class Worker(object):
             self._is_horse = True
             random.seed()
             self.log = Logger('horse')
-            try:
-                self.perform_job(job)
-            except Exception as e:
-                self.log.exception(e)
-                sys.exit(1)
-            sys.exit(0)
+
+            success = self.perform_job(job)
+            sys.exit(int(not success))
         else:
             self._horse_pid = child_pid
             self.procline('Forked %d at %d' % (child_pid, time.time()))
@@ -308,29 +312,34 @@ class Worker(object):
     def perform_job(self, job):
         self.procline('Processing %s from %s since %s' % (
             job.func.__name__,
-            job.origin.name, time.time()))
-        msg = 'Got job %s from %s' % (
-                job.call_string,
-                job.origin.name)
-        self.log.info(msg)
+            job.origin, time.time()))
         try:
             rv = job.perform()
         except Exception as e:
-            rv = e
-            self.log.exception(e)
-
             fq = self.failure_queue
+            self.log.exception(e)
             self.log.warning('Moving job to %s queue.' % (fq.name,))
-            job.ended_at = datetime.datetime.utcnow()
-            job.exc_info = e
-            fq._push(job.pickle())
+
+            # Store the exception information...
+            job.ended_at = times.now()
+            job.exc_info = traceback.format_exc()
+
+            # ------ REFACTOR THIS -------------------------
+            job.save()
+            # ...and put the job on the failure queue
+            fq.push_job_id(job.id)
+            # ------ UNTIL HERE ----------------------------
+            # (should be as easy as fq.enqueue(job) or so)
+
+            return False
         else:
-            if rv is not None:
-                self.log.info('Job result = %s' % (rv,))
+            if rv is None:
+                self.log.info('Job OK')
             else:
-                self.log.info('Job ended normally without result')
+                self.log.info('Job OK, result = %s' % (yellow(rv),))
         if rv is not None:
             p = conn.pipeline()
-            p.set(job.rv_key, dumps(rv))
-            p.expire(job.rv_key, self.rv_ttl)
+            p.set(job.result, dumps(rv))
+            p.expire(job.result, self.rv_ttl)
             p.execute()
+        return True

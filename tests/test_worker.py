@@ -1,5 +1,6 @@
 from tests import RQTestCase
 from tests import testjob, failing_job
+from tests.helpers import strip_milliseconds
 from rq import Queue, Worker
 from rq.job import Job
 
@@ -21,7 +22,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(w.work(burst=True), True, 'Expected at least some work done.')
 
     def test_work_is_unreadable(self):
-        """Worker processes unreadable job."""
+        """Unreadable jobs are put on the failure queue."""
         q = Queue()
         failure_q = Queue('failure')
 
@@ -31,14 +32,15 @@ class TestWorker(RQTestCase):
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job(failing_job, 3)
-        pickled_job = job.pickle()
-        invalid_data = pickled_job.replace(
-                'failing_job', 'nonexisting_job')
+        job = Job.for_call(failing_job, 3)
+        job.save()
+        data = self.testconn.hget(job.key, 'data')
+        invalid_data = data.replace('failing_job', 'nonexisting_job')
+        self.testconn.hset(job.key, 'data', invalid_data)
 
         # We use the low-level internal function to enqueue any data (bypassing
         # validity checks)
-        q._push(invalid_data)
+        q.push_job_id(job.id)
 
         self.assertEquals(q.count, 1)
 
@@ -50,20 +52,33 @@ class TestWorker(RQTestCase):
         self.assertEquals(failure_q.count, 1)
 
     def test_work_fails(self):
-        """Worker processes failing job."""
+        """Failing jobs are put on the failure queue."""
         q = Queue()
         failure_q = Queue('failure')
 
+        # Preconditions
         self.assertEquals(failure_q.count, 0)
         self.assertEquals(q.count, 0)
 
-        q.enqueue(failing_job)
-
+        # Action
+        job = q.enqueue(failing_job)
         self.assertEquals(q.count, 1)
+
+        # keep for later
+        enqueued_at_date = strip_milliseconds(job.enqueued_at)
+
         w = Worker([q])
         w.work(burst=True)  # should silently pass
-        self.assertEquals(q.count, 0)
 
+        # Postconditions
+        self.assertEquals(q.count, 0)
         self.assertEquals(failure_q.count, 1)
 
+        # Check the job
+        job = Job.fetch(job.id)
+        self.assertEquals(job.origin, q.name)
+
+        # should be the original enqueued_at date, not the date of enqueueing to the failure queue
+        self.assertEquals(job.enqueued_at, enqueued_at_date)
+        self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
