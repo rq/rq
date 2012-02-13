@@ -1,6 +1,6 @@
 import times
 from uuid import uuid4
-from .pickle import loads, dumps, UnpicklingError
+from cPickle import loads, dumps, UnpicklingError
 from .proxy import conn
 from .exceptions import UnpickleError, NoSuchJobError
 
