@@ -15,17 +15,11 @@ First, run a Redis server, of course:
 To put jobs on queues, you don't have to do anything special, just define
 your typically lengthy or blocking function:
 
-    import urllib2
+    import requests
 
     def count_words_at_url(url):
-        f = urllib2.urlopen(url)
-        count = 0
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            count += len(line.split())
-        return count
+        resp = requests.get(url)
+        return len(resp.text.split())
 
 Then, create a RQ queue:
 
