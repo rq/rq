@@ -73,7 +73,7 @@ class Job(object):
 
 
     # Data access
-    def get_id(self):
+    def get_id(self):  # noqa
         """The job ID for this job instance. Generates an ID lazily the
         first time the ID is requested.
         """
@@ -93,27 +93,28 @@ class Job(object):
         return 'rq:job:%s' % (self.id,)
 
 
-    @property
+    @property  # noqa
     def job_tuple(self):
-        """Returns the job tuple that encodes the actual function call that this job represents."""
+        """Returns the job tuple that encodes the actual function call that
+        this job represents."""
         return (self.func, self.args, self.kwargs)
 
     @property
     def return_value(self):
         """Returns the return value of the job.
 
-        Initially, right after enqueueing a job, the return value will be None.
-        But when the job has been executed, and had a return value or exception,
-        this will return that value or exception.
+        Initially, right after enqueueing a job, the return value will be
+        None.  But when the job has been executed, and had a return value or
+        exception, this will return that value or exception.
 
         Note that, when the job has no return value (i.e. returns None), the
         ReadOnlyJob object is useless, as the result won't be written back to
         Redis.
 
-        Also note that you cannot draw the conclusion that a job has _not_ been
-        executed when its return value is None, since return values written back
-        to Redis will expire after a given amount of time (500 seconds by
-        default).
+        Also note that you cannot draw the conclusion that a job has _not_
+        been executed when its return value is None, since return values
+        written back to Redis will expire after a given amount of time (500
+        seconds by default).
         """
         if self._cached_result is None:
             rv = conn.hget(self.key, 'result')
@@ -124,7 +125,7 @@ class Job(object):
 
 
     # Persistence
-    def refresh(self):
+    def refresh(self):  # noqa
         """Overwrite the current instance's properties with the values in the
         corresponding Redis key.
 
@@ -180,14 +181,14 @@ class Job(object):
 
 
     # Job execution
-    def perform(self):
+    def perform(self):  # noqa
         """Invokes the job function with the job arguments.
         """
         return self.func(*self.args, **self.kwargs)
 
 
     # Representation
-    def get_call_string(self):
+    def get_call_string(self):  # noqa
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
@@ -204,9 +205,8 @@ class Job(object):
 
 
     # Job equality
-    def __eq__(self, other):
+    def __eq__(self, other):  # noqa
         return self.id == other.id
 
     def __hash__(self):
         return hash(self.id)
-
