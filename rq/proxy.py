@@ -1,5 +1,3 @@
-import redis
-
 class NoRedisConnectionException(Exception):
     pass
 

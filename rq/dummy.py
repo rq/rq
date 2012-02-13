@@ -3,11 +3,14 @@ Some dummy tasks that are well-suited for generating load for testing purposes.
 """
 import time
 
+
 def do_nothing():
     pass
 
+
 def sleep(secs):
     time.sleep(secs)
+
 
 def endless_loop():
     x = 7
@@ -18,14 +21,17 @@ def endless_loop():
         if x == 0:
             x = 82
 
+
 def div_by_zero():
-    1/0
+    1 / 0
+
 
 def fib(n):
     if n <= 1:
         return 1
     else:
-        return fib(n-2) + fib(n-1)
+        return fib(n - 2) + fib(n - 1)
+
 
 def yield_stuff():
     yield 7

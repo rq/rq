@@ -2,15 +2,16 @@
 """
 Miscellaneous helper functions.
 
-The formatter for ANSI colored console output is heavily based on Pygments terminal
-colorizing code, originally by Georg Brandl.
+The formatter for ANSI colored console output is heavily based on Pygments
+terminal colorizing code, originally by Georg Brandl.
 """
 import os
+
 
 def gettermsize():
     def ioctl_GWINSZ(fd):
         try:
-            import fcntl, termios, struct
+            import fcntl, termios, struct  # noqa
             cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ,
         '1234'))
         except:
@@ -37,17 +38,17 @@ class _Colorizer(object):
         esc = "\x1b["
 
         self.codes = {}
-        self.codes[""]          = ""
-        self.codes["reset"]     = esc + "39;49;00m"
+        self.codes[""] = ""
+        self.codes["reset"] = esc + "39;49;00m"
 
-        self.codes["bold"]      = esc + "01m"
-        self.codes["faint"]     = esc + "02m"
-        self.codes["standout"]  = esc + "03m"
+        self.codes["bold"] = esc + "01m"
+        self.codes["faint"] = esc + "02m"
+        self.codes["standout"] = esc + "03m"
         self.codes["underline"] = esc + "04m"
-        self.codes["blink"]     = esc + "05m"
-        self.codes["overline"]  = esc + "06m"
+        self.codes["blink"] = esc + "05m"
+        self.codes["overline"] = esc + "06m"
 
-        dark_colors  = ["black", "darkred", "darkgreen", "brown", "darkblue",
+        dark_colors = ["black", "darkred", "darkgreen", "brown", "darkblue",
                         "purple", "teal", "lightgray"]
         light_colors = ["darkgray", "red", "green", "yellow", "blue",
                         "fuchsia", "turquoise", "white"]
@@ -60,10 +61,10 @@ class _Colorizer(object):
 
         del d, l, x
 
-        self.codes["darkteal"]   = self.codes["turquoise"]
+        self.codes["darkteal"] = self.codes["turquoise"]
         self.codes["darkyellow"] = self.codes["brown"]
-        self.codes["fuscia"]     = self.codes["fuchsia"]
-        self.codes["white"]      = self.codes["bold"]
+        self.codes["fuscia"] = self.codes["fuchsia"]
+        self.codes["white"] = self.codes["bold"]
 
     def reset_color(self):
         return self.codes["reset"]
@@ -97,6 +98,7 @@ class _Colorizer(object):
 
 
 colorizer = _Colorizer()
+
 
 def make_colorizer(color):
     """Creates a function that colorizes text with the given color.
