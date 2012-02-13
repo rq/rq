@@ -8,7 +8,7 @@ import procname
 import socket
 import signal
 import traceback
-from pickle import dumps
+from cPickle import dumps
 try:
     from logbook import Logger
     Logger = Logger    # Does nothing except it shuts up pyflakes annoying error

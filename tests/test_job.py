@@ -2,7 +2,7 @@ import times
 from datetime import datetime
 from tests import RQTestCase
 from tests.helpers import strip_milliseconds
-from pickle import loads
+from cPickle import loads
 from rq.job import Job
 from rq.exceptions import NoSuchJobError, UnpickleError
 

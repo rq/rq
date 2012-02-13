@@ -1,6 +1,6 @@
 import times
 from uuid import uuid4
-from pickle import loads, dumps
+from cPickle import loads, dumps, UnpicklingError
 from .proxy import conn
 from .exceptions import UnpickleError, NoSuchJobError
 
@@ -15,7 +15,7 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
-    except StandardError:
+    except (StandardError, UnpicklingError):
         raise UnpickleError('Could not unpickle.', pickled_string)
     return obj
 
