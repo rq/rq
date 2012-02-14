@@ -49,6 +49,24 @@ class TestQueue(RQTestCase):
         self.testconn.rpush('rq:queue:example', 'sentinel message')
         self.assertEquals(q.is_empty(), False)
 
+    def test_compact(self):
+        """Compacting queueus."""
+        q = Queue()
+
+        q.enqueue(testjob, 'Alice')
+        bob = q.enqueue(testjob, 'Bob')
+        q.enqueue(testjob, 'Charlie')
+        debrah = q.enqueue(testjob, 'Debrah')
+
+        bob.cancel()
+        debrah.cancel()
+
+        self.assertEquals(q.count, 4)
+
+        q.compact()
+
+        self.assertEquals(q.count, 2)
+
 
     def test_enqueue(self):  # noqa
         """Enqueueing job onto queues."""

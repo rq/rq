@@ -74,6 +74,20 @@ class Queue(object):
         """Returns a count of all messages in the queue."""
         return conn.llen(self.key)
 
+    def compact(self):
+        """Removes all "dead" jobs from the queue by cycling through it, while
+        guarantueeing FIFO semantics.
+        """
+        COMPACT_QUEUE = 'rq:queue:_compact'
+
+        conn.rename(self.key, COMPACT_QUEUE)
+        while True:
+            job_id = conn.lpop(COMPACT_QUEUE)
+            if job_id is None:
+                break
+            if Job.exists(job_id):
+                conn.rpush(self.key, job_id)
+
 
     def push_job_id(self, job_id):  # noqa
         """Pushes a job ID on the corresponding Redis queue."""
