@@ -16,7 +16,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.name, 'default')
 
 
-    def test_equality(self):
+    def test_equality(self):  # noqa
         """Mathematical equality of queues."""
         q1 = Queue('foo')
         q2 = Queue('foo')
@@ -28,7 +28,7 @@ class TestQueue(RQTestCase):
         self.assertNotEquals(q2, q3)
 
 
-    def test_empty_queue(self):
+    def test_empty_queue(self):  # noqa
         """Emptying queues."""
         q = Queue('example')
 
@@ -50,7 +50,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.is_empty(), False)
 
 
-    def test_enqueue(self):
+    def test_enqueue(self):  # noqa
         """Enqueueing job onto queues."""
         q = Queue()
         self.assertEquals(q.is_empty(), True)
@@ -81,7 +81,7 @@ class TestQueue(RQTestCase):
         self.assertIsNotNone(job.enqueued_at)
 
 
-    def test_pop_job_id(self):
+    def test_pop_job_id(self):  # noqa
         """Popping job IDs from queues."""
         # Set up
         q = Queue()
@@ -150,13 +150,15 @@ class TestQueue(RQTestCase):
         self.assertEquals(queue, fooq)
         self.assertEquals(job.func, testjob)
         self.assertEquals(job.origin, fooq.name)
-        self.assertEquals(job.args[0], 'for Foo', 'Foo should be dequeued first.')
+        self.assertEquals(job.args[0], 'for Foo',
+                'Foo should be dequeued first.')
 
         job, queue = Queue.dequeue_any([fooq, barq], False)
         self.assertEquals(queue, barq)
         self.assertEquals(job.func, testjob)
         self.assertEquals(job.origin, barq.name)
-        self.assertEquals(job.args[0], 'for Bar', 'Bar should be dequeued second.')
+        self.assertEquals(job.args[0], 'for Bar',
+                'Bar should be dequeued second.')
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
@@ -167,6 +169,6 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEquals(q.count, 1)
-        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False), None)
+        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False),
+                None)
         self.assertEquals(q.count, 0)
-
