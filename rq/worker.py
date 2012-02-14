@@ -21,6 +21,7 @@ from .exceptions import NoQueueError, UnpickleError
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
+red = make_colorizer('darkred')
 blue = make_colorizer('darkblue')
 
 
@@ -328,8 +329,8 @@ class Worker(object):
             rv = job.perform()
         except Exception as e:
             fq = self.failed_queue
-            self.log.exception(e)
-            self.log.warning('Moving job to %s queue.' % (fq.name,))
+            self.log.exception(red(str(e)))
+            self.log.warning('Moving job to %s queue.' % fq.name)
 
             # Store the exception information...
             job.ended_at = times.now()
@@ -341,7 +342,7 @@ class Worker(object):
             if rv is None:
                 self.log.info('Job OK')
             else:
-                self.log.info('Job OK, result = %s' % (yellow(rv),))
+                self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
         if rv is not None:
             p = conn.pipeline()
             p.hset(job.key, 'result', dumps(rv))
