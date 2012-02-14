@@ -28,7 +28,20 @@ class TestQueue(RQTestCase):
         self.assertNotEquals(q2, q3)
 
 
-    def test_queue_empty(self):
+    def test_empty_queue(self):
+        """Emptying queues."""
+        q = Queue('example')
+
+        self.testconn.rpush('rq:queue:example', 'foo')
+        self.testconn.rpush('rq:queue:example', 'bar')
+        self.assertEquals(q.is_empty(), False)
+
+        q.empty()
+
+        self.assertEquals(q.is_empty(), True)
+        self.assertIsNone(self.testconn.lpop('rq:queue:example'))
+
+    def test_queue_is_empty(self):
         """Detecting empty queues."""
         q = Queue('example')
         self.assertEquals(q.is_empty(), True)

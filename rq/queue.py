@@ -42,6 +42,10 @@ class Queue(object):
         """Returns the Redis key for this Queue."""
         return self._key
 
+    def empty(self):
+        """Removes all messages on the queue."""
+        conn.delete(self.key)
+
     def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0
