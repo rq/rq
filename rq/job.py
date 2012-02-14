@@ -50,6 +50,11 @@ class Job(object):
         return self._kwargs
 
     @classmethod
+    def exists(cls, job_id):
+        """Returns whether a job hash exists for the given job ID."""
+        return conn.exists(cls.key_for(job_id))
+
+    @classmethod
     def fetch(cls, id):
         """Fetches a persisted job from its corresponding Redis key and
         instantiates it.
@@ -87,10 +92,15 @@ class Job(object):
 
     id = property(get_id, set_id)
 
+    @classmethod
+    def key_for(cls, job_id):
+        """The Redis key that is used to store job hash under."""
+        return 'rq:job:%s' % (job_id,)
+
     @property
     def key(self):
-        """The Redis key that is used to store job data under."""
-        return 'rq:job:%s' % (self.id,)
+        """The Redis key that is used to store job hash under."""
+        return self.key_for(self.id)
 
 
     @property  # noqa
@@ -193,6 +203,7 @@ class Job(object):
     def delete(self):
         """Deletes the job hash from Redis."""
         conn.delete(self.key)
+
 
     # Job execution
     def perform(self):  # noqa
