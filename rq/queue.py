@@ -61,6 +61,8 @@ class Queue(object):
         def safe_fetch(job_id):
             try:
                 job = Job.fetch(job_id)
+            except NoSuchJobError:
+                return None
             except UnpickleError:
                 return None
             return job
