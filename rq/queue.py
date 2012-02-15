@@ -237,7 +237,12 @@ class FailedQueue(Queue):
 
     def requeue(self, job_id):
         """Requeues the given job ID."""
-        job = Job.fetch(job_id)
+        try:
+            job = Job.fetch(job_id)
+        except NoSuchJobError:
+            # Silently ignore/remove this job and return (i.e. do nothing)
+            conn.lrem(self.key, job_id)
+            return
 
         # Delete it from the FailedQueue (raise an error if that failed)
         if conn.lrem(self.key, job.id) == 0:
