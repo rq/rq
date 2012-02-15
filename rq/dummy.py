@@ -2,6 +2,7 @@
 Some dummy tasks that are well-suited for generating load for testing purposes.
 """
 import time
+import random
 
 
 def do_nothing():
@@ -13,13 +14,8 @@ def sleep(secs):
 
 
 def endless_loop():
-    x = 7
     while True:
-        x *= 28
-        if x % 3 == 0:
-            x //= 21
-        if x == 0:
-            x = 82
+        time.sleep(1)
 
 
 def div_by_zero():
@@ -33,8 +29,9 @@ def fib(n):
         return fib(n - 2) + fib(n - 1)
 
 
-def yield_stuff():
-    yield 7
-    yield 'foo'
-    yield (3.14, 2.18)
-    yield yield_stuff()
+def random_failure():
+    if random.choice([True, False]):
+        class RandomError(Exception):
+            pass
+        raise RandomError('Ouch!')
+    return 'OK'

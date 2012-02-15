@@ -22,15 +22,11 @@ def main():
 
     sample_calls = [
             (dummy.do_nothing, [], {}),
-            (dummy.do_nothing, [], {}),
-            (dummy.do_nothing, [], {}),
-            (dummy.do_nothing, [], {}),
-            (dummy.do_nothing, [], {}),
             (dummy.sleep, [1], {}),
             (dummy.fib, [8], {}),              # normal result
             (dummy.fib, [24], {}),             # takes pretty long
             (dummy.div_by_zero, [], {}),       # 5 / 0 => div by zero exc
-            (dummy.fib, [30], {}),             # takes long, then crashes
+            (dummy.random_failure, [], {}),    # simulate random failure (handy for requeue testing)
     ]
 
     for i in range(opts.count):
