@@ -227,3 +227,14 @@ class FailedQueue(Queue):
     def __init__(self):
         super(FailedQueue, self).__init__('failed')
 
+    def quarantine(self, job, exc_info):
+        """Puts the given Job in quarantine (i.e. put it on the failed
+        queue).
+
+        This is different from normal job enqueueing, since certain meta data
+        must not be overridden (e.g. `origin` or `enqueued_at`) and other meta
+        data must be inserted (`ended_at` and `exc_info`).
+        """
+        job.ended_at = times.now()
+        job.exc_info = exc_info
+        return self.enqueue_job(job, set_meta_data=False)

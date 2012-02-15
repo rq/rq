@@ -3,7 +3,6 @@ import os
 import errno
 import random
 import time
-import times
 import procname
 import socket
 import signal
@@ -332,11 +331,7 @@ class Worker(object):
             self.log.exception(red(str(e)))
             self.log.warning('Moving job to %s queue.' % fq.name)
 
-            # Store the exception information...
-            job.ended_at = times.now()
-            job.exc_info = traceback.format_exc()
-
-            fq.enqueue_job(job, set_meta_data=False)
+            fq.quarantine(job, exc_info=traceback.format_exc())
             return False
         else:
             if rv is None:
