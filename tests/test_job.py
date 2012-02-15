@@ -3,7 +3,7 @@ from datetime import datetime
 from tests import RQTestCase
 from tests.helpers import strip_milliseconds
 from cPickle import loads
-from rq.job import Job
+from rq import Job
 from rq.exceptions import NoSuchJobError, UnpickleError
 
 

@@ -1,7 +1,6 @@
 from tests import RQTestCase
 from tests import testjob
-from rq import Queue
-from rq.job import Job
+from rq import Queue, FailedQueue, Job
 
 
 class TestQueue(RQTestCase):
