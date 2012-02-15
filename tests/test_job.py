@@ -152,3 +152,4 @@ class TestJob(RQTestCase):
         self.testconn.hset(job.key, 'data', unimportable_data)
         with self.assertRaises(UnpickleError):
             job.refresh()
+

@@ -2,6 +2,10 @@ class NoSuchJobError(Exception):
     pass
 
 
+class InvalidJobOperationError(Exception):
+    pass
+
+
 class NoQueueError(Exception):
     pass
 

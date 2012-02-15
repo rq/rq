@@ -1,6 +1,7 @@
 from tests import RQTestCase
-from tests import testjob
+from tests import testjob, failing_job
 from rq import Queue, FailedQueue, Job
+from rq.exceptions import InvalidJobOperationError
 
 
 class TestQueue(RQTestCase):
@@ -189,3 +190,29 @@ class TestQueue(RQTestCase):
         self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False),
                 None)
         self.assertEquals(q.count, 0)
+
+
+class TestFailedQueue(RQTestCase):
+    def test_requeue_job(self):
+        """Requeueing existing jobs."""
+        job = Job.for_call(failing_job, 1, 2, 3)
+        job.origin = 'fake'
+        job.save()
+        FailedQueue().quarantine(job, Exception('Some fake error'))
+
+        self.assertItemsEqual(Queue.all(), [FailedQueue()])
+        self.assertEquals(FailedQueue().count, 1)
+
+        FailedQueue().requeue(job.id)
+
+        self.assertEquals(FailedQueue().count, 0)
+        self.assertEquals(Queue('fake').count, 1)
+
+    def test_requeue_nonfailed_job_fails(self):
+        """Requeueing non-failed jobs raises error."""
+        q = Queue()
+        job = q.enqueue(testjob, 'Nick', foo='bar')
+
+        # Assert that we cannot requeue a job that's not on the failed queue
+        with self.assertRaises(InvalidJobOperationError):
+            FailedQueue().requeue(job.id)

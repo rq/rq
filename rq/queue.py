@@ -2,7 +2,7 @@ import times
 from functools import total_ordering
 from .proxy import conn
 from .job import Job
-from .exceptions import NoSuchJobError, UnpickleError
+from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 
 
 def compact(lst):
@@ -121,10 +121,6 @@ class Queue(object):
         self.push_job_id(job.id)
         return job
 
-    def requeue(self, job):
-        """Requeues an existing (typically a failed job) onto the queue."""
-        raise NotImplementedError('Implement this')
-
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
         return conn.lpop(self.key)
@@ -238,3 +234,15 @@ class FailedQueue(Queue):
         job.ended_at = times.now()
         job.exc_info = exc_info
         return self.enqueue_job(job, set_meta_data=False)
+
+    def requeue(self, job_id):
+        """Requeues the given job ID."""
+        job = Job.fetch(job_id)
+
+        # Delete it from the FailedQueue (raise an error if that failed)
+        if conn.lrem(self.key, job.id) == 0:
+            raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
+
+        job.exc_info = None
+        q = Queue(job.origin)
+        q.enqueue_job(job)
