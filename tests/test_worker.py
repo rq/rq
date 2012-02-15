@@ -1,17 +1,8 @@
 import os
 from tests import RQTestCase
-from tests import testjob, failing_job
+from tests.fixtures import say_hello, div_by_zero, create_file
 from tests.helpers import strip_milliseconds
 from rq import Queue, Worker, Job
-
-
-SENTINEL_FILE = '/tmp/rq-tests.txt'
-
-
-def create_sentinel():
-    # Create some evidence that the job ran
-    with open(SENTINEL_FILE, 'w') as f:
-        f.write('Just a sentinel.')
 
 
 class TestWorker(RQTestCase):
@@ -27,7 +18,7 @@ class TestWorker(RQTestCase):
         w = Worker([fooq, barq])
         self.assertEquals(w.work(burst=True), False, 'Did not expect any work on the queue.')
 
-        fooq.enqueue(testjob, name='Frank')
+        fooq.enqueue(say_hello, name='Frank')
         self.assertEquals(w.work(burst=True), True, 'Expected at least some work done.')
 
     def test_work_is_unreadable(self):
@@ -41,7 +32,7 @@ class TestWorker(RQTestCase):
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.create(failing_job, 3)
+        job = Job.create(div_by_zero, 3)
         job.save()
         data = self.testconn.hget(job.key, 'data')
         invalid_data = data.replace('failing_job', 'nonexisting_job')
@@ -70,7 +61,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(q.count, 0)
 
         # Action
-        job = q.enqueue(failing_job)
+        job = q.enqueue(div_by_zero)
         self.assertEquals(q.count, 1)
 
         # keep for later
@@ -95,6 +86,9 @@ class TestWorker(RQTestCase):
 
     def test_cancelled_jobs_arent_executed(self):
         """Cancelling jobs."""
+
+        SENTINEL_FILE = '/tmp/rq-tests.txt'
+
         try:
             # Remove the sentinel if it is leftover from a previous test run
             os.remove(SENTINEL_FILE)
@@ -103,7 +97,7 @@ class TestWorker(RQTestCase):
                 raise
 
         q = Queue()
-        result = q.enqueue(create_sentinel)
+        result = q.enqueue(create_file, SENTINEL_FILE)
 
         # Here, we cancel the job, so the sentinel file may not be created
         assert q.count == 1

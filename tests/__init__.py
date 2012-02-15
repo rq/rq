@@ -3,17 +3,6 @@ from redis import Redis
 from logbook import NullHandler
 from rq import conn
 
-# Test data
-def testjob(name=None):
-    if name is None:
-        name = 'Stranger'
-    return 'Hi there, %s!' % (name,)
-
-def failing_job(x):
-    # Will throw a division-by-zero error
-    return x / 0
-
-
 def find_empty_redis_database():
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
