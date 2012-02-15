@@ -14,7 +14,7 @@ try:
     Logger = Logger   # Does nothing except it shuts up pyflakes annoying error
 except ImportError:
     from logging import Logger
-from .queue import Queue
+from .queue import Queue, FailedQueue
 from .proxy import conn
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
@@ -92,7 +92,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stopped = False
         self.log = Logger('worker')
-        self.failed_queue = Queue('failed')
+        self.failed_queue = FailedQueue()
 
 
     def validate_queues(self):  # noqa
@@ -336,7 +336,7 @@ class Worker(object):
             job.ended_at = times.now()
             job.exc_info = traceback.format_exc()
 
-            fq.enqueue_job(job, to_failed=True)
+            fq.enqueue_job(job, set_meta_data=False)
             return False
         else:
             if rv is None:

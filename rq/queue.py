@@ -108,13 +108,13 @@ class Queue(object):
         job = Job.for_call(f, *args, **kwargs)
         return self.enqueue_job(job)
 
-    def enqueue_job(self, job, to_failed=False):
+    def enqueue_job(self, job, set_meta_data=True):
         """Enqueues a job for delayed execution.
 
-        If the `to_failed` argument is `True`, it won't update the origin or
-        enqueued_at properties.
+        If the `set_meta_data` argument is `True` (default), it will update
+        the properties `origin` and `enqueued_at`.
         """
-        if not to_failed:
+        if set_meta_data:
             job.origin = self.name
             job.enqueued_at = times.now()
         job.save()
@@ -221,3 +221,9 @@ class Queue(object):
 
     def __str__(self):
         return '<Queue \'%s\'>' % (self.name,)
+
+
+class FailedQueue(Queue):
+    def __init__(self):
+        super(FailedQueue, self).__init__('failed')
+
