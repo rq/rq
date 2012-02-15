@@ -85,7 +85,7 @@ class TestQueue(RQTestCase):
     def test_enqueue_sets_metadata(self):
         """Enqueueing job onto queues modifies meta data."""
         q = Queue()
-        job = Job.for_call(testjob, 'Nick', foo='bar')
+        job = Job.create(testjob, 'Nick', foo='bar')
 
         # Preconditions
         self.assertIsNone(job.origin)
@@ -195,7 +195,7 @@ class TestQueue(RQTestCase):
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):
         """Requeueing existing jobs."""
-        job = Job.for_call(failing_job, 1, 2, 3)
+        job = Job.create(failing_job, 1, 2, 3)
         job.origin = 'fake'
         job.save()
         FailedQueue().quarantine(job, Exception('Some fake error'))

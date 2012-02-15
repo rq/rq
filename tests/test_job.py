@@ -32,7 +32,7 @@ class TestJob(RQTestCase):
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
-        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job = Job.create(arbitrary_function, 3, 4, z=2)
 
         # Jobs have a random UUID
         self.assertIsNotNone(job.id)
@@ -52,7 +52,7 @@ class TestJob(RQTestCase):
 
     def test_save(self):  # noqa
         """Storing jobs."""
-        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job = Job.create(arbitrary_function, 3, 4, z=2)
 
         # Saving creates a Redis hash
         self.assertEquals(self.testconn.exists(job.key), False)
@@ -98,7 +98,7 @@ class TestJob(RQTestCase):
 
     def test_persistence_of_typical_jobs(self):
         """Storing typical jobs."""
-        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job = Job.create(arbitrary_function, 3, 4, z=2)
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
@@ -113,7 +113,7 @@ class TestJob(RQTestCase):
                 ['created_at', 'data', 'description'])
 
     def test_store_then_fetch(self):
-        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job = Job.create(arbitrary_function, 3, 4, z=2)
         job.save()
 
         job2 = Job.fetch(job.id)
@@ -132,7 +132,7 @@ class TestJob(RQTestCase):
     def test_fetching_unreadable_data(self):
         """Fetching fails on unreadable data."""
         # Set up
-        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job = Job.create(arbitrary_function, 3, 4, z=2)
         job.save()
 
         # Just replace the data hkey with some random noise
@@ -141,7 +141,7 @@ class TestJob(RQTestCase):
             job.refresh()
 
         # Set up (part B)
-        job = Job.for_call(arbitrary_function, 3, 4, z=2)
+        job = Job.create(arbitrary_function, 3, 4, z=2)
         job.save()
 
         # Now slightly modify the job to make it unpickl'able (this is

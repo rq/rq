@@ -26,7 +26,7 @@ class Job(object):
 
     # Job construction
     @classmethod
-    def for_call(cls, func, *args, **kwargs):
+    def create(cls, func, *args, **kwargs):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """

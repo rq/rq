@@ -41,7 +41,7 @@ class TestWorker(RQTestCase):
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.for_call(failing_job, 3)
+        job = Job.create(failing_job, 3)
         job.save()
         data = self.testconn.hget(job.key, 'data')
         invalid_data = data.replace('failing_job', 'nonexisting_job')

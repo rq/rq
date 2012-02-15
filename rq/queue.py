@@ -105,7 +105,7 @@ class Queue(object):
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
-        job = Job.for_call(f, *args, **kwargs)
+        job = Job.create(f, *args, **kwargs)
         return self.enqueue_job(job)
 
     def enqueue_job(self, job, set_meta_data=True):
