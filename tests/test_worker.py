@@ -1,6 +1,6 @@
 import os
 from tests import RQTestCase
-from tests.fixtures import say_hello, div_by_zero, create_file
+from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file
 from tests.helpers import strip_milliseconds
 from rq import Queue, Worker, Job
 
@@ -111,3 +111,21 @@ class TestWorker(RQTestCase):
         # Should not have created evidence of execution
         self.assertEquals(os.path.exists(SENTINEL_FILE), False)
 
+    def test_cleaning_up_of_jobs(self):
+        """Jobs get cleaned up after successful execution."""
+        q = Queue()
+        job_with_rv = q.enqueue(say_hello, 'Franklin')
+        job_without_rv = q.enqueue(do_nothing)
+
+        # Job hashes exists
+        self.assertEquals(self.testconn.type(job_with_rv.key), 'hash')
+        self.assertEquals(self.testconn.type(job_without_rv.key), 'hash')
+
+        # Execute the job
+        w = Worker([q])
+        w.work(burst=True)
+
+        # Jobs with results expire after a certain TTL, while jobs without
+        # results are immediately removed
+        assert self.testconn.ttl(job_with_rv.key) > 0
+        assert self.testconn.exists(job_without_rv.key) == False

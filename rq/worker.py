@@ -333,14 +333,19 @@ class Worker(object):
 
             fq.quarantine(job, exc_info=traceback.format_exc())
             return False
+
+        if rv is None:
+            self.log.info('Job OK')
         else:
-            if rv is None:
-                self.log.info('Job OK')
-            else:
-                self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
+            self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
+
         if rv is not None:
             p = conn.pipeline()
             p.hset(job.key, 'result', dumps(rv))
             p.expire(job.key, self.rv_ttl)
             p.execute()
+        else:
+            # Cleanup immediately
+            job.delete()
+
         return True
