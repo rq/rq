@@ -32,10 +32,11 @@ class Queue(object):
         name = queue_key[len(prefix):]
         return Queue(name)
 
-    def __init__(self, name='default'):
+    def __init__(self, name='default', default_timeout=None):
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
+        self._default_timeout = default_timeout
 
     @property
     def key(self):
@@ -99,17 +100,25 @@ class Queue(object):
 
         Expects the function to call, along with the arguments and keyword
         arguments.
+
+        The special keyword `timeout` is reserved for `enqueue()` itself and
+        it won't be passed to the actual job function.
         """
         if f.__module__ == '__main__':
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
+        timeout = kwargs.pop('timeout', None)
         job = Job.create(f, *args, **kwargs)
-        return self.enqueue_job(job)
+        return self.enqueue_job(job, timeout=timeout)
 
-    def enqueue_job(self, job, set_meta_data=True):
+    def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
+
+        When the `timeout` argument is sent, it will overrides the default
+        timeout value of 180 seconds.  `timeout` may either be a string or
+        integer.
 
         If the `set_meta_data` argument is `True` (default), it will update
         the properties `origin` and `enqueued_at`.
@@ -117,6 +126,12 @@ class Queue(object):
         if set_meta_data:
             job.origin = self.name
             job.enqueued_at = times.now()
+
+        if timeout:
+            job.timeout = timeout  # _timeout_in_seconds(timeout)
+        else:
+            job.timeout = 180  # default
+
         job.save()
         self.push_job_id(job.id)
         return job

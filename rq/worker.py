@@ -1,4 +1,3 @@
-import sys
 import os
 import errno
 import random
@@ -295,14 +294,14 @@ class Worker(object):
         return did_perform_work
 
     def fork_and_perform_job(self, job):
+        """Spawns a work horse to perform the actual work and passes it a job.
+        The worker will wait for the work horse and make sure it executes
+        within the given timeout bounds, or will end the work horse with
+        SIGALRM.
+        """
         child_pid = os.fork()
         if child_pid == 0:
-            self._is_horse = True
-            random.seed()
-            self.log = Logger('horse')
-
-            success = self.perform_job(job)
-            sys.exit(int(not success))
+            self.main_work_horse(job)
         else:
             self._horse_pid = child_pid
             self.procline('Forked %d at %d' % (child_pid, time.time()))
@@ -320,13 +319,62 @@ class Worker(object):
                     if e.errno != errno.EINTR:
                         raise
 
+    def main_work_horse(self, job):
+        """This is the entry point of the newly spawned work horse."""
+        # After fork()'ing, always assure we are generating random sequences
+        # that are different from the worker.
+        random.seed()
+        self._is_horse = True
+        self.log = Logger('horse')
+
+        success = self.perform_job(job)
+
+        # os._exit() is the way to exit from childs after a fork(), in
+        # constrast to the regular sys.exit()
+        os._exit(int(not success))
+
+    def raise_death_penalty_after(self, timeout):
+        """Sets up an alarm signal and a signal handler that raises
+        a JobTimeoutException after the given `timeout` amount (expressed
+        in seconds).
+        """
+
+        class JobTimeoutException(Exception):
+            """Raised when a job takes longer to complete than the allowed
+            maximum time.
+            """
+            pass
+
+        # Setup a timeout handler
+        def timeout_handler(signum, frame):
+            raise JobTimeoutException('Job exceeded maximum timeout '
+                    'value (%d seconds).' % timeout)
+
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)
+
+    def cancel_death_penalty(self):
+        """Removes the death penalty alarm and puts back the system into
+        default signal handling.
+        """
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
     def perform_job(self, job):
+        """Performs the actual work of a job.  Will/should only be called
+        inside the work horse's process.
+        """
         self.procline('Processing %s from %s since %s' % (
             job.func.__name__,
             job.origin, time.time()))
+
+        # Set up death penalty
+        self.raise_death_penalty_after(job.timeout or 180)
         try:
             rv = job.perform()
+            self.cancel_death_penalty()
         except Exception as e:
+            self.cancel_death_penalty()
             fq = self.failed_queue
             self.log.exception(red(str(e)))
             self.log.warning('Moving job to %s queue.' % fq.name)
