@@ -75,6 +75,7 @@ class Job(object):
         self.ended_at = None
         self._result = None
         self.exc_info = None
+        self.timeout = None
 
 
     # Data access
