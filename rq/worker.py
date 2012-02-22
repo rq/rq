@@ -16,6 +16,7 @@ from .queue import Queue, FailedQueue
 from .proxy import conn
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
+from .timeouts import death_pentalty_after
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -333,33 +334,6 @@ class Worker(object):
         # constrast to the regular sys.exit()
         os._exit(int(not success))
 
-    def raise_death_penalty_after(self, timeout):
-        """Sets up an alarm signal and a signal handler that raises
-        a JobTimeoutException after the given `timeout` amount (expressed
-        in seconds).
-        """
-
-        class JobTimeoutException(Exception):
-            """Raised when a job takes longer to complete than the allowed
-            maximum time.
-            """
-            pass
-
-        # Setup a timeout handler
-        def timeout_handler(signum, frame):
-            raise JobTimeoutException('Job exceeded maximum timeout '
-                    'value (%d seconds).' % timeout)
-
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(timeout)
-
-    def cancel_death_penalty(self):
-        """Removes the death penalty alarm and puts back the system into
-        default signal handling.
-        """
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, signal.SIG_DFL)
-
     def perform_job(self, job):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -368,13 +342,10 @@ class Worker(object):
             job.func.__name__,
             job.origin, time.time()))
 
-        # Set up death penalty
-        self.raise_death_penalty_after(job.timeout or 180)
         try:
-            rv = job.perform()
-            self.cancel_death_penalty()
+            with death_pentalty_after(job.timeout or 180):
+                rv = job.perform()
         except Exception as e:
-            self.cancel_death_penalty()
             fq = self.failed_queue
             self.log.exception(red(str(e)))
             self.log.warning('Moving job to %s queue.' % fq.name)
