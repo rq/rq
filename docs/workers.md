@@ -71,7 +71,7 @@ The life-cycle of a worker consists of a few phases:
 {% comment %}  (Not implemented yet.)
 7. _Broadcast work ended_. The worker tells the system that it ended work.
 {% endcomment %}
-8. _Loop or quit_.  Goto 3 (default), or 7 (if `--burst`).
+8. _Loop or quit_.  If in burst mode, continue to 7, else go back to step 3.
 9. _Death registration_.
 
 
