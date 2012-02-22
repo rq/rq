@@ -59,8 +59,9 @@ The life-cycle of a worker consists of a few phases:
 1. _Boot_. Loading the Python environment.
 2. _Birth registration_. The worker registers itself to the system so it knows
    of this worker.
-3. _Start listening_. During this phase, a message is popped from any of the
-   given Redis queues.
+3. _Start listening_. A job is popped from any of the given Redis queues.
+   If all queues are empty and the worker is running in burst mode, quit now.
+   Else, wait until jobs arrive.
 {% comment %}  (Not implemented yet.)
 4. _Broadcast work began_. The worker tells the system that it will begin work.
 {% endcomment %}
@@ -71,8 +72,7 @@ The life-cycle of a worker consists of a few phases:
 {% comment %}  (Not implemented yet.)
 7. _Broadcast work ended_. The worker tells the system that it ended work.
 {% endcomment %}
-8. _Loop or quit_.  If in burst mode, continue to 7, else go back to step 3.
-9. _Death registration_.
+8. _Loop_.  Repeat from step 3.
 
 
 ### Worker names
