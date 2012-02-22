@@ -2,6 +2,7 @@
 This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slighty different characteristics.
 """
+import time
 
 
 def say_hello(name=None):
@@ -33,3 +34,8 @@ def create_file(path):
     job ran."""
     with open(path, 'w') as f:
         f.write('Just a sentinel.')
+
+
+def create_file_after_timeout(path, timeout):
+    time.sleep(timeout)
+    create_file(path)

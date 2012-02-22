@@ -1,6 +1,7 @@
 import os
 from tests import RQTestCase
-from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file
+from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
+        create_file_after_timeout
 from tests.helpers import strip_milliseconds
 from rq import Queue, Worker, Job
 
@@ -129,3 +130,30 @@ class TestWorker(RQTestCase):
         # results are immediately removed
         assert self.testconn.ttl(job_with_rv.key) > 0
         assert self.testconn.exists(job_without_rv.key) == False
+
+
+    def test_timeouts(self):
+        """Worker kills jobs after timeout."""
+        sentinel_file = '/tmp/.rq_sentinel'
+
+        q = Queue()
+        w = Worker([q])
+
+        # Put it on the queue with a timeout value
+        res = q.enqueue(
+                create_file_after_timeout, sentinel_file, 4,
+                timeout=1)
+
+        try:
+            os.unlink(sentinel_file)
+        except OSError as e:
+            if e.errno == 2:
+                pass
+
+        self.assertEquals(os.path.exists(sentinel_file), False)
+        w.work(burst=True)
+        self.assertEquals(os.path.exists(sentinel_file), False)
+
+        # TODO: Having to do the manual refresh() here is really ugly!
+        res.refresh()
+        self.assertIn('JobTimeoutException', res.exc_info)
