@@ -42,7 +42,7 @@ for certain tasks to be retried or not.
 
 When an exception is thrown inside a job, it is caught by the worker,
 serialized and stored under the job's Redis hash's `exc_info` key.  A reference
-to the job is put on the `failure` queue.
+to the job is put on the `failed` queue.
 
 The job itself has some useful properties that can be used to aid inspection:
 
