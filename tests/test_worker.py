@@ -17,10 +17,12 @@ class TestWorker(RQTestCase):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
-        self.assertEquals(w.work(burst=True), False, 'Did not expect any work on the queue.')
+        self.assertEquals(w.work(burst=True), False,
+                'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
-        self.assertEquals(w.work(burst=True), True, 'Expected at least some work done.')
+        self.assertEquals(w.work(burst=True), True,
+                'Expected at least some work done.')
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
@@ -79,13 +81,13 @@ class TestWorker(RQTestCase):
         job = Job.fetch(job.id)
         self.assertEquals(job.origin, q.name)
 
-        # should be the original enqueued_at date, not the date of enqueueing to
-        # the failed queue
+        # Should be the original enqueued_at date, not the date of enqueueing
+        # to the failed queue
         self.assertEquals(job.enqueued_at, enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
 
-    def test_cancelled_jobs_arent_executed(self):
+    def test_cancelled_jobs_arent_executed(self):  # noqa
         """Cancelling jobs."""
 
         SENTINEL_FILE = '/tmp/rq-tests.txt'
@@ -132,7 +134,7 @@ class TestWorker(RQTestCase):
         assert self.testconn.exists(job_without_rv.key) == False
 
 
-    def test_timeouts(self):
+    def test_timeouts(self):  # noqa
         """Worker kills jobs after timeout."""
         sentinel_file = '/tmp/.rq_sentinel'
 
