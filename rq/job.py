@@ -21,6 +21,21 @@ def unpickle(pickled_string):
     return obj
 
 
+def cancel_job(job_id):
+    """Cancels the job with the given job ID, preventing execution.  Discards
+    any job info (i.e. it can't be requeued later).
+    """
+    Job(job_id).cancel()
+
+
+def requeue_job(job_id):
+    """Requeues the job with the given job ID.  The job ID should refer to
+    a failed job (i.e. it should be on the failed queue).  If no such (failed)
+    job exists, a NoSuchJobError is raised.
+    """
+    raise NotImplementedError('Go implement this')
+
+
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """

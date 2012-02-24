@@ -1,6 +1,7 @@
 from tests import RQTestCase
 from tests.fixtures import say_hello, div_by_zero
-from rq import Queue, FailedQueue, Job
+from rq import Queue, FailedQueue
+from rq.job import Job
 from rq.exceptions import InvalidJobOperationError
 
 

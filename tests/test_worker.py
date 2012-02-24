@@ -3,7 +3,8 @@ from tests import RQTestCase, slow
 from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
         create_file_after_timeout
 from tests.helpers import strip_milliseconds
-from rq import Queue, Worker, Job
+from rq import Queue, Worker
+from rq.job import Job
 
 
 class TestWorker(RQTestCase):

@@ -4,7 +4,7 @@ from tests import RQTestCase
 from tests.fixtures import some_calculation, say_hello
 from tests.helpers import strip_milliseconds
 from cPickle import loads
-from rq import Job
+from rq.job import Job
 from rq.exceptions import NoSuchJobError, UnpickleError
 
 

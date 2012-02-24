@@ -1,8 +1,8 @@
 from redis import Redis
 from .proxy import conn
 from .queue import Queue, FailedQueue
+from .job import cancel_job, requeue_job
 from .worker import Worker
-from .job import Job
 from .version import VERSION
 
 
@@ -20,5 +20,8 @@ def use_redis(redis=None):
         raise TypeError('Argument redis should be a Redis instance.')
     conn.push(redis)
 
-__all__ = ['conn', 'Queue', 'FailedQueue', 'Worker', 'Job', 'use_redis']
+__all__ = [
+    'conn', 'use_redis',
+    'Queue', 'FailedQueue', 'Worker',
+    'cancel_job', 'requeue_job']
 __version__ = VERSION
