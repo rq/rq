@@ -242,7 +242,7 @@ class Worker(object):
             """Stops the current worker loop but waits for child processes to
             end gracefully (warm shutdown).
             """
-            self.log.debug('Got %s signal.' % signal_name(signum))
+            self.log.debug('Got signal %s.' % signal_name(signum))
 
             signal.signal(signal.SIGINT, request_force_stop)
             signal.signal(signal.SIGTERM, request_force_stop)
