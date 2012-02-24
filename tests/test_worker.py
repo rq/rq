@@ -1,5 +1,5 @@
 import os
-from tests import RQTestCase
+from tests import RQTestCase, slow
 from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
         create_file_after_timeout
 from tests.helpers import strip_milliseconds
@@ -134,7 +134,8 @@ class TestWorker(RQTestCase):
         assert self.testconn.exists(job_without_rv.key) == False
 
 
-    def test_timeouts(self):  # noqa
+    @slow  # noqa
+    def test_timeouts(self):
         """Worker kills jobs after timeout."""
         sentinel_file = '/tmp/.rq_sentinel'
 

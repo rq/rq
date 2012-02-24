@@ -27,8 +27,8 @@ class death_pentalty_after(object):
 
         # __exit__ may return True to supress further exception handling.  We
         # don't want to suppress any exceptions here, since all errors should
-        # just pass through, JobTimeoutException being handled as just one of
-        # them.
+        # just pass through, JobTimeoutException being handled normally to the
+        # invoking context.
         return False
 
     def handle_death_penalty(self, signum, frame):

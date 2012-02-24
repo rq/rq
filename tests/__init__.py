@@ -15,6 +15,18 @@ def find_empty_redis_database():
     assert False, 'No empty Redis database found to run tests in.'
 
 
+def slow(f):
+    import os
+    from functools import wraps
+
+    @wraps(f)
+    def _inner(*args, **kwargs):
+        if os.environ.get('ONLY_RUN_FAST_TESTS'):
+            f(*args, **kwargs)
+
+    return _inner
+
+
 class RQTestCase(unittest.TestCase):
     """Base class to inherit test cases from for RQ.
 
