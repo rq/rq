@@ -3,6 +3,7 @@ from redis import Redis
 from logbook import NullHandler
 from rq import conn
 
+
 def find_empty_redis_database():
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
@@ -64,5 +65,5 @@ class RQTestCase(unittest.TestCase):
 
         # Pop the connection to Redis
         testconn = conn.pop()
-        assert testconn == cls.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
-
+        assert testconn == cls.testconn, 'Wow, something really nasty ' \
+                'happened to the Redis connection stack. Check your setup.'
