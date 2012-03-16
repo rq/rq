@@ -52,7 +52,6 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         w.work(burst=True)   # should silently pass
         self.assertEquals(q.count, 0)
-
         self.assertEquals(failed_q.count, 1)
 
     def test_work_fails(self):

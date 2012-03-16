@@ -15,6 +15,9 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
+    except AttributeError as e:
+        raise UnpickleError('Could not unpickle: %s' % e.message,
+                pickled_string)
     except (StandardError, UnpicklingError):
         raise UnpickleError('Could not unpickle.', pickled_string)
     return obj
