@@ -110,6 +110,7 @@ class TestJob(RQTestCase):
                 ['created_at', 'data', 'description'])
 
     def test_store_then_fetch(self):
+        """Store, then fetch."""
         job = Job.create(some_calculation, 3, 4, z=2)
         job.save()
 
@@ -149,4 +150,3 @@ class TestJob(RQTestCase):
         self.testconn.hset(job.key, 'data', unimportable_data)
         with self.assertRaises(UnpickleError):
             job.refresh()
-

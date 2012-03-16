@@ -3,6 +3,7 @@ from redis import Redis
 from logbook import NullHandler
 from rq import conn
 
+
 def find_empty_redis_database():
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
@@ -13,6 +14,18 @@ def find_empty_redis_database():
         if empty:
             return testconn
     assert False, 'No empty Redis database found to run tests in.'
+
+
+def slow(f):
+    import os
+    from functools import wraps
+
+    @wraps(f)
+    def _inner(*args, **kwargs):
+        if os.environ.get('ONLY_RUN_FAST_TESTS'):
+            f(*args, **kwargs)
+
+    return _inner
 
 
 class RQTestCase(unittest.TestCase):
@@ -52,5 +65,5 @@ class RQTestCase(unittest.TestCase):
 
         # Pop the connection to Redis
         testconn = conn.pop()
-        assert testconn == cls.testconn, 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
-
+        assert testconn == cls.testconn, 'Wow, something really nasty ' \
+                'happened to the Redis connection stack. Check your setup.'

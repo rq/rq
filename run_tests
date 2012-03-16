@@ -11,6 +11,11 @@ else
     safe_rg=cat
 fi
 
+export ONLY_RUN_FAST_TESTS=1
+if [ "$1" == '-f' ]; then  # Poor man's argparse
+    unset ONLY_RUN_FAST_TESTS
+fi
+
 if check_redis_running; then
     /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_' | $safe_rg
 else

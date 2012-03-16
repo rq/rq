@@ -75,6 +75,7 @@ class Job(object):
         self.ended_at = None
         self._result = None
         self.exc_info = None
+        self.timeout = None
 
 
     # Data access
@@ -143,10 +144,10 @@ class Job(object):
         """
         key = self.key
         properties = ['data', 'created_at', 'origin', 'description',
-                'enqueued_at', 'ended_at', 'result', 'exc_info']
+                'enqueued_at', 'ended_at', 'result', 'exc_info', 'timeout']
         data, created_at, origin, description, \
                 enqueued_at, ended_at, result, \
-                exc_info = conn.hmget(key, properties)
+                exc_info, timeout = conn.hmget(key, properties)
         if data is None:
             raise NoSuchJobError('No such job: %s' % (key,))
 
@@ -164,6 +165,10 @@ class Job(object):
         self.ended_at = to_date(ended_at)
         self._result = result
         self.exc_info = exc_info
+        if timeout is None:
+            self.timeout = None
+        else:
+            self.timeout = int(timeout)
 
     def save(self):
         """Persists the current job instance to its corresponding Redis key."""
@@ -186,6 +191,8 @@ class Job(object):
             obj['result'] = self._result
         if self.exc_info is not None:
             obj['exc_info'] = self.exc_info
+        if self.timeout is not None:
+            obj['timeout'] = self.timeout
 
         conn.hmset(key, obj)
 
