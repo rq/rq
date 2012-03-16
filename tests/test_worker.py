@@ -38,7 +38,8 @@ class TestWorker(RQTestCase):
         job = Job.create(div_by_zero, 3)
         job.save()
         data = self.testconn.hget(job.key, 'data')
-        invalid_data = data.replace('failing_job', 'nonexisting_job')
+        invalid_data = data.replace('div_by_zero', 'nonexisting_job')
+        assert data != invalid_data
         self.testconn.hset(job.key, 'data', invalid_data)
 
         # We use the low-level internal function to enqueue any data (bypassing
