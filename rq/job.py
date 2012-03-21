@@ -44,9 +44,6 @@ class Job(object):
 
     @property
     def func(self):
-        import warnings
-        warnings.warn('Don\'t use this!', DeprecationWarning)
-
         func_name = self.func_name
         if func_name is None:
             return None
