@@ -5,6 +5,11 @@ from .job import Job
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 
 
+def get_failed_queue():
+    """Returns a handle to the special failed queue."""
+    return FailedQueue()
+
+
 def compact(lst):
     return [item for item in lst if item is not None]
 

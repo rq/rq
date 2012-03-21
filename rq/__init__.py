@@ -1,6 +1,6 @@
 from redis import Redis
 from .proxy import conn
-from .queue import Queue, FailedQueue
+from .queue import Queue, get_failed_queue
 from .job import cancel_job, requeue_job
 from .worker import Worker
 from .version import VERSION
@@ -22,6 +22,6 @@ def use_redis(redis=None):
 
 __all__ = [
     'conn', 'use_redis',
-    'Queue', 'FailedQueue', 'Worker',
+    'Queue', 'get_failed_queue', 'Worker',
     'cancel_job', 'requeue_job']
 __version__ = VERSION
