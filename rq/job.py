@@ -1,3 +1,4 @@
+import importlib
 import times
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
@@ -15,9 +16,6 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
-    except AttributeError as e:
-        raise UnpickleError('Could not unpickle: %s' % e.message,
-                pickled_string)
     except (StandardError, UnpicklingError):
         raise UnpickleError('Could not unpickle.', pickled_string)
     return obj
@@ -34,15 +32,28 @@ class Job(object):
         keyword arguments.
         """
         job = Job()
-        job._func = func
+        job._func_name = '%s.%s' % (func.__module__, func.__name__)
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()
         return job
 
     @property
+    def func_name(self):
+        return self._func_name
+
+    @property
     def func(self):
-        return self._func
+        import warnings
+        warnings.warn('Don\'t use this!', DeprecationWarning)
+
+        func_name = self.func_name
+        if func_name is None:
+            return None
+
+        module_name, func_name = func_name.rsplit('.', 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, func_name)
 
     @property
     def args(self):
@@ -69,7 +80,7 @@ class Job(object):
     def __init__(self, id=None):
         self._id = id
         self.created_at = times.now()
-        self._func = None
+        self._func_name = None
         self._args = None
         self._kwargs = None
         self.description = None
@@ -111,7 +122,7 @@ class Job(object):
     def job_tuple(self):
         """Returns the job tuple that encodes the actual function call that
         this job represents."""
-        return (self.func, self.args, self.kwargs)
+        return (self.func_name, self.args, self.kwargs)
 
     @property
     def return_value(self):
@@ -160,7 +171,7 @@ class Job(object):
             else:
                 return times.to_universal(date_str)
 
-        self._func, self._args, self._kwargs = unpickle(data)
+        self._func_name, self._args, self._kwargs = unpickle(data)
         self.created_at = to_date(created_at)
         self.origin = origin
         self.description = description
@@ -180,7 +191,7 @@ class Job(object):
         obj = {}
         obj['created_at'] = times.format(self.created_at, 'UTC')
 
-        if self.func is not None:
+        if self.func_name is not None:
             obj['data'] = dumps(self.job_tuple)
         if self.origin is not None:
             obj['origin'] = self.origin
@@ -227,13 +238,13 @@ class Job(object):
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        if self.func is None:
+        if self.func_name is None:
             return None
 
         arg_list = [repr(arg) for arg in self.args]
         arg_list += ['%s=%r' % (k, v) for k, v in self.kwargs.items()]
         args = ', '.join(arg_list)
-        return '%s(%s)' % (self.func.__name__, args)
+        return '%s(%s)' % (self.func_name, args)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)

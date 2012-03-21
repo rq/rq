@@ -58,20 +58,20 @@ class TestJob(RQTestCase):
 
         # Saving writes pickled job data
         unpickled_data = loads(self.testconn.hget(job.key, 'data'))
-        self.assertEquals(unpickled_data[0], some_calculation)
+        self.assertEquals(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
         """Fetching jobs."""
         # Prepare test
         self.testconn.hset('rq:job:some_id', 'data',
-                "(ctest_job\nsome_calculation\np0\n(I3\nI4\ntp1\n(dp2\nS'z'\np3\nI2\nstp4\n.")  # noqa
+                "(S'tests.fixtures.some_calculation'\np0\n(I3\nI4\ntp1\n(dp2\nS'z'\np3\nI2\nstp4\n.")  # noqa
         self.testconn.hset('rq:job:some_id', 'created_at',
                 "2012-02-07 22:13:24+0000")
 
         # Fetch returns a job
         job = Job.fetch('some_id')
         self.assertEquals(job.id, 'some_id')
-        self.assertEquals(job.func, some_calculation)
+        self.assertEquals(job.func_name, 'tests.fixtures.some_calculation')
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, dict(z=2))
         self.assertEquals(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
@@ -135,18 +135,5 @@ class TestJob(RQTestCase):
 
         # Just replace the data hkey with some random noise
         self.testconn.hset(job.key, 'data', 'this is no pickle string')
-        with self.assertRaises(UnpickleError):
-            job.refresh()
-
-        # Set up (part B)
-        job = Job.create(some_calculation, 3, 4, z=2)
-        job.save()
-
-        # Now slightly modify the job to make it unpickl'able (this is
-        # equivalent to a worker not having the most up-to-date source code and
-        # unable to import the function)
-        data = self.testconn.hget(job.key, 'data')
-        unimportable_data = data.replace('some_calculation', 'broken')
-        self.testconn.hset(job.key, 'data', unimportable_data)
         with self.assertRaises(UnpickleError):
             job.refresh()

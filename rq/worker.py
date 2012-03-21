@@ -339,7 +339,7 @@ class Worker(object):
         inside the work horse's process.
         """
         self.procline('Processing %s from %s since %s' % (
-            job.func.__name__,
+            job.func_name,
             job.origin, time.time()))
 
         try:
