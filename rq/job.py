@@ -33,7 +33,9 @@ def requeue_job(job_id):
     a failed job (i.e. it should be on the failed queue).  If no such (failed)
     job exists, a NoSuchJobError is raised.
     """
-    raise NotImplementedError('Go implement this')
+    from .queue import get_failed_queue
+    fq = get_failed_queue()
+    fq.requeue_job(job_id)
 
 
 class Job(object):
