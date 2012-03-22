@@ -256,7 +256,7 @@ class FailedQueue(Queue):
         return self.enqueue_job(job, set_meta_data=False)
 
     def requeue(self, job_id):
-        """Requeues the given job ID."""
+        """Requeues the job with the given job ID."""
         try:
             job = Job.fetch(job_id)
         except NoSuchJobError:

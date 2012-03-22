@@ -35,7 +35,7 @@ def requeue_job(job_id):
     """
     from .queue import get_failed_queue
     fq = get_failed_queue()
-    fq.requeue_job(job_id)
+    fq.requeue(job_id)
 
 
 class Job(object):
