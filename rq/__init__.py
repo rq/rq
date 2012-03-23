@@ -7,10 +7,6 @@ from .worker import Worker
 from .version import VERSION
 
 
-def use_redis(redis=None):
-    use_connection(redis)
-
-
 __all__ = [
     'use_connection', 'get_current_connection',
     'push_connection', 'pop_connection', 'Connection',

@@ -60,13 +60,16 @@ def pop_connection():
     return _connection_stack.pop()
 
 
-def use_connection(redis):
+def use_connection(redis=None):
     """Clears the stack and uses the given connection.  Protects against mixed
     use of use_connection() and stacked connection contexts.
     """
     assert _connection_stack.depth() <= 1, \
             'You should not mix Connection contexts with use_connection().'
     _connection_stack.empty()
+
+    if redis is None:
+        redis = Redis()
     push_connection(redis)
 
 

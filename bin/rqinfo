@@ -6,7 +6,7 @@ import time
 import argparse
 import redis
 from redis.exceptions import ConnectionError
-from rq import use_redis, Queue, Worker
+from rq import use_connection, Queue, Worker
 from rq.utils import gettermsize, make_colorizer
 
 red = make_colorizer('darkred')
@@ -146,7 +146,7 @@ def main():
 
     # Setup connection to Redis
     redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db)
-    use_redis(redis_conn)
+    use_connection(redis_conn)
     try:
         args.func(args)
     except ConnectionError as e:
