@@ -28,11 +28,11 @@ To put this potentially expensive word count for a given URL in the background,
 simply do this:
 
 {% highlight python %}
-from rq import use_redis, Queue
+from rq import use_connection, Queue
 from somewhere import count_words_at_url
 
 # Tell RQ what Redis connection to use
-rq.use_redis()  # no args uses Redis on localhost:6379
+use_connection()  # no args uses Redis on localhost:6379
 
 # Delay calculation of the multiplication
 q = Queue()

@@ -31,7 +31,7 @@ Then, create a RQ queue:
 
 {% highlight python %}
 import rq import *
-use_redis()
+use_connection()
 q = Queue()
 {% endhighlight %}
 
