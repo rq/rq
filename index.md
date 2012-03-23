@@ -10,14 +10,8 @@ stack.
 
 ## Getting started
 
-First, run a Redis server, of course:
-
-{% highlight console %}
-$ redis-server
-{% endhighlight %}
-
-To put jobs on queues, you don't have to do anything special, just define
-your typically lengthy or blocking function:
+First, run a Redis server, of course.  To put jobs on queues, you don't have to
+do anything special, just define your typically lengthy or blocking function:
 
 {% highlight python %}
 import requests
