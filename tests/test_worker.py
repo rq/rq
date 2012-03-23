@@ -3,7 +3,7 @@ from tests import RQTestCase, slow
 from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
         create_file_after_timeout
 from tests.helpers import strip_milliseconds
-from rq import Queue, Worker
+from rq import Queue, Worker, get_failed_queue
 from rq.job import Job
 
 
@@ -28,7 +28,7 @@ class TestWorker(RQTestCase):
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
         q = Queue()
-        failed_q = Queue('failed')
+        failed_q = get_failed_queue()
 
         self.assertEquals(failed_q.count, 0)
         self.assertEquals(q.count, 0)
@@ -58,7 +58,7 @@ class TestWorker(RQTestCase):
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
         q = Queue()
-        failed_q = Queue('failed')
+        failed_q = get_failed_queue()
 
         # Preconditions
         self.assertEquals(failed_q.count, 0)

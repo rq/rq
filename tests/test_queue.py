@@ -188,7 +188,7 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEquals(q.count, 1)
-        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False),
+        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False),  # noqa
                 None)
         self.assertEquals(q.count, 0)
 
@@ -199,9 +199,9 @@ class TestFailedQueue(RQTestCase):
         job = Job.create(div_by_zero, 1, 2, 3)
         job.origin = 'fake'
         job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))
+        get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
 
-        self.assertItemsEqual(Queue.all(), [get_failed_queue()])
+        self.assertItemsEqual(Queue.all(), [get_failed_queue()])  # noqa
         self.assertEquals(get_failed_queue().count, 1)
 
         get_failed_queue().requeue(job.id)

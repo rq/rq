@@ -2,7 +2,7 @@ import importlib
 import times
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
-from .proxy import conn
+from .connections import get_current_connection
 from .exceptions import UnpickleError, NoSuchJobError
 
 
@@ -21,20 +21,20 @@ def unpickle(pickled_string):
     return obj
 
 
-def cancel_job(job_id):
+def cancel_job(job_id, connection=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job(job_id).cancel()
+    Job(job_id, connection=connection).cancel()
 
 
-def requeue_job(job_id):
+def requeue_job(job_id, connection=None):
     """Requeues the job with the given job ID.  The job ID should refer to
     a failed job (i.e. it should be on the failed queue).  If no such (failed)
     job exists, a NoSuchJobError is raised.
     """
     from .queue import get_failed_queue
-    fq = get_failed_queue()
+    fq = get_failed_queue(connection=connection)
     fq.requeue(job_id)
 
 
@@ -48,7 +48,8 @@ class Job(object):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
-        job = Job()
+        connection = kwargs.pop('connection', None)
+        job = Job(connection=connection)
         job._func_name = '%s.%s' % (func.__module__, func.__name__)
         job._args = args
         job._kwargs = kwargs
@@ -80,18 +81,22 @@ class Job(object):
     @classmethod
     def exists(cls, job_id):
         """Returns whether a job hash exists for the given job ID."""
+        conn = get_current_connection()
         return conn.exists(cls.key_for(job_id))
 
     @classmethod
-    def fetch(cls, id):
+    def fetch(cls, id, connection=None):
         """Fetches a persisted job from its corresponding Redis key and
         instantiates it.
         """
-        job = Job(id)
+        job = Job(id, connection=connection)
         job.refresh()
         return job
 
-    def __init__(self, id=None):
+    def __init__(self, id=None, connection=None):
+        if connection is None:
+            connection = get_current_connection()
+        self.connection = connection
         self._id = id
         self.created_at = times.now()
         self._func_name = None
@@ -156,7 +161,7 @@ class Job(object):
         seconds by default).
         """
         if self._result is None:
-            rv = conn.hget(self.key, 'result')
+            rv = self.connection.hget(self.key, 'result')
             if rv is not None:
                 # cache the result
                 self._result = loads(rv)
@@ -175,7 +180,7 @@ class Job(object):
                 'enqueued_at', 'ended_at', 'result', 'exc_info', 'timeout']
         data, created_at, origin, description, \
                 enqueued_at, ended_at, result, \
-                exc_info, timeout = conn.hmget(key, properties)
+                exc_info, timeout = self.connection.hmget(key, properties)
         if data is None:
             raise NoSuchJobError('No such job: %s' % (key,))
 
@@ -222,7 +227,7 @@ class Job(object):
         if self.timeout is not None:
             obj['timeout'] = self.timeout
 
-        conn.hmset(key, obj)
+        self.connection.hmset(key, obj)
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -237,7 +242,7 @@ class Job(object):
 
     def delete(self):
         """Deletes the job hash from Redis."""
-        conn.delete(self.key)
+        self.connection.delete(self.key)
 
 
     # Job execution

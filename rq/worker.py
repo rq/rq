@@ -12,8 +12,8 @@ try:
     Logger = Logger   # Does nothing except it shuts up pyflakes annoying error
 except ImportError:
     from logging import Logger
-from .queue import Queue, FailedQueue
-from .proxy import conn
+from .queue import Queue, get_failed_queue
+from .connections import get_current_connection
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
 from .timeouts import death_pentalty_after
@@ -53,6 +53,7 @@ class Worker(object):
     def all(cls):
         """Returns an iterable of all Workers.
         """
+        conn = get_current_connection()
         reported_working = conn.smembers(cls.redis_workers_keys)
         return compact(map(cls.find_by_key, reported_working))
 
@@ -67,6 +68,7 @@ class Worker(object):
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % (worker_key,))
 
+        conn = get_current_connection()
         if not conn.exists(worker_key):
             return None
 
@@ -79,7 +81,10 @@ class Worker(object):
         return worker
 
 
-    def __init__(self, queues, name=None, rv_ttl=500):  # noqa
+    def __init__(self, queues, name=None, rv_ttl=500, connection=None):  # noqa
+        if connection is None:
+            connection = get_current_connection()
+        self.connection = connection
         if isinstance(queues, Queue):
             queues = [queues]
         self._name = name
@@ -91,7 +96,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stopped = False
         self.log = Logger('worker')
-        self.failed_queue = FailedQueue()
+        self.failed_queue = get_failed_queue(connection=self.connection)
 
 
     def validate_queues(self):  # noqa
@@ -158,14 +163,15 @@ class Worker(object):
     def register_birth(self):  # noqa
         """Registers its own birth."""
         self.log.debug('Registering birth of worker %s' % (self.name,))
-        if conn.exists(self.key) and not conn.hexists(self.key, 'death'):
+        if self.connection.exists(self.key) and \
+                not self.connection.hexists(self.key, 'death'):
             raise ValueError(
                     'There exists an active worker named \'%s\' '
                     'already.' % (self.name,))
         key = self.key
         now = time.time()
         queues = ','.join(self.queue_names())
-        with conn.pipeline() as p:
+        with self.connection.pipeline() as p:
             p.delete(key)
             p.hset(key, 'birth', now)
             p.hset(key, 'queues', queues)
@@ -175,7 +181,7 @@ class Worker(object):
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with conn.pipeline() as p:
+        with self.connection.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
@@ -185,7 +191,7 @@ class Worker(object):
 
     def set_state(self, new_state):
         self._state = new_state
-        conn.hset(self.key, 'state', new_state)
+        self.connection.hset(self.key, 'state', new_state)
 
     def get_state(self):
         return self._state
@@ -268,7 +274,8 @@ class Worker(object):
                         green(', '.join(qnames)))
                 wait_for_job = not burst
                 try:
-                    result = Queue.dequeue_any(self.queues, wait_for_job)
+                    result = Queue.dequeue_any(self.queues, wait_for_job, \
+                            connection=self.connection)
                     if result is None:
                         break
                 except UnpickleError as e:
@@ -359,7 +366,7 @@ class Worker(object):
             self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
 
         if rv is not None:
-            p = conn.pipeline()
+            p = self.connection.pipeline()
             p.hset(job.key, 'result', dumps(rv))
             p.expire(job.key, self.rv_ttl)
             p.execute()

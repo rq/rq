@@ -1,5 +1,6 @@
-from redis import Redis
-from .proxy import conn
+from .connections import get_current_connection
+from .connections import use_connection, push_connection, pop_connection
+from .connections import Connection
 from .queue import Queue, get_failed_queue
 from .job import cancel_job, requeue_job
 from .worker import Worker
@@ -7,21 +8,12 @@ from .version import VERSION
 
 
 def use_redis(redis=None):
-    """Pushes the given Redis connection (a redis.Redis instance) onto the
-    connection stack.  This is merely a helper function to easily start
-    using RQ without having to know or understand the RQ connection stack.
+    use_connection(redis)
 
-    When given None as an argument, a (default) Redis connection to
-    redis://localhost:6379 is set up.
-    """
-    if redis is None:
-        redis = Redis()
-    elif not isinstance(redis, Redis):
-        raise TypeError('Argument redis should be a Redis instance.')
-    conn.push(redis)
 
 __all__ = [
-    'conn', 'use_redis',
+    'use_connection', 'get_current_connection',
+    'push_connection', 'pop_connection', 'Connection',
     'Queue', 'get_failed_queue', 'Worker',
     'cancel_job', 'requeue_job']
 __version__ = VERSION

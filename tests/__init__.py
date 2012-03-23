@@ -1,7 +1,7 @@
 import unittest
 from redis import Redis
 from logbook import NullHandler
-from rq import conn
+from rq import push_connection, pop_connection
 
 
 def find_empty_redis_database():
@@ -42,7 +42,7 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
-        conn.push(testconn)
+        push_connection(testconn)
 
         # Store the connection (for sanity checking)
         cls.testconn = testconn
@@ -53,17 +53,17 @@ class RQTestCase(unittest.TestCase):
 
     def setUp(self):
         # Flush beforewards (we like our hygiene)
-        conn.flushdb()
+        self.testconn.flushdb()
 
     def tearDown(self):
         # Flush afterwards
-        conn.flushdb()
+        self.testconn.flushdb()
 
     @classmethod
     def tearDownClass(cls):
         cls.log_handler.pop_thread()
 
         # Pop the connection to Redis
-        testconn = conn.pop()
+        testconn = pop_connection()
         assert testconn == cls.testconn, 'Wow, something really nasty ' \
                 'happened to the Redis connection stack. Check your setup.'

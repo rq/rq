@@ -1,13 +1,13 @@
 import times
 from functools import total_ordering
-from .proxy import conn
+from .connections import get_current_connection
 from .job import Job
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 
 
-def get_failed_queue():
+def get_failed_queue(connection=None):
     """Returns a handle to the special failed queue."""
-    return FailedQueue()
+    return FailedQueue(connection=connection)
 
 
 def compact(lst):
@@ -19,14 +19,19 @@ class Queue(object):
     redis_queue_namespace_prefix = 'rq:queue:'
 
     @classmethod
-    def all(cls):
+    def all(cls, connection=None):
         """Returns an iterable of all Queues.
         """
         prefix = cls.redis_queue_namespace_prefix
-        return map(cls.from_queue_key, conn.keys('%s*' % prefix))
+        if connection is None:
+            connection = get_current_connection()
+
+        def to_queue(queue_key):
+            return cls.from_queue_key(queue_key, connection=connection)
+        return map(to_queue, connection.keys('%s*' % prefix))
 
     @classmethod
-    def from_queue_key(cls, queue_key):
+    def from_queue_key(cls, queue_key, connection=None):
         """Returns a Queue instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
         Redis keys.
@@ -35,9 +40,12 @@ class Queue(object):
         if not queue_key.startswith(prefix):
             raise ValueError('Not a valid RQ queue key: %s' % (queue_key,))
         name = queue_key[len(prefix):]
-        return Queue(name)
+        return Queue(name, connection=connection)
 
-    def __init__(self, name='default', default_timeout=None):
+    def __init__(self, name='default', default_timeout=None, connection=None):
+        if connection is None:
+            connection = get_current_connection()
+        self.connection = connection
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
@@ -50,7 +58,7 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        conn.delete(self.key)
+        self.connection.delete(self.key)
 
     def is_empty(self):
         """Returns whether the current queue is empty."""
@@ -59,7 +67,7 @@ class Queue(object):
     @property
     def job_ids(self):
         """Returns a list of all job IDS in the queue."""
-        return conn.lrange(self.key, 0, -1)
+        return self.connection.lrange(self.key, 0, -1)
 
     @property
     def jobs(self):
@@ -78,7 +86,7 @@ class Queue(object):
     @property
     def count(self):
         """Returns a count of all messages in the queue."""
-        return conn.llen(self.key)
+        return self.connection.llen(self.key)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
@@ -86,18 +94,18 @@ class Queue(object):
         """
         COMPACT_QUEUE = 'rq:queue:_compact'
 
-        conn.rename(self.key, COMPACT_QUEUE)
+        self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
-            job_id = conn.lpop(COMPACT_QUEUE)
+            job_id = self.connection.lpop(COMPACT_QUEUE)
             if job_id is None:
                 break
             if Job.exists(job_id):
-                conn.rpush(self.key, job_id)
+                self.connection.rpush(self.key, job_id)
 
 
     def push_job_id(self, job_id):  # noqa
         """Pushes a job ID on the corresponding Redis queue."""
-        conn.rpush(self.key, job_id)
+        self.connection.rpush(self.key, job_id)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues
@@ -115,7 +123,7 @@ class Queue(object):
                     'by workers.')
 
         timeout = kwargs.pop('timeout', None)
-        job = Job.create(f, *args, **kwargs)
+        job = Job.create(f, *args, connection=self.connection, **kwargs)
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
@@ -143,7 +151,7 @@ class Queue(object):
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
-        return conn.lpop(self.key)
+        return self.connection.lpop(self.key)
 
     @classmethod
     def lpop(cls, queue_keys, blocking):
@@ -155,6 +163,7 @@ class Queue(object):
         Until Redis receives a specific method for this, we'll have to wrap it
         this way.
         """
+        conn = get_current_connection()
         if blocking:
             queue_key, job_id = conn.blpop(queue_keys)
             return queue_key, job_id
@@ -174,7 +183,7 @@ class Queue(object):
         if job_id is None:
             return None
         try:
-            job = Job.fetch(job_id)
+            job = Job.fetch(job_id, connection=self.connection)
         except NoSuchJobError as e:
             # Silently pass on jobs that don't exist (anymore),
             # and continue by reinvoking itself recursively
@@ -187,7 +196,7 @@ class Queue(object):
         return job
 
     @classmethod
-    def dequeue_any(cls, queues, blocking):
+    def dequeue_any(cls, queues, blocking, connection=None):
         """Class method returning the Job instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -200,13 +209,13 @@ class Queue(object):
         if result is None:
             return None
         queue_key, job_id = result
-        queue = Queue.from_queue_key(queue_key)
+        queue = Queue.from_queue_key(queue_key, connection=connection)
         try:
-            job = Job.fetch(job_id)
+            job = Job.fetch(job_id, connection=connection)
         except NoSuchJobError:
             # Silently pass on jobs that don't exist (anymore),
             # and continue by reinvoking the same function recursively
-            return cls.dequeue_any(queues, blocking)
+            return cls.dequeue_any(queues, blocking, connection=connection)
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
@@ -240,8 +249,8 @@ class Queue(object):
 
 
 class FailedQueue(Queue):
-    def __init__(self):
-        super(FailedQueue, self).__init__('failed')
+    def __init__(self, connection=None):
+        super(FailedQueue, self).__init__('failed', connection=connection)
 
     def quarantine(self, job, exc_info):
         """Puts the given Job in quarantine (i.e. put it on the failed
@@ -258,16 +267,16 @@ class FailedQueue(Queue):
     def requeue(self, job_id):
         """Requeues the job with the given job ID."""
         try:
-            job = Job.fetch(job_id)
+            job = Job.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             # Silently ignore/remove this job and return (i.e. do nothing)
-            conn.lrem(self.key, job_id)
+            self.connection.lrem(self.key, job_id)
             return
 
-        # Delete it from the FailedQueue (raise an error if that failed)
-        if conn.lrem(self.key, job.id) == 0:
+        # Delete it from the failed queue (raise an error if that failed)
+        if self.connection.lrem(self.key, job.id) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
         job.exc_info = None
-        q = Queue(job.origin)
+        q = Queue(job.origin, connection=self.connection)
         q.enqueue_job(job)
