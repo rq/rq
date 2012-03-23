@@ -72,8 +72,8 @@ If you want the cutting edge version (that may well be broken), use this:
 ## Project history
 
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
-and [this snippet][3], and has been created as a lightweight alternative to the
-heaviness of Celery or other AMQP-based queueing implementations.
+and [this snippet][3], and has been created as a lightweight alternative to
+existing queueing frameworks, with a low barrier to entry.
 
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
