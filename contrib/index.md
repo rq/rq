@@ -3,9 +3,9 @@ title: "Contributing to RQ"
 layout: contrib
 ---
 
-If you'd like to contribute to RQ, simply fork the project on GitHub and submit
-a pull request.
+If you'd like to contribute to RQ, simply [fork](https://github.com/nvie/rq)
+the project on GitHub and submit a pull request.
 
-Please bear in mind the philosiphy behind RQ: it should remain small and
-simple, rather than complete.  And it should prefer insightfulness over
-throughput performance.
+Please bear in mind the philosiphy behind RQ: it should rather remain small and
+simple, than packed with features.  And it should value insightfulness over
+performance.
