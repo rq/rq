@@ -148,10 +148,10 @@ def parse_args():
 
 def interval(val, func, args):
     while True:
-        if val:
+        if val and sys.stdout.isatty():
             os.system('clear')
         func(args)
-        if val:
+        if val and sys.stdout.isatty():
             time.sleep(val)
         else:
             break
