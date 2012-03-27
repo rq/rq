@@ -20,6 +20,13 @@ navigation:
     url: docs/monitoring/
   - text: Connections
     url: docs/connections/
+- text: Patterns
+  url: patterns/
+  subs:
+  - text: Heroku
+    url: patterns/
+  - text: Django
+    url: patterns/django/
 - text: Contributing
   url: contrib/
   subs:
