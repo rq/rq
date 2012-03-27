@@ -83,19 +83,22 @@ def show_workers(args):
 
         # Filter out workers that don't match the queue filter
         ws = [w for w in Worker.all() if any_matching_queue(w)]
-    else:
-        qs = Queue.all()
-        ws = Worker.all()
 
-    if not args.by_queue:
         def filter_queues(queue_names):
             return [qname for qname in queue_names if Queue(qname) in qs]
 
+    else:
+        qs = Queue.all()
+        ws = Worker.all()
+        filter_queues = lambda x: x
+
+    if not args.by_queue:
         for w in ws:
+            worker_queues = filter_queues(w.queue_names())
             if not args.raw:
-                print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(filter_queues(w.queue_names())))
+                print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(worker_queues))
             else:
-                print 'worker %s %s %s' % (w.name, w.state, ','.join(filter_queues(w.queue_names())))
+                print 'worker %s %s %s' % (w.name, w.state, ','.join(worker_queues))
     else:
         # Create reverse lookup table
         queues = {q: [] for q in qs}
