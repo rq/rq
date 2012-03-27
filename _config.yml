@@ -18,6 +18,8 @@ navigation:
     url: docs/results/
   - text: Monitoring
     url: docs/monitoring/
+  - text: Connections
+    url: docs/connections/
   - text: Internals
     url: docs/internals/
 - text: Contributing
