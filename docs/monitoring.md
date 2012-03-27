@@ -5,79 +5,85 @@ layout: docs
 
 Monitoring is where RQ shines.
 
-
-## Showing queues
-
-To see what queues exist (and how many jobs there are to process them):
+To see what queues exist and what workers are active, just type `rqinfo`:
 
 {% highlight console %}
-$ rqinfo queues
+$ rqinfo
 high       |██████████████████████████ 20
 low        |██████████████ 12
-normal     |█████████ 8
-default    | 0
-4 queues, 45 jobs total
+default    |█████████ 8
+3 queues, 45 jobs total
+
+Bricktop.19233 idle: low
+Bricktop.19232 idle: high, default, low
+Bricktop.18349 idle: default
+3 workers, 3 queues
 {% endhighlight %}
 
+
+## Querying by queue names
 
 You can also query for a subset of queues, if you're looking for specific ones:
 
 {% highlight console %}
-$ rqinfo queues high normal
+$ rqinfo high default
 high       |██████████████████████████ 20
-normal     |█████████ 8
+default    |█████████ 8
 2 queues, 28 jobs total
+
+Bricktop.19232 idle: high, default
+Bricktop.18349 idle: default
+2 workers, 2 queues
 {% endhighlight %}
 
 
-### Interval polling
+## Organising workers by queue
 
-By default, `rqinfo` prints the stats and exists.  You can however tell it to
-keep polling for the same data periodically, by using the `--interval` flag.
-`rqinfo` then puts itself into an endless polling loop.
+By default, `rqinfo` prints the workers that are currently active, and the
+queues that they are listening on, like this:
 
 {% highlight console %}
-$ rqinfo queues --interval 2
+$ rqinfo
+...
+
+Mickey.26421 idle: high, default
+Bricktop.25458 busy: high, default, low
+Turkish.25812 busy: high, default
+3 workers, 3 queues
 {% endhighlight %}
 
-`rqinfo` will now update the screen with the new info every second.  If you
-feel the need, you can specify fractions of seconds (although this might incur
-some extra polling load):
+To see the same data, but organised by queue, use the `-R` (or `--by-queue`)
+flag:
 
 {% highlight console %}
-$ rqinfo queues --interval 0.5
-{% endhighlight %}
+$ rqinfo -R
+...
 
-
-## Showing active workers
-
-To see what workers are currently active, and what queues they operate on:
-
-{% highlight console %}
-$ rqinfo workers
-Mickey.26421 ●: high, normal, default
-Bricktop.25458 ●: high, normal, low
-Turkish.25812 ●: high, normal
+default: Mickey.26421 (idle)
+high:    Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
+low:     Bricktop.25458 (busy)
+default: Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
 3 workers, 4 queues
 {% endhighlight %}
 
-To see the same data, but organised by queue, use the `-Q` (or `--by-queue`) flag:
+
+## Interval polling
+
+By default, if `rqinfo` is ran in a terminal session, it will print stats and
+autorefresh them every 2.5 seconds.  You can specify a different poll interval,
+by using the `--interval` flag.
 
 {% highlight console %}
-$ rqinfo workers -Q
-default: Mickey.26421 (●)
-high:    Bricktop.25458 (●), Mickey.26421 (●), Turkish.25812 (●)
-low:     Bricktop.25458 (●)
-normal:  Bricktop.25458 (●), Mickey.26421 (●), Turkish.25812 (●)
-3 workers, 4 queues
+$ rqinfo --interval 1
 {% endhighlight %}
 
-The dots behind the worker names indicate the current state of the worker.
-A open green dot means idle and a filled red dot means busy.
+`rqinfo` will now update the screen every second.  You may specify a float
+value to indicate fractions of seconds.  Be aware that low interval values will
+increase the load on Redis, of course.
 
+{% highlight console %}
+$ rqinfo --interval 0.5
+{% endhighlight %}
 
-### Interval polling
-
-Just like with `rqinfo queues`, you can use the `--interval` option to keep
-polling for the worker stats at a regular interval.
-
+Note that if stdout is redirected (i.e. stdout is not a TTY), `rqinfo` will
+only output the stats once, and won't loop.
