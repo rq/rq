@@ -11,16 +11,20 @@ Redis server that you want RQ to use.
 
 In development mode, to connect to a default, local Redis server:
 
-    from rq import use_connection
-    use_connection()
+{% highlight python %}
+from rq import use_connection
+use_connection()
+{% endhighlight %}
 
 In production, to connect to a specific Redis server:
 
-    from redis import Redis
-    from rq import use_connection
+{% highlight python %}
+from redis import Redis
+from rq import use_connection
 
-    redis = Redis('my.host.org', 6789, password='secret')
-    use_connection(redis)
+redis = Redis('my.host.org', 6789, password='secret')
+use_connection(redis)
+{% endhighlight %}
 
 
 ## Multiple Redis connections
@@ -40,14 +44,16 @@ Each RQ object instance (queues, workers, jobs) has a `connection` keyword
 argument that can be passed to the constructor.  Using this, you don't need to
 use `use_connection()`.  Instead, you can create your queues like this:
 
-    from rq import Queue
-    from redis import Redis
+{% highlight python %}
+from rq import Queue
+from redis import Redis
 
-    conn1 = Redis('localhost', 6379)
-    conn2 = Redis('remote.host.org', 9836)
+conn1 = Redis('localhost', 6379)
+conn2 = Redis('remote.host.org', 9836)
 
-    q1 = Queue('foo', connection=conn1)
-    q2 = Queue('bar', connection=conn2)
+q1 = Queue('foo', connection=conn1)
+q2 = Queue('bar', connection=conn2)
+{% endhighlight %}
 
 Every job that is enqueued on a queue will know what connection it belongs to.
 The same goes for the workers.
@@ -64,21 +70,20 @@ default connection to be used.
 
 An example will help to understand it:
 
-    >>> from rq import Queue, Connection
-    >>> from redis import Redis
-    >>>
-    >>> with Connection(Redis('localhost', 6379)):
-    >>>     q1 = Queue('foo')
-    >>>     with Connection(Redis('remote.host.org', 9836)):
-    >>>         q2 = Queue('bar')
-    >>>     q3 = Queue('qux')
-    >>> 
-    >>> q1.connection != q2.connection
-    True
-    >>> q2.connection != q3.connection
-    True
-    >>> q1.connection == q3.connection
-    True
+{% highlight python %}
+from rq import Queue, Connection
+from redis import Redis
+
+with Connection(Redis('localhost', 6379)):
+    q1 = Queue('foo')
+    with Connection(Redis('remote.host.org', 9836)):
+        q2 = Queue('bar')
+    q3 = Queue('qux')
+
+assert q1.connection != q2.connection
+assert q2.connection != q3.connection
+assert q1.connection == q3.connection
+{% endhighlight %}
 
 You can think of this as if, within the `Connection` context, every newly
 created RQ object instance will have the `connection` argument set implicitly.
@@ -92,18 +97,20 @@ If your code does not allow you to use a `with` statement, for example, if you
 want to use this to set up a unit test, you can use the `push_connection()` and
 `pop_connection()` methods instead of using the context manager.
 
-    import unittest
-    from rq import Queue
-    from rq import push_connection, pop_connection
+{% highlight python %}
+import unittest
+from rq import Queue
+from rq import push_connection, pop_connection
 
-    class MyTest(unittest.TestCase):
-        def setUp(self):
-            push_connection(Redis())
+class MyTest(unittest.TestCase):
+    def setUp(self):
+        push_connection(Redis())
 
-        def tearDown(self):
-            pop_connection()
+    def tearDown(self):
+        pop_connection()
 
-        def test_foo(self):
-            """Any queues created here use local Redis."""
-            q = Queue()
-            ...
+    def test_foo(self):
+        """Any queues created here use local Redis."""
+        q = Queue()
+        ...
+{% endhighlight %}
