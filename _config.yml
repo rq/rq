@@ -10,7 +10,7 @@ navigation:
 - text: Docs
   url: docs/
   subs:
-  - text: Jobs
+  - text: Queues
     url: docs/
   - text: Workers
     url: docs/workers/
@@ -20,7 +20,10 @@ navigation:
     url: docs/monitoring/
   - text: Connections
     url: docs/connections/
-  - text: Internals
-    url: docs/internals/
 - text: Contributing
   url: contrib/
+  subs:
+  - text: Internals
+    url: contrib/
+  - text: GitHub
+    url: contrib/github/
