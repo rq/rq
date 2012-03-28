@@ -3,7 +3,7 @@ title: "RQ: Documentation"
 layout: docs
 ---
 
-A job is a Python object, representing a function that is invoked
+A _job_ is a Python object, representing a function that is invoked
 asynchronously in a worker (background) process.  Any Python function can be
 invoked asynchronously, by simply pushing a reference to the function and its
 arguments onto a queue.  This is called _enqueueing_.
