@@ -6,6 +6,7 @@ import sys
 import os
 from setuptools import setup
 
+
 def get_version():
     basedir = os.path.dirname(__file__)
     with open(os.path.join(basedir, 'rq/version.py')) as f:
@@ -13,6 +14,7 @@ def get_version():
         exec(f.read())
         return VERSION
     raise RuntimeError('No version info found.')
+
 
 def get_dependencies():
     deps = ['redis', 'procname', 'times']
@@ -60,7 +62,7 @@ setup(
         'Operating System :: MacOS',
         'Operating System :: Unix',
         'Programming Language :: Python',
-        'Topic :: Software Development :: Libraries :: Python Modules'
+        'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: Internet',
         'Topic :: Scientific/Engineering',
         'Topic :: System :: Distributed Computing',
@@ -69,4 +71,3 @@ setup(
 
     ]
 )
-
