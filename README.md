@@ -32,7 +32,7 @@ And enqueue the function call:
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
-[d]: {{site.baseurl}}docs/
+[d]: http://nvie.github.com/rq/docs/
 
 
 ### The worker
