@@ -22,7 +22,7 @@ your typically lengthy or blocking function:
 Then, create a RQ queue:
 
     import rq import *
-    use_redis()
+    use_connection()
     q = Queue()
 
 And enqueue the function call:
