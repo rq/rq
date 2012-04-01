@@ -161,7 +161,10 @@ class LocalStack(object):
             return None
 
     def __len__(self):
-        return len(self._local.stack)
+        stack = getattr(self._local, 'stack', None)
+        if stack is None:
+            return 0
+        return len(stack)
 
 
 class LocalManager(object):
