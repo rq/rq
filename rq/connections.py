@@ -1,39 +1,10 @@
 from contextlib import contextmanager
 from redis import Redis
+from .local import LocalStack, release_local
 
 
 class NoRedisConnectionException(Exception):
     pass
-
-
-class _RedisConnectionStack(object):
-    def __init__(self):
-        self.stack = []
-
-    def _get_current_object(self):
-        try:
-            return self.stack[-1]
-        except IndexError:
-            msg = 'No Redis connection configured.'
-            raise NoRedisConnectionException(msg)
-
-    def pop(self):
-        return self.stack.pop()
-
-    def push(self, connection):
-        self.stack.append(connection)
-
-    def empty(self):
-        del self.stack[:]
-
-    def depth(self):
-        return len(self.stack)
-
-    def __getattr__(self, name):
-        return getattr(self._get_current_object(), name)
-
-
-_connection_stack = _RedisConnectionStack()
 
 
 @contextmanager
@@ -64,21 +35,23 @@ def use_connection(redis=None):
     """Clears the stack and uses the given connection.  Protects against mixed
     use of use_connection() and stacked connection contexts.
     """
-    assert _connection_stack.depth() <= 1, \
+    assert len(_connection_stack) <= 1, \
             'You should not mix Connection contexts with use_connection().'
-    _connection_stack.empty()
+    release_local(_connection_stack)
 
     if redis is None:
         redis = Redis()
-    push_connection(redis)
+    _connection_stack.push(redis)
 
 
 def get_current_connection():
     """Returns the current Redis connection (i.e. the topmost on the
     connection stack).
     """
-    return _connection_stack._get_current_object()
+    return _connection_stack.top
 
+
+_connection_stack = LocalStack()
 
 __all__ = ['Connection',
         'get_current_connection', 'push_connection', 'pop_connection',
