@@ -21,7 +21,7 @@ your typically lengthy or blocking function:
 
 Then, create a RQ queue:
 
-    import rq import *
+    from rq import *
     use_connection()
     q = Queue()
 
