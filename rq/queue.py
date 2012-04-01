@@ -1,8 +1,8 @@
 import times
-from functools import total_ordering
 from .connections import get_current_connection
 from .job import Job
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
+from .compat import total_ordering
 
 
 def get_failed_queue(connection=None):
