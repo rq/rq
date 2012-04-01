@@ -101,7 +101,7 @@ def show_workers(args):
                 print 'worker %s %s %s' % (w.name, w.state, ','.join(worker_queues))
     else:
         # Create reverse lookup table
-        queues = {q: [] for q in qs}
+        queues = dict([(q, []) for q in qs])
         for w in ws:
             for q in w.queues:
                 if not q in queues:
