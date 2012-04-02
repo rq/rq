@@ -19,6 +19,8 @@ your typically lengthy or blocking function:
         resp = requests.get(url)
         return len(resp.text.split())
 
+You do use the excellent [requests][r] package, don't you?
+
 Then, create a RQ queue:
 
     from rq import *
@@ -31,8 +33,6 @@ And enqueue the function call:
     result = q.enqueue(count_words_at_url, 'http://nvie.com')
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
-
-[d]: http://nvie.github.com/rq/docs/
 
 
 ### The worker
@@ -66,6 +66,8 @@ This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
+[r]: http://python-requests.org
+[d]: http://nvie.github.com/rq/docs/
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
 [1]: http://www.celeryproject.org/
