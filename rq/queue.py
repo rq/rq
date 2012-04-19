@@ -40,7 +40,7 @@ class Queue(object):
         if not queue_key.startswith(prefix):
             raise ValueError('Not a valid RQ queue key: %s' % (queue_key,))
         name = queue_key[len(prefix):]
-        return Queue(name, connection=connection)
+        return cls(name, connection=connection)
 
     def __init__(self, name='default', default_timeout=None, connection=None):
         if connection is None:
@@ -209,7 +209,7 @@ class Queue(object):
         if result is None:
             return None
         queue_key, job_id = result
-        queue = Queue.from_queue_key(queue_key, connection=connection)
+        queue = cls.from_queue_key(queue_key, connection=connection)
         try:
             job = Job.fetch(job_id, connection=connection)
         except NoSuchJobError:

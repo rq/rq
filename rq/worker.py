@@ -73,7 +73,7 @@ class Worker(object):
             return None
 
         name = worker_key[len(prefix):]
-        worker = Worker([], name)
+        worker = cls([], name)
         queues = conn.hget(worker.key, 'queues')
         worker._state = conn.hget(worker.key, 'state') or '?'
         if queues:
