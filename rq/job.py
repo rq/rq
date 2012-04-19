@@ -49,7 +49,7 @@ class Job(object):
         keyword arguments.
         """
         connection = kwargs.pop('connection', None)
-        job = Job(connection=connection)
+        job = cls(connection=connection)
         job._func_name = '%s.%s' % (func.__module__, func.__name__)
         job._args = args
         job._kwargs = kwargs
@@ -89,7 +89,7 @@ class Job(object):
         """Fetches a persisted job from its corresponding Redis key and
         instantiates it.
         """
-        job = Job(id, connection=connection)
+        job = cls(id, connection=connection)
         job.refresh()
         return job
 
