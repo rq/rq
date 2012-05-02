@@ -42,6 +42,11 @@ ul.inline li
     margin: 0 10px;
 }
 
+.subnav ul.inline li
+{
+    margin: 0 6px;
+}
+
 header a
 {
     color: #3a3a3a;

@@ -10,7 +10,7 @@ navigation:
 - text: Docs
   url: docs/
   subs:
-  - text: Jobs
+  - text: Queues
     url: docs/
   - text: Workers
     url: docs/workers/
@@ -18,7 +18,19 @@ navigation:
     url: docs/results/
   - text: Monitoring
     url: docs/monitoring/
-  - text: Internals
-    url: docs/internals/
+  - text: Connections
+    url: docs/connections/
+- text: Patterns
+  url: patterns/
+  subs:
+  - text: Heroku
+    url: patterns/
+  - text: Django
+    url: patterns/django/
 - text: Contributing
   url: contrib/
+  subs:
+  - text: Internals
+    url: contrib/
+  - text: GitHub
+    url: contrib/github/
