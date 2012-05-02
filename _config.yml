@@ -1,4 +1,4 @@
-baseurl: /rq/
+baseurl: /
 exclude: design
 permalink: pretty
 markdown: redcarpet
