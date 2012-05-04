@@ -2,10 +2,11 @@
 import sys
 import argparse
 import logbook
-import redis
 from logbook import handlers
-from rq import use_connection, Queue, Worker
+from rq import Queue, Worker
 from redis.exceptions import ConnectionError
+from rq.scripts import add_standard_arguments
+from rq.scripts import setup_redis
 
 
 def format_colors(record, handler):
@@ -40,9 +41,7 @@ def setup_loghandlers(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Starts an RQ worker.')
-    parser.add_argument('--host', '-H', default='localhost', help='The Redis hostname (default: localhost)')
-    parser.add_argument('--port', '-p', type=int, default=6379, help='The Redis portnumber (default: 6379)')
-    parser.add_argument('--db', '-d', type=int, default=0, help='The Redis database (default: 0)')
+    add_standard_arguments(parser)
 
     parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
@@ -60,10 +59,7 @@ def main():
         sys.path = args.path.split(':') + sys.path
 
     setup_loghandlers(args)
-
-    # Setup connection to Redis
-    redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db)
-    use_connection(redis_conn)
+    setup_redis(args)
     try:
         queues = map(Queue, args.queues)
         w = Worker(queues, name=args.name)
