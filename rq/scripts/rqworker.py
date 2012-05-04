@@ -27,7 +27,6 @@ def setup_loghandlers(args):
         loglevel = logbook.INFO
         formatter = format_colors
 
-    import sys
     handlers.NullHandler(bubble=False).push_application()
     handler = handlers.StreamHandler(sys.stdout, level=loglevel, bubble=False)
     if formatter:

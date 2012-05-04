@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import optparse
-from rq import use_connection, Queue, Worker
+from rq import use_connection, Queue
 from rq import dummy
 
 
