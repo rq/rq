@@ -71,7 +71,3 @@ def main():
         w.work(burst=args.burst)
     except ConnectionError as e:
         print(e)
-
-
-if __name__ == '__main__':
-    main()

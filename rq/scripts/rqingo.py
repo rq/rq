@@ -177,6 +177,3 @@ def main():
         interval(args.interval, func, args)
     except ConnectionError as e:
         print(e)
-
-if __name__ == '__main__':
-    main()
