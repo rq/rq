@@ -154,7 +154,7 @@ class Queue(object):
         return self.connection.lpop(self.key)
 
     @classmethod
-    def lpop(cls, queue_keys, blocking):
+    def lpop(cls, queue_keys, blocking, connection=None):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -163,13 +163,14 @@ class Queue(object):
         Until Redis receives a specific method for this, we'll have to wrap it
         this way.
         """
-        conn = get_current_connection()
+        if connection is None:
+            connection = get_current_connection()
         if blocking:
-            queue_key, job_id = conn.blpop(queue_keys)
+            queue_key, job_id = connection.blpop(queue_keys)
             return queue_key, job_id
         else:
             for queue_key in queue_keys:
-                blob = conn.lpop(queue_key)
+                blob = connection.lpop(queue_key)
                 if blob is not None:
                     return queue_key, blob
             return None
@@ -205,7 +206,7 @@ class Queue(object):
         any of the queues, or returns None.
         """
         queue_keys = [q.key for q in queues]
-        result = cls.lpop(queue_keys, blocking)
+        result = cls.lpop(queue_keys, blocking, connection=connection)
         if result is None:
             return None
         queue_key, job_id = result
