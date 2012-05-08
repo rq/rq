@@ -42,7 +42,11 @@ setup(
     zip_safe=False,
     platforms='any',
     install_requires=get_dependencies(),
-    scripts=['bin/rqinfo', 'bin/rqworker'],
+    entry_points='''\
+    [console_scripts]
+    rqworker = rq.scripts.rqworker:main
+    rqinfo = rq.scripts.rqinfo:main
+    ''',
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
         #'Development Status :: 1 - Planning',
