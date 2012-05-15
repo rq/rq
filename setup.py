@@ -4,7 +4,7 @@ processing them.
 """
 import sys
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def get_version():
@@ -37,7 +37,7 @@ setup(
     description='RQ is a simple, lightweight, library for creating background '
                 'jobs, and processing them.',
     long_description=__doc__,
-    packages=['rq'],
+    packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
     platforms='any',
