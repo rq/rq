@@ -1,3 +1,9 @@
+### 0.1.2
+(May 15, 2012)
+
+- Fix broken PyPI deployment.
+
+
 ### 0.1.1
 (May 14, 2012)
 
