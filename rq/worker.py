@@ -307,6 +307,13 @@ class Worker(object):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
+        # Load job function to bring it's module
+        # into the worker's memory. This way
+        # we will get significant performance boost
+        # if there are many imports in the function's
+        # module.
+        job.func
+
         child_pid = os.fork()
         if child_pid == 0:
             self.main_work_horse(job)
