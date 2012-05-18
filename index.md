@@ -24,7 +24,7 @@ def count_words_at_url(url):
 Then, create a RQ queue:
 
 {% highlight python %}
-from rq import Queue
+from rq import Queue, use_connection
 use_connection()
 q = Queue()
 {% endhighlight %}
