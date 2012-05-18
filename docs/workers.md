@@ -75,6 +75,38 @@ The life-cycle of a worker consists of a few phases:
 8. _Loop_.  Repeat from step 3.
 
 
+## Performance notes
+
+Basically the `rqworker` shell script is a simple fetch-fork-execute loop.
+When a lot of your jobs do lengthy setups, or they all depend on the same set
+of modules, you pay this overhead each time you run a job (since you're doing
+the import _after_ the moment of forking).  This is clean, because RQ won't
+ever leak memory this way, but also slow.
+
+A pattern you can use to improve the throughput performance for these kind of
+jobs can be to import the necessary modules _before_ the fork.  There is no way
+of telling RQ workers to perform this set up for you, but you can do it
+yourself before starting the work loop.
+
+To do this, provide your own worker script (instead of using `rqworker`).
+A simple implementation example:
+
+    #!/usr/bin/env python
+    import sys
+    import rq
+    rq.use_connection()
+
+    # Preload libraries
+    import library_that_you_want_preloaded
+
+    # Provide queue names to listen to as arguments to this script,
+    # similar to rqworker
+    qs = map(rq.Queue, sys.argv[1:]) or [rq.Queue()]
+
+    w = rq.Worker(qs)
+    w.work()
+
+
 ### Worker names
 
 Workers are registered to the system under their names, see [monitoring][m].
