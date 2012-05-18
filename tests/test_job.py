@@ -18,14 +18,14 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(job.created_at)
 
         # ...and nothing else
-        self.assertIsNone(job.func, None)
-        self.assertIsNone(job.args, None)
-        self.assertIsNone(job.kwargs, None)
-        self.assertIsNone(job.origin, None)
-        self.assertIsNone(job.enqueued_at, None)
-        self.assertIsNone(job.ended_at, None)
-        self.assertIsNone(job.return_value, None)
-        self.assertIsNone(job.exc_info, None)
+        self.assertIsNone(job.func)
+        self.assertIsNone(job.args)
+        self.assertIsNone(job.kwargs)
+        self.assertIsNone(job.origin)
+        self.assertIsNone(job.enqueued_at)
+        self.assertIsNone(job.ended_at)
+        self.assertIsNone(job.return_value)
+        self.assertIsNone(job.exc_info)
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
