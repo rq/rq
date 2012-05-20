@@ -50,15 +50,17 @@ class Worker(object):
     redis_workers_keys = 'rq:workers'
 
     @classmethod
-    def all(cls):
+    def all(cls, connection=None):
         """Returns an iterable of all Workers.
         """
-        conn = get_current_connection()
-        reported_working = conn.smembers(cls.redis_workers_keys)
-        return compact(map(cls.find_by_key, reported_working))
+        if connection is None:
+            connection = get_current_connection()
+        reported_working = connection.smembers(cls.redis_workers_keys)
+        workers = [cls.find_by_key(key, connection) for key in reported_working]
+        return compact(workers)
 
     @classmethod
-    def find_by_key(cls, worker_key):
+    def find_by_key(cls, worker_key, connection=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -68,14 +70,15 @@ class Worker(object):
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % (worker_key,))
 
-        conn = get_current_connection()
-        if not conn.exists(worker_key):
+        if connection is None:
+            connection = get_current_connection()
+        if not connection.exists(worker_key):
             return None
 
         name = worker_key[len(prefix):]
         worker = cls([], name)
-        queues = conn.hget(worker.key, 'queues')
-        worker._state = conn.hget(worker.key, 'state') or '?'
+        queues = connection.hget(worker.key, 'queues')
+        worker._state = connection.hget(worker.key, 'state') or '?'
         if queues:
             worker.queues = map(Queue, queues.split(','))
         return worker
