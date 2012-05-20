@@ -73,12 +73,6 @@ Just sayin'.
 
 ## Dealing with job timeouts
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
-    <strong>Be warned!</strong>
-    <p>This timeout stuff does not exist yet.</p>
-</div>
-
 By default, jobs should execute within 180 seconds.  After that, the worker
 kills the work horse and puts the job onto the `failed` queue, indicating the
 job timed out.
@@ -91,6 +85,17 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 q = Queue()
 q.enqueue(mytask, foo, bar=qux, timeout='10m')
 {% endhighlight console %}
+
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
+    <strong>Warning!</strong>
+    <p>
+Yes, the `timeout` keyword argument mixes in with the keyword arguments for the
+job function, which kind of sucks.  But currently it just does so anyway.  You
+can use this, but I wouldn't depend on it too much, since it'll likely change
+in the future because of this argument.
+    </p>
+</div>
 
 You can also change the default timeout for jobs that are enqueued via specific
 queue instances at once, which can be useful for patterns like this:
