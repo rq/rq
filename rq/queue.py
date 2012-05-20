@@ -122,7 +122,7 @@ class Queue(object):
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
-        timeout = kwargs.pop('timeout', None)
+        timeout = kwargs.pop('timeout', self._default_timeout)
         job = Job.create(f, *args, connection=self.connection, **kwargs)
         return self.enqueue_job(job, timeout=timeout)
 
