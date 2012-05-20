@@ -9,7 +9,7 @@ The easiest way is probably to use the [RQ dashboard][dashboard], a separately
 distributed tool, which is a lightweight webbased monitor frontend for RQ,
 which looks like this:
 
-![](/img/dashboard.png)
+[![RQ dashboard](/img/dashboard.png)][dashboard]
 
 To install, just do:
 
