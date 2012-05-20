@@ -83,7 +83,7 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 
 {% highlight python %}
 q = Queue()
-q.enqueue(mytask, foo, bar=qux, timeout='10m')
+q.enqueue(mytask, foo, bar=qux, timeout=600)  # 10 mins
 {% endhighlight console %}
 
 <div class="warning">
@@ -103,11 +103,11 @@ queue instances at once, which can be useful for patterns like this:
 {% highlight python %}
 # High prio jobs should end in 8 secs, while low prio
 # work may take up to 10 mins
-high = Queue('high', default_timeout=8)
-low = Queue('low', default_timeout='10m')
+high = Queue('high', default_timeout=8)  # 8 secs
+low = Queue('low', default_timeout=600)  # 10 mins
 
 # Individual jobs can still override these defaults
-low.enqueue(really_really_slow, timeout='1h')
+low.enqueue(really_really_slow, timeout=3600)  # 1 hr
 {% endhighlight console %}
 
 Individual jobs can still specify an alternative timeout, as workers will
