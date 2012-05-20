@@ -1,3 +1,9 @@
+### 0.1.3
+(Not released yet)
+
+- Workers can accept explicit connections, like Queues.
+
+
 ### 0.1.2
 (May 15, 2012)
 
