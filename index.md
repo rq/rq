@@ -8,6 +8,8 @@ them in the background with workers.  It is backed by Redis and it is designed
 to have a low barrier to entry.  It should be integrated in your web stack
 easily.
 
+RQ requires Redis >= 2.2.0.
+
 ## Getting started
 
 First, run a Redis server, of course.  To put jobs on queues, you don't have to
