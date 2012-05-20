@@ -5,6 +5,24 @@ layout: docs
 
 Monitoring is where RQ shines.
 
+The easiest way is probably to use the [RQ dashboard][dashboard], a separately
+distributed tool, which is a lightweight webbased monitor frontend for RQ,
+which looks like this:
+
+![](/img/dashboard.png)
+
+To install, just do:
+
+{% highlight console %}
+$ pip install rq-dashboard
+$ rq-dashboard
+{% endhighlight %}
+
+It can also be integrated easily in your Flask app.
+
+
+## Monitoring at the console
+
 To see what queues exist and what workers are active, just type `rqinfo`:
 
 {% highlight console %}
@@ -87,3 +105,5 @@ $ rqinfo --interval 0.5
 
 Note that if stdout is redirected (i.e. stdout is not a TTY), `rqinfo` will
 only output the stats once, and won't loop.
+
+[dashboard]: https://github.com/nvie/rq-dashboard
