@@ -1,13 +1,10 @@
 import os
 import time
-from rq import Queue
+from rq import Queue, use_connection
 from fib import slow_fib
 
 # Tell RQ what Redis connection to use
-from redis import Redis
-from rq import conn
-conn.push(Redis())
-
+use_connection()
 # Range of Fibonacci numbers to compute
 fib_range = range(20, 34)
 

@@ -1,9 +1,7 @@
-from rq import Queue, Worker
+from rq import Queue, Worker, use_connection
 
 # Tell rq what Redis connection to use
-from redis import Redis
-from rq import conn
-conn.push(Redis())
+use_connection()
 
 if __name__ == '__main__':
     q = Queue()
