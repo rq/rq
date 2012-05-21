@@ -378,3 +378,129 @@ class Worker(object):
             job.delete()
 
         return True
+
+
+try:
+    import gevent
+    from gevent.coros import Semaphore
+except ImportError:
+    raise ImportError('Install gevent when using GeventWorker instances.')
+
+class GeventWorker(Worker):
+    def __init__(self, *args, **kwargs):
+        self.slaves = kwargs.pop('slaves', 1)
+        self.slave_workers = []
+        self._slave_semaphore = Semaphore(value=self.slaves)
+        super(GeventWorker, self).__init__(*args, **kwargs)
+
+    def slave(self):
+        result = None
+
+        while result is None:
+            try:
+                result = Queue.dequeue_any(self.queues, blocking=False,
+                    connection=self.connection)
+
+                if result is None:
+                    # Perform a context switch
+                    gevent.sleep(1)  # TODO: 1 second or 0?
+                elif self.stopped:
+                    gevent.getcurrent().kill()
+                else:
+                    job, queue = result
+                    self.log.info('%s: %s (%s)' % (green(queue.name),
+                        blue(job.description), job.id))
+
+                    self.state = 'busy'
+                    self._slave_semaphore.acquire(blocking=False)
+
+                    try:
+                        gevent.spawn(self.perform_job, job).join()
+                    finally:
+                        self._slave_semaphore.release()
+
+                    if self._slave_semaphore.counter == self.slaves:
+                        self.state = 'idle'
+
+                    gevent.sleep(0)
+
+                    result = None
+            except UnpickleError as e:
+                msg = '*** Ignoring unpickleable data on %s.' % \
+                        green(e.queue.name)
+                self.log.warning(msg)
+                self.log.debug('Data follows:')
+                self.log.debug(e.raw_data)
+                self.log.debug('End of unreadable data.')
+                self.failed_queue.push_job_id(e.job_id)
+                continue
+
+
+    def work(self, burst=False):  # noqa
+        """Starts the work loop.
+
+        Pops and performs all jobs on the current list of queues.  When all
+        queues are empty, block and wait for new jobs to arrive on any of the
+        queues, unless `burst` mode is enabled.
+
+        The return value indicates whether any jobs were processed.
+        """
+        self._install_signal_handlers()
+
+        did_perform_work = False
+        self.register_birth()
+        self.state = 'starting'
+        try:
+            for i in range(self.slaves):
+                self.slave_workers.append(gevent.spawn(self.slave))
+
+            gevent.joinall(self.slave_workers)
+            did_perform_work = True
+        finally:
+            if not self.is_horse:
+                self.register_death()
+        return did_perform_work
+
+    def _install_signal_handlers(self):
+        """Installs signal handlers for handling SIGINT and SIGTERM
+        gracefully. TODO: refactor this to stay DRY
+        """
+
+        def request_force_stop(signum, frame):
+            """Terminates the application (cold shutdown).
+            """
+            self.log.warning('Cold shut down.')
+
+            # Take down the horse with the worker
+            if self.horse_pid:
+                msg = 'Taking down horse %d with me.' % self.horse_pid
+                self.log.debug(msg)
+                try:
+                    os.kill(self.horse_pid, signal.SIGKILL)
+                except OSError as e:
+                    # ESRCH ("No such process") is fine with us
+                    if e.errno != errno.ESRCH:
+                        self.log.debug('Horse already down.')
+                        raise
+            raise SystemExit()
+
+        def request_stop(signum, frame):
+            """Stops the current worker loop but waits for child processes to
+            end gracefully (warm shutdown).
+            """
+            self.log.debug('Got %s signal.' % signal_name(signum))
+
+            #signal.signal(signal.SIGINT, request_force_stop)
+            #signal.signal(signal.SIGTERM, request_force_stop)
+
+            if self.is_horse:
+                self.log.debug('Ignoring signal %s.' % signal_name(signum))
+                return
+
+            msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
+            self.log.warning(msg)
+            self._stopped = True
+            self.log.debug('Stopping after current horse is finished.')
+
+        gevent.signal(signal.SIGINT, request_stop)
+        gevent.signal(signal.SIGTERM, request_stop)
