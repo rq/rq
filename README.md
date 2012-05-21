@@ -23,7 +23,7 @@ You do use the excellent [requests][r] package, don't you?
 
 Then, create a RQ queue:
 
-    from rq import *
+    from rq import Queue, use_connection
     use_connection()
     q = Queue()
 
