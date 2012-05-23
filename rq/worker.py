@@ -405,7 +405,8 @@ class GeventWorker(Worker):
                     # Perform a context switch
                     gevent.sleep(1)  # TODO: 1 second or 0?
                 elif self.stopped:
-                    gevent.getcurrent().kill()
+                    result = True
+                    return
                 else:
                     job, queue = result
                     self.log.info('%s: %s (%s)' % (green(queue.name),
@@ -476,7 +477,7 @@ class GeventWorker(Worker):
                 msg = 'Taking down horse %d with me.' % self.horse_pid
                 self.log.debug(msg)
                 try:
-                    os.kill(self.horse_pid, signal.SIGKILL)
+                    gevent.shutdown()
                 except OSError as e:
                     # ESRCH ("No such process") is fine with us
                     if e.errno != errno.ESRCH:
@@ -484,17 +485,17 @@ class GeventWorker(Worker):
                         raise
             raise SystemExit()
 
-        def request_stop(signum, frame):
+        def request_stop():
             """Stops the current worker loop but waits for child processes to
             end gracefully (warm shutdown).
             """
-            self.log.debug('Got %s signal.' % signal_name(signum))
+            #self.log.debug('Got %s signal.' % signal_name(signum))
 
-            #signal.signal(signal.SIGINT, request_force_stop)
-            #signal.signal(signal.SIGTERM, request_force_stop)
+            #gevent.signal(signal.SIGINT, request_force_stop)
+            #gevent.signal(signal.SIGTERM, request_force_stop)
 
             if self.is_horse:
-                self.log.debug('Ignoring signal %s.' % signal_name(signum))
+                #self.log.debug('Ignoring signal %s.' % signal_name(signum))
                 return
 
             msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
