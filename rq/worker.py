@@ -2,7 +2,11 @@ import os
 import errno
 import random
 import time
-import procname
+try:
+    from procname import setprocname
+except ImportError:
+    def setprocname(*args, **kwargs):  # noqa
+        pass
 import socket
 import signal
 import traceback
@@ -160,7 +164,7 @@ class Worker(object):
 
         This can be used to make `ps -ef` output more readable.
         """
-        procname.setprocname('rq: %s' % (message,))
+        setprocname('rq: %s' % (message,))
 
 
     def register_birth(self):  # noqa
