@@ -112,7 +112,7 @@ class Scheduler(object):
         """
         Move scheduled jobs into queues. 
         """
-        jobs_to_queue = self.get_jobs_to_queue
+        jobs_to_queue = self.get_jobs_to_queue()
         for job in jobs_to_queue:
             self.enqueue_job(job)
 
@@ -127,5 +127,5 @@ class Scheduler(object):
             while True:
                 self.enqueue_jobs()
                 time.sleep(self._interval)
-        except KeyboardInterrupt:
+        finally:
             self.register_death()
