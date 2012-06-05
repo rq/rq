@@ -10,6 +10,17 @@ from tests.fixtures import say_hello
 
 class TestScheduler(RQTestCase):
 
+    def test_birth_and_death_registration(self):
+        key = Scheduler.scheduler_key
+        self.assertNotIn(key, self.testconn.keys('*'))
+        scheduler = Scheduler(connection=self.testconn)
+        scheduler.register_birth()
+        self.assertIn(key, self.testconn.keys('*'))
+        self.assertFalse(self.testconn.hexists(key, 'death'))
+        self.assertRaises(ValueError, scheduler.register_birth)
+        scheduler.register_death()
+        self.assertTrue(self.testconn.hexists(key, 'death'))
+
     def test_create_scheduled_job(self):
         """
         Ensure that scheduled jobs are created, put in the scheduler queue
@@ -40,14 +51,17 @@ class TestScheduler(RQTestCase):
         When scheduled job is enqueued, make sure:
         - Job is removed from the sorted set of scheduled jobs
         - "enqueued_at" attribute is properly set
-        - Job appears in the queue
+        - Job appears in the right queue
         """
         now = datetime.now()
-        scheduler = Scheduler(connection=self.testconn)
+        queue_name = 'foo'
+        scheduler = Scheduler(connection=self.testconn, queue_name=queue_name)
         job = scheduler.schedule(now, say_hello)
         scheduler.enqueue_job(job)
         self.assertNotIn(job, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 10))
         job = Job.fetch(job.id, connection=self.testconn)
         self.assertTrue(job.enqueued_at is not None)
         queue = scheduler.get_queue_for_job(job)
+        self.assertIn(job, queue.jobs)
+        queue = Queue.from_queue_key('rq:queue:{0}'.format(queue_name))
         self.assertIn(job, queue.jobs)
