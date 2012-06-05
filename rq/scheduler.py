@@ -67,6 +67,7 @@ class Scheduler(object):
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
 
+
     def schedule(self, time, func, *args, **kwargs):
         """
         Pushes a job to the scheduler queue. The scheduled queue is a Redis sorted
