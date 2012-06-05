@@ -15,7 +15,7 @@ class Scheduler(object):
         self.connection = connection
         self.name = name
         self._key = '{0}{1}'.format(self.prefix, name)
-        self._interval = check_interval
+        self._interval = interval
 
     def schedule(self, time, func, *args, **kwargs):
         """
