@@ -41,22 +41,24 @@ Here's how to put a job in the scheduler::
     # Instantiates a scheduler for the "default" queue
     scheduler = Scheduler('default', connection=Redis()) 
     
-    # Puts a job into the scheduler
-    scheduler.enqueue(datetime(2020, 10, 10, 3, 4), func)
+    # Puts a job into the scheduler. The API is similar
+    # to rq except that it takes a datetime object as first argument
+    scheduler.enqueue(datetime(2020, 01, 01, 1, 1), func)
+    scheduler.enqueue(datetime(2025, 10, 10, 3, 4), func, foo, bar=baz)
 
 ---------------------
 Running the scheduler
 ---------------------
 
-`RQ Scheduler`_ comes with a script ``rqscheduler`` that runs a scheduler process that polls
-redis once every minute and move scheduled jobs to the relevant queues when
-they need to be executed::
+`RQ Scheduler`_ comes with a script ``rqscheduler`` that runs a scheduler
+process that polls Redis once every minute and move scheduled jobs to the
+relevant queues when they need to be executed::
 
     rqscheduler --host localhost --port 6379 --db 0
 
 The script accepts these arguments:
 
-* '-H' or '--host': Redis server to connect to
-* '-p' or '--port': port to connect to
-* '-d' or '--db': Redis db to use
-* '-P' or '--password': password to connect to Redis
+* ``-H`` or ``--host``: Redis server to connect to
+* ``-p`` or ``--port``: port to connect to
+* ``-d`` or ``--db``: Redis db to use
+* ``-P`` or ``--password``: password to connect to Redis
