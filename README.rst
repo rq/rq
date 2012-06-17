@@ -32,7 +32,7 @@ Schedule a job involves doing two different things:
 Scheduling a Job
 ----------------
 
-Here's how to put a job in the scheduler::
+There are two ways you can schedule a job. The first is using RQ Scheduler's ``enqueue_at``::
 
     from rq import use_connection
     from rq_scheduler import Scheduler
@@ -41,10 +41,27 @@ Here's how to put a job in the scheduler::
     use_connection() # Use RQ's default Redis connection
     scheduler = Scheduler() # Get a scheduler for the "default" queue
 
-    # Puts a job into the scheduler. The API is similar
-    # to rq except that it takes a datetime object as first argument
-    scheduler.schedule(datetime(2020, 01, 01, 1, 1), func)
-    scheduler.schedule(datetime(2025, 10, 10, 3, 4), func, foo, bar=baz)
+    # Puts a job into the scheduler. The API is similar to RQ except that it
+    # takes a datetime object as first argument. So for example to schedule a
+    # job to run on Jan 1st 2020 we do:
+    scheduler.enqueue_at(datetime(2020, 1, 1), func)
+
+    # Here's another example scheduling a job to run at a specific date and time,
+    # complete with args and kwargs
+    scheduler.enqueue_at(datetime(2020, 1, 1, 3, 4), func, foo, bar=baz)
+
+The second way is using ``enqueue_in``. Instead of taking a ``datetime`` object, 
+this method expects a ``timedelta`` and schedules the job to run at
+X seconds/minutes/hours/days/weeks later. For example, if we want to monitor how
+popular a tweet is a few times during the course of the day, we could do something like::
+
+    from datetime import timedelta
+
+    # Schedule a job to run 10 minutes, 1 hour1 and 1 day later
+    scheduler.enqueue_in(timedelta(minutes=10), count_retweets, tweet_id)
+    scheduler.enqueue_in(timedelta(hours=1), count_retweets, tweet_id)
+    scheduler.enqueue_in(timedelta(days=1), count_retweets, tweet_id)
+
 
 You can also explicitly pass in ``connection`` to use a different Redis server::
 
@@ -52,8 +69,8 @@ You can also explicitly pass in ``connection`` to use a different Redis server::
     from rq_scheduler import Scheduler
     from datetime import datetime
     
-    scheduler = Scheduler('default', connection=Redis()) 
-    scheduler.schedule(datetime(2020, 01, 01, 1, 1), func)
+    scheduler = Scheduler('default', connection=Redis('192.168.1.3', port=123)) 
+    scheduler.enqueue_at(datetime(2020, 01, 01, 1, 1), func)
     
 
 ---------------------

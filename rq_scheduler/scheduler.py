@@ -60,8 +60,21 @@ class Scheduler(object):
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
 
+    def _create_job(self, func, *args, **kwargs):
+        """
+        Creates an RQ job and saves it to Redis.
+        """
+        if func.__module__ == '__main__':
+            raise ValueError(
+                    'Functions from the __main__ module cannot be processed '
+                    'by workers.')
 
-    def schedule(self, scheduled_time, func, *args, **kwargs):
+        job = Job.create(func, *args, connection=self.connection, **kwargs)
+        job.origin = self.queue_name
+        job.save()
+        return job
+
+    def enqueue_at(self, scheduled_time, func, *args, **kwargs):
         """
         Pushes a job to the scheduler queue. The scheduled queue is a Redis sorted
         set ordered by timestamp - which in this case is job's scheduled execution time.
@@ -76,18 +89,25 @@ class Scheduler(object):
 
         redis = Redis()
         scheduler = Scheduler(queue_name='default', connection=redis)
-        scheduler.schedule(datetime(2020, 1, 1), func, 'argument', keyword='argument')
+        scheduler.enqueue_at(datetime(2020, 1, 1), func, 'argument', keyword='argument')
         """
-        if func.__module__ == '__main__':
-            raise ValueError(
-                    'Functions from the __main__ module cannot be processed '
-                    'by workers.')
-
-        job = Job.create(func, *args, connection=self.connection, **kwargs)
-        job.origin = self.queue_name
-        job.save()
+        job = self._create_job(func, *args, **kwargs)
         self.connection.zadd(self.scheduled_jobs_key, job.id,
                              int(scheduled_time.strftime('%s')))
+        return job
+
+    # This is here for backwards compatibility purposes
+    schedule = enqueue_at
+
+    def enqueue_in(self, time_delta, func, *args, **kwargs):
+        """
+        Similar to ``enqueue_at``, but accepts a timedelta instead of datetime object.
+        The job's scheduled execution time will be calculated by adding the timedelta
+        to datetime.now().
+        """
+        job = self._create_job(func, *args, **kwargs)
+        self.connection.zadd(self.scheduled_jobs_key, job.id,
+                             int((datetime.now() + time_delta).strftime('%s')))
         return job
 
     def get_jobs_to_queue(self):

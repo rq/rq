@@ -27,18 +27,43 @@ class TestScheduler(RQTestCase):
         scheduler.register_death()
         self.assertTrue(self.testconn.hexists(key, 'death'))
 
+    def test_create_job(self):
+        """
+        Ensure that jobs are created properly.
+        """
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler._create_job(say_hello)
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job, job_from_queue)
+        self.assertEqual(job_from_queue.func, say_hello)
+
     def test_create_scheduled_job(self):
         """
-        Ensure that scheduled jobs are created, put in the scheduler queue
-        and have the right score
+        Ensure that scheduled jobs are put in the scheduler queue with the right score
         """
         scheduled_time = datetime.now()
         scheduler = Scheduler(connection=self.testconn)
-        job = scheduler.schedule(scheduled_time, say_hello)
+        job = scheduler.enqueue_at(scheduled_time, say_hello)
         self.assertEqual(job, Job.fetch(job.id, connection=self.testconn))
         self.assertIn(job.id, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
         self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
                          int(scheduled_time.strftime('%s')))
+
+    def test_enqueue_in(self):
+        """
+        Ensure that jobs have the right scheduled time.
+        """
+        right_now = datetime.now()
+        time_delta = timedelta(minutes=1)
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler.enqueue_in(time_delta, say_hello)
+        self.assertIn(job.id, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         int((right_now + time_delta).strftime('%s')))
+        time_delta = timedelta(hours=1)
+        job = scheduler.enqueue_in(time_delta, say_hello)
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         int((right_now + time_delta).strftime('%s')))
 
     def test_get_jobs_to_queue(self):
         """
@@ -46,10 +71,10 @@ class TestScheduler(RQTestCase):
         """
         now = datetime.now()
         scheduler = Scheduler(connection=self.testconn)
-        job = scheduler.schedule(now, say_hello)
+        job = scheduler.enqueue_at(now, say_hello)
         self.assertIn(job, scheduler.get_jobs_to_queue())
         future_time = now + timedelta(hours=1)
-        job = scheduler.schedule(future_time, say_hello)
+        job = scheduler.enqueue_at(future_time, say_hello)
         self.assertNotIn(job, scheduler.get_jobs_to_queue())
 
     def test_enqueue_job(self):
@@ -62,7 +87,7 @@ class TestScheduler(RQTestCase):
         now = datetime.now()
         queue_name = 'foo'
         scheduler = Scheduler(connection=self.testconn, queue_name=queue_name)
-        job = scheduler.schedule(now, say_hello)
+        job = scheduler.enqueue_at(now, say_hello)
         scheduler.enqueue_job(job)
         self.assertNotIn(job, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 10))
         job = Job.fetch(job.id, connection=self.testconn)
