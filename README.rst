@@ -50,6 +50,7 @@ There are two ways you can schedule a job. The first is using RQ Scheduler's ``e
     # complete with args and kwargs
     scheduler.enqueue_at(datetime(2020, 1, 1, 3, 4), func, foo, bar=baz)
 
+
 The second way is using ``enqueue_in``. Instead of taking a ``datetime`` object, 
 this method expects a ``timedelta`` and schedules the job to run at
 X seconds/minutes/hours/days/weeks later. For example, if we want to monitor how
@@ -57,7 +58,7 @@ popular a tweet is a few times during the course of the day, we could do somethi
 
     from datetime import timedelta
 
-    # Schedule a job to run 10 minutes, 1 hour1 and 1 day later
+    # Schedule a job to run 10 minutes, 1 hour and 1 day later
     scheduler.enqueue_in(timedelta(minutes=10), count_retweets, tweet_id)
     scheduler.enqueue_in(timedelta(hours=1), count_retweets, tweet_id)
     scheduler.enqueue_in(timedelta(days=1), count_retweets, tweet_id)
