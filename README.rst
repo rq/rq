@@ -44,7 +44,7 @@ Here's how to put a job in the scheduler::
     # Puts a job into the scheduler. The API is similar
     # to rq except that it takes a datetime object as first argument
     scheduler.schedule(datetime(2020, 01, 01, 1, 1), func)
-    scheduler.enqueue(datetime(2025, 10, 10, 3, 4), func, foo, bar=baz)
+    scheduler.schedule(datetime(2025, 10, 10, 3, 4), func, foo, bar=baz)
 
 You can also explicitly pass in ``connection`` to use a different Redis server::
 
@@ -53,7 +53,7 @@ You can also explicitly pass in ``connection`` to use a different Redis server::
     from datetime import datetime
     
     scheduler = Scheduler('default', connection=Redis()) 
-    scheduler.enqueue(datetime(2020, 01, 01, 1, 1), func)
+    scheduler.schedule(datetime(2020, 01, 01, 1, 1), func)
     
 
 ---------------------
