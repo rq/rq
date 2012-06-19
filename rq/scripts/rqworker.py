@@ -66,3 +66,4 @@ def main():
         w.work(burst=args.burst)
     except ConnectionError as e:
         print(e)
+        sys.exit(1)

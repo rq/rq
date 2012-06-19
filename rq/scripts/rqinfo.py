@@ -174,3 +174,4 @@ def main():
         interval(args.interval, func, args)
     except ConnectionError as e:
         print(e)
+        sys.exit(1)
