@@ -96,3 +96,17 @@ class TestScheduler(RQTestCase):
         self.assertIn(job, queue.jobs)
         queue = Queue.from_queue_key('rq:queue:{0}'.format(queue_name))
         self.assertIn(job, queue.jobs)
+    
+    def test_cancel_scheduled_job(self):
+        """
+        When scheduled job is canceled, make sure:
+        - Job is removed from the sorted set of scheduled jobs
+        """
+        # schedule a job to be enqueued one minute from now
+        time_delta = timedelta(minutes=1)
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler.enqueue_in(time_delta, say_hello)
+        # cancel the scheduled job and check that it's gone from the set
+        scheduler.cancel(job)
+        self.assertNotIn(job.id, self.testconn.zrange(
+            scheduler.scheduled_jobs_key, 0, 1))
