@@ -110,6 +110,12 @@ class Scheduler(object):
                              int((datetime.now() + time_delta).strftime('%s')))
         return job
 
+    def cancel(self, job):
+        """
+        Pulls a job from the scheduler queue
+        """
+        self.connection.zrem(self.scheduled_jobs_key, job.id)
+
     def get_jobs_to_queue(self):
         """
         Returns a list of job instances that should be queued
