@@ -72,7 +72,15 @@ You can also explicitly pass in ``connection`` to use a different Redis server::
     
     scheduler = Scheduler('default', connection=Redis('192.168.1.3', port=123)) 
     scheduler.enqueue_at(datetime(2020, 01, 01, 1, 1), func)
-    
+
+
+---------------
+Canceling a job
+---------------
+
+To cancel a job, simply do:
+
+    scheduler.cancel(job)
 
 ---------------------
 Running the scheduler
