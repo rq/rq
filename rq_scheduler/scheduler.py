@@ -12,6 +12,8 @@ from rq.connections import get_current_connection
 from rq.job import Job
 from rq.queue import Queue
 
+from redis import WatchError
+
 
 class Scheduler(object):
     scheduler_key = 'rq:scheduler'
@@ -115,6 +117,25 @@ class Scheduler(object):
         Pulls a job from the scheduler queue
         """
         self.connection.zrem(self.scheduled_jobs_key, job.id)
+
+    def change_execution_time(self, job, date_time):
+        """
+        Change a job's execution time. Wrap this in a transaction to prevent race condition.
+        """
+        with self.connection.pipeline() as pipe:
+            while 1:
+                try:
+                    pipe.watch(self.scheduled_jobs_key)
+                    if pipe.zscore(self.scheduled_jobs_key, job.id) is None:
+                        raise ValueError('Job not in scheduled jobs queue')
+                    pipe.zadd(self.scheduled_jobs_key, job.id, int(date_time.strftime('%s')))
+                    break
+                except WatchError:
+                    # If job is still in the queue, retry otherwise job is already executed
+                    # so we raise an error
+                    if pipe.zscore(self.scheduled_jobs_key, job.id) is None:
+                        raise ValueError('Job not in scheduled jobs queue')
+                    continue
 
     def get_jobs_to_queue(self):
         """

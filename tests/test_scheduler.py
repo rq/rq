@@ -110,3 +110,15 @@ class TestScheduler(RQTestCase):
         scheduler.cancel(job)
         self.assertNotIn(job.id, self.testconn.zrange(
             scheduler.scheduled_jobs_key, 0, 1))
+
+    def test_change_execution_time(self):
+        """
+        Ensure ``change_execution_time`` is called, ensure that job's score is updated
+        """
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler.enqueue_at(datetime.now(), say_hello)
+        new_date = datetime(2010, 1, 1)
+        scheduler.change_execution_time(job, new_date)
+        self.assertEqual(int(new_date.strftime('%s')),
+            self.testconn.zscore(scheduler.scheduled_jobs_key, job.id))
+
