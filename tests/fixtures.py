@@ -39,3 +39,12 @@ def create_file(path):
 def create_file_after_timeout(path, timeout):
     time.sleep(timeout)
     create_file(path)
+
+
+class Calculator(object):
+    """Test instance methods."""
+    def __init__(self, denominator):
+        self.denominator = denominator
+
+    def calculate(x, y):
+        return x * y / self.denominator
