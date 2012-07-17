@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import times
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
@@ -50,7 +51,11 @@ class Job(object):
         """
         connection = kwargs.pop('connection', None)
         job = cls(connection=connection)
-        job._func_name = '%s.%s' % (func.__module__, func.__name__)
+        if inspect.ismethod(func):
+            job._instance = func.im_self
+            job._func_name = func.__name__
+        else:
+            job._func_name = '%s.%s' % (func.__module__, func.__name__)
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()
@@ -66,9 +71,16 @@ class Job(object):
         if func_name is None:
             return None
 
+        if self.instance:
+            return getattr(self.instance, func_name)
+
         module_name, func_name = func_name.rsplit('.', 1)
         module = importlib.import_module(module_name)
         return getattr(module, func_name)
+
+    @property
+    def instance(self):
+        return self._instance
 
     @property
     def args(self):
@@ -100,6 +112,7 @@ class Job(object):
         self._id = id
         self.created_at = times.now()
         self._func_name = None
+        self._instance = None
         self._args = None
         self._kwargs = None
         self.description = None
@@ -141,7 +154,7 @@ class Job(object):
     def job_tuple(self):
         """Returns the job tuple that encodes the actual function call that
         this job represents."""
-        return (self.func_name, self.args, self.kwargs)
+        return (self.func_name, self.instance, self.args, self.kwargs)
 
     @property
     def return_value(self):
@@ -190,7 +203,7 @@ class Job(object):
             else:
                 return times.to_universal(date_str)
 
-        self._func_name, self._args, self._kwargs = unpickle(data)
+        self._func_name, self._instance, self._args, self._kwargs = unpickle(data)
         self.created_at = to_date(created_at)
         self.origin = origin
         self.description = description
