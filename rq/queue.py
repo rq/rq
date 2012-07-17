@@ -280,4 +280,4 @@ class FailedQueue(Queue):
 
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
-        q.enqueue_job(job)
+        q.enqueue_job(job, timeout=job.timeout)
