@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import times
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
@@ -7,8 +8,8 @@ from .exceptions import UnpickleError, NoSuchJobError
 
 
 JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
-                 'created_at', 'enqueued_at', 'connection', '_result', 'timeout',
-                 '_kwargs', 'exc_info', '_id', 'data'])
+                 'created_at', 'enqueued_at', 'connection', '_result',
+                 'timeout', '_kwargs', 'exc_info', '_id', 'data'])
 
 
 def unpickle(pickled_string):
@@ -55,7 +56,11 @@ class Job(object):
         """
         connection = kwargs.pop('connection', None)
         job = cls(connection=connection)
-        job._func_name = '%s.%s' % (func.__module__, func.__name__)
+        if inspect.ismethod(func):
+            job._instance = func.im_self
+            job._func_name = func.__name__
+        else:
+            job._func_name = '%s.%s' % (func.__module__, func.__name__)
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()
@@ -71,9 +76,16 @@ class Job(object):
         if func_name is None:
             return None
 
+        if self.instance:
+            return getattr(self.instance, func_name)
+
         module_name, func_name = func_name.rsplit('.', 1)
         module = importlib.import_module(module_name)
         return getattr(module, func_name)
+
+    @property
+    def instance(self):
+        return self._instance
 
     @property
     def args(self):
@@ -105,6 +117,7 @@ class Job(object):
         self._id = id
         self.created_at = times.now()
         self._func_name = None
+        self._instance = None
         self._args = None
         self._kwargs = None
         self.description = None
@@ -141,12 +154,11 @@ class Job(object):
         """The Redis key that is used to store job hash under."""
         return self.key_for(self.id)
 
-
     @property  # noqa
     def job_tuple(self):
         """Returns the job tuple that encodes the actual function call that
         this job represents."""
-        return (self.func_name, self.args, self.kwargs)
+        return (self.func_name, self.instance, self.args, self.kwargs)
 
     @property
     def return_value(self):
@@ -190,7 +202,8 @@ class Job(object):
                 return None
             else:
                 return times.to_universal(date_str)
-        self._func_name, self._args, self._kwargs = unpickle(obj.get('data'))
+
+        self._func_name, self._instance, self._args, self._kwargs = unpickle(obj.get('data'))  # noqa
         self.created_at = to_date(obj.get('created_at'))
         self.origin = obj.get('origin')
         self.description = obj.get('description')
@@ -199,9 +212,8 @@ class Job(object):
         self._result = obj.get('result')
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
-        """
-        Overwrite job's additional attributes (those not in JOB_ATTRS), if any.
-        """
+
+        # Overwrite job's additional attrs (those not in JOB_ATTRS), if any
         additional_attrs = set(obj.keys()).difference(JOB_ATTRS)
         for attr in additional_attrs:
             setattr(self, attr, obj[attr])
@@ -233,12 +245,12 @@ class Job(object):
         Store additional attributes from job instance into Redis. This is done
         so that third party libraries using RQ can store additional data
         directly on ``Job`` instances. For example:
-        
+
         job = Job.create(func)
         job.foo = 'bar'
         job.save() # Will persist the 'foo' attribute
         """
-        additional_attrs = set(self.__dict__.keys()).difference(JOB_ATTRS) 
+        additional_attrs = set(self.__dict__.keys()).difference(JOB_ATTRS)
         for attr in additional_attrs:
             obj[attr] = getattr(self, attr)
         self.connection.hmset(key, obj)

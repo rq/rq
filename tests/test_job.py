@@ -1,7 +1,7 @@
 import times
 from datetime import datetime
 from tests import RQTestCase
-from tests.fixtures import some_calculation, say_hello
+from tests.fixtures import Calculator, some_calculation, say_hello
 from tests.helpers import strip_milliseconds
 from cPickle import loads
 from rq.job import Job
@@ -19,6 +19,7 @@ class TestJob(RQTestCase):
 
         # ...and nothing else
         self.assertIsNone(job.func)
+        self.assertIsNone(job.instance)
         self.assertIsNone(job.args)
         self.assertIsNone(job.kwargs)
         self.assertIsNone(job.origin)
@@ -35,6 +36,7 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
         self.assertIsNotNone(job.description)
+        self.assertIsNone(job.instance)
 
         # Job data is set...
         self.assertEquals(job.func, some_calculation)
@@ -46,6 +48,15 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.return_value)
 
+    def test_create_instance_method_job(self):
+        """Creation of jobs for instance methods."""
+        c = Calculator(2)
+        job = Job.create(c.calculate, 3, 4)
+
+        # Job data is set
+        self.assertEquals(job.func, c.calculate)
+        self.assertEquals(job.instance, c)
+        self.assertEquals(job.args, (3, 4))
 
     def test_save(self):  # noqa
         """Storing jobs."""
@@ -64,7 +75,7 @@ class TestJob(RQTestCase):
         """Fetching jobs."""
         # Prepare test
         self.testconn.hset('rq:job:some_id', 'data',
-                "(S'tests.fixtures.some_calculation'\np0\n(I3\nI4\ntp1\n(dp2\nS'z'\np3\nI2\nstp4\n.")  # noqa
+                "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")  # noqa
         self.testconn.hset('rq:job:some_id', 'created_at',
                 "2012-02-07 22:13:24+0000")
 
@@ -72,6 +83,7 @@ class TestJob(RQTestCase):
         job = Job.fetch('some_id')
         self.assertEquals(job.id, 'some_id')
         self.assertEquals(job.func_name, 'tests.fixtures.some_calculation')
+        self.assertIsNone(job.instance)
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, dict(z=2))
         self.assertEquals(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
