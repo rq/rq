@@ -263,7 +263,7 @@ class FailedQueue(Queue):
         """
         job.ended_at = times.now()
         job.exc_info = exc_info
-        return self.enqueue_job(job, set_meta_data=False)
+        return self.enqueue_job(job, timeout=job.timeout, set_meta_data=False)
 
     def requeue(self, job_id):
         """Requeues the job with the given job ID."""
@@ -280,4 +280,4 @@ class FailedQueue(Queue):
 
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
-        q.enqueue_job(job)
+        q.enqueue_job(job, timeout=job.timeout)
