@@ -6,6 +6,11 @@ from .connections import get_current_connection
 from .exceptions import UnpickleError, NoSuchJobError
 
 
+JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
+                 'created_at', 'enqueued_at', 'connection', '_result', 'timeout',
+                 '_kwargs', 'exc_info', '_id', 'data'])
+
+
 def unpickle(pickled_string):
     """Unpickles a string, but raises a unified UnpickleError in case anything
     fails.
@@ -176,12 +181,8 @@ class Job(object):
         Will raise a NoSuchJobError if no corresponding Redis key exists.
         """
         key = self.key
-        properties = ['data', 'created_at', 'origin', 'description',
-                'enqueued_at', 'ended_at', 'result', 'exc_info', 'timeout']
-        data, created_at, origin, description, \
-                enqueued_at, ended_at, result, \
-                exc_info, timeout = self.connection.hmget(key, properties)
-        if data is None:
+        obj = self.connection.hgetall(key)
+        if obj.get('data') is None:
             raise NoSuchJobError('No such job: %s' % (key,))
 
         def to_date(date_str):
@@ -189,19 +190,21 @@ class Job(object):
                 return None
             else:
                 return times.to_universal(date_str)
-
-        self._func_name, self._args, self._kwargs = unpickle(data)
-        self.created_at = to_date(created_at)
-        self.origin = origin
-        self.description = description
-        self.enqueued_at = to_date(enqueued_at)
-        self.ended_at = to_date(ended_at)
-        self._result = result
-        self.exc_info = exc_info
-        if timeout is None:
-            self.timeout = None
-        else:
-            self.timeout = int(timeout)
+        self._func_name, self._args, self._kwargs = unpickle(obj.get('data'))
+        self.created_at = to_date(obj.get('created_at'))
+        self.origin = obj.get('origin')
+        self.description = obj.get('description')
+        self.enqueued_at = to_date(obj.get('enqueued_at'))
+        self.ended_at = to_date(obj.get('ended_at'))
+        self._result = obj.get('result')
+        self.exc_info = obj.get('exc_info')
+        self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
+        """
+        Overwrite job's additional attributes (those not in JOB_ATTRS), if any.
+        """
+        additional_attrs = set(obj.keys()).difference(JOB_ATTRS)
+        for attr in additional_attrs:
+            setattr(self, attr, obj[attr])
 
     def save(self):
         """Persists the current job instance to its corresponding Redis key."""
@@ -226,7 +229,18 @@ class Job(object):
             obj['exc_info'] = self.exc_info
         if self.timeout is not None:
             obj['timeout'] = self.timeout
-
+        """
+        Store additional attributes from job instance into Redis. This is done
+        so that third party libraries using RQ can store additional data
+        directly on ``Job`` instances. For example:
+        
+        job = Job.create(func)
+        job.foo = 'bar'
+        job.save() # Will persist the 'foo' attribute
+        """
+        additional_attrs = set(self.__dict__.keys()).difference(JOB_ATTRS) 
+        for attr in additional_attrs:
+            obj[attr] = getattr(self, attr)
         self.connection.hmset(key, obj)
 
     def cancel(self):

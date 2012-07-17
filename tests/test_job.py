@@ -153,3 +153,18 @@ class TestJob(RQTestCase):
         job.refresh()
         with self.assertRaises(AttributeError):
             job.func  # accessing the func property should fail
+
+    def test_additional_job_attrs_is_persisted(self):
+        """
+        Verify that additional attributes stored on jobs are:
+        - Saved in Redis when job.save() is called
+        - Attached back to job instance when job.refresh() is called
+        """
+        job = Job.create(say_hello, 'Lionel')
+        job.foo = 'bar'
+        job.save()
+        self.assertEqual(self.testconn.hget(job.key, 'foo'), 'bar')
+        
+        job2 = Job.fetch(job.id)
+        job2.refresh()
+        self.assertEqual(job2.foo, 'bar')
