@@ -59,8 +59,10 @@ class Job(object):
         if inspect.ismethod(func):
             job._instance = func.im_self
             job._func_name = func.__name__
-        else:
+        elif inspect.isfunction(func):
             job._func_name = '%s.%s' % (func.__module__, func.__name__)
+        else:  # we expect a string
+            job._func_name = func
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()

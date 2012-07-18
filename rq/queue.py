@@ -112,12 +112,13 @@ class Queue(object):
         it.
 
         Expects the function to call, along with the arguments and keyword
-        arguments.
+        arguments.  May be a fully qualified string of the function instance,
+        in which case the function must be meaningful to the worker.
 
         The special keyword `timeout` is reserved for `enqueue()` itself and
         it won't be passed to the actual job function.
         """
-        if f.__module__ == '__main__':
+        if not isinstance(f, basestring) and f.__module__ == '__main__':
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
