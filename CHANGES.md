@@ -1,7 +1,15 @@
-### 0.1.3
-(Not released yet)
+### 0.2.0
+(July 18th, 2012)
 
-- Workers can accept explicit connections, like Queues.
+- `q.enqueue()` accepts instance methods now, too.  Objects will be pickle'd
+  along with the instance method, so beware.
+- `q.enqueue()` accepts string specification of functions now, too.  Example:
+  `q.enqueue("my.math.lib.fibonacci", 5)`.  Useful if the worker and the
+  submitter of work don't share code bases.
+- Job can be assigned custom attrs and they will be pickle'd along with the
+  rest of the job's attrs.  Can be used when writing RQ extensions.
+- Workers can now accept explicit connections, like Queues.
+- Various bug fixes.
 
 
 ### 0.1.2
