@@ -9,7 +9,7 @@ from .exceptions import UnpickleError, NoSuchJobError
 
 JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
                  'created_at', 'enqueued_at', 'connection', '_result',
-                 'timeout', '_kwargs', 'exc_info', '_id', 'data'])
+                 'timeout', '_kwargs', 'exc_info', '_id', 'data', '_instance'])
 
 
 def unpickle(pickled_string):
@@ -194,7 +194,8 @@ class Job(object):
         """
         key = self.key
         obj = self.connection.hgetall(key)
-        if obj.get('data') is None:
+        # hgetall returns an empty dict if key doesn't exist
+        if obj == {}:
             raise NoSuchJobError('No such job: %s' % (key,))
 
         def to_date(date_str):
