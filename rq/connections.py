@@ -11,11 +11,11 @@ class NoRedisConnectionException(Exception):
 def Connection(connection=None):
     if connection is None:
         connection = Redis()
-    _connection_stack.push(connection)
+    push_connection(connection)
     try:
         yield
     finally:
-        popped = _connection_stack.pop()
+        popped = pop_connection()
         assert popped == connection, \
                 'Unexpected Redis connection was popped off the stack. ' \
                 'Check your Redis connection setup.'
@@ -41,7 +41,7 @@ def use_connection(redis=None):
 
     if redis is None:
         redis = Redis()
-    _connection_stack.push(redis)
+    push_connection(redis)
 
 
 def get_current_connection():
