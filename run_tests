@@ -4,7 +4,7 @@ check_redis_running() {
     return $?
 }
 
-if which -s rg; then
+if command -v rg >/dev/null; then
     safe_rg=rg
 else
     # Fall back for systems that don't have rg installed
