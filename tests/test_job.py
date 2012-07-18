@@ -58,6 +58,15 @@ class TestJob(RQTestCase):
         self.assertEquals(job.instance, c)
         self.assertEquals(job.args, (3, 4))
 
+    def test_create_job_from_string_function(self):
+        """Creation of jobs using string specifier."""
+        job = Job.create('tests.fixtures.say_hello', 'World')
+
+        # Job data is set
+        self.assertEquals(job.func, say_hello)
+        self.assertIsNone(job.instance)
+        self.assertEquals(job.args, ('World',))
+
     def test_save(self):  # noqa
         """Storing jobs."""
         job = Job.create(some_calculation, 3, 4, z=2)
@@ -176,7 +185,7 @@ class TestJob(RQTestCase):
         job.foo = 'bar'
         job.save()
         self.assertEqual(self.testconn.hget(job.key, 'foo'), 'bar')
-        
+
         job2 = Job.fetch(job.id)
         job2.refresh()
         self.assertEqual(job2.foo, 'bar')

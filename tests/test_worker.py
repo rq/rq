@@ -25,6 +25,15 @@ class TestWorker(RQTestCase):
         self.assertEquals(w.work(burst=True), True,
                 'Expected at least some work done.')
 
+    def test_work_via_string_argument(self):
+        """Worker processes work fed via string arguments."""
+        q = Queue('foo')
+        w = Worker([q])
+        result = q.enqueue('tests.fixtures.say_hello', name='Frank')
+        self.assertEquals(w.work(burst=True), True,
+                'Expected at least some work done.')
+        self.assertEquals(result.return_value, 'Hi there, Frank!')
+
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
         q = Queue()
