@@ -194,8 +194,7 @@ class Job(object):
         """
         key = self.key
         obj = self.connection.hgetall(key)
-        # hgetall returns an empty dict if key doesn't exist
-        if obj == {}:
+        if not obj:
             raise NoSuchJobError('No such job: %s' % (key,))
 
         def to_date(date_str):
