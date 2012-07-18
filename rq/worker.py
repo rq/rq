@@ -20,7 +20,7 @@ from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
-from .timeouts import death_pentalty_after
+from .timeouts import death_penalty_after
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -357,7 +357,7 @@ class Worker(object):
             job.origin, time.time()))
 
         try:
-            with death_pentalty_after(job.timeout or 180):
+            with death_penalty_after(job.timeout or 180):
                 rv = job.perform()
         except Exception as e:
             fq = self.failed_queue

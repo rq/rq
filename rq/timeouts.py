@@ -8,7 +8,7 @@ class JobTimeoutException(Exception):
     pass
 
 
-class death_pentalty_after(object):
+class death_penalty_after(object):
     def __init__(self, timeout):
         self._timeout = timeout
 
