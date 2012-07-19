@@ -14,6 +14,10 @@ def say_hello(name=None):
     return 'Hi there, %s!' % (name,)
 
 
+def simple_addition(x, y, z):
+    return x + y + z
+
+
 class TestScheduler(RQTestCase):
 
     def test_birth_and_death_registration(self):
@@ -32,10 +36,18 @@ class TestScheduler(RQTestCase):
         Ensure that jobs are created properly.
         """
         scheduler = Scheduler(connection=self.testconn)
-        job = scheduler._create_job(say_hello)
+        job = scheduler._create_job(say_hello, args=[], kwargs={})
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job, job_from_queue)
         self.assertEqual(job_from_queue.func, say_hello)
+
+    def test_job_not_persisted_if_commit_false(self):
+        """
+        Ensure jobs are only saved to Redis if commit=True.
+        """
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler._create_job(say_hello, args=[], kwargs={}, commit=False)
+        self.assertEqual(self.testconn.hgetall(job.key), {})
 
     def test_create_scheduled_job(self):
         """
@@ -96,7 +108,7 @@ class TestScheduler(RQTestCase):
         self.assertIn(job, queue.jobs)
         queue = Queue.from_queue_key('rq:queue:{0}'.format(queue_name))
         self.assertIn(job, queue.jobs)
-    
+
     def test_cancel_scheduled_job(self):
         """
         When scheduled job is canceled, make sure:
@@ -122,3 +134,34 @@ class TestScheduler(RQTestCase):
         self.assertEqual(int(new_date.strftime('%s')),
             self.testconn.zscore(scheduler.scheduled_jobs_key, job.id))
 
+    def test_args_kwargs_are_passed_correctly(self):
+        """
+        Ensure that arguments and keyword arguments are properly saved to jobs.
+        """
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler.enqueue_at(datetime.now(), simple_addition, 1, 1, 1)
+        self.assertEqual(job.args, (1, 1, 1))
+        job = scheduler.enqueue_at(datetime.now(), simple_addition, z=1, y=1, x=1)
+        self.assertEqual(job.kwargs, {'x': 1, 'y': 1, 'z': 1})
+        job = scheduler.enqueue_at(datetime.now(), simple_addition, 1, z=1, y=1)
+        self.assertEqual(job.kwargs, {'y': 1, 'z': 1})
+        self.assertEqual(job.args, (1,))
+
+        time_delta = timedelta(minutes=1)
+        job = scheduler.enqueue_in(time_delta, simple_addition, 1, 1, 1)
+        self.assertEqual(job.args, (1, 1, 1))
+        job = scheduler.enqueue_in(time_delta, simple_addition, z=1, y=1, x=1)
+        self.assertEqual(job.kwargs, {'x': 1, 'y': 1, 'z': 1})
+        job = scheduler.enqueue_in(time_delta, simple_addition, 1, z=1, y=1)
+        self.assertEqual(job.kwargs, {'y': 1, 'z': 1})
+        self.assertEqual(job.args, (1,))
+
+    def test_interval_and_repeat_persisted_correctly(self):
+        """
+        Ensure that interval and repeat attributes get correctly saved in Redis.
+        """
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler.enqueue(datetime.now(), say_hello, interval=10, repeat=11)
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(int(job_from_queue.interval), 10)
+        self.assertEqual(int(job_from_queue.repeat), 11)

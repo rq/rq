@@ -62,7 +62,7 @@ class Scheduler(object):
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
 
-    def _create_job(self, func, *args, **kwargs):
+    def _create_job(self, func, args=None, kwargs=None, commit=True):
         """
         Creates an RQ job and saves it to Redis.
         """
@@ -70,10 +70,14 @@ class Scheduler(object):
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
-
+        if args is None:
+            args = []
+        if kwargs is None:
+            kwargs = {}
         job = Job.create(func, *args, connection=self.connection, **kwargs)
         job.origin = self.queue_name
-        job.save()
+        if commit:
+            job.save()
         return job
 
     def enqueue_at(self, scheduled_time, func, *args, **kwargs):
@@ -82,7 +86,7 @@ class Scheduler(object):
         set ordered by timestamp - which in this case is job's scheduled execution time.
 
         Usage:
-        
+
         from datetime import datetime
         from redis import Redis
         from rq.scheduler import Scheduler
@@ -93,7 +97,7 @@ class Scheduler(object):
         scheduler = Scheduler(queue_name='default', connection=redis)
         scheduler.enqueue_at(datetime(2020, 1, 1), func, 'argument', keyword='argument')
         """
-        job = self._create_job(func, *args, **kwargs)
+        job = self._create_job(func, args=args, kwargs=kwargs)
         self.connection.zadd(self.scheduled_jobs_key, job.id,
                              int(scheduled_time.strftime('%s')))
         return job
@@ -107,9 +111,21 @@ class Scheduler(object):
         The job's scheduled execution time will be calculated by adding the timedelta
         to datetime.now().
         """
-        job = self._create_job(func, *args, **kwargs)
+        job = self._create_job(func, args=args, kwargs=kwargs)
         self.connection.zadd(self.scheduled_jobs_key, job.id,
                              int((datetime.now() + time_delta).strftime('%s')))
+        return job
+
+    def enqueue(self, scheduled_time, func, args=None, kwargs=None,
+                interval=None, repeat=None):
+        """
+        """
+        job = self._create_job(func, args=args, kwargs=kwargs, commit=False)
+        job.interval = int(interval) if interval else None
+        job.repeat = int(repeat) if repeat else None
+        job.save()
+        self.connection.zadd(self.scheduled_jobs_key, job.id,
+                             int(scheduled_time.strftime('%s')))
         return job
 
     def cancel(self, job):
@@ -165,7 +181,7 @@ class Scheduler(object):
 
     def enqueue_jobs(self):
         """
-        Move scheduled jobs into queues. 
+        Move scheduled jobs into queues.
         """
         jobs = self.get_jobs_to_queue()
         for job in jobs:
@@ -174,7 +190,7 @@ class Scheduler(object):
 
     def run(self):
         """
-        Periodically check whether there's any job that should be put in the queue (score 
+        Periodically check whether there's any job that should be put in the queue (score
         lower than current time).
         """
         self.log.debug('Running RQ scheduler...')
