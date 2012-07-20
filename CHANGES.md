@@ -1,6 +1,9 @@
 ### 0.?.?
 (Not yet released)
 
+- Fix important bug where result data wasn't restored from Redis correctly
+  (affected non-string results only).
+
 
 ### 0.2.0
 (July 18th, 2012)

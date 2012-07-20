@@ -211,7 +211,7 @@ class Job(object):
         self.description = obj.get('description')
         self.enqueued_at = to_date(obj.get('enqueued_at'))
         self.ended_at = to_date(obj.get('ended_at'))
-        self._result = obj.get('result')
+        self._result = unpickle(obj.get('result')) if obj.get('result') else None
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
 
@@ -238,7 +238,7 @@ class Job(object):
         if self.ended_at is not None:
             obj['ended_at'] = times.format(self.ended_at, 'UTC')
         if self._result is not None:
-            obj['result'] = self._result
+            obj['result'] = dumps(self._result)
         if self.exc_info is not None:
             obj['exc_info'] = self.exc_info
         if self.timeout is not None:
