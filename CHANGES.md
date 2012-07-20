@@ -1,5 +1,5 @@
-### 0.?.?
-(Not yet released)
+### 0.2.1
+(July 20th, 2012)
 
 - Fix important bug where result data wasn't restored from Redis correctly
   (affected non-string results only).
