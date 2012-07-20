@@ -20,7 +20,7 @@ You can install `RQ Scheduler`_ via pip::
 
     pip install rq-scheduler
 
-Or you can download the latest stable package from `PyPI <http://pypi.python.org/pypi/rq-scheduler>`_
+Or you can download the latest stable package from `PyPI <http://pypi.python.org/pypi/rq-scheduler>`_.
 
 =====
 Usage
@@ -172,5 +172,4 @@ Changelog
 
 Version 0.3:
 
-* Added the capability to create periodic (cron) and repeated job using
-``scheduler.enqueue``
+* Added the capability to create periodic (cron) and repeated job using ``scheduler.enqueue``
