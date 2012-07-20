@@ -116,13 +116,26 @@ class Scheduler(object):
                              int((datetime.now() + time_delta).strftime('%s')))
         return job
 
+    def enqueue_periodic(self, scheduled_time, interval, repeat, func,
+                         *args, **kwargs):
+        """
+        Schedule a job to be periodically executed, at a certain interval.
+        """
+        return self.enqueue(scheduled_time, func, args=args, kwargs=kwargs,
+                            interval=interval, repeat=repeat)
+
     def enqueue(self, scheduled_time, func, args=None, kwargs=None,
                 interval=None, repeat=None):
         """
+        Schedule a job to be periodically executed, at a certain interval.
         """
         job = self._create_job(func, args=args, kwargs=kwargs, commit=False)
-        job.interval = int(interval) if interval else None
-        job.repeat = int(repeat) if repeat else None
+        if interval is not None:
+            job.interval = int(interval)
+        if repeat is not None:
+            job.repeat = int(repeat)
+        if repeat and interval is None:
+            raise ValueError("Can't repeat a job without interval argument")
         job.save()
         self.connection.zadd(self.scheduled_jobs_key, job.id,
                              int(scheduled_time.strftime('%s')))
@@ -170,14 +183,31 @@ class Scheduler(object):
 
     def enqueue_job(self, job):
         """
-        Move a scheduled job to a queue.
+        Move a scheduled job to a queue. In addition, it also does puts the job
+        back into the scheduler if needed.
         """
         self.log.debug('Pushing {0} to {1}'.format(job.id, job.origin))
+
+        interval = getattr(job, 'interval', None)
+        repeat = getattr(job, 'repeat', None)
+
+        # If job is a repeated job, decrement counter
+        if repeat:
+            job.repeat = int(repeat) - 1
         job.enqueued_at = datetime.now()
         job.save()
+
         queue = self.get_queue_for_job(job)
         queue.push_job_id(job.id)
         self.connection.zrem(self.scheduled_jobs_key, job.id)
+
+        if interval:
+            # If this is a repeat job and counter has reached 0, don't repeat
+            if repeat is not None:
+                if job.repeat == 0:
+                    return
+            self.connection.zadd(self.scheduled_jobs_key, job.id,
+                int(datetime.now().strftime('%s')) + int(interval))
 
     def enqueue_jobs(self):
         """
