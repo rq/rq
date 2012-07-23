@@ -157,8 +157,9 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         # Put it on the queue with a timeout value
-        res = q.enqueue(
-                create_file_after_timeout, sentinel_file, 4,
+        res = q.enqueue_call(
+                func=create_file_after_timeout,
+                args=(sentinel_file, 4),
                 timeout=1)
 
         try:

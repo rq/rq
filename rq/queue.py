@@ -107,7 +107,7 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args, kwargs, **options):
+    def enqueue_call(self, func, args=None, kwargs=None, **options):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -138,12 +138,15 @@ class Queue(object):
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
-        options = {}
-        try:
-            options['timeout'] = kwargs.pop('timeout')
-        except KeyError:
-            pass
-        return self.enqueue_call(func=f, args=args, kwargs=kwargs, **options)
+        # Warn about the timeout flag that has been removed
+        if 'timeout' in kwargs:
+            import warnings
+            warnings.warn('The use of the timeout kwarg is not supported '
+                    'anymore.  If you meant to pass this argument to RQ '
+                    '(rather than to %r), use the `.enqueue_call()` '
+                    'method instead.' % f, DeprecationWarning)
+
+        return self.enqueue_call(func=f, args=args, kwargs=kwargs)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
