@@ -83,17 +83,17 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 
 {% highlight python %}
 q = Queue()
-q.enqueue(mytask, foo, bar=qux, timeout=600)  # 10 mins
+q.enqueue_call(func=mytask, args=(foo,), kwargs={'bar': qux}, timeout=600)  # 10 mins
 {% endhighlight console %}
 
 <div class="warning">
     <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
     <strong>Warning!</strong>
     <p>
-Yes, the `timeout` keyword argument mixes in with the keyword arguments for the
-job function, which kind of sucks.  But currently it just does so anyway.  You
-can use this, but I wouldn't depend on it too much, since it'll likely change
-in the future because of this argument.
+Before RQ 0.3.0, the `.enqueue()` method accepted a `timeout` keyword argument,
+but this introduced an ambiguity as it was impossible to pass that keyword
+argument to the target function.  So, from RQ >= 0.3.0, you can use
+`.enqueue_call()` for that.
     </p>
 </div>
 
@@ -107,7 +107,7 @@ high = Queue('high', default_timeout=8)  # 8 secs
 low = Queue('low', default_timeout=600)  # 10 mins
 
 # Individual jobs can still override these defaults
-low.enqueue(really_really_slow, timeout=3600)  # 1 hr
+low.enqueue_call(really_really_slow, timeout=3600)  # 1 hr
 {% endhighlight console %}
 
 Individual jobs can still specify an alternative timeout, as workers will

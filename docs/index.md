@@ -56,6 +56,16 @@ you can quite flexibly distribute work to your own desire.  A common naming
 pattern is to name your queues after priorities (e.g.  `high`, `medium`,
 `low`).
 
+For cases where you want to pass in options to `.enqueue()` itself (rather than
+to the job function), use `.enqueue_call()`, which is the more explicit
+counterpart.  A typical use case for this is to pass in a `timeout` argument:
+
+{% highlight python %}
+q = Queue('low')
+q.enqueue_call(func=count_words_at_url,
+               args=('http://nvie.com'),
+               timeout=30)
+{% endhighlight %}
 
 
 ### On the Design
