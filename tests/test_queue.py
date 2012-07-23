@@ -86,7 +86,7 @@ class TestQueue(RQTestCase):
     def test_enqueue_sets_metadata(self):
         """Enqueueing job onto queues modifies meta data."""
         q = Queue()
-        job = Job.create(say_hello, 'Nick', foo='bar')
+        job = Job.create(func=say_hello, args=('Nick',), kwargs=dict(foo='bar'))
 
         # Preconditions
         self.assertIsNone(job.origin)
@@ -209,7 +209,7 @@ class TestQueue(RQTestCase):
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):
         """Requeueing existing jobs."""
-        job = Job.create(div_by_zero, 1, 2, 3)
+        job = Job.create(func=div_by_zero, args=(1, 2, 3))
         job.origin = 'fake'
         job.save()
         get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
@@ -233,7 +233,7 @@ class TestFailedQueue(RQTestCase):
 
     def test_quarantine_preserves_timeout(self):
         """Quarantine preserves job timeout."""
-        job = Job.create(div_by_zero, 1, 2, 3)
+        job = Job.create(func=div_by_zero, args=(1, 2, 3))
         job.origin = 'fake'
         job.timeout = 200
         job.save()
@@ -243,7 +243,7 @@ class TestFailedQueue(RQTestCase):
 
     def test_requeueing_preserves_timeout(self):
         """Requeueing preserves job timeout."""
-        job = Job.create(div_by_zero, 1, 2, 3)
+        job = Job.create(func=div_by_zero, args=(1, 2, 3))
         job.origin = 'fake'
         job.timeout = 200
         job.save()

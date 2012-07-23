@@ -50,11 +50,16 @@ class Job(object):
 
     # Job construction
     @classmethod
-    def create(cls, func, *args, **kwargs):
+    def create(cls, func, args=None, kwargs=None, connection=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
-        connection = kwargs.pop('connection', None)
+        if args is None:
+            args = ()
+        if kwargs is None:
+            kwargs = {}
+        assert isinstance(args, tuple), '%r is not a valid args list.' % (args,)
+        assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
         job = cls(connection=connection)
         if inspect.ismethod(func):
             job._instance = func.im_self
