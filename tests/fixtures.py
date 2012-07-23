@@ -4,6 +4,8 @@ fixtures has a slighty different characteristics.
 """
 import time
 
+from rq.decorators import job
+
 
 def say_hello(name=None):
     """A job with a single argument and a return value."""
@@ -48,3 +50,7 @@ class Calculator(object):
 
     def calculate(x, y):
         return x * y / self.denominator
+
+@job()
+def decorated_job(x, y):
+    return x + y
