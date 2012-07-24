@@ -107,7 +107,7 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args=None, kwargs=None, **options):
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -115,7 +115,7 @@ class Queue(object):
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
         """
-        timeout = options.get('timeout', self._default_timeout)
+        timeout = timeout or self._default_timeout
         job = Job.create(func, args, kwargs, connection=self.connection)
         return self.enqueue_job(job, timeout=timeout)
 
@@ -140,15 +140,15 @@ class Queue(object):
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
+        timeout = None
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
-            options = kwargs
+            timeout = kwargs.pop('timeout', None)
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
-        else:
-            options = {}
 
-        return self.enqueue_call(func=f, args=args, kwargs=kwargs, **options)
+        return self.enqueue_call(func=f, args=args, kwargs=kwargs,
+                timeout=timeout)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
