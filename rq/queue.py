@@ -1,5 +1,5 @@
 import times
-from .connections import get_current_connection
+from .connections import resolve_connection
 from .job import Job
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 from .compat import total_ordering
@@ -23,8 +23,7 @@ class Queue(object):
         """Returns an iterable of all Queues.
         """
         prefix = cls.redis_queue_namespace_prefix
-        if connection is None:
-            connection = get_current_connection()
+        connection = resolve_connection(connection)
 
         def to_queue(queue_key):
             return cls.from_queue_key(queue_key, connection=connection)
@@ -43,9 +42,7 @@ class Queue(object):
         return cls(name, connection=connection)
 
     def __init__(self, name='default', default_timeout=None, connection=None):
-        if connection is None:
-            connection = get_current_connection()
-        self.connection = connection
+        self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
@@ -187,8 +184,7 @@ class Queue(object):
         Until Redis receives a specific method for this, we'll have to wrap it
         this way.
         """
-        if connection is None:
-            connection = get_current_connection()
+        connection = resolve_connection(connection)
         if blocking:
             queue_key, job_id = connection.blpop(queue_keys)
             return queue_key, job_id

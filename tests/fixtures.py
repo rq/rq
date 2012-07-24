@@ -3,7 +3,7 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slighty different characteristics.
 """
 import time
-
+from rq import Connection
 from rq.decorators import job
 
 
@@ -51,6 +51,8 @@ class Calculator(object):
     def calculate(self, x, y):
         return x * y / self.denominator
 
-@job(queue='default')
-def decorated_job(x, y):
-    return x + y
+
+with Connection():
+    @job(queue='default')
+    def decorated_job(x, y):
+        return x + y
