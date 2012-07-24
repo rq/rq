@@ -27,3 +27,13 @@ class TestDecorator(RQTestCase):
         # Ensure that job returns the right result when performed
         self.assertEqual(result.perform(), 3)
 
+    def test_decorator_accepts_queue_name_as_argument(self):
+        """
+        Ensure that passing in queue name to the decorator puts the job in the
+        right queue.
+        """
+        @job(queue='queue_name')
+        def hello():
+            return 'Hi'
+        result = hello.delay()
+        self.assertEqual(result.origin, 'queue_name')

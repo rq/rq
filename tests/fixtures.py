@@ -51,6 +51,6 @@ class Calculator(object):
     def calculate(x, y):
         return x * y / self.denominator
 
-@job()
+@job(queue='default')
 def decorated_job(x, y):
     return x + y

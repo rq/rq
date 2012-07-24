@@ -1,20 +1,15 @@
-from .connections import use_connection, get_current_connection
 from .queue import Queue
 
 
 class job(object):
 
-    def __init__(self, queue=None):
+    def __init__(self, queue, connection=None, timeout=None):
         """
         A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a ``queue`` instance
         as an optional argument. For example:
 
-            from rq import Queue, use_connection
-            use_connection()
-            q = Queue()
-
-            @job(queue=q)
+            @job(queue='default')
             def simple_add(x, y):
                 return x + y
 
@@ -22,14 +17,15 @@ class job(object):
 
         """
         self.queue = queue
+        self.connection = connection
+        self.timeout = timeout
 
     def __call__(self, f):
         def delay(*args, **kwargs):
-            if self.queue is None:
-                use_connection(get_current_connection())
-                self.queue = Queue()
-            return self.queue.enqueue(f, *args, **kwargs)
+            if isinstance(self.queue, basestring):
+                queue = Queue(name=self.queue, connection=self.connection)
+            else:
+                queue = self.queue
+            return queue.enqueue_call(f, args=args, kwargs=kwargs, timeout=self.timeout)
         f.delay = delay
         return f
-
-
