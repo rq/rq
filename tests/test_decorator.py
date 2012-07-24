@@ -11,14 +11,12 @@ class TestDecorator(RQTestCase):
         super(TestDecorator, self).setUp()
 
     def test_decorator_preserves_functionality(self):
-        """
-        Ensure that a decorated function's functionality is still preserved
+        """Ensure that a decorated function's functionality is still preserved.
         """
         self.assertEqual(decorated_job(1, 2), 3)
 
     def test_decorator_adds_delay_attr(self):
-        """
-        Ensure that decorator adds a delay attribute to function that returns
+        """Ensure that decorator adds a delay attribute to function that returns
         a Job instance when called.
         """
         self.assertTrue(hasattr(decorated_job, 'delay'))
@@ -28,9 +26,8 @@ class TestDecorator(RQTestCase):
         self.assertEqual(result.perform(), 3)
 
     def test_decorator_accepts_queue_name_as_argument(self):
-        """
-        Ensure that passing in queue name to the decorator puts the job in the
-        right queue.
+        """Ensure that passing in queue name to the decorator puts the job in
+        the right queue.
         """
         @job(queue='queue_name')
         def hello():
