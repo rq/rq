@@ -6,8 +6,8 @@ class job(object):
     def __init__(self, queue, connection=None, timeout=None):
         """
         A decorator that adds a ``delay`` method to the decorated function,
-        which in turn creates a RQ job when called. Accepts a ``queue`` instance
-        as an optional argument. For example:
+        which in turn creates a RQ job when called. Accepts a ``queue``
+        instance as an optional argument. For example:
 
             @job(queue='default')
             def simple_add(x, y):
@@ -26,6 +26,7 @@ class job(object):
                 queue = Queue(name=self.queue, connection=self.connection)
             else:
                 queue = self.queue
-            return queue.enqueue_call(f, args=args, kwargs=kwargs, timeout=self.timeout)
+            return queue.enqueue_call(f, args=args, kwargs=kwargs,
+                    timeout=self.timeout)
         f.delay = delay
         return f
