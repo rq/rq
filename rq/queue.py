@@ -107,25 +107,46 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
+    def enqueue_call(self, func, args=None, kwargs=None, **options):
+        """Creates a job to represent the delayed function call and enqueues
+        it.
+
+        It is much like `.enqueue()`, except that it takes the function's args
+        and kwargs as explicit arguments.  Any kwargs passed to this function
+        contain options for RQ itself.
+        """
+        timeout = options.get('timeout', self._default_timeout)
+        job = Job.create(func, args, kwargs, connection=self.connection)
+        return self.enqueue_job(job, timeout=timeout)
+
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
         Expects the function to call, along with the arguments and keyword
-        arguments.  May be a fully qualified string of the function instance,
-        in which case the function must be meaningful to the worker.
+        arguments.
 
-        The special keyword `timeout` is reserved for `enqueue()` itself and
-        it won't be passed to the actual job function.
+        The function argument `f` may be any of the following:
+
+        * A reference to a function
+        * A reference to an object's instance method
+        * A string, representing the location of a function (must be
+          meaningful to the import context of the workers)
         """
         if not isinstance(f, basestring) and f.__module__ == '__main__':
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
-        timeout = kwargs.pop('timeout', self._default_timeout)
-        job = Job.create(f, *args, connection=self.connection, **kwargs)
-        return self.enqueue_job(job, timeout=timeout)
+        # Warn about the timeout flag that has been removed
+        if 'timeout' in kwargs:
+            import warnings
+            warnings.warn('The use of the timeout kwarg is not supported '
+                    'anymore.  If you meant to pass this argument to RQ '
+                    '(rather than to %r), use the `.enqueue_call()` '
+                    'method instead.' % f, DeprecationWarning)
+
+        return self.enqueue_call(func=f, args=args, kwargs=kwargs)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.

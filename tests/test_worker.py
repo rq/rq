@@ -45,7 +45,7 @@ class TestWorker(RQTestCase):
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.create(div_by_zero, 3)
+        job = Job.create(func=div_by_zero, args=(3,))
         job.save()
         data = self.testconn.hget(job.key, 'data')
         invalid_data = data.replace('div_by_zero', 'nonexisting_job')
@@ -157,8 +157,9 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         # Put it on the queue with a timeout value
-        res = q.enqueue(
-                create_file_after_timeout, sentinel_file, 4,
+        res = q.enqueue_call(
+                func=create_file_after_timeout,
+                args=(sentinel_file, 4),
                 timeout=1)
 
         try:

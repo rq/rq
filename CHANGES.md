@@ -1,7 +1,8 @@
-### 0.x.x
+### 0.3.0
 (not released)
 
-- ...
+- Removes the possible ambiguity of passing in a `timeout` argument to
+  `.enqueue()`.  Instead, now use the `.enqueue_call()` method.
 
 
 ### 0.2.1
