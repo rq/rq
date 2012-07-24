@@ -138,15 +138,17 @@ class Queue(object):
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
-        # Warn about the timeout flag that has been removed
-        if 'timeout' in kwargs:
-            import warnings
-            warnings.warn('The use of the timeout kwarg is not supported '
-                    'anymore.  If you meant to pass this argument to RQ '
-                    '(rather than to %r), use the `.enqueue_call()` '
-                    'method instead.' % f, DeprecationWarning)
+        # Detect explicit invocations, i.e. of the form:
+        #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
+        if 'args' in kwargs or 'kwargs' in kwargs:
+            assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
+            options = kwargs
+            args = kwargs.pop('args', None)
+            kwargs = kwargs.pop('kwargs', None)
+        else:
+            options = {}
 
-        return self.enqueue_call(func=f, args=args, kwargs=kwargs)
+        return self.enqueue_call(func=f, args=args, kwargs=kwargs, **options)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
