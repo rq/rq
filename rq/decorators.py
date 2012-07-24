@@ -1,3 +1,4 @@
+from functools import wraps
 from .queue import Queue
 
 
@@ -21,6 +22,7 @@ class job(object):
         self.timeout = timeout
 
     def __call__(self, f):
+        @wraps(f)
         def delay(*args, **kwargs):
             if isinstance(self.queue, basestring):
                 queue = Queue(name=self.queue, connection=self.connection)
