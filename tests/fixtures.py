@@ -48,7 +48,7 @@ class Calculator(object):
     def __init__(self, denominator):
         self.denominator = denominator
 
-    def calculate(x, y):
+    def calculate(self, x, y):
         return x * y / self.denominator
 
 @job(queue='default')
