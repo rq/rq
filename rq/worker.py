@@ -60,7 +60,8 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         reported_working = connection.smembers(cls.redis_workers_keys)
-        workers = [cls.find_by_key(key, connection) for key in reported_working]
+        workers = [cls.find_by_key(key, connection) for key in
+                reported_working]
         return compact(workers)
 
     @classmethod
