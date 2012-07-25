@@ -1,8 +1,22 @@
 ### 0.3.0
 (not released)
 
-- Removes the possible ambiguity of passing in a `timeout` argument to
-  `.enqueue()`.  Instead, now use the `.enqueue_call()` method.
+- `.enqueue()` does not consume the `timeout` kwarg anymore.  Instead, to pass
+  RQ a timeout value while enqueueing a function, use the explicit invocation
+  instead:
+
+      q.enqueue(do_something, args=(1, 2), kwargs={'a': 1}, timeout=30)
+
+- Add a `@job` decorator, which can be used to do Celery-style delayed
+  invocations:
+
+      from rq.decorators import job
+
+      @job('high', timeout=10)
+      def some_work(x, y):
+          return x + y
+
+      some_work.delay(2, 3)
 
 
 ### 0.2.1

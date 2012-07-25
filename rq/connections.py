@@ -51,6 +51,20 @@ def get_current_connection():
     return _connection_stack.top
 
 
+def resolve_connection(connection=None):
+    """Convenience function to resolve the given or the current connection.
+    Raises an exception if it cannot resolve a connection now.
+    """
+    if connection is not None:
+        return connection
+
+    connection = get_current_connection()
+    if connection is None:
+        raise NoRedisConnectionException(
+                'Could not resolve a Redis connection.')
+    return connection
+
+
 _connection_stack = LocalStack()
 
 __all__ = ['Connection',
