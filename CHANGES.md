@@ -10,11 +10,19 @@
 - Add a `@job` decorator, which can be used to do Celery-style delayed
   invocations:
 
+      from redis import Redis
       from rq.decorators import job
 
-      @job('high', timeout=10)
+      # Connect to Redis
+      redis = Redis()
+
+      @job('high', timeout=10, connection=redis)
       def some_work(x, y):
           return x + y
+
+  Then, in another module, you can call `some_work`:
+
+      from foo.bar import some_work
 
       some_work.delay(2, 3)
 
