@@ -49,6 +49,11 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
 
 
+def stop_worker():
+    # A job that does nothing, only for triggering Worker's warm shutdown
+    pass
+
+
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
@@ -105,6 +110,7 @@ class Worker(object):
         self._stopped = False
         self.log = Logger('worker')
         self.failed_queue = get_failed_queue(connection=self.connection)
+        self._shutdown_job = None
 
 
     def validate_queues(self):  # noqa
@@ -196,6 +202,8 @@ class Worker(object):
             p.hset(self.key, 'death', time.time())
             p.expire(self.key, 60)
             p.execute()
+            if self._shutdown_job:
+                self._shutdown_job.cancel()
 
     def set_state(self, new_state):
         self._state = new_state
@@ -249,6 +257,11 @@ class Worker(object):
             msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
             self.log.warning(msg)
             self._stopped = True
+            """Workers use Redis' blpop blocking call to listen for new jobs, so
+            we need to create an empty job that gets cleaned up on on exit to
+            trigger shutdown.
+            """
+            self._shutdown_job = self.queues[0].enqueue(stop_worker)
             self.log.debug('Stopping after current horse is finished.')
 
         signal.signal(signal.SIGINT, request_stop)
