@@ -56,3 +56,7 @@ with Connection():
     @job(queue='default')
     def decorated_job(x, y):
         return x + y
+
+
+def long_running_job():
+    time.sleep(10)

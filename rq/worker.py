@@ -28,6 +28,10 @@ red = make_colorizer('darkred')
 blue = make_colorizer('darkblue')
 
 
+class StopRequested(Exception):
+    pass
+
+
 def iterable(x):
     return hasattr(x, '__iter__')
 
@@ -246,10 +250,16 @@ class Worker(object):
                 self.log.debug('Ignoring signal %s.' % signal_name(signum))
                 return
 
-            msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
+            msg = 'Warm shut down requested.'
             self.log.warning(msg)
-            self._stopped = True
-            self.log.debug('Stopping after current horse is finished.')
+            # If shutdown is requested in the middle of a job, wait until finish
+            # before shutting down
+            if self.state == 'busy':
+                self._stopped = True
+                self.log.debug('Stopping after current horse is finished.'
+                               'Press Ctrl+C again for a cold shutdown.')
+            else:
+                raise StopRequested
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
@@ -286,6 +296,8 @@ class Worker(object):
                             connection=self.connection)
                     if result is None:
                         break
+                except StopRequested:
+                    break
                 except UnpickleError as e:
                     msg = '*** Ignoring unpickleable data on %s.' % \
                             green(e.queue.name)
