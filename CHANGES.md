@@ -1,3 +1,9 @@
+### 0.2.2
+(August 1st, 2012)
+
+- Fix bug where return values that couldn't be pickled crashed the worker
+
+
 ### 0.2.1
 (July 20th, 2012)
 
