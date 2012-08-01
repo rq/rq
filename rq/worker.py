@@ -362,6 +362,10 @@ class Worker(object):
         try:
             with death_penalty_after(job.timeout or 180):
                 rv = job.perform()
+
+            # Pickle the result in the same try-except block since we need to
+            # use the same exc handling when pickling fails
+            pickled_rv = dumps(rv)
         except Exception as e:
             fq = self.failed_queue
             self.log.exception(red(str(e)))
@@ -377,7 +381,7 @@ class Worker(object):
 
         if rv is not None:
             p = self.connection.pipeline()
-            p.hset(job.key, 'result', dumps(rv))
+            p.hset(job.key, 'result', pickled_rv)
             p.expire(job.key, self.rv_ttl)
             p.execute()
         else:
