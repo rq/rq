@@ -21,6 +21,7 @@ from .connections import get_current_connection
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
 from .timeouts import death_penalty_after
+from .version import VERSION
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -268,6 +269,7 @@ class Worker(object):
 
         did_perform_work = False
         self.register_birth()
+        self.log.info('RQ worker started, version %s' % VERSION)
         self.state = 'starting'
         try:
             while True:
