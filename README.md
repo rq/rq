@@ -15,24 +15,30 @@ First, run a Redis server, of course:
 To put jobs on queues, you don't have to do anything special, just define
 your typically lengthy or blocking function:
 
+    ```python
     import requests
 
     def count_words_at_url(url):
         resp = requests.get(url)
         return len(resp.text.split())
+    ```
 
 You do use the excellent [requests][r] package, don't you?
 
 Then, create a RQ queue:
 
+    ```python
     from rq import Queue, use_connection
     use_connection()
     q = Queue()
+    ```
 
 And enqueue the function call:
 
+    ```python
     from my_module import count_words_at_url
     result = q.enqueue(count_words_at_url, 'http://nvie.com')
+    ```
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
