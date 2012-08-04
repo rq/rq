@@ -95,6 +95,21 @@ the job has finished (assuming the job _has_ a return value in the first place,
 of course).
 
 
+## The `@job` decorator
+If you're familiar with Celery, you might be used to its `@task` decorator.
+Starting from RQ >= 0.3, there exists a similar decorator:
+
+{% highlight python %}
+@job('low', conn=my_redis_conn, timeout=5)
+def add(x, y):
+    return x + y
+
+result = add.delay(3, 4)
+time.sleep(1)
+print result.return_value
+{% endhighlight %}
+
+
 ## The worker
 
 To learn about workers, see the [workers][w] documentation.
