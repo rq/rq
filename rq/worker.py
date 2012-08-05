@@ -243,10 +243,6 @@ class Worker(object):
             signal.signal(signal.SIGINT, request_force_stop)
             signal.signal(signal.SIGTERM, request_force_stop)
 
-            if self.is_horse:
-                self.log.debug('Ignoring signal %s.' % signal_name(signum))
-                return
-
             msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
             self.log.warning(msg)
             self._stopped = True
@@ -349,6 +345,7 @@ class Worker(object):
         # after the current work is done.  When cold shutdown is requested, it
         # kills the current job anyway.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
         self._is_horse = True
         self.log = Logger('horse')
