@@ -1,5 +1,10 @@
 ### 0.3.0
-(not released)
+(August 5th, 2012)
+
+- Reliability improvements
+
+    - Warm shutdown now exits immediately when Ctrl+C is pressed and worker is idle
+    - Worker does not leak worker registrations anymore when stopped gracefully
 
 - `.enqueue()` does not consume the `timeout` kwarg anymore.  Instead, to pass
   RQ a timeout value while enqueueing a function, use the explicit invocation
