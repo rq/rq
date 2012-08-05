@@ -10,29 +10,38 @@ easily.
 
 First, run a Redis server, of course:
 
-    $ redis-server
+```console
+$ redis-server
+```
 
 To put jobs on queues, you don't have to do anything special, just define
 your typically lengthy or blocking function:
 
-    import requests
+```python
+import requests
 
-    def count_words_at_url(url):
-        resp = requests.get(url)
-        return len(resp.text.split())
+def count_words_at_url(url):
+    """Just an example function that's called async."""
+    resp = requests.get(url)
+    return len(resp.text.split())
+```
 
 You do use the excellent [requests][r] package, don't you?
 
 Then, create a RQ queue:
 
-    from rq import Queue, use_connection
-    use_connection()
-    q = Queue()
+```python
+from rq import Queue, use_connection
+use_connection()
+q = Queue()
+```
 
 And enqueue the function call:
 
-    from my_module import count_words_at_url
-    result = q.enqueue(count_words_at_url, 'http://nvie.com')
+```python
+from my_module import count_words_at_url
+result = q.enqueue(count_words_at_url, 'http://nvie.com')
+```
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
@@ -42,11 +51,13 @@ For a more complete example, refer to the [docs][d].  But this is the essence.
 To start executing enqueued function calls in the background, start a worker
 from your project's directory:
 
-    $ rqworker
-    *** Listening for work on default
-    Got count_words_at_url('http://nvie.com') from default
-    Job result = 818
-    *** Listening for work on default
+```console
+$ rqworker
+*** Listening for work on default
+Got count_words_at_url('http://nvie.com') from default
+Job result = 818
+*** Listening for work on default
+```
 
 That's about it.
 

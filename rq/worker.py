@@ -21,6 +21,7 @@ from .connections import get_current_connection
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
 from .timeouts import death_penalty_after
+from .version import VERSION
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -246,10 +247,6 @@ class Worker(object):
             signal.signal(signal.SIGINT, request_force_stop)
             signal.signal(signal.SIGTERM, request_force_stop)
 
-            if self.is_horse:
-                self.log.debug('Ignoring signal %s.' % signal_name(signum))
-                return
-
             msg = 'Warm shut down requested.'
             self.log.warning(msg)
             # If shutdown is requested in the middle of a job, wait until finish
@@ -278,6 +275,7 @@ class Worker(object):
 
         did_perform_work = False
         self.register_birth()
+        self.log.info('RQ worker started, version %s' % VERSION)
         self.state = 'starting'
         try:
             while True:
@@ -352,6 +350,15 @@ class Worker(object):
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
         random.seed()
+
+        # Always ignore Ctrl+C in the work horse, as it might abort the
+        # currently running job.
+        # The main worker catches the Ctrl+C and requests graceful shutdown
+        # after the current work is done.  When cold shutdown is requested, it
+        # kills the current job anyway.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
         self._is_horse = True
         self.log = Logger('horse')
 
@@ -372,6 +379,10 @@ class Worker(object):
         try:
             with death_penalty_after(job.timeout or 180):
                 rv = job.perform()
+
+            # Pickle the result in the same try-except block since we need to
+            # use the same exc handling when pickling fails
+            pickled_rv = dumps(rv)
         except Exception as e:
             fq = self.failed_queue
             self.log.exception(red(str(e)))
@@ -387,7 +398,7 @@ class Worker(object):
 
         if rv is not None:
             p = self.connection.pipeline()
-            p.hset(job.key, 'result', dumps(rv))
+            p.hset(job.key, 'result', pickled_rv)
             p.expire(job.key, self.rv_ttl)
             p.execute()
         else:
