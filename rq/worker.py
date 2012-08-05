@@ -253,10 +253,10 @@ class Worker(object):
             # before shutting down
             if self.state == 'busy':
                 self._stopped = True
-                self.log.debug('Stopping after current horse is finished.'
+                self.log.debug('Stopping after current horse is finished. '
                                'Press Ctrl+C again for a cold shutdown.')
             else:
-                raise StopRequested
+                raise StopRequested()
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
@@ -306,11 +306,12 @@ class Worker(object):
                     self.failed_queue.push_job_id(e.job_id)
                     continue
 
+                self.state = 'busy'
+
                 job, queue = result
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                     blue(job.description), job.id))
 
-                self.state = 'busy'
                 self.fork_and_perform_job(job)
 
                 did_perform_work = True
