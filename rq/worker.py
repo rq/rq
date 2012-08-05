@@ -342,6 +342,14 @@ class Worker(object):
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
         random.seed()
+
+        # Always ignore Ctrl+C in the work horse, as it might abort the
+        # currently running job.
+        # The main worker catches the Ctrl+C and requests graceful shutdown
+        # after the current work is done.  When cold shutdown is requested, it
+        # kills the current job anyway.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         self._is_horse = True
         self.log = Logger('horse')
 
