@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='rq-scheduler',
-    version='0.3.0',
+    version='0.3.1',
     author='Selwin Ong',
     author_email='selwin.ong@gmail.com',
     packages=['rq_scheduler'],
@@ -18,7 +18,7 @@ setup(
     rqscheduler = rq_scheduler.scripts.rqscheduler:main
     ''',
     package_data = { '': ['README.rst'] },
-    install_requires=['rq'],
+    install_requires=['rq>=0.3'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Environment :: Console',

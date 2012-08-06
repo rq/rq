@@ -39,7 +39,7 @@ class TestScheduler(RQTestCase):
         """
         Ensure that jobs are created properly.
         """
-        job = self.scheduler._create_job(say_hello, args=[], kwargs={})
+        job = self.scheduler._create_job(say_hello, args=(), kwargs={})
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job, job_from_queue)
         self.assertEqual(job_from_queue.func, say_hello)
@@ -48,7 +48,7 @@ class TestScheduler(RQTestCase):
         """
         Ensure jobs are only saved to Redis if commit=True.
         """
-        job = self.scheduler._create_job(say_hello, args=[], kwargs={}, commit=False)
+        job = self.scheduler._create_job(say_hello, commit=False)
         self.assertEqual(self.testconn.hgetall(job.key), {})
 
     def test_create_scheduled_job(self):
@@ -227,3 +227,13 @@ class TestScheduler(RQTestCase):
         self.scheduler.enqueue_job(job)
         self.assertNotIn(job.id,
             self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
+
+    def test_missing_jobs_removed_from_scheduler(self):
+        """
+        Ensure jobs that don't exist when queued are removed from the scheduler.
+        """
+        job = self.scheduler.enqueue(datetime.now(), say_hello)
+        job.cancel()
+        self.scheduler.get_jobs_to_queue()
+        self.assertNotIn(job.id, self.testconn.zrange(
+            self.scheduler.scheduled_jobs_key, 0, 1))

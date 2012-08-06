@@ -9,6 +9,7 @@ except ImportError:
     from logging import Logger
 
 from rq.connections import get_current_connection
+from rq.exceptions import NoSuchJobError
 from rq.job import Job
 from rq.queue import Queue
 
@@ -71,10 +72,10 @@ class Scheduler(object):
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
         if args is None:
-            args = []
+            args = ()
         if kwargs is None:
             kwargs = {}
-        job = Job.create(func, *args, connection=self.connection, **kwargs)
+        job = Job.create(func, args=args, connection=self.connection, kwargs=kwargs)
         job.origin = self.queue_name
         if commit:
             job.save()
@@ -143,9 +144,13 @@ class Scheduler(object):
 
     def cancel(self, job):
         """
-        Pulls a job from the scheduler queue
+        Pulls a job from the scheduler queue. This function accepts either a
+        job_id or a job instance.
         """
-        self.connection.zrem(self.scheduled_jobs_key, job.id)
+        if isinstance(job, basestring):
+            self.connection.zrem(self.scheduled_jobs_key, job)
+        else:
+            self.connection.zrem(self.scheduled_jobs_key, job.id)
 
     def change_execution_time(self, job, date_time):
         """
@@ -172,7 +177,15 @@ class Scheduler(object):
         (score lower than current timestamp).
         """
         job_ids = self.connection.zrangebyscore(self.scheduled_jobs_key, 0, int(time.strftime('%s')))
-        return [Job.fetch(job_id, connection=self.connection) for job_id in job_ids]
+        jobs = []
+        for job_id in job_ids:
+            try:
+                jobs.append(Job.fetch(job_id, connection=self.connection))
+            except NoSuchJobError:
+                # Delete jobs that aren't there from scheduler
+                self.cancel(job_id)
+        return jobs
+
 
     def get_queue_for_job(self, job):
         """
