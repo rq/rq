@@ -94,18 +94,18 @@ A simple implementation example:
 {% highlight python %}
 #!/usr/bin/env python
 import sys
-import rq
-rq.use_connection()
+from rq import Queue, Connection, Worker
 
 # Preload libraries
 import library_that_you_want_preloaded
 
 # Provide queue names to listen to as arguments to this script,
 # similar to rqworker
-qs = map(rq.Queue, sys.argv[1:]) or [rq.Queue()]
+with Connection():
+    qs = map(rq.Queue, sys.argv[1:]) or [rq.Queue()]
 
-w = rq.Worker(qs)
-w.work()
+    w = rq.Worker(qs)
+    w.work()
 {% endhighlight %}
 
 

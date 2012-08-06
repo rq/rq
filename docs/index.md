@@ -28,14 +28,14 @@ To put this potentially expensive word count for a given URL in the background,
 simply do this:
 
 {% highlight python %}
-from rq import use_connection, Queue
+from rq import Connection, Queue
 from somewhere import count_words_at_url
 
 # Tell RQ what Redis connection to use
-use_connection()  # no args uses Redis on localhost:6379
+redis_conn = Redis()
+q = Queue(connection=redis_conn)  # no args implies the default queue
 
 # Delay calculation of the multiplication
-q = Queue()
 result = q.enqueue(count_words_at_url, 'http://nvie.com')
 print result.return_value   # => None
 
@@ -47,7 +47,7 @@ print result.return_value   # => 889
 If you want to put the work on a specific queue, simply specify its name:
 
 {% highlight python %}
-q = Queue('low')
+q = Queue('low', connection=redis_conn)
 q.enqueue(count_words_at_url, 'http://nvie.com')
 {% endhighlight %}
 
@@ -61,7 +61,7 @@ to the job function), use `.enqueue_call()`, which is the more explicit
 counterpart.  A typical use case for this is to pass in a `timeout` argument:
 
 {% highlight python %}
-q = Queue('low')
+q = Queue('low', connection=redis_conn)
 q.enqueue_call(func=count_words_at_url,
                args=('http://nvie.com'),
                timeout=30)

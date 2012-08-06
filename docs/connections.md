@@ -3,11 +3,23 @@ title: "RQ: Connections"
 layout: docs
 ---
 
-Out of the box, it's most convenient to use `use_connection()` to set up the
-Redis server that you want RQ to use.
+Although RQ features the `use_connection()` command for convenience, it
+is deprecated, since it pollutes the global namespace.  Instead, prefer explicit
+connection management using the `with Connection(...):` context manager, or
+pass in Redis connection references to queues directly.
 
 
 ## Single Redis connection (easy)
+
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
+    <strong>Note:</strong>
+    <p>
+        The use of <code>use_connection</code> is deprecated.
+        Please don't use `use_connection` in your scripts.
+        Instead, use explicit connection management.
+    </p>
+</div>
 
 In development mode, to connect to a default, local Redis server:
 
@@ -25,6 +37,9 @@ from rq import use_connection
 redis = Redis('my.host.org', 6789, password='secret')
 use_connection(redis)
 {% endhighlight %}
+
+Be aware of the fact that `use_connection` pollutes the global namespace.  It
+also implies that you can only ever use a single connection.
 
 
 ## Multiple Redis connections
