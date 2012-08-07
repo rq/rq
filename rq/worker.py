@@ -400,7 +400,10 @@ class Worker(object):
         if rv is not None:
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
-            p.expire(job.key, self.rv_ttl)
+            if job.result_ttl is None:
+                p.expire(job.key, self.rv_ttl)
+            elif job.result_ttl >= 0:
+                p.expire(job.key, job.result_ttl)
             p.execute()
         else:
             # Cleanup immediately

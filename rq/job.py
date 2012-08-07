@@ -9,7 +9,8 @@ from .exceptions import UnpickleError, NoSuchJobError
 
 JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
                  'created_at', 'enqueued_at', 'connection', '_result',
-                 'timeout', '_kwargs', 'exc_info', '_id', 'data', '_instance'])
+                 'timeout', '_kwargs', 'exc_info', '_id', 'data', '_instance',
+                 'result_ttl'])
 
 
 def unpickle(pickled_string):
@@ -50,7 +51,8 @@ class Job(object):
 
     # Job construction
     @classmethod
-    def create(cls, func, args=None, kwargs=None, connection=None):
+    def create(cls, func, args=None, kwargs=None, connection=None,
+               result_ttl=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -71,6 +73,7 @@ class Job(object):
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()
+        job.result_ttl = result_ttl
         return job
 
     @property
@@ -134,6 +137,7 @@ class Job(object):
         self._result = None
         self.exc_info = None
         self.timeout = None
+        self.result_ttl = None
 
 
     # Data access
@@ -219,6 +223,7 @@ class Job(object):
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
+        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
 
         # Overwrite job's additional attrs (those not in JOB_ATTRS), if any
         additional_attrs = set(obj.keys()).difference(JOB_ATTRS)
@@ -248,6 +253,8 @@ class Job(object):
             obj['exc_info'] = self.exc_info
         if self.timeout is not None:
             obj['timeout'] = self.timeout
+        if self.result_ttl is not None:
+            obj['result_ttl'] = self.result_ttl
         """
         Store additional attributes from job instance into Redis. This is done
         so that third party libraries using RQ can store additional data

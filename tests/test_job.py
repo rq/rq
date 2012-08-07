@@ -189,3 +189,15 @@ class TestJob(RQTestCase):
         job2 = Job.fetch(job.id)
         job2.refresh()
         self.assertEqual(job2.foo, 'bar')
+
+    def test_result_ttl_is_persisted(self):
+        """Ensure that job's result_ttl is set properly"""
+        job = Job.create(func=say_hello, args=('Lionel',), result_ttl=10)
+        job.save()
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.result_ttl, 10)
+
+        job = Job.create(func=say_hello, args=('Lionel',))
+        job.save()
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.result_ttl, None)
