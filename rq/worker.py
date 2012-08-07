@@ -94,7 +94,8 @@ class Worker(object):
         return worker
 
 
-    def __init__(self, queues, name=None, rv_ttl=500, connection=None):  # noqa
+    def __init__(self, queues, name=None, default_result_ttl=500,
+            connection=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -103,7 +104,7 @@ class Worker(object):
         self._name = name
         self.queues = queues
         self.validate_queues()
-        self.rv_ttl = rv_ttl
+        self.default_result_ttl = default_result_ttl
         self._state = 'starting'
         self._is_horse = False
         self._horse_pid = 0
@@ -401,7 +402,7 @@ class Worker(object):
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
             if job.result_ttl is None:
-                p.expire(job.key, self.rv_ttl)
+                p.expire(job.key, self.default_result_ttl)
             elif job.result_ttl >= 0:
                 p.expire(job.key, job.result_ttl)
             p.execute()
