@@ -67,6 +67,15 @@ q.enqueue_call(func=count_words_at_url,
                timeout=30)
 {% endhighlight %}
 
+For cases where the web process doesn't have access to the source code running
+in the worker (i.e. code base X invokes a delayed function from code base Y),
+you can pass the function as a string reference, too.
+
+{% highlight python %}
+q = Queue('low', connection=redis_conn)
+q.enqueue('my_package.my_module.my_func', 3, 4)
+{% endhighlight %}
+
 
 ### On the Design
 
