@@ -25,6 +25,15 @@ class TestWorker(RQTestCase):
         self.assertEquals(w.work(burst=True), True,
                 'Expected at least some work done.')
 
+    def test_work_via_string_argument(self):
+        """Worker processes work fed via string arguments."""
+        q = Queue('foo')
+        w = Worker([q])
+        result = q.enqueue('tests.fixtures.say_hello', name='Frank')
+        self.assertEquals(w.work(burst=True), True,
+                'Expected at least some work done.')
+        self.assertEquals(result.return_value, 'Hi there, Frank!')
+
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
         q = Queue()
@@ -36,7 +45,7 @@ class TestWorker(RQTestCase):
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.create(div_by_zero, 3)
+        job = Job.create(func=div_by_zero, args=(3,))
         job.save()
         data = self.testconn.hget(job.key, 'data')
         invalid_data = data.replace('div_by_zero', 'nonexisting_job')
@@ -149,7 +158,8 @@ class TestWorker(RQTestCase):
 
         # Put it on the queue with a timeout value
         res = q.enqueue(
-                create_file_after_timeout, sentinel_file, 4,
+                create_file_after_timeout,
+                args=(sentinel_file, 4),
                 timeout=1)
 
         try:

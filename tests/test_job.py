@@ -1,7 +1,7 @@
 import times
 from datetime import datetime
 from tests import RQTestCase
-from tests.fixtures import some_calculation, say_hello
+from tests.fixtures import Calculator, some_calculation, say_hello
 from tests.helpers import strip_milliseconds
 from cPickle import loads
 from rq.job import Job
@@ -19,6 +19,7 @@ class TestJob(RQTestCase):
 
         # ...and nothing else
         self.assertIsNone(job.func)
+        self.assertIsNone(job.instance)
         self.assertIsNone(job.args)
         self.assertIsNone(job.kwargs)
         self.assertIsNone(job.origin)
@@ -29,12 +30,13 @@ class TestJob(RQTestCase):
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
-        job = Job.create(some_calculation, 3, 4, z=2)
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
 
         # Jobs have a random UUID
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
         self.assertIsNotNone(job.description)
+        self.assertIsNone(job.instance)
 
         # Job data is set...
         self.assertEquals(job.func, some_calculation)
@@ -46,10 +48,28 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.return_value)
 
+    def test_create_instance_method_job(self):
+        """Creation of jobs for instance methods."""
+        c = Calculator(2)
+        job = Job.create(func=c.calculate, args=(3, 4))
+
+        # Job data is set
+        self.assertEquals(job.func, c.calculate)
+        self.assertEquals(job.instance, c)
+        self.assertEquals(job.args, (3, 4))
+
+    def test_create_job_from_string_function(self):
+        """Creation of jobs using string specifier."""
+        job = Job.create(func='tests.fixtures.say_hello', args=('World',))
+
+        # Job data is set
+        self.assertEquals(job.func, say_hello)
+        self.assertIsNone(job.instance)
+        self.assertEquals(job.args, ('World',))
 
     def test_save(self):  # noqa
         """Storing jobs."""
-        job = Job.create(some_calculation, 3, 4, z=2)
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
 
         # Saving creates a Redis hash
         self.assertEquals(self.testconn.exists(job.key), False)
@@ -64,7 +84,7 @@ class TestJob(RQTestCase):
         """Fetching jobs."""
         # Prepare test
         self.testconn.hset('rq:job:some_id', 'data',
-                "(S'tests.fixtures.some_calculation'\np0\n(I3\nI4\ntp1\n(dp2\nS'z'\np3\nI2\nstp4\n.")  # noqa
+                "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")  # noqa
         self.testconn.hset('rq:job:some_id', 'created_at',
                 "2012-02-07 22:13:24+0000")
 
@@ -72,6 +92,7 @@ class TestJob(RQTestCase):
         job = Job.fetch('some_id')
         self.assertEquals(job.id, 'some_id')
         self.assertEquals(job.func_name, 'tests.fixtures.some_calculation')
+        self.assertIsNone(job.instance)
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, dict(z=2))
         self.assertEquals(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
@@ -95,7 +116,7 @@ class TestJob(RQTestCase):
 
     def test_persistence_of_typical_jobs(self):
         """Storing typical jobs."""
-        job = Job.create(some_calculation, 3, 4, z=2)
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
@@ -111,7 +132,7 @@ class TestJob(RQTestCase):
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(some_calculation, 3, 4, z=2)
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         job2 = Job.fetch(job.id)
@@ -130,7 +151,7 @@ class TestJob(RQTestCase):
     def test_fetching_unreadable_data(self):
         """Fetching fails on unreadable data."""
         # Set up
-        job = Job.create(some_calculation, 3, 4, z=2)
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         # Just replace the data hkey with some random noise
@@ -140,7 +161,7 @@ class TestJob(RQTestCase):
 
     def test_job_is_unimportable(self):
         """Jobs that cannot be imported throw exception on access."""
-        job = Job.create(say_hello, 'Lionel')
+        job = Job.create(func=say_hello, args=('Lionel',))
         job.save()
 
         # Now slightly modify the job to make it unimportable (this is
@@ -153,3 +174,18 @@ class TestJob(RQTestCase):
         job.refresh()
         with self.assertRaises(AttributeError):
             job.func  # accessing the func property should fail
+
+    def test_additional_job_attrs_is_persisted(self):
+        """
+        Verify that additional attributes stored on jobs are:
+        - Saved in Redis when job.save() is called
+        - Attached back to job instance when job.refresh() is called
+        """
+        job = Job.create(func=say_hello, args=('Lionel',))
+        job.foo = 'bar'
+        job.save()
+        self.assertEqual(self.testconn.hget(job.key, 'foo'), 'bar')
+
+        job2 = Job.fetch(job.id)
+        job2.refresh()
+        self.assertEqual(job2.foo, 'bar')

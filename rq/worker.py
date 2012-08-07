@@ -2,7 +2,11 @@ import os
 import errno
 import random
 import time
-import procname
+try:
+    from procname import setprocname
+except ImportError:
+    def setprocname(*args, **kwargs):  # noqa
+        pass
 import socket
 import signal
 import traceback
@@ -16,12 +20,17 @@ from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
-from .timeouts import death_pentalty_after
+from .timeouts import death_penalty_after
+from .version import VERSION
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 red = make_colorizer('darkred')
 blue = make_colorizer('darkblue')
+
+
+class StopRequested(Exception):
+    pass
 
 
 def iterable(x):
@@ -56,7 +65,8 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         reported_working = connection.smembers(cls.redis_workers_keys)
-        workers = [cls.find_by_key(key, connection) for key in reported_working]
+        workers = [cls.find_by_key(key, connection) for key in
+                reported_working]
         return compact(workers)
 
     @classmethod
@@ -160,7 +170,7 @@ class Worker(object):
 
         This can be used to make `ps -ef` output more readable.
         """
-        procname.setprocname('rq: %s' % (message,))
+        setprocname('rq: %s' % (message,))
 
 
     def register_birth(self):  # noqa
@@ -232,19 +242,21 @@ class Worker(object):
             """Stops the current worker loop but waits for child processes to
             end gracefully (warm shutdown).
             """
-            self.log.debug('Got %s signal.' % signal_name(signum))
+            self.log.debug('Got signal %s.' % signal_name(signum))
 
             signal.signal(signal.SIGINT, request_force_stop)
             signal.signal(signal.SIGTERM, request_force_stop)
 
-            if self.is_horse:
-                self.log.debug('Ignoring signal %s.' % signal_name(signum))
-                return
-
-            msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
+            msg = 'Warm shut down requested.'
             self.log.warning(msg)
-            self._stopped = True
-            self.log.debug('Stopping after current horse is finished.')
+            # If shutdown is requested in the middle of a job, wait until finish
+            # before shutting down
+            if self.state == 'busy':
+                self._stopped = True
+                self.log.debug('Stopping after current horse is finished. '
+                               'Press Ctrl+C again for a cold shutdown.')
+            else:
+                raise StopRequested()
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
@@ -263,6 +275,7 @@ class Worker(object):
 
         did_perform_work = False
         self.register_birth()
+        self.log.info('RQ worker started, version %s' % VERSION)
         self.state = 'starting'
         try:
             while True:
@@ -281,6 +294,8 @@ class Worker(object):
                             connection=self.connection)
                     if result is None:
                         break
+                except StopRequested:
+                    break
                 except UnpickleError as e:
                     msg = '*** Ignoring unpickleable data on %s.' % \
                             green(e.queue.name)
@@ -291,11 +306,12 @@ class Worker(object):
                     self.failed_queue.push_job_id(e.job_id)
                     continue
 
+                self.state = 'busy'
+
                 job, queue = result
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                     blue(job.description), job.id))
 
-                self.state = 'busy'
                 self.fork_and_perform_job(job)
 
                 did_perform_work = True
@@ -335,6 +351,15 @@ class Worker(object):
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
         random.seed()
+
+        # Always ignore Ctrl+C in the work horse, as it might abort the
+        # currently running job.
+        # The main worker catches the Ctrl+C and requests graceful shutdown
+        # after the current work is done.  When cold shutdown is requested, it
+        # kills the current job anyway.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
         self._is_horse = True
         self.log = Logger('horse')
 
@@ -353,8 +378,12 @@ class Worker(object):
             job.origin, time.time()))
 
         try:
-            with death_pentalty_after(job.timeout or 180):
+            with death_penalty_after(job.timeout or 180):
                 rv = job.perform()
+
+            # Pickle the result in the same try-except block since we need to
+            # use the same exc handling when pickling fails
+            pickled_rv = dumps(rv)
         except Exception as e:
             fq = self.failed_queue
             self.log.exception(red(str(e)))
@@ -370,7 +399,7 @@ class Worker(object):
 
         if rv is not None:
             p = self.connection.pipeline()
-            p.hset(job.key, 'result', dumps(rv))
+            p.hset(job.key, 'result', pickled_rv)
             p.expire(job.key, self.rv_ttl)
             p.execute()
         else:

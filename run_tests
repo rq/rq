@@ -4,7 +4,13 @@ check_redis_running() {
     return $?
 }
 
-if which -s rg; then
+# Quit early if Redis server isn't running
+if ! check_redis_running; then
+    echo "Redis not running." >&2
+    exit 2
+fi
+
+if command -v rg >/dev/null; then
     safe_rg=rg
 else
     # Fall back for systems that don't have rg installed
@@ -12,13 +18,15 @@ else
 fi
 
 export ONLY_RUN_FAST_TESTS=1
-if [ "$1" == '-f' ]; then  # Poor man's argparse
+if [ "$1" = '-f' ]; then  # Poor man's argparse
     unset ONLY_RUN_FAST_TESTS
+    shift 1
 fi
 
-if check_redis_running; then
-    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_' | $safe_rg
+# For use on build server, we need exit code to be representative of success/failure
+if [ "$1" = '-x' ]; then
+    shift 1
+    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1
 else
-    echo "Redis not running." >&2
-    exit 2
+    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_' | $safe_rg
 fi

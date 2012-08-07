@@ -1,5 +1,5 @@
 import times
-from .connections import get_current_connection
+from .connections import resolve_connection
 from .job import Job
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 from .compat import total_ordering
@@ -23,8 +23,7 @@ class Queue(object):
         """Returns an iterable of all Queues.
         """
         prefix = cls.redis_queue_namespace_prefix
-        if connection is None:
-            connection = get_current_connection()
+        connection = resolve_connection(connection)
 
         def to_queue(queue_key):
             return cls.from_queue_key(queue_key, connection=connection)
@@ -43,9 +42,7 @@ class Queue(object):
         return cls(name, connection=connection)
 
     def __init__(self, name='default', default_timeout=None, connection=None):
-        if connection is None:
-            connection = get_current_connection()
-        self.connection = connection
+        self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
@@ -74,7 +71,7 @@ class Queue(object):
         """Returns a list of all (valid) jobs in the queue."""
         def safe_fetch(job_id):
             try:
-                job = Job.fetch(job_id)
+                job = Job.fetch(job_id, connection=self.connection)
             except NoSuchJobError:
                 return None
             except UnpickleError:
@@ -107,6 +104,18 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None):
+        """Creates a job to represent the delayed function call and enqueues
+        it.
+
+        It is much like `.enqueue()`, except that it takes the function's args
+        and kwargs as explicit arguments.  Any kwargs passed to this function
+        contain options for RQ itself.
+        """
+        timeout = timeout or self._default_timeout
+        job = Job.create(func, args, kwargs, connection=self.connection)
+        return self.enqueue_job(job, timeout=timeout)
+
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues
         it.
@@ -114,17 +123,29 @@ class Queue(object):
         Expects the function to call, along with the arguments and keyword
         arguments.
 
-        The special keyword `timeout` is reserved for `enqueue()` itself and
-        it won't be passed to the actual job function.
+        The function argument `f` may be any of the following:
+
+        * A reference to a function
+        * A reference to an object's instance method
+        * A string, representing the location of a function (must be
+          meaningful to the import context of the workers)
         """
-        if f.__module__ == '__main__':
+        if not isinstance(f, basestring) and f.__module__ == '__main__':
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
 
-        timeout = kwargs.pop('timeout', self._default_timeout)
-        job = Job.create(f, *args, connection=self.connection, **kwargs)
-        return self.enqueue_job(job, timeout=timeout)
+        # Detect explicit invocations, i.e. of the form:
+        #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
+        timeout = None
+        if 'args' in kwargs or 'kwargs' in kwargs:
+            assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
+            timeout = kwargs.pop('timeout', None)
+            args = kwargs.pop('args', None)
+            kwargs = kwargs.pop('kwargs', None)
+
+        return self.enqueue_call(func=f, args=args, kwargs=kwargs,
+                timeout=timeout)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
@@ -163,8 +184,7 @@ class Queue(object):
         Until Redis receives a specific method for this, we'll have to wrap it
         this way.
         """
-        if connection is None:
-            connection = get_current_connection()
+        connection = resolve_connection(connection)
         if blocking:
             queue_key, job_id = connection.blpop(queue_keys)
             return queue_key, job_id
@@ -263,7 +283,7 @@ class FailedQueue(Queue):
         """
         job.ended_at = times.now()
         job.exc_info = exc_info
-        return self.enqueue_job(job, set_meta_data=False)
+        return self.enqueue_job(job, timeout=job.timeout, set_meta_data=False)
 
     def requeue(self, job_id):
         """Requeues the job with the given job ID."""
@@ -280,4 +300,4 @@ class FailedQueue(Queue):
 
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
-        q.enqueue_job(job)
+        q.enqueue_job(job, timeout=job.timeout)

@@ -11,11 +11,11 @@ class NoRedisConnectionException(Exception):
 def Connection(connection=None):
     if connection is None:
         connection = Redis()
-    _connection_stack.push(connection)
+    push_connection(connection)
     try:
         yield
     finally:
-        popped = _connection_stack.pop()
+        popped = pop_connection()
         assert popped == connection, \
                 'Unexpected Redis connection was popped off the stack. ' \
                 'Check your Redis connection setup.'
@@ -41,7 +41,7 @@ def use_connection(redis=None):
 
     if redis is None:
         redis = Redis()
-    _connection_stack.push(redis)
+    push_connection(redis)
 
 
 def get_current_connection():
@@ -49,6 +49,20 @@ def get_current_connection():
     connection stack).
     """
     return _connection_stack.top
+
+
+def resolve_connection(connection=None):
+    """Convenience function to resolve the given or the current connection.
+    Raises an exception if it cannot resolve a connection now.
+    """
+    if connection is not None:
+        return connection
+
+    connection = get_current_connection()
+    if connection is None:
+        raise NoRedisConnectionException(
+                'Could not resolve a Redis connection.')
+    return connection
 
 
 _connection_stack = LocalStack()
