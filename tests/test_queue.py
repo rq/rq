@@ -254,7 +254,7 @@ class TestFailedQueue(RQTestCase):
         self.assertEquals(job.timeout, 200)
 
     def test_enqueue_preserves_result_ttl(self):
-        """Ensure that result_ttl argument are properly persisted to Redis."""
+        """Enqueueing persists result_ttl."""
         q = Queue()
         job = q.enqueue(div_by_zero, args=(1, 2, 3), result_ttl=10)
         self.assertEqual(job.result_ttl, 10)

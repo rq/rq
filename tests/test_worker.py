@@ -96,7 +96,6 @@ class TestWorker(RQTestCase):
         self.assertEquals(job.enqueued_at, enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
-
     def test_cancelled_jobs_arent_executed(self):  # noqa
         """Cancelling jobs."""
 
@@ -147,7 +146,6 @@ class TestWorker(RQTestCase):
         assert self.testconn.ttl(job_with_rv.key) > 0
         assert not self.testconn.exists(job_without_rv.key)
 
-
     @slow  # noqa
     def test_timeouts(self):
         """Worker kills jobs after timeout."""
@@ -182,12 +180,10 @@ class TestWorker(RQTestCase):
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w = Worker([q])
         w.work(burst=True)
-        self.assertEqual(self.testconn.ttl(job.key), 10)
+        self.assertNotEqual(self.testconn.ttl(job.key), 0)
 
         # Job with -1 result_ttl don't expire
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
         w = Worker([q])
         w.work(burst=True)
         self.assertEqual(self.testconn.ttl(job.key), None)
-
-
