@@ -398,13 +398,20 @@ class Worker(object):
         else:
             self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
 
-        if rv is not None:
+        # Expire results
+        has_result = rv is not None
+        explicit_ttl_requested = job.result_ttl is not None
+        should_expire = has_result or explicit_ttl_requested
+        if should_expire:
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
-            if job.result_ttl is None:
-                p.expire(job.key, self.default_result_ttl)
-            elif job.result_ttl >= 0:
-                p.expire(job.key, job.result_ttl)
+
+            if explicit_ttl_requested:
+                ttl = job.result_ttl
+            else:
+                ttl = self.default_result_ttl
+            if ttl >= 0:
+                p.expire(job.key, ttl)
             p.execute()
         else:
             # Cleanup immediately
