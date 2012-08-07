@@ -94,7 +94,8 @@ class Worker(object):
         return worker
 
 
-    def __init__(self, queues, name=None, rv_ttl=500, connection=None):  # noqa
+    def __init__(self, queues, name=None, default_result_ttl=500,
+            connection=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -103,7 +104,7 @@ class Worker(object):
         self._name = name
         self.queues = queues
         self.validate_queues()
-        self.rv_ttl = rv_ttl
+        self.default_result_ttl = default_result_ttl
         self._state = 'starting'
         self._is_horse = False
         self._horse_pid = 0
@@ -398,10 +399,20 @@ class Worker(object):
         else:
             self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
 
-        if rv is not None:
+        # Expire results
+        has_result = rv is not None
+        explicit_ttl_requested = job.result_ttl is not None
+        should_expire = has_result or explicit_ttl_requested
+        if should_expire:
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
-            p.expire(job.key, self.rv_ttl)
+
+            if explicit_ttl_requested:
+                ttl = job.result_ttl
+            else:
+                ttl = self.default_result_ttl
+            if ttl >= 0:
+                p.expire(job.key, ttl)
             p.execute()
         else:
             # Cleanup immediately
