@@ -175,3 +175,19 @@ class TestWorker(RQTestCase):
         # TODO: Having to do the manual refresh() here is really ugly!
         res.refresh()
         self.assertIn('JobTimeoutException', res.exc_info)
+
+    def test_worker_sets_result_ttl(self):
+        """Ensure that Worker properly sets result_ttl for individual jobs."""
+        q = Queue()
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w = Worker([q])
+        w.work(burst=True)
+        self.assertEqual(self.testconn.ttl(job.key), 10)
+
+        # Job with -1 result_ttl don't expire
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
+        w = Worker([q])
+        w.work(burst=True)
+        self.assertEqual(self.testconn.ttl(job.key), None)
+
+
