@@ -12,7 +12,7 @@ solving a problem, but are getting back a few in return.
 Python functions may have return values, so jobs can have them, too.  If a job
 returns a non-`None` return value, the worker will write that return value back
 to the job's Redis hash under the `result` key.  The job's Redis hash itself
-will expire after 500 seconds after the job is finished.
+will expire after 500 seconds by default after the job is finished.
 
 The party that enqueued the job gets back a `Job` instance as a result of the
 enqueueing itself.  Such a `Job` object is a proxy object that is tied to the
@@ -24,9 +24,26 @@ job's ID, to be able to poll for results.
 Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
-The TTL value of these keys cannot be changed currently, nor can it be disabled
-altogether.  If this introduces any real life problems, we might support
-specifying it in the future.  For now, we're keeping it simple.
+From RQ >= 0.3.1, The TTL value of the job result can be specified using the
+`result_ttl` keyword argument to `enqueue()` calls.  It can also be used to
+disable the expiry altogether.  You then are responsible for cleaning up jobs
+yourself, though, so be careful to use that.
+
+You can do the following:
+
+{% highlight python %}
+q.enqueue(func=foo)  # result expires after 500 secs (the default)
+q.enqueue(func=foo, result_ttl=86400)  # result expires after 1 day
+q.enqueue(func=foo, result_ttl=0)  # result gets deleted immediately
+q.enqueue(func=foo, result_ttl=-1)  # result never expires--you should delete jobs manually
+{% endhighlight %}
+
+Additionally, you can use this for keeping around finished jobs without return
+values, which would be deleted immediately by default.
+
+{% highlight python %}
+q.enqueue(func=func_without_rv, result_ttl=500)  # job kept explicitly
+{% endhighlight %}
 
 
 ## Dealing with exceptions
