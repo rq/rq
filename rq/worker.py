@@ -250,8 +250,9 @@ class Worker(object):
 
             msg = 'Warm shut down requested.'
             self.log.warning(msg)
-            # If shutdown is requested in the middle of a job, wait until finish
-            # before shutting down
+
+            # If shutdown is requested in the middle of a job, wait until
+            # finish before shutting down
             if self.state == 'busy':
                 self._stopped = True
                 self.log.debug('Stopping after current horse is finished. '
