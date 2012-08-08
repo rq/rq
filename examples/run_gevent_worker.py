@@ -1,9 +1,9 @@
-from rq import Queue, use_connection
-from rq.worker import GeventWorker as Worker
+from rq import Queue, Connection
+from rq.worker import GeventWorker
 
-# Tell rq what Redis connection to use
-use_connection()
 
 if __name__ == '__main__':
-    q = Queue()
-    Worker(q, slaves=8).work()
+    # Tell rq what Redis connection to use
+    with Connection():
+        q = Queue()
+        GeventWorker(q, slaves=8).work()

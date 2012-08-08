@@ -411,7 +411,6 @@ class Worker(object):
 
 try:
     import gevent
-    from gevent.coros import Semaphore
 except ImportError:
     raise ImportError('Install gevent when using GeventWorker instances.')
 
@@ -419,7 +418,7 @@ class GeventWorker(Worker):
     def __init__(self, *args, **kwargs):
         self.slaves = kwargs.pop('slaves', 1)
         self.slave_workers = []
-        self._slave_semaphore = Semaphore(value=self.slaves)
+        self.slave_counter = self.slaves
         super(GeventWorker, self).__init__(*args, **kwargs)
 
     def slave(self):
@@ -434,6 +433,7 @@ class GeventWorker(Worker):
                     # Perform a context switch
                     gevent.sleep(1)  # TODO: 1 second or 0?
                 elif self.stopped:
+                    self.log.info('Gevent Slave stopping on request.')
                     result = True
                     return
                 else:
@@ -442,19 +442,21 @@ class GeventWorker(Worker):
                         blue(job.description), job.id))
 
                     self.state = 'busy'
-                    self._slave_semaphore.acquire(blocking=False)
+                    self.slave_counter -= 1
 
                     try:
                         gevent.spawn(self.perform_job, job).join()
                     finally:
-                        self._slave_semaphore.release()
+                        self.slave_counter += 1
 
-                    if self._slave_semaphore.counter == self.slaves:
+                    if self.slave_counter == self.slaves:
                         self.state = 'idle'
 
                     gevent.sleep(0)
-
                     result = None
+
+            except StopRequested:
+                return
             except UnpickleError as e:
                 msg = '*** Ignoring unpickleable data on %s.' % \
                         green(e.queue.name)
@@ -479,9 +481,17 @@ class GeventWorker(Worker):
 
         did_perform_work = False
         self.register_birth()
+        self.log.info('RQ worker started, version %s' % VERSION)
         self.state = 'starting'
+
         try:
-            for i in range(self.slaves):
+            qnames = self.queue_names()
+            self.procline('Listening on %s' % ','.join(qnames))
+            self.log.info('')
+            self.log.info('*** Listening on %s...' % \
+                    green(', '.join(qnames)))
+
+            for _ in xrange(self.slaves):
                 self.slave_workers.append(gevent.spawn(self.slave))
 
             gevent.joinall(self.slave_workers)
