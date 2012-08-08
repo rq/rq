@@ -467,7 +467,6 @@ class GeventWorker(Worker):
                 self.failed_queue.push_job_id(e.job_id)
                 continue
 
-
     def work(self, burst=False):  # noqa
         """Starts the work loop.
 
@@ -494,7 +493,11 @@ class GeventWorker(Worker):
             for _ in xrange(self.slaves):
                 self.slave_workers.append(gevent.spawn(self.slave))
 
-            gevent.joinall(self.slave_workers)
+            try:
+                gevent.joinall(self.slave_workers)
+            except KeyboardInterrupt:
+                pass
+
             did_perform_work = True
         finally:
             if not self.is_horse:
@@ -506,41 +509,18 @@ class GeventWorker(Worker):
         gracefully. TODO: refactor this to stay DRY
         """
 
-        def request_force_stop(signum, frame):
-            """Terminates the application (cold shutdown).
-            """
-            self.log.warning('Cold shut down.')
-
-            # Take down the horse with the worker
-            if self.horse_pid:
-                msg = 'Taking down horse %d with me.' % self.horse_pid
-                self.log.debug(msg)
-                try:
-                    gevent.shutdown()
-                except OSError as e:
-                    # ESRCH ("No such process") is fine with us
-                    if e.errno != errno.ESRCH:
-                        self.log.debug('Horse already down.')
-                        raise
-            raise SystemExit()
-
-        def request_stop():
+        def request_stop(*args, **kwargs):
             """Stops the current worker loop but waits for child processes to
             end gracefully (warm shutdown).
             """
-            #self.log.debug('Got %s signal.' % signal_name(signum))
+            #self.log.debug('Got signal %s.' % signal_name(signum))
+            self.log.warning('Warm shut down requested.')
 
-            #gevent.signal(signal.SIGINT, request_force_stop)
-            #gevent.signal(signal.SIGTERM, request_force_stop)
-
-            if self.is_horse:
-                #self.log.debug('Ignoring signal %s.' % signal_name(signum))
-                return
-
-            msg = 'Warm shut down. Press Ctrl+C again for a cold shutdown.'
-            self.log.warning(msg)
+            # If shutdown is requested in the middle of a job, wait until finish
+            # before shutting down
             self._stopped = True
-            self.log.debug('Stopping after current horse is finished.')
+            self.log.debug('Stopping after current active slaves are finished. '
+                            'Send A SIGQUIT signal for a cold shutdown.')
 
         gevent.signal(signal.SIGINT, request_stop)
         gevent.signal(signal.SIGTERM, request_stop)
