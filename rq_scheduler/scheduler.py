@@ -63,7 +63,8 @@ class Scheduler(object):
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
 
-    def _create_job(self, func, args=None, kwargs=None, commit=True):
+    def _create_job(self, func, args=None, kwargs=None, commit=True,
+                    result_ttl=None):
         """
         Creates an RQ job and saves it to Redis.
         """
@@ -75,7 +76,8 @@ class Scheduler(object):
             args = ()
         if kwargs is None:
             kwargs = {}
-        job = Job.create(func, args=args, connection=self.connection, kwargs=kwargs)
+        job = Job.create(func, args=args, connection=self.connection,
+                         kwargs=kwargs, result_ttl=result_ttl)
         job.origin = self.queue_name
         if commit:
             job.save()
@@ -126,11 +128,15 @@ class Scheduler(object):
                             interval=interval, repeat=repeat)
 
     def enqueue(self, scheduled_time, func, args=None, kwargs=None,
-                interval=None, repeat=None):
+                interval=None, repeat=None, result_ttl=None):
         """
         Schedule a job to be periodically executed, at a certain interval.
         """
-        job = self._create_job(func, args=args, kwargs=kwargs, commit=False)
+        # Set result_ttl to -1 for periodic jobs, if result_ttl not specified
+        if interval is not None and result_ttl is None:
+            result_ttl = -1
+        job = self._create_job(func, args=args, kwargs=kwargs, commit=False,
+                               result_ttl=result_ttl)
         if interval is not None:
             job.interval = int(interval)
         if repeat is not None:

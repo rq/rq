@@ -237,3 +237,11 @@ class TestScheduler(RQTestCase):
         self.scheduler.get_jobs_to_queue()
         self.assertNotIn(job.id, self.testconn.zrange(
             self.scheduler.scheduled_jobs_key, 0, 1))
+
+    def test_periodic_jobs_sets_ttl(self):
+        """
+        Ensure periodic jobs set result_ttl to infinite.
+        """
+        job = self.scheduler.enqueue(datetime.now(), say_hello, interval=5)
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.result_ttl, -1)
