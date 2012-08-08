@@ -80,7 +80,10 @@ Periodic & Repeated Jobs
 ------------------------
 
 As of version 0.3, `RQ Scheduler`_ also supports creating periodic and repeated jobs.
-You can do this via the ``enqueue`` method. This is the syntax::
+You can do this via the ``enqueue`` method. Note that this feature needs
+`RQ`_ >= 0.3.1.
+
+This is how you do it::
 
     scheduler.enqueue(
         scheduled_time=datetime.now(), # Time for first execution
@@ -124,6 +127,10 @@ The script accepts these arguments:
 =========
 Changelog
 =========
+
+Version 0.3.2:
+
+* Periodic jobs now require `RQ`_ >= 0.3.1
 
 Version 0.3:
 
