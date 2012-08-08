@@ -89,7 +89,7 @@ This is how you do it::
         scheduled_time=datetime.now(), # Time for first execution
         func=func,                     # Function to be queued
         args=[arg1, arg2],             # Arguments passed into function when executed
-        kwargs = {'foo': 'bar'},       # Keyword arguments passed into function when executed
+        kwargs={'foo': 'bar'},       # Keyword arguments passed into function when executed
         interval=60,                   # Time before the function is called again, in seconds
         repeat=10                      # Repeat this number of times (None means repeat forever)
     )
