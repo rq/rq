@@ -252,3 +252,11 @@ class TestFailedQueue(RQTestCase):
 
         job = Job.fetch(job.id)
         self.assertEquals(job.timeout, 200)
+
+    def test_enqueue_preserves_result_ttl(self):
+        """Enqueueing persists result_ttl."""
+        q = Queue()
+        job = q.enqueue(div_by_zero, args=(1, 2, 3), result_ttl=10)
+        self.assertEqual(job.result_ttl, 10)
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(int(job_from_queue.result_ttl), 10)
