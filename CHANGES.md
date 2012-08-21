@@ -4,6 +4,8 @@
 - `.enqueue()` now takes a `result_ttl` keyword argument that can be used to
   change the expiration time of results.
 
+- Remove `logbook` dependency (in favor of `logging`)
+
 
 ### 0.3.0
 (August 5th, 2012)
