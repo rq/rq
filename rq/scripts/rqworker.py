@@ -9,7 +9,7 @@ from redis.exceptions import ConnectionError
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
 
-logger = logging.getLogger("rq.worker")
+logger = logging.getLogger(__name__)
 
 
 def setup_loghandlers(args):
