@@ -1,42 +1,44 @@
 #!/usr/bin/env python
 import sys
 import argparse
-import logbook
-from logbook import handlers
+import logging
+import logging.config
+
 from rq import Queue, Worker
 from redis.exceptions import ConnectionError
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
 
-
-def format_colors(record, handler):
-    from rq.utils import make_colorizer
-    if record.level == logbook.WARNING:
-        colorize = make_colorizer('darkyellow')
-    elif record.level >= logbook.ERROR:
-        colorize = make_colorizer('darkred')
-    else:
-        colorize = lambda x: x
-    return '%s: %s' % (record.time.strftime('%H:%M:%S'), colorize(record.msg))
+logger = logging.getLogger("rq.worker")
 
 
 def setup_loghandlers(args):
-    if args.verbose:
-        loglevel = logbook.DEBUG
-        formatter = None
-    else:
-        loglevel = logbook.INFO
-        formatter = format_colors
+    logging.config.dictConfig({
+        "version": 1,
+        "disable_existing_loggers": False,
 
-    handlers.NullHandler(bubble=False).push_application()
-    handler = handlers.StreamHandler(sys.stdout, level=loglevel, bubble=False)
-    if formatter:
-        handler.formatter = formatter
-    handler.push_application()
-    handler = handlers.StderrHandler(level=logbook.WARNING, bubble=False)
-    if formatter:
-        handler.formatter = formatter
-    handler.push_application()
+        "formatters": {
+            "console": {
+                "format": "%(asctime)s %(message)s",
+                "datefmt": "%H:%M:%S",
+            },
+        },
+
+        "handlers": {
+            "console": {
+                "level": "DEBUG",
+                #"class": "logging.StreamHandler",
+                "class": "rq.utils.ColorizingStreamHandler",
+                "formatter": "console",
+                "exclude": ["%(asctime)s"],
+            },
+        },
+
+        "root": {
+            "handlers": ["console"],
+            "level": "DEBUG" if args.verbose else "INFO"
+        }
+    })
 
 
 def parse_args():
@@ -60,6 +62,7 @@ def main():
 
     setup_loghandlers(args)
     setup_redis(args)
+
     try:
         queues = map(Queue, args.queues)
         w = Worker(queues, name=args.name)
