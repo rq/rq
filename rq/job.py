@@ -289,7 +289,8 @@ class Job(object):
     def perform(self):  # noqa
         """Invokes the job function with the job arguments.
         """
-        return self.func(*self.args, **self.kwargs)
+        self._result = self.func(*self.args, **self.kwargs)
+        return self._result
 
 
     # Representation

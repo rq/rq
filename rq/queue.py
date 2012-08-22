@@ -41,12 +41,14 @@ class Queue(object):
         name = queue_key[len(prefix):]
         return cls(name, connection=connection)
 
-    def __init__(self, name='default', default_timeout=None, connection=None):
+    def __init__(self, name='default', default_timeout=None, connection=None,
+                 async=True):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
         self._default_timeout = default_timeout
+        self._async = async
 
     @property
     def key(self):
@@ -158,6 +160,8 @@ class Queue(object):
 
         If the `set_meta_data` argument is `True` (default), it will update
         the properties `origin` and `enqueued_at`.
+
+        If Queue is instantiated with async=False, job is executed immediately.
         """
         if set_meta_data:
             job.origin = self.name
@@ -168,8 +172,12 @@ class Queue(object):
         else:
             job.timeout = 180  # default
 
-        job.save()
-        self.push_job_id(job.id)
+        if self._async:
+            job.save()
+            self.push_job_id(job.id)
+        else:
+            job.perform()
+            job.save()
         return job
 
     def pop_job_id(self):
