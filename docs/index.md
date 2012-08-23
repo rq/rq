@@ -132,8 +132,9 @@ execution to a worker (available since version 0.3.1).  To do this, pass the
 21
 {% endhighlight %}
 
-The above code runs without an active worker and executes `fib(8)` as if
-a worker would have done it.
+The above code runs without an active worker and executes `fib(8)`
+synchronously within the same process.  You may know this behaviour from Celery
+as `ALWAYS_EAGER`.
 
 
 ## The worker
