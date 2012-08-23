@@ -25,7 +25,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.ended_at)
-        self.assertIsNone(job.return_value)
+        self.assertIsNone(job.result)
         self.assertIsNone(job.exc_info)
 
     def test_create_typical_job(self):
@@ -46,7 +46,7 @@ class TestJob(RQTestCase):
         # ...but metadata is not
         self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
-        self.assertIsNone(job.return_value)
+        self.assertIsNone(job.result)
 
     def test_create_instance_method_job(self):
         """Creation of jobs for instance methods."""

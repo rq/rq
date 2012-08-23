@@ -172,7 +172,7 @@ class Job(object):
         return (self.func_name, self.instance, self.args, self.kwargs)
 
     @property
-    def return_value(self):
+    def result(self):
         """Returns the return value of the job.
 
         Initially, right after enqueueing a job, the return value will be
@@ -194,6 +194,9 @@ class Job(object):
                 # cache the result
                 self._result = loads(rv)
         return self._result
+
+    """Backwards-compatibility accessor property `return_value`."""
+    return_value = self.result
 
 
     # Persistence

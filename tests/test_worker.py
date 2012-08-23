@@ -29,10 +29,10 @@ class TestWorker(RQTestCase):
         """Worker processes work fed via string arguments."""
         q = Queue('foo')
         w = Worker([q])
-        result = q.enqueue('tests.fixtures.say_hello', name='Frank')
+        job = q.enqueue('tests.fixtures.say_hello', name='Frank')
         self.assertEquals(w.work(burst=True), True,
                 'Expected at least some work done.')
-        self.assertEquals(result.return_value, 'Hi there, Frank!')
+        self.assertEquals(job.result, 'Hi there, Frank!')
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
@@ -109,11 +109,11 @@ class TestWorker(RQTestCase):
                 raise
 
         q = Queue()
-        result = q.enqueue(create_file, SENTINEL_FILE)
+        job = q.enqueue(create_file, SENTINEL_FILE)
 
         # Here, we cancel the job, so the sentinel file may not be created
         assert q.count == 1
-        result.cancel()
+        job.cancel()
         assert q.count == 1
 
         w = Worker([q])
