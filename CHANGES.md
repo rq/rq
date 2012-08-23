@@ -4,6 +4,9 @@
 - `.enqueue()` now takes a `result_ttl` keyword argument that can be used to
   change the expiration time of results.
 
+- Queue constructor now takes an optional `async=False` argument to bypass the
+  worker (for testing purposes).
+
 - Remove `logbook` dependency (in favor of `logging`)
 
 
