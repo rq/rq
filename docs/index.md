@@ -36,12 +36,12 @@ redis_conn = Redis()
 q = Queue(connection=redis_conn)  # no args implies the default queue
 
 # Delay calculation of the multiplication
-result = q.enqueue(count_words_at_url, 'http://nvie.com')
-print result.return_value   # => None
+job = q.enqueue(count_words_at_url, 'http://nvie.com')
+print job.result   # => None
 
 # Now, wait a while, until the worker is finished
 time.sleep(2)
-print result.return_value   # => 889
+print job.result   # => 889
 {% endhighlight %}
 
 If you want to put the work on a specific queue, simply specify its name:
@@ -98,7 +98,7 @@ When jobs get enqueued, the `queue.enqueue()` method returns a `Job` instance.
 This is nothing more than a proxy object that can be used to check the outcome
 of the actual job.
 
-For this purpose, it has a convenience `return_value` accessor property, that
+For this purpose, it has a convenience `result` accessor property, that
 will return `None` when the job is not yet finished, or a non-`None` value when
 the job has finished (assuming the job _has_ a return value in the first place,
 of course).
@@ -113,9 +113,9 @@ Starting from RQ >= 0.3, there exists a similar decorator:
 def add(x, y):
     return x + y
 
-result = add.delay(3, 4)
+job = add.delay(3, 4)
 time.sleep(1)
-print result.return_value
+print job.result
 {% endhighlight %}
 
 
