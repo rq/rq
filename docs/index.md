@@ -119,6 +119,23 @@ print job.result
 {% endhighlight %}
 
 
+## Bypassing workers
+
+For testing purposes, you can enqueue jobs without delegating the actual
+execution to a worker (available since version 0.3.1).  To do this, pass the
+`async=False` argument into the Queue constructor:
+
+{% highlight pycon %}
+>>> q = Queue('low', async=False)
+>>> job = q.enqueue(fib, 8)
+>>> job.result
+21
+{% endhighlight %}
+
+The above code runs without an active worker and executes `fib(8)` as if
+a worker would have done it.
+
+
 ## The worker
 
 To learn about workers, see the [workers][w] documentation.
