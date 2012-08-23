@@ -147,10 +147,8 @@ on a queue:
 
 ## Limitations
 
-Currently, it is impossible to enqueue instance methods.
-
-Furthermore, RQ workers will only run on systems that implement `fork()`.  Most
-notably, this means it is not possible to run the workers on Windows.
+RQ workers will only run on systems that implement `fork()`.  Most notably,
+this means it is not possible to run the workers on Windows.
 
 
 [m]: http://pypi.python.org/pypi/mailer
