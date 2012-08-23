@@ -196,7 +196,7 @@ class Job(object):
         return self._result
 
     """Backwards-compatibility accessor property `return_value`."""
-    return_value = self.result
+    return_value = result
 
 
     # Persistence
