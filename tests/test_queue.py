@@ -1,5 +1,5 @@
 from tests import RQTestCase
-from tests.fixtures import Calculator, say_hello, div_by_zero
+from tests.fixtures import Calculator, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
 from rq.job import Job
 from rq.exceptions import InvalidJobOperationError
@@ -260,3 +260,9 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(job.result_ttl, 10)
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(int(job_from_queue.result_ttl), 10)
+
+    def test_async_false(self):
+        """Executes a job immediately if async=False."""
+        q = Queue(async=False)
+        job = q.enqueue(some_calculation, args=(2, 3))
+        self.assertEqual(job.return_value, 6)
