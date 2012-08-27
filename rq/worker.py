@@ -409,12 +409,16 @@ class Worker(object):
         result_ttl =  self.default_result_ttl if job.result_ttl is None else job.result_ttl  # noqa
         if result_ttl == 0:
             job.delete()
+            self.log.info('Result discarded immediately.')
         else:
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
             p.hset(job.key, 'status', job._status)
             if result_ttl > 0:
                 p.expire(job.key, result_ttl)
+                self.log.info('Result is kept for %d seconds.' % result_ttl)
+            else:
+                self.log.warning('Result will never expire, clean up result key manually.')
             p.execute()
 
         return True
