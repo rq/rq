@@ -92,6 +92,22 @@ class Job(object):
         return self._status
 
     @property
+    def is_finished(self):
+        return self.status == Status.FINISHED
+
+    @property
+    def is_queued(self):
+        return self.status == Status.QUEUED
+
+    @property
+    def is_failed(self):
+        return self.status == Status.FAILED
+
+    @property
+    def is_done(self):
+        return self._status is not None and not self.is_queued
+
+    @property
     def func(self):
         func_name = self.func_name
         if func_name is None:
