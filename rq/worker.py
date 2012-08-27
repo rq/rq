@@ -14,6 +14,7 @@ import logging
 from cPickle import dumps
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
+from .job import Status
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
 from .timeouts import death_penalty_after
@@ -385,10 +386,12 @@ class Worker(object):
             # Pickle the result in the same try-except block since we need to
             # use the same exc handling when pickling fails
             pickled_rv = dumps(rv)
+            job._status = Status.FINISHED
         except Exception as e:
             fq = self.failed_queue
             self.log.exception(red(str(e)))
             self.log.warning('Moving job to %s queue.' % fq.name)
+            job._status = Status.FAILED
 
             fq.quarantine(job, exc_info=traceback.format_exc())
             return False
@@ -398,23 +401,25 @@ class Worker(object):
         else:
             self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
 
-        # Expire results
-        has_result = rv is not None
-        explicit_ttl_requested = job.result_ttl is not None
-        should_expire = has_result or explicit_ttl_requested
-        if should_expire:
+        # How long we persist the job result depends on the value of
+        # result_ttl:
+        # - If result_ttl is 0, cleanup the job immediately.
+        # - If it's a positive number, set the job to expire in X seconds.
+        # - If result_ttl is negative, don't set an expiry to it (persist
+        #   forever)
+        result_ttl =  self.default_result_ttl if job.result_ttl is None else job.result_ttl  # noqa
+        if result_ttl == 0:
+            job.delete()
+            self.log.info('Result discarded immediately.')
+        else:
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
-
-            if explicit_ttl_requested:
-                ttl = job.result_ttl
+            p.hset(job.key, 'status', job._status)
+            if result_ttl > 0:
+                p.expire(job.key, result_ttl)
+                self.log.info('Result is kept for %d seconds.' % result_ttl)
             else:
-                ttl = self.default_result_ttl
-            if ttl >= 0:
-                p.expire(job.key, ttl)
+                self.log.warning('Result will never expire, clean up result key manually.')
             p.execute()
-        else:
-            # Cleanup immediately
-            job.delete()
 
         return True
