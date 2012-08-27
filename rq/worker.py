@@ -400,13 +400,13 @@ class Worker(object):
         else:
             self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
 
-        """
-        How long we persist the job result depends on the value of result_ttl:
-        - If result_ttl is 0, cleanup the job immediately.
-        - If it's a positive number, set the job to expire in X seconds.
-        - If result_ttl is negative, don't set an expiry to it (persist forever)
-        """
-        result_ttl =  self.default_result_ttl if job.result_ttl is None else job.result_ttl
+        # How long we persist the job result depends on the value of
+        # result_ttl:
+        # - If result_ttl is 0, cleanup the job immediately.
+        # - If it's a positive number, set the job to expire in X seconds.
+        # - If result_ttl is negative, don't set an expiry to it (persist
+        #   forever)
+        result_ttl =  self.default_result_ttl if job.result_ttl is None else job.result_ttl  # noqa
         if result_ttl == 0:
             job.delete()
         else:
