@@ -89,6 +89,7 @@ class Job(object):
 
     @property
     def status(self):
+        self._status = self.connection.hget(self.key, 'status')
         return self._status
 
     @property
