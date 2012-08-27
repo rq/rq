@@ -115,7 +115,8 @@ class Queue(object):
         contain options for RQ itself.
         """
         timeout = timeout or self._default_timeout
-        job = Job.create(func, args, kwargs, connection=self.connection, result_ttl=result_ttl)
+        job = Job.create(func, args, kwargs, connection=self.connection,
+                         result_ttl=result_ttl, status=Job.STATUS.queued)
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue(self, f, *args, **kwargs):

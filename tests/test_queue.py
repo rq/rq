@@ -205,6 +205,12 @@ class TestQueue(RQTestCase):
                 None)
         self.assertEquals(q.count, 0)
 
+    def test_enqueue_sets_status(self):
+        """Enqueueing a job sets its status to "queued"."""
+        q = Queue()
+        job = q.enqueue(say_hello)
+        self.assertEqual(job.status, Job.STATUS.queued)
+
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):

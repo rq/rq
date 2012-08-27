@@ -123,29 +123,6 @@ class TestWorker(RQTestCase):
         # Should not have created evidence of execution
         self.assertEquals(os.path.exists(SENTINEL_FILE), False)
 
-    def test_cleaning_up_of_jobs(self):
-        """Jobs get cleaned up after successful execution."""
-        q = Queue()
-        job_with_rv = q.enqueue(say_hello, 'Franklin')
-        job_without_rv = q.enqueue(do_nothing)
-
-        # Job hashes exists
-        self.assertEquals(self.testconn.type(job_with_rv.key), 'hash')
-        self.assertEquals(self.testconn.type(job_without_rv.key), 'hash')
-
-        # Execute the job
-        w = Worker([q])
-        w.work(burst=True)
-
-        # First, assert that the job executed successfully
-        assert self.testconn.hget(job_with_rv.key, 'exc_info') is None
-        assert self.testconn.hget(job_without_rv.key, 'exc_info') is None
-
-        # Jobs with results expire after a certain TTL, while jobs without
-        # results are immediately removed
-        assert self.testconn.ttl(job_with_rv.key) > 0
-        assert not self.testconn.exists(job_without_rv.key)
-
     @slow  # noqa
     def test_timeouts(self):
         """Worker kills jobs after timeout."""
@@ -187,3 +164,25 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         w.work(burst=True)
         self.assertEqual(self.testconn.ttl(job.key), None)
+
+        # Job with result_ttl = 0 gets deleted immediately
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=0)
+        w = Worker([q])
+        w.work(burst=True)
+        self.assertEqual(self.testconn.get(job.key), None)
+
+    def test_worker_sets_job_status(self):
+        """Ensure that worker correctly sets job status."""
+        q = Queue()
+        w = Worker([q])
+        
+        job = q.enqueue(say_hello)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertEqual(job.status, job.STATUS.finished)
+        
+        # Failed jobs should set status to "failed"
+        job = q.enqueue(div_by_zero, args=(1,))
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertEqual(job.status, job.STATUS.failed)

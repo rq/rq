@@ -1,6 +1,7 @@
 import importlib
 import inspect
 import times
+from collections import namedtuple
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
 from .connections import get_current_connection
@@ -8,9 +9,11 @@ from .exceptions import UnpickleError, NoSuchJobError
 
 
 JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
-                 'created_at', 'enqueued_at', 'connection', '_result',
+                 'created_at', 'enqueued_at', 'connection', '_result', 'result',
                  'timeout', '_kwargs', 'exc_info', '_id', 'data', '_instance',
-                 'result_ttl'])
+                 'result_ttl', '_status', 'status'])
+Status = namedtuple('Status', ('queued', 'finished', 'failed'))
+STATUS = Status(queued='queued', finished='finished', failed='failed')
 
 
 def unpickle(pickled_string):
@@ -48,11 +51,12 @@ def requeue_job(job_id, connection=None):
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+    STATUS = STATUS
 
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None):
+               result_ttl=None, status=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -74,11 +78,16 @@ class Job(object):
         job._kwargs = kwargs
         job.description = job.get_call_string()
         job.result_ttl = result_ttl
+        job._status = status
         return job
 
     @property
     def func_name(self):
         return self._func_name
+
+    @property
+    def status(self):
+        return self._status
 
     @property
     def func(self):
@@ -138,6 +147,7 @@ class Job(object):
         self.exc_info = None
         self.timeout = None
         self.result_ttl = None
+        self._status = None
 
 
     # Data access
@@ -227,6 +237,7 @@ class Job(object):
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
+        self._status = obj.get('status') if obj.get('status') else None # noqa
 
         # Overwrite job's additional attrs (those not in JOB_ATTRS), if any
         additional_attrs = set(obj.keys()).difference(JOB_ATTRS)
@@ -258,6 +269,8 @@ class Job(object):
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
+        if self._status is not None:
+            obj['status'] = self._status
         """
         Store additional attributes from job instance into Redis. This is done
         so that third party libraries using RQ can store additional data
