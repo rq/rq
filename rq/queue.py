@@ -1,6 +1,6 @@
 import times
 from .connections import resolve_connection
-from .job import Job
+from .job import Job, Status
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 from .compat import total_ordering
 
@@ -116,7 +116,7 @@ class Queue(object):
         """
         timeout = timeout or self._default_timeout
         job = Job.create(func, args, kwargs, connection=self.connection,
-                         result_ttl=result_ttl, status=Job.STATUS.queued)
+                         result_ttl=result_ttl, status=Status.QUEUED)
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue(self, f, *args, **kwargs):

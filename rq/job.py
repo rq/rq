@@ -12,8 +12,12 @@ JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
                  'created_at', 'enqueued_at', 'connection', '_result', 'result',
                  'timeout', '_kwargs', 'exc_info', '_id', 'data', '_instance',
                  'result_ttl', '_status', 'status'])
-Status = namedtuple('Status', ('queued', 'finished', 'failed'))
-STATUS = Status(queued='queued', finished='finished', failed='failed')
+
+def enum(name, *sequential, **named):
+    values = dict(zip(sequential, range(len(sequential))), **named)
+    return type(name, (), values)
+
+Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed')
 
 
 def unpickle(pickled_string):
@@ -51,8 +55,6 @@ def requeue_job(job_id, connection=None):
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
-    STATUS = STATUS
-
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,

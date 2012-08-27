@@ -4,7 +4,7 @@ from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
         create_file_after_timeout
 from tests.helpers import strip_milliseconds
 from rq import Queue, Worker, get_failed_queue
-from rq.job import Job
+from rq.job import Job, Status
 
 
 class TestWorker(RQTestCase):
@@ -175,14 +175,14 @@ class TestWorker(RQTestCase):
         """Ensure that worker correctly sets job status."""
         q = Queue()
         w = Worker([q])
-        
+
         job = q.enqueue(say_hello)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.status, job.STATUS.finished)
-        
+        self.assertEqual(job.status, Status.FINISHED)
+
         # Failed jobs should set status to "failed"
         job = q.enqueue(div_by_zero, args=(1,))
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.status, job.STATUS.failed)
+        self.assertEqual(job.status, Status.FAILED)

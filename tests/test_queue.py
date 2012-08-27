@@ -1,7 +1,7 @@
 from tests import RQTestCase
 from tests.fixtures import Calculator, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
-from rq.job import Job
+from rq.job import Job, Status
 from rq.exceptions import InvalidJobOperationError
 
 
@@ -209,7 +209,7 @@ class TestQueue(RQTestCase):
         """Enqueueing a job sets its status to "queued"."""
         q = Queue()
         job = q.enqueue(say_hello)
-        self.assertEqual(job.status, Job.STATUS.queued)
+        self.assertEqual(job.status, Status.QUEUED)
 
 
 class TestFailedQueue(RQTestCase):
