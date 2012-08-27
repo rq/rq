@@ -7,6 +7,16 @@
 - Queue constructor now takes an optional `async=False` argument to bypass the
   worker (for testing purposes).
 
+- Jobs now carry status information.  To get job status information, like
+  whether a job is queued, finished, or failed, use the property `status`, or
+  one of the new boolean accessor properties `is_queued`, `is_finished` or
+  `is_failed`.
+
+- Jobs return values are always stored explicitly, even if they have to
+  explicit return value or return `None` (with given TTL of course).  This
+  makes it possible to distinguish between a job that explicitly returned
+  `None` and a job that isn't finished yet (see `status` property).
+
 - Remove `logbook` dependency (in favor of `logging`)
 
 
