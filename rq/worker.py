@@ -84,11 +84,12 @@ class Worker(object):
             return None
 
         name = worker_key[len(prefix):]
-        worker = cls([], name)
+        worker = cls([], name, connection=connection)
         queues = connection.hget(worker.key, 'queues')
         worker._state = connection.hget(worker.key, 'state') or '?'
         if queues:
-            worker.queues = map(Queue, queues.split(','))
+            worker.queues = [Queue(queue, connection=connection)
+                                for queue in queues.split(',')]
         return worker
 
 
