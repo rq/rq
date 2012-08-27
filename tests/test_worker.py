@@ -181,7 +181,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_queued, True)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, False)
-        self.assertEqual(job.is_done, False)
 
         w.work(burst=True)
         job = Job.fetch(job.id)
@@ -189,7 +188,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, True)
         self.assertEqual(job.is_failed, False)
-        self.assertEqual(job.is_done, True)
 
         # Failed jobs should set status to "failed"
         job = q.enqueue(div_by_zero, args=(1,))
@@ -199,4 +197,3 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
-        self.assertEqual(job.is_done, True)
