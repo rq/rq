@@ -3,11 +3,13 @@ from rq import use_connection
 
 
 def add_standard_arguments(parser):
-    parser.add_argument('--host', '-H', default='localhost',
+    parser.add_argument('--config', '-c', default=None,
+            help='Module containing RQ settings.')
+    parser.add_argument('--host', '-H', default=None,
             help='The Redis hostname (default: localhost)')
-    parser.add_argument('--port', '-p', type=int, default=6379,
+    parser.add_argument('--port', '-p', default=None,
             help='The Redis portnumber (default: 6379)')
-    parser.add_argument('--db', '-d', type=int, default=0,
+    parser.add_argument('--db', '-d', type=int, default=None,
             help='The Redis database (default: 0)')
 
 
