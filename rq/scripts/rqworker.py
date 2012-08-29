@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
+    parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
     parser.add_argument('queues', nargs='*', default=['default'], help='The queues to listen on (default: \'default\')')
 
     return parser.parse_args()
@@ -74,6 +75,8 @@ def main():
         args.port = int(settings.get('REDIS_PORT', 6379))
     if args.db is None:
         args.db = settings.get('REDIS_DB', 0)
+    if args.sentry_dsn is None:
+        args.sentry_dsn = settings.get('SENTRY_DSN', None)
 
     if args.path:
         sys.path = args.path.split(':') + sys.path
@@ -84,6 +87,14 @@ def main():
     try:
         queues = map(Queue, args.queues)
         w = Worker(queues, name=args.name)
+
+        # Should we configure Sentry?
+        if args.sentry_dsn:
+            from raven import Client
+            from rq.contrib.sentry import register_sentry
+            client = Client(args.sentry_dsn)
+            register_sentry(client, w)
+
         w.work(burst=args.burst)
     except ConnectionError as e:
         print(e)
