@@ -24,6 +24,10 @@
   [here](http://python-rq.org/docs/exceptions/) and
   [here](http://python-rq.org/patterns/sentry/).
 
+- `rqworker` now supports passing in configuration files instead of the
+  many command line options: `rqworker -c settings` will source
+  `settings.py`.
+
 
 ### 0.3.0
 (August 5th, 2012)
