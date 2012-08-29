@@ -19,6 +19,11 @@
 
 - Remove `logbook` dependency (in favor of `logging`)
 
+- Custom exception handlers can now be configured in addition to, or to fully
+  replace, moving failed jobs to the failed queue.  Relevant documentation
+  [here](http://python-rq.org/docs/exceptions/) and
+  [here](http://python-rq.org/patterns/sentry/).
+
 
 ### 0.3.0
 (August 5th, 2012)

@@ -87,10 +87,15 @@ class Job(object):
     def func_name(self):
         return self._func_name
 
-    @property
-    def status(self):
+    def _get_status(self):
         self._status = self.connection.hget(self.key, 'status')
         return self._status
+
+    def _set_status(self, status):
+        self._status = status
+        self.connection.hset(self.key, 'status', self._status)
+
+    status = property(_get_status, _set_status)
 
     @property
     def is_finished(self):

@@ -1,3 +1,4 @@
+import sys
 import os
 import errno
 import random
@@ -22,7 +23,6 @@ from .version import VERSION
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
-red = make_colorizer('darkred')
 blue = make_colorizer('darkblue')
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ class Worker(object):
 
 
     def __init__(self, queues, name=None, default_result_ttl=500,
-            connection=None):  # noqa
+            connection=None, exc_handler=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -104,6 +104,7 @@ class Worker(object):
         self._name = name
         self.queues = queues
         self.validate_queues()
+        self._exc_handlers = []
         self.default_result_ttl = default_result_ttl
         self._state = 'starting'
         self._is_horse = False
@@ -111,6 +112,12 @@ class Worker(object):
         self._stopped = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
+
+        # By default, push the "move-to-failed-queue" exception handler onto
+        # the stack
+        self.push_exc_handler(self.move_to_failed_queue)
+        if exc_handler is not None:
+            self.push_exc_handler(exc_handler)
 
 
     def validate_queues(self):  # noqa
@@ -387,13 +394,10 @@ class Worker(object):
             # use the same exc handling when pickling fails
             pickled_rv = dumps(rv)
             job._status = Status.FINISHED
-        except Exception as e:
-            fq = self.failed_queue
-            self.log.exception(red(str(e)))
-            self.log.warning('Moving job to %s queue.' % fq.name)
-            job._status = Status.FAILED
-
-            fq.quarantine(job, exc_info=traceback.format_exc())
+        except:
+            # Use the public setter here, to immediately update Redis
+            job.status = Status.FAILED
+            self.handle_exception(job, *sys.exc_info())
             return False
 
         if rv is None:
@@ -423,3 +427,37 @@ class Worker(object):
             p.execute()
 
         return True
+
+
+    def handle_exception(self, job, *exc_info):
+        """Walks the exception handler stack to delegate exception handling."""
+        exc_string = ''.join(
+                traceback.format_exception_only(*exc_info[:2]) +
+                traceback.format_exception(*exc_info))
+        self.log.error(exc_string)
+
+        for handler in reversed(self._exc_handlers):
+            self.log.debug('Invoking exception handler %s' % (handler,))
+            fallthrough = handler(job, *exc_info)
+
+            # Only handlers with explicit return values should disable further
+            # exc handling, so interpret a None return value as True.
+            if fallthrough is None:
+                fallthrough = True
+
+            if not fallthrough:
+                break
+
+    def move_to_failed_queue(self, job, *exc_info):
+        """Default exception handler: move the job to the failed queue."""
+        exc_string = ''.join(traceback.format_exception(*exc_info))
+        self.log.warning('Moving job to %s queue.' % self.failed_queue.name)
+        self.failed_queue.quarantine(job, exc_info=exc_string)
+
+    def push_exc_handler(self, handler_func):
+        """Pushes an exception handler onto the exc handler stack."""
+        self._exc_handlers.append(handler_func)
+
+    def pop_exc_handler(self):
+        """Pops the latest exception handler off of the exc handler stack."""
+        return self._exc_handlers.pop()
