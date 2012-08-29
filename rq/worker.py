@@ -23,7 +23,6 @@ from .version import VERSION
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
-red = make_colorizer('darkred')
 blue = make_colorizer('darkblue')
 
 logger = logging.getLogger(__name__)
@@ -429,8 +428,10 @@ class Worker(object):
 
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = ''.join(traceback.format_exception(*exc_info))
-        self.log.exception(red(exc_string))
+        exc_string = ''.join(
+                traceback.format_exception_only(*exc_info[:2]) +
+                traceback.format_exception(*exc_info))
+        self.log.error(exc_string)
 
         for handler in reversed(self._exc_handlers):
             self.log.debug('Invoking exception handler %s' % (handler,))
