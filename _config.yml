@@ -20,6 +20,8 @@ navigation:
     url: docs/monitoring/
   - text: Connections
     url: docs/connections/
+  - text: Exceptions
+    url: docs/exceptions/
 - text: Patterns
   url: patterns/
   subs:
@@ -27,6 +29,8 @@ navigation:
     url: patterns/
   - text: Django
     url: patterns/django/
+  - text: Sentry
+    url: patterns/sentry/
 - text: Contributing
   url: contrib/
   subs:
