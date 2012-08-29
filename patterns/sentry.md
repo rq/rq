@@ -16,6 +16,7 @@ An example:
 
 {% highlight python %}
 from raven import Client
+from rq.contrib.sentry import register_sentry
 
 client = Client('your sentry DSN here')
 register_sentry(client, worker)
