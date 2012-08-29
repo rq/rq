@@ -72,7 +72,7 @@ It's important to know for implementors that, by default, when the handler
 doesn't have an explicit return value (thus `None`), this will be interpreted
 as `True` (i.e.  continue with the next handler).
 
-To replace the default behaviour (move the job to the `failed` queue) of RQ,
+To replace the default behaviour (i.e. moving the job to the `failed` queue),
 use a custom exception handler that doesn't fall through, for example:
 
 {% highlight python %}
