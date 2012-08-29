@@ -17,7 +17,7 @@ def get_version():
 
 
 def get_dependencies():
-    deps = ['redis', 'times']
+    deps = ['redis >= 2.4.0', 'times']
     if sys.version_info < (2, 7) or \
             (sys.version_info >= (3, 0) and sys.version_info < (3, 1)):
         deps += ['importlib']
