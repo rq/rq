@@ -26,4 +26,4 @@ Where `worker` is your RQ worker instance.  After that, call `worker.work(...)`
 to start the worker.  All exceptions that occur are reported to Sentry
 automatically.
 
-Read more on RQ's [custom exception handling]() capabilities.
+Read more on RQ's [custom exception handling](/docs/exceptions/) capabilities.
