@@ -10,6 +10,7 @@ def register_sentry(client, worker):
                     'func': job.func,
                     'args': job.args,
                     'kwargs': job.kwargs,
+                    'description': job.description,
                     })
 
     worker.push_exc_handler(send_to_sentry)
