@@ -64,6 +64,9 @@ def read_config_file(module):
 def main():
     args = parse_args()
 
+    if args.path:
+        sys.path = args.path.split(':') + sys.path
+
     settings = {}
     if args.config:
         settings = read_config_file(args.config)
@@ -77,9 +80,6 @@ def main():
         args.db = settings.get('REDIS_DB', 0)
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN', None)
-
-    if args.path:
-        sys.path = args.path.split(':') + sys.path
 
     setup_loghandlers(args)
     setup_redis(args)
