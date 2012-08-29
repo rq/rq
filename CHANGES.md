@@ -19,6 +19,9 @@
 
 - Remove `logbook` dependency (in favor of `logging`)
 
+- Custom exception handlers can now be configured in addition to, or to fully
+  replace, moving failed jobs to the failed queue.
+
 
 ### 0.3.0
 (August 5th, 2012)
