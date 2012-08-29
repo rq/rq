@@ -454,9 +454,9 @@ class Worker(object):
         self.failed_queue.quarantine(job, exc_info=exc_string)
 
     def push_exc_handler(self, handler_func):
-        """Pushes an exception handler onto the exc hanlder stack."""
+        """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
     def pop_exc_handler(self):
-        """Pops the latest exception handler off of the exc hanlder stack."""
+        """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
