@@ -423,3 +423,120 @@ class Worker(object):
             p.execute()
 
         return True
+
+
+try:
+    import gevent
+except ImportError:
+    raise ImportError('Install gevent when using GeventWorker instances.')
+
+class GeventWorker(Worker):
+    def __init__(self, *args, **kwargs):
+        self.slaves = kwargs.pop('slaves', 1)
+        self.slave_workers = []
+        self.slave_counter = self.slaves
+        super(GeventWorker, self).__init__(*args, **kwargs)
+
+    def slave(self):
+        result = None
+
+        while result is None:
+            try:
+                result = Queue.dequeue_any(self.queues, blocking=False,
+                    connection=self.connection)
+
+                if result is None:
+                    # Perform a context switch
+                    gevent.sleep(1)  # TODO: 1 second or 0?
+                elif self.stopped:
+                    self.log.info('Gevent Slave stopping on request.')
+                    result = True
+                    return
+                else:
+                    job, queue = result
+                    self.log.info('%s: %s (%s)' % (green(queue.name),
+                        blue(job.description), job.id))
+
+                    self.state = 'busy'
+                    self.slave_counter -= 1
+
+                    try:
+                        gevent.spawn(self.perform_job, job).join()
+                    finally:
+                        self.slave_counter += 1
+
+                    if self.slave_counter == self.slaves:
+                        self.state = 'idle'
+
+                    gevent.sleep(0)
+                    result = None
+
+            except StopRequested:
+                return
+            except UnpickleError as e:
+                msg = '*** Ignoring unpickleable data on %s.' % \
+                        green(e.queue.name)
+                self.log.warning(msg)
+                self.log.debug('Data follows:')
+                self.log.debug(e.raw_data)
+                self.log.debug('End of unreadable data.')
+                self.failed_queue.push_job_id(e.job_id)
+                continue
+
+    def work(self, burst=False):  # noqa
+        """Starts the work loop.
+
+        Pops and performs all jobs on the current list of queues.  When all
+        queues are empty, block and wait for new jobs to arrive on any of the
+        queues, unless `burst` mode is enabled.
+
+        The return value indicates whether any jobs were processed.
+        """
+        self._install_signal_handlers()
+
+        did_perform_work = False
+        self.register_birth()
+        self.log.info('RQ worker started, version %s' % VERSION)
+        self.state = 'starting'
+
+        try:
+            qnames = self.queue_names()
+            self.procline('Listening on %s' % ','.join(qnames))
+            self.log.info('')
+            self.log.info('*** Listening on %s...' % \
+                    green(', '.join(qnames)))
+
+            for _ in xrange(self.slaves):
+                self.slave_workers.append(gevent.spawn(self.slave))
+
+            try:
+                gevent.joinall(self.slave_workers)
+            except KeyboardInterrupt:
+                pass
+
+            did_perform_work = True
+        finally:
+            if not self.is_horse:
+                self.register_death()
+        return did_perform_work
+
+    def _install_signal_handlers(self):
+        """Installs signal handlers for handling SIGINT and SIGTERM
+        gracefully. TODO: refactor this to stay DRY
+        """
+
+        def request_stop(*args, **kwargs):
+            """Stops the current worker loop but waits for child processes to
+            end gracefully (warm shutdown).
+            """
+            #self.log.debug('Got signal %s.' % signal_name(signum))
+            self.log.warning('Warm shut down requested.')
+
+            # If shutdown is requested in the middle of a job, wait until finish
+            # before shutting down
+            self._stopped = True
+            self.log.debug('Stopping after current active slaves are finished. '
+                            'Send A SIGQUIT signal for a cold shutdown.')
+
+        gevent.signal(signal.SIGINT, request_stop)
+        gevent.signal(signal.SIGTERM, request_stop)
