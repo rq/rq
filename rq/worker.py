@@ -455,6 +455,6 @@ class Worker(object):
         """Pushes an exception handler onto the exc hanlder stack."""
         self._exc_handlers.append(handler_func)
 
-    def pop_exc_handler(self, handler_func):
+    def pop_exc_handler(self):
         """Pops the latest exception handler off of the exc hanlder stack."""
         return self._exc_handlers.pop()
