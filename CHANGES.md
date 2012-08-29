@@ -28,6 +28,11 @@
   many command line options: `rqworker -c settings` will source
   `settings.py`.
 
+- `rqworker` now supports one-flag setup to enable Sentry as its exception
+  handler: `rqworker --sentry-dsn="http://public:secret@example.com/1"`
+  Alternatively, you can use a settings file and configure `SENTRY_DSN
+  = 'http://public:secret@example.com/1'` instead.
+
 
 ### 0.3.0
 (August 5th, 2012)
