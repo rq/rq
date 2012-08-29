@@ -4,9 +4,9 @@ layout: docs
 ---
 
 Jobs can fail due to exceptions occurring.  When your RQ workers run in the
-background, how do you get notified of these exceptions.
+background, how do you get notified of these exceptions?
 
-## Default: the failed queue
+## Default: the `failed` queue
 
 The default safety net for RQ is the `failed` queue.  Every job that fails
 execution is stored in here, along with its exception information (type,
