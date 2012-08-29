@@ -395,7 +395,8 @@ class Worker(object):
             pickled_rv = dumps(rv)
             job._status = Status.FINISHED
         except:
-            job._status = Status.FAILED
+            # Use the public setter here, to immediately update Redis
+            job.status = Status.FAILED
             self.handle_exception(job, *sys.exc_info())
             return False
 
