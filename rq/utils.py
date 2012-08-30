@@ -5,7 +5,6 @@ Miscellaneous helper functions.
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
-import logging
 import os
 
 
@@ -116,34 +115,3 @@ def make_colorizer(color):
     def inner(text):
         return colorizer.colorize(color, text)
     return inner
-
-
-class ColorizingStreamHandler(logging.StreamHandler):
-
-    levels = {
-        logging.WARNING: make_colorizer('darkyellow'),
-        logging.ERROR: make_colorizer('darkred'),
-        logging.CRITICAL: make_colorizer('darkred'),
-    }
-
-    def __init__(self, exclude=None, *args, **kwargs):
-        self.exclude = exclude
-        super(ColorizingStreamHandler, self).__init__(*args, **kwargs)
-
-    @property
-    def is_tty(self):
-        isatty = getattr(self.stream, 'isatty', None)
-        return isatty and isatty()
-
-    def format(self, record):
-        message = logging.StreamHandler.format(self, record)
-        if self.is_tty:
-            colorize = self.levels.get(record.levelno, lambda x: x)
-
-            # Don't colorize any traceback
-            parts = message.split('\n', 1)
-            parts[0] = " ".join([parts[0].split(" ", 1)[0], colorize(parts[0].split(" ", 1)[1])])
-
-            message = '\n'.join(parts)
-
-        return message

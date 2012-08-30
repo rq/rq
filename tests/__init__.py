@@ -1,7 +1,6 @@
-import logging
 import unittest
-
 from redis import Redis
+from logbook import NullHandler
 from rq import push_connection, pop_connection
 
 
@@ -48,8 +47,9 @@ class RQTestCase(unittest.TestCase):
         # Store the connection (for sanity checking)
         cls.testconn = testconn
 
-        # Shut up logging
-        logging.disable("ERROR")
+        # Shut up logbook
+        cls.log_handler = NullHandler()
+        cls.log_handler.push_thread()
 
     def setUp(self):
         # Flush beforewards (we like our hygiene)
@@ -66,7 +66,7 @@ class RQTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        logging.disable(logging.NOTSET)
+        cls.log_handler.pop_thread()
 
         # Pop the connection to Redis
         testconn = pop_connection()

@@ -17,8 +17,6 @@
   makes it possible to distinguish between a job that explicitly returned
   `None` and a job that isn't finished yet (see `status` property).
 
-- Remove `logbook` dependency (in favor of `logging`)
-
 - Custom exception handlers can now be configured in addition to, or to fully
   replace, moving failed jobs to the failed queue.  Relevant documentation
   [here](http://python-rq.org/docs/exceptions/) and

@@ -18,6 +18,7 @@ def get_version():
 
 def get_dependencies():
     deps = ['redis >= 2.4.0', 'times']
+    deps += ['logbook']  # should be soft dependency?
     if sys.version_info < (2, 7) or \
             (sys.version_info >= (3, 0) and sys.version_info < (3, 1)):
         deps += ['importlib']
