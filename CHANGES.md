@@ -1,5 +1,5 @@
 ### 0.3.1
-(not yet released)
+(August 30th, 2012)
 
 - `.enqueue()` now takes a `result_ttl` keyword argument that can be used to
   change the expiration time of results.
