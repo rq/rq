@@ -57,7 +57,10 @@ def get_current_job():
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
     """
-    return _job_stack.top
+    job_id = _job_stack.top
+    if job_id is None:
+        return None
+    return Job.fetch(job_id)
 
 
 class Job(object):
@@ -332,11 +335,11 @@ class Job(object):
     # Job execution
     def perform(self):  # noqa
         """Invokes the job function with the job arguments."""
-        _job_stack.push(self)
+        _job_stack.push(self.id)
         try:
             self._result = self.func(*self.args, **self.kwargs)
         finally:
-            assert self == _job_stack.pop()
+            assert self.id == _job_stack.pop()
         return self._result
 
 

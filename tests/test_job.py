@@ -209,4 +209,7 @@ class TestJob(RQTestCase):
 
         # Executing the job function from outside of RQ throws an exception
         job = Job.create(func=access_self)
-        self.assertEqual(job.perform(), job.id)
+        job.save()
+        id = job.perform()
+        self.assertEqual(job.id, id)
+        self.assertEqual(job.func, access_self)
