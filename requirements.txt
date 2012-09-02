@@ -1,4 +1,3 @@
 redis
 times
-logbook
 argparse
