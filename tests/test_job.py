@@ -207,7 +207,8 @@ class TestJob(RQTestCase):
         # Executing the job function from outside of RQ throws an exception
         self.assertIsNone(get_current_job())
 
-        # Executing the job function from outside of RQ throws an exception
+        # Executing the job function from within the job works (and in
+        # this case leads to the job ID being returned)
         job = Job.create(func=access_self)
         job.save()
         id = job.perform()
