@@ -4,6 +4,7 @@ import times
 from collections import namedtuple
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
+from .local import LocalStack
 from .connections import get_current_connection
 from .exceptions import UnpickleError, NoSuchJobError
 
@@ -50,6 +51,13 @@ def requeue_job(job_id, connection=None):
     from .queue import get_failed_queue
     fq = get_failed_queue(connection=connection)
     fq.requeue(job_id)
+
+
+def get_current_job():
+    """Returns the Job instance that is currently being executed.  If this
+    function is invoked from outside a job context, None is returned.
+    """
+    return _job_stack.top
 
 
 class Job(object):
@@ -323,9 +331,12 @@ class Job(object):
 
     # Job execution
     def perform(self):  # noqa
-        """Invokes the job function with the job arguments.
-        """
-        self._result = self.func(*self.args, **self.kwargs)
+        """Invokes the job function with the job arguments."""
+        _job_stack.push(self)
+        try:
+            self._result = self.func(*self.args, **self.kwargs)
+        finally:
+            assert self == _job_stack.pop()
         return self._result
 
 
@@ -352,3 +363,6 @@ class Job(object):
 
     def __hash__(self):
         return hash(self.id)
+
+
+_job_stack = LocalStack()
