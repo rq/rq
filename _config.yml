@@ -16,6 +16,8 @@ navigation:
     url: docs/workers/
   - text: Results
     url: docs/results/
+  - text: Jobs
+    url: docs/jobs/
   - text: Monitoring
     url: docs/monitoring/
   - text: Connections
