@@ -8,6 +8,8 @@ from rq import Queue, Worker
 from redis.exceptions import ConnectionError
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
+from rq.scripts import read_config_file
+from rq.scripts import setup_default_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +57,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def read_config_file(module):
-    """Reads all UPPERCASE variables defined in the given module file."""
-    settings = __import__(module, [], [], [], -1)
-    return {k: v for k, v in settings.__dict__.items() if k.upper() == k}
-
-
 def main():
     args = parse_args()
 
@@ -71,13 +67,9 @@ def main():
     if args.config:
         settings = read_config_file(args.config)
 
-    # Default arguments
-    if args.host is None:
-        args.host = settings.get('REDIS_HOST', 'localhost')
-    if args.port is None:
-        args.port = int(settings.get('REDIS_PORT', 6379))
-    if args.db is None:
-        args.db = settings.get('REDIS_DB', 0)
+    setup_default_arguments(args, settings)
+
+    # Other default arguments
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN', None)
 

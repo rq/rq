@@ -98,7 +98,7 @@ class Queue(object):
             job_id = self.connection.lpop(COMPACT_QUEUE)
             if job_id is None:
                 break
-            if Job.exists(job_id):
+            if Job.exists(job_id, self.connection):
                 self.connection.rpush(self.key, job_id)
 
 

@@ -1,3 +1,17 @@
+### 0.3.3
+(not released yet)
+
+
+
+### 0.3.2
+(September 3rd, 2012)
+
+- Fixes broken `rqinfo` command.
+
+- Improve compatibility with Python < 2.7.
+
+
+
 ### 0.3.1
 (August 30th, 2012)
 

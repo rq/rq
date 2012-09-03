@@ -9,6 +9,8 @@ from rq import Queue, Worker
 from rq.utils import gettermsize, make_colorizer
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
+from rq.scripts import read_config_file
+from rq.scripts import setup_default_arguments
 
 red = make_colorizer('darkred')
 green = make_colorizer('darkgreen')
@@ -161,6 +163,12 @@ def main():
 
     if args.path:
         sys.path = args.path.split(':') + sys.path
+
+    settings = {}
+    if args.config:
+        settings = read_config_file(args.config)
+
+    setup_default_arguments(args, settings)
 
     setup_redis(args)
     try:
