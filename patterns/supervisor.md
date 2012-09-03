@@ -5,9 +5,10 @@ layout: patterns
 
 ## Putting RQ under supervisor
 
-Supervisor is a popular tool for managing long-running processes in production
-environments.  It can automatically restart any crashed processes, and you gain
-a single dashboard for all of the running processes that make up your product.
+[Supervisor][1] is a popular tool for managing long-running processes in
+production environments.  It can automatically restart any crashed processes,
+and you gain a single dashboard for all of the running processes that make up
+your product.
 
 RQ can be used in combination with supervisor easily.  You'd typically want to
 use the following supervisor settings:
@@ -37,3 +38,5 @@ stopsignal=TERM
 autostart=true
 autorestart=true
 {% endhighlight %}
+
+[1]: http://supervisord.org/
