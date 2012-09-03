@@ -1,7 +1,11 @@
 ### 0.3.3
 (not released yet)
 
-- Access the current job from within the job function (`rq.get_current_job()`).
+- Jobs can now access the current `Job` instance from within.  Relevant
+  documentation [here](http://python-rq.org/docs/jobs/).
+
+- Custom properties can be set by modifying the `job.meta` dict.  Relevant
+  documentation [here](http://python-rq.org/docs/jobs/).
 
 
 ### 0.3.2
