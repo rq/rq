@@ -1,6 +1,8 @@
 ### 0.3.3
 (not released yet)
 
+- Custom properties can be set by modifying the `job.meta` dict.  Relevant
+  documentation [here](http://python-rq.org/docs/jobs/).
 
 
 ### 0.3.2
