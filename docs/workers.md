@@ -128,3 +128,32 @@ the work loop and gracefully register its own death.
 If, during this takedown phase, `SIGINT` or `SIGTERM` is received again, the
 worker will forcefully terminate the child process (sending it `SIGKILL`), but
 will still try to register its own death.
+
+
+## Using a config file
+
+_New in version 0.3.2._
+
+If you'd like to configure `rqworker` via a configuration file instead of
+through command line arguments, you can do this by creating a Python file like
+`settings.py`:
+
+{% highlight python %}
+REDIS_HOST = 'redis.example.com'
+REDIS_PORT = 6380
+
+# You can also specify the Redis DB to use
+# REDIS_DB = 3
+
+# If you're using Sentry to collect your runtime exceptions, you can use this
+# to configure RQ for it in a single step
+SENTRY_DSN = 'http://public:secret@example.com/1'
+{% endhighlight %}
+
+The example above shows all the options that are currently supported.
+
+To specify which module to read settings from, use the `-c` option:
+
+{% highlight console %}
+$ rqworker -c settings high normal low
+{% endhighlight %}
