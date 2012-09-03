@@ -5,7 +5,7 @@ from collections import namedtuple
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
 from .local import LocalStack
-from .connections import get_current_connection
+from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
 
 
@@ -146,9 +146,9 @@ class Job(object):
         return self._kwargs
 
     @classmethod
-    def exists(cls, job_id):
+    def exists(cls, job_id, connection=None):
         """Returns whether a job hash exists for the given job ID."""
-        conn = get_current_connection()
+        conn = resolve_connection(connection)
         return conn.exists(cls.key_for(job_id))
 
     @classmethod
@@ -161,9 +161,7 @@ class Job(object):
         return job
 
     def __init__(self, id=None, connection=None):
-        if connection is None:
-            connection = get_current_connection()
-        self.connection = connection
+        self.connection = resolve_connection(connection)
         self._id = id
         self.created_at = times.now()
         self._func_name = None
