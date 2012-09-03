@@ -175,20 +175,17 @@ class TestJob(RQTestCase):
         with self.assertRaises(AttributeError):
             job.func  # accessing the func property should fail
 
-    def test_additional_job_attrs_is_persisted(self):
-        """
-        Verify that additional attributes stored on jobs are:
-        - Saved in Redis when job.save() is called
-        - Attached back to job instance when job.refresh() is called
-        """
+    def test_custom_meta_is_persisted(self):
+        """Additional meta data on jobs are stored persisted correctly."""
         job = Job.create(func=say_hello, args=('Lionel',))
-        job.foo = 'bar'
+        job.meta['foo'] = 'bar'
         job.save()
-        self.assertEqual(self.testconn.hget(job.key, 'foo'), 'bar')
+
+        raw_data = self.testconn.hget(job.key, 'meta')
+        self.assertEqual(loads(raw_data)['foo'], 'bar')
 
         job2 = Job.fetch(job.id)
-        job2.refresh()
-        self.assertEqual(job2.foo, 'bar')
+        self.assertEqual(job2.meta['foo'], 'bar')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""

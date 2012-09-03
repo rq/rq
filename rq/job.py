@@ -9,11 +9,6 @@ from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
 
 
-JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
-                 'created_at', 'enqueued_at', 'connection', '_result', 'result',
-                 'timeout', '_kwargs', 'exc_info', '_id', 'data', '_instance',
-                 'result_ttl', '_status', 'status'])
-
 def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
     return type(name, (), values)
@@ -167,6 +162,7 @@ class Job(object):
         self.timeout = None
         self.result_ttl = None
         self._status = None
+        self.meta = {}
 
 
     # Data access
@@ -256,12 +252,8 @@ class Job(object):
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
-        self._status = obj.get('status') if obj.get('status') else None # noqa
-
-        # Overwrite job's additional attrs (those not in JOB_ATTRS), if any
-        additional_attrs = set(obj.keys()).difference(JOB_ATTRS)
-        for attr in additional_attrs:
-            setattr(self, attr, obj[attr])
+        self._status = obj.get('status') if obj.get('status') else None
+        self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def save(self):
         """Persists the current job instance to its corresponding Redis key."""
@@ -290,18 +282,9 @@ class Job(object):
             obj['result_ttl'] = self.result_ttl
         if self._status is not None:
             obj['status'] = self._status
-        """
-        Store additional attributes from job instance into Redis. This is done
-        so that third party libraries using RQ can store additional data
-        directly on ``Job`` instances. For example:
+        if self.meta:
+            obj['meta'] = dumps(self.meta)
 
-        job = Job.create(func)
-        job.foo = 'bar'
-        job.save() # Will persist the 'foo' attribute
-        """
-        additional_attrs = set(self.__dict__.keys()).difference(JOB_ATTRS)
-        for attr in additional_attrs:
-            obj[attr] = getattr(self, attr)
         self.connection.hmset(key, obj)
 
     def cancel(self):
