@@ -33,6 +33,8 @@ navigation:
     url: patterns/django/
   - text: Sentry
     url: patterns/sentry/
+  - text: Supervisor
+    url: patterns/supervisor/
 - text: Contributing
   url: contrib/
   subs:
