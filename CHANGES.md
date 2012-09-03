@@ -1,7 +1,7 @@
 ### 0.3.2
 (not released yet)
 
-- Access the current job from within the job function (`rq.current_job()`).
+- Access the current job from within the job function (`rq.get_current_job()`).
 
 
 ### 0.3.1
