@@ -334,3 +334,43 @@ class Job(object):
 
     def __hash__(self):
         return hash(self.id)
+
+
+    # Backwards compatibility for custom properties
+    def __getattr__(self, name):
+        import warnings
+        warnings.warn(
+                "Getting custom properties from the job instance directly "
+                "will be unsupported as of RQ 0.4. Please use the meta dict "
+                "to store all custom variables.  So instead of this:\n\n"
+                "\tjob.foo\n\n"
+                "Use this:\n\n"
+                "\tjob.meta['foo']\n",
+                SyntaxWarning)
+        try:
+            return self.__dict__['meta'][name]  # avoid recursion
+        except KeyError:
+            return getattr(super(Job, self), name)
+
+    def __setattr__(self, name, value):
+        # Ignore the "private" fields
+        private_attrs = set(['origin', '_func_name', 'ended_at',
+            'description', '_args', 'created_at', 'enqueued_at', 'connection',
+            '_result', 'result', 'timeout', '_kwargs', 'exc_info', '_id',
+            'data', '_instance', 'result_ttl', '_status', 'status', 'meta'])
+
+        if name in private_attrs:
+            object.__setattr__(self, name, value)
+            return
+
+        import warnings
+        warnings.warn(
+                "Setting custom properties on the job instance directly will "
+                "be unsupported as of RQ 0.4. Please use the meta dict to "
+                "store all custom variables.  So instead of this:\n\n"
+                "\tjob.foo = 'bar'\n\n"
+                "Use this:\n\n"
+                "\tjob.meta['foo'] = 'bar'\n",
+                SyntaxWarning)
+
+        self.__dict__['meta'][name] = value
