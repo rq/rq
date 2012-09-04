@@ -11,6 +11,8 @@ def add_standard_arguments(parser):
             help='The Redis portnumber (default: 6379)')
     parser.add_argument('--db', '-d', type=int, default=None,
             help='The Redis database (default: 0)')
+    parser.add_argument('--password', '-a', default=None,
+            help='The Redis password (default: None)')
 
 
 def read_config_file(module):
@@ -34,5 +36,6 @@ def setup_default_arguments(args, settings):
 
 
 def setup_redis(args):
-    redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db)
+    redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db,
+        password=args.password)
     use_connection(redis_conn)
