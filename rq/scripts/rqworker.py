@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
-    parser.add_argument('queues', nargs='*', default=['default'], help='The queues to listen on (default: \'default\')')
+    parser.add_argument('queues', nargs='*', help='The queues to listen on (default: \'default\')')
 
     return parser.parse_args()
 

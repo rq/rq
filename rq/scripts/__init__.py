@@ -39,6 +39,9 @@ def setup_default_arguments(args, settings):
     if args.password is None:
         args.password = settings.get('REDIS_PASSWORD', None)
 
+    if not args.queues:
+        args.queues = settings.get('QUEUES', ['default'])
+
 
 def setup_redis(args):
     redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db,
