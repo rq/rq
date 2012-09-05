@@ -144,6 +144,10 @@ REDIS_PORT = 6380
 
 # You can also specify the Redis DB to use
 # REDIS_DB = 3
+# REDIS_PASSWORD = 'very secret'
+
+# Queues to listen on
+QUEUES = ['high', 'normal', 'low']
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step
@@ -155,5 +159,5 @@ The example above shows all the options that are currently supported.
 To specify which module to read settings from, use the `-c` option:
 
 {% highlight console %}
-$ rqworker -c settings high normal low
+$ rqworker -c settings
 {% endhighlight %}
