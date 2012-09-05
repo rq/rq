@@ -4,6 +4,8 @@
 - Custom properties can be set by modifying the `job.meta` dict.  Relevant
   documentation [here](http://python-rq.org/docs/jobs/).
 
+- `rqworker` now has an optional `--password` flag.
+
 
 ### 0.3.2
 (September 3rd, 2012)
