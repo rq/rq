@@ -27,12 +27,17 @@ def setup_default_arguments(args, settings):
     """ Sets up args from settings or defaults """
     if args.host is None:
         args.host = settings.get('REDIS_HOST', 'localhost')
+
     if args.port is None:
         args.port = int(settings.get('REDIS_PORT', 6379))
     else:
         args.port = int(args.port)
+
     if args.db is None:
         args.db = settings.get('REDIS_DB', 0)
+
+    if args.password is None:
+        args.password = settings.get('REDIS_PASSWORD', None)
 
 
 def setup_redis(args):
