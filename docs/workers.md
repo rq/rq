@@ -154,8 +154,9 @@ QUEUES = ['high', 'normal', 'low']
 SENTRY_DSN = 'http://public:secret@example.com/1'
 {% endhighlight %}
 
-The example above shows all the options that are currently supported.  _The
-`QUEUES` and `REDIS_PASSWORD` settings are new since 0.3.3._
+The example above shows all the options that are currently supported.
+
+_Note: The_ `QUEUES` _and_ `REDIS_PASSWORD` _settings are new since 0.3.3._
 
 To specify which module to read settings from, use the `-c` option:
 
