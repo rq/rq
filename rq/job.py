@@ -13,7 +13,8 @@ def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
     return type(name, (), values)
 
-Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed')
+Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed',
+                        STARTED='started')
 
 
 def unpickle(pickled_string):
@@ -104,6 +105,10 @@ class Job(object):
     @property
     def is_failed(self):
         return self.status == Status.FAILED
+
+    @property
+    def is_started(self):
+        return self.status == Status.STARTED
 
     @property
     def func(self):
