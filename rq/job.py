@@ -14,7 +14,7 @@ def enum(name, *sequential, **named):
     return type(name, (), values)
 
 Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed',
-                        RUNNING='running')
+                        STARTED='started')
 
 
 def unpickle(pickled_string):
@@ -107,8 +107,8 @@ class Job(object):
         return self.status == Status.FAILED
 
     @property
-    def is_running(self):
-        return self.status == Status.RUNNING
+    def is_started(self):
+        return self.status == Status.STARTED
 
     @property
     def func(self):

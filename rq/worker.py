@@ -321,7 +321,7 @@ class Worker(object):
 
                 job, queue = result
                 # Use the public setter here, to immediately update Redis
-                job.status = Status.RUNNING
+                job.status = Status.STARTED
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                     blue(job.description), job.id))
 
