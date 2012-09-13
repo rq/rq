@@ -17,7 +17,7 @@ try:
     Logger = Logger   # Does nothing except it shuts up pyflakes annoying error
 except ImportError:
     from logging import Logger
-from .queue import Queue, get_failed_queue
+from .queue import Queue, get_failed_queue, get_started_queue
 from .connections import get_current_connection
 from .job import Status
 from .utils import make_colorizer
@@ -114,6 +114,7 @@ class Worker(object):
         self._stopped = False
         self.log = Logger('worker')
         self.failed_queue = get_failed_queue(connection=self.connection)
+        self.started_queue = get_started_queue(connection=self.connection)
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -322,6 +323,7 @@ class Worker(object):
                 job, queue = result
                 # Use the public setter here, to immediately update Redis
                 job.status = Status.STARTED
+                self.started_queue.push_job_id(job.id)
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                     blue(job.description), job.id))
 
@@ -403,6 +405,9 @@ class Worker(object):
             job.status = Status.FAILED
             self.handle_exception(job, *sys.exc_info())
             return False
+        finally:
+            # Remove the job from the started queue in either case
+            self.started_queue.remove(job)
 
         if rv is None:
             self.log.info('Job OK')
