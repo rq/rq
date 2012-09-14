@@ -35,6 +35,7 @@ def gettermsize():
 
 class _Colorizer(object):
     def __init__(self):
+        import sys
         esc = "\x1b["
 
         self.codes = {}
@@ -65,12 +66,17 @@ class _Colorizer(object):
         self.codes["darkyellow"] = self.codes["brown"]
         self.codes["fuscia"] = self.codes["fuchsia"]
         self.codes["white"] = self.codes["bold"]
+        self.notty = not sys.stdout.isatty()
+
 
     def reset_color(self):
         return self.codes["reset"]
 
     def colorize(self, color_key, text):
-        return self.codes[color_key] + text + self.codes["reset"]
+        if self.notty:
+            return text
+        else:
+            return self.codes[color_key] + text + self.codes["reset"]
 
     def ansiformat(self, attr, text):
         """
