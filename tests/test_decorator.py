@@ -3,7 +3,7 @@ from tests.fixtures import decorated_job
 
 from rq.decorators import job
 from rq.job import Job
-
+from rq.worker import DEFAULT_RESULT_TTL
 
 class TestDecorator(RQTestCase):
 
@@ -34,3 +34,17 @@ class TestDecorator(RQTestCase):
             return 'Hi'
         result = hello.delay()
         self.assertEqual(result.origin, 'queue_name')
+
+    def test_decorator_accepts_result_ttl_as_argument(self):
+        """Ensure that passing in result_ttl to the decorator sets the
+        result_ttl on the job
+        """
+        #Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.result_ttl, DEFAULT_RESULT_TTL)
+
+        @job('default', result_ttl=10)
+        def hello():
+            return 'Why hello'
+        result = hello.delay()
+        self.assertEqual(result.result_ttl, 10)

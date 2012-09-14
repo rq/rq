@@ -1,11 +1,12 @@
 from functools import wraps
 from .queue import Queue
 from .connections import resolve_connection
-
+from .worker import DEFAULT_RESULT_TTL
 
 class job(object):
 
-    def __init__(self, queue, connection=None, timeout=None):
+    def __init__(self, queue, connection=None, timeout=None,
+            result_ttl=DEFAULT_RESULT_TTL):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
         ``queue`` argument that can be either a ``Queue`` instance or a string
@@ -20,6 +21,7 @@ class job(object):
         self.queue = queue
         self.connection = resolve_connection(connection)
         self.timeout = timeout
+        self.result_ttl = result_ttl
 
     def __call__(self, f):
         @wraps(f)
@@ -29,6 +31,6 @@ class job(object):
             else:
                 queue = self.queue
             return queue.enqueue_call(f, args=args, kwargs=kwargs,
-                    timeout=self.timeout)
+                    timeout=self.timeout, result_ttl=self.result_ttl)
         f.delay = delay
         return f

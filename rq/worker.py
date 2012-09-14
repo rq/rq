@@ -29,6 +29,7 @@ green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
 
+DEFAULT_RESULT_TTL = 500
 
 class StopRequested(Exception):
     pass
@@ -96,7 +97,7 @@ class Worker(object):
         return worker
 
 
-    def __init__(self, queues, name=None, default_result_ttl=500,
+    def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
             connection=None, exc_handler=None):  # noqa
         if connection is None:
             connection = get_current_connection()
