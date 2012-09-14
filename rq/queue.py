@@ -11,8 +11,13 @@ def get_failed_queue(connection=None):
 
 
 def get_started_queue(connection=None):
-    """Returns a handle to the special active queue."""
+    """Returns a handle to the special started queue."""
     return StartedQueue(connection=connection)
+
+
+def get_finished_queue(connection=None):
+    """Returns a handle to the special finished queue."""
+    return FinishedQueue(connection=connection)
 
 
 def compact(lst):
@@ -328,3 +333,7 @@ class StartedQueue(Queue):
         if self.connection.lrem(self.key, job.id) == 0:
             raise InvalidJobOperationError('Removing job from started queue failed.')
 
+
+class FinishedQueue(Queue):
+    def __init__(self, connection=None):
+        super(FinishedQueue, self).__init__('finished', connection=connection)

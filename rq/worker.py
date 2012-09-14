@@ -17,7 +17,7 @@ try:
     Logger = Logger   # Does nothing except it shuts up pyflakes annoying error
 except ImportError:
     from logging import Logger
-from .queue import Queue, get_failed_queue, get_started_queue
+from .queue import Queue, get_failed_queue, get_started_queue, get_finished_queue
 from .connections import get_current_connection
 from .job import Status
 from .utils import make_colorizer
@@ -115,6 +115,7 @@ class Worker(object):
         self.log = Logger('worker')
         self.failed_queue = get_failed_queue(connection=self.connection)
         self.started_queue = get_started_queue(connection=self.connection)
+        self.finished_queue = get_finished_queue(connection=self.connection)
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -434,6 +435,9 @@ class Worker(object):
             else:
                 self.log.warning('Result will never expire, clean up result key manually.')
             p.execute()
+            # Add the job to the finished queue
+            self.finished_queue.push_job_id(job.id)
+
 
         return True
 
