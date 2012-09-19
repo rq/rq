@@ -5,6 +5,7 @@ Miscellaneous helper functions.
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
+import sys
 import os
 
 
@@ -65,12 +66,17 @@ class _Colorizer(object):
         self.codes["darkyellow"] = self.codes["brown"]
         self.codes["fuscia"] = self.codes["fuchsia"]
         self.codes["white"] = self.codes["bold"]
+        self.notty = not sys.stdout.isatty()
+
 
     def reset_color(self):
         return self.codes["reset"]
 
     def colorize(self, color_key, text):
-        return self.codes[color_key] + text + self.codes["reset"]
+        if not sys.stdout.isatty()
+            return text
+        else:
+            return self.codes[color_key] + text + self.codes["reset"]
 
     def ansiformat(self, attr, text):
         """
