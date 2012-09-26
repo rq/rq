@@ -183,3 +183,7 @@ def main():
     except ConnectionError as e:
         print(e)
         sys.exit(1)
+    except KeyboardInterrupt:
+        print
+        sys.exit(0)
+
