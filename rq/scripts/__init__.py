@@ -47,7 +47,7 @@ def setup_default_arguments(args, settings):
 
 def setup_redis(args):
     if args.url is not None:
-        redis_conn = redis.Redis.from_url(args.url, db=args.db)
+        redis_conn = redis.from_url(args.url, db=args.db)
     else:
         redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db,
             password=args.password)
