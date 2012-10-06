@@ -5,6 +5,8 @@ from rq import use_connection
 def add_standard_arguments(parser):
     parser.add_argument('--config', '-c', default=None,
             help='Module containing RQ settings.')
+    parser.add_argument('--url', '-u', default=None,
+            help='URL describing Redis connection details')
     parser.add_argument('--host', '-H', default=None,
             help='The Redis hostname (default: localhost)')
     parser.add_argument('--port', '-p', default=None,
@@ -44,6 +46,9 @@ def setup_default_arguments(args, settings):
 
 
 def setup_redis(args):
-    redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db,
-        password=args.password)
+    if args.url is not None:
+        redis_conn = redis.from_url(args.url, db=args.db)
+    else:
+        redis_conn = redis.Redis(host=args.host, port=args.port, db=args.db,
+            password=args.password)
     use_connection(redis_conn)
