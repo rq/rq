@@ -265,3 +265,10 @@ class TestScheduler(RQTestCase):
         thread.start()
         self.assertRaises(SystemExit, self.scheduler.run)
         thread.join()
+
+    def test_scheduler_w_o_explicit_connection(self):
+        """
+        Ensure instantiating Scheduler w/o explicit connection works.
+        """
+        s = Scheduler()
+        self.assertEqual(s.connection, self.testconn)
