@@ -1,4 +1,8 @@
 from datetime import datetime, timedelta
+import os
+import signal
+import time
+from threading import Thread
 
 from rq import Queue, Worker
 from rq.job import Job
@@ -245,3 +249,19 @@ class TestScheduler(RQTestCase):
         job = self.scheduler.enqueue(datetime.now(), say_hello, interval=5)
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, -1)
+
+    def test_run(self):
+        """
+        Check correct signal handling in Scheduler.run().
+        """
+        def send_stop_signal():
+            """
+            Sleep for 1 second, then send a INT signal to ourself, so the
+            signal handler installed by scheduler.run() is called.
+            """
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGINT)
+        thread = Thread(target=send_stop_signal)
+        thread.start()
+        self.assertRaises(SystemExit, self.scheduler.run)
+        thread.join()
