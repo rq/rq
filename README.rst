@@ -94,6 +94,17 @@ This is how you do it::
         repeat=10                      # Repeat this number of times (None means repeat forever)
     )
 
+------------------------------
+Checking if a job is scheduled
+------------------------------
+
+You can check whether a specific job instance or job id is scheduled for
+execution using the familiar python ``in`` operator::
+
+    job_instance in scheduler
+    # or
+    job_id in scheduler
+
 ---------------
 Canceling a job
 ---------------
