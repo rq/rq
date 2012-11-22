@@ -272,3 +272,13 @@ class TestScheduler(RQTestCase):
         """
         s = Scheduler()
         self.assertEqual(s.connection, self.testconn)
+
+    def test_no_functions_from__main__module(self):
+        """
+        Ensure functions from the __main__ module are not accepted for scheduling.
+        """
+        def dummy():
+            return 1
+        # Fake __main__ module function
+        dummy.__module__ = "__main__"
+        self.assertRaises(ValueError, self.scheduler._create_job, dummy)
