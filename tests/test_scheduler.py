@@ -136,6 +136,8 @@ class TestScheduler(RQTestCase):
         self.scheduler.change_execution_time(job, new_date)
         self.assertEqual(int(new_date.strftime('%s')),
             self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id))
+        self.scheduler.cancel(job)
+        self.assertRaises(ValueError, self.scheduler.change_execution_time, job, new_date)
 
     def test_args_kwargs_are_passed_correctly(self):
         """
