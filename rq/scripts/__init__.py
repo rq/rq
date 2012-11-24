@@ -1,3 +1,4 @@
+import importlib
 import redis
 from rq import use_connection
 
@@ -19,7 +20,7 @@ def add_standard_arguments(parser):
 
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
-    settings = __import__(module, [], [], [], -1)
+    settings = importlib.import_module(module)
     return dict([(k, v)
             for k, v in settings.__dict__.items()
             if k.upper() == k])
