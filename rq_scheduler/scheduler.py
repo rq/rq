@@ -1,6 +1,7 @@
 import signal
 import time
 from datetime import datetime
+import warnings
 
 try:
     from logbook import Logger
@@ -105,9 +106,6 @@ class Scheduler(object):
                              int(scheduled_time.strftime('%s')))
         return job
 
-    # This is here for backwards compatibility purposes
-    schedule = enqueue_at
-
     def enqueue_in(self, time_delta, func, *args, **kwargs):
         """
         Similar to ``enqueue_at``, but accepts a timedelta instead of datetime object.
@@ -124,10 +122,10 @@ class Scheduler(object):
         """
         Schedule a job to be periodically executed, at a certain interval.
         """
-        return self.enqueue(scheduled_time, func, args=args, kwargs=kwargs,
+        return self.schedule(scheduled_time, func, args=args, kwargs=kwargs,
                             interval=interval, repeat=repeat)
 
-    def enqueue(self, scheduled_time, func, args=None, kwargs=None,
+    def schedule(self, scheduled_time, func, args=None, kwargs=None,
                 interval=None, repeat=None, result_ttl=None):
         """
         Schedule a job to be periodically executed, at a certain interval.
@@ -147,6 +145,17 @@ class Scheduler(object):
         self.connection.zadd(self.scheduled_jobs_key, job.id,
                              int(scheduled_time.strftime('%s')))
         return job
+
+    def enqueue(self, scheduled_time, func, args=None, kwargs=None,
+                interval=None, repeat=None, result_ttl=None):
+        """
+        This method is deprecated and only left in as a backwards compatibility
+        alias for schedule().
+        """
+        warnings.warn("'enqueue()' has been deprecated in favor of '.schedule()'"
+                      "and will be removed in a future release.", DeprecationWarning)
+        return self.schedule(scheduled_time, func, args, kwargs, interval,
+                             repeat, result_ttl)
 
     def cancel(self, job):
         """
