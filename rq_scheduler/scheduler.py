@@ -124,6 +124,8 @@ class Scheduler(object):
         """
         Schedule a job to be periodically executed, at a certain interval.
         """
+        warnings.warn("'enqueue_periodic()' has been deprecated in favor of '.schedule()'"
+                      "and will be removed in a future release.", DeprecationWarning)
         return self.schedule(scheduled_time, func, args=args, kwargs=kwargs,
                             interval=interval, repeat=repeat)
 

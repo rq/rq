@@ -179,8 +179,8 @@ Version 0.3.3:
 * You can now check whether a job is scheduled for execution using
   ``job in scheduler`` syntax
 * Added ``scheduler.get_jobs`` method
-* Using ``scheduler.enqueue`` will raise a DeprecationWarning, please use
-  ``scheduler.schedule`` instead
+* ``scheduler.enqueue`` and ``scheduler.enqueue_periodic`` will now raise a
+  DeprecationWarning, please use ``scheduler.schedule`` instead
 
 Version 0.3.2:
 

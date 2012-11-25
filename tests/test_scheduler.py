@@ -193,6 +193,17 @@ class TestScheduler(RQTestCase):
             self.assertEqual(1, len(w))
             self.assertEqual(w[0].category, DeprecationWarning)
 
+    def test_enqueue_periodic(self):
+        """
+        Ensure .enqueue_periodic() throws a DeprecationWarning
+        """
+        with warnings.catch_warnings(record=True) as w:
+            # Enable all warnings
+            warnings.simplefilter("always")
+            job = self.scheduler.enqueue_periodic(datetime.now(), 1, None, say_hello)
+            self.assertEqual(1, len(w))
+            self.assertEqual(w[0].category, DeprecationWarning)
+
     def test_interval_and_repeat_persisted_correctly(self):
         """
         Ensure that interval and repeat attributes get correctly saved in Redis.
