@@ -5,6 +5,7 @@ fixtures has a slighty different characteristics.
 import time
 from rq import Connection
 from rq.decorators import job
+from rq import get_current_job
 
 
 def say_hello(name=None):
@@ -41,6 +42,11 @@ def create_file(path):
 def create_file_after_timeout(path, timeout):
     time.sleep(timeout)
     create_file(path)
+
+
+def access_self():
+    job = get_current_job()
+    return job.id
 
 
 class Calculator(object):

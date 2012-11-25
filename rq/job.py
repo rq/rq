@@ -49,6 +49,16 @@ def requeue_job(job_id, connection=None):
     fq.requeue(job_id)
 
 
+def get_current_job():
+    """Returns the Job instance that is currently being executed.  If this
+    function is invoked from outside a job context, None is returned.
+    """
+    job_id = _job_stack.top
+    if job_id is None:
+        return None
+    return Job.fetch(job_id)
+
+
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
@@ -310,9 +320,12 @@ class Job(object):
 
     # Job execution
     def perform(self):  # noqa
-        """Invokes the job function with the job arguments.
-        """
-        self._result = self.func(*self.args, **self.kwargs)
+        """Invokes the job function with the job arguments."""
+        _job_stack.push(self.id)
+        try:
+            self._result = self.func(*self.args, **self.kwargs)
+        finally:
+            assert self.id == _job_stack.pop()
         return self._result
 
 
@@ -342,7 +355,7 @@ class Job(object):
 
 
     # Backwards compatibility for custom properties
-    def __getattr__(self, name):
+    def __getattr__(self, name):  # noqa
         import warnings
         warnings.warn(
                 "Getting custom properties from the job instance directly "
@@ -379,3 +392,6 @@ class Job(object):
                 SyntaxWarning)
 
         self.__dict__['meta'][name] = value
+
+
+_job_stack = LocalStack()

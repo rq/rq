@@ -1,6 +1,12 @@
 ### 0.3.3
 (not released yet)
 
+- Jobs can now access the current `Job` instance from within.  Relevant
+  documentation [here](http://python-rq.org/docs/jobs/).
+
+- Custom properties can be set by modifying the `job.meta` dict.  Relevant
+  documentation [here](http://python-rq.org/docs/jobs/).
+
 - Custom properties can be set by modifying the `job.meta` dict.  Relevant
   documentation [here](http://python-rq.org/docs/jobs/).
 

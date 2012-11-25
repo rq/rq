@@ -1,10 +1,10 @@
 import times
 from datetime import datetime
 from tests import RQTestCase
-from tests.fixtures import Calculator, some_calculation, say_hello
+from tests.fixtures import Calculator, some_calculation, say_hello, access_self
 from tests.helpers import strip_milliseconds
 from cPickle import loads
-from rq.job import Job
+from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 
 
@@ -198,3 +198,16 @@ class TestJob(RQTestCase):
         job.save()
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, None)
+
+    def test_job_access_within_job_function(self):
+        """The current job is accessible within the job function."""
+        # Executing the job function from outside of RQ throws an exception
+        self.assertIsNone(get_current_job())
+
+        # Executing the job function from within the job works (and in
+        # this case leads to the job ID being returned)
+        job = Job.create(func=access_self)
+        job.save()
+        id = job.perform()
+        self.assertEqual(job.id, id)
+        self.assertEqual(job.func, access_self)
