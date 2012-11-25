@@ -1,7 +1,8 @@
 import times
 from datetime import datetime
 from tests import RQTestCase
-from tests.fixtures import Calculator, some_calculation, say_hello, access_self
+from tests.fixtures import (Calculator, some_calculation, say_hello,
+                            access_self, div_by_zero)
 from tests.helpers import strip_milliseconds
 from cPickle import loads
 from rq.job import Job, get_current_job
@@ -222,3 +223,47 @@ class TestJob(RQTestCase):
         id = job.perform()
         self.assertEqual(job.id, id)
         self.assertEqual(job.func, access_self)
+
+    def test_job_perform_sets_status_properly(self):
+        """Ensure that worker correctly sets job status."""
+        q = Queue()
+
+        job = q.enqueue(say_hello)
+        self.assertEqual(job.status, 'queued')
+        self.assertEqual(job.is_queued, True)
+        self.assertEqual(job.is_finished, False)
+        self.assertEqual(job.is_failed, False)
+
+        job.perform()
+        self.assertEqual(job.status, 'finished')
+        self.assertEqual(job.is_queued, False)
+        self.assertEqual(job.is_finished, True)
+        self.assertEqual(job.is_failed, False)
+
+        # Failed jobs should set status to "failed"
+        job = q.enqueue(div_by_zero, args=(1,))
+        try:
+            job.perform()
+        except:
+            pass
+        self.assertEqual(job.status, 'failed')
+        self.assertEqual(job.is_queued, False)
+        self.assertEqual(job.is_finished, False)
+        self.assertEqual(job.is_failed, True)
+
+    def test_job_sets_result_ttl(self):
+        """Ensure that result_ttl is properly set."""
+        q = Queue()
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        job.perform()
+        self.assertNotEqual(self.testconn.ttl(job.key), 0)
+
+        # Job with -1 result_ttl don't expire
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
+        job.perform()
+        self.assertEqual(self.testconn.ttl(job.key), None)
+
+        # Job with result_ttl = 0 gets deleted immediately
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=0)
+        job.perform()
+        self.assertEqual(self.testconn.get(job.key), None)
