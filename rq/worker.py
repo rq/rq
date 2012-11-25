@@ -26,7 +26,6 @@ from .timeouts import death_penalty_after
 from .version import VERSION
 
 green = make_colorizer('darkgreen')
-yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
 
 
@@ -389,44 +388,13 @@ class Worker(object):
             job.origin, time.time()))
 
         try:
-            with death_penalty_after(job.timeout or 180):
-                rv = job.perform()
-
+            job.perform(worker_result_ttl=self.default_result_ttl, logger=self.log)
             # Pickle the result in the same try-except block since we need to
             # use the same exc handling when pickling fails
-            pickled_rv = dumps(rv)
-            job._status = Status.FINISHED
         except:
-            # Use the public setter here, to immediately update Redis
-            job.status = Status.FAILED
+            # Use the public setter here, to immediately update Redis            
             self.handle_exception(job, *sys.exc_info())
             return False
-
-        if rv is None:
-            self.log.info('Job OK')
-        else:
-            self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
-
-        # How long we persist the job result depends on the value of
-        # result_ttl:
-        # - If result_ttl is 0, cleanup the job immediately.
-        # - If it's a positive number, set the job to expire in X seconds.
-        # - If result_ttl is negative, don't set an expiry to it (persist
-        #   forever)
-        result_ttl =  self.default_result_ttl if job.result_ttl is None else job.result_ttl  # noqa
-        if result_ttl == 0:
-            job.delete()
-            self.log.info('Result discarded immediately.')
-        else:
-            p = self.connection.pipeline()
-            p.hset(job.key, 'result', pickled_rv)
-            p.hset(job.key, 'status', job._status)
-            if result_ttl > 0:
-                p.expire(job.key, result_ttl)
-                self.log.info('Result is kept for %d seconds.' % result_ttl)
-            else:
-                self.log.warning('Result will never expire, clean up result key manually.')
-            p.execute()
 
         return True
 

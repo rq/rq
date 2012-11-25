@@ -7,7 +7,11 @@ from cPickle import loads, dumps, UnpicklingError
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
+from .timeouts import death_penalty_after
+from .utils import make_colorizer
 
+
+yellow = make_colorizer('darkyellow')
 
 JOB_ATTRS = set(['origin', '_func_name', 'ended_at', 'description', '_args',
                  'created_at', 'enqueued_at', 'connection', '_result', 'result',
@@ -331,11 +335,48 @@ class Job(object):
 
 
     # Job execution
-    def perform(self):  # noqa
+    def perform(self, worker_result_ttl=None, logger=None):  # noqa
         """Invokes the job function with the job arguments."""
         _job_stack.push(self.id)
         try:
-            self._result = self.func(*self.args, **self.kwargs)
+            with death_penalty_after(self.timeout or 180):
+                self._result = self.func(*self.args, **self.kwargs)
+            
+            self._status = Status.FINISHED            
+            if logger:
+                if self._result is None:
+                    logger.info('Job OK')
+                else:
+                    logger.info('Job OK, result = %s' %
+                                (yellow(unicode(self._result)),))            
+            
+            # How long we persist the job result depends on the value of
+            # result_ttl:
+            # - If result_ttl is 0, cleanup the job immediately.
+            # - If it's a positive number, set the job to expire in X seconds.
+            # - Negative result_ttl means persist forever
+            result_ttl =  worker_result_ttl if self.result_ttl is None else self.result_ttl  # noqa
+            if result_ttl == 0:
+                self.delete()
+                if logger:
+                    logger.info('Result discarded immediately.')
+            else:
+                p = self.connection.pipeline()
+                p.hset(self.key, 'result', dumps(self._result))
+                p.hset(self.key, 'status', self._status)
+                if result_ttl > 0:
+                    p.expire(self.key, result_ttl)
+                    if logger:
+                        logger.info('Result is kept for %d seconds.' % result_ttl)
+                else:
+                    if logger:
+                        logger.warning('Result will never expire, clean up result key manually.')
+                p.execute()
+        
+        except:
+            self.status = Status.FAILED
+            raise
+        
         finally:
             assert self.id == _job_stack.pop()
         return self._result
