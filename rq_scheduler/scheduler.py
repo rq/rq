@@ -159,6 +159,16 @@ class Scheduler(object):
         else:
             self.connection.zrem(self.scheduled_jobs_key, job.id)
 
+    def __contains__(self, item):
+        """
+        Returns a boolean indicating whether the given job instance or job id is
+        scheduled for execution.
+        """
+        job_id = item
+        if isinstance(item, Job):
+            job_id = item.id
+        return self.connection.zscore(self.scheduled_jobs_key, job_id) is not None
+
     def change_execution_time(self, job, date_time):
         """
         Change a job's execution time. Wrap this in a transaction to prevent race condition.

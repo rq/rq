@@ -128,6 +128,13 @@ class TestScheduler(RQTestCase):
         queue = Queue.from_queue_key('rq:queue:{0}'.format(queue_name))
         self.assertIn(job, queue.jobs)
 
+    def test_job_membership(self):
+        now = datetime.now()
+        job = self.scheduler.enqueue_at(now, say_hello)
+        self.assertIn(job, self.scheduler)
+        self.assertIn(job.id, self.scheduler)
+        self.assertNotIn("non-existing-job-id", self.scheduler)
+
     def test_cancel_scheduled_job(self):
         """
         When scheduled job is canceled, make sure:
