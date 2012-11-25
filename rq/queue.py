@@ -172,9 +172,9 @@ class Queue(object):
             job.timeout = timeout  # _timeout_in_seconds(timeout)
         else:
             job.timeout = 180  # default
+        job.save()
 
         if self._async:
-            job.save()
             self.push_job_id(job.id)
         else:
             job.perform()
