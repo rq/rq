@@ -82,6 +82,20 @@ class TestScheduler(RQTestCase):
         self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
                          int((right_now + time_delta).strftime('%s')))
 
+    def test_get_jobs(self):
+        """
+        Ensure get_jobs() returns all jobs until the specified time.
+        """
+        now = datetime.now()
+        job = self.scheduler.enqueue_at(now, say_hello)
+        self.assertIn(job, self.scheduler.get_jobs(now))
+        future_time = now + timedelta(hours=1)
+        job = self.scheduler.enqueue_at(future_time, say_hello)
+        self.assertIn(job, self.scheduler.get_jobs(timedelta(hours=1, seconds=1)))
+        self.assertIn(job, [j[0] for j in self.scheduler.get_jobs(with_times=True)])
+        self.assertIsInstance(self.scheduler.get_jobs(with_times=True)[0][1], datetime)
+        self.assertNotIn(job, self.scheduler.get_jobs(timedelta(minutes=59, seconds=59)))
+
     def test_get_jobs_to_queue(self):
         """
         Ensure that jobs scheduled the future are not queued.

@@ -1,6 +1,7 @@
+from itertools import repeat
 import signal
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from logbook import Logger
@@ -177,21 +178,50 @@ class Scheduler(object):
                         raise ValueError('Job not in scheduled jobs queue')
                     continue
 
-    def get_jobs_to_queue(self):
+    def get_jobs(self, until=None, with_times=False):
         """
-        Returns a list of job instances that should be queued
-        (score lower than current timestamp).
+        Returns a list of job instances that will be queued until the given time.
+        If no 'until' argument is given all jobs are returned. This function
+        accepts datetime and timedelta instances as well as integers representing
+        epoch values.
+        If with_times is True a list of tuples consisting of the job instance and
+        it's scheduled execution time is returned.
         """
-        job_ids = self.connection.zrangebyscore(self.scheduled_jobs_key, 0, int(time.strftime('%s')))
+        def epoch_to_datetime(epoch):
+            return datetime.fromtimestamp(float(epoch))
+
+        if until is None:
+            until = "+inf"
+        elif isinstance(until, datetime):
+            until = until.strftime('%s')
+        elif isinstance(until, timedelta):
+            until = (datetime.now() + until).strftime('%s')
+        job_ids = self.connection.zrangebyscore(self.scheduled_jobs_key, 0,
+                                                until, withscores=with_times,
+                                                score_cast_func=epoch_to_datetime)
+        if not with_times:
+            job_ids = zip(job_ids, repeat(None))
         jobs = []
-        for job_id in job_ids:
+        for job_id, sched_time in job_ids:
             try:
-                jobs.append(Job.fetch(job_id, connection=self.connection))
+                job = Job.fetch(job_id, connection=self.connection)
+                if with_times:
+                    jobs.append((job, sched_time))
+                else:
+                    jobs.append(job)
             except NoSuchJobError:
                 # Delete jobs that aren't there from scheduler
                 self.cancel(job_id)
         return jobs
 
+    def get_jobs_to_queue(self, with_times=False):
+        """
+        Returns a list of job instances that should be queued
+        (score lower than current timestamp).
+        If with_times is True a list of tuples consisting of the job instance and
+        it's scheduled execution time is returned.
+        """
+        return self.get_jobs(int(time.strftime('%s')), with_times=with_times)
 
     def get_queue_for_job(self, job):
         """
