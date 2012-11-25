@@ -27,8 +27,9 @@ Usage
 =====
 
 Schedule a job involves doing two different things:
-# Putting a job in the scheduler
-# Running a scheduler that will move scheduled jobs into queues when the time comes
+
+1. Putting a job in the scheduler
+2. Running a scheduler that will move scheduled jobs into queues when the time comes
 
 ----------------
 Scheduling a Job
@@ -75,6 +76,25 @@ You can also explicitly pass in ``connection`` to use a different Redis server::
     scheduler = Scheduler('default', connection=Redis('192.168.1.3', port=123))
     scheduler.enqueue_at(datetime(2020, 01, 01, 1, 1), func)
 
+------------------------
+Periodic & Repeated Jobs
+------------------------
+
+As of version 0.3, `RQ Scheduler`_ also supports creating periodic and repeated jobs.
+You can do this via the ``schedule`` method. Note that this feature needs
+`RQ`_ >= 0.3.1.
+
+This is how you do it::
+
+    scheduler.schedule(
+        scheduled_time=datetime.now(), # Time for first execution
+        func=func,                     # Function to be queued
+        args=[arg1, arg2],             # Arguments passed into function when executed
+        kwargs={'foo': 'bar'},       # Keyword arguments passed into function when executed
+        interval=60,                   # Time before the function is called again, in seconds
+        repeat=10                      # Repeat this number of times (None means repeat forever)
+    )
+
 -------------------------
 Retrieving scheduled jobs
 -------------------------
@@ -107,25 +127,6 @@ Example::
     # returns a list of tuples:
     # [(<rq.job.Job object at 0x123456789>, datetime.datetime(2012, 11, 25, 12, 30)), ...]
 
-------------------------
-Periodic & Repeated Jobs
-------------------------
-
-As of version 0.3, `RQ Scheduler`_ also supports creating periodic and repeated jobs.
-You can do this via the ``schedule`` method. Note that this feature needs
-`RQ`_ >= 0.3.1.
-
-This is how you do it::
-
-    scheduler.schedule(
-        scheduled_time=datetime.now(), # Time for first execution
-        func=func,                     # Function to be queued
-        args=[arg1, arg2],             # Arguments passed into function when executed
-        kwargs={'foo': 'bar'},       # Keyword arguments passed into function when executed
-        interval=60,                   # Time before the function is called again, in seconds
-        repeat=10                      # Repeat this number of times (None means repeat forever)
-    )
-
 ------------------------------
 Checking if a job is scheduled
 ------------------------------
@@ -133,9 +134,11 @@ Checking if a job is scheduled
 You can check whether a specific job instance or job id is scheduled for
 execution using the familiar python ``in`` operator::
 
-    job_instance in scheduler
+    if job_instance in scheduler:
+        # Do something
     # or
-    job_id in scheduler
+    if job_id in scheduler:
+        # Do something
 
 ---------------
 Canceling a job
@@ -170,6 +173,14 @@ The script accepts these arguments:
 =========
 Changelog
 =========
+
+Version 0.3.3:
+
+* You can now check whether a job is scheduled for execution using
+  ``job in scheduler`` syntax
+* Added ``scheduler.get_jobs`` method
+* Using ``scheduler.enqueue`` will raise a DeprecationWarning, please use
+  ``scheduler.schedule`` instead
 
 Version 0.3.2:
 
