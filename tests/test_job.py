@@ -6,6 +6,7 @@ from tests.helpers import strip_milliseconds
 from cPickle import loads
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.queue import Queue
 
 
 class TestJob(RQTestCase):
@@ -211,6 +212,13 @@ class TestJob(RQTestCase):
         # this case leads to the job ID being returned)
         job = Job.create(func=access_self)
         job.save()
+        id = job.perform()
+        self.assertEqual(job.id, id)
+        self.assertEqual(job.func, access_self)
+
+        # Ensure that get_current_job also works from within synchronous jobs
+        queue = Queue(async=False)
+        job = queue.enqueue(access_self)
         id = job.perform()
         self.assertEqual(job.id, id)
         self.assertEqual(job.func, access_self)
