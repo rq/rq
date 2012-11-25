@@ -1,4 +1,8 @@
 from datetime import datetime, timedelta
+import os
+import signal
+import time
+from threading import Thread
 
 from rq import Queue, Worker
 from rq.job import Job
@@ -79,6 +83,20 @@ class TestScheduler(RQTestCase):
         self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
                          int((right_now + time_delta).strftime('%s')))
 
+    def test_get_jobs(self):
+        """
+        Ensure get_jobs() returns all jobs until the specified time.
+        """
+        now = datetime.now()
+        job = self.scheduler.enqueue_at(now, say_hello)
+        self.assertIn(job, self.scheduler.get_jobs(now))
+        future_time = now + timedelta(hours=1)
+        job = self.scheduler.enqueue_at(future_time, say_hello)
+        self.assertIn(job, self.scheduler.get_jobs(timedelta(hours=1, seconds=1)))
+        self.assertIn(job, [j[0] for j in self.scheduler.get_jobs(with_times=True)])
+        self.assertIsInstance(self.scheduler.get_jobs(with_times=True)[0][1], datetime)
+        self.assertNotIn(job, self.scheduler.get_jobs(timedelta(minutes=59, seconds=59)))
+
     def test_get_jobs_to_queue(self):
         """
         Ensure that jobs scheduled the future are not queued.
@@ -111,6 +129,13 @@ class TestScheduler(RQTestCase):
         queue = Queue.from_queue_key('rq:queue:{0}'.format(queue_name))
         self.assertIn(job, queue.jobs)
 
+    def test_job_membership(self):
+        now = datetime.now()
+        job = self.scheduler.enqueue_at(now, say_hello)
+        self.assertIn(job, self.scheduler)
+        self.assertIn(job.id, self.scheduler)
+        self.assertNotIn("non-existing-job-id", self.scheduler)
+
     def test_cancel_scheduled_job(self):
         """
         When scheduled job is canceled, make sure:
@@ -133,6 +158,8 @@ class TestScheduler(RQTestCase):
         self.scheduler.change_execution_time(job, new_date)
         self.assertEqual(int(new_date.strftime('%s')),
             self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id))
+        self.scheduler.cancel(job)
+        self.assertRaises(ValueError, self.scheduler.change_execution_time, job, new_date)
 
     def test_args_kwargs_are_passed_correctly(self):
         """
@@ -257,3 +284,36 @@ class TestScheduler(RQTestCase):
         job = self.scheduler.schedule(datetime.now(), say_hello, interval=5)
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, -1)
+
+    def test_run(self):
+        """
+        Check correct signal handling in Scheduler.run().
+        """
+        def send_stop_signal():
+            """
+            Sleep for 1 second, then send a INT signal to ourself, so the
+            signal handler installed by scheduler.run() is called.
+            """
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGINT)
+        thread = Thread(target=send_stop_signal)
+        thread.start()
+        self.assertRaises(SystemExit, self.scheduler.run)
+        thread.join()
+
+    def test_scheduler_w_o_explicit_connection(self):
+        """
+        Ensure instantiating Scheduler w/o explicit connection works.
+        """
+        s = Scheduler()
+        self.assertEqual(s.connection, self.testconn)
+
+    def test_no_functions_from__main__module(self):
+        """
+        Ensure functions from the __main__ module are not accepted for scheduling.
+        """
+        def dummy():
+            return 1
+        # Fake __main__ module function
+        dummy.__module__ = "__main__"
+        self.assertRaises(ValueError, self.scheduler._create_job, dummy)

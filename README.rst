@@ -75,6 +75,38 @@ You can also explicitly pass in ``connection`` to use a different Redis server::
     scheduler = Scheduler('default', connection=Redis('192.168.1.3', port=123))
     scheduler.enqueue_at(datetime(2020, 01, 01, 1, 1), func)
 
+-------------------------
+Retrieving scheduled jobs
+-------------------------
+
+Sometimes you need to know which jobs have already been scheduled. You can get a
+list of enqueued jobs with the ``get_jobs`` method::
+
+    list_of_job_instances = scheduler.get_jobs()
+
+In it's simplest form (as seen in the above example) this method returns a list
+of all job instances that are currently scheduled for execution.
+
+Additionally the method takes two optional keyword arguments ``until`` and
+``with_times``. The first one specifies up to which point in time scheduled jobs
+should be returned. It can be given as either a datetime / timedelta instance
+or an integer denoting the number of seconds since epoch (1970-01-01 00:00:00).
+The second argument is a boolen that determines whether the scheduled execution
+time should be returned along with the job instances.
+
+Example::
+
+    # get all jobs until 2012-11-30 10:00:00
+    list_of_job_instances = scheduler.get_jobs(until=datetime(2012, 10, 30, 10))
+
+    # get all jobs for the next hour
+    list_of_job_instances = scheduler.get_jobs(until=timedelta(hours=1))
+
+    # get all jobs with execution times
+    jobs_and_times = scheduler.get_jobs(with_times=True)
+    # returns a list of tuples:
+    # [(<rq.job.Job object at 0x123456789>, datetime.datetime(2012, 11, 25, 12, 30)), ...]
+
 ------------------------
 Periodic & Repeated Jobs
 ------------------------
@@ -93,6 +125,17 @@ This is how you do it::
         interval=60,                   # Time before the function is called again, in seconds
         repeat=10                      # Repeat this number of times (None means repeat forever)
     )
+
+------------------------------
+Checking if a job is scheduled
+------------------------------
+
+You can check whether a specific job instance or job id is scheduled for
+execution using the familiar python ``in`` operator::
+
+    job_instance in scheduler
+    # or
+    job_id in scheduler
 
 ---------------
 Canceling a job
