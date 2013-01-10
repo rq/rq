@@ -63,7 +63,7 @@ counterpart.  A typical use case for this is to pass in a `timeout` argument:
 {% highlight python %}
 q = Queue('low', connection=redis_conn)
 q.enqueue_call(func=count_words_at_url,
-               args=('http://nvie.com'),
+               args=('http://nvie.com',),
                timeout=30)
 {% endhighlight %}
 
