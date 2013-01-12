@@ -3,6 +3,7 @@ import os
 import errno
 import random
 import time
+import times
 try:
     from procname import setprocname
 except ImportError:
@@ -399,6 +400,7 @@ class Worker(object):
             # use the same exc handling when pickling fails
             pickled_rv = dumps(rv)
             job._status = Status.FINISHED
+            job.ended_at = times.now()
         except:
             # Use the public setter here, to immediately update Redis
             job.status = Status.FAILED
@@ -424,6 +426,7 @@ class Worker(object):
             p = self.connection.pipeline()
             p.hset(job.key, 'result', pickled_rv)
             p.hset(job.key, 'status', job._status)
+            p.hset(job.key, 'ended_at', times.format(job.ended_at, 'UTC'))
             if result_ttl > 0:
                 p.expire(job.key, result_ttl)
                 self.log.info('Result is kept for %d seconds.' % result_ttl)
