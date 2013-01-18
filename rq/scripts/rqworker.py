@@ -15,32 +15,33 @@ logger = logging.getLogger(__name__)
 
 
 def setup_loghandlers(args):
-    logging.config.dictConfig({
-        "version": 1,
-        "disable_existing_loggers": False,
+    if not logging._handlers:
+        logging.config.dictConfig({
+            "version": 1,
+            "disable_existing_loggers": False,
 
-        "formatters": {
-            "console": {
-                "format": "%(asctime)s %(message)s",
-                "datefmt": "%H:%M:%S",
+            "formatters": {
+                "console": {
+                    "format": "%(asctime)s %(message)s",
+                    "datefmt": "%H:%M:%S",
+                },
             },
-        },
 
-        "handlers": {
-            "console": {
-                "level": "DEBUG",
-                #"class": "logging.StreamHandler",
-                "class": "rq.utils.ColorizingStreamHandler",
-                "formatter": "console",
-                "exclude": ["%(asctime)s"],
+            "handlers": {
+                "console": {
+                    "level": "DEBUG",
+                    #"class": "logging.StreamHandler",
+                    "class": "rq.utils.ColorizingStreamHandler",
+                    "formatter": "console",
+                    "exclude": ["%(asctime)s"],
+                },
             },
-        },
 
-        "root": {
-            "handlers": ["console"],
-            "level": "DEBUG" if args.verbose else "INFO"
-        }
-    })
+            "root": {
+                "handlers": ["console"],
+                "level": "DEBUG" if args.verbose else "INFO"
+            }
+        })
 
 
 def parse_args():
