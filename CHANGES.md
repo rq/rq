@@ -14,6 +14,8 @@
 
 - `rqworker` now has an optional `--password` flag.
 
+- Remove `logbook` dependency (in favor of `logging`)
+
 
 ### 0.3.2
 (September 3rd, 2012)
@@ -42,8 +44,6 @@
   explicit return value or return `None` (with given TTL of course).  This
   makes it possible to distinguish between a job that explicitly returned
   `None` and a job that isn't finished yet (see `status` property).
-
-- Remove `logbook` dependency (in favor of `logging`)
 
 - Custom exception handlers can now be configured in addition to, or to fully
   replace, moving failed jobs to the failed queue.  Relevant documentation
