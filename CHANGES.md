@@ -1,6 +1,8 @@
 ### 0.3.3
 (not released yet)
 
+- Fix bug where work was lost due to silently ignored unpickle errors.
+
 - Jobs can now access the current `Job` instance from within.  Relevant
   documentation [here](http://python-rq.org/docs/jobs/).
 
