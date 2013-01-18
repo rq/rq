@@ -1,5 +1,5 @@
 ### 0.3.3
-(not released yet)
+(January 18th, 2013)
 
 - Fix bug where work was lost due to silently ignored unpickle errors.
 
