@@ -19,7 +19,7 @@ except ImportError:
     from logging import Logger
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
-from .job import Status
+from .job import Job, Status
 from .utils import make_colorizer
 from .exceptions import NoQueueError, UnpickleError
 from .timeouts import death_penalty_after
@@ -309,13 +309,8 @@ class Worker(object):
                 except StopRequested:
                     break
                 except UnpickleError as e:
-                    msg = '*** Ignoring unpickleable data on %s.' % \
-                            green(e.queue.name)
-                    self.log.warning(msg)
-                    self.log.debug('Data follows:')
-                    self.log.debug(e.raw_data)
-                    self.log.debug('End of unreadable data.')
-                    self.failed_queue.push_job_id(e.job_id)
+                    job = Job.safe_fetch(e.job_id)
+                    self.handle_exception(job, *sys.exc_info())
                     continue
 
                 self.state = 'busy'

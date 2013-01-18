@@ -73,7 +73,7 @@ class Queue(object):
         """Returns a list of all (valid) jobs in the queue."""
         def safe_fetch(job_id):
             try:
-                job = Job.fetch(job_id, connection=self.connection)
+                job = Job.safe_fetch(job_id, connection=self.connection)
             except NoSuchJobError:
                 return None
             except UnpickleError:

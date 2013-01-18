@@ -160,6 +160,15 @@ class Job(object):
         job.refresh()
         return job
 
+    @classmethod
+    def safe_fetch(cls, id, connection=None):
+        """Fetches a persisted job from its corresponding Redis key, but does
+        not instantiate it, making it impossible to get UnpickleErrors.
+        """
+        job = cls(id, connection=connection)
+        job.refresh(safe=True)
+        return job
+
     def __init__(self, id=None, connection=None):
         self.connection = resolve_connection(connection)
         self._id = id
@@ -240,7 +249,7 @@ class Job(object):
 
 
     # Persistence
-    def refresh(self):  # noqa
+    def refresh(self, safe=False):  # noqa
         """Overwrite the current instance's properties with the values in the
         corresponding Redis key.
 
@@ -257,7 +266,12 @@ class Job(object):
             else:
                 return times.to_universal(date_str)
 
-        self._func_name, self._instance, self._args, self._kwargs = unpickle(obj.get('data'))  # noqa
+        self.data = obj.get('data')
+        try:
+            self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
+        except UnpickleError:
+            if not safe:
+                raise
         self.created_at = to_date(obj.get('created_at'))
         self.origin = obj.get('origin')
         self.description = obj.get('description')
