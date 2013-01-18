@@ -1,44 +1,18 @@
 #!/usr/bin/env python
 import sys
 import argparse
-import logbook
-from logbook import handlers
+import logging
+import logging.config
+
 from rq import Queue, Worker
+from rq.logutils import setup_loghandlers
 from redis.exceptions import ConnectionError
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
 from rq.scripts import read_config_file
 from rq.scripts import setup_default_arguments
 
-
-def format_colors(record, handler):
-    from rq.utils import make_colorizer
-    if record.level == logbook.WARNING:
-        colorize = make_colorizer('darkyellow')
-    elif record.level >= logbook.ERROR:
-        colorize = make_colorizer('darkred')
-    else:
-        colorize = lambda x: x
-    return '%s: %s' % (record.time.strftime('%H:%M:%S'), colorize(record.msg))
-
-
-def setup_loghandlers(args):
-    if args.verbose:
-        loglevel = logbook.DEBUG
-        formatter = None
-    else:
-        loglevel = logbook.INFO
-        formatter = format_colors
-
-    handlers.NullHandler(bubble=False).push_application()
-    handler = handlers.StreamHandler(sys.stdout, level=loglevel, bubble=False)
-    if formatter:
-        handler.formatter = formatter
-    handler.push_application()
-    handler = handlers.StderrHandler(level=logbook.WARNING, bubble=False)
-    if formatter:
-        handler.formatter = formatter
-    handler.push_application()
+logger = logging.getLogger(__name__)
 
 
 def parse_args():
@@ -71,8 +45,9 @@ def main():
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN', None)
 
-    setup_loghandlers(args)
+    setup_loghandlers(args.verbose)
     setup_redis(args)
+
     try:
         queues = map(Queue, args.queues)
         w = Worker(queues, name=args.name)
