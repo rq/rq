@@ -17,6 +17,7 @@ from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .job import Status
 from .utils import make_colorizer
+from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, UnpickleError
 from .timeouts import death_penalty_after
 from .version import VERSION
@@ -280,6 +281,7 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
+        setup_loghandlers()
         self._install_signal_handlers()
 
         did_perform_work = False

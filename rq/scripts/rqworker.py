@@ -5,6 +5,7 @@ import logging
 import logging.config
 
 from rq import Queue, Worker
+from rq.logutils import setup_loghandlers
 from redis.exceptions import ConnectionError
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
@@ -12,36 +13,6 @@ from rq.scripts import read_config_file
 from rq.scripts import setup_default_arguments
 
 logger = logging.getLogger(__name__)
-
-
-def setup_loghandlers(args):
-    if not logging._handlers:
-        logging.config.dictConfig({
-            "version": 1,
-            "disable_existing_loggers": False,
-
-            "formatters": {
-                "console": {
-                    "format": "%(asctime)s %(message)s",
-                    "datefmt": "%H:%M:%S",
-                },
-            },
-
-            "handlers": {
-                "console": {
-                    "level": "DEBUG",
-                    #"class": "logging.StreamHandler",
-                    "class": "rq.utils.ColorizingStreamHandler",
-                    "formatter": "console",
-                    "exclude": ["%(asctime)s"],
-                },
-            },
-
-            "root": {
-                "handlers": ["console"],
-                "level": "DEBUG" if args.verbose else "INFO"
-            }
-        })
 
 
 def parse_args():
@@ -74,7 +45,7 @@ def main():
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN', None)
 
-    setup_loghandlers(args)
+    setup_loghandlers(args.verbose)
     setup_redis(args)
 
     try:
