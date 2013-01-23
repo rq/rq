@@ -1,7 +1,8 @@
 ### 0.3.5
 (not yet released)
 
-- ...
+- `ended_at` is now recorded for normally finished jobs, too.  (Previously only
+  for failed jobs.)
 
 
 ### 0.3.4
