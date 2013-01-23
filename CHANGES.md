@@ -1,7 +1,7 @@
 ### 0.3.4
-(not released yet)
+(January 23rd, 2013)
 
-- ...
+- Restore compatibility with Python 2.6.
 
 
 ### 0.3.3
