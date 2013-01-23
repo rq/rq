@@ -10,7 +10,7 @@ To setup RQ on [Heroku](https://heroku.com/), first add it to your
 `requirements.txt` file:
 
     redis==2.4.11
-    rq==0.1.0
+    rq==0.3.4
 
 Create a file called `run-worker.py` with the following content (assuming you
 are using [Redis To Go](https://devcenter.heroku.com/articles/redistogo) with
