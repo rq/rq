@@ -1,5 +1,9 @@
 import logging
-import unittest
+from rq.compat import is_python_version
+if is_python_version((2, 7), (3, 2)):
+    import unittest
+else:
+    import unittest2 as unittest  # noqa
 
 from redis import Redis
 from rq import push_connection, pop_connection
