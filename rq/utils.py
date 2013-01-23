@@ -9,6 +9,8 @@ import os
 import sys
 import logging
 
+from compat import is_python_version
+
 
 def gettermsize():
     def ioctl_GWINSZ(fd):
@@ -134,7 +136,10 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
     def __init__(self, exclude=None, *args, **kwargs):
         self.exclude = exclude
-        super(ColorizingStreamHandler, self).__init__(*args, **kwargs)
+        if is_python_version((2,6)):
+            logging.StreamHandler.__init__(self, *args, **kwargs)
+        else:
+            super(ColorizingStreamHandler, self).__init__(*args, **kwargs)
 
     @property
     def is_tty(self):
