@@ -1,9 +1,16 @@
-import logging.config
+import logging
+
+# Make sure that dictConfig is available
+# This was added in Python 2.7/3.2
+try:
+    from logging.config import dictConfig
+except ImportError:
+    from rq.compat.dictconfig import dictConfig  # noqa
 
 
 def setup_loghandlers(verbose=False):
     if not logging._handlers:
-        logging.config.dictConfig({
+        dictConfig({
             "version": 1,
             "disable_existing_loggers": False,
 
