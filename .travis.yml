@@ -4,7 +4,8 @@ python:
   - "2.7"
   - "pypy"
 install:
+  - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install -r py26-requirements.txt; fi
   - pip install -r requirements.txt
-  - pip install pytest
+  #- pip install pytest  # installed by Travis by default already
 script:
   - py.test
