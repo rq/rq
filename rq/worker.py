@@ -301,9 +301,9 @@ class Worker(object):
                 self.log.info('')
                 self.log.info('*** Listening on %s...' % \
                         green(', '.join(qnames)))
-                wait_for_job = not burst
+                timeout = None if burst else 0
                 try:
-                    result = Queue.dequeue_any(self.queues, wait_for_job, \
+                    result = Queue.dequeue_any(self.queues, timeout, \
                             connection=self.connection)
                     if result is None:
                         break

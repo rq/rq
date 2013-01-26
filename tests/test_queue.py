@@ -166,11 +166,11 @@ class TestQueue(RQTestCase):
         fooq = Queue('foo')
         barq = Queue('bar')
 
-        self.assertEquals(Queue.dequeue_any([fooq, barq], False), None)
+        self.assertEquals(Queue.dequeue_any([fooq, barq], None), None)
 
         # Enqueue a single item
         barq.enqueue(say_hello)
-        job, queue = Queue.dequeue_any([fooq, barq], False)
+        job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEquals(job.func, say_hello)
         self.assertEquals(queue, barq)
 
@@ -178,14 +178,14 @@ class TestQueue(RQTestCase):
         barq.enqueue(say_hello, 'for Bar')
         fooq.enqueue(say_hello, 'for Foo')
 
-        job, queue = Queue.dequeue_any([fooq, barq], False)
+        job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEquals(queue, fooq)
         self.assertEquals(job.func, say_hello)
         self.assertEquals(job.origin, fooq.name)
         self.assertEquals(job.args[0], 'for Foo',
                 'Foo should be dequeued first.')
 
-        job, queue = Queue.dequeue_any([fooq, barq], False)
+        job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEquals(queue, barq)
         self.assertEquals(job.func, say_hello)
         self.assertEquals(job.origin, barq.name)
@@ -201,7 +201,7 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEquals(q.count, 1)
-        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], False),  # noqa
+        self.assertEquals(Queue.dequeue_any([Queue(), Queue('low')], None),  # noqa
                 None)
         self.assertEquals(q.count, 0)
 
