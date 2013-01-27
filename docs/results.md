@@ -81,7 +81,7 @@ stop further processing of jobs.  This ensures that jobs always get a fair
 change to finish themselves.
 
 However, workers can be killed forcefully by `kill -9`, which will not give the
-workers a change to finish the job gracefully or to put the job on the `failed`
+workers a chance to finish the job gracefully or to put the job on the `failed`
 queue.  Therefore, killing a worker forcefully could potentially lead to
 damage.
 
