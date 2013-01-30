@@ -210,8 +210,8 @@ class TestScheduler(RQTestCase):
         """
         job = self.scheduler.schedule(datetime.now(), say_hello, interval=10, repeat=11)
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(int(job_from_queue.interval), 10)
-        self.assertEqual(int(job_from_queue.repeat), 11)
+        self.assertEqual(job_from_queue.meta['interval'], 10)
+        self.assertEqual(job_from_queue.meta['repeat'], 11)
 
     def test_repeat_without_interval_raises_error(self):
         # Ensure that an error is raised if repeat is specified without interval

@@ -140,9 +140,9 @@ class Scheduler(object):
         job = self._create_job(func, args=args, kwargs=kwargs, commit=False,
                                result_ttl=result_ttl)
         if interval is not None:
-            job.interval = int(interval)
+            job.meta['interval'] = int(interval)
         if repeat is not None:
-            job.repeat = int(repeat)
+            job.meta['repeat'] = int(repeat)
         if repeat and interval is None:
             raise ValueError("Can't repeat a job without interval argument")
         job.save()
@@ -259,12 +259,12 @@ class Scheduler(object):
         """
         self.log.debug('Pushing {0} to {1}'.format(job.id, job.origin))
 
-        interval = getattr(job, 'interval', None)
-        repeat = getattr(job, 'repeat', None)
+        interval = job.meta.get('interval', None) 
+        repeat = job.meta.get('repeat', None)
 
         # If job is a repeated job, decrement counter
         if repeat:
-            job.repeat = int(repeat) - 1
+            job.meta['repeat'] = int(repeat) - 1
         job.enqueued_at = datetime.now()
         job.save()
 
@@ -275,7 +275,7 @@ class Scheduler(object):
         if interval:
             # If this is a repeat job and counter has reached 0, don't repeat
             if repeat is not None:
-                if job.repeat == 0:
+                if job.meta['repeat'] == 0:
                     return
             self.connection.zadd(self.scheduled_jobs_key, job.id,
                 int(datetime.now().strftime('%s')) + int(interval))
