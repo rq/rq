@@ -174,6 +174,11 @@ The script accepts these arguments:
 Changelog
 =========
 
+Version 0.3.4:
+
+* Scheduler related job attributes (``interval`` and ``repeat``) are now stored
+  in ``job.meta`` introduced in RQ 0.3.4
+
 Version 0.3.3:
 
 * You can now check whether a job is scheduled for execution using
