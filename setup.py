@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='rq-scheduler',
-    version='0.3.3',
+    version='0.3.4',
     author='Selwin Ong',
     author_email='selwin.ong@gmail.com',
     packages=['rq_scheduler'],
