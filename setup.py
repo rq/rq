@@ -71,6 +71,5 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Systems Administration',
         'Topic :: System :: Monitoring',
-
     ]
 )
