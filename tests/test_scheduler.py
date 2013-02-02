@@ -7,7 +7,7 @@ from threading import Thread
 from rq import Queue, Worker
 from rq.job import Job
 import warnings
-from rq_scheduler import Scheduler
+from rq.scheduler import Scheduler
 
 from tests import RQTestCase
 

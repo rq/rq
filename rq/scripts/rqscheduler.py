@@ -3,7 +3,7 @@
 import argparse
 
 from redis import Redis
-from rq_scheduler.scheduler import Scheduler
+from rq.scheduler import Scheduler
 
 
 def main():
