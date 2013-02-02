@@ -1,6 +1,5 @@
 import signal
 import time
-import warnings
 
 from datetime import datetime, timedelta
 from itertools import repeat
@@ -119,16 +118,6 @@ class Scheduler(object):
                              int((datetime.now() + time_delta).strftime('%s')))
         return job
 
-    def enqueue_periodic(self, scheduled_time, interval, repeat, func,
-                         *args, **kwargs):
-        """
-        Schedule a job to be periodically executed, at a certain interval.
-        """
-        warnings.warn("'enqueue_periodic()' has been deprecated in favor of '.schedule()'"
-                      "and will be removed in a future release.", DeprecationWarning)
-        return self.schedule(scheduled_time, func, args=args, kwargs=kwargs,
-                            interval=interval, repeat=repeat)
-
     def schedule(self, scheduled_time, func, args=None, kwargs=None,
                 interval=None, repeat=None, result_ttl=None):
         """
@@ -149,17 +138,6 @@ class Scheduler(object):
         self.connection.zadd(self.scheduled_jobs_key, job.id,
                              int(scheduled_time.strftime('%s')))
         return job
-
-    def enqueue(self, scheduled_time, func, args=None, kwargs=None,
-                interval=None, repeat=None, result_ttl=None):
-        """
-        This method is deprecated and only left in as a backwards compatibility
-        alias for schedule().
-        """
-        warnings.warn("'enqueue()' has been deprecated in favor of '.schedule()'"
-                      "and will be removed in a future release.", DeprecationWarning)
-        return self.schedule(scheduled_time, func, args, kwargs, interval,
-                             repeat, result_ttl)
 
     def cancel(self, job):
         """

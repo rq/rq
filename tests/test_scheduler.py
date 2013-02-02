@@ -6,7 +6,6 @@ from threading import Thread
 
 from rq import Queue, Worker
 from rq.job import Job
-import warnings
 from rq.scheduler import Scheduler
 
 from tests import RQTestCase
@@ -182,28 +181,6 @@ class TestScheduler(RQTestCase):
         self.assertEqual(job.kwargs, {'y': 1, 'z': 1})
         self.assertEqual(job.args, (1,))
 
-    def test_enqueue_is_deprecated(self):
-        """
-        Ensure .enqueue() throws a DeprecationWarning
-        """
-        with warnings.catch_warnings(record=True) as w:
-            # Enable all warnings
-            warnings.simplefilter("always")
-            job = self.scheduler.enqueue(datetime.now(), say_hello)
-            self.assertEqual(1, len(w))
-            self.assertEqual(w[0].category, DeprecationWarning)
-
-    def test_enqueue_periodic(self):
-        """
-        Ensure .enqueue_periodic() throws a DeprecationWarning
-        """
-        with warnings.catch_warnings(record=True) as w:
-            # Enable all warnings
-            warnings.simplefilter("always")
-            job = self.scheduler.enqueue_periodic(datetime.now(), 1, None, say_hello)
-            self.assertEqual(1, len(w))
-            self.assertEqual(w[0].category, DeprecationWarning)
-
     def test_interval_and_repeat_persisted_correctly(self):
         """
         Ensure that interval and repeat attributes get correctly saved in Redis.
@@ -232,14 +209,6 @@ class TestScheduler(RQTestCase):
         self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
                          int(time_now.strftime('%s')) + interval)
 
-        # Now the same thing using enqueue_periodic
-        job = self.scheduler.enqueue_periodic(time_now, interval, None, say_hello)
-        self.scheduler.enqueue_job(job)
-        self.assertIn(job.id,
-            self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
-        self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
-                         int(time_now.strftime('%s')) + interval)
-
     def test_job_with_repeat(self):
         """
         Ensure jobs with repeat attribute are put back in the scheduler
@@ -255,22 +224,6 @@ class TestScheduler(RQTestCase):
 
         # If job is repeated twice, it should only be put back in the queue once
         job = self.scheduler.schedule(time_now, say_hello, interval=interval, repeat=2)
-        self.scheduler.enqueue_job(job)
-        self.assertIn(job.id,
-            self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
-        self.scheduler.enqueue_job(job)
-        self.assertNotIn(job.id,
-            self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
-
-        time_now = datetime.now()
-        # Now the same thing using enqueue_periodic
-        job = self.scheduler.enqueue_periodic(time_now, interval, 1, say_hello)
-        self.scheduler.enqueue_job(job)
-        self.assertNotIn(job.id,
-            self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
-
-        # If job is repeated twice, it should only be put back in the queue once
-        job = self.scheduler.enqueue_periodic(time_now, interval, 2, say_hello)
         self.scheduler.enqueue_job(job)
         self.assertIn(job.id,
             self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
