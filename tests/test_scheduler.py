@@ -29,11 +29,18 @@ class TestScheduler(RQTestCase):
         self.scheduler = Scheduler(connection=self.testconn)
 
     def test_birth_and_death_registration(self):
+        """
+        When scheduler registers it's birth, besides creating a key, it should
+        also set an expiry that's a few seconds longer than it's polling
+        interval so it automatically expires if scheduler is unexpectedly 
+        terminated.
+        """
         key = Scheduler.scheduler_key
         self.assertNotIn(key, self.testconn.keys('*'))
-        scheduler = Scheduler(connection=self.testconn)
+        scheduler = Scheduler(connection=self.testconn, interval=20)
         scheduler.register_birth()
         self.assertIn(key, self.testconn.keys('*'))
+        self.assertEqual(self.testconn.ttl(key), 30)
         self.assertFalse(self.testconn.hexists(key, 'death'))
         self.assertRaises(ValueError, scheduler.register_birth)
         scheduler.register_death()
