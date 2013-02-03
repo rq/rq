@@ -271,10 +271,11 @@ class Scheduler(object):
         self.connection.expire(self.scheduler_key, self._interval + 10)
         return jobs
 
-    def run(self):
+    def run(self, burst=False):
         """
-        Periodically check whether there's any job that should be put in the queue (score
-        lower than current time).
+        Periodically check whether there's any job that should queued (score
+        lower than current time). If ``burst`` argument is set to True,
+        scheduler would run ``enqueue_jobs`` once and quits.
         """
         self.log.debug('Running RQ scheduler...')
         self.register_birth()
@@ -282,6 +283,8 @@ class Scheduler(object):
         try:
             while True:
                 self.enqueue_jobs()
+                if burst:
+                    break
                 time.sleep(self._interval)
         finally:
             self.register_death()

@@ -281,3 +281,13 @@ class TestScheduler(RQTestCase):
         # Fake __main__ module function
         dummy.__module__ = "__main__"
         self.assertRaises(ValueError, self.scheduler._create_job, dummy)
+
+    def test_burst_mode(self):
+        """
+        Ensure that scheduler on burst mode runs properly.
+        """
+        job = self.scheduler.schedule(datetime.now(), say_hello)
+        queue = Queue(connection=self.testconn)
+        self.assertNotIn(job, queue.jobs)
+        self.scheduler.run(burst=True)
+        self.assertIn(job, queue.jobs)
