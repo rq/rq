@@ -29,6 +29,7 @@ simply do this:
 
 {% highlight python %}
 from rq import Connection, Queue
+from redis import Redis
 from somewhere import count_words_at_url
 
 # Tell RQ what Redis connection to use
@@ -74,6 +75,37 @@ you can pass the function as a string reference, too.
 {% highlight python %}
 q = Queue('low', connection=redis_conn)
 q.enqueue('my_package.my_module.my_func', 3, 4)
+{% endhighlight %}
+
+
+### Enqueuing Instance Methods
+
+You can also enqueue instance methods. Given a trivial class:
+
+{% highlight python %}
+import requests
+
+class URLWordCounter(object):
+
+    def __init__(self, url):
+        self.url = url
+
+    def count_words(self):
+        return len(requests.get(self.url).text.split())
+{% endhighlight %}
+
+It's easy to put it to use with RQ:
+
+{% highlight python %}
+from rq import Connection, Queue
+from redis import Redis
+from somewhere_else import URLWordCounter
+
+redis_conn = Redis()
+q = Queue(connection=redis_conn)
+
+wc = URLWordCounter('http://nvie.com')
+q.enqueue(wc.count_words)
 {% endhighlight %}
 
 
