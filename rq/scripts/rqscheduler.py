@@ -2,7 +2,7 @@
 
 import argparse
 
-from redis import Redis
+from redis import StrictRedis
 from rq.scheduler import Scheduler
 
 
@@ -16,7 +16,7 @@ def main():
         , help="How often the scheduler checks for new jobs to add to the \
             queue (in seconds).")
     args = parser.parse_args()
-    connection = Redis(args.host, args.port, args.db, args.password)
+    connection = StrictRedis(args.host, args.port, args.db, args.password)
     scheduler = Scheduler(connection=connection, interval=args.interval)
     scheduler.run()
 

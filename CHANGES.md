@@ -4,6 +4,10 @@
 - `ended_at` is now recorded for normally finished jobs, too.  (Previously only
   for failed jobs.)
 
+- Adds support for both redis.Redis and redis.StrictRedis connection types
+
+- Makes StrictRedis the default is no connection is explicitly provided
+
 
 ### 0.3.4
 (January 23rd, 2013)
@@ -93,11 +97,11 @@
   invocations:
 
       ```python
-      from redis import Redis
+      from redis import StrictRedis
       from rq.decorators import job
 
       # Connect to Redis
-      redis = Redis()
+      redis = StrictRedis()
 
       @job('high', timeout=10, connection=redis)
       def some_work(x, y):
