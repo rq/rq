@@ -1,6 +1,7 @@
 import logging
 import signal
 import time
+import times
 
 from datetime import datetime, timedelta
 from itertools import repeat
@@ -104,7 +105,7 @@ class Scheduler(object):
         """
         job = self._create_job(func, args=args, kwargs=kwargs)
         self.connection._zadd(self.scheduled_jobs_key,
-                              int(scheduled_time.strftime('%s')),
+                              times.to_unix(scheduled_time),
                               job.id)
         return job
 
@@ -112,11 +113,11 @@ class Scheduler(object):
         """
         Similar to ``enqueue_at``, but accepts a timedelta instead of datetime object.
         The job's scheduled execution time will be calculated by adding the timedelta
-        to datetime.now().
+        to times.now().
         """
         job = self._create_job(func, args=args, kwargs=kwargs)
         self.connection._zadd(self.scheduled_jobs_key,
-                              int((datetime.now() + time_delta).strftime('%s')),
+                              times.to_unix(times.now() + time_delta),
                               job.id)
         return job
 
@@ -138,7 +139,7 @@ class Scheduler(object):
             raise ValueError("Can't repeat a job without interval argument")
         job.save()
         self.connection._zadd(self.scheduled_jobs_key,
-                              int(scheduled_time.strftime('%s')),
+                              times.to_unix(scheduled_time),
                               job.id)
         return job
 
@@ -172,7 +173,7 @@ class Scheduler(object):
                     pipe.watch(self.scheduled_jobs_key)
                     if pipe.zscore(self.scheduled_jobs_key, job.id) is None:
                         raise ValueError('Job not in scheduled jobs queue')
-                    pipe.zadd(self.scheduled_jobs_key, int(date_time.strftime('%s')), job.id)
+                    pipe.zadd(self.scheduled_jobs_key, times.to_unix(date_time), job.id)
                     break
                 except WatchError:
                     # If job is still in the queue, retry otherwise job is already executed
@@ -196,9 +197,9 @@ class Scheduler(object):
         if until is None:
             until = "+inf"
         elif isinstance(until, datetime):
-            until = until.strftime('%s')
+            until = times.to_unix(until)
         elif isinstance(until, timedelta):
-            until = (datetime.now() + until).strftime('%s')
+            until = times.to_unix((times.now() + until))
         job_ids = self.connection.zrangebyscore(self.scheduled_jobs_key, 0,
                                                 until, withscores=with_times,
                                                 score_cast_func=epoch_to_datetime)
@@ -224,7 +225,7 @@ class Scheduler(object):
         If with_times is True a list of tuples consisting of the job instance and
         it's scheduled execution time is returned.
         """
-        return self.get_jobs(int(time.strftime('%s')), with_times=with_times)
+        return self.get_jobs(times.to_unix(times.now()), with_times=with_times)
 
     def get_queue_for_job(self, job):
         """
@@ -246,7 +247,7 @@ class Scheduler(object):
         # If job is a repeated job, decrement counter
         if repeat:
             job.meta['repeat'] = int(repeat) - 1
-        job.enqueued_at = datetime.now()
+        job.enqueued_at = times.now()
         job.save()
 
         queue = self.get_queue_for_job(job)
@@ -259,7 +260,7 @@ class Scheduler(object):
                 if job.meta['repeat'] == 0:
                     return
             self.connection._zadd(self.scheduled_jobs_key,
-                                  int(datetime.now().strftime('%s')) + int(interval),
+                                  times.to_unix(times.now()) + int(interval),
                                   job.id)
 
     def enqueue_jobs(self):
