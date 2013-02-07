@@ -27,8 +27,8 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
-    except (StandardError, UnpicklingError):
-        raise UnpickleError('Could not unpickle.', pickled_string)
+    except (StandardError, UnpicklingError) as e:
+        raise UnpickleError('Could not unpickle.', pickled_string, e)
     return obj
 
 
