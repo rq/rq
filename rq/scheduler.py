@@ -6,10 +6,10 @@ import times
 from datetime import datetime, timedelta
 from itertools import repeat
 
-from rq.connections import resolve_connection
-from rq.exceptions import NoSuchJobError
-from rq.job import Job
-from rq.queue import Queue
+from .connections import resolve_connection
+from .exceptions import NoSuchJobError
+from .job import Job
+from .queue import Queue
 
 from redis import WatchError
 
@@ -94,12 +94,12 @@ class Scheduler(object):
         Usage:
 
         from datetime import datetime
-        from redis import Redis
+        from redis import StrictRedis
         from rq.scheduler import Scheduler
 
         from foo import func
 
-        redis = Redis()
+        redis = StrictRedis()
         scheduler = Scheduler(queue_name='default', connection=redis)
         scheduler.enqueue_at(datetime(2020, 1, 1), func, 'argument', keyword='argument')
         """

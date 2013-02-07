@@ -1,4 +1,3 @@
-
 import logging
 from rq.compat import is_python_version
 if is_python_version((2, 7), (3, 2)):
