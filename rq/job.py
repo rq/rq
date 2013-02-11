@@ -289,7 +289,7 @@ class Job(object):
         key = self.key
 
         obj = {}
-        obj['created_at'] = times.format(self.created_at, 'UTC')
+        obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
 
         if self.func_name is not None:
             obj['data'] = dumps(self.job_tuple)
