@@ -13,7 +13,7 @@ import socket
 import signal
 import traceback
 import logging
-from cPickle import dumps
+from six.moves import cPickle as pickle
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .job import Job, Status
@@ -393,7 +393,7 @@ class Worker(object):
 
             # Pickle the result in the same try-except block since we need to
             # use the same exc handling when pickling fails
-            pickled_rv = dumps(rv)
+            pickled_rv = pickle.dumps(rv)
             job._status = Status.FINISHED
             job.ended_at = times.now()
         except:

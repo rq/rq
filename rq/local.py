@@ -13,11 +13,15 @@
 # current thread ident.
 try:
     from greenlet import getcurrent as get_ident
-except ImportError: # noqa
+except ImportError:  # noqa
     try:
         from thread import get_ident  # noqa
-    except ImportError: # noqa
-        from dummy_thread import get_ident  # noqa
+    except ImportError:  # noqa
+        try:
+            from dummy_thread import get_ident  # noqa
+        except ImportError:  # noqa
+            # In Python 3, dummy_thread is renamed to _dummy_thread
+            from _dummy_thread import get_ident  # noqa
 
 
 def release_local(local):

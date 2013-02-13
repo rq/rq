@@ -1,2 +1,3 @@
 redis
-times
+times>=0.6.1
+six

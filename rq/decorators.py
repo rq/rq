@@ -1,3 +1,4 @@
+import six
 from functools import wraps
 from .queue import Queue
 from .connections import resolve_connection
@@ -26,7 +27,7 @@ class job(object):
     def __call__(self, f):
         @wraps(f)
         def delay(*args, **kwargs):
-            if isinstance(self.queue, basestring):
+            if isinstance(self.queue, six.string_types):
                 queue = Queue(name=self.queue, connection=self.connection)
             else:
                 queue = self.queue

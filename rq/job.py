@@ -1,8 +1,9 @@
 import importlib
 import inspect
 import times
+import six
 from uuid import uuid4
-from cPickle import loads, dumps, UnpicklingError
+from six.moves import cPickle as pickle
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
@@ -25,8 +26,8 @@ def unpickle(pickled_string):
     IndexError, TypeError, KeyError, etc.)
     """
     try:
-        obj = loads(pickled_string)
-    except (StandardError, UnpicklingError) as e:
+        obj = pickle.loads(pickled_string)
+    except (StandardError, pickle.UnpicklingError) as e:
         raise UnpickleError('Could not unpickle.', pickled_string, e)
     return obj
 
@@ -194,7 +195,7 @@ class Job(object):
         first time the ID is requested.
         """
         if self._id is None:
-            self._id = unicode(uuid4())
+            self._id = six.text_type(uuid4())
         return self._id
 
     def set_id(self, value):
@@ -240,7 +241,7 @@ class Job(object):
             rv = self.connection.hget(self.key, 'result')
             if rv is not None:
                 # cache the result
-                self._result = loads(rv)
+                self._result = pickle.loads(rv)
         return self._result
 
     """Backwards-compatibility accessor property `return_value`."""
@@ -291,7 +292,7 @@ class Job(object):
         obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
 
         if self.func_name is not None:
-            obj['data'] = dumps(self.job_tuple)
+            obj['data'] = pickle.dumps(self.job_tuple)
         if self.origin is not None:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -301,7 +302,7 @@ class Job(object):
         if self.ended_at is not None:
             obj['ended_at'] = times.format(self.ended_at, 'UTC')
         if self._result is not None:
-            obj['result'] = dumps(self._result)
+            obj['result'] = pickle.dumps(self._result)
         if self.exc_info is not None:
             obj['exc_info'] = self.exc_info
         if self.timeout is not None:
@@ -311,7 +312,7 @@ class Job(object):
         if self._status is not None:
             obj['status'] = self._status
         if self.meta:
-            obj['meta'] = dumps(self.meta)
+            obj['meta'] = pickle.dumps(self.meta)
 
         self.connection.hmset(key, obj)
 
