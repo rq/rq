@@ -63,6 +63,20 @@ class Queue(object):
         """Returns whether the current queue is empty."""
         return self.count == 0
 
+    def safe_fetch_job(self, job_id):
+        try:
+            job = Job.safe_fetch(job_id, connection=self.connection)
+        except NoSuchJobError:
+            return None
+        except UnpickleError:
+            return None
+        return job
+
+    def get_jobs_page(self, offset, limit):
+        """Returns a paginated list of jobs in the queue."""
+        job_ids = self.connection.lrange(self.key, offset, offset+limit)
+        return compact([self.safe_fetch_job(job_id) for job_id in job_ids])
+
     @property
     def job_ids(self):
         """Returns a list of all job IDS in the queue."""
@@ -71,16 +85,7 @@ class Queue(object):
     @property
     def jobs(self):
         """Returns a list of all (valid) jobs in the queue."""
-        def safe_fetch(job_id):
-            try:
-                job = Job.safe_fetch(job_id, connection=self.connection)
-            except NoSuchJobError:
-                return None
-            except UnpickleError:
-                return None
-            return job
-
-        return compact([safe_fetch(job_id) for job_id in self.job_ids])
+        return compact([self.safe_fetch_job(job_id) for job_id in self.job_ids])
 
     @property
     def count(self):
