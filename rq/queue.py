@@ -310,6 +310,7 @@ class FailedQueue(Queue):
         if self.connection._lrem(self.key, 0, job.id) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
+        job.status = Status.QUEUED
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
         q.enqueue_job(job, timeout=job.timeout)
