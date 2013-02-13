@@ -1,7 +1,6 @@
 import importlib
 import inspect
 import times
-from collections import namedtuple
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
 from .local import LocalStack
