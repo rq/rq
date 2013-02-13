@@ -72,6 +72,11 @@ class Queue(object):
             return None
         return job
 
+    def get_jobs_page(self, offset, limit):
+        """Returns a paginated list of jobs in the queue."""
+        job_ids = self.connection.lrange(self.key, offset, offset+limit)
+        return compact([self.safe_fetch_job(job_id) for job_id in job_ids])
+
     @property
     def job_ids(self):
         """Returns a list of all job IDS in the queue."""
