@@ -302,11 +302,11 @@ class FailedQueue(Queue):
             job = Job.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             # Silently ignore/remove this job and return (i.e. do nothing)
-            self.connection.lrem(self.key, job_id)
+            self.connection._lrem(self.key, 0, job_id)
             return
 
         # Delete it from the failed queue (raise an error if that failed)
-        if self.connection.lrem(self.key, job.id) == 0:
+        if self.connection._lrem(self.key, 0, job.id) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
         job.status = Status.QUEUED
