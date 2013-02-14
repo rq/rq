@@ -192,12 +192,12 @@ class TestJob(RQTestCase):
         """Ensure that job's result_ttl is set properly"""
         job = Job.create(func=say_hello, args=('Lionel',), result_ttl=10)
         job.save()
-        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, 10)
 
         job = Job.create(func=say_hello, args=('Lionel',))
         job.save()
-        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, None)
 
     def test_job_access_within_job_function(self):
