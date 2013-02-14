@@ -53,7 +53,7 @@ class RQTestCase(unittest.TestCase):
         cls.testconn = testconn
 
         # Shut up logging
-        logging.disable("ERROR")
+        logging.disable(logging.ERROR)
 
     def setUp(self):
         # Flush beforewards (we like our hygiene)
