@@ -77,7 +77,7 @@ class Job(object):
         assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
         job = cls(connection=connection)
         if inspect.ismethod(func):
-            job._instance = func.im_self
+            job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func):
             job._func_name = '%s.%s' % (func.__module__, func.__name__)
