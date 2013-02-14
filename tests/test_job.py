@@ -3,7 +3,7 @@ from datetime import datetime
 from tests import RQTestCase
 from tests.fixtures import Calculator, some_calculation, say_hello, access_self
 from tests.helpers import strip_milliseconds
-from cPickle import loads
+from six.moves import cPickle as pickle
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
@@ -78,7 +78,7 @@ class TestJob(RQTestCase):
         self.assertEquals(self.testconn.type(job.key), 'hash')
 
         # Saving writes pickled job data
-        unpickled_data = loads(self.testconn.hget(job.key, 'data'))
+        unpickled_data = pickle.loads(self.testconn.hget(job.key, 'data'))
         self.assertEquals(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
@@ -183,7 +183,7 @@ class TestJob(RQTestCase):
         job.save()
 
         raw_data = self.testconn.hget(job.key, 'meta')
-        self.assertEqual(loads(raw_data)['foo'], 'bar')
+        self.assertEqual(pickle.loads(raw_data)['foo'], 'bar')
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
