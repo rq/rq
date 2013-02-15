@@ -259,6 +259,16 @@ class TestFailedQueue(RQTestCase):
         job = Job.fetch(job.id)
         self.assertEquals(job.timeout, 200)
 
+    def test_requeue_sets_status_to_queued(self):
+        """Requeueing a job should set its status back to QUEUED."""
+        job = Job.create(func=div_by_zero, args=(1, 2, 3))
+        job.save()
+        get_failed_queue().quarantine(job, Exception('Some fake error'))
+        get_failed_queue().requeue(job.id)
+
+        job = Job.fetch(job.id)
+        self.assertEqual(job.status, Status.QUEUED)
+
     def test_enqueue_preserves_result_ttl(self):
         """Enqueueing persists result_ttl."""
         q = Queue()

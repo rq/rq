@@ -9,7 +9,7 @@ import os
 import sys
 import logging
 
-from compat import is_python_version
+from .compat import is_python_version
 
 
 def gettermsize():
