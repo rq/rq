@@ -306,7 +306,7 @@ class Worker(object):
                 self.log.info('')
                 self.log.info('*** Listening on %s...' % \
                         green(', '.join(qnames)))
-                timeout = None if burst else self.default_worker_ttl - 60
+                timeout = None if burst else max(1, self.default_worker_ttl - 60)
                 try:
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
