@@ -223,6 +223,7 @@ class Queue(object):
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
+            e.job_id = job_id
             e.queue = self
             raise e
         return job
