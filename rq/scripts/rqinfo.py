@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 import sys
 import os
 import time
@@ -11,6 +12,8 @@ from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
 from rq.scripts import read_config_file
 from rq.scripts import setup_default_arguments
+from six.moves import map
+from six.moves import zip
 
 red = make_colorizer('darkred')
 green = make_colorizer('darkgreen')
@@ -72,7 +75,7 @@ def show_queues(args):
 
     # Print summary when not in raw mode
     if not args.raw:
-        print('%d queues, %d jobs total' % (len(qs), num_jobs))
+        print(('%d queues, %d jobs total' % (len(qs), num_jobs)))
 
 
 def show_workers(args):
@@ -99,9 +102,9 @@ def show_workers(args):
         for w in ws:
             worker_queues = filter_queues(w.queue_names())
             if not args.raw:
-                print '%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(worker_queues))
+                print('%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(worker_queues)))
             else:
-                print 'worker %s %s %s' % (w.name, w.state, ','.join(worker_queues))
+                print('worker %s %s %s' % (w.name, w.state, ','.join(worker_queues)))
     else:
         # Create reverse lookup table
         queues = dict([(q, []) for q in qs])
@@ -117,21 +120,21 @@ def show_workers(args):
                 queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.state)), queues[q])))
             else:
                 queues_str = '–'
-            print '%s %s' % (pad(q.name + ':', max_qname + 1), queues_str)
+            print('%s %s' % (pad(q.name + ':', max_qname + 1), queues_str))
 
     if not args.raw:
-        print '%d workers, %d queues' % (len(ws), len(qs))
+        print('%d workers, %d queues' % (len(ws), len(qs)))
 
 
 def show_both(args):
     show_queues(args)
     if not args.raw:
-        print ''
+        print('')
     show_workers(args)
     if not args.raw:
-        print ''
+        print('')
         import datetime
-        print 'Updated: %s' % datetime.datetime.now()
+        print('Updated: %s' % datetime.datetime.now())
 
 
 def parse_args():
@@ -184,6 +187,6 @@ def main():
         print(e)
         sys.exit(1)
     except KeyboardInterrupt:
-        print
+        print()
         sys.exit(0)
 

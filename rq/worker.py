@@ -4,6 +4,8 @@ import errno
 import random
 import time
 import times
+from six.moves import map
+from six.moves import zip
 try:
     from procname import setprocname
 except ImportError:

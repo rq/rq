@@ -11,6 +11,8 @@ from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
 from rq.scripts import read_config_file
 from rq.scripts import setup_default_arguments
+from six.moves import map
+from six.moves import zip
 
 logger = logging.getLogger(__name__)
 

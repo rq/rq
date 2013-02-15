@@ -4,6 +4,8 @@ from .connections import resolve_connection
 from .job import Job, Status
 from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
 from .compat import total_ordering
+from six.moves import map
+from six.moves import zip
 
 
 def get_failed_queue(connection=None):
