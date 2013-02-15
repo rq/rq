@@ -1,7 +1,6 @@
 import importlib
 import inspect
 import times
-from collections import namedtuple
 from uuid import uuid4
 from cPickle import loads, dumps, UnpicklingError
 from .local import LocalStack
@@ -27,8 +26,8 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
-    except (StandardError, UnpicklingError):
-        raise UnpickleError('Could not unpickle.', pickled_string)
+    except (StandardError, UnpicklingError) as e:
+        raise UnpickleError('Could not unpickle.', pickled_string, e)
     return obj
 
 
@@ -289,7 +288,7 @@ class Job(object):
         key = self.key
 
         obj = {}
-        obj['created_at'] = times.format(self.created_at, 'UTC')
+        obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
 
         if self.func_name is not None:
             obj['data'] = dumps(self.job_tuple)

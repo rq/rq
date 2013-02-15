@@ -1,7 +1,8 @@
 import times
 from .connections import resolve_connection
 from .job import Job, Status
-from .exceptions import NoSuchJobError, UnpickleError, InvalidJobOperationError
+from .exceptions import (NoSuchJobError, UnpickleError,
+                         InvalidJobOperationError, DequeueTimeout)
 from .compat import total_ordering
 
 
@@ -186,7 +187,7 @@ class Queue(object):
         return self.connection.lpop(self.key)
 
     @classmethod
-    def lpop(cls, queue_keys, blocking, connection=None):
+    def lpop(cls, queue_keys, timeout, connection=None):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -194,12 +195,21 @@ class Queue(object):
 
         Until Redis receives a specific method for this, we'll have to wrap it
         this way.
+
+        The timeout parameter is interpreted as follows:
+            None - non-blocking (return immediately)
+             > 0 - maximum number of seconds to block
         """
         connection = resolve_connection(connection)
-        if blocking:
-            queue_key, job_id = connection.blpop(queue_keys)
+        if timeout is not None:  # blocking variant
+            if timeout == 0:
+                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0.')
+            result = connection.blpop(queue_keys, timeout)
+            if result is None:
+                raise DequeueTimeout(timeout, queue_keys)
+            queue_key, job_id = result
             return queue_key, job_id
-        else:
+        else:  # non-blocking variant
             for queue_key in queue_keys:
                 blob = connection.lpop(queue_key)
                 if blob is not None:
@@ -223,21 +233,25 @@ class Queue(object):
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
+            e.job_id = job_id
             e.queue = self
             raise e
         return job
 
     @classmethod
-    def dequeue_any(cls, queues, blocking, connection=None):
+    def dequeue_any(cls, queues, timeout, connection=None):
         """Class method returning the Job instance at the front of the given
         set of Queues, where the order of the queues is important.
 
-        When all of the Queues are empty, depending on the `blocking` argument,
-        either blocks execution of this function until new messages arrive on
-        any of the queues, or returns None.
+        When all of the Queues are empty, depending on the `timeout` argument,
+        either blocks execution of this function for the duration of the
+        timeout or until new messages arrive on any of the queues, or returns
+        None.
+
+        See the documentation of cls.lpop for the interpretation of timeout.
         """
         queue_keys = [q.key for q in queues]
-        result = cls.lpop(queue_keys, blocking, connection=connection)
+        result = cls.lpop(queue_keys, timeout, connection=connection)
         if result is None:
             return None
         queue_key, job_id = result
@@ -247,7 +261,7 @@ class Queue(object):
         except NoSuchJobError:
             # Silently pass on jobs that don't exist (anymore),
             # and continue by reinvoking the same function recursively
-            return cls.dequeue_any(queues, blocking, connection=connection)
+            return cls.dequeue_any(queues, timeout, connection=connection)
         except UnpickleError as e:
             # Attach queue information on the exception for improved error
             # reporting
@@ -309,6 +323,7 @@ class FailedQueue(Queue):
         if self.connection._lrem(self.key, 0, job.id) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
+        job.status = Status.QUEUED
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
         q.enqueue_job(job, timeout=job.timeout)
