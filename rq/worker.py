@@ -343,7 +343,10 @@ class Worker(object):
                 return Queue.dequeue_any(self.queues, timeout,
                         connection=self.connection)
             except DequeueTimeout:
-                self.connection.expire(self.key, self.default_worker_ttl)
+                pass
+
+            self.log.debug('Sending heartbeat to prevent worker timeout.')
+            self.connection.expire(self.key, self.default_worker_ttl)
 
 
     def fork_and_perform_job(self, job):
