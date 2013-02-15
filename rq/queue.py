@@ -196,19 +196,20 @@ class Queue(object):
         Until Redis receives a specific method for this, we'll have to wrap it
         this way.
 
-        The timeout parameter is interpreted thus:
-            0 - no timeout (block forever)
-            None - non-blocking (return value or None immediately)
-            <integer> - maximum seconds to block
+        The timeout parameter is interpreted as follows:
+            None - non-blocking (return immediately)
+             > 0 - maximum number of seconds to block
         """
         connection = resolve_connection(connection)
-        if timeout is not None:
+        if timeout is not None:  # blocking variant
+            if timeout == 0:
+                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0.')
             result = connection.blpop(queue_keys, timeout)
             if result is None:
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
             return queue_key, job_id
-        else:
+        else:  # non-blocking variant
             for queue_key in queue_keys:
                 blob = connection.lpop(queue_key)
                 if blob is not None:
