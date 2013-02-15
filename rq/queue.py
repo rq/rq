@@ -87,6 +87,7 @@ class Queue(object):
         """Returns a count of all messages in the queue."""
         return self.connection.llen(self.key)
 
+    # TODO: job references are now removed on job.cancel, is this still needed?
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guarantueeing FIFO semantics.
