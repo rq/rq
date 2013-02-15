@@ -242,9 +242,9 @@ class Queue(object):
         """Class method returning the Job instance at the front of the given
         set of Queues, where the order of the queues is important.
 
-        When all of the Queues are empty, depending on the `timout` argument,
+        When all of the Queues are empty, depending on the `timeout` argument,
         either blocks execution of this function for the duration of the
-        timout or until new messages arrive on any of the queues, or returns
+        timeout or until new messages arrive on any of the queues, or returns
         None.
 
         See the documentation of cls.lpop for the interpretation of timeout.
