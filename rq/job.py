@@ -257,7 +257,7 @@ class Job(object):
         """
         key = self.key
         obj = self.connection.hgetall(key)
-        if not obj:
+        if len(obj) == 0:
             raise NoSuchJobError('No such job: %s' % (key,))
 
         def to_date(date_str):
@@ -266,7 +266,11 @@ class Job(object):
             else:
                 return times.to_universal(date_str)
 
-        self.data = obj.get('data')
+        try:
+            self.data = obj['data']
+        except KeyError:
+            raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+
         try:
             self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
         except UnpickleError:
