@@ -1,8 +1,13 @@
+from datetime import timedelta
+
 from tests import RQTestCase
 from tests.fixtures import Calculator, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
 from rq.job import Job, Status
 from rq.exceptions import InvalidJobOperationError
+from rq.scheduler import Scheduler
+
+import times
 
 
 class TestQueue(RQTestCase):
@@ -211,6 +216,37 @@ class TestQueue(RQTestCase):
         job = q.enqueue(say_hello)
         self.assertEqual(job.status, Status.QUEUED)
 
+    def test_schedule_at(self):
+        """Ensure queue.schedule_at assigns the correct score and origin."""
+        scheduled_time = times.now()
+        queue_name = 'scheduler_test'
+        queue = Queue(name=queue_name, connection=self.testconn)
+        scheduler = Scheduler(queue_name, connection=self.testconn)
+        job = queue.schedule_at(scheduled_time, say_hello)
+        self.assertEqual(job, Job.fetch(job.id, connection=self.testconn))
+        self.assertEqual(job.origin, queue_name)
+        self.assertIn(job.id,
+            self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         times.to_unix(scheduled_time))
+
+    def test_schedule_in(self):
+        right_now = times.now()
+        time_delta = timedelta(minutes=1)
+        queue_name = 'scheduler_test'
+        queue = Queue(name=queue_name, connection=self.testconn)
+        scheduler = Scheduler(queue_name, connection=self.testconn)        
+        job = queue.schedule_in(time_delta, say_hello)
+        self.assertEqual(job.origin, queue_name)
+        self.assertIn(job.id, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         times.to_unix(right_now + time_delta))
+        time_delta = timedelta(hours=1)
+        job = scheduler.enqueue_in(time_delta, say_hello)
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         times.to_unix(right_now + time_delta))
+
+
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):
@@ -258,6 +294,16 @@ class TestFailedQueue(RQTestCase):
 
         job = Job.fetch(job.id)
         self.assertEquals(job.timeout, 200)
+
+    def test_requeue_sets_status_to_queued(self):
+        """Requeueing a job should set its status back to QUEUED."""
+        job = Job.create(func=div_by_zero, args=(1, 2, 3))
+        job.save()
+        get_failed_queue().quarantine(job, Exception('Some fake error'))
+        get_failed_queue().requeue(job.id)
+
+        job = Job.fetch(job.id)
+        self.assertEqual(job.status, Status.QUEUED)
 
     def test_enqueue_preserves_result_ttl(self):
         """Enqueueing persists result_ttl."""
