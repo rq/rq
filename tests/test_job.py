@@ -7,6 +7,7 @@ from cPickle import loads
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
+from rq.scheduler import Scheduler
 
 
 class TestJob(RQTestCase):
@@ -219,3 +220,15 @@ class TestJob(RQTestCase):
         id = job.perform()
         self.assertEqual(job.id, id)
         self.assertEqual(job.func, access_self)
+
+    def test_cancel(self):
+        """Canceling a job should remove references from Scheduler and Queue"""
+        scheduler = Scheduler(connection=self.testconn)
+        job = scheduler.enqueue_at(times.now(), say_hello)
+        job.cancel()
+        self.assertNotIn(job.id, scheduler)
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        self.assertIn(job.id, queue.job_ids)
+        job.cancel()
+        self.assertNotIn(job.id, queue.job_ids)
