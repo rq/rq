@@ -7,6 +7,7 @@ import logging.config
 from rq import Queue, Worker
 from rq.logutils import setup_loghandlers
 from redis.exceptions import ConnectionError
+from rq.contrib.legacy import cleanup_ghosts
 from rq.scripts import add_standard_arguments
 from rq.scripts import setup_redis
 from rq.scripts import read_config_file
@@ -47,6 +48,8 @@ def main():
 
     setup_loghandlers(args.verbose)
     setup_redis(args)
+
+    cleanup_ghosts()
 
     try:
         queues = map(Queue, args.queues)
