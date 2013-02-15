@@ -1,8 +1,13 @@
+from datetime import timedelta
+
 from tests import RQTestCase
 from tests.fixtures import Calculator, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
 from rq.job import Job, Status
 from rq.exceptions import InvalidJobOperationError
+from rq.scheduler import Scheduler
+
+import times
 
 
 class TestQueue(RQTestCase):
@@ -210,6 +215,37 @@ class TestQueue(RQTestCase):
         q = Queue()
         job = q.enqueue(say_hello)
         self.assertEqual(job.status, Status.QUEUED)
+
+    def test_schedule_at(self):
+        """Ensure queue.schedule_at assigns the correct score and origin."""
+        scheduled_time = times.now()
+        queue_name = 'scheduler_test'
+        queue = Queue(name=queue_name, connection=self.testconn)
+        scheduler = Scheduler(queue_name, connection=self.testconn)
+        job = queue.schedule_at(scheduled_time, say_hello)
+        self.assertEqual(job, Job.fetch(job.id, connection=self.testconn))
+        self.assertEqual(job.origin, queue_name)
+        self.assertIn(job.id,
+            self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         times.to_unix(scheduled_time))
+
+    def test_schedule_in(self):
+        right_now = times.now()
+        time_delta = timedelta(minutes=1)
+        queue_name = 'scheduler_test'
+        queue = Queue(name=queue_name, connection=self.testconn)
+        scheduler = Scheduler(queue_name, connection=self.testconn)        
+        job = queue.schedule_in(time_delta, say_hello)
+        self.assertEqual(job.origin, queue_name)
+        self.assertIn(job.id, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         times.to_unix(right_now + time_delta))
+        time_delta = timedelta(hours=1)
+        job = scheduler.enqueue_in(time_delta, say_hello)
+        self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
+                         times.to_unix(right_now + time_delta))
+
 
 
 class TestFailedQueue(RQTestCase):
