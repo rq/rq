@@ -268,7 +268,7 @@ class Job(object):
         try:
             self.data = obj['data']
         except KeyError:
-            raise NoSuchJobError('Unexpected job format: {0}'.format(self.data))
+            raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
         try:
             self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
