@@ -265,7 +265,7 @@ class Job(object):
             else:
                 return times.to_universal(date_str)
 
-        self.data = obj.get('data')
+        self.data = obj['data']
         try:
             self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
         except UnpickleError:
