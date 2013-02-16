@@ -50,6 +50,32 @@ class TestQueue(RQTestCase):
         self.testconn.rpush('rq:queue:example', 'sentinel message')
         self.assertEquals(q.is_empty(), False)
 
+    def test_remove(self):
+        """Ensure queue.remove properly removes Job from queue."""
+        q = Queue('example')
+        job = q.enqueue(say_hello)
+        self.assertIn(job.id, q.job_ids)
+        q.remove(job)
+        self.assertNotIn(job.id, q.job_ids)
+
+        job = q.enqueue(say_hello)
+        self.assertIn(job.id, q.job_ids)
+        q.remove(job.id)
+        self.assertNotIn(job.id, q.job_ids)
+
+    def test_jobs(self):
+        """Getting jobs out of a queue."""
+        q = Queue('example')
+        self.assertEqual(q.jobs, [])
+        job = q.enqueue(say_hello)
+        self.assertEqual(q.jobs, [job])
+
+        # Fetching a deleted removes it from queue
+        job.delete()
+        self.assertEqual(q.job_ids, [job.id])
+        q.jobs
+        self.assertEqual(q.job_ids, [])
+
     def test_compact(self):
         """Compacting queueus."""
         q = Queue()
