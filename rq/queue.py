@@ -76,6 +76,7 @@ class Queue(object):
             try:
                 job = Job.safe_fetch(job_id, connection=self.connection)
             except NoSuchJobError:
+                self.remove(job_id)
                 return None
             except UnpickleError:
                 return None
@@ -87,6 +88,11 @@ class Queue(object):
     def count(self):
         """Returns a count of all messages in the queue."""
         return self.connection.llen(self.key)
+
+    def remove(self, job_or_id):
+        """Removes Job from queue, accepts either a Job instance or ID."""
+        job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
+        return self.connection._lrem(self.key, 0, job_id)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
@@ -316,11 +322,11 @@ class FailedQueue(Queue):
             job = Job.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             # Silently ignore/remove this job and return (i.e. do nothing)
-            self.connection._lrem(self.key, 0, job_id)
+            self.remove(job_id)
             return
 
         # Delete it from the failed queue (raise an error if that failed)
-        if self.connection._lrem(self.key, 0, job.id) == 0:
+        if self.remove(job) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
         job.status = Status.QUEUED
