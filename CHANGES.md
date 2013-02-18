@@ -1,5 +1,5 @@
 ### 0.3.6
-(not yet released)
+(February 18th, 2013)
 
 - Worker registrations now expire.  This should prevent `rqinfo` from reporting
   about ghosted workers.  (Thanks, @yaniv-aknin!)
