@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
+    parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
     parser.add_argument('queues', nargs='*', help='The queues to listen on (default: \'default\')')
 
@@ -46,7 +47,16 @@ def main():
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN', None)
 
-    setup_loghandlers(args.verbose)
+    if args.verbose and args.quiet:
+        raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
+
+    if args.verbose:
+        level = 'DEBUG'
+    elif args.quiet:
+        level = 'WARNING'
+    else:
+        level = 'INFO'
+    setup_loghandlers(level)
     setup_redis(args)
 
     cleanup_ghosts()
