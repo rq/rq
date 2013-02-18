@@ -4,6 +4,11 @@
 - Worker registrations now expire.  This should prevent `rqinfo` from reporting
   about ghosted workers.  (Thanks, @yaniv-aknin!)
 
+- `rqworker` will automatically clean up ghosted worker registrations from
+  pre-0.3.6 runs.
+
+- `rqworker` grew a `-q` flag, to be more silent (only warnings/errors are shown)
+
 
 ### 0.3.5
 (February 6th, 2013)
