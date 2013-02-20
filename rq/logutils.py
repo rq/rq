@@ -8,7 +8,7 @@ except ImportError:
     from rq.compat.dictconfig import dictConfig  # noqa
 
 
-def setup_loghandlers(verbose=False):
+def setup_loghandlers(level=None):
     if not logging._handlers:
         dictConfig({
             "version": 1,
@@ -33,6 +33,6 @@ def setup_loghandlers(verbose=False):
 
             "root": {
                 "handlers": ["console"],
-                "level": "DEBUG" if verbose else "INFO"
+                "level": level or "INFO",
             }
         })

@@ -1,4 +1,5 @@
 import os
+from time import sleep
 from tests import RQTestCase, slow
 from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
         create_file_after_timeout
@@ -24,6 +25,14 @@ class TestWorker(RQTestCase):
         fooq.enqueue(say_hello, name='Frank')
         self.assertEquals(w.work(burst=True), True,
                 'Expected at least some work done.')
+
+    def test_worker_ttl(self):
+        """Worker ttl."""
+        w = Worker([])
+        w.register_birth() # ugly: our test should only call public APIs
+        [worker_key] = self.testconn.smembers(Worker.redis_workers_keys)
+        self.assertIsNotNone(self.testconn.ttl(worker_key))
+        w.register_death()
 
     def test_work_via_string_argument(self):
         """Worker processes work fed via string arguments."""
