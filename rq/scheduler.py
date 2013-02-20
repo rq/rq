@@ -104,13 +104,7 @@ class Scheduler(object):
         scheduler = Scheduler(queue_name='default', connection=redis)
         scheduler.enqueue_at(datetime(2020, 1, 1), func, 'argument', keyword='argument')
         """
-        # TODO: refactor to use schedule method
-        job = self._create_job(func, args=args, kwargs=kwargs)
-        self.connection._zadd(self.scheduled_jobs_key,
-                              times.to_unix(scheduled_time),
-                              job.id)
-        self.register(job)        
-        return job
+        return self.schedule(scheduled_time, func, args=args, kwargs=kwargs)
 
     def enqueue_in(self, time_delta, func, *args, **kwargs):
         """
@@ -118,16 +112,11 @@ class Scheduler(object):
         The job's scheduled execution time will be calculated by adding the timedelta
         to times.now().
         """
-        # TODO: refactor to use schedule method
-        job = self._create_job(func, args=args, kwargs=kwargs)
-        self.connection._zadd(self.scheduled_jobs_key,
-                              times.to_unix(times.now() + time_delta),
-                              job.id)
-        self.register(job)
-        return job
+        return self.schedule(times.now() + time_delta, func, args=args,
+                             kwargs=kwargs)
 
     def schedule(self, scheduled_time, func, args=None, kwargs=None,
-                interval=None, repeat=None, result_ttl=None):
+                 interval=None, repeat=None, result_ttl=None):
         """
         Schedule a job to be periodically executed, at a certain interval.
         """
