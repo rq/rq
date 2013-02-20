@@ -324,16 +324,16 @@ class Job(object):
         # If a job gets deleted, it should remove itself from queue and scheduler
         from .queue import Queue, Status
         from .scheduler import Scheduler
-        
+
+        self.delete()
+
         scheduler = Scheduler(connection=self.connection)
         if self in scheduler:
             scheduler.cancel(self)
-        
-        if self.status == Status.QUEUED:
+
+        if self._status == Status.QUEUED:
             queue = Queue(self.origin, self.connection)
             self.connection.lrem(queue.key, 1, self.id)
-        
-        self.delete()
 
     def delete(self):
         """Deletes the job hash from Redis."""
