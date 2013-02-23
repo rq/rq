@@ -329,7 +329,7 @@ class Job(object):
         from .queue import Queue, Status
         from .scheduler import Scheduler
 
-        pipeline = self.connection.pipeline()
+        pipeline = self.connection._pipeline()
         self.delete(pipeline=pipeline)
 
         scheduler = Scheduler(connection=self.connection)
