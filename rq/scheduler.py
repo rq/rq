@@ -135,19 +135,20 @@ class Scheduler(object):
         self.register(job)
         return job
 
-    def cancel(self, job):
+    def cancel(self, job, pipeline=None):
         """
         Pulls a job from the scheduler queue. This function accepts either a
         job_id or a job instance.
         """
+        connection = self.connection if pipeline is None else pipeline
         if isinstance(job, basestring):
-            self.connection.zrem(self.scheduled_jobs_key, job)
+            connection.zrem(self.scheduled_jobs_key, job)
             try:
-                job = Job.fetch(job, connection=self.connection)
+                job = Job.fetch(job, connection=connection)
             except NoSuchJobError:
                 return
         else:
-            self.connection.zrem(self.scheduled_jobs_key, job.id)
+            connection.zrem(self.scheduled_jobs_key, job.id)
         self.unregister(job)
 
     def __contains__(self, obj):

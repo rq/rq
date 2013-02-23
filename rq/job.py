@@ -329,19 +329,23 @@ class Job(object):
         from .queue import Queue, Status
         from .scheduler import Scheduler
 
-        self.delete()
+        pipeline = self.connection.pipeline()
+        self.delete(pipeline=pipeline)
 
         scheduler = Scheduler(connection=self.connection)
         if self in scheduler:
-            scheduler.cancel(self)
+            scheduler.cancel(self, pipeline=pipeline)
 
         if self._status == Status.QUEUED:
             queue = Queue(self.origin, self.connection)
-            self.connection.lrem(queue.key, 1, self.id)
+            pipeline.lrem(queue.key, 1, self.id)
+        
+        pipeline.execute()
 
-    def delete(self):
+    def delete(self, pipeline=None):
         """Deletes the job hash from Redis."""
-        self.connection.delete(self.key)
+        connection = self.connection if pipeline is None else pipeline
+        connection.delete(self.key)
 
 
     # Job execution
