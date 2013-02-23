@@ -13,7 +13,6 @@ import socket
 import signal
 import traceback
 import logging
-from cPickle import dumps
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .job import Job, Status
@@ -199,7 +198,7 @@ class Worker(object):
         key = self.key
         now = time.time()
         queues = ','.join(self.queue_names())
-        with self.connection.pipeline() as p:
+        with self.connection._pipeline() as p:
             p.delete(key)
             p.hset(key, 'birth', now)
             p.hset(key, 'queues', queues)
@@ -210,7 +209,7 @@ class Worker(object):
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with self.connection.pipeline() as p:
+        with self.connection._pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
@@ -415,9 +414,9 @@ class Worker(object):
             job._result = rv
             job._status = Status.FINISHED
             job.ended_at = times.now()
-            
+
             result_ttl = job.get_ttl(self.default_result_ttl)
-            pipeline = self.connection.pipeline()
+            pipeline = self.connection._pipeline()
             if result_ttl != 0:
                 job.save(pipeline=pipeline)
             job.cleanup(result_ttl, pipeline=pipeline)
