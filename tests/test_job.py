@@ -219,3 +219,33 @@ class TestJob(RQTestCase):
         id = job.perform()
         self.assertEqual(job.id, id)
         self.assertEqual(job.func, access_self)
+
+    def test_get_ttl(self):
+        """Getting job TTL."""
+        job_ttl = 1
+        default_ttl = 2
+        job = Job.create(func=say_hello, result_ttl=job_ttl)
+        job.save()
+        self.assertEqual(job.get_ttl(default_ttl=default_ttl), job_ttl)
+        self.assertEqual(job.get_ttl(), job_ttl)
+        job = Job.create(func=say_hello)
+        job.save()
+        self.assertEqual(job.get_ttl(default_ttl=default_ttl), default_ttl)
+        self.assertEqual(job.get_ttl(), None)
+
+    def test_cleanup(self):
+        """Test that jobs and results are expired properly."""
+        job = Job.create(func=say_hello)
+        job.save()
+        
+        # Jobs with negative TTLs don't expire
+        job.cleanup(ttl=-1)
+        self.assertEqual(self.testconn.ttl(job.key), -1)
+
+        # Jobs with positive TTLs are eventually deleted 
+        job.cleanup(ttl=100)
+        self.assertEqual(self.testconn.ttl(job.key), 100)
+
+        # Jobs with 0 TTL are immediately deleted
+        job.cleanup(ttl=0)
+        self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
