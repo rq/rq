@@ -141,12 +141,16 @@ class TestScheduler(RQTestCase):
         job = self.scheduler.enqueue_at(now, say_hello)
         self.assertIn(job, self.scheduler)
         self.assertIn(job.id, self.scheduler)
+        self.assertIn(say_hello, self.scheduler)
         self.assertNotIn("non-existing-job-id", self.scheduler)
+        self.assertNotIn(times.now, self.scheduler)
 
     def test_cancel_scheduled_job(self):
         """
         When scheduled job is canceled, make sure:
         - Job is removed from the sorted set of scheduled jobs
+        - Canceling jobs using job id works
+        - Canceling a job that has been deleted doesn't cause an error
         """
         # schedule a job to be enqueued one minute from now
         time_delta = timedelta(minutes=1)
@@ -155,6 +159,17 @@ class TestScheduler(RQTestCase):
         self.scheduler.cancel(job)
         self.assertNotIn(job.id, self.testconn.zrange(
             self.scheduler.scheduled_jobs_key, 0, 1))
+
+        # Cancel using job id
+        job = self.scheduler.enqueue_in(time_delta, say_hello)
+        self.scheduler.cancel(job.id)
+        self.assertNotIn(job.id, self.testconn.zrange(
+            self.scheduler.scheduled_jobs_key, 0, 1))
+
+        # Cancel a deleted job doesn't cause an exception
+        job = self.scheduler.enqueue_in(time_delta, say_hello)
+        job.delete()
+        self.scheduler.cancel(job.id)
 
     def test_change_execution_time(self):
         """

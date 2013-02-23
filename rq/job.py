@@ -6,6 +6,7 @@ from cPickle import loads, dumps, UnpicklingError
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
+from .utils import get_func_name
 
 
 def enum(name, *sequential, **named):
@@ -77,11 +78,7 @@ class Job(object):
         job = cls(connection=connection)
         if inspect.ismethod(func):
             job._instance = func.im_self
-            job._func_name = func.__name__
-        elif inspect.isfunction(func):
-            job._func_name = '%s.%s' % (func.__module__, func.__name__)
-        else:  # we expect a string
-            job._func_name = func
+        job._func_name = get_func_name(func)
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()
@@ -321,18 +318,34 @@ class Job(object):
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
-        ran (or inspected).
+        ran (or inspected). This function will also delete references to this
+        job from associated scheduler or queue.
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
-        cancellation.  Technically, this call is (currently) the same as just
-        deleting the job hash.
+        cancellation.
         """
-        self.delete()
+        # If a job gets deleted, it should remove itself from queue and scheduler
+        from .queue import Queue, Status
+        from .scheduler import Scheduler
 
-    def delete(self):
+        pipeline = self.connection._pipeline()
+        self.delete(pipeline=pipeline)
+
+        scheduler = Scheduler(connection=self.connection)
+        if self in scheduler:
+            scheduler.cancel(self, pipeline=pipeline)
+
+        if self._status == Status.QUEUED:
+            queue = Queue(self.origin, self.connection)
+            pipeline.lrem(queue.key, 1, self.id)
+
+        pipeline.execute()
+
+    def delete(self, pipeline=None):
         """Deletes the job hash from Redis."""
-        self.connection.delete(self.key)
+        connection = self.connection if pipeline is None else pipeline
+        connection.delete(self.key)
 
 
     # Job execution
