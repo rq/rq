@@ -10,6 +10,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .job import Job
 from .queue import Queue
+from .registry import Registry
 
 from redis import WatchError
 
@@ -103,11 +104,7 @@ class Scheduler(object):
         scheduler = Scheduler(queue_name='default', connection=redis)
         scheduler.enqueue_at(datetime(2020, 1, 1), func, 'argument', keyword='argument')
         """
-        job = self._create_job(func, args=args, kwargs=kwargs)
-        self.connection._zadd(self.scheduled_jobs_key,
-                              times.to_unix(scheduled_time),
-                              job.id)
-        return job
+        return self.schedule(scheduled_time, func, args=args, kwargs=kwargs)
 
     def enqueue_in(self, time_delta, func, *args, **kwargs):
         """
@@ -115,14 +112,11 @@ class Scheduler(object):
         The job's scheduled execution time will be calculated by adding the timedelta
         to times.now().
         """
-        job = self._create_job(func, args=args, kwargs=kwargs)
-        self.connection._zadd(self.scheduled_jobs_key,
-                              times.to_unix(times.now() + time_delta),
-                              job.id)
-        return job
+        return self.schedule(times.now() + time_delta, func, args=args,
+                             kwargs=kwargs)
 
     def schedule(self, scheduled_time, func, args=None, kwargs=None,
-                interval=None, repeat=None, result_ttl=None):
+                 interval=None, repeat=None, result_ttl=None):
         """
         Schedule a job to be periodically executed, at a certain interval.
         """
@@ -138,28 +132,40 @@ class Scheduler(object):
         self.connection._zadd(self.scheduled_jobs_key,
                               times.to_unix(scheduled_time),
                               job.id)
+        self.register(job)
         return job
 
-    def cancel(self, job):
+    def cancel(self, job, pipeline=None):
         """
         Pulls a job from the scheduler queue. This function accepts either a
         job_id or a job instance.
         """
+        connection = self.connection if pipeline is None else pipeline
         if isinstance(job, basestring):
-            self.connection.zrem(self.scheduled_jobs_key, job)
+            connection.zrem(self.scheduled_jobs_key, job)
+            try:
+                job = Job.fetch(job, connection=connection)
+            except NoSuchJobError:
+                return
         else:
-            self.connection.zrem(self.scheduled_jobs_key, job.id)
+            connection.zrem(self.scheduled_jobs_key, job.id)
+        self.unregister(job)
 
-    def __contains__(self, item):
+    def __contains__(self, obj):
         """
-        Returns a boolean indicating whether the given job instance or job id is
-        scheduled for execution.
+        Returns a boolean indicating whether the given object is scheduled
+        for execution. Object can be a Job instance, Job id or a callable.
         """
-        job_id = item
-        if isinstance(item, Job):
-            job_id = item.id
+        # If object is callable, check whether that callable is in scheduler
+        if callable(obj):
+            return self.is_registered(obj)
+        
+        # If object is not callable, it must be either a Job instance or ID
+        job_id = obj
+        if isinstance(obj, Job):
+            job_id = obj.id
         return self.connection.zscore(self.scheduled_jobs_key, job_id) is not None
-
+    
     def change_execution_time(self, job, date_time):
         """
         Change a job's execution time. Wrap this in a transaction to prevent race condition.
@@ -249,7 +255,8 @@ class Scheduler(object):
 
         queue = self.get_queue_for_job(job)
         queue.push_job_id(job.id)
-        self.connection.zrem(self.scheduled_jobs_key, job.id)
+
+        self.cancel(job)
 
         if interval:
             # If this is a repeat job and counter has reached 0, don't repeat
@@ -259,6 +266,7 @@ class Scheduler(object):
             self.connection._zadd(self.scheduled_jobs_key,
                                   times.to_unix(times.now()) + int(interval),
                                   job.id)
+            self.register(job)
 
     def enqueue_jobs(self):
         """
@@ -288,3 +296,15 @@ class Scheduler(object):
                 time.sleep(self._interval)
         finally:
             self.register_death()
+
+    def get_registry(self):
+        return Registry('scheduler', self.connection)
+
+    def register(self, job):
+        self.get_registry().register(job)
+
+    def unregister(self, job):
+        self.get_registry().unregister(job)
+
+    def is_registered(self, f):
+        return self.get_registry().is_registered(f)

@@ -90,8 +90,8 @@ class TestQueue(RQTestCase):
         q.enqueue(say_hello, 'Charlie')
         debrah = q.enqueue(say_hello, 'Debrah')
 
-        bob.cancel()
-        debrah.cancel()
+        bob.delete()
+        debrah.delete()
 
         self.assertEquals(q.count, 4)
 

@@ -150,7 +150,7 @@ class TestWorker(RQTestCase):
 
         # Here, we cancel the job, so the sentinel file may not be created
         assert q.count == 1
-        job.cancel()
+        job.delete()
         assert q.count == 1
 
         w = Worker([q])
