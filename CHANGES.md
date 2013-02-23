@@ -1,3 +1,9 @@
+### 0.3.7
+(not yet released)
+
+- ...
+
+
 ### 0.3.6
 (February 18th, 2013)
 
@@ -15,7 +21,9 @@
 
 - `ended_at` is now recorded for normally finished jobs, too.  (Previously only
   for failed jobs.)
+
 - Adds support for both `Redis` and `StrictRedis` connection types
+
 - Makes `StrictRedis` the default connection type if none is explicitly provided
 
 

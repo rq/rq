@@ -270,7 +270,7 @@ class TestScheduler(RQTestCase):
         """
         job = self.scheduler.schedule(times.now(), say_hello, interval=5)
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job_from_queue.result_ttl, -1)
+        self.assertIsNone(job_from_queue.result_ttl)
 
     def test_run(self):
         """

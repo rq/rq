@@ -120,9 +120,6 @@ class Scheduler(object):
         """
         Schedule a job to be periodically executed, at a certain interval.
         """
-        # Set result_ttl to -1 for periodic jobs, if result_ttl not specified
-        if interval is not None and result_ttl is None:
-            result_ttl = -1
         job = self._create_job(func, args=args, kwargs=kwargs, commit=False,
                                result_ttl=result_ttl)
         if interval is not None:
