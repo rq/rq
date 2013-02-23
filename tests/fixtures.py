@@ -3,6 +3,7 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slighty different characteristics.
 """
 import time
+from . import find_empty_redis_database
 from rq import Connection
 from rq.decorators import job
 from rq import get_current_job
@@ -58,7 +59,7 @@ class Calculator(object):
         return x * y / self.denominator
 
 
-with Connection():
+with Connection(find_empty_redis_database()):
     @job(queue='default')
     def decorated_job(x, y):
         return x + y
