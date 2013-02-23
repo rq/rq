@@ -339,7 +339,7 @@ class Job(object):
         if self._status == Status.QUEUED:
             queue = Queue(self.origin, self.connection)
             pipeline.lrem(queue.key, 1, self.id)
-        
+
         pipeline.execute()
 
     def delete(self, pipeline=None):

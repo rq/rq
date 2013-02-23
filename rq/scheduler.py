@@ -159,13 +159,13 @@ class Scheduler(object):
         # If object is callable, check whether that callable is in scheduler
         if callable(obj):
             return self.is_registered(obj)
-        
+
         # If object is not callable, it must be either a Job instance or ID
         job_id = obj
         if isinstance(obj, Job):
             job_id = obj.id
         return self.connection.zscore(self.scheduled_jobs_key, job_id) is not None
-    
+
     def change_execution_time(self, job, date_time):
         """
         Change a job's execution time. Wrap this in a transaction to prevent race condition.
