@@ -3,3 +3,4 @@ dump.rdb
 /*.egg-info
 .env
 /.tox/
+/dist
