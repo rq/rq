@@ -1,7 +1,13 @@
-### 0.3.7
+### 0.3.8
 (not yet released)
 
 - ...
+
+
+### 0.3.7
+(February 26th, 2013)
+
+- Fixed bug where workers would not execute builtin functions properly.
 
 
 ### 0.3.6

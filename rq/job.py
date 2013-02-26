@@ -78,7 +78,7 @@ class Job(object):
         if inspect.ismethod(func):
             job._instance = func.im_self
             job._func_name = func.__name__
-        elif inspect.isfunction(func):
+        elif inspect.isfunction(func) or inspect.isbuiltin(func):
             job._func_name = '%s.%s' % (func.__module__, func.__name__)
         else:  # we expect a string
             job._func_name = func
