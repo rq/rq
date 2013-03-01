@@ -161,10 +161,12 @@ class ColorizingStreamHandler(logging.StreamHandler):
         return message
 
 
-def get_func_name(func):
+def parse_func(func):
     if inspect.ismethod(func):
-        return func.__name__
-    elif inspect.isfunction(func):
-        return '%s.%s' % (func.__module__, func.__name__)
+        return (func.__self__, func.__name__)
+    elif inspect.isfunction(func) or inspect.isbuiltin(func):
+        return (None, '%s.%s' % (func.__module__, func.__name__))
     else:  # we expect a string
-        return func
+        if not isinstance(func, basestring):
+            raise TypeError('method, function, or string expected, but got {}'.format(type(func)))
+        return (None, func)

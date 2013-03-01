@@ -6,7 +6,7 @@ from cPickle import loads, dumps, UnpicklingError
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
-from .utils import get_func_name
+from .utils import parse_func
 
 
 def enum(name, *sequential, **named):
@@ -76,9 +76,7 @@ class Job(object):
         assert isinstance(args, tuple), '%r is not a valid args list.' % (args,)
         assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
         job = cls(connection=connection)
-        if inspect.ismethod(func):
-            job._instance = func.im_self
-        job._func_name = get_func_name(func)
+        job._instance, job._func_name = parse_func(func)
         job._args = args
         job._kwargs = kwargs
         job.description = job.get_call_string()

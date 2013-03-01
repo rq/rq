@@ -1,4 +1,4 @@
-from .utils import get_func_name
+from .utils import parse_func
 
 
 class Registry(object):
@@ -26,7 +26,8 @@ class Registry(object):
         Returns a registry key for a callable, it should look something like:
             rq:registry:registry_name:callable_name
         """
-        return '%s:%s' % (self.key, get_func_name(f))        
+        _, func_name = parse_func(f)
+        return '%s:%s' % (self.key, func_name)
 
     def register(self, job):
         self.connection.sadd(self.get_key_from_job(job), job.id)
