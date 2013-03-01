@@ -13,7 +13,6 @@ import socket
 import signal
 import traceback
 import logging
-from cPickle import dumps
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .job import Job, Status
@@ -199,7 +198,7 @@ class Worker(object):
         key = self.key
         now = time.time()
         queues = ','.join(self.queue_names())
-        with self.connection.pipeline() as p:
+        with self.connection._pipeline() as p:
             p.delete(key)
             p.hset(key, 'birth', now)
             p.hset(key, 'queues', queues)
@@ -210,7 +209,7 @@ class Worker(object):
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with self.connection.pipeline() as p:
+        with self.connection._pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
@@ -412,9 +411,17 @@ class Worker(object):
 
             # Pickle the result in the same try-except block since we need to
             # use the same exc handling when pickling fails
-            pickled_rv = dumps(rv)
+            job._result = rv
             job._status = Status.FINISHED
             job.ended_at = times.now()
+
+            result_ttl = job.get_ttl(self.default_result_ttl)
+            pipeline = self.connection._pipeline()
+            if result_ttl != 0:
+                job.save(pipeline=pipeline)
+            job.cleanup(result_ttl, pipeline=pipeline)
+            pipeline.execute()
+
         except:
             # Use the public setter here, to immediately update Redis
             job.status = Status.FAILED
@@ -426,27 +433,12 @@ class Worker(object):
         else:
             self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
 
-        # How long we persist the job result depends on the value of
-        # result_ttl:
-        # - If result_ttl is 0, cleanup the job immediately.
-        # - If it's a positive number, set the job to expire in X seconds.
-        # - If result_ttl is negative, don't set an expiry to it (persist
-        #   forever)
-        result_ttl =  self.default_result_ttl if job.result_ttl is None else job.result_ttl  # noqa
         if result_ttl == 0:
-            job.delete()
             self.log.info('Result discarded immediately.')
+        elif result_ttl > 0:
+            self.log.info('Result is kept for %d seconds.' % result_ttl)
         else:
-            p = self.connection.pipeline()
-            p.hset(job.key, 'result', pickled_rv)
-            p.hset(job.key, 'status', job._status)
-            p.hset(job.key, 'ended_at', times.format(job.ended_at, 'UTC'))
-            if result_ttl > 0:
-                p.expire(job.key, result_ttl)
-                self.log.info('Result is kept for %d seconds.' % result_ttl)
-            else:
-                self.log.warning('Result will never expire, clean up result key manually.')
-            p.execute()
+            self.log.warning('Result will never expire, clean up result key manually.')
 
         return True
 
