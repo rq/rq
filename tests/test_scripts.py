@@ -101,11 +101,6 @@ class TestRQInfoScript(RQTestCase):
             "--db", str(connection_kwargs["db"]),
         ]
 
-    def tearDown(self):
-        use_connection(self.testconn)
-
-        super(TestRQInfoScript, self).tearDown()
-
     def test_rqinfo_defaults_to_all_queues(self):
         parser = rqinfo.setup_parser()
         args = parser.parse_args(self.base_arguments)
@@ -114,6 +109,8 @@ class TestRQInfoScript(RQTestCase):
         setup_redis(args)
 
         output = self.capture_stdout(rqinfo.show_queues, args)
+
+        use_connection(self.testconn)
 
         expected_output = ['queue B 1', 'queue C 1', 'queue A 1']
         self.assertEqual(output.splitlines(), expected_output)
@@ -126,6 +123,8 @@ class TestRQInfoScript(RQTestCase):
         setup_redis(args)
 
         output = self.capture_stdout(rqinfo.show_queues, args)
+
+        use_connection(self.testconn)
 
         expected_output = ['queue B 1', ]
         self.assertEqual(output.splitlines(), expected_output)
