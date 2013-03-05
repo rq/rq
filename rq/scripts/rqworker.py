@@ -62,6 +62,9 @@ def main():
     setup_default_arguments(args, settings)
 
     # Worker specific default arguments
+    if not args.queues:
+        args.queues = settings.get('QUEUES', ['default'])
+
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN', None)
 

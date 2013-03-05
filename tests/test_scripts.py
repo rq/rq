@@ -4,10 +4,11 @@ if is_python_version((2, 7), (3, 2)):
 else:
     from unittest2 import TestCase  # noqa
 
-import argparse
+import sys
+from StringIO import StringIO
 
-from redis import StrictRedis
-from rq.connections import get_current_connection
+from rq import Queue
+from rq.connections import get_current_connection, use_connection
 from rq.scripts import (
     read_config_file,
     setup_redis,
@@ -15,6 +16,10 @@ from rq.scripts import (
 )
 
 from rq.scripts import rqworker
+from rq.scripts import rqinfo
+
+from tests import RQTestCase
+from tests.fixtures import say_hello
 
 
 class TestScripts(TestCase):
@@ -63,3 +68,64 @@ class TestRQWorkerScript(TestCase):
         ])
 
         self.assert_current_connection("localhost", 6379, 1)
+
+
+class TestRQInfoScript(RQTestCase):
+
+    def capture_stdout(self, f, *args, **kwargs):
+        backup = sys.stdout
+
+        sys.stdout = StringIO()
+        try:
+            f(*args, **kwargs)
+            out = sys.stdout.getvalue()
+            return out
+        finally:
+            sys.stdout.close()
+            sys.stdout = backup
+
+    def setUp(self):
+        super(TestRQInfoScript, self).setUp()
+
+        for queue_name in ["A", "B", "C"]:
+            q = Queue(queue_name)
+            q.enqueue(say_hello)
+
+        connection_kwargs = self.testconn.connection_pool.connection_kwargs
+
+        self.base_arguments = [
+            "-r",
+            "-i", "0",
+            "--host", connection_kwargs["host"],
+            "--port", str(connection_kwargs["port"]),
+            "--db", str(connection_kwargs["db"]),
+        ]
+
+    def tearDown(self):
+        super(TestRQInfoScript, self).tearDown()
+
+        use_connection(self.testconn)
+
+    def test_rqinfo_defaults_to_all_queues(self):
+        parser = rqinfo.setup_parser()
+        args = parser.parse_args(self.base_arguments)
+
+        setup_default_arguments(args, {})
+        setup_redis(args)
+
+        output = self.capture_stdout(rqinfo.show_queues, args)
+
+        expected_output = ['queue B 1', 'queue C 1', 'queue A 1']
+        self.assertEqual(output.splitlines(), expected_output)
+
+    def test_rqinfo_can_choose_queue(self):
+        parser = rqinfo.setup_parser()
+        args = parser.parse_args(self.base_arguments + ["B", ])
+
+        setup_default_arguments(args, {})
+        setup_redis(args)
+
+        output = self.capture_stdout(rqinfo.show_queues, args)
+
+        expected_output = ['queue B 1', ]
+        self.assertEqual(output.splitlines(), expected_output)

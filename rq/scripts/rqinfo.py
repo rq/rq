@@ -21,6 +21,7 @@ def pad(s, pad_to_length):
     """Pads the given string to the given length."""
     return ('%-' + '%ds' % pad_to_length) % (s,)
 
+
 def get_scale(x):
     """Finds the lowest scale where x <= scale."""
     scales = [20, 50, 100, 200, 400, 600, 800, 1000]
@@ -28,6 +29,7 @@ def get_scale(x):
         if x <= scale:
             return scale
     return x
+
 
 def state_symbol(state):
     symbols = {
@@ -134,7 +136,7 @@ def show_both(args):
         print 'Updated: %s' % datetime.datetime.now()
 
 
-def parse_args():
+def setup_parser():
     parser = argparse.ArgumentParser(description='RQ command-line monitor.')
     add_standard_arguments(parser)
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
@@ -144,6 +146,11 @@ def parse_args():
     parser.add_argument('--only-workers', '-W', dest='only_workers', default=False, action='store_true', help='Show only worker info')
     parser.add_argument('--by-queue', '-R', dest='by_queue', default=False, action='store_true', help='Shows workers by queue')
     parser.add_argument('queues', nargs='*', help='The queues to poll')
+    return parser
+
+
+def parse_args():
+    parser = setup_parser()
     return parser.parse_args()
 
 
