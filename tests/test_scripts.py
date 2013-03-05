@@ -122,8 +122,8 @@ class TestRQInfoScript(RQTestCase):
 
         connections.use_connection(self.testconn)
 
-        expected_output = ['queue B 1', 'queue C 1', 'queue A 1']
-        self.assertEqual(output.splitlines(), expected_output)
+        expected_output = set(['queue B 1', 'queue C 1', 'queue A 1'])
+        self.assertEqual(set(output.splitlines()), expected_output)
 
     def test_rqinfo_can_choose_queue(self):
         parser = rqinfo.setup_parser()
