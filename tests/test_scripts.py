@@ -8,7 +8,7 @@ import sys
 from StringIO import StringIO
 
 from rq import Queue
-from rq.connections import get_current_connection, use_connection
+from rq import connections
 from rq.scripts import (
     read_config_file,
     setup_redis,
@@ -36,11 +36,21 @@ class TestRQWorkerScript(TestCase):
         args = parser.parse_args(arguments)
 
         setup_default_arguments(args, {})
+
+        self.current_connection = connections.get_current_connection()
+
         setup_redis(args)
+
+    def tearDown(self):
+        super(TestRQWorkerScript, self).tearDown()
+
+        connections.pop_connection()  # Clean up after setup_redis() which clears the active connection
+        if self.current_connection:
+            connections.push_connection(self.current_connection)
 
     def assert_current_connection(self, expected_host, expected_port,
                                   expected_db):
-        connection = get_current_connection()
+        connection = connections.get_current_connection()
         connection_kwargs = connection.connection_pool.connection_kwargs
 
         self.assertEqual(connection_kwargs["host"], expected_host)
@@ -106,11 +116,11 @@ class TestRQInfoScript(RQTestCase):
         args = parser.parse_args(self.base_arguments)
 
         setup_default_arguments(args, {})
-        setup_redis(args)
+        setup_redis(args)  # This uses use_connection and clears self.testconn from the stack
 
         output = self.capture_stdout(rqinfo.show_queues, args)
 
-        use_connection(self.testconn)
+        connections.use_connection(self.testconn)
 
         expected_output = ['queue B 1', 'queue C 1', 'queue A 1']
         self.assertEqual(output.splitlines(), expected_output)
@@ -124,7 +134,7 @@ class TestRQInfoScript(RQTestCase):
 
         output = self.capture_stdout(rqinfo.show_queues, args)
 
-        use_connection(self.testconn)
+        connections.use_connection(self.testconn)
 
         expected_output = ['queue B 1', ]
         self.assertEqual(output.splitlines(), expected_output)
