@@ -102,9 +102,9 @@ class TestRQInfoScript(RQTestCase):
         ]
 
     def tearDown(self):
-        super(TestRQInfoScript, self).tearDown()
-
         use_connection(self.testconn)
+
+        super(TestRQInfoScript, self).tearDown()
 
     def test_rqinfo_defaults_to_all_queues(self):
         parser = rqinfo.setup_parser()
