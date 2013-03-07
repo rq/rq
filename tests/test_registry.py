@@ -1,5 +1,5 @@
 from tests import RQTestCase
-from tests.fixtures import say_hello
+from tests.fixtures import Calculator, say_hello
 
 from rq.queue import Queue
 from rq.registry import Registry
@@ -37,3 +37,23 @@ class TestRegistry(RQTestCase):
         scheduler = Scheduler('default', self.testconn)
         job = scheduler.enqueue_at(times.now(), say_hello)
         self.assertTrue(registry.is_registered(say_hello))
+
+    def test_key_generation(self):
+        """Ensure proper keys are generated for both functions and methods"""
+        registry = Registry('default', self.testconn)
+        queue = Queue('default', self.testconn)
+        
+        job = queue.enqueue(say_hello)
+        self.assertEqual(registry.get_key_from_job(job),
+                         'rq:registry:default:tests.fixtures.say_hello')
+        self.assertEqual(registry.get_key_from_callable(say_hello),
+                         'rq:registry:default:tests.fixtures.say_hello')
+        
+        c = Calculator(2)
+        job = queue.enqueue(c.calculate, 3, 4)
+        self.assertEqual(registry.get_key_from_job(job),
+                         'rq:registry:default:tests.fixtures.Calculator.calculate')
+        self.assertEqual(registry.get_key_from_callable(c.calculate),
+                         'rq:registry:default:tests.fixtures.Calculator.calculate')
+
+        
