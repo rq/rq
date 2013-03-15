@@ -10,9 +10,12 @@ class uFaking(object):
         for attr in faking:
             setattr(self, attr, None)
 
+def fake_args():
+    return uFaking('host', 'port', 'url', 'socket', 'db', 'queues', 'password')
+
 def conf_pair(**faked_settings):
-    return (faked_settings,
-            uFaking('host', 'port', 'socket', 'db', 'queues', 'password'))
+    return faked_settings, fake_args()
+
 
 class TestScripts(TestCase):
     def test_config_file(self):
@@ -40,3 +43,13 @@ class TestScripts(TestCase):
         add_standard_arguments(args)
         socket_parms = [e for e in caught if e[0] == '--socket']
         self.assertEqual([('--socket', '-s')], socket_parms)
+
+    def test_redis_socket_whiteboxish(self):
+        args = fake_args()
+        args.socket = '/no/such/path'
+        setup_redis(args)
+
+        from rq import connections
+        conn = connections.pop_connection()
+        from redis.connection import UnixDomainSocketConnection
+        self.assertEqual(conn.connection_pool.connection_kwargs['path'], '/no/such/path')

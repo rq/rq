@@ -56,5 +56,5 @@ def setup_redis(args):
         redis_conn = redis.StrictRedis.from_url(args.url, db=args.db)
     else:
         redis_conn = redis.StrictRedis(host=args.host, port=args.port, db=args.db,
-            password=args.password)
+            password=args.password, unix_socket_path=args.socket)
     use_connection(redis_conn)
