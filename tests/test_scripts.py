@@ -30,3 +30,13 @@ class TestScripts(TestCase):
         args.socket = 'sock-from-arg'
         setup_default_arguments(args, settings)
         self.assertEqual(args.socket, 'sock-from-arg')
+
+    def test_add_socket_argument(self):
+        caught = []
+
+        args = uFaking()
+        args.add_argument = lambda *args, **kw: caught.append(args)
+
+        add_standard_arguments(args)
+        socket_parms = [e for e in caught if e[0] == '--socket']
+        self.assertEqual([('--socket', '-s')], socket_parms)

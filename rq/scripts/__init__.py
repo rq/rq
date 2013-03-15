@@ -16,7 +16,8 @@ def add_standard_arguments(parser):
             help='The Redis database (default: 0)')
     parser.add_argument('--password', '-a', default=None,
             help='The Redis password (default: None)')
-
+    parser.add_argument('--socket', '-s', default=None,
+            help='The Redis Unix socket')
 
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
