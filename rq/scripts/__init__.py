@@ -36,6 +36,10 @@ def setup_default_arguments(args, settings):
     else:
         args.port = int(args.port)
 
+    socket = settings.get('REDIS_SOCKET', False)
+    if args.socket is None and socket:
+        args.socket = socket
+
     if args.db is None:
         args.db = settings.get('REDIS_DB', 0)
 
