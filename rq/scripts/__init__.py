@@ -16,7 +16,8 @@ def add_standard_arguments(parser):
             help='The Redis database (default: 0)')
     parser.add_argument('--password', '-a', default=None,
             help='The Redis password (default: None)')
-
+    parser.add_argument('--socket', '-s', default=None,
+            help='The Redis Unix socket')
 
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
@@ -36,6 +37,10 @@ def setup_default_arguments(args, settings):
     else:
         args.port = int(args.port)
 
+    socket = settings.get('REDIS_SOCKET', False)
+    if args.socket is None and socket:
+        args.socket = socket
+
     if args.db is None:
         args.db = settings.get('REDIS_DB', 0)
 
@@ -51,5 +56,5 @@ def setup_redis(args):
         redis_conn = redis.StrictRedis.from_url(args.url, db=args.db)
     else:
         redis_conn = redis.StrictRedis(host=args.host, port=args.port, db=args.db,
-            password=args.password)
+            password=args.password, unix_socket_path=args.socket)
     use_connection(redis_conn)
