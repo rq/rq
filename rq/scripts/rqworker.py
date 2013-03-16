@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import sys
 import argparse
 import logging
@@ -45,7 +46,8 @@ def main():
 
     # Other default arguments
     if args.sentry_dsn is None:
-        args.sentry_dsn = settings.get('SENTRY_DSN', None)
+        args.sentry_dsn = settings.get('SENTRY_DSN',
+                                       os.environ.get('SENTRY_DSN', None))
 
     if args.verbose and args.quiet:
         raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
