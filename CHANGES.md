@@ -1,7 +1,11 @@
 ### 0.3.8
 (not yet released)
 
-- ...
+- `rqworker` and `rqinfo` have a `--socket` option to connect to a Redis server
+  through a Unix socket.
+
+- `rqworker` reads `SENTRY_DSN` from the environment, unless specifically
+  provided on the command line.
 
 
 ### 0.3.7
