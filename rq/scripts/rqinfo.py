@@ -21,6 +21,7 @@ def pad(s, pad_to_length):
     """Pads the given string to the given length."""
     return ('%-' + '%ds' % pad_to_length) % (s,)
 
+
 def get_scale(x):
     """Finds the lowest scale where x <= scale."""
     scales = [20, 50, 100, 200, 400, 600, 800, 1000]
@@ -28,6 +29,7 @@ def get_scale(x):
         if x <= scale:
             return scale
     return x
+
 
 def state_symbol(state):
     symbols = {
@@ -186,4 +188,3 @@ def main():
     except KeyboardInterrupt:
         print
         sys.exit(0)
-
