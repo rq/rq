@@ -7,7 +7,8 @@ def add_standard_arguments(parser):
     parser.add_argument('--config', '-c', default=None,
             help='Module containing RQ settings.')
     parser.add_argument('--url', '-u', default=None,
-            help='URL describing Redis connection details')
+            help='URL describing Redis connection details. '
+                 'Overrides other connection arguments if supplied.')
     parser.add_argument('--host', '-H', default=None,
             help='The Redis hostname (default: localhost)')
     parser.add_argument('--port', '-p', default=None,
@@ -42,13 +43,10 @@ def setup_default_arguments(args, settings):
     if args.password is None:
         args.password = settings.get('REDIS_PASSWORD', None)
 
-    if not args.queues:
-        args.queues = settings.get('QUEUES', ['default'])
-
 
 def setup_redis(args):
     if args.url is not None:
-        redis_conn = redis.StrictRedis.from_url(args.url, db=args.db)
+        redis_conn = redis.StrictRedis.from_url(args.url)
     else:
         redis_conn = redis.StrictRedis(host=args.host, port=args.port, db=args.db,
             password=args.password)
