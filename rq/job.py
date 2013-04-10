@@ -7,6 +7,13 @@ from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
 
+#part of a hack to help the job serialization system detect objects wrapped by newrelic
+try:
+    from newrelic.api.object_wrapper import ObjectWrapper
+    NEWRELIC_EXISTS = True
+except ImportError:
+    NEWRELIC_EXISTS = False
+
 
 def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
@@ -75,6 +82,11 @@ class Job(object):
         assert isinstance(args, (tuple, list)), '%r is not a valid args list.' % (args,)
         assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
         job = cls(connection=connection)
+
+        # Nasty hack to unwrap functions that have been wrapped by newrelic's analytics engine
+        if NEWRELIC_EXISTS and isinstance(func, ObjectWrapper):
+            func = func._nr_last_object
+
         if inspect.ismethod(func):
             job._instance = func.im_self
             job._func_name = func.__name__
