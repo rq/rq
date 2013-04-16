@@ -3,3 +3,5 @@ dump.rdb
 /*.egg-info
 .env
 /.tox/
+.hg/
+.hgignore
