@@ -237,6 +237,31 @@ class TestQueue(RQTestCase):
         job = q.enqueue(say_hello)
         self.assertEqual(job.status, Status.QUEUED)
 
+    def test_enqueue_waitlist(self):
+        """Enqueueing a waitlist pushes all jobs in waitlist to queue"""
+        q = Queue()
+        parent_job = Job.create(func=say_hello)
+        parent_job.save()
+        job_1 = Job.create(func=say_hello, parent=parent_job)
+        job_1.save()
+        job_1.register_dependency()
+        job_2 = Job.create(func=say_hello, parent=parent_job)
+        job_2.save()
+        job_2.register_dependency()
+
+        # After waitlist is enqueued, job_1 and job_2 should be in queue
+        self.assertEqual(q.job_ids, [])
+        q.enqueue_waitlist(parent_job)
+        self.assertEqual(q.job_ids, [job_1.id, job_2.id])
+        self.assertFalse(self.testconn.exists(parent_job.waitlist_key))
+
+    def test_enqueue_job_with_dependency(self):
+        """Job with dependency is not queued right away"""
+        parent_job = Job.create(func=say_hello)
+        q = Queue()
+        q.enqueue_call(say_hello, after=parent_job)
+        self.assertEqual(q.job_ids, [])
+
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):

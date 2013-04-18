@@ -131,6 +131,22 @@ class TestJob(RQTestCase):
                 self.testconn.hkeys(job.key),
                 ['created_at', 'data', 'description'])
 
+    def test_persistence_of_parent_job(self):
+        """Storing jobs with parent job, either instance or key."""
+        parent_job = Job.create(func=some_calculation)
+        parent_job.save()
+        job = Job.create(func=some_calculation, parent=parent_job)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._parent_id, parent_job.id)
+        self.assertEqual(stored_job.parent, parent_job)
+
+        job = Job.create(func=some_calculation, parent=parent_job.id)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._parent_id, parent_job.id)
+        self.assertEqual(stored_job.parent, parent_job)
+
     def test_store_then_fetch(self):
         """Store, then fetch."""
         job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
@@ -242,10 +258,27 @@ class TestJob(RQTestCase):
         job.cleanup(ttl=-1)
         self.assertEqual(self.testconn.ttl(job.key), -1)
 
-        # Jobs with positive TTLs are eventually deleted 
+        # Jobs with positive TTLs are eventually deleted
         job.cleanup(ttl=100)
         self.assertEqual(self.testconn.ttl(job.key), 100)
 
         # Jobs with 0 TTL are immediately deleted
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
+
+    def test_register_dependency(self):
+        """Test that jobs updates the correct job waitlist"""
+        job = Job.create(func=say_hello)
+        job._parent_id = 'id'
+        job.save()
+        job.register_dependency()
+        self.assertEqual(self.testconn.lpop('rq:job:id:waitlist'), job.id)
+
+    def test_get_waitlist(self):
+        """Test that all waitlisted job ids are fetched"""
+        job = Job.create(func=say_hello)
+        self.assertEqual(job.get_waitlist(), [])
+        self.testconn.lpush(job.waitlist_key, 'id_1')
+        self.assertEqual(job.get_waitlist(), ['id_1'])
+        self.testconn.lpush(job.waitlist_key, 'id_2')
+        self.assertEqual(job.get_waitlist(), ['id_2', 'id_1'])

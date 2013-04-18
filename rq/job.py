@@ -64,7 +64,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None):
+               result_ttl=None, status=None, parent=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -87,6 +87,9 @@ class Job(object):
         job.description = job.get_call_string()
         job.result_ttl = result_ttl
         job._status = status
+        # parent could be job instance or id
+        if parent is not None:
+            job._parent_id = parent.id if isinstance(parent, Job) else parent
         return job
 
     @property
@@ -118,6 +121,20 @@ class Job(object):
     @property
     def is_started(self):
         return self.status == Status.STARTED
+
+    @property
+    def parent(self):
+        """Returns a job's parent. To avoid repeated Redis fetches, we cache
+        job.parent as job._parent.
+        """
+        if self._parent_id is None:
+            return None
+        if hasattr(self, '_parent'):
+            return self._parent
+        job = Job.fetch(self._parent_id, connection=self.connection)
+        job.refresh()
+        self._parent = job
+        return job
 
     @property
     def func(self):
@@ -185,6 +202,7 @@ class Job(object):
         self.timeout = None
         self.result_ttl = None
         self._status = None
+        self._parent_id = None
         self.meta = {}
 
 
@@ -208,10 +226,20 @@ class Job(object):
         """The Redis key that is used to store job hash under."""
         return 'rq:job:%s' % (job_id,)
 
+    @classmethod
+    def waitlist_key_for(cls, job_id):
+        """The Redis key that is used to store job hash under."""
+        return 'rq:job:%s:waitlist' % (job_id,)
+
     @property
     def key(self):
         """The Redis key that is used to store job hash under."""
         return self.key_for(self.id)
+
+    @property
+    def waitlist_key(self):
+        """The Redis key that is used to store job hash under."""
+        return self.waitlist_key_for(self.id)
 
     @property  # noqa
     def job_tuple(self):
@@ -285,6 +313,7 @@ class Job(object):
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
         self._status = obj.get('status') if obj.get('status') else None
+        self._parent_id = obj.get('parent_id', None)
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def save(self, pipeline=None):
@@ -315,6 +344,8 @@ class Job(object):
             obj['result_ttl'] = self.result_ttl
         if self._status is not None:
             obj['status'] = self._status
+        if self._parent_id is not None:
+            obj['parent_id'] = self._parent_id
         if self.meta:
             obj['meta'] = dumps(self.meta)
 
@@ -381,7 +412,26 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+
+    def register_dependency(self):
+        """Jobs may have a waitlist. Jobs in this waitlist are enqueued
+        only if the parent job is successfully performed. We maintain this
+        waitlist in Redis, with key that looks something like:
+            
+            rq:job:job_id:waitlist = ['job_id_1', 'job_id_2']
         
+        This method puts the job on it's parent's waitlist.
+        """
+        # TODO: This can probably be pipelined
+        self.connection.rpush(Job.waitlist_key_for(self._parent_id), self.id)
+
+    def get_waitlist(self):
+        """Returns all job ids in the waitlist.
+        """
+        # TODO: This can probably be pipelined
+
+        return self.connection.lrange(
+            self.waitlist_key, 0, self.connection.llen(self.waitlist_key) - 1)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
@@ -413,10 +463,11 @@ class Job(object):
 
     def __setattr__(self, name, value):
         # Ignore the "private" fields
-        private_attrs = set(['origin', '_func_name', 'ended_at',
+        private_attrs = set(('origin', '_func_name', 'ended_at',
             'description', '_args', 'created_at', 'enqueued_at', 'connection',
             '_result', 'result', 'timeout', '_kwargs', 'exc_info', '_id',
-            'data', '_instance', 'result_ttl', '_status', 'status', 'meta'])
+            'data', '_instance', 'result_ttl', '_status', 'status',
+            '_parent_id', '_parent', 'parent', 'meta'))
 
         if name in private_attrs:
             object.__setattr__(self, name, value)

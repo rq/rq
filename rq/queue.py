@@ -113,7 +113,8 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args=None, kwargs=None, timeout=None, result_ttl=None): #noqa
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None, 
+                     result_ttl=None, after=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -123,7 +124,14 @@ class Queue(object):
         """
         timeout = timeout or self._default_timeout
         job = Job.create(func, args, kwargs, connection=self.connection,
-                         result_ttl=result_ttl, status=Status.QUEUED)
+                         result_ttl=result_ttl, status=Status.QUEUED,
+                         parent=after)
+        # If job depends on another job to finish, register itself on it's
+        # parent's waitlist instead of enqueueing it
+        if after is not None:
+            job.register_dependency()
+            job.save()
+            return job
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue(self, f, *args, **kwargs):
@@ -149,15 +157,18 @@ class Queue(object):
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
         timeout = None
         result_ttl = None
-        if 'args' in kwargs or 'kwargs' in kwargs:
+        after = None
+        if 'args' in kwargs or 'kwargs' in kwargs or 'after' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
             timeout = kwargs.pop('timeout', None)
             args = kwargs.pop('args', None)
             result_ttl = kwargs.pop('result_ttl', None)
+            after = kwargs.pop('after', None)
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
-                                 timeout=timeout, result_ttl=result_ttl)
+                                 timeout=timeout, result_ttl=result_ttl,
+                                 after=after)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
@@ -187,6 +198,16 @@ class Queue(object):
             job.perform()
             job.save()
         return job
+
+    def enqueue_waitlist(self, job):
+        """Enqueues all jobs in the waitlist and clears it"""
+        # TODO: can probably be pipelined
+        job_ids = job.get_waitlist()
+        for job_id in job.get_waitlist():
+            waitlisted_job = Job.fetch(job_id, connection=self.connection)
+            self.enqueue_job(waitlisted_job)
+        if job_ids:
+            self.connection.delete(job.waitlist_key)
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
