@@ -113,7 +113,7 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args=None, kwargs=None, timeout=None, 
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, after=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
@@ -123,6 +123,7 @@ class Queue(object):
         contain options for RQ itself.
         """
         timeout = timeout or self._default_timeout
+        # TODO: job with dependency shouldn't have "queued" as status
         job = Job.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
                          parent=after)
