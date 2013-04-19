@@ -165,8 +165,20 @@ class TestQueue(RQTestCase):
         q.enqueue(n.div, 4)
 
         job = q.dequeue()
+
         # The instance has been pickled and unpickled, so it is now a separate
         # object. Test for equality using each object's __dict__ instead.
+        self.assertEquals(job.instance.__dict__, n.__dict__)
+        self.assertEquals(job.func.__name__, 'div')
+        self.assertEquals(job.args, (4,))
+
+    def test_dequeue_class_method(self):
+        """Dequeueing class method jobs from queues."""
+        q = Queue()
+        q.enqueue(Number.divide, 3, 4)
+
+        job = q.dequeue()
+
         self.assertEquals(job.instance.__dict__, Number.__dict__)
         self.assertEquals(job.func.__name__, 'divide')
         self.assertEquals(job.args, (3, 4))
