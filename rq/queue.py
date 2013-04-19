@@ -74,20 +74,28 @@ class Queue(object):
             return None
         return job
 
-    def get_jobs_page(self, offset, limit):
-        """Returns a paginated list of jobs in the queue."""
-        job_ids = self.connection.lrange(self.key, offset, offset+limit)
+    def get_job_ids(self, start=0, limit=-1):
+        """Returns a slice of job IDs in the queue."""
+        if limit >= 0:
+            end = start + limit
+        else:
+            end = limit
+        return self.connection.lrange(self.key, start, end)
+
+    def get_jobs(self, start=0, limit=-1):
+        """Returns a slice of jobs in the queue."""
+        job_ids = self.get_job_ids(start, limit)
         return compact([self.safe_fetch_job(job_id) for job_id in job_ids])
 
     @property
     def job_ids(self):
         """Returns a list of all job IDS in the queue."""
-        return self.connection.lrange(self.key, 0, -1)
+        return self.get_jobs_ids()
 
     @property
     def jobs(self):
         """Returns a list of all (valid) jobs in the queue."""
-        return compact([self.safe_fetch_job(job_id) for job_id in self.job_ids])
+        return self.get_jobs()
 
     @property
     def count(self):
@@ -118,7 +126,7 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args=None, kwargs=None, timeout=None, result_ttl=None): #noqa
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None, result_ttl=None):  # noqa
         """Creates a job to represent the delayed function call and enqueues
         it.
 
