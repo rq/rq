@@ -19,14 +19,31 @@ class Registry(object):
         key should be of the following format:
             rq:registry:registry_name:callable_name
         """
+        if job.instance:
+            return '%s:%s.%s.%s' % (
+                self.key,
+                job.instance.__module__,
+                job.instance.__class__.__name__,
+                job.func_name
+            )
         return '%s:%s' % (self.key, job.func_name)
 
     def get_key_from_callable(self, f):
         """
-        Returns a registry key for a callable, it should look something like:
+        Returns a registry key for a callable, functions look like:
             rq:registry:registry_name:callable_name
+
+        Methods look like:
+            rq:registry:registry_name:path.to.Class.method
         """
-        _, func_name = parse_func(f)
+        instance, func_name = parse_func(f)
+        if instance:
+            return '%s:%s.%s.%s' % (
+                self.key,
+                instance.__module__,
+                instance.__class__.__name__,
+                func_name
+            )
         return '%s:%s' % (self.key, func_name)
 
     def register(self, job):
