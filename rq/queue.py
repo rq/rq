@@ -90,7 +90,7 @@ class Queue(object):
     @property
     def job_ids(self):
         """Returns a list of all job IDS in the queue."""
-        return self.get_jobs_ids()
+        return self.get_job_ids()
 
     @property
     def jobs(self):
