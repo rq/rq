@@ -256,11 +256,18 @@ class TestQueue(RQTestCase):
         self.assertFalse(self.testconn.exists(parent_job.waitlist_key))
 
     def test_enqueue_job_with_dependency(self):
-        """Job with dependency is not queued right away"""
+        """Test enqueueing job with dependency"""
+        # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
         q.enqueue_call(say_hello, after=parent_job)
         self.assertEqual(q.job_ids, [])
+
+        # Jobs dependent on finished jobs are immediately enqueued
+        parent_job.status = 'finished'
+        parent_job.save()
+        job = q.enqueue_call(say_hello, after=parent_job)
+        self.assertEqual(q.job_ids, [job.id])
 
 
 class TestFailedQueue(RQTestCase):

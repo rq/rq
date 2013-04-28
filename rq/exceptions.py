@@ -17,3 +17,7 @@ class UnpickleError(Exception):
 
 class DequeueTimeout(Exception):
     pass
+
+
+class EnqueueError(Exception):
+    pass

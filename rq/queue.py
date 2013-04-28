@@ -1,9 +1,11 @@
 import times
 from .connections import resolve_connection
 from .job import Job, Status
-from .exceptions import (NoSuchJobError, UnpickleError,
-                         InvalidJobOperationError, DequeueTimeout)
+from .exceptions import (DequeueTimeout, EnqueueError, InvalidJobOperationError, 
+                         NoSuchJobError, UnpickleError)
 from .compat import total_ordering
+
+from redis import WatchError
 
 
 def get_failed_queue(connection=None):
@@ -127,12 +129,23 @@ class Queue(object):
         job = Job.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
                          parent=after)
-        # If job depends on another job to finish, register itself on it's
+        
+        # If job depends on an unfinished job, register itself on it's
         # parent's waitlist instead of enqueueing it
         if after is not None:
-            job.register_dependency()
-            job.save()
-            return job
+            with self.connection.pipeline() as pipe:
+                try:
+                    pipe.watch(after.key)
+                    if after.status != Status.FINISHED:
+                        job.register_dependency()
+                        job.save()
+                        return job
+                except WatchError:
+                    raise EnqueueError(
+                        'Parent job (%s) modified during enqueue process. ' +
+                        'Bailing out to avoid race conditions' % after.id
+                    )
+            
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue(self, f, *args, **kwargs):
