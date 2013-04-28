@@ -128,7 +128,7 @@ class Queue(object):
         # TODO: job with dependency shouldn't have "queued" as status
         job = Job.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
-                         parent=after)
+                         dependency=after)
         
         # If job depends on an unfinished job, register itself on it's
         # parent's waitlist instead of enqueueing it

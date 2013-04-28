@@ -242,10 +242,10 @@ class TestQueue(RQTestCase):
         q = Queue()
         parent_job = Job.create(func=say_hello)
         parent_job.save()
-        job_1 = Job.create(func=say_hello, parent=parent_job)
+        job_1 = Job.create(func=say_hello, dependency=parent_job)
         job_1.save()
         job_1.register_dependency()
-        job_2 = Job.create(func=say_hello, parent=parent_job)
+        job_2 = Job.create(func=say_hello, dependency=parent_job)
         job_2.save()
         job_2.register_dependency()
 

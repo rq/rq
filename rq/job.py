@@ -64,7 +64,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, parent=None):
+               result_ttl=None, status=None, dependency=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -87,9 +87,9 @@ class Job(object):
         job.description = job.get_call_string()
         job.result_ttl = result_ttl
         job._status = status
-        # parent could be job instance or id
-        if parent is not None:
-            job._parent_id = parent.id if isinstance(parent, Job) else parent
+        # dependency could be job instance or id
+        if dependency is not None:
+            job._dependency_id = dependency.id if isinstance(dependency, Job) else dependency
         return job
 
     @property
@@ -123,17 +123,17 @@ class Job(object):
         return self.status == Status.STARTED
 
     @property
-    def parent(self):
-        """Returns a job's parent. To avoid repeated Redis fetches, we cache
-        job.parent as job._parent.
+    def dependency(self):
+        """Returns a job's dependency. To avoid repeated Redis fetches, we cache
+        job.dependency as job._dependency.
         """
-        if self._parent_id is None:
+        if self._dependency_id is None:
             return None
-        if hasattr(self, '_parent'):
-            return self._parent
-        job = Job.fetch(self._parent_id, connection=self.connection)
+        if hasattr(self, '_dependency'):
+            return self._dependency
+        job = Job.fetch(self._dependency_id, connection=self.connection)
         job.refresh()
-        self._parent = job
+        self._dependency = job
         return job
 
     @property
@@ -202,7 +202,7 @@ class Job(object):
         self.timeout = None
         self.result_ttl = None
         self._status = None
-        self._parent_id = None
+        self._dependency_id = None
         self.meta = {}
 
 
@@ -313,7 +313,7 @@ class Job(object):
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
         self._status = obj.get('status') if obj.get('status') else None
-        self._parent_id = obj.get('parent_id', None)
+        self._dependency_id = obj.get('dependency_id', None)
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def save(self, pipeline=None):
@@ -344,8 +344,8 @@ class Job(object):
             obj['result_ttl'] = self.result_ttl
         if self._status is not None:
             obj['status'] = self._status
-        if self._parent_id is not None:
-            obj['parent_id'] = self._parent_id
+        if self._dependency_id is not None:
+            obj['dependency_id'] = self._dependency_id
         if self.meta:
             obj['meta'] = dumps(self.meta)
 
@@ -415,15 +415,15 @@ class Job(object):
 
     def register_dependency(self):
         """Jobs may have a waitlist. Jobs in this waitlist are enqueued
-        only if the parent job is successfully performed. We maintain this
+        only if the dependency job is successfully performed. We maintain this
         waitlist in Redis, with key that looks something like:
             
             rq:job:job_id:waitlist = ['job_id_1', 'job_id_2']
         
-        This method puts the job on it's parent's waitlist.
+        This method puts the job on it's dependency's waitlist.
         """
         # TODO: This can probably be pipelined
-        self.connection.rpush(Job.waitlist_key_for(self._parent_id), self.id)
+        self.connection.rpush(Job.waitlist_key_for(self._dependency_id), self.id)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
@@ -459,7 +459,7 @@ class Job(object):
             'description', '_args', 'created_at', 'enqueued_at', 'connection',
             '_result', 'result', 'timeout', '_kwargs', 'exc_info', '_id',
             'data', '_instance', 'result_ttl', '_status', 'status',
-            '_parent_id', '_parent', 'parent', 'meta'))
+            '_dependency_id', '_dependency', 'dependency', 'meta'))
 
         if name in private_attrs:
             object.__setattr__(self, name, value)

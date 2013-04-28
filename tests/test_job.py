@@ -135,17 +135,17 @@ class TestJob(RQTestCase):
         """Storing jobs with parent job, either instance or key."""
         parent_job = Job.create(func=some_calculation)
         parent_job.save()
-        job = Job.create(func=some_calculation, parent=parent_job)
+        job = Job.create(func=some_calculation, dependency=parent_job)
         job.save()
         stored_job = Job.fetch(job.id)
-        self.assertEqual(stored_job._parent_id, parent_job.id)
-        self.assertEqual(stored_job.parent, parent_job)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job.dependency, parent_job)
 
-        job = Job.create(func=some_calculation, parent=parent_job.id)
+        job = Job.create(func=some_calculation, dependency=parent_job.id)
         job.save()
         stored_job = Job.fetch(job.id)
-        self.assertEqual(stored_job._parent_id, parent_job.id)
-        self.assertEqual(stored_job.parent, parent_job)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job.dependency, parent_job)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
@@ -269,7 +269,7 @@ class TestJob(RQTestCase):
     def test_register_dependency(self):
         """Test that jobs updates the correct job waitlist"""
         job = Job.create(func=say_hello)
-        job._parent_id = 'id'
+        job._dependency_id = 'id'
         job.save()
         job.register_dependency()
         self.assertEqual(self.testconn.lpop('rq:job:id:waitlist'), job.id)
