@@ -66,25 +66,38 @@ class Queue(object):
         """Returns whether the current queue is empty."""
         return self.count == 0
 
+    def safe_fetch_job(self, job_id):
+        try:
+            job = Job.safe_fetch(job_id, connection=self.connection)
+        except NoSuchJobError:
+            self.remove(job_id)
+            return None
+        except UnpickleError:
+            return None
+        return job
+
+    def get_job_ids(self, start=0, limit=-1):
+        """Returns a slice of job IDs in the queue."""
+        if limit >= 0:
+            end = start + limit
+        else:
+            end = limit
+        return self.connection.lrange(self.key, start, end)
+
+    def get_jobs(self, start=0, limit=-1):
+        """Returns a slice of jobs in the queue."""
+        job_ids = self.get_job_ids(start, limit)
+        return compact([self.safe_fetch_job(job_id) for job_id in job_ids])
+
     @property
     def job_ids(self):
         """Returns a list of all job IDS in the queue."""
-        return self.connection.lrange(self.key, 0, -1)
+        return self.get_job_ids()
 
     @property
     def jobs(self):
         """Returns a list of all (valid) jobs in the queue."""
-        def safe_fetch(job_id):
-            try:
-                job = Job.safe_fetch(job_id, connection=self.connection)
-            except NoSuchJobError:
-                self.remove(job_id)
-                return None
-            except UnpickleError:
-                return None
-            return job
-
-        return compact([safe_fetch(job_id) for job_id in self.job_ids])
+        return self.get_jobs()
 
     @property
     def count(self):
@@ -114,6 +127,7 @@ class Queue(object):
     def push_job_id(self, job_id):  # noqa
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
+
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, after=None):
