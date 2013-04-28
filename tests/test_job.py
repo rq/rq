@@ -273,12 +273,3 @@ class TestJob(RQTestCase):
         job.save()
         job.register_dependency()
         self.assertEqual(self.testconn.lpop('rq:job:id:waitlist'), job.id)
-
-    def test_get_waitlist(self):
-        """Test that all waitlisted job ids are fetched"""
-        job = Job.create(func=say_hello)
-        self.assertEqual(job.get_waitlist(), [])
-        self.testconn.lpush(job.waitlist_key, 'id_1')
-        self.assertEqual(job.get_waitlist(), ['id_1'])
-        self.testconn.lpush(job.waitlist_key, 'id_2')
-        self.assertEqual(job.get_waitlist(), ['id_2', 'id_1'])

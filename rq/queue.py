@@ -216,12 +216,12 @@ class Queue(object):
     def enqueue_waitlist(self, job):
         """Enqueues all jobs in the waitlist and clears it"""
         # TODO: can probably be pipelined
-        job_ids = job.get_waitlist()
-        for job_id in job.get_waitlist():
+        while True:
+            job_id = self.connection.lpop(job.waitlist_key)
+            if job_id is None:
+                break
             waitlisted_job = Job.fetch(job_id, connection=self.connection)
             self.enqueue_job(waitlisted_job)
-        if job_ids:
-            self.connection.delete(job.waitlist_key)
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""

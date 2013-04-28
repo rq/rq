@@ -425,14 +425,6 @@ class Job(object):
         # TODO: This can probably be pipelined
         self.connection.rpush(Job.waitlist_key_for(self._parent_id), self.id)
 
-    def get_waitlist(self):
-        """Returns all job ids in the waitlist.
-        """
-        # TODO: This can probably be pipelined
-
-        return self.connection.lrange(
-            self.waitlist_key, 0, self.connection.llen(self.waitlist_key) - 1)
-
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
 
