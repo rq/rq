@@ -141,6 +141,8 @@ If you're familiar with Celery, you might be used to its `@task` decorator.
 Starting from RQ >= 0.3, there exists a similar decorator:
 
 {% highlight python %}
+from rq.decorators import job
+
 @job('low', conn=my_redis_conn, timeout=5)
 def add(x, y):
     return x + y
