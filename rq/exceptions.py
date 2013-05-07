@@ -15,9 +15,6 @@ class UnpickleError(Exception):
         super(UnpickleError, self).__init__(message, inner_exception)
         self.raw_data = raw_data
 
+
 class DequeueTimeout(Exception):
-    pass
-
-
-class EnqueueError(Exception):
     pass
