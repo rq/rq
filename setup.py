@@ -45,6 +45,7 @@ setup(
     [console_scripts]
     rqworker = rq.scripts.rqworker:main
     rqinfo = rq.scripts.rqinfo:main
+    rqscheduler = rq.scripts.rqscheduler:main
     ''',
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
