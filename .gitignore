@@ -4,3 +4,4 @@ dump.rdb
 .env
 /.tox/
 /dist
+/build
