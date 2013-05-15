@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
+    parser.add_argument('--pid', '-i', action='store', default=None,
+                        help='Write PID to this file')
     parser.add_argument('queues', nargs='*', help='The queues to listen on (default: \'default\')')
 
     return parser.parse_args()
@@ -64,6 +66,10 @@ def main():
     if args.sentry_dsn is None:
         args.sentry_dsn = settings.get('SENTRY_DSN',
                                        os.environ.get('SENTRY_DSN', None))
+
+    if args.pid:
+        with open(os.path.expanduser(args.pid), "w") as fp:
+            fp.write(str(os.getpid()))
 
     setup_loghandlers_from_args(args)
     setup_redis(args)
