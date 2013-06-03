@@ -30,6 +30,9 @@ def read_config_file(module):
 
 def setup_default_arguments(args, settings):
     """ Sets up args from settings or defaults """
+    if args.url is None:
+        args.url = settings.get('REDIS_URL', 'redis://localhost:6379/0')
+
     if args.host is None:
         args.host = settings.get('REDIS_HOST', 'localhost')
 
