@@ -70,9 +70,9 @@ class _Colorizer(object):
         self.codes["fuscia"] = self.codes["fuchsia"]
         self.codes["white"] = self.codes["bold"]
 
-        try:
+        if hasattr(sys.stdout, "isatty"):
             self.notty = not sys.stdout.isatty()
-        except:
+        else:
             self.notty = True
 
     def reset_color(self):
