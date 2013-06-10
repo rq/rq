@@ -69,8 +69,11 @@ class _Colorizer(object):
         self.codes["darkyellow"] = self.codes["brown"]
         self.codes["fuscia"] = self.codes["fuchsia"]
         self.codes["white"] = self.codes["bold"]
-        self.notty = not sys.stdout.isatty()
 
+        try:
+            self.notty = not sys.stdout.isatty()
+        except:
+            self.notty = True
 
     def reset_color(self):
         return self.codes["reset"]
