@@ -78,7 +78,7 @@ class Queue(object):
         """Returns a slice of job IDs in the queue."""
         start = offset
         if length >= 0:
-            end = offset + length
+            end = offset + (length - 1)
         else:
             end = length
         return self.connection.lrange(self.key, start, end)
