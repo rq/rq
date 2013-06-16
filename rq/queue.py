@@ -74,17 +74,18 @@ class Queue(object):
             return None
         return job
 
-    def get_job_ids(self, start=0, limit=-1):
+    def get_job_ids(self, offset=0, length=-1):
         """Returns a slice of job IDs in the queue."""
-        if limit >= 0:
-            end = start + limit
+        start = offset
+        if length >= 0:
+            end = offset + (length - 1)
         else:
-            end = limit
+            end = length
         return self.connection.lrange(self.key, start, end)
 
-    def get_jobs(self, start=0, limit=-1):
+    def get_jobs(self, offset=0, length=-1):
         """Returns a slice of jobs in the queue."""
-        job_ids = self.get_job_ids(start, limit)
+        job_ids = self.get_job_ids(offset, length)
         return compact([self.safe_fetch_job(job_id) for job_id in job_ids])
 
     @property
