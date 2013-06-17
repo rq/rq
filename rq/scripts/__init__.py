@@ -42,10 +42,6 @@ def setup_default_arguments(args, settings):
     if args.socket is None and socket:
         args.socket = socket
 
-    pid = settings.get('PID_FILE', False)
-    if args.pid is None and pid:
-        args.pid = pid
-
     if args.db is None:
         args.db = settings.get('REDIS_DB', 0)
 
