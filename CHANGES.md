@@ -1,5 +1,5 @@
 ### 0.3.8
-(not yet released)
+(June 17th, 2013)
 
 - `rqworker` and `rqinfo` have a  `--url` argument to connect to a Redis url.
 
