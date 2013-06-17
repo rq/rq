@@ -25,24 +25,24 @@ Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
 From RQ >= 0.3.1, The TTL value of the job result can be specified using the
-`result_ttl` keyword argument to `enqueue()` calls.  It can also be used to
-disable the expiry altogether.  You then are responsible for cleaning up jobs
-yourself, though, so be careful to use that.
+`result_ttl` keyword argument to `enqueue_call()` calls.  It can also be used
+to disable the expiry altogether.  You then are responsible for cleaning up
+jobs yourself, though, so be careful to use that.
 
 You can do the following:
 
 {% highlight python %}
-q.enqueue(func=foo)  # result expires after 500 secs (the default)
-q.enqueue(func=foo, result_ttl=86400)  # result expires after 1 day
-q.enqueue(func=foo, result_ttl=0)  # result gets deleted immediately
-q.enqueue(func=foo, result_ttl=-1)  # result never expires--you should delete jobs manually
+q.enqueue_call(func=foo)  # result expires after 500 secs (the default)
+q.enqueue_call(func=foo, result_ttl=86400)  # result expires after 1 day
+q.enqueue_call(func=foo, result_ttl=0)  # result gets deleted immediately
+q.enqueue_call(func=foo, result_ttl=-1)  # result never expires--you should delete jobs manually
 {% endhighlight %}
 
 Additionally, you can use this for keeping around finished jobs without return
 values, which would be deleted immediately by default.
 
 {% highlight python %}
-q.enqueue(func=func_without_rv, result_ttl=500)  # job kept explicitly
+q.enqueue_call(func=func_without_rv, result_ttl=500)  # job kept explicitly
 {% endhighlight %}
 
 
