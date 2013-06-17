@@ -73,7 +73,7 @@ class Job(object):
             args = ()
         if kwargs is None:
             kwargs = {}
-        assert isinstance(args, tuple), '%r is not a valid args list.' % (args,)
+        assert isinstance(args, (tuple, list)), '%r is not a valid args list.' % (args,)
         assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
         job = cls(connection=connection)
         job._instance, job._func_name = parse_func(func)

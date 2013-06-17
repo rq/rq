@@ -50,13 +50,16 @@ def access_self():
     return job.id
 
 
-class Calculator(object):
-    """Test instance methods."""
-    def __init__(self, denominator):
-        self.denominator = denominator
+class Number(object):
+    def __init__(self, value):
+        self.value = value
 
-    def calculate(self, x, y):
-        return x * y / self.denominator
+    @classmethod
+    def divide(cls, x, y):
+        return x * y
+
+    def div(self, y):
+        return self.value / y
 
 
 with Connection(find_empty_redis_database()):

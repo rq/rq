@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import sys
 import argparse
 import logging
@@ -31,6 +32,19 @@ def parse_args():
     return parser.parse_args()
 
 
+def setup_loghandlers_from_args(args):
+    if args.verbose and args.quiet:
+        raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
+
+    if args.verbose:
+        level = 'DEBUG'
+    elif args.quiet:
+        level = 'WARNING'
+    else:
+        level = 'INFO'
+    setup_loghandlers(level)
+
+
 def main():
     args = parse_args()
 
@@ -43,20 +57,15 @@ def main():
 
     setup_default_arguments(args, settings)
 
-    # Other default arguments
+    # Worker specific default arguments
+    if not args.queues:
+        args.queues = settings.get('QUEUES', ['default'])
+
     if args.sentry_dsn is None:
-        args.sentry_dsn = settings.get('SENTRY_DSN', None)
+        args.sentry_dsn = settings.get('SENTRY_DSN',
+                                       os.environ.get('SENTRY_DSN', None))
 
-    if args.verbose and args.quiet:
-        raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
-
-    if args.verbose:
-        level = 'DEBUG'
-    elif args.quiet:
-        level = 'WARNING'
-    else:
-        level = 'INFO'
-    setup_loghandlers(level)
+    setup_loghandlers_from_args(args)
     setup_redis(args)
 
     cleanup_ghosts()

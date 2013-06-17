@@ -1,7 +1,7 @@
 import times
 from datetime import datetime
 from tests import RQTestCase
-from tests.fixtures import Calculator, some_calculation, say_hello, access_self
+from tests.fixtures import Number, some_calculation, say_hello, access_self
 from tests.helpers import strip_milliseconds
 from cPickle import loads
 from rq.job import Job, get_current_job
@@ -52,13 +52,13 @@ class TestJob(RQTestCase):
 
     def test_create_instance_method_job(self):
         """Creation of jobs for instance methods."""
-        c = Calculator(2)
-        job = Job.create(func=c.calculate, args=(3, 4))
+        n = Number(2)
+        job = Job.create(func=n.div, args=(4,))
 
         # Job data is set
-        self.assertEquals(job.func, c.calculate)
-        self.assertEquals(job.instance, c)
-        self.assertEquals(job.args, (3, 4))
+        self.assertEquals(job.func, n.div)
+        self.assertEquals(job.instance, n)
+        self.assertEquals(job.args, (4,))
 
     def test_create_job_from_string_function(self):
         """Creation of jobs using string specifier."""

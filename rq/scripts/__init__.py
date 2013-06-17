@@ -7,7 +7,8 @@ def add_standard_arguments(parser):
     parser.add_argument('--config', '-c', default=None,
             help='Module containing RQ settings.')
     parser.add_argument('--url', '-u', default=None,
-            help='URL describing Redis connection details')
+            help='URL describing Redis connection details. '
+                 'Overrides other connection arguments if supplied.')
     parser.add_argument('--host', '-H', default=None,
             help='The Redis hostname (default: localhost)')
     parser.add_argument('--port', '-p', default=None,
@@ -16,7 +17,8 @@ def add_standard_arguments(parser):
             help='The Redis database (default: 0)')
     parser.add_argument('--password', '-a', default=None,
             help='The Redis password (default: None)')
-
+    parser.add_argument('--socket', '-s', default=None,
+            help='The Redis Unix socket')
 
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
@@ -36,20 +38,22 @@ def setup_default_arguments(args, settings):
     else:
         args.port = int(args.port)
 
+    socket = settings.get('REDIS_SOCKET', False)
+    if args.socket is None and socket:
+        args.socket = socket
+
     if args.db is None:
         args.db = settings.get('REDIS_DB', 0)
 
     if args.password is None:
         args.password = settings.get('REDIS_PASSWORD', None)
 
-    if not args.queues:
-        args.queues = settings.get('QUEUES', ['default'])
-
 
 def setup_redis(args):
     if args.url is not None:
-        redis_conn = redis.StrictRedis.from_url(args.url, db=args.db)
+        redis_conn = redis.StrictRedis.from_url(args.url)
     else:
         redis_conn = redis.StrictRedis(host=args.host, port=args.port,
-                                       db=args.db, password=args.password)
+                                       db=args.db, password=args.password,
+                                       unix_socket_path=args.socket)
     use_connection(redis_conn)

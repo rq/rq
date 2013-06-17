@@ -1,7 +1,16 @@
 ### 0.3.8
 (not yet released)
 
-- ...
+- `rqworker` and `rqinfo` have a  `--url` argument to connect to a Redis url.
+
+- `rqworker` and `rqinfo` have a `--socket` option to connect to a Redis server
+  through a Unix socket.
+
+- `rqworker` reads `SENTRY_DSN` from the environment, unless specifically
+  provided on the command line.
+
+- `Queue` has a new API that supports paging `get_jobs(3, 7)`, which will
+  return at most 7 jobs, starting from the 3rd.
 
 
 ### 0.3.7

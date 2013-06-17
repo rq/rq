@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from tests import RQTestCase
-from tests.fixtures import Calculator, div_by_zero, say_hello, some_calculation
+from tests.fixtures import Number, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
 from rq.job import Job, Status
 from rq.exceptions import InvalidJobOperationError
@@ -166,14 +166,26 @@ class TestQueue(RQTestCase):
     def test_dequeue_instance_method(self):
         """Dequeueing instance method jobs from queues."""
         q = Queue()
-        c = Calculator(2)
-        result = q.enqueue(c.calculate, 3, 4)
+        n = Number(2)
+        q.enqueue(n.div, 4)
 
         job = q.dequeue()
+
         # The instance has been pickled and unpickled, so it is now a separate
         # object. Test for equality using each object's __dict__ instead.
-        self.assertEquals(job.instance.__dict__, c.__dict__)
-        self.assertEquals(job.func.__name__, 'calculate')
+        self.assertEquals(job.instance.__dict__, n.__dict__)
+        self.assertEquals(job.func.__name__, 'div')
+        self.assertEquals(job.args, (4,))
+
+    def test_dequeue_class_method(self):
+        """Dequeueing class method jobs from queues."""
+        q = Queue()
+        q.enqueue(Number.divide, 3, 4)
+
+        job = q.dequeue()
+
+        self.assertEquals(job.instance.__dict__, Number.__dict__)
+        self.assertEquals(job.func.__name__, 'divide')
         self.assertEquals(job.args, (3, 4))
 
     def test_dequeue_ignores_nonexisting_jobs(self):
