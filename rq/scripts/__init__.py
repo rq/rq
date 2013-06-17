@@ -1,5 +1,6 @@
 import importlib
 import redis
+from warnings import warn
 from rq import use_connection
 
 
@@ -31,7 +32,12 @@ def read_config_file(module):
 def setup_default_arguments(args, settings):
     """ Sets up args from settings or defaults """
     if args.url is None:
-        args.url = settings.get('REDIS_URL', 'redis://localhost:6379/0')
+        args.url = settings.get('REDIS_URL')
+
+    if (args.host or args.port or args.socket or args.db or args.password):
+        warn('Host, port, db, password options for Redis will not be \
+                supported in future versions of RQ. \
+                Please use `REDIS_URL` or `--url` instead.', DeprecationWarning)
 
     if args.host is None:
         args.host = settings.get('REDIS_HOST', 'localhost')
