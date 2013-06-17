@@ -55,7 +55,7 @@ class Number(object):
         self.value = value
 
     @classmethod
-    def divide(cls, x, y):
+    def multiply(cls, x, y):
         return x * y
 
     def div(self, y):

@@ -180,12 +180,12 @@ class TestQueue(RQTestCase):
     def test_dequeue_class_method(self):
         """Dequeueing class method jobs from queues."""
         q = Queue()
-        q.enqueue(Number.divide, 3, 4)
+        q.enqueue(Number.multiply, 3, 4)
 
         job = q.dequeue()
 
         self.assertEquals(job.instance.__dict__, Number.__dict__)
-        self.assertEquals(job.func.__name__, 'divide')
+        self.assertEquals(job.func.__name__, 'multiply')
         self.assertEquals(job.args, (3, 4))
 
     def test_dequeue_ignores_nonexisting_jobs(self):
@@ -273,7 +273,7 @@ class TestQueue(RQTestCase):
         time_delta = timedelta(minutes=1)
         queue_name = 'scheduler_test'
         queue = Queue(name=queue_name, connection=self.testconn)
-        scheduler = Scheduler(queue_name, connection=self.testconn)        
+        scheduler = Scheduler(queue_name, connection=self.testconn)
         job = queue.schedule_in(time_delta, say_hello)
         self.assertEqual(job.origin, queue_name)
         self.assertIn(job.id, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
