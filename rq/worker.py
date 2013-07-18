@@ -56,6 +56,13 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
 
 
+def utctime(dt=None):
+    if dt is None:
+        dt = times.now()
+    return time.mktime(dt.timetuple()) + \
+                (dt.microsecond / 1000000.0)
+
+
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
@@ -107,6 +114,7 @@ class Worker(object):
         if isinstance(queues, Queue):
             queues = [queues]
         self._name = name
+        self.birth_date = times.now()
         self.queues = queues
         self.validate_queues()
         self._exc_handlers = []
@@ -196,11 +204,10 @@ class Worker(object):
                     'There exists an active worker named \'%s\' '
                     'already.' % (self.name,))
         key = self.key
-        now = time.time()
         queues = ','.join(self.queue_names())
         with self.connection._pipeline() as p:
             p.delete(key)
-            p.hset(key, 'birth', now)
+            p.hset(key, 'birth', utctime(self.birth_date))
             p.hset(key, 'queues', queues)
             p.sadd(self.redis_workers_keys, key)
             p.expire(key, self.default_worker_ttl)
@@ -213,7 +220,7 @@ class Worker(object):
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
-            p.hset(self.key, 'death', time.time())
+            p.hset(self.key, 'death', utctime())
             p.expire(self.key, 60)
             p.execute()
 
