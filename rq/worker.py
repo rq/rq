@@ -92,6 +92,11 @@ class Worker(object):
         worker = cls([], name, connection=connection)
         queues = connection.hget(worker.key, 'queues')
         worker._state = connection.hget(worker.key, 'state') or '?'
+
+        worker_birth = connection.hget(worker.key, 'birth')
+        if worker_birth:
+            worker.birth_date = times.to_universal(int(worker_birth))
+
         if queues:
             worker.queues = [Queue(queue, connection=connection)
                                 for queue in queues.split(',')]
@@ -118,6 +123,7 @@ class Worker(object):
         self._stopped = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
+        self.birth_date = times.now()
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -196,11 +202,10 @@ class Worker(object):
                     'There exists an active worker named \'%s\' '
                     'already.' % (self.name,))
         key = self.key
-        now = time.time()
         queues = ','.join(self.queue_names())
         with self.connection._pipeline() as p:
             p.delete(key)
-            p.hset(key, 'birth', now)
+            p.hset(key, 'birth', times.to_unix(self.birth_date))
             p.hset(key, 'queues', queues)
             p.sadd(self.redis_workers_keys, key)
             p.expire(key, self.default_worker_ttl)
@@ -213,7 +218,7 @@ class Worker(object):
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
-            p.hset(self.key, 'death', time.time())
+            p.hset(self.key, 'death', times.to_unix(time.now()))
             p.expire(self.key, 60)
             p.execute()
 
