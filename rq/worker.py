@@ -88,18 +88,23 @@ class Worker(object):
             connection.srem(cls.redis_workers_keys, worker_key)
             return None
 
+        redis_state = connection.hgetall(worker_key)
+
         name = worker_key[len(prefix):]
-        worker = cls([], name, connection=connection)
-        queues = connection.hget(worker.key, 'queues')
-        worker._state = connection.hget(worker.key, 'state') or '?'
+        state = redis_state.get('state', '?')
+        birth = redis_state.get('birth', None)
+        death = redis_state.get('death', None)
+        queue_names = redis_state.get('queues', [])
+        queues = [Queue(queue, connection=connection)
+                    for queue in queue_names.split(',')]
 
-        worker_birth = connection.hget(worker.key, 'birth')
-        if worker_birth:
-            worker.birth_date = times.to_universal(int(worker_birth))
+        worker = cls(queues, name, connection=connection)
+        worker._state = state
+        if birth is not None:
+            worker.birth = times.to_universal(int(birth))
+        if death is not None:
+            worker.death = times.to_universal(int(death))
 
-        if queues:
-            worker.queues = [Queue(queue, connection=connection)
-                                for queue in queues.split(',')]
         return worker
 
 
@@ -123,7 +128,7 @@ class Worker(object):
         self._stopped = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
-        self.birth_date = times.now()
+        self.birth = times.now()
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -205,7 +210,7 @@ class Worker(object):
         queues = ','.join(self.queue_names())
         with self.connection._pipeline() as p:
             p.delete(key)
-            p.hset(key, 'birth', times.to_unix(self.birth_date))
+            p.hset(key, 'birth', times.to_unix(self.birth))
             p.hset(key, 'queues', queues)
             p.sadd(self.redis_workers_keys, key)
             p.expire(key, self.default_worker_ttl)
@@ -219,6 +224,7 @@ class Worker(object):
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
             p.hset(self.key, 'death', times.to_unix(time.now()))
+            p.hset(self.key, 'state', 'dead')
             p.expire(self.key, 60)
             p.execute()
 
