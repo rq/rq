@@ -223,7 +223,7 @@ class Worker(object):
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
-            p.hset(self.key, 'death', times.to_unix(time.now()))
+            p.hset(self.key, 'death', times.to_unix(times.now()))
             p.hset(self.key, 'state', 'dead')
             p.expire(self.key, 60)
             p.execute()
