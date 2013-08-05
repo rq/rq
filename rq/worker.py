@@ -101,9 +101,9 @@ class Worker(object):
         worker = cls(queues, name, connection=connection)
         worker._state = state
         if birth is not None:
-            worker.birth = times.to_universal(int(birth))
+            worker.birth = times.to_universal(int(float(birth)))
         if death is not None:
-            worker.death = times.to_universal(int(death))
+            worker.death = times.to_universal(int(float(death)))
 
         return worker
 
