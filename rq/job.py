@@ -9,7 +9,7 @@ except ImportError: # noqa
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
-from rq.compat import text_type
+from rq.compat import text_type, decode_redis_hash, as_text
 
 
 def enum(name, *sequential, **named):
@@ -98,7 +98,7 @@ class Job(object):
         return self._func_name
 
     def _get_status(self):
-        self._status = self.connection.hget(self.key, 'status')
+        self._status = as_text(self.connection.hget(self.key, 'status'))
         return self._status
 
     def _set_status(self, status):
@@ -210,7 +210,7 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s' % (job_id,)
+        return b'rq:job:' + job_id.encode('ascii')
 
     @property
     def key(self):
@@ -259,7 +259,7 @@ class Job(object):
         Will raise a NoSuchJobError if no corresponding Redis key exists.
         """
         key = self.key
-        obj = self.connection.hgetall(key)
+        obj = decode_redis_hash(self.connection.hgetall(key))
         if len(obj) == 0:
             raise NoSuchJobError('No such job: %s' % (key,))
 
@@ -267,7 +267,7 @@ class Job(object):
             if date_str is None:
                 return None
             else:
-                return times.to_universal(date_str)
+                return times.to_universal(as_text(date_str))
 
         try:
             self.data = obj['data']
@@ -279,16 +279,16 @@ class Job(object):
         except UnpickleError:
             if not safe:
                 raise
-        self.created_at = to_date(obj.get('created_at'))
-        self.origin = obj.get('origin')
-        self.description = obj.get('description')
-        self.enqueued_at = to_date(obj.get('enqueued_at'))
-        self.ended_at = to_date(obj.get('ended_at'))
+        self.created_at = to_date(as_text(obj.get('created_at')))
+        self.origin = as_text(obj.get('origin'))
+        self.description = as_text(obj.get('description'))
+        self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
+        self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
-        self._status = obj.get('status') if obj.get('status') else None
+        self._status = as_text(obj.get('status') if obj.get('status') else None)
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def save(self, pipeline=None):

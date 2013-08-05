@@ -47,6 +47,25 @@ if PY2:
     string_types = (str, unicode)
     text_type = unicode
 
+    def as_text(v):
+        return v
+
+    def decode_redis_hash(h):
+        return h
+
 else:
     string_types = (str,)
     text_type = str
+
+    def as_text(v):
+        if v is None:
+            return None
+        elif isinstance(v, bytes):
+            return v.decode('ascii')
+        elif isinstance(v, str):
+            return v
+        else:
+            raise ValueError('Unknown type %r' % type(v))
+
+    def decode_redis_hash(h):
+        return dict((as_text(k), h[k]) for k in h)

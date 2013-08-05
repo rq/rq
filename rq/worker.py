@@ -21,6 +21,7 @@ from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, UnpickleError, DequeueTimeout
 from .timeouts import death_penalty_after
 from .version import VERSION
+from rq.compat import text_type
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -431,7 +432,7 @@ class Worker(object):
         if rv is None:
             self.log.info('Job OK')
         else:
-            self.log.info('Job OK, result = %s' % (yellow(unicode(rv)),))
+            self.log.info('Job OK, result = %s' % (yellow(text_type(rv)),))
 
         if result_ttl == 0:
             self.log.info('Result discarded immediately.')

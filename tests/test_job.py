@@ -78,7 +78,7 @@ class TestJob(RQTestCase):
         # Saving creates a Redis hash
         self.assertEquals(self.testconn.exists(job.key), False)
         job.save()
-        self.assertEquals(self.testconn.type(job.key), 'hash')
+        self.assertEquals(self.testconn.type(job.key), b'hash')
 
         # Saving writes pickled job data
         unpickled_data = loads(self.testconn.hget(job.key, 'data'))
@@ -108,15 +108,15 @@ class TestJob(RQTestCase):
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at')
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('ascii')
         self.assertEquals(
                 times.to_universal(stored_date),
                 expected_date)
 
         # ... and no other keys are stored
-        self.assertItemsEqual(
+        self.assertEqual(
                 self.testconn.hkeys(job.key),
-                ['created_at'])
+                [b'created_at'])
 
     def test_persistence_of_typical_jobs(self):
         """Storing typical jobs."""
@@ -124,15 +124,15 @@ class TestJob(RQTestCase):
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at')
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('ascii')
         self.assertEquals(
                 times.to_universal(stored_date),
                 expected_date)
 
         # ... and no other keys are stored
-        self.assertItemsEqual(
-                self.testconn.hkeys(job.key),
-                ['created_at', 'data', 'description'])
+        self.assertEqual(
+                sorted(self.testconn.hkeys(job.key)),
+                [b'created_at', b'data', b'description'])
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
@@ -172,7 +172,7 @@ class TestJob(RQTestCase):
         # equivalent to a worker not having the most up-to-date source code
         # and unable to import the function)
         data = self.testconn.hget(job.key, 'data')
-        unimportable_data = data.replace('say_hello', 'shut_up')
+        unimportable_data = data.replace(b'say_hello', b'shut_up')
         self.testconn.hset(job.key, 'data', unimportable_data)
 
         job.refresh()
