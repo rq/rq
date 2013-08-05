@@ -21,7 +21,7 @@ from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, UnpickleError, DequeueTimeout
 from .timeouts import death_penalty_after
 from .version import VERSION
-from rq.compat import text_type
+from rq.compat import text_type, as_text
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -68,7 +68,7 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         reported_working = connection.smembers(cls.redis_workers_keys)
-        workers = [cls.find_by_key(key, connection) for key in
+        workers = [cls.find_by_key(as_text(key), connection) for key in
                 reported_working]
         return compact(workers)
 
@@ -91,7 +91,7 @@ class Worker(object):
 
         name = worker_key[len(prefix):]
         worker = cls([], name, connection=connection)
-        queues = connection.hget(worker.key, 'queues')
+        queues = as_text(connection.hget(worker.key, 'queues'))
         worker._state = connection.hget(worker.key, 'state') or '?'
         if queues:
             worker.queues = [Queue(queue, connection=connection)
