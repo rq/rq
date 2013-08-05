@@ -39,3 +39,14 @@ else:
                 opfunc.__doc__ = getattr(int, opname).__doc__
                 setattr(cls, opname, opfunc)
         return cls
+
+
+PY2 = sys.version_info[0] < 3
+
+if PY2:
+    string_types = (str, unicode)
+    text_type = unicode
+
+else:
+    string_types = (str,)
+    text_type = str

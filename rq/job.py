@@ -2,10 +2,14 @@ import importlib
 import inspect
 import times
 from uuid import uuid4
-from cPickle import loads, dumps, UnpicklingError
+try:
+    from cPickle import loads, dumps, UnpicklingError
+except ImportError: # noqa
+    from pickle import loads, dumps, UnpicklingError  # noqa
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
+from rq.compat import text_type
 
 
 def enum(name, *sequential, **named):
@@ -194,7 +198,7 @@ class Job(object):
         first time the ID is requested.
         """
         if self._id is None:
-            self._id = unicode(uuid4())
+            self._id = text_type(uuid4())
         return self._id
 
     def set_id(self, value):

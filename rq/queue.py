@@ -3,7 +3,7 @@ from .connections import resolve_connection
 from .job import Job, Status
 from .exceptions import (NoSuchJobError, UnpickleError,
                          InvalidJobOperationError, DequeueTimeout)
-from .compat import total_ordering
+from .compat import total_ordering, string_types
 
 
 def get_failed_queue(connection=None):
@@ -154,7 +154,7 @@ class Queue(object):
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
         """
-        if not isinstance(f, basestring) and f.__module__ == '__main__':
+        if not isinstance(f, string_types) and f.__module__ == '__main__':
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')

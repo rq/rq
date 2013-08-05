@@ -3,7 +3,10 @@ from datetime import datetime
 from tests import RQTestCase
 from tests.fixtures import Number, some_calculation, say_hello, access_self
 from tests.helpers import strip_milliseconds
-from cPickle import loads
+try:
+    from cPickle import loads
+except ImportError:
+    from pickle import loads
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
