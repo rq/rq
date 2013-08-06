@@ -17,7 +17,10 @@ except ImportError: # noqa
     try:
         from thread import get_ident  # noqa
     except ImportError: # noqa
-        from dummy_thread import get_ident  # noqa
+        try:
+            from _thread import get_ident  # noqa
+        except ImportError: # noqa
+            from dummy_thread import get_ident  # noqa
 
 
 def release_local(local):

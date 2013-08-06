@@ -39,3 +39,33 @@ else:
                 opfunc.__doc__ = getattr(int, opname).__doc__
                 setattr(cls, opname, opfunc)
         return cls
+
+
+PY2 = sys.version_info[0] < 3
+
+if PY2:
+    string_types = (str, unicode)
+    text_type = unicode
+
+    def as_text(v):
+        return v
+
+    def decode_redis_hash(h):
+        return h
+
+else:
+    string_types = (str,)
+    text_type = str
+
+    def as_text(v):
+        if v is None:
+            return None
+        elif isinstance(v, bytes):
+            return v.decode('utf-8')
+        elif isinstance(v, str):
+            return v
+        else:
+            raise ValueError('Unknown type %r' % type(v))
+
+    def decode_redis_hash(h):
+        return dict((as_text(k), h[k]) for k in h)

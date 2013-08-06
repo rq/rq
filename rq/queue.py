@@ -3,7 +3,7 @@ from .connections import resolve_connection
 from .job import Job, Status
 from .exceptions import (NoSuchJobError, UnpickleError,
                          InvalidJobOperationError, DequeueTimeout)
-from .compat import total_ordering
+from .compat import total_ordering, string_types, as_text
 
 
 def get_failed_queue(connection=None):
@@ -27,8 +27,9 @@ class Queue(object):
         connection = resolve_connection(connection)
 
         def to_queue(queue_key):
-            return cls.from_queue_key(queue_key, connection=connection)
-        return map(to_queue, connection.keys('%s*' % prefix))
+            return cls.from_queue_key(as_text(queue_key),
+                                      connection=connection)
+        return list(map(to_queue, connection.keys('%s*' % prefix)))
 
     @classmethod
     def from_queue_key(cls, queue_key, connection=None):
@@ -81,7 +82,8 @@ class Queue(object):
             end = offset + (length - 1)
         else:
             end = length
-        return self.connection.lrange(self.key, start, end)
+        return [as_text(job_id) for job_id in
+                self.connection.lrange(self.key, start, end)]
 
     def get_jobs(self, offset=0, length=-1):
         """Returns a slice of jobs in the queue."""
@@ -116,7 +118,7 @@ class Queue(object):
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
-            job_id = self.connection.lpop(COMPACT_QUEUE)
+            job_id = as_text(self.connection.lpop(COMPACT_QUEUE))
             if job_id is None:
                 break
             if Job.exists(job_id, self.connection):
@@ -154,7 +156,7 @@ class Queue(object):
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
         """
-        if not isinstance(f, basestring) and f.__module__ == '__main__':
+        if not isinstance(f, string_types) and f.__module__ == '__main__':
             raise ValueError(
                     'Functions from the __main__ module cannot be processed '
                     'by workers.')
@@ -204,7 +206,7 @@ class Queue(object):
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
-        return self.connection.lpop(self.key)
+        return as_text(self.connection.lpop(self.key))
 
     @classmethod
     def lpop(cls, queue_keys, timeout, connection=None):
@@ -274,7 +276,7 @@ class Queue(object):
         result = cls.lpop(queue_keys, timeout, connection=connection)
         if result is None:
             return None
-        queue_key, job_id = result
+        queue_key, job_id = map(as_text, result)
         queue = cls.from_queue_key(queue_key, connection=connection)
         try:
             job = Job.fetch(job_id, connection=connection)
