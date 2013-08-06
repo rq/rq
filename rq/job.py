@@ -210,7 +210,7 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('ascii')
+        return b'rq:job:' + job_id.encode('utf-8')
 
     @property
     def key(self):

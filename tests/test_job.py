@@ -108,7 +108,7 @@ class TestJob(RQTestCase):
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at').decode('ascii')
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
         self.assertEquals(
                 times.to_universal(stored_date),
                 expected_date)
@@ -124,7 +124,7 @@ class TestJob(RQTestCase):
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at').decode('ascii')
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
         self.assertEquals(
                 times.to_universal(stored_date),
                 expected_date)

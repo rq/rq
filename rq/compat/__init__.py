@@ -61,7 +61,7 @@ else:
         if v is None:
             return None
         elif isinstance(v, bytes):
-            return v.decode('ascii')
+            return v.decode('utf-8')
         elif isinstance(v, str):
             return v
         else:
