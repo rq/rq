@@ -143,7 +143,7 @@ Starting from RQ >= 0.3, there exists a similar decorator:
 {% highlight python %}
 from rq.decorators import job
 
-@job('low', conn=my_redis_conn, timeout=5)
+@job('low', connection=my_redis_conn, timeout=5)
 def add(x, y):
     return x + y
 
