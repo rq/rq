@@ -1,3 +1,11 @@
+### 0.3.9
+(August 20th, 2013)
+
+- Python 3 compatibility (Thanks, Alex!)
+
+- Minor bug fix where Sentry would break when func cannot be imported
+
+
 ### 0.3.8
 (June 17th, 2013)
 
