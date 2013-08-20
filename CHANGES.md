@@ -1,3 +1,9 @@
+### 0.3.10
+(August 20th, 2013)
+
+- Bug fix in setup.py
+
+
 ### 0.3.9
 (August 20th, 2013)
 
