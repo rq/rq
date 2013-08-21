@@ -203,6 +203,20 @@ class TestJob(RQTestCase):
         job_from_queue = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, None)
 
+    def test_description_is_persisted(self):
+        """Ensure that job's custom description is set properly"""
+        description = 'Say hello!'
+        job = Job.create(func=say_hello, args=('Lionel',), description=description)
+        job.save()
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.description, description)
+
+        # Ensure job description is constructed from function call string
+        job = Job.create(func=say_hello, args=('Lionel',))
+        job.save()
+        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.description, job.get_call_string())
+
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""
         # Executing the job function from outside of RQ throws an exception
