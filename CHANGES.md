@@ -1,3 +1,9 @@
+### 0.3.11
+(August 23th, 2013)
+
+- Some more fixes in command line scripts for Python 3
+
+
 ### 0.3.10
 (August 20th, 2013)
 
