@@ -44,7 +44,7 @@ def state_symbol(state):
 
 def show_queues(args):
     if len(args.queues):
-        qs = map(Queue, args.queues)
+        qs = list(map(Queue, args.queues))
     else:
         qs = Queue.all()
 
@@ -79,7 +79,7 @@ def show_queues(args):
 
 def show_workers(args):
     if len(args.queues):
-        qs = map(Queue, args.queues)
+        qs = list(map(Queue, args.queues))
 
         def any_matching_queue(worker):
             def queue_matches(q):

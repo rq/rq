@@ -77,7 +77,7 @@ def main():
     cleanup_ghosts()
 
     try:
-        queues = map(Queue, args.queues)
+        queues = list(map(Queue, args.queues))
         w = Worker(queues, name=args.name)
 
         # Should we configure Sentry?
