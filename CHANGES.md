@@ -1,3 +1,10 @@
+### 0.3.12
+(not released yet)
+
+- Ability to provide a custom job description (instead of using the default
+  function invocation hint).  Thanks, İbrahim.
+
+
 ### 0.3.11
 (August 23th, 2013)
 
