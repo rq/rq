@@ -129,7 +129,8 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args=None, kwargs=None, description=None, timeout=None, result_ttl=None):  # noqa
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
+                     result_ttl=None, description=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
