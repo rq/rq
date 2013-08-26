@@ -205,17 +205,16 @@ class TestJob(RQTestCase):
 
     def test_description_is_persisted(self):
         """Ensure that job's custom description is set properly"""
-        description = 'Say hello!'
-        job = Job.create(func=say_hello, args=('Lionel',), description=description)
+        job = Job.create(func=say_hello, args=('Lionel',), description=u'Say hello!')
         job.save()
         Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.description, description)
+        self.assertEqual(job.description, u'Say hello!')
 
         # Ensure job description is constructed from function call string
         job = Job.create(func=say_hello, args=('Lionel',))
         job.save()
         Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.description, job.get_call_string())
+        self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""
