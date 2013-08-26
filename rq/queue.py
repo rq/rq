@@ -158,14 +158,13 @@ class Queue(object):
           meaningful to the import context of the workers)
         """
         if not isinstance(f, string_types) and f.__module__ == '__main__':
-            raise ValueError(
-                    'Functions from the __main__ module cannot be processed '
-                    'by workers.')
+            raise ValueError('Functions from the __main__ module cannot be processed '
+                             'by workers.')
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
         timeout = None
-        description=None
+        description = None
         result_ttl = None
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
