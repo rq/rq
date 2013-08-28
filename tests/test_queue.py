@@ -251,6 +251,17 @@ class TestQueue(RQTestCase):
         job = q.enqueue(say_hello)
         self.assertEqual(job.status, Status.QUEUED)
 
+    def test_all_queues(self):
+        """All queues"""
+        q = Queue('first-queue')
+        r = Queue('second-queue')
+        s = Queue('third-queue')
+        all = Queue.all()
+        self.assertEquals(len(all), 3)
+        names = [q.name for q in all]
+        self.assertTrue('first-queue' in names)
+        self.assertTrue('second-queue' in names)
+        self.assertTrue('third-queue' in names)
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):

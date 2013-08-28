@@ -18,6 +18,7 @@ def compact(lst):
 @total_ordering
 class Queue(object):
     redis_queue_namespace_prefix = 'rq:queue:'
+    redis_queues_keys = 'rq:queues'
 
     @classmethod
     def all(cls, connection=None):
@@ -29,7 +30,7 @@ class Queue(object):
         def to_queue(queue_key):
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection)
-        return list(map(to_queue, connection.keys('%s*' % prefix)))
+        return list(map(to_queue, connection.smembers(cls.redis_queues_keys)))
 
     @classmethod
     def from_queue_key(cls, queue_key, connection=None):
@@ -51,6 +52,7 @@ class Queue(object):
         self._key = '%s%s' % (prefix, name)
         self._default_timeout = default_timeout
         self._async = async
+        self.connection.sadd(self.redis_queues_keys, self.key)
 
     @property
     def key(self):
