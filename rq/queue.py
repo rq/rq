@@ -1,4 +1,6 @@
 import times
+import uuid
+
 from .connections import resolve_connection
 from .job import Job, Status
 from .exceptions import (NoSuchJobError, UnpickleError,
@@ -114,7 +116,7 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guarantueeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact'
+        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
