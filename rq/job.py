@@ -4,7 +4,7 @@ import times
 from uuid import uuid4
 try:
     from cPickle import loads, dumps, UnpicklingError
-except ImportError: # noqa
+except ImportError:  # noqa
     from pickle import loads, dumps, UnpicklingError  # noqa
 from .local import LocalStack
 from .connections import resolve_connection
@@ -16,8 +16,9 @@ def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
     return type(name, (), values)
 
-Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed',
-                        STARTED='started')
+Status = enum('Status',
+              QUEUED='queued', FINISHED='finished', FAILED='failed',
+              STARTED='started')
 
 
 def unpickle(pickled_string):
@@ -287,15 +288,12 @@ class Job(object):
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
-        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
+        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
-    def save(self, pipeline=None):
-        """Persists the current job instance to its corresponding Redis key."""
-        key = self.key
-        connection = pipeline if pipeline is not None else self.connection
-
+    def dump(self):
+        """Returns a serialization of the current job instance"""
         obj = {}
         obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
 
@@ -322,7 +320,14 @@ class Job(object):
         if self.meta:
             obj['meta'] = dumps(self.meta)
 
-        connection.hmset(key, obj)
+        return obj
+
+    def save(self, pipeline=None):
+        """Persists the current job instance to its corresponding Redis key."""
+        key = self.key
+        connection = pipeline if pipeline is not None else self.connection
+
+        connection.hmset(key, self.dump())
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -349,7 +354,6 @@ class Job(object):
         finally:
             assert self.id == _job_stack.pop()
         return self._result
-
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job and its result
@@ -379,13 +383,12 @@ class Job(object):
         - If it's a positive number, set the job to expire in X seconds.
         - If result_ttl is negative, don't set an expiry to it (persist
           forever)
-        """        
+        """
         if ttl == 0:
             self.cancel()
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
-        
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
