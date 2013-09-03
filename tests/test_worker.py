@@ -234,3 +234,19 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
+
+    def test_job_dependency(self):
+        """Enqueue waitlisted jobs only if their parents don't fail"""
+        q = Queue()
+        w = Worker([q])
+        parent_job = q.enqueue(say_hello)
+        job = q.enqueue_call(say_hello, after=parent_job)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertEqual(job.status, 'finished')
+
+        parent_job = q.enqueue(div_by_zero)
+        job = q.enqueue_call(say_hello, after=parent_job)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertNotEqual(job.status, 'finished')
