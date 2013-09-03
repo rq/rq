@@ -1,5 +1,7 @@
-### 0.3.12
+### 0.4.0
 (not released yet)
+
+- Job dependencies!  Thanks, Selwin.
 
 - Ability to provide a custom job description (instead of using the default
   function invocation hint).  Thanks, İbrahim.
