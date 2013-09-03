@@ -1,5 +1,35 @@
+### 0.3.12
+(not released yet)
+
+- Ability to provide a custom job description (instead of using the default
+  function invocation hint).  Thanks, İbrahim.
+
+- Temporary key for the compact queue is now randomly generated, which should
+  avoid name clashes for concurrent compact actions.
+
+
+### 0.3.11
+(August 23th, 2013)
+
+- Some more fixes in command line scripts for Python 3
+
+
+### 0.3.10
+(August 20th, 2013)
+
+- Bug fix in setup.py
+
+
+### 0.3.9
+(August 20th, 2013)
+
+- Python 3 compatibility (Thanks, Alex!)
+
+- Minor bug fix where Sentry would break when func cannot be imported
+
+
 ### 0.3.8
-(not yet released)
+(June 17th, 2013)
 
 - `rqworker` and `rqinfo` have a  `--url` argument to connect to a Redis url.
 

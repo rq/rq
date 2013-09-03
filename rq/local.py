@@ -13,11 +13,14 @@
 # current thread ident.
 try:
     from greenlet import getcurrent as get_ident
-except ImportError: # noqa
+except ImportError:  # noqa
     try:
         from thread import get_ident  # noqa
-    except ImportError: # noqa
-        from dummy_thread import get_ident  # noqa
+    except ImportError:  # noqa
+        try:
+            from _thread import get_ident  # noqa
+        except ImportError:  # noqa
+            from dummy_thread import get_ident  # noqa
 
 
 def release_local(local):
@@ -116,6 +119,7 @@ class LocalStack(object):
 
     def _get__ident_func__(self):
         return self._local.__ident_func__
+
     def _set__ident_func__(self, value):  # noqa
         object.__setattr__(self._local, '__ident_func__', value)
     __ident_func__ = property(_get__ident_func__, _set__ident_func__)

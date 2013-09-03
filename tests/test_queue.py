@@ -107,7 +107,9 @@ class TestQueue(RQTestCase):
         # Inspect data inside Redis
         q_key = 'rq:queue:default'
         self.assertEquals(self.testconn.llen(q_key), 1)
-        self.assertEquals(self.testconn.lrange(q_key, 0, -1)[0], job_id)
+        self.assertEquals(
+            self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'),
+            job_id)
 
     def test_enqueue_sets_metadata(self):
         """Enqueueing job onto queues modifies meta data."""
@@ -268,7 +270,7 @@ class TestQueue(RQTestCase):
         self.assertFalse(self.testconn.exists(parent_job.waitlist_key))
 
     def test_enqueue_job_with_dependency(self):
-        """Test enqueueing job with dependency"""
+        """Jobs are enqueued only when their dependencies are finished"""
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
@@ -290,7 +292,7 @@ class TestFailedQueue(RQTestCase):
         job.save()
         get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
 
-        self.assertItemsEqual(Queue.all(), [get_failed_queue()])  # noqa
+        self.assertEqual(Queue.all(), [get_failed_queue()])  # noqa
         self.assertEquals(get_failed_queue().count, 1)
 
         get_failed_queue().requeue(job.id)

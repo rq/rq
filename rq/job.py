@@ -2,18 +2,23 @@ import importlib
 import inspect
 import times
 from uuid import uuid4
-from cPickle import loads, dumps, UnpicklingError
+try:
+    from cPickle import loads, dumps, UnpicklingError
+except ImportError:  # noqa
+    from pickle import loads, dumps, UnpicklingError  # noqa
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
+from rq.compat import text_type, decode_redis_hash, as_text
 
 
 def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
     return type(name, (), values)
 
-Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed',
-                        STARTED='started')
+Status = enum('Status',
+              QUEUED='queued', FINISHED='finished', FAILED='failed',
+              STARTED='started')
 
 
 def unpickle(pickled_string):
@@ -26,7 +31,7 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
-    except (StandardError, UnpicklingError) as e:
+    except (Exception, UnpicklingError) as e:
         raise UnpickleError('Could not unpickle.', pickled_string, e)
     return obj
 
@@ -64,7 +69,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, dependency=None):
+               result_ttl=None, status=None, description=None, dependency=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -76,7 +81,7 @@ class Job(object):
         assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
         job = cls(connection=connection)
         if inspect.ismethod(func):
-            job._instance = func.im_self
+            job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
             job._func_name = '%s.%s' % (func.__module__, func.__name__)
@@ -84,7 +89,7 @@ class Job(object):
             job._func_name = func
         job._args = args
         job._kwargs = kwargs
-        job.description = job.get_call_string()
+        job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
         job._status = status
         # dependency could be job instance or id
@@ -97,7 +102,7 @@ class Job(object):
         return self._func_name
 
     def _get_status(self):
-        self._status = self.connection.hget(self.key, 'status')
+        self._status = as_text(self.connection.hget(self.key, 'status'))
         return self._status
 
     def _set_status(self, status):
@@ -212,7 +217,7 @@ class Job(object):
         first time the ID is requested.
         """
         if self._id is None:
-            self._id = unicode(uuid4())
+            self._id = text_type(uuid4())
         return self._id
 
     def set_id(self, value):
@@ -224,7 +229,7 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s' % (job_id,)
+        return b'rq:job:' + job_id.encode('utf-8')
 
     @classmethod
     def waitlist_key_for(cls, job_id):
@@ -283,7 +288,7 @@ class Job(object):
         Will raise a NoSuchJobError if no corresponding Redis key exists.
         """
         key = self.key
-        obj = self.connection.hgetall(key)
+        obj = decode_redis_hash(self.connection.hgetall(key))
         if len(obj) == 0:
             raise NoSuchJobError('No such job: %s' % (key,))
 
@@ -291,7 +296,7 @@ class Job(object):
             if date_str is None:
                 return None
             else:
-                return times.to_universal(date_str)
+                return times.to_universal(as_text(date_str))
 
         try:
             self.data = obj['data']
@@ -303,24 +308,21 @@ class Job(object):
         except UnpickleError:
             if not safe:
                 raise
-        self.created_at = to_date(obj.get('created_at'))
-        self.origin = obj.get('origin')
-        self.description = obj.get('description')
-        self.enqueued_at = to_date(obj.get('enqueued_at'))
-        self.ended_at = to_date(obj.get('ended_at'))
+        self.created_at = to_date(as_text(obj.get('created_at')))
+        self.origin = as_text(obj.get('origin'))
+        self.description = as_text(obj.get('description'))
+        self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
+        self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
-        self._status = obj.get('status') if obj.get('status') else None
+        self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = obj.get('dependency_id', None)
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
-    def save(self, pipeline=None):
-        """Persists the current job instance to its corresponding Redis key."""
-        key = self.key
-        connection = pipeline if pipeline is not None else self.connection
-
+    def dump(self):
+        """Returns a serialization of the current job instance"""
         obj = {}
         obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
 
@@ -349,7 +351,14 @@ class Job(object):
         if self.meta:
             obj['meta'] = dumps(self.meta)
 
-        connection.hmset(key, obj)
+        return obj
+
+    def save(self, pipeline=None):
+        """Persists the current job instance to its corresponding Redis key."""
+        key = self.key
+        connection = pipeline if pipeline is not None else self.connection
+
+        connection.hmset(key, self.dump())
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -376,7 +385,6 @@ class Job(object):
         finally:
             assert self.id == _job_stack.pop()
         return self._result
-
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job and its result
@@ -406,7 +414,7 @@ class Job(object):
         - If it's a positive number, set the job to expire in X seconds.
         - If result_ttl is negative, don't set an expiry to it (persist
           forever)
-        """        
+        """
         if ttl == 0:
             self.cancel()
         elif ttl > 0:
@@ -435,47 +443,5 @@ class Job(object):
 
     def __hash__(self):
         return hash(self.id)
-
-
-    # Backwards compatibility for custom properties
-    def __getattr__(self, name):  # noqa
-        import warnings
-        warnings.warn(
-                "Getting custom properties from the job instance directly "
-                "will be unsupported as of RQ 0.4. Please use the meta dict "
-                "to store all custom variables.  So instead of this:\n\n"
-                "\tjob.foo\n\n"
-                "Use this:\n\n"
-                "\tjob.meta['foo']\n",
-                SyntaxWarning)
-        try:
-            return self.__dict__['meta'][name]  # avoid recursion
-        except KeyError:
-            return getattr(super(Job, self), name)
-
-    def __setattr__(self, name, value):
-        # Ignore the "private" fields
-        private_attrs = set(('origin', '_func_name', 'ended_at',
-            'description', '_args', 'created_at', 'enqueued_at', 'connection',
-            '_result', 'result', 'timeout', '_kwargs', 'exc_info', '_id',
-            'data', '_instance', 'result_ttl', '_status', 'status',
-            '_dependency_id', '_dependency', 'dependency', 'meta'))
-
-        if name in private_attrs:
-            object.__setattr__(self, name, value)
-            return
-
-        import warnings
-        warnings.warn(
-                "Setting custom properties on the job instance directly will "
-                "be unsupported as of RQ 0.4. Please use the meta dict to "
-                "store all custom variables.  So instead of this:\n\n"
-                "\tjob.foo = 'bar'\n\n"
-                "Use this:\n\n"
-                "\tjob.meta['foo'] = 'bar'\n",
-                SyntaxWarning)
-
-        self.__dict__['meta'][name] = value
-
 
 _job_stack = LocalStack()

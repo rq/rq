@@ -16,8 +16,7 @@ def gettermsize():
     def ioctl_GWINSZ(fd):
         try:
             import fcntl, termios, struct  # noqa
-            cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ,
-        '1234'))
+            cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
         except:
             return None
         return cr
@@ -53,7 +52,7 @@ class _Colorizer(object):
         self.codes["overline"] = esc + "06m"
 
         dark_colors = ["black", "darkred", "darkgreen", "brown", "darkblue",
-                        "purple", "teal", "lightgray"]
+                       "purple", "teal", "lightgray"]
         light_colors = ["darkgray", "red", "green", "yellow", "blue",
                         "fuchsia", "turquoise", "white"]
 
@@ -69,8 +68,11 @@ class _Colorizer(object):
         self.codes["darkyellow"] = self.codes["brown"]
         self.codes["fuscia"] = self.codes["fuchsia"]
         self.codes["white"] = self.codes["bold"]
-        self.notty = not sys.stdout.isatty()
 
+        if hasattr(sys.stdout, "isatty"):
+            self.notty = not sys.stdout.isatty()
+        else:
+            self.notty = True
 
     def reset_color(self):
         return self.codes["reset"]
@@ -136,7 +138,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
     def __init__(self, exclude=None, *args, **kwargs):
         self.exclude = exclude
-        if is_python_version((2,6)):
+        if is_python_version((2, 6)):
             logging.StreamHandler.__init__(self, *args, **kwargs)
         else:
             super(ColorizingStreamHandler, self).__init__(*args, **kwargs)
