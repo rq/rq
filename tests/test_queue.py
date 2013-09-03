@@ -256,12 +256,26 @@ class TestQueue(RQTestCase):
         q = Queue('first-queue')
         r = Queue('second-queue')
         s = Queue('third-queue')
-        all = Queue.all()
-        self.assertEquals(len(all), 3)
-        names = [q.name for q in all]
+
+        # Ensure a queue is added only once a job is enqueued
+        self.assertEquals(len(Queue.all()), 0)
+        q.enqueue(say_hello)
+        self.assertEquals(len(Queue.all()), 1)
+
+        # Ensure this holds true for multiple queues
+        r.enqueue(say_hello)
+        s.enqueue(say_hello)
+        names = [q.name for q in Queue.all()]
+        self.assertEquals(len(Queue.all()), 3)
+
+        # Verify names
         self.assertTrue('first-queue' in names)
         self.assertTrue('second-queue' in names)
         self.assertTrue('third-queue' in names)
+
+        # Ensure we no longer return queues whose keys do not exist
+        self.testconn.srem(Queue.redis_queues_keys, s.key)
+        self.assertEquals(len(Queue.all()), 2)
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):

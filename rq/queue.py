@@ -30,7 +30,7 @@ class Queue(object):
         def to_queue(queue_key):
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection)
-        return list(map(to_queue, connection.smembers(cls.redis_queues_keys)))
+        return [to_queue(rq_key) for rq_key in connection.smembers(cls.redis_queues_keys) if rq_key]
 
     @classmethod
     def from_queue_key(cls, queue_key, connection=None):
@@ -52,7 +52,6 @@ class Queue(object):
         self._key = '%s%s' % (prefix, name)
         self._default_timeout = default_timeout
         self._async = async
-        self.connection.sadd(self.redis_queues_keys, self.key)
 
     @property
     def key(self):
@@ -190,7 +189,10 @@ class Queue(object):
         the properties `origin` and `enqueued_at`.
 
         If Queue is instantiated with async=False, job is executed immediately.
-        """
+        """              
+        # Add Queue key set
+        self.connection.sadd(self.redis_queues_keys, self.key)
+
         if set_meta_data:
             job.origin = self.name
             job.enqueued_at = times.now()
