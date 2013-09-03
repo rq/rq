@@ -7,6 +7,7 @@ try:
     from cPickle import loads
 except ImportError:
     from pickle import loads
+from rq.compat import as_text
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
@@ -288,4 +289,4 @@ class TestJob(RQTestCase):
         job._dependency_id = 'id'
         job.save()
         job.register_dependency()
-        self.assertEqual(self.testconn.lpop('rq:job:id:waitlist'), job.id)
+        self.assertEqual(as_text(self.testconn.lpop('rq:job:id:waitlist')), job.id)

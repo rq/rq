@@ -318,7 +318,7 @@ class Job(object):
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
-        self._dependency_id = obj.get('dependency_id', None)
+        self._dependency_id = as_text(obj.get('dependency_id', None))
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def dump(self):

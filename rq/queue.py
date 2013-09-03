@@ -240,7 +240,7 @@ class Queue(object):
         """Enqueues all jobs in the waitlist and clears it"""
         # TODO: can probably be pipelined
         while True:
-            job_id = self.connection.lpop(job.waitlist_key)
+            job_id = as_text(self.connection.lpop(job.waitlist_key))
             if job_id is None:
                 break
             waitlisted_job = Job.fetch(job_id, connection=self.connection)
