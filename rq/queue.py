@@ -23,6 +23,7 @@ def compact(lst):
 @total_ordering
 class Queue(object):
     redis_queue_namespace_prefix = 'rq:queue:'
+    redis_queues_keys = 'rq:queues'
 
     @classmethod
     def all(cls, connection=None):
@@ -34,7 +35,7 @@ class Queue(object):
         def to_queue(queue_key):
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection)
-        return list(map(to_queue, connection.keys('%s*' % prefix)))
+        return [to_queue(rq_key) for rq_key in connection.smembers(cls.redis_queues_keys) if rq_key]
 
     @classmethod
     def from_queue_key(cls, queue_key, connection=None):
@@ -218,7 +219,10 @@ class Queue(object):
         the properties `origin` and `enqueued_at`.
 
         If Queue is instantiated with async=False, job is executed immediately.
-        """
+        """              
+        # Add Queue key set
+        self.connection.sadd(self.redis_queues_keys, self.key)
+
         if set_meta_data:
             job.origin = self.name
             job.enqueued_at = times.now()
