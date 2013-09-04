@@ -273,10 +273,6 @@ class TestQueue(RQTestCase):
         self.assertTrue('second-queue' in names)
         self.assertTrue('third-queue' in names)
 
-        # Ensure we no longer return queues whose keys do not exist
-        self.testconn.srem(Queue.redis_queues_keys, s.key)
-        self.assertEquals(len(Queue.all()), 2)
-
     def test_enqueue_waitlist(self):
         """Enqueueing a waitlist pushes all jobs in waitlist to queue"""
         q = Queue()
