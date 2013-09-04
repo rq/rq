@@ -2,6 +2,7 @@ from tests import RQTestCase
 from tests.fixtures import Number, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
 from rq.job import Job, Status
+from rq.worker import Worker
 from rq.exceptions import InvalidJobOperationError
 
 
@@ -253,18 +254,18 @@ class TestQueue(RQTestCase):
 
     def test_all_queues(self):
         """All queues"""
-        q = Queue('first-queue')
-        r = Queue('second-queue')
-        s = Queue('third-queue')
+        q1 = Queue('first-queue')
+        q2 = Queue('second-queue')
+        q3 = Queue('third-queue')
 
         # Ensure a queue is added only once a job is enqueued
         self.assertEquals(len(Queue.all()), 0)
-        q.enqueue(say_hello)
+        q1.enqueue(say_hello)
         self.assertEquals(len(Queue.all()), 1)
 
         # Ensure this holds true for multiple queues
-        r.enqueue(say_hello)
-        s.enqueue(say_hello)
+        q2.enqueue(say_hello)
+        q3.enqueue(say_hello)
         names = [q.name for q in Queue.all()]
         self.assertEquals(len(Queue.all()), 3)
 
@@ -272,6 +273,13 @@ class TestQueue(RQTestCase):
         self.assertTrue('first-queue' in names)
         self.assertTrue('second-queue' in names)
         self.assertTrue('third-queue' in names)
+
+        # Now empty two queues
+        w = Worker([q2, q3])
+        w.work(burst=True)
+
+        # Queue.all() should still report the empty queues
+        self.assertEquals(len(Queue.all()), 3)
 
     def test_enqueue_waitlist(self):
         """Enqueueing a waitlist pushes all jobs in waitlist to queue"""
