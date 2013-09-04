@@ -7,6 +7,7 @@ try:
     from cPickle import loads
 except ImportError:
     from pickle import loads
+from rq.compat import as_text
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
@@ -133,6 +134,22 @@ class TestJob(RQTestCase):
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
             [b'created_at', b'data', b'description'])
+
+    def test_persistence_of_parent_job(self):
+        """Storing jobs with parent job, either instance or key."""
+        parent_job = Job.create(func=some_calculation)
+        parent_job.save()
+        job = Job.create(func=some_calculation, dependency=parent_job)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job.dependency, parent_job)
+
+        job = Job.create(func=some_calculation, dependency=parent_job.id)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job.dependency, parent_job)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
@@ -265,3 +282,11 @@ class TestJob(RQTestCase):
         # Jobs with 0 TTL are immediately deleted
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
+
+    def test_register_dependency(self):
+        """Test that jobs updates the correct job waitlist"""
+        job = Job.create(func=say_hello)
+        job._dependency_id = 'id'
+        job.save()
+        job.register_dependency()
+        self.assertEqual(as_text(self.testconn.lpop('rq:job:id:waitlist')), job.id)

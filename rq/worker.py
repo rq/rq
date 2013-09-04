@@ -43,9 +43,9 @@ def iterable(x):
 def compact(l):
     return [x for x in l if x is not None]
 
-_signames = dict((getattr(signal, signame), signame) \
-                    for signame in dir(signal) \
-                    if signame.startswith('SIG') and '_' not in signame)
+_signames = dict((getattr(signal, signame), signame)
+                 for signame in dir(signal)
+                 if signame.startswith('SIG') and '_' not in signame)
 
 
 def signal_name(signum):
@@ -68,8 +68,8 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         reported_working = connection.smembers(cls.redis_workers_keys)
-        workers = [cls.find_by_key(as_text(key), connection) for key in
-                reported_working]
+        workers = [cls.find_by_key(as_text(key), connection)
+                   for key in reported_working]
         return compact(workers)
 
     @classmethod
@@ -95,13 +95,12 @@ class Worker(object):
         worker._state = connection.hget(worker.key, 'state') or '?'
         if queues:
             worker.queues = [Queue(queue, connection=connection)
-                                for queue in queues.split(',')]
+                             for queue in queues.split(',')]
         return worker
 
-
     def __init__(self, queues, name=None,
-            default_result_ttl=DEFAULT_RESULT_TTL, connection=None,
-            exc_handler=None, default_worker_ttl=DEFAULT_WORKER_TTL):  # noqa
+                 default_result_ttl=DEFAULT_RESULT_TTL, connection=None,
+                 exc_handler=None, default_worker_ttl=DEFAULT_WORKER_TTL):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -193,9 +192,8 @@ class Worker(object):
         self.log.debug('Registering birth of worker %s' % (self.name,))
         if self.connection.exists(self.key) and \
                 not self.connection.hexists(self.key, 'death'):
-            raise ValueError(
-                    'There exists an active worker named \'%s\' '
-                    'already.' % (self.name,))
+            raise ValueError('There exists an active worker named \'%s\' '
+                             'already.' % (self.name,))
         key = self.key
         now = time.time()
         queues = ','.join(self.queue_names())
@@ -304,8 +302,8 @@ class Worker(object):
                 qnames = self.queue_names()
                 self.procline('Listening on %s' % ','.join(qnames))
                 self.log.info('')
-                self.log.info('*** Listening on %s...' % \
-                        green(', '.join(qnames)))
+                self.log.info('*** Listening on %s...' %
+                              green(', '.join(qnames)))
                 timeout = None if burst else max(1, self.default_worker_ttl - 60)
                 try:
                     result = self.dequeue_job_and_maintain_ttl(timeout)
@@ -324,11 +322,13 @@ class Worker(object):
                 # Use the public setter here, to immediately update Redis
                 job.status = Status.STARTED
                 self.log.info('%s: %s (%s)' % (green(queue.name),
-                    blue(job.description), job.id))
+                              blue(job.description), job.id))
 
                 self.connection.expire(self.key, (job.timeout or 180) + 60)
                 self.fork_and_perform_job(job)
                 self.connection.expire(self.key, self.default_worker_ttl)
+                if job.status == 'finished':
+                    queue.enqueue_waitlist(job)
 
                 did_perform_work = True
         finally:
@@ -336,18 +336,16 @@ class Worker(object):
                 self.register_death()
         return did_perform_work
 
-
     def dequeue_job_and_maintain_ttl(self, timeout):
         while True:
             try:
                 return Queue.dequeue_any(self.queues, timeout,
-                        connection=self.connection)
+                                         connection=self.connection)
             except DequeueTimeout:
                 pass
 
             self.log.debug('Sending heartbeat to prevent worker timeout.')
             self.connection.expire(self.key, self.default_worker_ttl)
-
 
     def fork_and_perform_job(self, job):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -443,12 +441,10 @@ class Worker(object):
 
         return True
 
-
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = ''.join(
-                traceback.format_exception_only(*exc_info[:2]) +
-                traceback.format_exception(*exc_info))
+        exc_string = ''.join(traceback.format_exception_only(*exc_info[:2]) +
+                             traceback.format_exception(*exc_info))
         self.log.error(exc_string)
 
         for handler in reversed(self._exc_handlers):

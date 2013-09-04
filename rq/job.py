@@ -4,7 +4,7 @@ import times
 from uuid import uuid4
 try:
     from cPickle import loads, dumps, UnpicklingError
-except ImportError: # noqa
+except ImportError:  # noqa
     from pickle import loads, dumps, UnpicklingError  # noqa
 from .local import LocalStack
 from .connections import resolve_connection
@@ -16,8 +16,9 @@ def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
     return type(name, (), values)
 
-Status = enum('Status', QUEUED='queued', FINISHED='finished', FAILED='failed',
-                        STARTED='started')
+Status = enum('Status',
+              QUEUED='queued', FINISHED='finished', FAILED='failed',
+              STARTED='started')
 
 
 def unpickle(pickled_string):
@@ -68,7 +69,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None):
+               result_ttl=None, status=None, description=None, dependency=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -91,6 +92,9 @@ class Job(object):
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
         job._status = status
+        # dependency could be job instance or id
+        if dependency is not None:
+            job._dependency_id = dependency.id if isinstance(dependency, Job) else dependency
         return job
 
     @property
@@ -122,6 +126,20 @@ class Job(object):
     @property
     def is_started(self):
         return self.status == Status.STARTED
+
+    @property
+    def dependency(self):
+        """Returns a job's dependency. To avoid repeated Redis fetches, we cache
+        job.dependency as job._dependency.
+        """
+        if self._dependency_id is None:
+            return None
+        if hasattr(self, '_dependency'):
+            return self._dependency
+        job = Job.fetch(self._dependency_id, connection=self.connection)
+        job.refresh()
+        self._dependency = job
+        return job
 
     @property
     def func(self):
@@ -189,6 +207,7 @@ class Job(object):
         self.timeout = None
         self.result_ttl = None
         self._status = None
+        self._dependency_id = None
         self.meta = {}
 
 
@@ -212,10 +231,20 @@ class Job(object):
         """The Redis key that is used to store job hash under."""
         return b'rq:job:' + job_id.encode('utf-8')
 
+    @classmethod
+    def waitlist_key_for(cls, job_id):
+        """The Redis key that is used to store job hash under."""
+        return 'rq:job:%s:waitlist' % (job_id,)
+
     @property
     def key(self):
         """The Redis key that is used to store job hash under."""
         return self.key_for(self.id)
+
+    @property
+    def waitlist_key(self):
+        """The Redis key that is used to store job hash under."""
+        return self.waitlist_key_for(self.id)
 
     @property  # noqa
     def job_tuple(self):
@@ -289,13 +318,11 @@ class Job(object):
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
+        self._dependency_id = as_text(obj.get('dependency_id', None))
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
-    def save(self, pipeline=None):
-        """Persists the current job instance to its corresponding Redis key."""
-        key = self.key
-        connection = pipeline if pipeline is not None else self.connection
-
+    def dump(self):
+        """Returns a serialization of the current job instance"""
         obj = {}
         obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
 
@@ -319,10 +346,19 @@ class Job(object):
             obj['result_ttl'] = self.result_ttl
         if self._status is not None:
             obj['status'] = self._status
+        if self._dependency_id is not None:
+            obj['dependency_id'] = self._dependency_id
         if self.meta:
             obj['meta'] = dumps(self.meta)
 
-        connection.hmset(key, obj)
+        return obj
+
+    def save(self, pipeline=None):
+        """Persists the current job instance to its corresponding Redis key."""
+        key = self.key
+        connection = pipeline if pipeline is not None else self.connection
+
+        connection.hmset(key, self.dump())
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -349,7 +385,6 @@ class Job(object):
         finally:
             assert self.id == _job_stack.pop()
         return self._result
-
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job and its result
@@ -379,13 +414,24 @@ class Job(object):
         - If it's a positive number, set the job to expire in X seconds.
         - If result_ttl is negative, don't set an expiry to it (persist
           forever)
-        """        
+        """
         if ttl == 0:
             self.cancel()
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+
+    def register_dependency(self):
+        """Jobs may have a waitlist. Jobs in this waitlist are enqueued
+        only if the dependency job is successfully performed. We maintain this
+        waitlist in Redis, with key that looks something like:
+            
+            rq:job:job_id:waitlist = ['job_id_1', 'job_id_2']
         
+        This method puts the job on it's dependency's waitlist.
+        """
+        # TODO: This can probably be pipelined
+        self.connection.rpush(Job.waitlist_key_for(self._dependency_id), self.id)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
@@ -397,6 +443,5 @@ class Job(object):
 
     def __hash__(self):
         return hash(self.id)
-
 
 _job_stack = LocalStack()
