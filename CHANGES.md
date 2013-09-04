@@ -3,6 +3,11 @@
 
 - Job dependencies!  Thanks, Selwin.
 
+- `Queue.all()` and `rqinfo` now report empty queues, too.  Thanks, Rob!
+
+- Fixed a performance issue in `Queue.all()` when issued in large Redis DBs.
+  Thanks, Rob!
+
 - Ability to provide a custom job description (instead of using the default
   function invocation hint).  Thanks, İbrahim.
 
