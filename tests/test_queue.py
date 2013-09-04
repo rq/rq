@@ -224,14 +224,14 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.func, say_hello)
         self.assertEquals(job.origin, fooq.name)
         self.assertEquals(job.args[0], 'for Foo',
-                'Foo should be dequeued first.')
+                          'Foo should be dequeued first.')
 
         job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEquals(queue, barq)
         self.assertEquals(job.func, say_hello)
         self.assertEquals(job.origin, barq.name)
         self.assertEquals(job.args[0], 'for Bar',
-                'Bar should be dequeued second.')
+                          'Bar should be dequeued second.')
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
