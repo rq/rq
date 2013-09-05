@@ -65,9 +65,10 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        for job in self.get_jobs():
-            job.cancel()
+        job_list = self.get_jobs()
         self.connection.delete(self.key)
+        for job in job_list:
+            job.cancel()
 
     def is_empty(self):
         """Returns whether the current queue is empty."""
