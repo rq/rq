@@ -13,8 +13,10 @@
 - Ability to provide a custom job description (instead of using the default
   function invocation hint).  Thanks, İbrahim.
 
-- Temporary key for the compact queue is now randomly generated, which should
-  avoid name clashes for concurrent compact actions.
+- Fix: temporary key for the compact queue is now randomly generated, which
+  should avoid name clashes for concurrent compact actions.
+
+- Fix: `Queue.empty()` now correctly deletes job hashes from Redis.
 
 
 ### 0.3.11
