@@ -8,6 +8,8 @@
 - Fixed a performance issue in `Queue.all()` when issued in large Redis DBs.
   Thanks, Rob!
 
+- Birth and death dates are now stored as proper datetimes, not timestamps.
+
 - Ability to provide a custom job description (instead of using the default
   function invocation hint).  Thanks, İbrahim.
 
