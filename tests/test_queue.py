@@ -43,6 +43,14 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.is_empty(), True)
         self.assertIsNone(self.testconn.lpop('rq:queue:example'))
 
+    def test_empty_removes_jobs(self):
+        """Emptying a queue deletes the associated job objects"""
+        q = Queue('example')
+        job = q.enqueue(say_hello)
+        self.assertTrue(Job.exists(job.id))
+        q.empty()
+        self.assertFalse(Job.exists(job.id))
+
     def test_queue_is_empty(self):
         """Detecting empty queues."""
         q = Queue('example')

@@ -65,6 +65,8 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
+        for job in self.get_jobs():
+            job.cancel()
         self.connection.delete(self.key)
 
     def is_empty(self):
@@ -151,7 +153,7 @@ class Queue(object):
         job = Job.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
                          description=description, dependency=after)
-        
+
         # If job depends on an unfinished job, register itself on it's
         # parent's waitlist instead of enqueueing it.
         # If WatchError is raised in the process, that means something else is
@@ -168,7 +170,7 @@ class Queue(object):
                         break
                     except WatchError:
                         continue
-            
+
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue(self, f, *args, **kwargs):
@@ -219,7 +221,7 @@ class Queue(object):
         the properties `origin` and `enqueued_at`.
 
         If Queue is instantiated with async=False, job is executed immediately.
-        """              
+        """
         # Add Queue key set
         self.connection.sadd(self.redis_queues_keys, self.key)
 
