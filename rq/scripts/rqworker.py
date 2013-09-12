@@ -27,6 +27,7 @@ def parse_args():
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
+    parser.add_argument('--errormator-key', action='store', default=None, metavar='KEY', help='Report exceptions with this Errormator private API key')
     parser.add_argument('--pid', action='store', default=None,
                         help='Write the process ID number to a file at the specified path')
     parser.add_argument('queues', nargs='*', help='The queues to listen on (default: \'default\')')
@@ -67,6 +68,10 @@ def main():
         args.sentry_dsn = settings.get('SENTRY_DSN',
                                        os.environ.get('SENTRY_DSN', None))
 
+    if args.errormator_key is None:
+        args.errormator_key = settings.get('ERRORMATOR_KEY',
+                                       os.environ.get('ERRORMATOR_KEY', None))
+
     if args.pid:
         with open(os.path.expanduser(args.pid), "w") as fp:
             fp.write(str(os.getpid()))
@@ -86,6 +91,14 @@ def main():
             from rq.contrib.sentry import register_sentry
             client = Client(args.sentry_dsn)
             register_sentry(client, w)
+
+        # Should we configure Errormator
+        if args.errormator_key:
+            from errormator_client.client import Client
+            errormator_client = Client({'errormator': True,
+                            'errormator.api_key' : args.errormator_key})
+            from rq.contrib.errormator import register_errormator
+            register_errormator(errormator_client, w)
 
         w.work(burst=args.burst)
     except ConnectionError as e:
