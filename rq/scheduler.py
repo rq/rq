@@ -11,6 +11,7 @@ from .exceptions import NoSuchJobError
 from .job import Job
 from .queue import Queue
 from .registry import Registry
+from rq.compat import string_types
 
 from redis import WatchError
 
@@ -141,7 +142,7 @@ class Scheduler(object):
         job_id or a job instance.
         """
         connection = self.connection if pipeline is None else pipeline
-        if isinstance(job, basestring):
+        if isinstance(job, string_types):
             connection.zrem(self.scheduled_jobs_key, job)
             try:
                 job = Job.fetch(job, connection=connection)

@@ -3,6 +3,7 @@ from datetime import timedelta
 from tests import RQTestCase
 from tests.fixtures import Number, div_by_zero, say_hello, some_calculation
 from rq import Queue, get_failed_queue
+from rq.compat import as_text
 from rq.job import Job, Status
 from rq.worker import Worker
 from rq.exceptions import InvalidJobOperationError
@@ -275,7 +276,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job, Job.fetch(job.id, connection=self.testconn))
         self.assertEqual(job.origin, queue_name)
         self.assertIn(job.id,
-            self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+            as_text(self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)))
         self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
                          times.to_unix(scheduled_time))
 

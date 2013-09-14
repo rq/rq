@@ -230,12 +230,12 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('utf-8')
+        return b'rq:job:' + as_text(job_id).encode('utf-8')
 
     @classmethod
     def waitlist_key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s:waitlist' % (job_id,)
+        return 'rq:job:%s:waitlist' % as_text(job_id).encode('utf-8')
 
     @property
     def key(self):
