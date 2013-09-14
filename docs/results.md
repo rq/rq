@@ -101,7 +101,7 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 {% highlight python %}
 q = Queue()
 q.enqueue_call(func=mytask, args=(foo,), kwargs={'bar': qux}, timeout=600)  # 10 mins
-{% endhighlight console %}
+{% endhighlight %}
 
 <div class="warning">
     <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
@@ -125,7 +125,7 @@ low = Queue('low', default_timeout=600)  # 10 mins
 
 # Individual jobs can still override these defaults
 low.enqueue_call(really_really_slow, timeout=3600)  # 1 hr
-{% endhighlight console %}
+{% endhighlight %}
 
 Individual jobs can still specify an alternative timeout, as workers will
 respect these.

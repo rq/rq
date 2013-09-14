@@ -78,37 +78,6 @@ q.enqueue('my_package.my_module.my_func', 3, 4)
 {% endhighlight %}
 
 
-### Enqueuing Instance Methods
-
-You can also enqueue instance methods. Given a trivial class:
-
-{% highlight python %}
-import requests
-
-class URLWordCounter(object):
-
-    def __init__(self, url):
-        self.url = url
-
-    def count_words(self):
-        return len(requests.get(self.url).text.split())
-{% endhighlight %}
-
-It's easy to put it to use with RQ:
-
-{% highlight python %}
-from rq import Connection, Queue
-from redis import Redis
-from somewhere_else import URLWordCounter
-
-redis_conn = Redis()
-q = Queue(connection=redis_conn)
-
-wc = URLWordCounter('http://nvie.com')
-q.enqueue(wc.count_words)
-{% endhighlight %}
-
-
 ### On the Design
 
 With RQ, you don't have to set up any queues upfront, and you don't have to
@@ -169,6 +138,22 @@ execution to a worker (available since version 0.3.1).  To do this, pass the
 The above code runs without an active worker and executes `fib(8)`
 synchronously within the same process.  You may know this behaviour from Celery
 as `ALWAYS_EAGER`.
+
+
+## Job dependencies
+
+New in RQ 0.4.0 is the ability to chain the execution of multiple jobs.
+To to execute a job that depends on another job, use the `after` argument:
+
+{% highlight python %}
+q = Queue('low', async=False)
+report_job = q.enqueue(generate_report)
+q.enqueue(send_report, after=report_job)
+{% endhighlight %}
+
+The ability to handle job dependencies allows you to split a big job into
+several smaller ones. A job that is dependent on another is enqueued when
+it's parent job's finishes *successfully*.
 
 
 ## The worker
