@@ -57,7 +57,7 @@ class TestWorker(RQTestCase):
         job = Job.create(func=div_by_zero, args=(3,))
         job.save()
         data = self.testconn.hget(job.key, 'data')
-        invalid_data = data.replace('div_by_zero', 'nonexisting_job')
+        invalid_data = data.replace(b'div_by_zero', b'nonexisting_job')
         assert data != invalid_data
         self.testconn.hset(job.key, 'data', invalid_data)
 
@@ -234,3 +234,19 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
+
+    def test_job_dependency(self):
+        """Enqueue waitlisted jobs only if their parents don't fail"""
+        q = Queue()
+        w = Worker([q])
+        parent_job = q.enqueue(say_hello)
+        job = q.enqueue_call(say_hello, after=parent_job)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertEqual(job.status, 'finished')
+
+        parent_job = q.enqueue(div_by_zero)
+        job = q.enqueue_call(say_hello, after=parent_job)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertNotEqual(job.status, 'finished')

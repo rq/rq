@@ -1,3 +1,44 @@
+### 0.4.0
+(not released yet)
+
+- Job dependencies!  Thanks, Selwin.
+
+- `Queue.all()` and `rqinfo` now report empty queues, too.  Thanks, Rob!
+
+- Fixed a performance issue in `Queue.all()` when issued in large Redis DBs.
+  Thanks, Rob!
+
+- Birth and death dates are now stored as proper datetimes, not timestamps.
+
+- Ability to provide a custom job description (instead of using the default
+  function invocation hint).  Thanks, İbrahim.
+
+- Fix: temporary key for the compact queue is now randomly generated, which
+  should avoid name clashes for concurrent compact actions.
+
+- Fix: `Queue.empty()` now correctly deletes job hashes from Redis.
+
+
+### 0.3.11
+(August 23th, 2013)
+
+- Some more fixes in command line scripts for Python 3
+
+
+### 0.3.10
+(August 20th, 2013)
+
+- Bug fix in setup.py
+
+
+### 0.3.9
+(August 20th, 2013)
+
+- Python 3 compatibility (Thanks, Alex!)
+
+- Minor bug fix where Sentry would break when func cannot be imported
+
+
 ### 0.3.8
 (June 17th, 2013)
 

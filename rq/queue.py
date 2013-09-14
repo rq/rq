@@ -1,9 +1,14 @@
 import times
+import uuid
+
 from .connections import resolve_connection
 from .job import Job, Status
-from .exceptions import (NoSuchJobError, UnpickleError,
-                         InvalidJobOperationError, DequeueTimeout)
-from .compat import total_ordering
+
+from .exceptions import (DequeueTimeout, InvalidJobOperationError,
+                         NoSuchJobError, UnpickleError)
+from .compat import total_ordering, string_types, as_text
+
+from redis import WatchError
 
 
 def get_failed_queue(connection=None):
@@ -18,6 +23,7 @@ def compact(lst):
 @total_ordering
 class Queue(object):
     redis_queue_namespace_prefix = 'rq:queue:'
+    redis_queues_keys = 'rq:queues'
 
     @classmethod
     def all(cls, connection=None):
@@ -27,8 +33,9 @@ class Queue(object):
         connection = resolve_connection(connection)
 
         def to_queue(queue_key):
-            return cls.from_queue_key(queue_key, connection=connection)
-        return map(to_queue, connection.keys('%s*' % prefix))
+            return cls.from_queue_key(as_text(queue_key),
+                                      connection=connection)
+        return [to_queue(rq_key) for rq_key in connection.smembers(cls.redis_queues_keys) if rq_key]
 
     @classmethod
     def from_queue_key(cls, queue_key, connection=None):
@@ -58,7 +65,10 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
+        job_list = self.get_jobs()
         self.connection.delete(self.key)
+        for job in job_list:
+            job.cancel()
 
     def is_empty(self):
         """Returns whether the current queue is empty."""
@@ -81,7 +91,8 @@ class Queue(object):
             end = offset + (length - 1)
         else:
             end = length
-        return self.connection.lrange(self.key, start, end)
+        return [as_text(job_id) for job_id in
+                self.connection.lrange(self.key, start, end)]
 
     def get_jobs(self, offset=0, length=-1):
         """Returns a slice of jobs in the queue."""
@@ -112,11 +123,11 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guarantueeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact'
+        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
-            job_id = self.connection.lpop(COMPACT_QUEUE)
+            job_id = as_text(self.connection.lpop(COMPACT_QUEUE))
             if job_id is None:
                 break
             if Job.exists(job_id, self.connection):
@@ -127,7 +138,9 @@ class Queue(object):
         """Pushes a job ID on the corresponding Redis queue."""
         self.connection.rpush(self.key, job_id)
 
-    def enqueue_call(self, func, args=None, kwargs=None, timeout=None, result_ttl=None):  # noqa
+
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
+                     result_ttl=None, description=None, after=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -136,8 +149,29 @@ class Queue(object):
         contain options for RQ itself.
         """
         timeout = timeout or self._default_timeout
+
+        # TODO: job with dependency shouldn't have "queued" as status
         job = Job.create(func, args, kwargs, connection=self.connection,
-                         result_ttl=result_ttl, status=Status.QUEUED)
+                         result_ttl=result_ttl, status=Status.QUEUED,
+                         description=description, dependency=after)
+
+        # If job depends on an unfinished job, register itself on it's
+        # parent's waitlist instead of enqueueing it.
+        # If WatchError is raised in the process, that means something else is
+        # modifying the dependency. In this case we simply retry
+        if after is not None:
+            with self.connection.pipeline() as pipe:
+                while True:
+                    try:
+                        pipe.watch(after.key)
+                        if after.status != Status.FINISHED:
+                            job.register_dependency()
+                            job.save()
+                            return job
+                        break
+                    except WatchError:
+                        continue
+
         return self.enqueue_job(job, timeout=timeout)
 
     def enqueue(self, f, *args, **kwargs):
@@ -154,24 +188,28 @@ class Queue(object):
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
         """
-        if not isinstance(f, basestring) and f.__module__ == '__main__':
-            raise ValueError(
-                    'Functions from the __main__ module cannot be processed '
-                    'by workers.')
+        if not isinstance(f, string_types) and f.__module__ == '__main__':
+            raise ValueError('Functions from the __main__ module cannot be processed '
+                             'by workers.')
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
         timeout = None
+        description = None
         result_ttl = None
-        if 'args' in kwargs or 'kwargs' in kwargs:
+        after = None
+        if 'args' in kwargs or 'kwargs' in kwargs or 'after' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
             timeout = kwargs.pop('timeout', None)
+            description = kwargs.pop('description', None)
             args = kwargs.pop('args', None)
             result_ttl = kwargs.pop('result_ttl', None)
+            after = kwargs.pop('after', None)
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
-                                 timeout=timeout, result_ttl=result_ttl)
+                                 timeout=timeout, result_ttl=result_ttl,
+                                 description=description, after=after)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
@@ -185,6 +223,9 @@ class Queue(object):
 
         If Queue is instantiated with async=False, job is executed immediately.
         """
+        # Add Queue key set
+        self.connection.sadd(self.redis_queues_keys, self.key)
+
         if set_meta_data:
             job.origin = self.name
             job.enqueued_at = times.now()
@@ -202,9 +243,19 @@ class Queue(object):
             job.save()
         return job
 
+    def enqueue_waitlist(self, job):
+        """Enqueues all jobs in the waitlist and clears it"""
+        # TODO: can probably be pipelined
+        while True:
+            job_id = as_text(self.connection.lpop(job.waitlist_key))
+            if job_id is None:
+                break
+            waitlisted_job = Job.fetch(job_id, connection=self.connection)
+            self.enqueue_job(waitlisted_job)
+
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
-        return self.connection.lpop(self.key)
+        return as_text(self.connection.lpop(self.key))
 
     @classmethod
     def lpop(cls, queue_keys, timeout, connection=None):
@@ -274,7 +325,7 @@ class Queue(object):
         result = cls.lpop(queue_keys, timeout, connection=connection)
         if result is None:
             return None
-        queue_key, job_id = result
+        queue_key, job_id = map(as_text, result)
         queue = cls.from_queue_key(queue_key, connection=connection)
         try:
             job = Job.fetch(job_id, connection=connection)

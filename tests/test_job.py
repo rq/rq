@@ -3,7 +3,11 @@ from datetime import datetime
 from tests import RQTestCase
 from tests.fixtures import Number, some_calculation, say_hello, access_self
 from tests.helpers import strip_milliseconds
-from cPickle import loads
+try:
+    from cPickle import loads
+except ImportError:
+    from pickle import loads
+from rq.compat import as_text
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
@@ -76,7 +80,7 @@ class TestJob(RQTestCase):
         # Saving creates a Redis hash
         self.assertEquals(self.testconn.exists(job.key), False)
         job.save()
-        self.assertEquals(self.testconn.type(job.key), 'hash')
+        self.assertEquals(self.testconn.type(job.key), b'hash')
 
         # Saving writes pickled job data
         unpickled_data = loads(self.testconn.hget(job.key, 'data'))
@@ -86,9 +90,9 @@ class TestJob(RQTestCase):
         """Fetching jobs."""
         # Prepare test
         self.testconn.hset('rq:job:some_id', 'data',
-                "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")  # noqa
+                           "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
-                "2012-02-07 22:13:24+0000")
+                           '2012-02-07 22:13:24+0000')
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -106,15 +110,15 @@ class TestJob(RQTestCase):
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at')
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
         self.assertEquals(
-                times.to_universal(stored_date),
-                expected_date)
+            times.to_universal(stored_date),
+            expected_date)
 
         # ... and no other keys are stored
-        self.assertItemsEqual(
-                self.testconn.hkeys(job.key),
-                ['created_at'])
+        self.assertEqual(
+            self.testconn.hkeys(job.key),
+            [b'created_at'])
 
     def test_persistence_of_typical_jobs(self):
         """Storing typical jobs."""
@@ -122,15 +126,31 @@ class TestJob(RQTestCase):
         job.save()
 
         expected_date = strip_milliseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at')
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
         self.assertEquals(
-                times.to_universal(stored_date),
-                expected_date)
+            times.to_universal(stored_date),
+            expected_date)
 
         # ... and no other keys are stored
-        self.assertItemsEqual(
-                self.testconn.hkeys(job.key),
-                ['created_at', 'data', 'description'])
+        self.assertEqual(
+            sorted(self.testconn.hkeys(job.key)),
+            [b'created_at', b'data', b'description'])
+
+    def test_persistence_of_parent_job(self):
+        """Storing jobs with parent job, either instance or key."""
+        parent_job = Job.create(func=some_calculation)
+        parent_job.save()
+        job = Job.create(func=some_calculation, dependency=parent_job)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job.dependency, parent_job)
+
+        job = Job.create(func=some_calculation, dependency=parent_job.id)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job.dependency, parent_job)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
@@ -170,7 +190,7 @@ class TestJob(RQTestCase):
         # equivalent to a worker not having the most up-to-date source code
         # and unable to import the function)
         data = self.testconn.hget(job.key, 'data')
-        unimportable_data = data.replace('say_hello', 'shut_up')
+        unimportable_data = data.replace(b'say_hello', b'shut_up')
         self.testconn.hset(job.key, 'data', unimportable_data)
 
         job.refresh()
@@ -193,13 +213,26 @@ class TestJob(RQTestCase):
         """Ensure that job's result_ttl is set properly"""
         job = Job.create(func=say_hello, args=('Lionel',), result_ttl=10)
         job.save()
-        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, 10)
 
         job = Job.create(func=say_hello, args=('Lionel',))
         job.save()
-        job_from_queue = Job.fetch(job.id, connection=self.testconn)
+        Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, None)
+
+    def test_description_is_persisted(self):
+        """Ensure that job's custom description is set properly"""
+        job = Job.create(func=say_hello, args=('Lionel',), description=u'Say hello!')
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.description, u'Say hello!')
+
+        # Ensure job description is constructed from function call string
+        job = Job.create(func=say_hello, args=('Lionel',))
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""
@@ -238,12 +271,12 @@ class TestJob(RQTestCase):
         """Test that jobs and results are expired properly."""
         job = Job.create(func=say_hello)
         job.save()
-        
+
         # Jobs with negative TTLs don't expire
         job.cleanup(ttl=-1)
         self.assertEqual(self.testconn.ttl(job.key), -1)
 
-        # Jobs with positive TTLs are eventually deleted 
+        # Jobs with positive TTLs are eventually deleted
         job.cleanup(ttl=100)
         self.assertEqual(self.testconn.ttl(job.key), 100)
 
@@ -262,3 +295,11 @@ class TestJob(RQTestCase):
         self.assertIn(job.id, queue.job_ids)
         job.cancel()
         self.assertNotIn(job.id, queue.job_ids)
+
+    def test_register_dependency(self):
+        """Test that jobs updates the correct job waitlist"""
+        job = Job.create(func=say_hello)
+        job._dependency_id = 'id'
+        job.save()
+        job.register_dependency()
+        self.assertEqual(as_text(self.testconn.lpop('rq:job:id:waitlist')), job.id)

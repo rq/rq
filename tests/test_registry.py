@@ -48,18 +48,3 @@ class TestRegistry(RQTestCase):
                          'rq:registry:default:tests.fixtures.say_hello')
         self.assertEqual(registry.get_key_from_callable(say_hello),
                          'rq:registry:default:tests.fixtures.say_hello')
-
-        n = Number(2)
-        job = queue.enqueue(n.multiply, 3, 4)
-        self.assertEqual(registry.get_key_from_job(job),
-                         'rq:registry:default:tests.fixtures.Number.multiply')
-
-        # Class method
-        self.assertEqual(registry.get_key_from_callable(n.multiply),
-                         'rq:registry:default:tests.fixtures.Number.multiply')
-        self.assertEqual(registry.get_key_from_callable(Number.multiply),
-                         'rq:registry:default:tests.fixtures.Number.multiply')
-
-        # Instance method
-        self.assertEqual(registry.get_key_from_callable(n.div),
-                         'rq:registry:default:tests.fixtures.Number.div')
