@@ -41,7 +41,8 @@ class TestScheduler(RQTestCase):
         self.assertNotIn(key, self.testconn.keys('*'))
         scheduler = Scheduler(connection=self.testconn, interval=20)
         scheduler.register_birth()
-        self.assertIn(key, as_text(self.testconn.keys('*')))
+        results = [as_text(key) for key in self.testconn.keys('*')]
+        self.assertIn(key, results)
         self.assertEqual(self.testconn.ttl(key), 30)
         self.assertFalse(self.testconn.hexists(key, 'death'))
         self.assertRaises(ValueError, scheduler.register_birth)
@@ -71,8 +72,8 @@ class TestScheduler(RQTestCase):
         scheduled_time = times.now()
         job = self.scheduler.enqueue_at(scheduled_time, say_hello)
         self.assertEqual(job, Job.fetch(job.id, connection=self.testconn))
-        self.assertIn(job.id,
-            as_text(self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1)))
+        results = [as_text(key) for key in self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)]
+        self.assertIn(job.id, results)
         self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
                          times.to_unix(scheduled_time))
 
@@ -83,8 +84,8 @@ class TestScheduler(RQTestCase):
         right_now = times.now()
         time_delta = timedelta(minutes=1)
         job = self.scheduler.enqueue_in(time_delta, say_hello)
-        self.assertIn(job.id,
-                      as_text(self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1)))
+        results = [as_text(key) for key in self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)]
+        self.assertIn(job.id, results)
         self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
                          times.to_unix(right_now + time_delta))
         time_delta = timedelta(hours=1)
@@ -229,8 +230,8 @@ class TestScheduler(RQTestCase):
         interval = 10
         job = self.scheduler.schedule(time_now, say_hello, interval=interval)
         self.scheduler.enqueue_job(job)
-        self.assertIn(job.id,
-            self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
+        results = [as_text(key) for key in self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)]
+        self.assertIn(job.id, results)
         self.assertEqual(self.testconn.zscore(self.scheduler.scheduled_jobs_key, job.id),
                          times.to_unix(time_now) + interval)
 
@@ -250,8 +251,8 @@ class TestScheduler(RQTestCase):
         # If job is repeated twice, it should only be put back in the queue once
         job = self.scheduler.schedule(time_now, say_hello, interval=interval, repeat=2)
         self.scheduler.enqueue_job(job)
-        self.assertIn(job.id,
-            self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))
+        results = [as_text(key) for key in self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)]
+        self.assertIn(job.id, results)
         self.scheduler.enqueue_job(job)
         self.assertNotIn(job.id,
             self.testconn.zrange(self.scheduler.scheduled_jobs_key, 0, 1))

@@ -275,8 +275,8 @@ class TestQueue(RQTestCase):
         job = queue.schedule_at(scheduled_time, say_hello)
         self.assertEqual(job, Job.fetch(job.id, connection=self.testconn))
         self.assertEqual(job.origin, queue_name)
-        self.assertIn(job.id,
-            as_text(self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)))
+        results = [as_text(key) for key in self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)]
+        self.assertIn(job.id, results)
         self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
                          times.to_unix(scheduled_time))
 
@@ -288,7 +288,8 @@ class TestQueue(RQTestCase):
         scheduler = Scheduler(queue_name, connection=self.testconn)
         job = queue.schedule_in(time_delta, say_hello)
         self.assertEqual(job.origin, queue_name)
-        self.assertIn(job.id, self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1))
+        results = [as_text(key) for key in self.testconn.zrange(scheduler.scheduled_jobs_key, 0, 1)]
+        self.assertIn(job.id, results)
         self.assertEqual(self.testconn.zscore(scheduler.scheduled_jobs_key, job.id),
                          times.to_unix(right_now + time_delta))
         time_delta = timedelta(hours=1)
