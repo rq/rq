@@ -100,7 +100,7 @@ class TestScheduler(RQTestCase):
         Ensure get_jobs() returns all jobs until the specified time.
         """
         now = times.now()
-        job = self.scheduler.enqueue_at(now, say_hello)
+        job = self.scheduler.enqueue_at(now, say_hello)        
         self.assertIn(job, self.scheduler.get_jobs(now))
         future_time = now + timedelta(hours=1)
         job = self.scheduler.enqueue_at(future_time, say_hello)

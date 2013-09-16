@@ -193,7 +193,7 @@ class Job(object):
 
     def __init__(self, id=None, connection=None):
         self.connection = resolve_connection(connection)
-        self._id = id
+        self._id = as_text(id)
         self.created_at = times.now()
         self._func_name = None
         self._instance = None
@@ -223,7 +223,7 @@ class Job(object):
 
     def set_id(self, value):
         """Sets a job ID for the given job."""
-        self._id = value
+        self._id = as_text(value)
 
     id = property(get_id, set_id)
 
@@ -235,7 +235,7 @@ class Job(object):
     @classmethod
     def waitlist_key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s:waitlist' % as_text(job_id).encode('utf-8')
+        return b'rq:job:' + as_text(job_id).encode('utf-8') + b':waitlist'
 
     @property
     def key(self):
