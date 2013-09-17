@@ -294,17 +294,17 @@ class TestQueue(RQTestCase):
         q = Queue()
         parent_job = Job.create(func=say_hello)
         parent_job.save()
-        job_1 = Job.create(func=say_hello, dependency=parent_job)
+        job_1 = Job.create(func=say_hello, depends_on=parent_job)
         job_1.save()
         job_1.register_dependency()
-        job_2 = Job.create(func=say_hello, dependency=parent_job)
+        job_2 = Job.create(func=say_hello, depends_on=parent_job)
         job_2.save()
         job_2.register_dependency()
 
         # After waitlist is enqueued, job_1 and job_2 should be in queue
         self.assertEqual(q.job_ids, [])
         q.enqueue_waitlist(parent_job)
-        self.assertEqual(q.job_ids, [job_1.id, job_2.id])
+        self.assertEqual(set(q.job_ids), set([job_1.id, job_2.id]))
         self.assertFalse(self.testconn.exists(parent_job.waitlist_key))
 
     def test_enqueue_job_with_dependency(self):
@@ -312,13 +312,13 @@ class TestQueue(RQTestCase):
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
-        q.enqueue_call(say_hello, after=parent_job)
+        q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [])
 
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.status = 'finished'
         parent_job.save()
-        job = q.enqueue_call(say_hello, after=parent_job)
+        job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [job.id])
 
 

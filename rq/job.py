@@ -69,7 +69,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, dependency=None):
+               result_ttl=None, status=None, description=None, depends_on=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -93,8 +93,8 @@ class Job(object):
         job.result_ttl = result_ttl
         job._status = status
         # dependency could be job instance or id
-        if dependency is not None:
-            job._dependency_id = dependency.id if isinstance(dependency, Job) else dependency
+        if depends_on is not None:
+            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
         return job
 
     @property
@@ -424,14 +424,14 @@ class Job(object):
     def register_dependency(self):
         """Jobs may have a waitlist. Jobs in this waitlist are enqueued
         only if the dependency job is successfully performed. We maintain this
-        waitlist in Redis, with key that looks something like:
+        waitlist in a Redis set, with key that looks something like:
             
-            rq:job:job_id:waitlist = ['job_id_1', 'job_id_2']
+            rq:job:job_id:waitlist = {'job_id_1', 'job_id_2'}
         
         This method puts the job on it's dependency's waitlist.
         """
         # TODO: This can probably be pipelined
-        self.connection.rpush(Job.waitlist_key_for(self._dependency_id), self.id)
+        self.connection.sadd(Job.waitlist_key_for(self._dependency_id), self.id)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
