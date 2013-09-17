@@ -143,17 +143,17 @@ as `ALWAYS_EAGER`.
 ## Job dependencies
 
 New in RQ 0.4.0 is the ability to chain the execution of multiple jobs.
-To to execute a job that depends on another job, use the `after` argument:
+To to execute a job that depends on another job, use the `depends_on` argument:
 
 {% highlight python %}
 q = Queue('low', async=False)
 report_job = q.enqueue(generate_report)
-q.enqueue(send_report, after=report_job)
+q.enqueue(send_report, depends_on=report_job)
 {% endhighlight %}
 
 The ability to handle job dependencies allows you to split a big job into
-several smaller ones. A job that is dependent on another is enqueued when
-it's parent job's finishes *successfully*.
+several smaller ones. A job that is dependent on another is enqueued only when
+it's dependency finishes *successfully*.
 
 
 ## The worker
