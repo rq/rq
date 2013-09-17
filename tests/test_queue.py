@@ -294,10 +294,10 @@ class TestQueue(RQTestCase):
         q = Queue()
         parent_job = Job.create(func=say_hello)
         parent_job.save()
-        job_1 = Job.create(func=say_hello, dependency=parent_job)
+        job_1 = Job.create(func=say_hello, depends_on=parent_job)
         job_1.save()
         job_1.register_dependency()
-        job_2 = Job.create(func=say_hello, dependency=parent_job)
+        job_2 = Job.create(func=say_hello, depends_on=parent_job)
         job_2.save()
         job_2.register_dependency()
 
@@ -312,13 +312,13 @@ class TestQueue(RQTestCase):
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
-        q.enqueue_call(say_hello, after=parent_job)
+        q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [])
 
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.status = 'finished'
         parent_job.save()
-        job = q.enqueue_call(say_hello, after=parent_job)
+        job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [job.id])
 
 

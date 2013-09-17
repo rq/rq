@@ -139,13 +139,13 @@ class TestJob(RQTestCase):
         """Storing jobs with parent job, either instance or key."""
         parent_job = Job.create(func=some_calculation)
         parent_job.save()
-        job = Job.create(func=some_calculation, dependency=parent_job)
+        job = Job.create(func=some_calculation, depends_on=parent_job)
         job.save()
         stored_job = Job.fetch(job.id)
         self.assertEqual(stored_job._dependency_id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 
-        job = Job.create(func=some_calculation, dependency=parent_job.id)
+        job = Job.create(func=some_calculation, depends_on=parent_job.id)
         job.save()
         stored_job = Job.fetch(job.id)
         self.assertEqual(stored_job._dependency_id, parent_job.id)

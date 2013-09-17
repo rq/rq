@@ -69,7 +69,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, dependency=None):
+               result_ttl=None, status=None, description=None, depends_on=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -93,8 +93,8 @@ class Job(object):
         job.result_ttl = result_ttl
         job._status = status
         # dependency could be job instance or id
-        if dependency is not None:
-            job._dependency_id = dependency.id if isinstance(dependency, Job) else dependency
+        if depends_on is not None:
+            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
         return job
 
     @property

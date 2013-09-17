@@ -140,7 +140,7 @@ class Queue(object):
 
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, description=None, after=None):
+                     result_ttl=None, description=None, depends_on=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -153,18 +153,18 @@ class Queue(object):
         # TODO: job with dependency shouldn't have "queued" as status
         job = Job.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
-                         description=description, dependency=after)
+                         description=description, depends_on=depends_on)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's waitlist instead of enqueueing it.
         # If WatchError is raised in the process, that means something else is
         # modifying the dependency. In this case we simply retry
-        if after is not None:
+        if depends_on is not None:
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
-                        pipe.watch(after.key)
-                        if after.status != Status.FINISHED:
+                        pipe.watch(depends_on.key)
+                        if depends_on.status != Status.FINISHED:
                             job.register_dependency()
                             job.save()
                             return job
@@ -197,19 +197,19 @@ class Queue(object):
         timeout = None
         description = None
         result_ttl = None
-        after = None
-        if 'args' in kwargs or 'kwargs' in kwargs or 'after' in kwargs:
+        depends_on = None
+        if 'args' in kwargs or 'kwargs' in kwargs or 'depends_on' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
             timeout = kwargs.pop('timeout', None)
             description = kwargs.pop('description', None)
             args = kwargs.pop('args', None)
             result_ttl = kwargs.pop('result_ttl', None)
-            after = kwargs.pop('after', None)
+            depends_on = kwargs.pop('depends_on', None)
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl,
-                                 description=description, after=after)
+                                 description=description, depends_on=depends_on)
 
     def enqueue_job(self, job, timeout=None, set_meta_data=True):
         """Enqueues a job for delayed execution.
