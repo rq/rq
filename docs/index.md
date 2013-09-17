@@ -143,7 +143,7 @@ as `ALWAYS_EAGER`.
 ## Job dependencies
 
 New in RQ 0.4.0 is the ability to chain the execution of multiple jobs.
-To to execute a job that depends on another job, use the `depends_on` argument:
+To execute a job that depends on another job, use the `depends_on` argument:
 
 {% highlight python %}
 q = Queue('low', async=False)
