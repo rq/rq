@@ -424,14 +424,14 @@ class Job(object):
     def register_dependency(self):
         """Jobs may have a waitlist. Jobs in this waitlist are enqueued
         only if the dependency job is successfully performed. We maintain this
-        waitlist in Redis, with key that looks something like:
+        waitlist in a Redis set, with key that looks something like:
             
-            rq:job:job_id:waitlist = ['job_id_1', 'job_id_2']
+            rq:job:job_id:waitlist = {'job_id_1', 'job_id_2'}
         
         This method puts the job on it's dependency's waitlist.
         """
         # TODO: This can probably be pipelined
-        self.connection.rpush(Job.waitlist_key_for(self._dependency_id), self.id)
+        self.connection.sadd(Job.waitlist_key_for(self._dependency_id), self.id)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)

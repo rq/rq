@@ -304,7 +304,7 @@ class TestQueue(RQTestCase):
         # After waitlist is enqueued, job_1 and job_2 should be in queue
         self.assertEqual(q.job_ids, [])
         q.enqueue_waitlist(parent_job)
-        self.assertEqual(q.job_ids, [job_1.id, job_2.id])
+        self.assertEqual(set(q.job_ids), set([job_1.id, job_2.id]))
         self.assertFalse(self.testconn.exists(parent_job.waitlist_key))
 
     def test_enqueue_job_with_dependency(self):

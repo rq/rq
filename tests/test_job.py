@@ -289,4 +289,4 @@ class TestJob(RQTestCase):
         job._dependency_id = 'id'
         job.save()
         job.register_dependency()
-        self.assertEqual(as_text(self.testconn.lpop('rq:job:id:waitlist')), job.id)
+        self.assertEqual(as_text(self.testconn.spop('rq:job:id:waitlist')), job.id)
