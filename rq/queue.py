@@ -22,6 +22,7 @@ def compact(lst):
 
 @total_ordering
 class Queue(object):
+    DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'
     redis_queues_keys = 'rq:queues'
 
@@ -153,7 +154,7 @@ class Queue(object):
         # TODO: job with dependency shouldn't have "queued" as status
         job = Job.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
-                         description=description, dependency=after)
+                         description=description, dependency=after, timeout=timeout)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's waitlist instead of enqueueing it.
@@ -172,7 +173,7 @@ class Queue(object):
                     except WatchError:
                         continue
 
-        return self.enqueue_job(job, timeout=timeout)
+        return self.enqueue_job(job)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues
@@ -211,12 +212,8 @@ class Queue(object):
                                  timeout=timeout, result_ttl=result_ttl,
                                  description=description, after=after)
 
-    def enqueue_job(self, job, timeout=None, set_meta_data=True):
+    def enqueue_job(self, job, set_meta_data=True):
         """Enqueues a job for delayed execution.
-
-        When the `timeout` argument is sent, it will overrides the default
-        timeout value of 180 seconds.  `timeout` may either be a string or
-        integer.
 
         If the `set_meta_data` argument is `True` (default), it will update
         the properties `origin` and `enqueued_at`.
@@ -230,10 +227,8 @@ class Queue(object):
             job.origin = self.name
             job.enqueued_at = times.now()
 
-        if timeout:
-            job.timeout = timeout  # _timeout_in_seconds(timeout)
-        else:
-            job.timeout = 180  # default
+        if job.timeout is None:
+            job.timeout = self.DEFAULT_TIMEOUT
         job.save()
 
         if self._async:
@@ -379,7 +374,7 @@ class FailedQueue(Queue):
         """
         job.ended_at = times.now()
         job.exc_info = exc_info
-        return self.enqueue_job(job, timeout=job.timeout, set_meta_data=False)
+        return self.enqueue_job(job, set_meta_data=False)
 
     def requeue(self, job_id):
         """Requeues the job with the given job ID."""
@@ -397,4 +392,4 @@ class FailedQueue(Queue):
         job.status = Status.QUEUED
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
-        q.enqueue_job(job, timeout=job.timeout)
+        q.enqueue_job(job)

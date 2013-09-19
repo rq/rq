@@ -323,7 +323,7 @@ class Worker(object):
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                               blue(job.description), job.id))
 
-                self.connection.expire(self.key, (job.timeout or 180) + 60)
+                self.connection.expire(self.key, (job.timeout or Queue.DEFAULT_TIMEOUT) + 60)
                 self.fork_and_perform_job(job)
                 self.connection.expire(self.key, self.default_worker_ttl)
                 if job.status == 'finished':
@@ -404,7 +404,7 @@ class Worker(object):
             job.origin, time.time()))
 
         try:
-            with death_penalty_after(job.timeout or 180):
+            with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
                 rv = job.perform()
 
             # Pickle the result in the same try-except block since we need to
