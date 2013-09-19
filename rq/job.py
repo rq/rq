@@ -69,7 +69,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, dependency=None):
+               result_ttl=None, status=None, description=None, dependency=None, timeout=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -91,6 +91,7 @@ class Job(object):
         job._kwargs = kwargs
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
+        job.timeout = timeout
         job._status = status
         # dependency could be job instance or id
         if dependency is not None:
