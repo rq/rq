@@ -284,9 +284,9 @@ class TestJob(RQTestCase):
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
     def test_register_dependency(self):
-        """Test that jobs updates the correct job waitlist"""
+        """Test that jobs updates the correct job dependents."""
         job = Job.create(func=say_hello)
         job._dependency_id = 'id'
         job.save()
         job.register_dependency()
-        self.assertEqual(as_text(self.testconn.spop('rq:job:id:waitlist')), job.id)
+        self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)

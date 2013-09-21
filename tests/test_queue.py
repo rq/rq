@@ -289,8 +289,8 @@ class TestQueue(RQTestCase):
         # Queue.all() should still report the empty queues
         self.assertEquals(len(Queue.all()), 3)
 
-    def test_enqueue_waitlist(self):
-        """Enqueueing a waitlist pushes all jobs in waitlist to queue"""
+    def test_enqueue_dependents(self):
+        """Enqueueing the dependent jobs pushes all jobs in the depends set to the queue."""
         q = Queue()
         parent_job = Job.create(func=say_hello)
         parent_job.save()
@@ -301,11 +301,11 @@ class TestQueue(RQTestCase):
         job_2.save()
         job_2.register_dependency()
 
-        # After waitlist is enqueued, job_1 and job_2 should be in queue
+        # After dependents is enqueued, job_1 and job_2 should be in queue
         self.assertEqual(q.job_ids, [])
-        q.enqueue_waitlist(parent_job)
+        q.enqueue_dependents(parent_job)
         self.assertEqual(set(q.job_ids), set([job_1.id, job_2.id]))
-        self.assertFalse(self.testconn.exists(parent_job.waitlist_key))
+        self.assertFalse(self.testconn.exists(parent_job.dependents_key))
 
     def test_enqueue_job_with_dependency(self):
         """Jobs are enqueued only when their dependencies are finished"""

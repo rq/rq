@@ -232,9 +232,9 @@ class Job(object):
         return b'rq:job:' + job_id.encode('utf-8')
 
     @classmethod
-    def waitlist_key_for(cls, job_id):
+    def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s:waitlist' % (job_id,)
+        return 'rq:job:%s:dependents' % (job_id,)
 
     @property
     def key(self):
@@ -242,9 +242,9 @@ class Job(object):
         return self.key_for(self.id)
 
     @property
-    def waitlist_key(self):
+    def dependents_key(self):
         """The Redis key that is used to store job hash under."""
-        return self.waitlist_key_for(self.id)
+        return self.dependents_key_for(self.id)
 
     @property  # noqa
     def job_tuple(self):
@@ -422,16 +422,17 @@ class Job(object):
             connection.expire(self.key, ttl)
 
     def register_dependency(self):
-        """Jobs may have a waitlist. Jobs in this waitlist are enqueued
-        only if the dependency job is successfully performed. We maintain this
-        waitlist in a Redis set, with key that looks something like:
-            
-            rq:job:job_id:waitlist = {'job_id_1', 'job_id_2'}
-        
-        This method puts the job on it's dependency's waitlist.
+        """Jobs may have dependencies. Jobs are enqueued only if the job they
+        depend on is successfully performed. We record this relation as
+        a reverse dependency (a Redis set), with a key that looks something
+        like:
+
+            rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
+
+        This method adds the current job in its dependency's dependents set.
         """
         # TODO: This can probably be pipelined
-        self.connection.sadd(Job.waitlist_key_for(self._dependency_id), self.id)
+        self.connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)

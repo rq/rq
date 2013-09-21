@@ -156,7 +156,7 @@ class Queue(object):
                          description=description, depends_on=depends_on)
 
         # If job depends on an unfinished job, register itself on it's
-        # parent's waitlist instead of enqueueing it.
+        # parent's dependents instead of enqueueing it.
         # If WatchError is raised in the process, that means something else is
         # modifying the dependency. In this case we simply retry
         if depends_on is not None:
@@ -243,15 +243,15 @@ class Queue(object):
             job.save()
         return job
 
-    def enqueue_waitlist(self, job):
-        """Enqueues all jobs in the waitlist and clears it"""
+    def enqueue_dependents(self, job):
+        """Enqueues all jobs in the given job's dependents set and clears it."""
         # TODO: can probably be pipelined
         while True:
-            job_id = as_text(self.connection.spop(job.waitlist_key))
+            job_id = as_text(self.connection.spop(job.dependents_key))
             if job_id is None:
                 break
-            waitlisted_job = Job.fetch(job_id, connection=self.connection)
-            self.enqueue_job(waitlisted_job)
+            dependent = Job.fetch(job_id, connection=self.connection)
+            self.enqueue_job(dependent)
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""

@@ -327,7 +327,7 @@ class Worker(object):
                 self.fork_and_perform_job(job)
                 self.connection.expire(self.key, self.default_worker_ttl)
                 if job.status == 'finished':
-                    queue.enqueue_waitlist(job)
+                    queue.enqueue_dependents(job)
 
                 did_perform_work = True
         finally:
