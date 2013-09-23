@@ -1,11 +1,12 @@
 #!/usr/bin/env python
-import os
-import sys
 import argparse
+import importlib
 import logging
 import logging.config
+import os
+import sys
 
-from rq import Queue, Worker
+from rq import Queue
 from rq.logutils import setup_loghandlers
 from redis.exceptions import ConnectionError
 from rq.contrib.legacy import cleanup_ghosts
@@ -23,6 +24,7 @@ def parse_args():
 
     parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
+    parser.add_argument('--worker', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
@@ -76,9 +78,13 @@ def main():
 
     cleanup_ghosts()
 
+    module_name, class_name = args.worker.rsplit('.', 1)
+    module = importlib.import_module(module_name)
+    worker_class = getattr(module, class_name)
+
     try:
         queues = list(map(Queue, args.queues))
-        w = Worker(queues, name=args.name)
+        w = worker_class(queues, name=args.name)
 
         # Should we configure Sentry?
         if args.sentry_dsn:
