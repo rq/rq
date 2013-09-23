@@ -5,9 +5,10 @@ Miscellaneous helper functions.
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
+import importlib
+import logging
 import os
 import sys
-import logging
 
 from .compat import is_python_version
 
@@ -160,3 +161,10 @@ class ColorizingStreamHandler(logging.StreamHandler):
             message = '\n'.join(parts)
 
         return message
+
+
+def import_attribute(name):
+    """Return an attribute from a dotted path name (e.g. "path.to.func")."""
+    module_name, attribute = name.rsplit('.', 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, attribute)

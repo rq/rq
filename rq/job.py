@@ -1,4 +1,3 @@
-import importlib
 import inspect
 import times
 from uuid import uuid4
@@ -9,6 +8,7 @@ except ImportError:  # noqa
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
+from .utils import import_attribute
 from rq.compat import text_type, decode_redis_hash, as_text
 
 
@@ -151,9 +151,7 @@ class Job(object):
         if self.instance:
             return getattr(self.instance, func_name)
 
-        module_name, func_name = func_name.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, func_name)
+        return import_attribute(self.func_name)
 
     @property
     def instance(self):

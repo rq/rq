@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import argparse
-import importlib
 import logging
 import logging.config
 import os
@@ -10,10 +9,8 @@ from rq import Queue
 from rq.logutils import setup_loghandlers
 from redis.exceptions import ConnectionError
 from rq.contrib.legacy import cleanup_ghosts
-from rq.scripts import add_standard_arguments
-from rq.scripts import setup_redis
-from rq.scripts import read_config_file
-from rq.scripts import setup_default_arguments
+from rq.scripts import add_standard_arguments, read_config_file, setup_default_arguments, setup_redis
+from rq.utils import import_attribute
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +21,7 @@ def parse_args():
 
     parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
-    parser.add_argument('--worker', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
+    parser.add_argument('--worker-class', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
@@ -77,14 +74,11 @@ def main():
     setup_redis(args)
 
     cleanup_ghosts()
-
-    module_name, class_name = args.worker.rsplit('.', 1)
-    module = importlib.import_module(module_name)
-    worker_class = getattr(module, class_name)
+    w_class = import_attribute(args.worker_class)
 
     try:
         queues = list(map(Queue, args.queues))
-        w = worker_class(queues, name=args.name)
+        w = w_class(queues, name=args.name)
 
         # Should we configure Sentry?
         if args.sentry_dsn:
