@@ -74,11 +74,11 @@ def main():
     setup_redis(args)
 
     cleanup_ghosts()
-    w_class = import_attribute(args.worker_class)
+    worker_class = import_attribute(args.worker_class)
 
     try:
         queues = list(map(Queue, args.queues))
-        w = w_class(queues, name=args.name)
+        w = worker_class(queues, name=args.name)
 
         # Should we configure Sentry?
         if args.sentry_dsn:
