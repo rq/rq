@@ -290,3 +290,14 @@ class TestJob(RQTestCase):
         job.save()
         job.register_dependency()
         self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)
+
+    def test_cancel(self):
+        """job.cancel() deletes itself & dependents mapping from Redis."""
+        job = Job.create(func=say_hello)
+        job_key = job.key
+        dependents_key = job.dependents_key
+        job2 = Job.create(func=say_hello, depends_on=job)
+        job2.register_dependency()
+        job.cancel()
+        self.assertFalse(self.testconn.exists(job.key))
+        self.assertFalse(self.testconn.exists(job.dependents_key))

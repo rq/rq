@@ -371,11 +371,11 @@ class Job(object):
         deleting the job hash.
         """
         self.delete()
+        self.connection.delete(self.dependents_key)
 
     def delete(self):
         """Deletes the job hash from Redis."""
         self.connection.delete(self.key)
-
 
     # Job execution
     def perform(self):  # noqa
