@@ -368,12 +368,15 @@ class Job(object):
         cancellation.  Technically, this call is (currently) the same as just
         deleting the job hash.
         """
-        self.delete()
-        self.connection.delete(self.dependents_key)
+        pipeline = self.connection.pipeline()
+        self.delete(pipeline=pipeline)
+        pipeline.delete(self.dependents_key)
+        pipeline.execute()
 
-    def delete(self):
+    def delete(self, pipeline=None):
         """Deletes the job hash from Redis."""
-        self.connection.delete(self.key)
+        connection = pipeline if pipeline is not None else self.connection
+        connection.delete(self.key)
 
     # Job execution
     def perform(self):  # noqa
