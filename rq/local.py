@@ -209,7 +209,7 @@ class LocalManager(object):
         scoped sessions) to the Werkzeug locals.
 
         .. versionchanged:: 0.7
-           Yu can pass a different ident function to the local manager that
+           You can pass a different ident function to the local manager that
            will then be propagated to all the locals passed to the
            constructor.
         """
