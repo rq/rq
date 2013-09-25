@@ -93,6 +93,7 @@ class Worker(object):
         worker = cls([], name, connection=connection)
         queues = as_text(connection.hget(worker.key, 'queues'))
         worker._state = connection.hget(worker.key, 'state') or '?'
+        worker._job_id = connection.hget(worker.key, 'current_job') or None
         if queues:
             worker.queues = [Queue(queue, connection=connection)
                              for queue in queues.split(',')]
@@ -215,14 +216,40 @@ class Worker(object):
             p.expire(self.key, 60)
             p.execute()
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, pipeline=None):
         self._state = new_state
-        self.connection.hset(self.key, 'state', new_state)
+
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'state', new_state)
 
     def get_state(self):
         return self._state
 
     state = property(get_state, set_state)
+
+    def set_job_id(self, new_job_id, pipeline=None):
+        self._job_id = new_job_id
+
+        connection = pipeline if pipeline is not None else self.connection
+
+        if new_job_id is None:
+            connection.hdel(self.key, 'current_job')
+        else:
+            connection.hset(self.key, 'current_job', new_job_id)
+
+    def get_job_id(self):
+        return self._job_id
+
+    job_id = property(get_job_id, set_job_id)
+
+    # most client will want to use the method below to query the current job
+    def get_current_job(self):
+        job_id = self.get_job_id()
+
+        if job_id is None:
+            return None
+
+        return Job.safe_fetch(job_id)
 
     @property
     def stopped(self):
@@ -318,6 +345,8 @@ class Worker(object):
                 self.state = 'busy'
 
                 job, queue = result
+                self.job_id = job.id
+
                 # Use the public setter here, to immediately update Redis
                 job.status = Status.STARTED
                 self.log.info('%s: %s (%s)' % (green(queue.name),
@@ -326,6 +355,8 @@ class Worker(object):
                 self.connection.expire(self.key, (job.timeout or Queue.DEFAULT_TIMEOUT) + 60)
                 self.fork_and_perform_job(job)
                 self.connection.expire(self.key, self.default_worker_ttl)
+                self.job_id = None
+
                 if job.status == 'finished':
                     queue.enqueue_dependents(job)
 
