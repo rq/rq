@@ -242,6 +242,15 @@ class Worker(object):
 
     job_id = property(get_job_id, set_job_id)
 
+    # most client will want to use the method below to query the current job
+    def get_current_job(self):
+        job_id = self.get_job_id()
+
+        if job_id is None:
+            return None
+
+        return Job.safe_fetch(job_id)
+
     @property
     def stopped(self):
         return self._stopped
