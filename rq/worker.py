@@ -215,9 +215,11 @@ class Worker(object):
             p.expire(self.key, 60)
             p.execute()
 
-    def set_state(self, new_state):
+    def set_state(self, new_state, pipeline=None):
         self._state = new_state
-        self.connection.hset(self.key, 'state', new_state)
+
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'state', new_state)
 
     def get_state(self):
         return self._state
