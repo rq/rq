@@ -79,7 +79,6 @@ class Worker(object):
         by their Redis keys.
         """
         prefix = cls.redis_worker_namespace_prefix
-        name = worker_key[len(prefix):]
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % (worker_key,))
 
