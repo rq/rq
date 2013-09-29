@@ -352,7 +352,6 @@ class Queue(object):
     def __hash__(self):
         return hash(self.name)
 
-
     def __repr__(self):  # noqa
         return 'Queue(%r)' % (self.name,)
 
@@ -362,7 +361,7 @@ class Queue(object):
 
 class FailedQueue(Queue):
     def __init__(self, connection=None):
-        super(FailedQueue, self).__init__('failed', connection=connection)
+        super(FailedQueue, self).__init__(Status.FAILED, connection=connection)
 
     def quarantine(self, job, exc_info):
         """Puts the given Job in quarantine (i.e. put it on the failed
