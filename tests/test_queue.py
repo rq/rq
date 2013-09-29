@@ -316,7 +316,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.status = 'finished'
+        parent_job.status = Status.FINISHED
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [job.id])
@@ -332,7 +332,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, 123)
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.status = 'finished'
+        parent_job.status = Status.FINISHED
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=123)
         self.assertEqual(q.job_ids, [job.id])
