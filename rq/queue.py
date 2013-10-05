@@ -151,23 +151,36 @@ class Queue(object):
         """
         timeout = timeout or self._default_timeout
 
-        # TODO: job with dependency shouldn't have "queued" as status
         job = Job.create(func, args, kwargs, connection=self.connection,
-                         result_ttl=result_ttl, status=Status.QUEUED,
+                         result_ttl=result_ttl, status=None if depends_on else Status.QUEUED,
                          description=description, depends_on=depends_on, timeout=timeout)
 
-        # If job depends on an unfinished job, register itself on it's
-        # parent's dependents instead of enqueueing it.
+        # If the new job depends on an unfinished job, register the new job
+        # as a dependent of the unfinished prerequisite job instead of enqueueing.
         # If WatchError is raised in the process, that means something else is
-        # modifying the dependency. In this case we simply retry
-        if depends_on is not None:
+        # modifying the prerequisite job. In this case we simply retry.
+        if depends_on:
+            if isinstance(depends_on, Job):
+                depends_on = [depends_on]
             with self.connection.pipeline() as pipe:
                 while True:
+                    remaining_prerequisites = []
                     try:
-                        pipe.watch(depends_on.key)
-                        if depends_on.status != Status.FINISHED:
-                            job.register_dependency()
-                            job.save()
+                        for prerequisite in depends_on:
+                            pipe.watch(prerequisite.key)
+                            if prerequisite.status == Status.FINISHED:
+                                continue
+                            remaining_prerequisites.append(prerequisite)
+                        if remaining_prerequisites:
+                            pipe.multi()
+                            job.register_prerequisites(
+                                map(
+                                    lambda prerequisite: prerequisite.id if isinstance(prerequisite, Job) else
+                                                         prerequisite,
+                                    remaining_prerequisites),
+                                pipe)
+                            job.save(pipe)
+                            pipe.execute()
                             return job
                         break
                     except WatchError:
@@ -238,15 +251,36 @@ class Queue(object):
             job.save()
         return job
 
-    def enqueue_dependents(self, job):
-        """Enqueues all jobs in the given job's dependents set and clears it."""
-        # TODO: can probably be pipelined
-        while True:
-            job_id = as_text(self.connection.spop(job.dependents_key))
-            if job_id is None:
-                break
-            dependent = Job.fetch(job_id, connection=self.connection)
+    def bump_dependents(self, job):
+        """Updates remaining prerequisites for all jobs in the given job's
+        dependent job set and deletes it, enqueueing dependent jobs that become
+        prerequisite-free."""
+
+        job_ids_to_enqueue = []
+        dependent_job_ids = map(as_text, self.connection.smembers(job.dependents_key))
+        if not dependent_job_ids:
+            return
+        num_dependents = len(dependent_job_ids)
+        with self.connection.pipeline() as pipe:
+            for dependent_job_id in dependent_job_ids:
+                pipe.srem(Job.remaining_prerequisites_key_for(dependent_job_id), job.id)
+            for dependent_job_id in dependent_job_ids:
+                pipe.scard(Job.remaining_prerequisites_key_for(dependent_job_id))
+            pipe.delete(job.dependents_key)
+            results = pipe.execute()
+        # The srem results should be all 1's, otherwise the jobs are in an inconsistent
+        # state where dependent job sets and prerequisite job sets disagree.
+        assert len(results) == num_dependents * 2 + 1
+        assert(all(results[:num_dependents]))
+        to_enqueue_idx = filter(lambda idx: results[num_dependents + idx] == 0, xrange(0, num_dependents))
+        if not to_enqueue_idx:
+            return
+        # TODO: pipeline the enqueueing
+        for dependent_job_idx in to_enqueue_idx:
+            dependent_job_id = dependent_job_ids[dependent_job_idx]
+            dependent = Job.fetch(dependent_job_id, connection=self.connection)
             self.enqueue_job(dependent)
+
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
