@@ -93,9 +93,12 @@ class Job(object):
         job.result_ttl = result_ttl
         job.timeout = timeout
         job._status = status
-        # dependency could be job instance or id
+        # depends_on could be a job instance or job id, or list thereof
         if depends_on is not None:
-            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
+            if isinstance(depends_on, Job) or isinstance(depends_on, text_type):
+                depends_on = [depends_on]
+            job._prerequisite_ids = list(
+                prerequisite.id if isinstance(prerequisite, Job) else prerequisite for prerequisite in depends_on)
         return job
 
     @property
@@ -129,18 +132,22 @@ class Job(object):
         return self.status == Status.STARTED
 
     @property
-    def dependency(self):
-        """Returns a job's dependency. To avoid repeated Redis fetches, we cache
-        job.dependency as job._dependency.
+    def prerequisites(self):
+        """Returns a job's prerequisites. To avoid repeated Redis fetches, we
+        cache job.prerequisites as job._prerequisites.
+        TODO: What if the prerequisite has already been removed e.g. due to result_ttl timeout?
         """
-        if self._dependency_id is None:
-            return None
-        if hasattr(self, '_dependency'):
-            return self._dependency
-        job = Job.fetch(self._dependency_id, connection=self.connection)
-        job.refresh()
-        self._dependency = job
-        return job
+        if not self._prerequisite_ids:
+            return []
+        try:
+            return self._prerequisites
+        except AttributeError:
+            pass
+
+        # TODO: Pipeline the prerequisite job fetching.
+        jobs = [Job.fetch(prerequisite_id) for prerequisite_id in self._prerequisite_ids]
+        self._prerequisites = jobs
+        return jobs
 
     @property
     def func(self):
@@ -206,7 +213,7 @@ class Job(object):
         self.timeout = None
         self.result_ttl = None
         self._status = None
-        self._dependency_id = None
+        self._prerequisite_ids = []
         self.meta = {}
 
 
@@ -227,23 +234,33 @@ class Job(object):
 
     @classmethod
     def key_for(cls, job_id):
-        """The Redis key that is used to store job hash under."""
+        """Redis key for the job hash."""
         return b'rq:job:' + job_id.encode('utf-8')
 
     @classmethod
     def dependents_key_for(cls, job_id):
-        """The Redis key that is used to store job hash under."""
+        """Redis key for the dependent job set."""
         return 'rq:job:%s:dependents' % (job_id,)
+
+    @classmethod
+    def remaining_prerequisites_key_for(cls, job_id):
+        """Redis key for the prerequisite job set."""
+        return 'rq:job:%s:prerequisites' % (job_id,)
 
     @property
     def key(self):
-        """The Redis key that is used to store job hash under."""
+        """Redis key for the job hash."""
         return self.key_for(self.id)
 
     @property
     def dependents_key(self):
-        """The Redis key that is used to store job hash under."""
+        """Redis key for the dependent job set."""
         return self.dependents_key_for(self.id)
+
+    @property
+    def remaining_prerequisites_key(self):
+        """Redis key for the prerequisite job set."""
+        return self.remaining_prerequisites_key_for(self.id)
 
     @property  # noqa
     def job_tuple(self):
@@ -317,7 +334,7 @@ class Job(object):
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
-        self._dependency_id = as_text(obj.get('dependency_id', None))
+        self._prerequisite_ids = map(as_text, obj.get('prerequisite_ids', '').split(' '))
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def dump(self):
@@ -345,8 +362,8 @@ class Job(object):
             obj['result_ttl'] = self.result_ttl
         if self._status is not None:
             obj['status'] = self._status
-        if self._dependency_id is not None:
-            obj['dependency_id'] = self._dependency_id
+        if self._prerequisite_ids:
+            obj['prerequisite_ids'] = ' '.join(self._prerequisite_ids)
         if self.meta:
             obj['meta'] = dumps(self.meta)
 
@@ -367,6 +384,8 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.  Technically, this call is (currently) the same as just
         deleting the job hash.
+
+        NOTE: Any job that depends on this job becomes orphaned.
         """
         pipeline = self.connection.pipeline()
         self.delete(pipeline=pipeline)
@@ -423,18 +442,27 @@ class Job(object):
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
 
-    def register_dependency(self):
-        """Jobs may have dependencies. Jobs are enqueued only if the job they
-        depend on is successfully performed. We record this relation as
-        a reverse dependency (a Redis set), with a key that looks something
-        like:
+    def register_prerequisites(self, remaining_prerequisite_ids, pipeline=None):
+        """Jobs may have other jobs as prerequisites. A job is added to its
+        queue only if all its prerequisites have succeeded. For prerequisites
+        that have not yet succeeded, given in remaining_prerequisite_ids, we
+        record the relation as a set of job ids on a key determined by the
+        prerequisite id like this:
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
-
-        This method adds the current job in its dependency's dependents set.
         """
-        # TODO: This can probably be pipelined
-        self.connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
+
+        def doit(pipe):
+            for prerequisite_id in remaining_prerequisite_ids:
+                pipe.sadd(Job.dependents_key_for(prerequisite_id), self.id)
+            pipe.sadd(self.remaining_prerequisites_key, *remaining_prerequisite_ids)
+
+        if pipeline is None:
+            with self.connection.pipeline() as pipeline:
+                doit(pipeline)
+                pipeline.execute()
+        else:
+            doit(pipeline)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
