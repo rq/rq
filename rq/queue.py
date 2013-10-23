@@ -162,23 +162,24 @@ class Queue(object):
         if depends_on:
             if isinstance(depends_on, Job):
                 depends_on = [depends_on]
+            
             with self.connection.pipeline() as pipe:
                 while True:
                     remaining_dependencies = []
                     try:
+                        # Each dependency.status call creates a Redis query
+                        # We should probably use bulk fetches
                         for dependency in depends_on:
                             pipe.watch(dependency.key)
-                            if dependency.status == Status.FINISHED:
-                                continue
-                            remaining_dependencies.append(dependency)
+                            if dependency.status != Status.FINISHED:
+                                remaining_dependencies.append(dependency)
+                        
                         if remaining_dependencies:
                             pipe.multi()
                             job.register_dependencies(
-                                map(
-                                    lambda dependency: dependency.id if isinstance(dependency, Job) else
-                                                         dependency,
-                                    remaining_dependencies),
-                                pipe)
+                                [dependency.id for dependency in remaining_dependencies],
+                                pipe
+                            )
                             job.save(pipe)
                             pipe.execute()
                             return job
