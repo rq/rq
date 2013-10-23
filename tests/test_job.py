@@ -142,14 +142,14 @@ class TestJob(RQTestCase):
         job = Job.create(func=some_calculation, depends_on=parent_job)
         job.save()
         stored_job = Job.fetch(job.id)
-        self.assertEqual(stored_job._prerequisite_ids, [parent_job.id])
-        self.assertEqual(stored_job.prerequisites, [parent_job])
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
+        self.assertEqual(stored_job.dependencies, [parent_job])
 
         job = Job.create(func=some_calculation, depends_on=parent_job.id)
         job.save()
         stored_job = Job.fetch(job.id)
-        self.assertEqual(stored_job._prerequisite_ids, [parent_job.id])
-        self.assertEqual(stored_job.prerequisites, [parent_job])
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
+        self.assertEqual(stored_job.dependencies, [parent_job])
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
@@ -283,12 +283,12 @@ class TestJob(RQTestCase):
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
-    def test_register_prerequisites(self):
+    def test_register_dependencies(self):
         """Test that jobs updates the correct job dependents."""
         job = Job.create(func=say_hello)
-        job._prerequisite_ids = ['id1', 'id2']
+        job._dependency_ids = ['id1', 'id2']
         job.save()
-        job.register_prerequisites(['id1'])
+        job.register_dependencies(['id1'])
         self.assertEqual(map(as_text, self.testconn.smembers('rq:job:id1:dependents')), [job.id])
         self.assertEqual(map(as_text, self.testconn.smembers('rq:job:id2:dependents')), [])
 
@@ -296,7 +296,7 @@ class TestJob(RQTestCase):
         """job.cancel() deletes itself & dependents mapping from Redis."""
         job = Job.create(func=say_hello)
         job2 = Job.create(func=say_hello, depends_on=job)
-        job2.register_prerequisites([job.id])
+        job2.register_dependencies([job.id])
         job.cancel()
         self.assertFalse(self.testconn.exists(job.key))
         self.assertFalse(self.testconn.exists(job.dependents_key))

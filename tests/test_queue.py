@@ -297,15 +297,15 @@ class TestQueue(RQTestCase):
         parent_job2.save()
         job_1 = Job.create(func=say_hello, depends_on=parent_job1)
         job_1.save()
-        job_1.register_prerequisites([parent_job1.id])
+        job_1.register_dependencies([parent_job1.id])
         job_2 = Job.create(func=say_hello, depends_on=[parent_job2])
         job_2.save()
-        job_2.register_prerequisites([parent_job2.id])
+        job_2.register_dependencies([parent_job2.id])
         job_3 = Job.create(func=say_hello, depends_on=[parent_job1, parent_job2])
         job_3.save()
-        job_3.register_prerequisites([parent_job1.id, parent_job2.id])
+        job_3.register_dependencies([parent_job1.id, parent_job2.id])
 
-        # Before prerequisite jobs bump the dependent jobs, queue is empty.
+        # Before dependency jobs bump the dependent jobs, queue is empty.
         self.assertEqual(q.job_ids, [])
 
         # After bump_depedents() for parent_job1 , queue should contain job_1.
@@ -320,10 +320,10 @@ class TestQueue(RQTestCase):
         self.assertFalse(self.testconn.exists(parent_job1.dependents_key))
         self.assertFalse(self.testconn.exists(parent_job2.dependents_key))
 
-    def test_enqueue_job_with_prerequisites(self):
-        """In enqueue_call(), jobs are enqueued iff all their prerequisites are
+    def test_enqueue_job_with_dependencies(self):
+        """In enqueue_call(), jobs are enqueued iff all their dependencies are
         finished."""
-        # Job with remaining prerequisite is not immediately enqueued
+        # Job with remaining dependency is not immediately enqueued
         parent_job1 = Job.create(func=say_hello)
         parent_job1.save()
         parent_job2 = Job.create(func=say_hello, status=Status.FINISHED)
@@ -348,18 +348,18 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
 
-    def test_enqueue_job_with_prerequisite_and_timeout(self):
+    def test_enqueue_job_with_dependency_and_timeout(self):
         """Jobs still know their specified timeout after being scheduled as dependents."""
         parent_job = Job.create(func=say_hello)
         q = Queue()
 
-        # Job with remaining prerequisite is not immediately enqueued
+        # Job with remaining dependency is not immediately enqueued
         q.empty()
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=123)
         self.assertEqual(q.job_ids, [])
         self.assertEqual(job.timeout, 123)
 
-        # Job is enqueued after prerequisite job bumps dependents, and timeout is
+        # Job is enqueued after dependency job bumps dependents, and timeout is
         # correct.
         q.empty()
         parent_job.status = Status.FINISHED

@@ -156,28 +156,28 @@ class Queue(object):
                          description=description, depends_on=depends_on, timeout=timeout)
 
         # If the new job depends on an unfinished job, register the new job
-        # as a dependent of the unfinished prerequisite job instead of enqueueing.
+        # as a dependent of the unfinished dependency job instead of enqueueing.
         # If WatchError is raised in the process, that means something else is
-        # modifying the prerequisite job. In this case we simply retry.
+        # modifying the dependency job. In this case we simply retry.
         if depends_on:
             if isinstance(depends_on, Job):
                 depends_on = [depends_on]
             with self.connection.pipeline() as pipe:
                 while True:
-                    remaining_prerequisites = []
+                    remaining_dependencies = []
                     try:
-                        for prerequisite in depends_on:
-                            pipe.watch(prerequisite.key)
-                            if prerequisite.status == Status.FINISHED:
+                        for dependency in depends_on:
+                            pipe.watch(dependency.key)
+                            if dependency.status == Status.FINISHED:
                                 continue
-                            remaining_prerequisites.append(prerequisite)
-                        if remaining_prerequisites:
+                            remaining_dependencies.append(dependency)
+                        if remaining_dependencies:
                             pipe.multi()
-                            job.register_prerequisites(
+                            job.register_dependencies(
                                 map(
-                                    lambda prerequisite: prerequisite.id if isinstance(prerequisite, Job) else
-                                                         prerequisite,
-                                    remaining_prerequisites),
+                                    lambda dependency: dependency.id if isinstance(dependency, Job) else
+                                                         dependency,
+                                    remaining_dependencies),
                                 pipe)
                             job.save(pipe)
                             pipe.execute()
@@ -252,9 +252,9 @@ class Queue(object):
         return job
 
     def bump_dependents(self, job):
-        """Updates remaining prerequisites for all jobs in the given job's
+        """Updates remaining dependencies for all jobs in the given job's
         dependent job set and deletes it, enqueueing dependent jobs that become
-        prerequisite-free."""
+        dependency-free."""
 
         job_ids_to_enqueue = []
         dependent_job_ids = map(as_text, self.connection.smembers(job.dependents_key))
@@ -263,13 +263,13 @@ class Queue(object):
         num_dependents = len(dependent_job_ids)
         with self.connection.pipeline() as pipe:
             for dependent_job_id in dependent_job_ids:
-                pipe.srem(Job.remaining_prerequisites_key_for(dependent_job_id), job.id)
+                pipe.srem(Job.remaining_dependencies_key_for(dependent_job_id), job.id)
             for dependent_job_id in dependent_job_ids:
-                pipe.scard(Job.remaining_prerequisites_key_for(dependent_job_id))
+                pipe.scard(Job.remaining_dependencies_key_for(dependent_job_id))
             pipe.delete(job.dependents_key)
             results = pipe.execute()
         # The srem results should be all 1's, otherwise the jobs are in an inconsistent
-        # state where dependent job sets and prerequisite job sets disagree.
+        # state where dependent job sets and dependency job sets disagree.
         assert len(results) == num_dependents * 2 + 1
         assert(all(results[:num_dependents]))
         to_enqueue_idx = filter(lambda idx: results[num_dependents + idx] == 0, xrange(0, num_dependents))
