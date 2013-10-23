@@ -451,18 +451,18 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
         """
-
-        def doit(pipe):
-            for dependency_id in remaining_dependency_ids:
-                pipe.sadd(Job.dependents_key_for(dependency_id), self.id)
-            pipe.sadd(self.remaining_dependencies_key, *remaining_dependency_ids)
-
         if pipeline is None:
-            with self.connection.pipeline() as pipeline:
-                doit(pipeline)
-                pipeline.execute()
+            pipeline = self.connection.pipeline()
+            execute_pipeline = True
         else:
-            doit(pipeline)
+            execute_pipeline = False
+
+        for dependency_id in remaining_dependency_ids:
+            pipeline.sadd(Job.dependents_key_for(dependency_id), self.id)
+            pipeline.sadd(self.remaining_dependencies_key, *remaining_dependency_ids)
+        
+        if execute_pipeline:
+            pipeline.execute()
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
