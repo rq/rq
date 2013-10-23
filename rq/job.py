@@ -95,7 +95,7 @@ class Job(object):
         job._status = status
         # depends_on could be a job instance or job id, or list thereof
         if depends_on is not None:
-            if isinstance(depends_on, Job) or isinstance(depends_on, text_type):
+            if isinstance(depends_on, (Job, text_type)):
                 depends_on = [depends_on]
             job._prerequisite_ids = list(
                 prerequisite.id if isinstance(prerequisite, Job) else prerequisite for prerequisite in depends_on)
