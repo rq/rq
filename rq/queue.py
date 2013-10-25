@@ -234,10 +234,11 @@ class Queue(object):
         dependent job set and deletes it, enqueueing dependent jobs that become
         dependency-free."""
 
-        job_ids_to_enqueue = []
         dependent_job_ids = map(as_text, self.connection.smembers(job.dependents_key))
+
         if not dependent_job_ids:
             return
+
         num_dependents = len(dependent_job_ids)
         with self.connection.pipeline() as pipe:
             for dependent_job_id in dependent_job_ids:
@@ -246,13 +247,9 @@ class Queue(object):
                 pipe.scard(Job.remaining_dependencies_key_for(dependent_job_id))
             pipe.delete(job.dependents_key)
             results = pipe.execute()
-        # The srem results should be all 1's, otherwise the jobs are in an inconsistent
-        # state where dependent job sets and dependency job sets disagree.
-        assert len(results) == num_dependents * 2 + 1
-        assert(all(results[:num_dependents]))
+        
         to_enqueue_idx = filter(lambda idx: results[num_dependents + idx] == 0, xrange(0, num_dependents))
-        if not to_enqueue_idx:
-            return
+
         # TODO: pipeline the enqueueing
         for dependent_job_idx in to_enqueue_idx:
             dependent_job_id = dependent_job_ids[dependent_job_idx]
