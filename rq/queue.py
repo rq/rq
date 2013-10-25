@@ -8,8 +8,6 @@ from .exceptions import (DequeueTimeout, InvalidJobOperationError,
                          NoSuchJobError, UnpickleError)
 from .compat import total_ordering, string_types, as_text
 
-from redis import WatchError
-
 
 def get_failed_queue(connection=None):
     """Returns a handle to the special failed queue."""
