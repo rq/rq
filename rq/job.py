@@ -242,12 +242,12 @@ class Job(object):
     @classmethod
     def dependents_key_for(cls, job_id):
         """Redis key for the dependent job set."""
-        return 'rq:job:%s:dependents' % job_id
+        return b'rq:job:' + job_id.encode('utf-8') + b':dependents'
 
     @classmethod
     def remaining_dependencies_key_for(cls, job_id):
         """Redis key for the dependency job set."""
-        return 'rq:job:%s:dependencies' % job_id
+        return b'rq:job:' + job_id.encode('utf-8') + b':dependencies'
 
     @property
     def key(self):
