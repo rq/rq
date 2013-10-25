@@ -232,7 +232,7 @@ class Queue(object):
         dependent job set and deletes it, enqueueing dependent jobs that become
         dependency-free."""
 
-        dependent_job_ids = map(as_text, self.connection.smembers(job.dependents_key))
+        dependent_job_ids = list(map(as_text, self.connection.smembers(job.dependents_key)))
 
         if not dependent_job_ids:
             return
@@ -246,7 +246,7 @@ class Queue(object):
             pipe.delete(job.dependents_key)
             results = pipe.execute()
         
-        to_enqueue_idx = filter(lambda idx: results[num_dependents + idx] == 0, xrange(0, num_dependents))
+        to_enqueue_idx = filter(lambda idx: results[num_dependents + idx] == 0, range(0, num_dependents))
 
         # TODO: pipeline the enqueueing
         for dependent_job_idx in to_enqueue_idx:
