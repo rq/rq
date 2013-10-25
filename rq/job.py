@@ -11,6 +11,8 @@ from .exceptions import UnpickleError, NoSuchJobError
 from .utils import import_attribute
 from rq.compat import text_type, decode_redis_hash, as_text
 
+from redis import WatchError
+
 
 def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
@@ -240,12 +242,12 @@ class Job(object):
     @classmethod
     def dependents_key_for(cls, job_id):
         """Redis key for the dependent job set."""
-        return 'rq:job:%s:dependents' % (job_id,)
+        return 'rq:job:%s:dependents' % job_id
 
     @classmethod
     def remaining_dependencies_key_for(cls, job_id):
         """Redis key for the dependency job set."""
-        return 'rq:job:%s:dependencies' % (job_id,)
+        return 'rq:job:%s:dependencies' % job_id
 
     @property
     def key(self):
@@ -442,27 +444,43 @@ class Job(object):
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
 
-    def register_dependencies(self, remaining_dependency_ids, pipeline=None):
-        """Jobs may have other jobs as dependencies. A job is added to its
-        queue only if all its dependencies have succeeded. For dependencies
-        that have not yet succeeded, given in remaining_dependency_ids, we
-        record the relation as a set of job ids on a key determined by the
-        dependency id like this:
+    def register_dependencies(self, dependencies):
+        """Register this job as being dependent on its dependencies.
+        A job is added to its queue only if all its dependencies have succeeded.
+
+        For each unmet dependency (jobs that aren't successfully completed), we
+        register this job's id in a Redis set:
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
         """
-        if pipeline is None:
-            pipeline = self.connection.pipeline()
-            execute_pipeline = True
-        else:
-            execute_pipeline = False
-
-        for dependency_id in remaining_dependency_ids:
-            pipeline.sadd(Job.dependents_key_for(dependency_id), self.id)
-            pipeline.sadd(self.remaining_dependencies_key, *remaining_dependency_ids)
+        pipeline = self.connection.pipeline()
+        remaining_dependencies = []
+        while True:
+            try:
+                # Check whether any of dependencies have been met
+                # pipeline.watch() is used to ensure that no dependency 
+                # is modified in the duration of the check
+                # TODO: Each dependency.status call issues a Redis query
+                # We should probably use bulk fetches if possible
+                for dependency in dependencies:
+                    pipeline.watch(dependency.key)
+                    if dependency.status != Status.FINISHED:
+                        remaining_dependencies.append(dependency)
+                
+                if remaining_dependencies:
+                    pipeline.multi()
+                    pipeline.sadd(self.remaining_dependencies_key,
+                                  *[dependency.id for dependency in remaining_dependencies])
         
-        if execute_pipeline:
-            pipeline.execute()
+                    for dependency in remaining_dependencies:
+                        pipeline.sadd(Job.dependents_key_for(dependency.id), self.id)
+                
+                    pipeline.execute()
+                break
+            except WatchError:
+                continue
+
+        return remaining_dependencies
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)

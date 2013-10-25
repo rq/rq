@@ -155,38 +155,15 @@ class Queue(object):
                          result_ttl=result_ttl, status=None if depends_on else Status.QUEUED,
                          description=description, depends_on=depends_on, timeout=timeout)
 
-        # If the new job depends on an unfinished job, register the new job
-        # as a dependent of the unfinished dependency job instead of enqueueing.
-        # If WatchError is raised in the process, that means something else is
-        # modifying the dependency job. In this case we simply retry.
+        # A job having unmet dependencies will not be enqueued right away
         if depends_on:
             if isinstance(depends_on, Job):
-                depends_on = [depends_on]
-            
-            with self.connection.pipeline() as pipe:
-                while True:
-                    remaining_dependencies = []
-                    try:
-                        # Each dependency.status call creates a Redis query
-                        # We should probably use bulk fetches
-                        for dependency in depends_on:
-                            pipe.watch(dependency.key)
-                            if dependency.status != Status.FINISHED:
-                                remaining_dependencies.append(dependency)
-                        
-                        if remaining_dependencies:
-                            pipe.multi()
-                            job.register_dependencies(
-                                [dependency.id for dependency in remaining_dependencies],
-                                pipe
-                            )
-                            job.save(pipe)
-                            pipe.execute()
-                            return job
-                        break
-                    except WatchError:
-                        continue
-
+                depends_on = [depends_on]            
+            remaining_dependencies = job.register_dependencies(depends_on)
+            if remaining_dependencies:
+                job.save()
+                return job
+        
         return self.enqueue_job(job)
 
     def enqueue(self, f, *args, **kwargs):

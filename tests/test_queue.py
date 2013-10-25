@@ -297,13 +297,13 @@ class TestQueue(RQTestCase):
         parent_job2.save()
         job_1 = Job.create(func=say_hello, depends_on=parent_job1)
         job_1.save()
-        job_1.register_dependencies([parent_job1.id])
+        job_1.register_dependencies([parent_job1])
         job_2 = Job.create(func=say_hello, depends_on=[parent_job2])
         job_2.save()
-        job_2.register_dependencies([parent_job2.id])
+        job_2.register_dependencies([parent_job2])
         job_3 = Job.create(func=say_hello, depends_on=[parent_job1, parent_job2])
         job_3.save()
-        job_3.register_dependencies([parent_job1.id, parent_job2.id])
+        job_3.register_dependencies([parent_job1, parent_job2])
 
         # Before dependency jobs bump the dependent jobs, queue is empty.
         self.assertEqual(q.job_ids, [])
