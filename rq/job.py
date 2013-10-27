@@ -447,32 +447,32 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
         """
-        pipeline = self.connection.pipeline()
         remaining_dependencies = []
-        while True:
-            try:
-                # Check whether any of dependencies have been met
-                # pipeline.watch() is used to ensure that no dependency 
-                # is modified in the duration of the check
-                # TODO: Each dependency.status call issues a Redis query
-                # We should probably use bulk fetches if possible
-                pipeline.watch(*[dependency.key for dependency in dependencies])
-                for dependency in dependencies:
-                    if dependency.status != Status.FINISHED:
-                        remaining_dependencies.append(dependency)
+        with self.connection.pipeline() as pipeline:
+            while True:
+                try:
+                    # Check whether any of dependencies have been met
+                    # pipeline.watch() is used to ensure that no dependency 
+                    # is modified in the duration of the check
+                    # TODO: Each dependency.status call issues a Redis query
+                    # We should probably use bulk fetches if possible
+                    pipeline.watch(*[dependency.key for dependency in dependencies])
+                    for dependency in dependencies:
+                        if dependency.status != Status.FINISHED:
+                            remaining_dependencies.append(dependency)
 
-                if remaining_dependencies:
-                    pipeline.multi()
-                    pipeline.sadd(self.remaining_dependencies_key,
-                                  *[dependency.id for dependency in remaining_dependencies])
-        
-                    for dependency in remaining_dependencies:
-                        pipeline.sadd(Job.dependents_key_for(dependency.id), self.id)
-                
-                    pipeline.execute()
-                break
-            except WatchError:
-                continue
+                    if remaining_dependencies:
+                        pipeline.multi()
+                        pipeline.sadd(self.remaining_dependencies_key,
+                                      *[dependency.id for dependency in remaining_dependencies])
+            
+                        for dependency in remaining_dependencies:
+                            pipeline.sadd(Job.dependents_key_for(dependency.id), self.id)
+                    
+                        pipeline.execute()
+                    break
+                except WatchError:
+                    continue
 
         return remaining_dependencies
 
