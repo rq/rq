@@ -456,11 +456,11 @@ class Job(object):
                 # is modified in the duration of the check
                 # TODO: Each dependency.status call issues a Redis query
                 # We should probably use bulk fetches if possible
+                pipeline.watch(*[dependency.key for dependency in dependencies])
                 for dependency in dependencies:
-                    pipeline.watch(dependency.key)
                     if dependency.status != Status.FINISHED:
                         remaining_dependencies.append(dependency)
-                
+
                 if remaining_dependencies:
                     pipeline.multi()
                     pipeline.sadd(self.remaining_dependencies_key,
