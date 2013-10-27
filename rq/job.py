@@ -139,17 +139,11 @@ class Job(object):
         cache job.dependencies as job._dependencies.
         TODO: What if the dependency has already been removed e.g. due to result_ttl timeout?
         """
-        if not self._dependency_ids:
-            return []
         try:
             return self._dependencies
         except AttributeError:
-            pass
-
-        # TODO: Pipeline the dependency job fetching.
-        jobs = [Job.fetch(dependency_id) for dependency_id in self._dependency_ids]
-        self._dependencies = jobs
-        return jobs
+            self._dependencies = [Job.fetch(dependency_id) for dependency_id in self._dependency_ids]
+            return self._dependencies
 
     @property
     def func(self):
