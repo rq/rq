@@ -293,7 +293,7 @@ class TestJob(RQTestCase):
             list(map(as_text, self.testconn.smembers(Job.dependents_key_for(job1.id)))),
             [job2.id]
         )
-        self.assertEqual(self.testconn.smembers('rq:job:%s:dependents' % job2.id), set())
+        self.assertEqual(self.testconn.smembers(Job.dependents_key_for(job2.id)), set())
 
     def test_cancel(self):
         """job.cancel() deletes itself & dependents mapping from Redis."""
