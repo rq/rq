@@ -285,15 +285,20 @@ class TestJob(RQTestCase):
 
     def test_register_dependencies(self):
         """Test that jobs updates the correct job dependents."""
+        finished_job = Job.create(func=say_hello, status='finished')
+        finished_job.save()
         job1 = Job.create(func=say_hello)
         job1.save()
-        job2 = Job.create(func=say_hello, depends_on=job1)
+        job2 = Job.create(func=say_hello, depends_on=[job1, finished_job])
         job2.register_dependencies([job1])
         self.assertEqual(
             list(map(as_text, self.testconn.smembers(Job.dependents_key_for(job1.id)))),
             [job2.id]
         )
+        # Should not register itself as being dependent on a finished job
+        self.assertEqual(self.testconn.smembers(Job.dependents_key_for(finished_job.id)), set())
         self.assertEqual(self.testconn.smembers(Job.dependents_key_for(job2.id)), set())
+
 
     def test_cancel(self):
         """job.cancel() deletes itself & dependents mapping from Redis."""
