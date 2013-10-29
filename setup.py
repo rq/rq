@@ -36,7 +36,7 @@ setup(
     description='RQ is a simple, lightweight, library for creating background '
                 'jobs, and processing them.',
     long_description=__doc__,
-    packages=find_packages(),
+    packages=find_packages(exclude=['tests']),
     include_package_data=True,
     zip_safe=False,
     platforms='any',
