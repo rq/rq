@@ -19,7 +19,7 @@ enqueueing itself.  Such a `Job` object is a proxy object that is tied to the
 job's ID, to be able to poll for results.
 
 
-### On the return value's TTL
+**On the return value's TTL**  
 
 Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
@@ -44,8 +44,6 @@ values, which would be deleted immediately by default.
 {% highlight python %}
 q.enqueue_call(func=func_without_rv, result_ttl=500)  # job kept explicitly
 {% endhighlight %}
-
-Easy enough.
 
 
 ## Dealing with exceptions
