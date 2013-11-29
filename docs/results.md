@@ -45,6 +45,8 @@ values, which would be deleted immediately by default.
 q.enqueue_call(func=func_without_rv, result_ttl=500)  # job kept explicitly
 {% endhighlight %}
 
+Easy enough.
+
 
 ## Dealing with exceptions
 
