@@ -20,7 +20,6 @@ job's ID, to be able to poll for results.
 
 
 **On the return value's TTL**  
-
 Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
@@ -36,6 +35,7 @@ q.enqueue_call(func=foo)  # result expires after 500 secs (the default)
 q.enqueue_call(func=foo, result_ttl=86400)  # result expires after 1 day
 q.enqueue_call(func=foo, result_ttl=0)  # result gets deleted immediately
 q.enqueue_call(func=foo, result_ttl=-1)  # result never expires--you should delete jobs manually
+pass
 {% endhighlight %}
 
 Additionally, you can use this for keeping around finished jobs without return
@@ -43,6 +43,7 @@ values, which would be deleted immediately by default.
 
 {% highlight python %}
 q.enqueue_call(func=func_without_rv, result_ttl=500)  # job kept explicitly
+pass
 {% endhighlight %}
 
 
