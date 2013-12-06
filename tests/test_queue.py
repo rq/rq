@@ -289,7 +289,7 @@ class TestQueue(RQTestCase):
         # Queue.all() should still report the empty queues
         self.assertEqual(len(Queue.all()), 3)
 
-    def test_bump_dependents(self):
+    def test_bump_reverse_dependencies(self):
         q = Queue()
         parent_job1 = Job.create(func=say_hello)
         parent_job1.save()
@@ -309,16 +309,16 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
 
         # After bump_depedents() for parent_job1 , queue should contain job_1.
-        q.bump_dependents(parent_job1)
+        q.bump_reverse_dependencies(parent_job1)
         self.assertEqual(set(q.job_ids), set([job_1.id]))
-        self.assertFalse(self.testconn.exists(parent_job1.dependents_key))
-        self.assertTrue(self.testconn.exists(parent_job2.dependents_key))
+        self.assertFalse(self.testconn.exists(parent_job1.reverse_dependencies_key))
+        self.assertTrue(self.testconn.exists(parent_job2.reverse_dependencies_key))
 
         # After bump_depedents() for parent_job2 , queue should also contain job_2 and job_3.
-        q.bump_dependents(parent_job2)
+        q.bump_reverse_dependencies(parent_job2)
         self.assertEqual(set(q.job_ids), set([job_1.id, job_2.id, job_3.id]))
-        self.assertFalse(self.testconn.exists(parent_job1.dependents_key))
-        self.assertFalse(self.testconn.exists(parent_job2.dependents_key))
+        self.assertFalse(self.testconn.exists(parent_job1.reverse_dependencies_key))
+        self.assertFalse(self.testconn.exists(parent_job2.reverse_dependencies_key))
 
     def test_enqueue_job_with_dependencies(self):
         """In enqueue_call(), jobs are enqueued iff all their dependencies are
@@ -349,7 +349,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
 
     def test_enqueue_job_with_dependency_and_timeout(self):
-        """Jobs still know their specified timeout after being scheduled as dependents."""
+        """Jobs still know their specified timeout after being scheduled as reverse_dependencies."""
         parent_job = Job.create(func=say_hello)
         q = Queue()
 
@@ -359,12 +359,12 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
         self.assertEqual(job.timeout, 123)
 
-        # Job is enqueued after dependency job bumps dependents, and timeout is
+        # Job is enqueued after dependency job bumps reverse_dependencies, and timeout is
         # correct.
         q.empty()
         parent_job.status = Status.FINISHED
         parent_job.save()
-        q.bump_dependents(parent_job)
+        q.bump_reverse_dependencies(parent_job)
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, 123)
 

@@ -234,9 +234,9 @@ class Job(object):
         return b'rq:job:' + job_id.encode('utf-8')
 
     @classmethod
-    def dependents_key_for(cls, job_id):
+    def reverse_dependencies_key_for(cls, job_id):
         """Redis key for the dependent job set."""
-        return b'rq:job:' + job_id.encode('utf-8') + b':dependents'
+        return b'rq:job:' + job_id.encode('utf-8') + b':reverse_dependencies'
 
     @classmethod
     def remaining_dependencies_key_for(cls, job_id):
@@ -249,9 +249,9 @@ class Job(object):
         return self.key_for(self.id)
 
     @property
-    def dependents_key(self):
+    def reverse_dependencies_key(self):
         """Redis key for the dependent job set."""
-        return self.dependents_key_for(self.id)
+        return self.reverse_dependencies_key_for(self.id)
 
     @property
     def remaining_dependencies_key(self):
@@ -385,7 +385,7 @@ class Job(object):
         """
         pipeline = self.connection.pipeline()
         self.delete(pipeline=pipeline)
-        pipeline.delete(self.dependents_key)
+        pipeline.delete(self.reverse_dependencies_key)
         pipeline.execute()
 
     def delete(self, pipeline=None):
@@ -445,7 +445,7 @@ class Job(object):
         For each unmet dependency (jobs that aren't successfully completed), we
         register this job's id in a Redis set:
 
-            rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
+            rq:job:job_id:reverse_dependencies = {'job_id_1', 'job_id_2'}
         """
         remaining_dependencies = []
         with self.connection.pipeline() as pipeline:
@@ -467,7 +467,7 @@ class Job(object):
                                       *[dependency.id for dependency in remaining_dependencies])
             
                         for dependency in remaining_dependencies:
-                            pipeline.sadd(Job.dependents_key_for(dependency.id), self.id)
+                            pipeline.sadd(Job.reverse_dependencies_key_for(dependency.id), self.id)
                     
                         pipeline.execute()
                     break

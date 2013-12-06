@@ -284,7 +284,7 @@ class TestJob(RQTestCase):
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
     def test_register_dependencies(self):
-        """Test that jobs updates the correct job dependents."""
+        """Test that jobs updates the correct job reverse_dependencies."""
         finished_job = Job.create(func=say_hello, status='finished')
         finished_job.save()
         job1 = Job.create(func=say_hello)
@@ -292,19 +292,19 @@ class TestJob(RQTestCase):
         job2 = Job.create(func=say_hello, depends_on=[job1, finished_job])
         job2.register_dependencies([job1])
         self.assertEqual(
-            list(map(as_text, self.testconn.smembers(Job.dependents_key_for(job1.id)))),
+            list(map(as_text, self.testconn.smembers(Job.reverse_dependencies_key_for(job1.id)))),
             [job2.id]
         )
         # Should not register itself as being dependent on a finished job
-        self.assertEqual(self.testconn.smembers(Job.dependents_key_for(finished_job.id)), set())
-        self.assertEqual(self.testconn.smembers(Job.dependents_key_for(job2.id)), set())
+        self.assertEqual(self.testconn.smembers(Job.reverse_dependencies_key_for(finished_job.id)), set())
+        self.assertEqual(self.testconn.smembers(Job.reverse_dependencies_key_for(job2.id)), set())
 
 
     def test_cancel(self):
-        """job.cancel() deletes itself & dependents mapping from Redis."""
+        """job.cancel() deletes itself & reverse_dependencies mapping from Redis."""
         job = Job.create(func=say_hello)
         job2 = Job.create(func=say_hello, depends_on=job)
         job2.register_dependencies([job])
         job.cancel()
         self.assertFalse(self.testconn.exists(job.key))
-        self.assertFalse(self.testconn.exists(job.dependents_key))
+        self.assertFalse(self.testconn.exists(job.reverse_dependencies_key))

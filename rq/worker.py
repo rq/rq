@@ -326,7 +326,7 @@ class Worker(object):
                 self.fork_and_perform_job(job)
                 self.connection.expire(self.key, self.default_worker_ttl)
                 if job.status == Status.FINISHED:
-                    queue.bump_dependents(job)
+                    queue.bump_reverse_dependencies(job)
 
                 did_perform_work = True
         finally:
