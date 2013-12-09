@@ -145,6 +145,23 @@ class Job(object):
             self._dependencies = [Job.fetch(dependency_id) for dependency_id in self._dependency_ids]
             return self._dependencies
 
+    def remove_dependency(self, dependency_id):
+        """Removes a dependency from job. This is usually called when
+        dependency is successfully executed."""
+        # TODO: can probably be pipelined
+        self.connection.srem(self.remaining_dependencies_key, dependency_id)
+
+    def has_unmet_dependencies(self):
+        """Checks whether job has dependencies that aren't yet finished."""
+        return bool(self.connection.scard(self.remaining_dependencies_key))
+
+    @property
+    def reverse_dependencies(self):
+        """Returns a list of jobs whose execution depends on this
+        job's successful execution"""
+        reverse_dependency_ids = self.connection.smembers(self.reverse_dependencies_key)
+        return [Job.fetch(id) for id in reverse_dependency_ids]
+
     @property
     def func(self):
         func_name = self.func_name

@@ -227,34 +227,6 @@ class Queue(object):
             job.save()
         return job
 
-    def bump_reverse_dependencies(self, job):
-        """Updates remaining dependencies for all jobs in the given job's
-        dependent job set and deletes it, enqueueing dependent jobs that become
-        dependency-free."""
-
-        dependent_job_ids = list(map(as_text, self.connection.smembers(job.reverse_dependencies_key)))
-
-        if not dependent_job_ids:
-            return
-
-        num_reverse_dependencies = len(dependent_job_ids)
-        with self.connection.pipeline() as pipe:
-            for dependent_job_id in dependent_job_ids:
-                pipe.srem(Job.remaining_dependencies_key_for(dependent_job_id), job.id)
-            for dependent_job_id in dependent_job_ids:
-                pipe.scard(Job.remaining_dependencies_key_for(dependent_job_id))
-            pipe.delete(job.reverse_dependencies_key)
-            results = pipe.execute()
-        
-        to_enqueue_idx = filter(lambda idx: results[num_reverse_dependencies + idx] == 0, range(0, num_reverse_dependencies))
-
-        # TODO: pipeline the enqueueing
-        for dependent_job_idx in to_enqueue_idx:
-            dependent_job_id = dependent_job_ids[dependent_job_idx]
-            dependent = Job.fetch(dependent_job_id, connection=self.connection)
-            self.enqueue_job(dependent)
-
-
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
         return as_text(self.connection.lpop(self.key))

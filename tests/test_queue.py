@@ -289,37 +289,6 @@ class TestQueue(RQTestCase):
         # Queue.all() should still report the empty queues
         self.assertEqual(len(Queue.all()), 3)
 
-    def test_bump_reverse_dependencies(self):
-        q = Queue()
-        parent_job1 = Job.create(func=say_hello)
-        parent_job1.save()
-        parent_job2 = Job.create(func=say_hello)
-        parent_job2.save()
-        job_1 = Job.create(func=say_hello, depends_on=parent_job1)
-        job_1.save()
-        job_1.register_dependencies([parent_job1])
-        job_2 = Job.create(func=say_hello, depends_on=[parent_job2])
-        job_2.save()
-        job_2.register_dependencies([parent_job2])
-        job_3 = Job.create(func=say_hello, depends_on=[parent_job1, parent_job2])
-        job_3.save()
-        job_3.register_dependencies([parent_job1, parent_job2])
-
-        # Before dependency jobs bump the dependent jobs, queue is empty.
-        self.assertEqual(q.job_ids, [])
-
-        # After bump_depedents() for parent_job1 , queue should contain job_1.
-        q.bump_reverse_dependencies(parent_job1)
-        self.assertEqual(set(q.job_ids), set([job_1.id]))
-        self.assertFalse(self.testconn.exists(parent_job1.reverse_dependencies_key))
-        self.assertTrue(self.testconn.exists(parent_job2.reverse_dependencies_key))
-
-        # After bump_depedents() for parent_job2 , queue should also contain job_2 and job_3.
-        q.bump_reverse_dependencies(parent_job2)
-        self.assertEqual(set(q.job_ids), set([job_1.id, job_2.id, job_3.id]))
-        self.assertFalse(self.testconn.exists(parent_job1.reverse_dependencies_key))
-        self.assertFalse(self.testconn.exists(parent_job2.reverse_dependencies_key))
-
     def test_enqueue_job_with_dependencies(self):
         """In enqueue_call(), jobs are enqueued iff all their dependencies are
         finished."""
@@ -359,17 +328,10 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
         self.assertEqual(job.timeout, 123)
 
-        # Job is enqueued after dependency job bumps reverse_dependencies, and timeout is
-        # correct.
+        # Jobs dependent on finished jobs are immediately enqueued.
         q.empty()
         parent_job.status = Status.FINISHED
         parent_job.save()
-        q.bump_reverse_dependencies(parent_job)
-        self.assertEqual(q.job_ids, [job.id])
-        self.assertEqual(job.timeout, 123)
-
-        # Jobs dependent on finished jobs are immediately enqueued.
-        q.empty()
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=456)
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, 456)

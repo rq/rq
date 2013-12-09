@@ -325,8 +325,12 @@ class Worker(object):
                 self.connection.expire(self.key, (job.timeout or Queue.DEFAULT_TIMEOUT) + 60)
                 self.fork_and_perform_job(job)
                 self.connection.expire(self.key, self.default_worker_ttl)
+                
                 if job.status == Status.FINISHED:
-                    queue.bump_reverse_dependencies(job)
+                    for reverse_dependency in job.reverse_dependencies:
+                        reverse_dependency.remove_dependency(job.id)
+                        if not reverse_dependency.has_unmet_dependencies():
+                            queue.enqueue_job(reverse_dependency)
 
                 did_perform_work = True
         finally:
