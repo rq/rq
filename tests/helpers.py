@@ -1,6 +1,6 @@
-import times
+from datetime import timedelta
 
 
-def strip_milliseconds(date):
-    return times.to_universal(times.format(date, 'UTC'))
+def strip_microseconds(date):
+    return date - timedelta(microseconds=date.microsecond)
 

@@ -1,8 +1,7 @@
-import times
 from datetime import datetime
 from tests import RQTestCase
 from tests.fixtures import Number, some_calculation, say_hello, access_self
-from tests.helpers import strip_milliseconds
+from tests.helpers import strip_microseconds
 try:
     from cPickle import loads
 except ImportError:
@@ -11,6 +10,7 @@ from rq.compat import as_text
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.queue import Queue
+from rq.utils import utcformat
 
 
 class TestJob(RQTestCase):
@@ -91,7 +91,7 @@ class TestJob(RQTestCase):
         self.testconn.hset('rq:job:some_id', 'data',
                            "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
-                           '2012-02-07 22:13:24+0000')
+                           '2012-02-07T22:13:24Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -108,11 +108,11 @@ class TestJob(RQTestCase):
         job = Job()
         job.save()
 
-        expected_date = strip_milliseconds(job.created_at)
+        expected_date = strip_microseconds(job.created_at)
         stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
         self.assertEquals(
-            times.to_universal(stored_date),
-            expected_date)
+            stored_date,
+            utcformat(expected_date))
 
         # ... and no other keys are stored
         self.assertEqual(
@@ -124,11 +124,11 @@ class TestJob(RQTestCase):
         job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
-        expected_date = strip_milliseconds(job.created_at)
+        expected_date = strip_microseconds(job.created_at)
         stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
         self.assertEquals(
-            times.to_universal(stored_date),
-            expected_date)
+            stored_date,
+            utcformat(expected_date))
 
         # ... and no other keys are stored
         self.assertEqual(

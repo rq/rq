@@ -3,7 +3,6 @@ import os
 import errno
 import random
 import time
-import times
 try:
     from procname import setprocname
 except ImportError:
@@ -16,7 +15,7 @@ import logging
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .job import Job, Status
-from .utils import make_colorizer
+from .utils import make_colorizer, utcnow, utcformat
 from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, UnpickleError, DequeueTimeout
 from .timeouts import death_penalty_after
@@ -197,7 +196,7 @@ class Worker(object):
         queues = ','.join(self.queue_names())
         with self.connection._pipeline() as p:
             p.delete(key)
-            p.hset(key, 'birth', times.format(times.now(), 'UTC'))
+            p.hset(key, 'birth', utcformat(utcnow()))
             p.hset(key, 'queues', queues)
             p.sadd(self.redis_workers_keys, key)
             p.expire(key, self.default_worker_ttl)
@@ -210,7 +209,7 @@ class Worker(object):
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
-            p.hset(self.key, 'death', times.format(times.now(), 'UTC'))
+            p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
 
@@ -410,7 +409,7 @@ class Worker(object):
             # use the same exc handling when pickling fails
             job._result = rv
             job._status = Status.FINISHED
-            job.ended_at = times.now()
+            job.ended_at = utcnow()
 
             result_ttl = job.get_ttl(self.default_result_ttl)
             pipeline = self.connection._pipeline()
