@@ -365,7 +365,7 @@ class Worker(object):
         timeout = max(timeout, self.default_worker_ttl)
         self.connection.expire(self.key, timeout)
         self.log.debug('Sent heartbeat to prevent worker timeout. '
-                       'Next one should arrive within {} seconds.'.format(timeout))
+                       'Next one should arrive within {0} seconds.'.format(timeout))
 
     def fork_and_perform_job(self, job):
         """Spawns a work horse to perform the actual work and passes it a job.
