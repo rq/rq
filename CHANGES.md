@@ -1,3 +1,10 @@
+### 0.3.12
+(December 16th, 2013)
+
+- Bug fix where a worker could time out before the job was done, removing it
+  from any monitor overviews (#288).
+
+
 ### 0.3.11
 (August 23th, 2013)
 
