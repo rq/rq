@@ -1,3 +1,10 @@
+### 0.3.13
+(December 17th, 2013)
+
+- Bug fix where the worker crashes on jobs that have their timeout explicitly
+  removed.  Thanks for reporting, @algrs.
+
+
 ### 0.3.12
 (December 16th, 2013)
 
