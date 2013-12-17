@@ -326,7 +326,7 @@ class Worker(object):
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                     blue(job.description), job.id))
 
-                self.heartbeat((job.timeout or Queue.DEFAULT_TIMEOUT) + 60)
+                self.heartbeat((job.timeout or 180) + 60)
                 self.fork_and_perform_job(job)
                 self.heartbeat()
 
