@@ -38,7 +38,7 @@ with Connection(conn):
 
 Than, add the command to your `Procfile`:
 
-    worker: python run-worker.py
+    worker: python -u run-worker.py
 
 Now, all you have to do is spin up a worker:
 
@@ -56,9 +56,10 @@ When using RQ under `foreman`, you may experience that the workers are a bit
 quiet sometimes.  This is because of Python buffering the output, so `foreman`
 cannot (yet) echo it.  Here's a related [Wiki page][4].
 
-Just change the way you run your worker process:
+Just change the way you run your worker process, by adding the `-u` option (to
+force stdin, stdout and stderr to be totally unbuffered):
 
-    worker: python -u worker.py high default low
+    worker: python -u run-worker.py
 
 [1]: https://heroku.com
 [2]: https://devcenter.heroku.com/articles/redistogo
