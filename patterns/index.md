@@ -6,15 +6,14 @@ layout: patterns
 
 ## Using RQ on Heroku
 
-To setup RQ on [Heroku](https://heroku.com/), first add it to your
+To setup RQ on [Heroku][1], first add it to your
 `requirements.txt` file:
 
     redis==2.4.11
     rq==0.3.4
 
 Create a file called `run-worker.py` with the following content (assuming you
-are using [Redis To Go](https://devcenter.heroku.com/articles/redistogo) with
-Heroku):
+are using [Redis To Go][2] with Heroku):
 
 {% highlight python %}
 import os
@@ -46,3 +45,22 @@ Now, all you have to do is spin up a worker:
 {% highlight console %}
 $ heroku scale worker=1
 {% endhighlight %}
+
+
+## Putting RQ under foreman
+
+[Foreman][3] is probably the process manager you use when you host your app on
+Heroku, or just because it's a pretty friendly tool to use in development.
+
+When using RQ under `foreman`, you may experience that the workers are a bit
+quiet sometimes.  This is because of Python buffering the output, so `foreman`
+cannot (yet) echo it.  Here's a related [Wiki page][4].
+
+Just change the way you run your worker process:
+
+    worker: python -u worker.py high default low
+
+[1]: https://heroku.com
+[2]: https://devcenter.heroku.com/articles/redistogo
+[3]: http://supervisord.org/
+[4]: https://github.com/ddollar/foreman/wiki/Missing-Output
