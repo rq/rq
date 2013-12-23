@@ -30,7 +30,6 @@ class Queue(object):
     def all(cls, connection=None):
         """Returns an iterable of all Queues.
         """
-        prefix = cls.redis_queue_namespace_prefix
         connection = resolve_connection(connection)
 
         def to_queue(queue_key):
