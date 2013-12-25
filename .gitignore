@@ -6,3 +6,4 @@
 /.envrc
 /.tox
 /dist
+/build
