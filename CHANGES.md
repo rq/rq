@@ -1,6 +1,8 @@
 ### 0.4.0
 (not released yet)
 
+- Removed dependency on the `times` library. Thanks, Malthe!
+
 - Job dependencies!  Thanks, Selwin.
 
 - `Queue.all()` and `rqinfo` now report empty queues, too.  Thanks, Rob!

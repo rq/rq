@@ -1,5 +1,4 @@
 import inspect
-import times
 from uuid import uuid4
 try:
     from cPickle import loads, dumps, UnpicklingError
@@ -8,7 +7,7 @@ except ImportError:  # noqa
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
-from .utils import import_attribute
+from .utils import import_attribute, utcnow, utcformat, utcparse
 from rq.compat import text_type, decode_redis_hash, as_text
 
 
@@ -192,7 +191,7 @@ class Job(object):
     def __init__(self, id=None, connection=None):
         self.connection = resolve_connection(connection)
         self._id = id
-        self.created_at = times.now()
+        self.created_at = utcnow()
         self._func_name = None
         self._instance = None
         self._args = None
@@ -293,9 +292,9 @@ class Job(object):
 
         def to_date(date_str):
             if date_str is None:
-                return None
+                return
             else:
-                return times.to_universal(as_text(date_str))
+                return utcparse(as_text(date_str))
 
         try:
             self.data = obj['data']
@@ -323,7 +322,7 @@ class Job(object):
     def dump(self):
         """Returns a serialization of the current job instance"""
         obj = {}
-        obj['created_at'] = times.format(self.created_at or times.now(), 'UTC')
+        obj['created_at'] = utcformat(self.created_at or utcnow())
 
         if self.func_name is not None:
             obj['data'] = dumps(self.job_tuple)
@@ -332,9 +331,9 @@ class Job(object):
         if self.description is not None:
             obj['description'] = self.description
         if self.enqueued_at is not None:
-            obj['enqueued_at'] = times.format(self.enqueued_at, 'UTC')
+            obj['enqueued_at'] = utcformat(self.enqueued_at)
         if self.ended_at is not None:
-            obj['ended_at'] = times.format(self.ended_at, 'UTC')
+            obj['ended_at'] = utcformat(self.ended_at)
         if self._result is not None:
             obj['result'] = dumps(self._result)
         if self.exc_info is not None:

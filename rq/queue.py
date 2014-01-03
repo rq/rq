@@ -1,8 +1,8 @@
-import times
 import uuid
 
 from .connections import resolve_connection
 from .job import Job, Status
+from .utils import utcnow
 
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
                          NoSuchJobError, UnpickleError)
@@ -224,7 +224,7 @@ class Queue(object):
 
         if set_meta_data:
             job.origin = self.name
-            job.enqueued_at = times.now()
+            job.enqueued_at = utcnow()
 
         if job.timeout is None:
             job.timeout = self.DEFAULT_TIMEOUT
@@ -370,7 +370,7 @@ class FailedQueue(Queue):
         must not be overridden (e.g. `origin` or `enqueued_at`) and other meta
         data must be inserted (`ended_at` and `exc_info`).
         """
-        job.ended_at = times.now()
+        job.ended_at = utcnow()
         job.exc_info = exc_info
         return self.enqueue_job(job, set_meta_data=False)
 

@@ -6,6 +6,7 @@ The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
 import importlib
+import datetime
 import logging
 import os
 import sys
@@ -168,3 +169,15 @@ def import_attribute(name):
     module_name, attribute = name.rsplit('.', 1)
     module = importlib.import_module(module_name)
     return getattr(module, attribute)
+
+
+def utcnow():
+    return datetime.datetime.utcnow()
+
+
+def utcformat(dt):
+    return dt.strftime(u"%Y-%m-%dT%H:%M:%SZ")
+
+
+def utcparse(string):
+    return datetime.datetime.strptime(string, "%Y-%m-%dT%H:%M:%SZ")
