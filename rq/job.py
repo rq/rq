@@ -1,6 +1,5 @@
 import inspect
 from uuid import uuid4
-from functools import wraps
 try:
     from cPickle import loads, dumps, UnpicklingError
 except ImportError:  # noqa
@@ -68,23 +67,6 @@ class Job(object):
     """
 
     data = None
-
-    def lazy(f, _attrs=[]):
-        attr = "_" + f.__name__
-        _attrs.append(attr)
-
-        @wraps(f)
-        def decorator(job):
-            if job.data is not None:
-                payload = unpickle(job.data)
-                for name, value in zip(_attrs, payload):
-                    setattr(job, name, value)
-
-                del job.data
-
-            return getattr(job, attr)
-
-        return property(decorator)
 
     # Job construction
     @classmethod
@@ -169,26 +151,30 @@ class Job(object):
 
         return import_attribute(self.func_name)
 
-    # Note: The order in which the following lazy attributes are
-    # declared is important. Don't change!
+    def _get_lazy(self, name):
+        if self.data is not None:
+            self._func_name, self._instance, self._args, self._kwargs = \
+                unpickle(self.data)
 
-    @lazy
+            del self.data
+
+        return getattr(self, "_" + name)
+
+    @property
     def func_name(self):
-        return self._func_name
+        return self._get_lazy('func_name')
 
-    @lazy
+    @property
     def instance(self):
-        return self._instance
+        return self._get_lazy('instance')
 
-    @lazy
+    @property
     def args(self):
-        return self._args
+        return self._get_lazy('args')
 
-    @lazy
+    @property
     def kwargs(self):
-        return self._kwargs
-
-    del lazy
+        return self._get_lazy('kwargs')
 
     @classmethod
     def exists(cls, job_id, connection=None):
