@@ -65,6 +65,9 @@ def get_current_job():
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+
+    data = None
+
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
@@ -96,10 +99,6 @@ class Job(object):
         if depends_on is not None:
             job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
         return job
-
-    @property
-    def func_name(self):
-        return self._func_name
 
     def _get_status(self):
         self._status = as_text(self.connection.hget(self.key, 'status'))
@@ -152,17 +151,30 @@ class Job(object):
 
         return import_attribute(self.func_name)
 
+    def _get_lazy(self, name):
+        if self.data is not None:
+            self._func_name, self._instance, self._args, self._kwargs = \
+                unpickle(self.data)
+
+            del self.data
+
+        return getattr(self, "_" + name)
+
+    @property
+    def func_name(self):
+        return self._get_lazy('func_name')
+
     @property
     def instance(self):
-        return self._instance
+        return self._get_lazy('instance')
 
     @property
     def args(self):
-        return self._args
+        return self._get_lazy('args')
 
     @property
     def kwargs(self):
-        return self._kwargs
+        return self._get_lazy('kwargs')
 
     @classmethod
     def exists(cls, job_id, connection=None):
@@ -177,15 +189,6 @@ class Job(object):
         """
         job = cls(id, connection=connection)
         job.refresh()
-        return job
-
-    @classmethod
-    def safe_fetch(cls, id, connection=None):
-        """Fetches a persisted job from its corresponding Redis key, but does
-        not instantiate it, making it impossible to get UnpickleErrors.
-        """
-        job = cls(id, connection=connection)
-        job.refresh(safe=True)
         return job
 
     def __init__(self, id=None, connection=None):
@@ -279,7 +282,7 @@ class Job(object):
 
 
     # Persistence
-    def refresh(self, safe=False):  # noqa
+    def refresh(self):  # noqa
         """Overwrite the current instance's properties with the values in the
         corresponding Redis key.
 
@@ -301,11 +304,6 @@ class Job(object):
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
-        try:
-            self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
-        except UnpickleError:
-            if not safe:
-                raise
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
@@ -324,8 +322,11 @@ class Job(object):
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
 
-        if self.func_name is not None:
+        if self.data is not None:
+            obj['data'] = self.data
+        elif self.func_name is not None:
             obj['data'] = dumps(self.job_tuple)
+
         if self.origin is not None:
             obj['origin'] = self.origin
         if self.description is not None:

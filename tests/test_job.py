@@ -170,15 +170,18 @@ class TestJob(RQTestCase):
             Job.fetch('b4a44d44-da16-4620-90a6-798e8cd72ca0')
 
     def test_fetching_unreadable_data(self):
-        """Fetching fails on unreadable data."""
+        """Fetching succeeds on unreadable data, but lazy props fail."""
         # Set up
         job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         # Just replace the data hkey with some random noise
         self.testconn.hset(job.key, 'data', 'this is no pickle string')
-        with self.assertRaises(UnpickleError):
-            job.refresh()
+        job.refresh()
+
+        for attr in ('func_name', 'instance', 'args', 'kwargs'):
+            with self.assertRaises(UnpickleError):
+                getattr(job, attr)
 
     def test_job_is_unimportable(self):
         """Jobs that cannot be imported throw exception on access."""
