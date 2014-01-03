@@ -63,27 +63,28 @@ def get_current_job():
     return Job.fetch(job_id)
 
 
-def lazy(f):
-    """Decorator for a lazy data property."""
-
-    attr = "_" + f.__name__
-
-    @wraps(f)
-    def decorator(job):
-        if job.data is not None:
-            job._func_name, job._instance, job._args, job._kwargs = unpickle(job.data)
-            del job.data
-
-        return getattr(job, attr)
-
-    return property(decorator)
-
-
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
 
     data = None
+
+    def lazy(f, _attrs=[]):
+        attr = "_" + f.__name__
+        _attrs.append(attr)
+
+        @wraps(f)
+        def decorator(job):
+            if job.data is not None:
+                payload = unpickle(job.data)
+                for name, value in zip(_attrs, payload):
+                    setattr(job, name, value)
+
+                del job.data
+
+            return getattr(job, attr)
+
+        return property(decorator)
 
     # Job construction
     @classmethod
@@ -116,10 +117,6 @@ class Job(object):
         if depends_on is not None:
             job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
         return job
-
-    @lazy
-    def func_name(self):
-        return self._func_name
 
     def _get_status(self):
         self._status = as_text(self.connection.hget(self.key, 'status'))
@@ -172,6 +169,13 @@ class Job(object):
 
         return import_attribute(self.func_name)
 
+    # Note: The order in which the following lazy attributes are
+    # declared is important. Don't change!
+
+    @lazy
+    def func_name(self):
+        return self._func_name
+
     @lazy
     def instance(self):
         return self._instance
@@ -183,6 +187,8 @@ class Job(object):
     @lazy
     def kwargs(self):
         return self._kwargs
+
+    del lazy
 
     @classmethod
     def exists(cls, job_id, connection=None):
