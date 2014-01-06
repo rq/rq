@@ -30,13 +30,13 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.exc_info)
 
         with self.assertRaises(ValueError):
-            self.assertIsNone(job.func)
+            job.func
         with self.assertRaises(ValueError):
-            self.assertIsNone(job.instance)
+            job.instance
         with self.assertRaises(ValueError):
-            self.assertIsNone(job.args)
+            job.args
         with self.assertRaises(ValueError):
-            self.assertIsNone(job.kwargs)
+            job.kwargs
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
@@ -88,7 +88,7 @@ class TestJob(RQTestCase):
         self.assertEquals(args, ())
         self.assertEquals(kwargs, {})
 
-    def test_data_property(self):
+    def test_data_property_sets_job_properties(self):
         """Job tuple gets derived lazily from data property."""
         job = Job()
         job.data = dumps(('foo', None, (1, 2, 3), {'bar': 'qux'}))
