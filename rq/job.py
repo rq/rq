@@ -79,8 +79,12 @@ class Job(object):
             args = ()
         if kwargs is None:
             kwargs = {}
-        assert isinstance(args, (tuple, list)), '%r is not a valid args list.' % (args,)
-        assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
+
+        if not isinstance(args, (tuple, list)):
+            raise TypeError('{0!r} is not a valid args list.'.format(args))
+        if not isinstance(kwargs, dict):
+            raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
+
         job = cls(connection=connection)
         if inspect.ismethod(func):
             job._instance = func.__self__
