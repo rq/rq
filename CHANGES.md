@@ -1,7 +1,7 @@
 ### 0.4.0
 (not released yet)
 
-- Job data is unpickled lazily. This fixes issue #294.
+- Job data is unpickled lazily. Thanks, Malthe!
 
 - Removed dependency on the `times` library. Thanks, Malthe!
 
