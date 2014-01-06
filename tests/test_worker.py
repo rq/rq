@@ -57,7 +57,7 @@ class TestWorker(RQTestCase):
         job = Job.create(func=div_by_zero, args=(3,))
         job.save()
         data = self.testconn.hget(job.key, 'data')
-        invalid_data = data.replace(b'div_by_zero', b'nonexisting_job')
+        invalid_data = data.replace(b'div_by_zero', b'nonexisting')
         assert data != invalid_data
         self.testconn.hset(job.key, 'data', invalid_data)
 
