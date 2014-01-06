@@ -19,6 +19,10 @@ Status = enum('Status',
               QUEUED='queued', FINISHED='finished', FAILED='failed',
               STARTED='started')
 
+# Sentinel value to mark that some of our lazily evaluated properties have not
+# yet been evaluated.
+UNEVALUATED = object()
+
 
 def unpickle(pickled_string):
     """Unpickles a string, but raises a unified UnpickleError in case anything
@@ -65,6 +69,7 @@ def get_current_job():
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
@@ -76,9 +81,16 @@ class Job(object):
             args = ()
         if kwargs is None:
             kwargs = {}
-        assert isinstance(args, (tuple, list)), '%r is not a valid args list.' % (args,)
-        assert isinstance(kwargs, dict), '%r is not a valid kwargs dict.' % (kwargs,)
+
+        if not isinstance(args, (tuple, list)):
+            raise TypeError('{0!r} is not a valid args list.'.format(args))
+        if not isinstance(kwargs, dict):
+            raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
+
         job = cls(connection=connection)
+
+        # Set the core job tuple properties
+        job._instance = None
         if inspect.ismethod(func):
             job._instance = func.__self__
             job._func_name = func.__name__
@@ -88,18 +100,17 @@ class Job(object):
             job._func_name = func
         job._args = args
         job._kwargs = kwargs
+
+        # Extra meta data
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
         job.timeout = timeout
         job._status = status
+
         # dependency could be job instance or id
         if depends_on is not None:
             job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
         return job
-
-    @property
-    def func_name(self):
-        return self._func_name
 
     def _get_status(self):
         self._status = as_text(self.connection.hget(self.key, 'status'))
@@ -152,17 +163,79 @@ class Job(object):
 
         return import_attribute(self.func_name)
 
+    def _unpickle_data(self):
+        self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
+
+    @property
+    def data(self):
+        if self._data is UNEVALUATED:
+            if self._func_name is UNEVALUATED:
+                raise ValueError('Cannot build the job data.')
+
+            if self._instance is UNEVALUATED:
+                self._instance = None
+
+            if self._args is UNEVALUATED:
+                self._args = ()
+
+            if self._kwargs is UNEVALUATED:
+                self._kwargs = {}
+
+            job_tuple = self._func_name, self._instance, self._args, self._kwargs
+            self._data = dumps(job_tuple)
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+        self._func_name = UNEVALUATED
+        self._instance = UNEVALUATED
+        self._args = UNEVALUATED
+        self._kwargs = UNEVALUATED
+
+    @property
+    def func_name(self):
+        if self._func_name is UNEVALUATED:
+            self._unpickle_data()
+        return self._func_name
+
+    @func_name.setter
+    def func_name(self, value):
+        self._func_name = value
+        self._data = UNEVALUATED
+
     @property
     def instance(self):
+        if self._instance is UNEVALUATED:
+            self._unpickle_data()
         return self._instance
+
+    @instance.setter
+    def instance(self, value):
+        self._instance = value
+        self._data = UNEVALUATED
 
     @property
     def args(self):
+        if self._args is UNEVALUATED:
+            self._unpickle_data()
         return self._args
+
+    @args.setter
+    def args(self, value):
+        self._args = value
+        self._data = UNEVALUATED
 
     @property
     def kwargs(self):
+        if self._kwargs is UNEVALUATED:
+            self._unpickle_data()
         return self._kwargs
+
+    @kwargs.setter
+    def kwargs(self, value):
+        self._kwargs = value
+        self._data = UNEVALUATED
 
     @classmethod
     def exists(cls, job_id, connection=None):
@@ -179,23 +252,15 @@ class Job(object):
         job.refresh()
         return job
 
-    @classmethod
-    def safe_fetch(cls, id, connection=None):
-        """Fetches a persisted job from its corresponding Redis key, but does
-        not instantiate it, making it impossible to get UnpickleErrors.
-        """
-        job = cls(id, connection=connection)
-        job.refresh(safe=True)
-        return job
-
     def __init__(self, id=None, connection=None):
         self.connection = resolve_connection(connection)
         self._id = id
         self.created_at = utcnow()
-        self._func_name = None
-        self._instance = None
-        self._args = None
-        self._kwargs = None
+        self._data = UNEVALUATED
+        self._func_name = UNEVALUATED
+        self._instance = UNEVALUATED
+        self._args = UNEVALUATED
+        self._kwargs = UNEVALUATED
         self.description = None
         self.origin = None
         self.enqueued_at = None
@@ -207,7 +272,6 @@ class Job(object):
         self._status = None
         self._dependency_id = None
         self.meta = {}
-
 
     # Data access
     def get_id(self):  # noqa
@@ -244,12 +308,6 @@ class Job(object):
         """The Redis key that is used to store job hash under."""
         return self.dependents_key_for(self.id)
 
-    @property  # noqa
-    def job_tuple(self):
-        """Returns the job tuple that encodes the actual function call that
-        this job represents."""
-        return (self.func_name, self.instance, self.args, self.kwargs)
-
     @property
     def result(self):
         """Returns the return value of the job.
@@ -277,9 +335,8 @@ class Job(object):
     """Backwards-compatibility accessor property `return_value`."""
     return_value = result
 
-
     # Persistence
-    def refresh(self, safe=False):  # noqa
+    def refresh(self):  # noqa
         """Overwrite the current instance's properties with the values in the
         corresponding Redis key.
 
@@ -301,11 +358,6 @@ class Job(object):
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
-        try:
-            self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
-        except UnpickleError:
-            if not safe:
-                raise
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
@@ -314,7 +366,7 @@ class Job(object):
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = obj.get('exc_info')
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
-        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None # noqa
+        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
@@ -323,9 +375,8 @@ class Job(object):
         """Returns a serialization of the current job instance"""
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
+        obj['data'] = self.data
 
-        if self.func_name is not None:
-            obj['data'] = dumps(self.job_tuple)
         if self.origin is not None:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -437,7 +488,6 @@ class Job(object):
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
-
 
     # Job equality
     def __eq__(self, other):  # noqa

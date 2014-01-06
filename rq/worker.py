@@ -308,10 +308,6 @@ class Worker(object):
                         break
                 except StopRequested:
                     break
-                except UnpickleError as e:
-                    job = Job.safe_fetch(e.job_id, connection=self.connection)
-                    self.handle_exception(job, *sys.exc_info())
-                    continue
 
                 self.state = 'busy'
 

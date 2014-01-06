@@ -3,9 +3,9 @@ from tests import RQTestCase
 from tests.fixtures import Number, some_calculation, say_hello, access_self
 from tests.helpers import strip_microseconds
 try:
-    from cPickle import loads
+    from cPickle import loads, dumps
 except ImportError:
-    from pickle import loads
+    from pickle import loads, dumps
 from rq.compat import as_text
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
@@ -23,15 +23,20 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(job.created_at)
 
         # ...and nothing else
-        self.assertIsNone(job.func)
-        self.assertIsNone(job.instance)
-        self.assertIsNone(job.args)
-        self.assertIsNone(job.kwargs)
         self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.ended_at)
         self.assertIsNone(job.result)
         self.assertIsNone(job.exc_info)
+
+        with self.assertRaises(ValueError):
+            self.assertIsNone(job.func)
+        with self.assertRaises(ValueError):
+            self.assertIsNone(job.instance)
+        with self.assertRaises(ValueError):
+            self.assertIsNone(job.args)
+        with self.assertRaises(ValueError):
+            self.assertIsNone(job.kwargs)
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
@@ -72,6 +77,27 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEquals(job.args, ('World',))
 
+    def test_job_properties_set_data_property(self):
+        """Data property gets derived from the job tuple."""
+        job = Job()
+        job.func_name = 'foo'
+        fname, instance, args, kwargs = loads(job.data)
+
+        self.assertEquals(fname, job.func_name)
+        self.assertEquals(instance, None)
+        self.assertEquals(args, ())
+        self.assertEquals(kwargs, {})
+
+    def test_data_property(self):
+        """Job tuple gets derived lazily from data property."""
+        job = Job()
+        job.data = dumps(('foo', None, (1, 2, 3), {'bar': 'qux'}))
+
+        self.assertEquals(job.func_name, 'foo')
+        self.assertEquals(job.instance, None)
+        self.assertEquals(job.args, (1, 2, 3))
+        self.assertEquals(job.kwargs, {'bar': 'qux'})
+
     def test_save(self):  # noqa
         """Storing jobs."""
         job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
@@ -102,22 +128,11 @@ class TestJob(RQTestCase):
         self.assertEquals(job.kwargs, dict(z=2))
         self.assertEquals(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
 
-
     def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
         job = Job()
-        job.save()
-
-        expected_date = strip_microseconds(job.created_at)
-        stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
-        self.assertEquals(
-            stored_date,
-            utcformat(expected_date))
-
-        # ... and no other keys are stored
-        self.assertEqual(
-            self.testconn.hkeys(job.key),
-            [b'created_at'])
+        with self.assertRaises(ValueError):
+            job.save()
 
     def test_persistence_of_typical_jobs(self):
         """Storing typical jobs."""
@@ -170,15 +185,18 @@ class TestJob(RQTestCase):
             Job.fetch('b4a44d44-da16-4620-90a6-798e8cd72ca0')
 
     def test_fetching_unreadable_data(self):
-        """Fetching fails on unreadable data."""
+        """Fetching succeeds on unreadable data, but lazy props fail."""
         # Set up
         job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         # Just replace the data hkey with some random noise
         self.testconn.hset(job.key, 'data', 'this is no pickle string')
-        with self.assertRaises(UnpickleError):
-            job.refresh()
+        job.refresh()
+
+        for attr in ('func_name', 'instance', 'args', 'kwargs'):
+            with self.assertRaises(UnpickleError):
+                getattr(job, attr)
 
     def test_job_is_unimportable(self):
         """Jobs that cannot be imported throw exception on access."""
