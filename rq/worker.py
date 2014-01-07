@@ -98,7 +98,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=DEFAULT_RESULT_TTL, connection=None,
-                 exc_handler=None, default_worker_ttl=DEFAULT_WORKER_TTL):  # noqa
+                 exc_handler=None, default_worker_ttl=DEFAULT_WORKER_TTL, fork=True):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -116,6 +116,7 @@ class Worker(object):
         self._stopped = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
+        self._fork = fork
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -318,7 +319,7 @@ class Worker(object):
                               blue(job.description), job.id))
 
                 self.heartbeat((job.timeout or 180) + 60)
-                self.fork_and_perform_job(job)
+                self.perform_job(job)
                 self.heartbeat()
                 if job.status == Status.FINISHED:
                     queue.enqueue_dependents(job)
@@ -359,7 +360,36 @@ class Worker(object):
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
 
-    def fork_and_perform_job(self, job):
+    def main_work_horse(self, job):
+        """This is the entry point of the newly spawned work horse."""
+        # After fork()'ing, always assure we are generating random sequences
+        # that are different from the worker.
+        random.seed()
+
+        # Always ignore Ctrl+C in the work horse, as it might abort the
+        # currently running job.
+        # The main worker catches the Ctrl+C and requests graceful shutdown
+        # after the current work is done.  When cold shutdown is requested, it
+        # kills the current job anyway.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+        self._is_horse = True
+        self.log = logger
+
+        success = self._perform_job(job)
+
+        # os._exit() is the way to exit from childs after a fork(), in
+        # constrast to the regular sys.exit()
+        os._exit(int(not success))
+
+    def perform_job(self, job):
+        if self._fork:
+            self._fork_and_perform_job(job)
+        else:
+            self._perform_job(job)
+
+    def _fork_and_perform_job(self, job):
         """Spawns a work horse to perform the actual work and passes it a job.
         The worker will wait for the work horse and make sure it executes
         within the given timeout bounds, or will end the work horse with
@@ -385,30 +415,7 @@ class Worker(object):
                     if e.errno != errno.EINTR:
                         raise
 
-    def main_work_horse(self, job):
-        """This is the entry point of the newly spawned work horse."""
-        # After fork()'ing, always assure we are generating random sequences
-        # that are different from the worker.
-        random.seed()
-
-        # Always ignore Ctrl+C in the work horse, as it might abort the
-        # currently running job.
-        # The main worker catches the Ctrl+C and requests graceful shutdown
-        # after the current work is done.  When cold shutdown is requested, it
-        # kills the current job anyway.
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
-
-        self._is_horse = True
-        self.log = logger
-
-        success = self.perform_job(job)
-
-        # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
-        os._exit(int(not success))
-
-    def perform_job(self, job):
+    def _perform_job(self, job):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
