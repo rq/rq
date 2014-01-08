@@ -7,6 +7,9 @@
 
 - Job dependencies!  Thanks, Selwin.
 
+- Custom worker classes, via the `--worker-class=path.to.MyClass` command line
+  argument.  Thanks, Selwin.
+
 - `Queue.all()` and `rqinfo` now report empty queues, too.  Thanks, Rob!
 
 - Fixed a performance issue in `Queue.all()` when issued in large Redis DBs.
