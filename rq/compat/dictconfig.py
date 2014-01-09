@@ -20,7 +20,6 @@
 import logging.handlers
 import re
 import sys
-import types
 from rq.compat import string_types
 
 IDENTIFIER = re.compile('^[a-z_][a-z0-9_]*$', re.I)
@@ -58,77 +57,63 @@ except ImportError:
 # Each wrapper should have a configurator attribute holding the actual
 # configurator to use for conversion.
 
-class ConvertingDict(dict):
+
+class ConvertHandle(object):
+    """base class to handle convert."""
+
+    def handle_converting_with_key(self, key, value):
+        result = self.configurator.convert(value)
+        #If the converted value is different, save for next time
+        if value is not result:
+            self[key] = result
+            if type(result) in (ConvertingDict, ConvertingList,
+                                ConvertingTuple):
+                result.parent = self
+                result.key = key
+        return result
+
+    def handle_converting(self, value):
+        result = self.configurator.convert(value)
+        if value is not result:
+            if type(result) in (ConvertingDict, ConvertingList,
+                                ConvertingTuple):
+                result.parent = self
+        return result
+
+
+class ConvertingDict(dict, ConvertHandle):
     """A converting dictionary wrapper."""
 
     def __getitem__(self, key):
         value = dict.__getitem__(self, key)
-        result = self.configurator.convert(value)
-        #If the converted value is different, save for next time
-        if value is not result:
-            self[key] = result
-            if type(result) in (ConvertingDict, ConvertingList,
-                                ConvertingTuple):
-                result.parent = self
-                result.key = key
-        return result
+        return self.handle_converting_with_key(key, value)
 
     def get(self, key, default=None):
         value = dict.get(self, key, default)
-        result = self.configurator.convert(value)
-        #If the converted value is different, save for next time
-        if value is not result:
-            self[key] = result
-            if type(result) in (ConvertingDict, ConvertingList,
-                                ConvertingTuple):
-                result.parent = self
-                result.key = key
-        return result
+        return self.handle_converting_with_key(key, value)
 
     def pop(self, key, default=None):
         value = dict.pop(self, key, default)
-        result = self.configurator.convert(value)
-        if value is not result:
-            if type(result) in (ConvertingDict, ConvertingList,
-                                ConvertingTuple):
-                result.parent = self
-                result.key = key
-        return result
+        return self.handle_converting_with_key(key, value)
 
-class ConvertingList(list):
+
+class ConvertingList(list, ConvertHandle):
     """A converting list wrapper."""
     def __getitem__(self, key):
         value = list.__getitem__(self, key)
-        result = self.configurator.convert(value)
-        #If the converted value is different, save for next time
-        if value is not result:
-            self[key] = result
-            if type(result) in (ConvertingDict, ConvertingList,
-                                ConvertingTuple):
-                result.parent = self
-                result.key = key
-        return result
+        return self.handle_converting_with_key(key, value)
 
     def pop(self, idx=-1):
         value = list.pop(self, idx)
-        result = self.configurator.convert(value)
-        if value is not result:
-            if type(result) in (ConvertingDict, ConvertingList,
-                                ConvertingTuple):
-                result.parent = self
-        return result
+        return self.handle_converting(value)
 
-class ConvertingTuple(tuple):
+
+class ConvertingTuple(tuple, ConvertHandle):
     """A converting tuple wrapper."""
     def __getitem__(self, key):
         value = tuple.__getitem__(self, key)
-        result = self.configurator.convert(value)
-        if value is not result:
-            if type(result) in (ConvertingDict, ConvertingList,
-                                ConvertingTuple):
-                result.parent = self
-                result.key = key
-        return result
+        return self.handle_converting(value)
+
 
 class BaseConfigurator(object):
     """
