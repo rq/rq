@@ -56,14 +56,14 @@ def requeue_job(job_id, connection=None):
     fq.requeue(job_id)
 
 
-def get_current_job():
+def get_current_job(connection=None):
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
     """
     job_id = _job_stack.top
     if job_id is None:
         return None
-    return Job.fetch(job_id)
+    return Job.fetch(job_id, connection=connection)
 
 
 class Job(object):
