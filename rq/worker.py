@@ -416,7 +416,7 @@ class Worker(object):
             job.func_name,
             job.origin, time.time()))
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection._pipeline() as pipeline:
             try:
                 with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
                     rv = job.perform()
