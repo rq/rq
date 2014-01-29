@@ -186,15 +186,6 @@ class Job(object):
             self._unpickle_data()
         return loads(self._func)
 
-        # func_name = self.func_name
-        # if func_name is None:
-        #     return None
-
-        # if self.instance:
-        #     return getattr(self.instance, func_name)
-
-        # return import_attribute(self.func_name)
-
     @func.setter
     def func(self, value):
         if inspect.ismethod(value) or inspect.isfunction(value) or inspect.isbuiltin(value):
