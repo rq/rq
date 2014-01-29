@@ -412,12 +412,16 @@ class Worker(object):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.procline('Processing %s from %s since %s' % (
-            job.func_name,
-            job.origin, time.time()))
 
         with self.connection._pipeline() as pipeline:
             try:
+
+                # Must be inside try/except, because func_name property
+                # will fail if the function is tampered or broken
+                self.procline('Processing %s from %s since %s' % (
+                    job.func_name,
+                    job.origin, time.time()))
+
                 with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
                     rv = job.perform()
 

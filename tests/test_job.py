@@ -2,10 +2,7 @@ from datetime import datetime
 from tests import RQTestCase
 from tests.fixtures import Number, some_calculation, say_hello, access_self
 from tests.helpers import strip_microseconds
-try:
-    from cPickle import loads, dumps
-except ImportError:
-    from pickle import loads, dumps
+from dill import loads, dumps, UnpicklingError
 from rq.compat import as_text
 from rq.job import Job, get_current_job
 from rq.exceptions import NoSuchJobError, UnpickleError
@@ -64,7 +61,7 @@ class TestJob(RQTestCase):
         job = Job.create(func=n.div, args=(4,))
 
         # Job data is set
-        self.assertEquals(job.func, n.div)
+        self.assertEquals(job.func(4), n.div(4))
         self.assertEquals(job.instance, n)
         self.assertEquals(job.args, (4,))
 
@@ -80,8 +77,11 @@ class TestJob(RQTestCase):
     def test_job_properties_set_data_property(self):
         """Data property gets derived from the job tuple."""
         job = Job()
-        job.func_name = 'foo'
-        fname, instance, args, kwargs = loads(job.data)
+        def foo(a,b,c,bar=''):
+            pass
+        job.func = foo
+        func, instance, args, kwargs = loads(job.data)
+        fname = loads(func).__name__
 
         self.assertEquals(fname, job.func_name)
         self.assertEquals(instance, None)
@@ -91,7 +91,10 @@ class TestJob(RQTestCase):
     def test_data_property_sets_job_properties(self):
         """Job tuple gets derived lazily from data property."""
         job = Job()
-        job.data = dumps(('foo', None, (1, 2, 3), {'bar': 'qux'}))
+        def foo(a,b,c,bar=''):
+            pass
+
+        job.data = dumps((dumps(foo), None, (1, 2, 3), {'bar': 'qux'}))
 
         self.assertEquals(job.func_name, 'foo')
         self.assertEquals(job.instance, None)
@@ -109,20 +112,26 @@ class TestJob(RQTestCase):
 
         # Saving writes pickled job data
         unpickled_data = loads(self.testconn.hget(job.key, 'data'))
-        self.assertEquals(unpickled_data[0], 'tests.fixtures.some_calculation')
+        func = loads(unpickled_data[0])
+        fname = func.__name__
+
+        self.assertEquals(fname, 'some_calculation')
+        self.assertEquals(func, some_calculation)
 
     def test_fetch(self):
         """Fetching jobs."""
         # Prepare test
+        data = dumps((dumps(some_calculation), None, (3,4), dict(z=2)))
         self.testconn.hset('rq:job:some_id', 'data',
-                           "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
+                                    data)
+                           # "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
                            '2012-02-07T22:13:24Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id')
         self.assertEquals(job.id, 'some_id')
-        self.assertEquals(job.func_name, 'tests.fixtures.some_calculation')
+        self.assertEquals(job.func_name, 'some_calculation')
         self.assertIsNone(job.instance)
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, dict(z=2))
@@ -249,7 +258,9 @@ class TestJob(RQTestCase):
         job = Job.create(func=say_hello, args=('Lionel',))
         job.save()
         Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
+
+        # TODO: should the full namespace be returned as the function name?
+        self.assertEqual(job.description, "say_hello('Lionel')")
 
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""

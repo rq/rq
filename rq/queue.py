@@ -184,9 +184,6 @@ class Queue(object):
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
         """
-        if not isinstance(f, string_types) and f.__module__ == '__main__':
-            raise ValueError('Functions from the __main__ module cannot be processed '
-                             'by workers.')
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
