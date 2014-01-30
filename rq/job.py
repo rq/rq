@@ -1,9 +1,6 @@
 import inspect
 from uuid import uuid4
-try:
-    from cPickle import loads, dumps, UnpicklingError
-except ImportError:  # noqa
-    from pickle import loads, dumps, UnpicklingError  # noqa
+from dill import loads, dumps, UnpicklingError
 from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
@@ -91,13 +88,13 @@ class Job(object):
 
         # Set the core job tuple properties
         job._instance = None
+        if inspect.ismethod(func) or inspect.isfunction(func) or inspect.isbuiltin(func):
+            job._func = dumps(func)
+        else:  # we expect a string
+            job._func = dumps(import_attribute(func))
         if inspect.ismethod(func):
             job._instance = func.__self__
-            job._func_name = func.__name__
-        elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '%s.%s' % (func.__module__, func.__name__)
-        else:  # we expect a string
-            job._func_name = func
+
         job._args = args
         job._kwargs = kwargs
 
@@ -152,24 +149,14 @@ class Job(object):
         self._dependency = job
         return job
 
-    @property
-    def func(self):
-        func_name = self.func_name
-        if func_name is None:
-            return None
-
-        if self.instance:
-            return getattr(self.instance, func_name)
-
-        return import_attribute(self.func_name)
 
     def _unpickle_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
+        self._func, self._instance, self._args, self._kwargs = unpickle(self.data)
 
     @property
     def data(self):
         if self._data is UNEVALUATED:
-            if self._func_name is UNEVALUATED:
+            if self._func is UNEVALUATED:
                 raise ValueError('Cannot build the job data.')
 
             if self._instance is UNEVALUATED:
@@ -181,28 +168,49 @@ class Job(object):
             if self._kwargs is UNEVALUATED:
                 self._kwargs = {}
 
-            job_tuple = self._func_name, self._instance, self._args, self._kwargs
+            job_tuple = self._func, self._instance, self._args, self._kwargs
             self._data = dumps(job_tuple)
         return self._data
 
     @data.setter
     def data(self, value):
         self._data = value
-        self._func_name = UNEVALUATED
+        self._func = UNEVALUATED
         self._instance = UNEVALUATED
         self._args = UNEVALUATED
         self._kwargs = UNEVALUATED
 
     @property
-    def func_name(self):
-        if self._func_name is UNEVALUATED:
+    def func(self):
+        if self._func is UNEVALUATED:
             self._unpickle_data()
-        return self._func_name
+        return loads(self._func)
+
+    @func.setter
+    def func(self, value):
+        if inspect.ismethod(value) or inspect.isfunction(value) or inspect.isbuiltin(value):
+            self._func = dumps(value)
+        else:  # we expect a string
+            self._func = dumps(import_attribute(value))
+
+        if inspect.ismethod(value):
+            self._instance = value.__self__
+
+    @property
+    def func_name(self):
+        if self._func is UNEVALUATED:
+            self._unpickle_data()
+        module = self.func.__module__
+        if module == "__main__":
+            return self.func.__name__
+        else:
+            return module + "." + self.func.__name__
 
     @func_name.setter
     def func_name(self, value):
-        self._func_name = value
-        self._data = UNEVALUATED
+        raise NotImplementedError("Cannot set name of function. Can only set function itself.")
+        # self._func_name = value
+        # self._data = UNEVALUATED
 
     @property
     def instance(self):
@@ -257,7 +265,7 @@ class Job(object):
         self._id = id
         self.created_at = utcnow()
         self._data = UNEVALUATED
-        self._func_name = UNEVALUATED
+        self._func = UNEVALUATED
         self._instance = UNEVALUATED
         self._args = UNEVALUATED
         self._kwargs = UNEVALUATED
