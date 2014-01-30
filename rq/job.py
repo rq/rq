@@ -196,14 +196,6 @@ class Job(object):
         if inspect.ismethod(value):
             self._instance = value.__self__
 
-
-
-    @property
-    def instance(self):
-        func = self.func
-        print "HI HI HI HI HI"
-        print "\n"*3
-
     @property
     def func_name(self):
         if self._func is UNEVALUATED:
