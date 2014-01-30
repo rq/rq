@@ -81,7 +81,7 @@ class TestJob(RQTestCase):
             pass
         job.func = foo
         func, instance, args, kwargs = loads(job.data)
-        fname = loads(func).__name__
+        fname = "tests.test_job."+loads(func).__name__
 
         self.assertEquals(fname, job.func_name)
         self.assertEquals(instance, None)
@@ -96,7 +96,7 @@ class TestJob(RQTestCase):
 
         job.data = dumps((dumps(foo), None, (1, 2, 3), {'bar': 'qux'}))
 
-        self.assertEquals(job.func_name, 'foo')
+        self.assertEquals(job.func_name, 'tests.test_job.foo')
         self.assertEquals(job.instance, None)
         self.assertEquals(job.args, (1, 2, 3))
         self.assertEquals(job.kwargs, {'bar': 'qux'})
@@ -131,7 +131,7 @@ class TestJob(RQTestCase):
         # Fetch returns a job
         job = Job.fetch('some_id')
         self.assertEquals(job.id, 'some_id')
-        self.assertEquals(job.func_name, 'some_calculation')
+        self.assertEquals(job.func_name, 'tests.fixtures.some_calculation')
         self.assertIsNone(job.instance)
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, dict(z=2))
@@ -260,7 +260,7 @@ class TestJob(RQTestCase):
         Job.fetch(job.id, connection=self.testconn)
 
         # TODO: should the full namespace be returned as the function name?
-        self.assertEqual(job.description, "say_hello('Lionel')")
+        self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""

@@ -200,7 +200,11 @@ class Job(object):
     def func_name(self):
         if self._func is UNEVALUATED:
             self._unpickle_data()
-        return self.func.__name__
+        module = self.func.__module__
+        if module == "__main__":
+            return self.func.__name__
+        else:
+            return module + "." + self.func.__name__
 
     @func_name.setter
     def func_name(self, value):
