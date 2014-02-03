@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
     parser.add_argument('--worker-class', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
+    parser.add_argument('--timeout', '-t', default=None, help='Default results timeout for the worker to use')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
@@ -78,7 +79,7 @@ def main():
 
     try:
         queues = list(map(Queue, args.queues))
-        w = worker_class(queues, name=args.name)
+        w = worker_class(queues, name=args.name, default_result_ttl=args.timeout)
 
         # Should we configure Sentry?
         if args.sentry_dsn:
