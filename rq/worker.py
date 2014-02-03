@@ -242,8 +242,8 @@ class Worker(object):
 
     job_id = property(get_job_id, set_job_id)
 
-    # most client will want to use the method below to query the current job
     def get_current_job(self):
+        """Returns the job id of the currently executing job."""
         job_id = self.get_job_id()
 
         if job_id is None:
