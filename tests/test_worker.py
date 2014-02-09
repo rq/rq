@@ -3,7 +3,7 @@ from time import sleep
 from tests import RQTestCase, slow
 from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
         create_file_after_timeout
-from tests.helpers import strip_milliseconds
+from tests.helpers import strip_microseconds
 from rq import Queue, Worker, get_failed_queue
 from rq.job import Job, Status
 
@@ -57,7 +57,7 @@ class TestWorker(RQTestCase):
         job = Job.create(func=div_by_zero, args=(3,))
         job.save()
         data = self.testconn.hget(job.key, 'data')
-        invalid_data = data.replace(b'div_by_zero', b'nonexisting_job')
+        invalid_data = data.replace(b'div_by_zero', b'nonexisting')
         assert data != invalid_data
         self.testconn.hset(job.key, 'data', invalid_data)
 
@@ -87,7 +87,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 1)
 
         # keep for later
-        enqueued_at_date = strip_milliseconds(job.enqueued_at)
+        enqueued_at_date = strip_microseconds(job.enqueued_at)
 
         w = Worker([q])
         w.work(burst=True)  # should silently pass

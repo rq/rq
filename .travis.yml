@@ -1,4 +1,6 @@
 language: python
+services:
+  - redis
 python:
   - "2.6"
   - "2.7"

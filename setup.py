@@ -17,7 +17,7 @@ def get_version():
 
 
 def get_dependencies():
-    deps = ['redis >= 2.4.13', 'times']
+    deps = ['redis >= 2.4.13']
     if sys.version_info < (2, 7) or \
             (sys.version_info >= (3, 0) and sys.version_info < (3, 1)):
         deps += ['importlib']
@@ -36,7 +36,7 @@ setup(
     description='RQ is a simple, lightweight, library for creating background '
                 'jobs, and processing them.',
     long_description=__doc__,
-    packages=find_packages(),
+    packages=find_packages(exclude=['tests']),
     include_package_data=True,
     zip_safe=False,
     platforms='any',

@@ -3,7 +3,6 @@ import os
 import errno
 import random
 import time
-import times
 try:
     from procname import setprocname
 except ImportError:
@@ -16,7 +15,7 @@ import logging
 from .queue import Queue, get_failed_queue
 from .connections import get_current_connection
 from .job import Job, Status
-from .utils import make_colorizer
+from .utils import make_colorizer, utcnow, utcformat
 from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, UnpickleError, DequeueTimeout
 from .timeouts import death_penalty_after
@@ -197,7 +196,7 @@ class Worker(object):
         queues = ','.join(self.queue_names())
         with self.connection._pipeline() as p:
             p.delete(key)
-            p.hset(key, 'birth', times.format(times.now(), 'UTC'))
+            p.hset(key, 'birth', utcformat(utcnow()))
             p.hset(key, 'queues', queues)
             p.sadd(self.redis_workers_keys, key)
             p.expire(key, self.default_worker_ttl)
@@ -210,7 +209,7 @@ class Worker(object):
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
-            p.hset(self.key, 'death', times.format(times.now(), 'UTC'))
+            p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
 
@@ -309,10 +308,6 @@ class Worker(object):
                         break
                 except StopRequested:
                     break
-                except UnpickleError as e:
-                    job = Job.safe_fetch(e.job_id)
-                    self.handle_exception(job, *sys.exc_info())
-                    continue
 
                 self.state = 'busy'
 
@@ -322,10 +317,10 @@ class Worker(object):
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                               blue(job.description), job.id))
 
-                self.connection.expire(self.key, (job.timeout or Queue.DEFAULT_TIMEOUT) + 60)
+                self.heartbeat((job.timeout or 180) + 60)
                 self.fork_and_perform_job(job)
-                self.connection.expire(self.key, self.default_worker_ttl)
-                
+                self.heartbeat()
+
                 if job.status == Status.FINISHED:
                     for reverse_dependency in job.reverse_dependencies:
                         reverse_dependency.remove_dependency(job.id)
@@ -339,15 +334,34 @@ class Worker(object):
         return did_perform_work
 
     def dequeue_job_and_maintain_ttl(self, timeout):
+        result = None
         while True:
+            self.heartbeat()
             try:
-                return Queue.dequeue_any(self.queues, timeout,
-                                         connection=self.connection)
+                result = Queue.dequeue_any(self.queues, timeout,
+                                           connection=self.connection)
+                break
             except DequeueTimeout:
                 pass
 
-            self.log.debug('Sending heartbeat to prevent worker timeout.')
-            self.connection.expire(self.key, self.default_worker_ttl)
+        self.heartbeat()
+        return result
+
+    def heartbeat(self, timeout=0):
+        """Specifies a new worker timeout, typically by extending the
+        expiration time of the worker, effectively making this a "heartbeat"
+        to not expire the worker until the timeout passes.
+
+        The next heartbeat should come before this time, or the worker will
+        die (at least from the monitoring dashboards).
+
+        The effective timeout can never be shorter than default_worker_ttl,
+        only larger.
+        """
+        timeout = max(timeout, self.default_worker_ttl)
+        self.connection.expire(self.key, timeout)
+        self.log.debug('Sent heartbeat to prevent worker timeout. '
+                       'Next one should arrive within {0} seconds.'.format(timeout))
 
     def fork_and_perform_job(self, job):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -406,28 +420,28 @@ class Worker(object):
             job.func_name,
             job.origin, time.time()))
 
-        try:
-            with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
-                rv = job.perform()
+        with self.connection._pipeline() as pipeline:
+            try:
+                with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
+                    rv = job.perform()
 
-            # Pickle the result in the same try-except block since we need to
-            # use the same exc handling when pickling fails
-            job._result = rv
-            job._status = Status.FINISHED
-            job.ended_at = times.now()
+                # Pickle the result in the same try-except block since we need to
+                # use the same exc handling when pickling fails
+                job._result = rv
+                job._status = Status.FINISHED
+                job.ended_at = utcnow()
 
-            result_ttl = job.get_ttl(self.default_result_ttl)
-            pipeline = self.connection._pipeline()
-            if result_ttl != 0:
-                job.save(pipeline=pipeline)
-            job.cleanup(result_ttl, pipeline=pipeline)
-            pipeline.execute()
+                result_ttl = job.get_ttl(self.default_result_ttl)
+                if result_ttl != 0:
+                    job.save(pipeline=pipeline)
+                job.cleanup(result_ttl, pipeline=pipeline)
+                pipeline.execute()
 
-        except:
-            # Use the public setter here, to immediately update Redis
-            job.status = Status.FAILED
-            self.handle_exception(job, *sys.exc_info())
-            return False
+            except Exception:
+                # Use the public setter here, to immediately update Redis
+                job.status = Status.FAILED
+                self.handle_exception(job, *sys.exc_info())
+                return False
 
         if rv is None:
             self.log.info('Job OK')

@@ -2,6 +2,8 @@
 *.egg-info
 
 /dump.rdb
-/.env
+/.direnv
+/.envrc
 /.tox
 /dist
+/build
