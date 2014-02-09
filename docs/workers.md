@@ -163,3 +163,22 @@ To specify which module to read settings from, use the `-c` option:
 {% highlight console %}
 $ rqworker -c settings
 {% endhighlight %}
+
+
+## Custom worker classes
+
+_New in version 0.4.0._
+
+There are times when you want to customize the worker's behavior. Some of the
+more common requests so far are:
+
+1. Managing database connectivity prior to running a job.
+2. Using a job execution model that does not require `os.fork`.
+3. The ability use different concurrency models such as
+   `multiprocessing` or `gevent`.
+
+You can use the `-w` option to specify a different worker class to use:
+
+{% highlight console %}
+$ rqworker -w 'path.to.GeventWorker'
+{% endhighlight %}
