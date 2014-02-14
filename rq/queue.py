@@ -207,7 +207,7 @@ class Queue(object):
                                  timeout=timeout, result_ttl=result_ttl,
                                  description=description, depends_on=depends_on)
 
-    def enqueue_job(self, job, set_meta_data=True):
+    def enqueue_job(self, job, set_meta_data=True, async=True):
         """Enqueues a job for delayed execution.
 
         If the `set_meta_data` argument is `True` (default), it will update
@@ -226,11 +226,14 @@ class Queue(object):
             job.timeout = self.DEFAULT_TIMEOUT
         job.save()
 
-        if self._async:
-            self.push_job_id(job.id)
-        else:
+        # Execute synchronously if either the
+        # queue or enqueue_job call asks for it
+        if not async or not self._async:
             job.perform()
             job.save()
+        else:
+            self.push_job_id(job.id)
+
         return job
 
     def enqueue_dependents(self, job):
