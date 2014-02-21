@@ -19,13 +19,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Starts an RQ worker.')
     add_standard_arguments(parser)
 
-    parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')
+    parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')  # noqa
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
     parser.add_argument('--worker-class', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
+    parser.add_argument('--results-ttl', default=None, help='Default results timeout to be used')
+    parser.add_argument('--worker-ttl', default=None, help='Default worker timeout to be used')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
-    parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')
+    parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')  # noqa
     parser.add_argument('--pid', action='store', default=None,
                         help='Write the process ID number to a file at the specified path')
     parser.add_argument('queues', nargs='*', help='The queues to listen on (default: \'default\')')
@@ -78,7 +80,10 @@ def main():
 
     try:
         queues = list(map(Queue, args.queues))
-        w = worker_class(queues, name=args.name)
+        w = worker_class(queues,
+                         name=args.name,
+                         default_worker_ttl=args.worker_ttl,
+                         default_result_ttl=args.results_ttl)
 
         # Should we configure Sentry?
         if args.sentry_dsn:
