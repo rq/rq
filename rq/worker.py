@@ -318,7 +318,7 @@ class Worker(object):
                               blue(job.description), job.id))
 
                 self.heartbeat((job.timeout or 180) + 60)
-                self.fork_and_perform_job(job)
+                self.execute_job(job)
                 self.heartbeat()
                 if job.status == Status.FINISHED:
                     queue.enqueue_dependents(job)
@@ -359,7 +359,7 @@ class Worker(object):
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
 
-    def fork_and_perform_job(self, job):
+    def execute_job(self, job):
         """Spawns a work horse to perform the actual work and passes it a job.
         The worker will wait for the work horse and make sure it executes
         within the given timeout bounds, or will end the work horse with
