@@ -18,7 +18,7 @@ from .job import Job, Status
 from .utils import make_colorizer, utcnow, utcformat
 from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, UnpickleError, DequeueTimeout
-from .timeouts import death_penalty_after
+from .timeouts import JobTimeoutException, interrupt_job_execution
 from .version import VERSION
 from rq.compat import text_type, as_text
 
@@ -273,6 +273,20 @@ class Worker(object):
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
 
+    def setup_job_timeout(self, timeout):
+        """Sets up an alarm signal and a signal handler that raises
+        a JobTimeoutException after the timeout amount (expressed in
+        seconds).
+        """
+        signal.signal(signal.SIGALRM, interrupt_job_execution)
+        signal.alarm(timeout)
+
+    def cancel_job_timeout(self):
+        """Removes the death penalty alarm and puts back the system into
+        default signal handling.
+        """
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
 
     def work(self, burst=False):  # noqa
         """Starts the work loop.
@@ -418,8 +432,15 @@ class Worker(object):
 
         with self.connection._pipeline() as pipeline:
             try:
-                with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
-                    rv = job.perform()
+                
+                self.setup_job_timeout(job.timeout or Queue.DEFAULT_TIMEOUT)
+                rv = job.perform()
+                try:
+                    self.cancel_job_timeout()
+                except JobTimeoutException:
+                    # Weird case: if alarm is fired after job execution
+                    # is finished, we may safely ignore this situation.
+                    pass
 
                 # Pickle the result in the same try-except block since we need to
                 # use the same exc handling when pickling fails
