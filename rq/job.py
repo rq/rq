@@ -273,6 +273,9 @@ class Job(object):
         self._dependency_id = None
         self.meta = {}
 
+    def __repr__(self):  # noqa
+        return 'Job(%r, enqueued_at=%r)' % (self._id, self.enqueued_at)
+
     # Data access
     def get_id(self):  # noqa
         """The job ID for this job instance. Generates an ID lazily the
