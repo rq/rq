@@ -220,6 +220,10 @@ class Worker(object):
         connection.hset(self.key, 'state', state)
 
     def _set_state(self, state):
+        """Raise a DeprecationWarning if ``worker.state = X`` is used"""
+        raise DeprecationWarning(
+            "worker.state is deprecated, use worker.set_state() instead."
+        )
         self.set_state(state)
 
     def get_state(self):
