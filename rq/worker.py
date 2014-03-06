@@ -453,8 +453,7 @@ class Worker(object):
         """
 
         self.set_state('busy')
-        self.set_current_job_id(job.id)
-        job.set_status(Status.STARTED)
+        self.set_current_job_id(job.id)        
         self.heartbeat((job.timeout or 180) + 60)
         
         self.procline('Processing %s from %s since %s' % (
@@ -469,8 +468,7 @@ class Worker(object):
                 # Pickle the result in the same try-except block since we need to
                 # use the same exc handling when pickling fails
                 job._result = rv
-                job._status = Status.FINISHED
-                job.ended_at = utcnow()
+                
                 self.set_current_job_id(None, pipeline=pipeline)
 
                 result_ttl = job.get_ttl(self.default_result_ttl)
