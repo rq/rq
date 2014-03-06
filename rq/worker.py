@@ -352,7 +352,7 @@ class Worker(object):
                 self.set_current_job_id(job.id)
 
                 # Use the public setter here, to immediately update Redis
-                job.status = Status.STARTED
+                job.set_status(Status.STARTED)
                 self.log.info('%s: %s (%s)' % (green(queue.name),
                               blue(job.description), job.id))
 
@@ -361,7 +361,7 @@ class Worker(object):
                 self.heartbeat()
                 self.set_current_job_id(None)
                 
-                if job.status == Status.FINISHED:
+                if job.get_status() == Status.FINISHED:
                     queue.enqueue_dependents(job)
 
                 did_perform_work = True
@@ -476,7 +476,7 @@ class Worker(object):
 
             except Exception:
                 # Use the public setter here, to immediately update Redis
-                job.status = Status.FAILED
+                job.set_status(Status.FAILED)
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
