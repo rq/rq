@@ -1,7 +1,6 @@
 import os
-from time import sleep
 from tests import RQTestCase, slow
-from tests.fixtures import say_hello, div_by_zero, do_nothing, create_file, \
+from tests.fixtures import say_hello, div_by_zero, create_file, \
         create_file_after_timeout
 from tests.helpers import strip_microseconds
 from rq import Queue, Worker, get_failed_queue
@@ -250,3 +249,17 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
         job = Job.fetch(job.id)
         self.assertNotEqual(job.status, Status.FINISHED)
+
+    def test_get_current_job(self):
+        """Ensure worker.get_current_job() works properly"""
+        q = Queue()
+        worker = Worker([q])
+        job = q.enqueue_call(say_hello)
+
+        self.assertEqual(self.testconn.hget(worker.key, 'current_job'), None)
+        worker.set_job_id(job.id)
+        self.assertEqual(
+            worker.get_job_id(),
+            self.testconn.hget(worker.key, 'current_job')
+        )
+        self.assertEqual(worker.get_current_job(), job)

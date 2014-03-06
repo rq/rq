@@ -254,7 +254,7 @@ class Worker(object):
         if job_id is None:
             return None
 
-        return Job.safe_fetch(job_id)
+        return Job.fetch(job_id, self.connection)
 
     @property
     def stopped(self):
