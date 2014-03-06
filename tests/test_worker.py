@@ -257,9 +257,9 @@ class TestWorker(RQTestCase):
         job = q.enqueue_call(say_hello)
 
         self.assertEqual(self.testconn.hget(worker.key, 'current_job'), None)
-        worker.set_job_id(job.id)
+        worker.set_current_job_id(job.id)
         self.assertEqual(
-            worker.get_job_id(),
+            worker.get_current_job_id(),
             self.testconn.hget(worker.key, 'current_job')
         )
         self.assertEqual(worker.get_current_job(), job)
