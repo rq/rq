@@ -214,14 +214,14 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         job = q.enqueue(say_hello)
-        self.assertEqual(job.status, Status.QUEUED)
+        self.assertEqual(job.get_status(), Status.QUEUED)
         self.assertEqual(job.is_queued, True)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, False)
 
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.status, Status.FINISHED)
+        self.assertEqual(job.get_status(), Status.FINISHED)
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, True)
         self.assertEqual(job.is_failed, False)
@@ -230,7 +230,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(div_by_zero, args=(1,))
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.status, Status.FAILED)
+        self.assertEqual(job.get_status(), Status.FAILED)
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
@@ -243,13 +243,13 @@ class TestWorker(RQTestCase):
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.status, Status.FINISHED)
+        self.assertEqual(job.get_status(), Status.FINISHED)
 
         parent_job = q.enqueue(div_by_zero)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertNotEqual(job.status, Status.FINISHED)
+        self.assertNotEqual(job.get_status(), Status.FINISHED)
 
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""

@@ -160,7 +160,7 @@ class Queue(object):
                 while True:
                     try:
                         pipe.watch(depends_on.key)
-                        if depends_on.status != Status.FINISHED:
+                        if depends_on.get_status() != Status.FINISHED:
                             job.register_dependency()
                             job.save()
                             return job
@@ -383,7 +383,7 @@ class FailedQueue(Queue):
         if self.remove(job) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
-        job.status = Status.QUEUED
+        job.set_status(Status.QUEUED)
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
         q.enqueue_job(job)

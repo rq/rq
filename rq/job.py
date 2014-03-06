@@ -112,31 +112,43 @@ class Job(object):
             job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
         return job
 
-    def _get_status(self):
+    def get_status(self):
         self._status = as_text(self.connection.hget(self.key, 'status'))
         return self._status
 
-    def _set_status(self, status):
+    def _get_status(self):
+        raise DeprecationWarning(
+            "job.status is deprecated. Use job.get_status() instead"
+        )
+        return self.get_status()
+
+    def set_status(self, status):
         self._status = status
         self.connection.hset(self.key, 'status', self._status)
+
+    def _set_status(self, status):
+        raise DeprecationWarning(
+            "job.status is deprecated. Use job.set_status() instead"
+        )
+        self.set_status(status)
 
     status = property(_get_status, _set_status)
 
     @property
     def is_finished(self):
-        return self.status == Status.FINISHED
+        return self.get_status() == Status.FINISHED
 
     @property
     def is_queued(self):
-        return self.status == Status.QUEUED
+        return self.get_status() == Status.QUEUED
 
     @property
     def is_failed(self):
-        return self.status == Status.FAILED
+        return self.get_status() == Status.FAILED
 
     @property
     def is_started(self):
-        return self.status == Status.STARTED
+        return self.get_status() == Status.STARTED
 
     @property
     def dependency(self):

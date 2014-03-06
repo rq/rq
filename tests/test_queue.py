@@ -258,7 +258,7 @@ class TestQueue(RQTestCase):
         """Enqueueing a job sets its status to "queued"."""
         q = Queue()
         job = q.enqueue(say_hello)
-        self.assertEqual(job.status, Status.QUEUED)
+        self.assertEqual(job.get_status(), Status.QUEUED)
 
     def test_all_queues(self):
         """All queues"""
@@ -316,7 +316,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.status = Status.FINISHED
+        parent_job.set_status(Status.FINISHED)
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [job.id])
@@ -332,7 +332,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, 123)
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.status = Status.FINISHED
+        parent_job.set_status(Status.FINISHED)
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=123)
         self.assertEqual(q.job_ids, [job.id])
@@ -394,7 +394,7 @@ class TestFailedQueue(RQTestCase):
         get_failed_queue().requeue(job.id)
 
         job = Job.fetch(job.id)
-        self.assertEqual(job.status, Status.QUEUED)
+        self.assertEqual(job.get_status(), Status.QUEUED)
 
     def test_enqueue_preserves_result_ttl(self):
         """Enqueueing persists result_ttl."""
