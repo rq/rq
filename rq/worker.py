@@ -244,7 +244,7 @@ class Worker(object):
 
     def get_current_job_id(self, pipeline=None):
         connection = pipeline if pipeline is not None else self.connection
-        return connection.hget(self.key, 'current_job')
+        return as_text(connection.hget(self.key, 'current_job'))
 
     def get_current_job(self):
         """Returns the job id of the currently executing job."""
