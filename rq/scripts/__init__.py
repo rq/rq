@@ -1,3 +1,4 @@
+import os
 import importlib
 import redis
 from warnings import warn
@@ -7,18 +8,25 @@ from rq import use_connection
 def add_standard_arguments(parser):
     parser.add_argument('--config', '-c', default=None,
                         help='Module containing RQ settings.')
-    parser.add_argument('--url', '-u', default=None,
+    parser.add_argument('--url', '-u',
+                        default=os.environ.get('RQ_REDIS_URL'),
                         help='URL describing Redis connection details. '
-                             'Overrides other connection arguments if supplied.')
-    parser.add_argument('--host', '-H', default=None,
+                             'Overrides other connection arguments if '
+                             'supplied.')
+    parser.add_argument('--host', '-H',
+                        default=os.environ.get('RQ_REDIS_HOST', 'localhost'),
                         help='The Redis hostname (default: localhost)')
-    parser.add_argument('--port', '-p', default=None,
+    parser.add_argument('--port', '-p',
+                        default=int(os.environ.get('RQ_REDIS_PORT', 6379)),
                         help='The Redis portnumber (default: 6379)')
-    parser.add_argument('--db', '-d', type=int, default=None,
+    parser.add_argument('--db', '-d', type=int,
+                        default=int(os.environ.get('RQ_REDIS_DB', 0)),
                         help='The Redis database (default: 0)')
-    parser.add_argument('--password', '-a', default=None,
+    parser.add_argument('--password', '-a',
+                        default=os.environ.get('RQ_REDIS_PASSWORD'),
                         help='The Redis password (default: None)')
-    parser.add_argument('--socket', '-s', default=None,
+    parser.add_argument('--socket', '-s',
+                        default=os.environ.get('RQ_REDIS_SOCKET'),
                         help='The Redis Unix socket')
 
 
