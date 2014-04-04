@@ -101,9 +101,9 @@ def show_workers(args):
         for w in ws:
             worker_queues = filter_queues(w.queue_names())
             if not args.raw:
-                print('%s %s: %s' % (w.name, state_symbol(w.state), ', '.join(worker_queues)))
+                print('%s %s: %s' % (w.name, state_symbol(w.get_state()), ', '.join(worker_queues)))
             else:
-                print('worker %s %s %s' % (w.name, w.state, ','.join(worker_queues)))
+                print('worker %s %s %s' % (w.name, w.get_state(), ','.join(worker_queues)))
     else:
         # Create reverse lookup table
         queues = dict([(q, []) for q in qs])
@@ -116,7 +116,7 @@ def show_workers(args):
         max_qname = max(map(lambda q: len(q.name), queues.keys())) if queues else 0
         for q in queues:
             if queues[q]:
-                queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.state)), queues[q])))
+                queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queues[q])))
             else:
                 queues_str = '–'
             print('%s %s' % (pad(q.name + ':', max_qname + 1), queues_str))
