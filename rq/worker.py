@@ -18,7 +18,7 @@ from .job import Job, Status
 from .utils import make_colorizer, utcnow, utcformat
 from .logutils import setup_loghandlers
 from .exceptions import NoQueueError, DequeueTimeout
-from .timeouts import death_penalty_after
+from .timeouts import UnixSignalDeathPenalty
 from .version import VERSION
 from rq.compat import text_type, as_text
 
@@ -59,6 +59,8 @@ def signal_name(signum):
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
+    death_penalty_class = UnixSignalDeathPenalty
+
 
     @classmethod
     def all(cls, connection=None):
@@ -462,7 +464,7 @@ class Worker(object):
 
         with self.connection._pipeline() as pipeline:
             try:
-                with death_penalty_after(job.timeout or Queue.DEFAULT_TIMEOUT):
+                with self.death_penalty_class(job.timeout or Queue.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
                 # Pickle the result in the same try-except block since we need to
