@@ -4,9 +4,9 @@ from functools import partial
 from warnings import warn
 
 import redis
-from first import first
 
 from rq import use_connection
+from rq.utils import first
 
 
 def add_standard_arguments(parser):
