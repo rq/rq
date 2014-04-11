@@ -190,17 +190,14 @@ class Queue(object):
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
-        timeout = None
-        description = None
-        result_ttl = None
-        depends_on = None
-        if 'args' in kwargs or 'kwargs' in kwargs or 'depends_on' in kwargs:
+        timeout = kwargs.pop('timeout', None)
+        description = kwargs.pop('description', None)
+        result_ttl = kwargs.pop('result_ttl', None)
+        depends_on = kwargs.pop('depends_on', None)
+        
+        if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
-            timeout = kwargs.pop('timeout', None)
-            description = kwargs.pop('description', None)
-            args = kwargs.pop('args', None)
-            result_ttl = kwargs.pop('result_ttl', None)
-            depends_on = kwargs.pop('depends_on', None)
+            args = kwargs.pop('args', None)            
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,

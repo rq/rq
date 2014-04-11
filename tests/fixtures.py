@@ -49,6 +49,10 @@ def access_self():
     return job.id
 
 
+def echo(*args, **kwargs):
+    return (args, kwargs)
+
+
 class Number(object):
     def __init__(self, value):
         self.value = value
