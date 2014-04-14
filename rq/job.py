@@ -449,12 +449,12 @@ class Job(object):
         _job_stack.push(self.id)
         try:
             self.set_status(Status.STARTED)
-            self._result = self.func(*self.args, **self.kwargs)            
+            self._result = self.func(*self.args, **self.kwargs)
             self.set_status(Status.FINISHED)
-            self.ended_at = utcnow()        
+            self.ended_at = utcnow()
         finally:
             assert self.id == _job_stack.pop()
-        
+
         return self._result
 
     def get_ttl(self, default_ttl=None):
