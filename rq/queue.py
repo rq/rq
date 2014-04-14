@@ -65,10 +65,25 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        job_list = self.get_jobs()
-        self.connection.delete(self.key)
-        for job in job_list:
-            job.cancel()
+        script = b"""
+            local prefix = "rq:job:"
+            local q = KEYS[1]
+            local count = 0
+            while true do
+                local job_id = redis.call("lpop", q)
+                if job_id == false then
+                    break
+                end
+
+                -- Delete the relevant keys
+                redis.call("del", prefix..job_id)
+                redis.call("del", prefix..job_id..":dependents")
+                count = count + 1
+            end
+            return count
+        """
+        script = self.connection.register_script(script)
+        return script(keys=[self.key])
 
     def is_empty(self):
         """Returns whether the current queue is empty."""
