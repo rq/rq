@@ -1,5 +1,5 @@
 from tests import RQTestCase
-from tests.fixtures import Number, div_by_zero, say_hello, some_calculation
+from tests.fixtures import Number, div_by_zero, echo, say_hello, some_calculation
 from rq import Queue, get_failed_queue
 from rq.job import Job, Status
 from rq.worker import Worker
@@ -259,6 +259,33 @@ class TestQueue(RQTestCase):
         q = Queue()
         job = q.enqueue(say_hello)
         self.assertEqual(job.get_status(), Status.QUEUED)
+
+    def test_enqueue_explicit_args(self):
+        """enqueue() works for both implicit/explicit args."""
+        q = Queue()
+        
+        # Implicit args/kwargs mode 
+        job = q.enqueue(echo, 1, timeout=1, result_ttl=1, bar='baz')
+        self.assertEqual(job.timeout, 1)
+        self.assertEqual(job.result_ttl, 1)
+        self.assertEqual(
+            job.perform(),
+            ((1,), {'bar': 'baz'})
+        )
+
+        # Explicit kwargs mode
+        kwargs = {
+            'timeout': 1,
+            'result_ttl': 1,
+        }
+        job = q.enqueue(echo, timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
+        self.assertEqual(job.timeout, 2)
+        self.assertEqual(job.result_ttl, 2)
+        self.assertEqual(
+            job.perform(),
+            ((1,), {'timeout': 1, 'result_ttl': 1})
+        )
+
 
     def test_all_queues(self):
         """All queues"""
