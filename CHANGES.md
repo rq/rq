@@ -1,6 +1,9 @@
 ### 0.4.0
 (not released yet)
 
+- Emptying the failed queue from the command line is now as simple as running
+  `rqinfo -X` or `rqinfo --empty-failed-queue`.
+
 - Job data is unpickled lazily. Thanks, Malthe!
 
 - Removed dependency on the `times` library. Thanks, Malthe!

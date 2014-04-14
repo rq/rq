@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import sys
-import os
-import time
 import argparse
+import os
+import sys
+import time
+
 from redis.exceptions import ConnectionError
-from rq import Queue, Worker
+
+from rq import get_failed_queue, Queue, Worker
+from rq.scripts import (add_standard_arguments, read_config_file,
+                        setup_default_arguments, setup_redis)
 from rq.utils import gettermsize, make_colorizer
-from rq.scripts import add_standard_arguments
-from rq.scripts import setup_redis
-from rq.scripts import read_config_file
-from rq.scripts import setup_default_arguments
 
 red = make_colorizer('darkred')
 green = make_colorizer('darkgreen')
@@ -116,7 +116,7 @@ def show_workers(args):
         max_qname = max(map(lambda q: len(q.name), queues.keys())) if queues else 0
         for q in queues:
             if queues[q]:
-                queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queues[q])))
+                queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queues[q])))  # noqa
             else:
                 queues_str = '–'
             print('%s %s' % (pad(q.name + ':', max_qname + 1), queues_str))
@@ -140,11 +140,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description='RQ command-line monitor.')
     add_standard_arguments(parser)
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
-    parser.add_argument('--interval', '-i', metavar='N', type=float, default=2.5, help='Updates stats every N seconds (default: don\'t poll)')
-    parser.add_argument('--raw', '-r', action='store_true', default=False, help='Print only the raw numbers, no bar charts')
-    parser.add_argument('--only-queues', '-Q', dest='only_queues', default=False, action='store_true', help='Show only queue info')
-    parser.add_argument('--only-workers', '-W', dest='only_workers', default=False, action='store_true', help='Show only worker info')
-    parser.add_argument('--by-queue', '-R', dest='by_queue', default=False, action='store_true', help='Shows workers by queue')
+    parser.add_argument('--interval', '-i', metavar='N', type=float, default=2.5, help='Updates stats every N seconds (default: don\'t poll)')  # noqa
+    parser.add_argument('--raw', '-r', action='store_true', default=False, help='Print only the raw numbers, no bar charts')  # noqa
+    parser.add_argument('--only-queues', '-Q', dest='only_queues', default=False, action='store_true', help='Show only queue info')  # noqa
+    parser.add_argument('--only-workers', '-W', dest='only_workers', default=False, action='store_true', help='Show only worker info')  # noqa
+    parser.add_argument('--by-queue', '-R', dest='by_queue', default=False, action='store_true', help='Shows workers by queue')  # noqa
+    parser.add_argument('--empty-failed-queue', '-X', dest='empty_failed_queue', default=False, action='store_true', help='Empties the failed queue, then quits')  # noqa
     parser.add_argument('queues', nargs='*', help='The queues to poll')
     return parser.parse_args()
 
@@ -173,15 +174,20 @@ def main():
     setup_default_arguments(args, settings)
 
     setup_redis(args)
-    try:
-        if args.only_queues:
-            func = show_queues
-        elif args.only_workers:
-            func = show_workers
-        else:
-            func = show_both
 
-        interval(args.interval, func, args)
+    try:
+        if args.empty_failed_queue:
+            num_jobs = get_failed_queue().empty()
+            print('{} jobs removed from failed queue'.format(num_jobs))
+        else:
+            if args.only_queues:
+                func = show_queues
+            elif args.only_workers:
+                func = show_workers
+            else:
+                func = show_both
+
+            interval(args.interval, func, args)
     except ConnectionError as e:
         print(e)
         sys.exit(1)
