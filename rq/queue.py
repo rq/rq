@@ -30,6 +30,7 @@ class Queue(object):
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'
     redis_queues_keys = 'rq:queues'
+    redis_queue_past_jobs_prefix = '%s_pastjobs:' % redis_queue_namespace_prefix
 
     @classmethod
     def all(cls, connection=None):
@@ -55,13 +56,16 @@ class Queue(object):
         return cls(name, connection=connection)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True):
+                 async=True, remember_past_jobs=False):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
         self._default_timeout = default_timeout
         self._async = async
+        self._remember_past_jobs = remember_past_jobs
+        if self._remember_past_jobs:
+            self._past_jobs = '%s%s' % (self.redis_queue_past_jobs_prefix, name)
 
     @property
     def key(self):
@@ -100,15 +104,37 @@ class Queue(object):
         except NoSuchJobError:
             self.remove(job_id)
 
+    def _prune_past_jobs(self):
+        """Prune past jobs that have expired or been deleted."""
+        script = b"""
+            local prefix = "rq:job:"
+            local past_jobs_set = KEYS[1]
+            local pruned_jobs = 0
+            for _, job_id in pairs(redis.call("smembers", past_jobs_set)) do
+                if redis.call("exists", prefix..job_id) == 0 then
+                    redis.call("srem", past_jobs_set, job_id)
+                    pruned_jobs = pruned_jobs + 1
+                end
+            end
+            return pruned_jobs
+        """
+        script = self.connection.register_script(script)
+        return script(keys=[self._past_jobs])
+
     def get_job_ids(self, offset=0, length=-1):
         """Returns a slice of job IDs in the queue."""
-        start = offset
-        if length >= 0:
-            end = offset + (length - 1)
+        if self._remember_past_jobs:
+            self._prune_past_jobs()
+            return [as_text(job_id) for job_id in
+                    self.connection.smembers(self._past_jobs)]
         else:
-            end = length
-        return [as_text(job_id) for job_id in
-                self.connection.lrange(self.key, start, end)]
+            start = offset
+            if length >= 0:
+                end = offset + (length - 1)
+            else:
+                end = length
+            return [as_text(job_id) for job_id in
+                    self.connection.lrange(self.key, start, end)]
 
     def get_jobs(self, offset=0, length=-1):
         """Returns a slice of jobs in the queue."""
@@ -131,9 +157,22 @@ class Queue(object):
         return self.connection.llen(self.key)
 
     def remove(self, job_or_id):
-        """Removes Job from queue, accepts either a Job instance or ID."""
+        """Removes Job from queue, accepts either a Job instance or ID.
+
+        Also delete the job hash (and its dependents). This prevents orphaned
+        jobs appearing in self.jobs when in remember_past_jobs mode.
+        """
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
-        return self.connection._lrem(self.key, 0, job_id)
+        script = b"""
+        local queue = KEYS[1]
+        local job_id = KEYS[2]
+        local prefix = "rq:job:"
+        redis.call("del", prefix..job_id)
+        redis.call("del", prefix..job_id..":dependents")
+        return redis.call("lrem", queue, 0, job_id)
+        """
+        script = self.connection.register_script(script)
+        return script(keys=[self.key, job_id])
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
@@ -232,6 +271,10 @@ class Queue(object):
         """
         # Add Queue key set
         self.connection.sadd(self.redis_queues_keys, self.key)
+
+        # Remember that we processed this job
+        if self._remember_past_jobs:
+            self.connection.sadd(self._past_jobs, job.id)
 
         if set_meta_data:
             job.origin = self.name
