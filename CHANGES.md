@@ -1,3 +1,9 @@
+### 0.4.1
+(April 22nd, 2014)
+
+- Fix bug where RQ 0.4 workers could not unpickle/process jobs from RQ < 0.4.
+
+
 ### 0.4.0
 (April 22nd, 2014)
 
