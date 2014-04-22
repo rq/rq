@@ -176,7 +176,7 @@ def utcnow():
 
 
 def utcformat(dt):
-    return dt.strftime(u"%Y-%m-%dT%H:%M:%SZ")
+    return dt.strftime(u'%Y-%m-%dT%H:%M:%SZ')
 
 
 def utcparse(string):
