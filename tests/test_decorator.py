@@ -48,3 +48,25 @@ class TestDecorator(RQTestCase):
             return 'Why hello'
         result = hello.delay()
         self.assertEqual(result.result_ttl, 10)
+
+    def test_decorator_accepts_result_depends_on_as_argument(self):
+        """Ensure that passing in depends_on to the decorator sets the
+        correct dependency on the job
+        """
+
+        @job(queue='queue_name')
+        def foo():
+            return 'Firstly'
+
+        @job(queue='queue_name')
+        def bar():
+            return 'Secondly'
+
+        foo_job = foo.delay()
+        bar_job = bar.delay(depends_on=foo_job)
+
+        self.assertIsNone(foo_job._dependency_id)
+
+        self.assertEqual(bar_job.dependency, foo_job)
+
+        self.assertEqual(bar_job._dependency_id, foo_job.id)
