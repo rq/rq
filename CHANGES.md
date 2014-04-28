@@ -1,3 +1,9 @@
+### 0.4.2
+(April 28th, 2014)
+
+- Add missing depends_on kwarg to @job decorator.  Thanks, Sasha!
+
+
 ### 0.4.1
 (April 22nd, 2014)
 
