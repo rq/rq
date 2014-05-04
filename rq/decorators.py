@@ -20,7 +20,7 @@ class job(object):
             simple_add.delay(1, 2) # Puts simple_add function into queue
         """
         self.queue = queue
-        self.connection = resolve_connection(connection)
+        self.connection = connection
         self.timeout = timeout
         self.result_ttl = result_ttl
 
@@ -28,7 +28,7 @@ class job(object):
         @wraps(f)
         def delay(*args, **kwargs):
             if isinstance(self.queue, string_types):
-                queue = Queue(name=self.queue, connection=self.connection)
+                queue = Queue(name=self.queue, connection=resolve_connection(self.connection))
             else:
                 queue = self.queue
             if 'depends_on' in kwargs:
