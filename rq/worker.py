@@ -60,6 +60,8 @@ class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
     death_penalty_class = UnixSignalDeathPenalty
+    queue_class = Queue
+    job_class = Job
 
 
     @classmethod
@@ -95,7 +97,7 @@ class Worker(object):
         worker._state = connection.hget(worker.key, 'state') or '?'
         worker._job_id = connection.hget(worker.key, 'current_job') or None
         if queues:
-            worker.queues = [Queue(queue, connection=connection)
+            worker.queues = [self.queue_class(queue, connection=connection)
                              for queue in queues.split(',')]
         return worker
 
@@ -105,7 +107,7 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
-        if isinstance(queues, Queue):
+        if isinstance(queues, self.queue_class):
             queues = [queues]
         self._name = name
         self.queues = queues
@@ -139,7 +141,7 @@ class Worker(object):
         if not iterable(self.queues):
             raise ValueError('Argument queues not iterable.')
         for queue in self.queues:
-            if not isinstance(queue, Queue):
+            if not isinstance(queue, self.queue_class):
                 raise NoQueueError('Give each worker at least one Queue.')
 
     def queue_names(self):
@@ -266,7 +268,7 @@ class Worker(object):
         if job_id is None:
             return None
 
-        return Job.fetch(job_id, self.connection)
+        return self.job_class.fetch(job_id, self.connection)
 
     @property
     def stopped(self):
@@ -377,7 +379,7 @@ class Worker(object):
             self.heartbeat()
 
             try:
-                result = Queue.dequeue_any(self.queues, timeout,
+                result = self.queue_class.dequeue_any(self.queues, timeout,
                                            connection=self.connection)
                 if result is not None:
                     job, queue = result
@@ -471,7 +473,7 @@ class Worker(object):
 
         with self.connection._pipeline() as pipeline:
             try:
-                with self.death_penalty_class(job.timeout or Queue.DEFAULT_TIMEOUT):
+                with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
                 # Pickle the result in the same try-except block since we need to
