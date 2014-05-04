@@ -73,7 +73,7 @@ class TestDecorator(RQTestCase):
 
         self.assertEqual(bar_job._dependency_id, foo_job.id)
 
-    @mock.patch('rq.decorators.resolve_connection')
+    @mock.patch('rq.queue.resolve_connection')
     def test_decorator_connection_laziness(self, resolve_connection):
         """Ensure that job decorator resolve connection in `lazy` way """
 

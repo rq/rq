@@ -1,6 +1,5 @@
 from functools import wraps
 from .queue import Queue
-from .connections import resolve_connection
 from .worker import DEFAULT_RESULT_TTL
 from rq.compat import string_types
 
@@ -28,7 +27,7 @@ class job(object):
         @wraps(f)
         def delay(*args, **kwargs):
             if isinstance(self.queue, string_types):
-                queue = Queue(name=self.queue, connection=resolve_connection(self.connection))
+                queue = Queue(name=self.queue, connection=self.connection)
             else:
                 queue = self.queue
             if 'depends_on' in kwargs:
