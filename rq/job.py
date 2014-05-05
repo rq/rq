@@ -8,7 +8,7 @@ from .local import LocalStack
 from .connections import resolve_connection
 from .exceptions import UnpickleError, NoSuchJobError
 from .utils import import_attribute, utcnow, utcformat, utcparse
-from rq.compat import text_type, decode_redis_hash, as_text
+from rq.compat import text_type, decode_redis_hash, as_text, string_types
 
 
 def enum(name, *sequential, **named):
@@ -96,8 +96,10 @@ class Job(object):
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
             job._func_name = '%s.%s' % (func.__module__, func.__name__)
-        else:  # we expect a string
-            job._func_name = func
+        elif isinstance(func, string_types):
+            job._func_name = as_text(func)
+        else:
+            raise TypeError('Expected a function/method/string, but got: {}'.format(func))
         job._args = args
         job._kwargs = kwargs
 
