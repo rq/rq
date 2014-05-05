@@ -21,17 +21,17 @@ else:
         """Class decorator that fills in missing ordering methods"""
         convert = {
             '__lt__': [('__gt__', lambda self, other: other < self),
-                    ('__le__', lambda self, other: not other < self),
-                    ('__ge__', lambda self, other: not self < other)],
+                       ('__le__', lambda self, other: not other < self),
+                       ('__ge__', lambda self, other: not self < other)],
             '__le__': [('__ge__', lambda self, other: other <= self),
-                    ('__lt__', lambda self, other: not other <= self),
-                    ('__gt__', lambda self, other: not self <= other)],
+                       ('__lt__', lambda self, other: not other <= self),
+                       ('__gt__', lambda self, other: not self <= other)],
             '__gt__': [('__lt__', lambda self, other: other > self),
-                    ('__ge__', lambda self, other: not other > self),
-                    ('__le__', lambda self, other: not self > other)],
+                       ('__ge__', lambda self, other: not other > self),
+                       ('__le__', lambda self, other: not self > other)],
             '__ge__': [('__le__', lambda self, other: other >= self),
-                    ('__gt__', lambda self, other: not other >= self),
-                    ('__lt__', lambda self, other: not self >= other)]
+                       ('__gt__', lambda self, other: not other >= self),
+                       ('__lt__', lambda self, other: not self >= other)]
         }
         roots = set(dir(cls)) & set(convert)
         if not roots:

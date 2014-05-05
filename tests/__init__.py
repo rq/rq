@@ -79,5 +79,5 @@ class RQTestCase(unittest.TestCase):
 
         # Pop the connection to Redis
         testconn = pop_connection()
-        assert testconn == cls.testconn, 'Wow, something really nasty ' \
-                'happened to the Redis connection stack. Check your setup.'
+        assert testconn == cls.testconn, \
+            'Wow, something really nasty happened to the Redis connection stack. Check your setup.'

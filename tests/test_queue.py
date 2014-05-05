@@ -23,8 +23,7 @@ class TestQueue(RQTestCase):
         q = Queue()
         self.assertEquals(q.name, 'default')
 
-
-    def test_equality(self):  # noqa
+    def test_equality(self):
         """Mathematical equality of queues."""
         q1 = Queue('foo')
         q2 = Queue('foo')
@@ -35,8 +34,7 @@ class TestQueue(RQTestCase):
         self.assertNotEquals(q1, q3)
         self.assertNotEquals(q2, q3)
 
-
-    def test_empty_queue(self):  # noqa
+    def test_empty_queue(self):
         """Emptying queues."""
         q = Queue('example')
 
@@ -109,8 +107,7 @@ class TestQueue(RQTestCase):
 
         self.assertEquals(q.count, 2)
 
-
-    def test_enqueue(self):  # noqa
+    def test_enqueue(self):
         """Enqueueing job onto queues."""
         q = Queue()
         self.assertEquals(q.is_empty(), True)
@@ -142,8 +139,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.origin, q.name)
         self.assertIsNotNone(job.enqueued_at)
 
-
-    def test_pop_job_id(self):  # noqa
+    def test_pop_job_id(self):
         """Popping job IDs from queues."""
         # Set up
         q = Queue()
@@ -269,8 +265,8 @@ class TestQueue(RQTestCase):
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
         q = Queue()
-        
-        # Implicit args/kwargs mode 
+
+        # Implicit args/kwargs mode
         job = q.enqueue(echo, 1, timeout=1, result_ttl=1, bar='baz')
         self.assertEqual(job.timeout, 1)
         self.assertEqual(job.result_ttl, 1)
@@ -291,7 +287,6 @@ class TestQueue(RQTestCase):
             job.perform(),
             ((1,), {'timeout': 1, 'result_ttl': 1})
         )
-
 
     def test_all_queues(self):
         """All queues"""

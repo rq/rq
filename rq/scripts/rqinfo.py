@@ -111,7 +111,7 @@ def show_workers(args):
         queues = dict([(q, []) for q in qs])
         for w in ws:
             for q in w.queues:
-                if not q in queues:
+                if q not in queues:
                     continue
                 queues[q].append(w)
 

@@ -28,7 +28,7 @@ def setup_loghandlers(level=None):
             "handlers": {
                 "console": {
                     "level": "DEBUG",
-                    #"class": "logging.StreamHandler",
+                    # "class": "logging.StreamHandler",
                     "class": "rq.utils.ColorizingStreamHandler",
                     "formatter": "console",
                     "exclude": ["%(asctime)s"],

@@ -68,7 +68,6 @@ class Worker(object):
     redis_workers_keys = 'rq:workers'
     death_penalty_class = UnixSignalDeathPenalty
 
-
     @classmethod
     def all(cls, connection=None):
         """Returns an iterable of all Workers.
@@ -140,8 +139,7 @@ class Worker(object):
         if exc_handler is not None:
             self.push_exc_handler(exc_handler)
 
-
-    def validate_queues(self):  # noqa
+    def validate_queues(self):
         """Sanity check for the given queues."""
         if not iterable(self.queues):
             raise ValueError('Argument queues not iterable.')
@@ -157,8 +155,7 @@ class Worker(object):
         """Returns the Redis keys representing this worker's queues."""
         return map(lambda q: q.key, self.queues)
 
-
-    @property  # noqa
+    @property
     def name(self):
         """Returns the name of the worker, under which it is registered to the
         monitoring system.
@@ -201,8 +198,7 @@ class Worker(object):
         """
         setprocname('rq: %s' % (message,))
 
-
-    def register_birth(self):  # noqa
+    def register_birth(self):
         """Registers its own birth."""
         self.log.debug('Registering birth of worker %s' % (self.name,))
         if self.connection.exists(self.key) and \
@@ -326,8 +322,7 @@ class Worker(object):
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
 
-
-    def work(self, burst=False):  # noqa
+    def work(self, burst=False):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all

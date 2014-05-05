@@ -14,7 +14,7 @@ class JobTimeoutException(Exception):
 
 class BaseDeathPenalty(object):
     """Base class to setup job timeouts."""
-    
+
     def __init__(self, timeout):
         self._timeout = timeout
 
@@ -45,7 +45,7 @@ class BaseDeathPenalty(object):
 
 
 class UnixSignalDeathPenalty(BaseDeathPenalty):
-    
+
     def handle_death_penalty(self, signum, frame):
         raise JobTimeoutException('Job exceeded maximum timeout '
                                   'value (%d seconds).' % self._timeout)

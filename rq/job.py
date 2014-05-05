@@ -4,15 +4,18 @@ from __future__ import (absolute_import, division, print_function,
 
 import inspect
 from uuid import uuid4
+
+from rq.compat import as_text, decode_redis_hash, string_types, text_type
+
+from .connections import resolve_connection
+from .exceptions import NoSuchJobError, UnpickleError
+from .local import LocalStack
+from .utils import import_attribute, utcformat, utcnow, utcparse
+
 try:
     from cPickle import loads, dumps, UnpicklingError
 except ImportError:  # noqa
     from pickle import loads, dumps, UnpicklingError  # noqa
-from .local import LocalStack
-from .connections import resolve_connection
-from .exceptions import UnpickleError, NoSuchJobError
-from .utils import import_attribute, utcnow, utcformat, utcparse
-from rq.compat import text_type, decode_redis_hash, as_text, string_types
 
 
 def enum(name, *sequential, **named):

@@ -44,7 +44,7 @@ class TestDecorator(RQTestCase):
         """Ensure that passing in result_ttl to the decorator sets the
         result_ttl on the job
         """
-        #Ensure default
+        # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.result_ttl, DEFAULT_RESULT_TTL)
 
