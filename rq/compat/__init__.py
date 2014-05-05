@@ -41,21 +41,11 @@ else:
         return cls
 
 
-PY2 = sys.version_info[0] < 3
-
-if PY2:
-    string_types = (str, unicode)
-    text_type = unicode
-
-    def as_text(v):
-        return v
-
-    def decode_redis_hash(h):
-        return h
-
-else:
-    string_types = (str,)
+PY2 = sys.version_info[0] == 2
+if not PY2:
+    # Python 3.x and up
     text_type = str
+    string_types = (str,)
 
     def as_text(v):
         if v is None:
@@ -69,3 +59,13 @@ else:
 
     def decode_redis_hash(h):
         return dict((as_text(k), h[k]) for k in h)
+else:
+    # Python 2.x
+    text_type = unicode
+    string_types = (str, unicode)
+
+    def as_text(v):
+        return v
+
+    def decode_redis_hash(h):
+        return h
