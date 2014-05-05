@@ -5,6 +5,9 @@ Miscellaneous helper functions.
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import importlib
 import datetime
 import logging

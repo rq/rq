@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import importlib
 import os
 from functools import partial
 from warnings import warn
 
 import redis
-
 from rq import use_connection
 from rq.utils import first
 

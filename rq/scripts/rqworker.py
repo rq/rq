@@ -1,15 +1,20 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import argparse
 import logging
 import logging.config
 import os
 import sys
 
-from rq import Queue
-from rq.logutils import setup_loghandlers
 from redis.exceptions import ConnectionError
+from rq import Queue
 from rq.contrib.legacy import cleanup_ghosts
-from rq.scripts import add_standard_arguments, read_config_file, setup_default_arguments, setup_redis
+from rq.logutils import setup_loghandlers
+from rq.scripts import (add_standard_arguments, read_config_file,
+                        setup_default_arguments, setup_redis)
 from rq.utils import import_attribute
 
 logger = logging.getLogger(__name__)

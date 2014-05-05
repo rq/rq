@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import argparse
 import os
 import sys
 import time
 
 from redis.exceptions import ConnectionError
-
 from rq import get_failed_queue, Queue, Worker
 from rq.scripts import (add_standard_arguments, read_config_file,
                         setup_default_arguments, setup_redis)

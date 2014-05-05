@@ -1,9 +1,15 @@
-from tests import RQTestCase
-from tests.fixtures import Number, div_by_zero, echo, say_hello, some_calculation
-from rq import Queue, get_failed_queue
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+from rq import get_failed_queue, Queue
+from rq.exceptions import InvalidJobOperationError
 from rq.job import Job, Status
 from rq.worker import Worker
-from rq.exceptions import InvalidJobOperationError
+
+from tests import RQTestCase
+from tests.fixtures import (div_by_zero, echo, Number, say_hello,
+                            some_calculation)
 
 
 class TestQueue(RQTestCase):

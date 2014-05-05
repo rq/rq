@@ -1,8 +1,14 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 from functools import wraps
-from .queue import Queue
-from .connections import resolve_connection
-from .worker import DEFAULT_RESULT_TTL
+
 from rq.compat import string_types
+
+from .connections import resolve_connection
+from .queue import Queue
+from .worker import DEFAULT_RESULT_TTL
 
 
 class job(object):

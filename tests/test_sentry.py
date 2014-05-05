@@ -1,6 +1,11 @@
-from tests import RQTestCase
-from rq import Queue, Worker, get_failed_queue
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+from rq import get_failed_queue, Queue, Worker
 from rq.contrib.sentry import register_sentry
+
+from tests import RQTestCase
 
 
 class FakeSentry(object):

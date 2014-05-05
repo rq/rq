@@ -1,7 +1,13 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 from contextlib import contextmanager
+
 from redis import StrictRedis
-from .local import LocalStack, release_local
+
 from .compat.connections import patch_connection
+from .local import LocalStack, release_local
 
 
 class NoRedisConnectionException(Exception):

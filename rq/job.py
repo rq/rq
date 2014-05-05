@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import inspect
 from uuid import uuid4
 try:
@@ -13,7 +17,12 @@ from rq.compat import text_type, decode_redis_hash, as_text, string_types
 
 def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
-    return type(name, (), values)
+
+    # NOTE: Yes, we *really* want to cast using str() here.
+    # On Python 2 type() requires a byte string (which is str() on Python 2).
+    # On Python 3 it does not matter, so we'll use str(), which acts as
+    # a no-op.
+    return type(str(name), (), values)
 
 Status = enum('Status',
               QUEUED='queued', FINISHED='finished', FAILED='failed',

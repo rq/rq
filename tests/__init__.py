@@ -1,12 +1,17 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import logging
+
+from redis import StrictRedis
+from rq import pop_connection, push_connection
 from rq.compat import is_python_version
+
 if is_python_version((2, 7), (3, 2)):
     import unittest
 else:
     import unittest2 as unittest  # noqa
-
-from redis import StrictRedis
-from rq import push_connection, pop_connection
 
 
 def find_empty_redis_database():

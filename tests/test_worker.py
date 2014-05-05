@@ -1,11 +1,17 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import os
-from tests import RQTestCase, slow
-from tests.fixtures import say_hello, div_by_zero, create_file, \
-        create_file_after_timeout
-from tests.helpers import strip_microseconds
-from rq import Queue, Worker, get_failed_queue
+
+from rq import get_failed_queue, Queue, Worker
 from rq.compat import as_text
 from rq.job import Job, Status
+
+from tests import RQTestCase, slow
+from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
+                            say_hello)
+from tests.helpers import strip_microseconds
 
 
 class TestWorker(RQTestCase):

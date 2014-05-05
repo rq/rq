@@ -1,7 +1,11 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import optparse
-from rq import use_connection, Queue
-from rq import dummy
+
+from rq import dummy, Queue, use_connection
 
 
 def parse_args():

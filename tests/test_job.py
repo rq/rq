@@ -1,16 +1,23 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 from datetime import datetime
+
+from rq.compat import as_text, PY2
+from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.job import get_current_job, Job
+from rq.queue import Queue
+from rq.utils import utcformat
+
 from tests import RQTestCase
-from tests.fixtures import Number, some_calculation, say_hello, access_self
+from tests.fixtures import access_self, Number, say_hello, some_calculation
 from tests.helpers import strip_microseconds
+
 try:
     from cPickle import loads, dumps
 except ImportError:
     from pickle import loads, dumps
-from rq.compat import as_text
-from rq.job import Job, get_current_job
-from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.queue import Queue
-from rq.utils import utcformat
 
 
 class TestJob(RQTestCase):
@@ -240,16 +247,19 @@ class TestJob(RQTestCase):
 
     def test_description_is_persisted(self):
         """Ensure that job's custom description is set properly"""
-        job = Job.create(func=say_hello, args=('Lionel',), description=u'Say hello!')
+        job = Job.create(func=say_hello, args=('Lionel',), description='Say hello!')
         job.save()
         Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.description, u'Say hello!')
+        self.assertEqual(job.description, 'Say hello!')
 
         # Ensure job description is constructed from function call string
         job = Job.create(func=say_hello, args=('Lionel',))
         job.save()
         Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
+        if PY2:
+            self.assertEqual(job.description, "tests.fixtures.say_hello(u'Lionel')")
+        else:
+            self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""

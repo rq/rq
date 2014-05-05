@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+
 def register_sentry(client, worker):
     """Given a Raven client and an RQ worker, registers exception handlers
     with the worker so exceptions are logged to Sentry.

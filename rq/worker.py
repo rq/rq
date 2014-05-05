@@ -1,26 +1,33 @@
-import sys
-import os
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import errno
+import logging
+import os
 import random
+import signal
+import socket
+import sys
 import time
+import traceback
+
+from rq.compat import as_text, text_type
+
+from .connections import get_current_connection
+from .exceptions import DequeueTimeout, NoQueueError
+from .job import Job, Status
+from .logutils import setup_loghandlers
+from .queue import get_failed_queue, Queue
+from .timeouts import UnixSignalDeathPenalty
+from .utils import make_colorizer, utcformat, utcnow
+from .version import VERSION
+
 try:
     from procname import setprocname
 except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
-import socket
-import signal
-import traceback
-import logging
-from .queue import Queue, get_failed_queue
-from .connections import get_current_connection
-from .job import Job, Status
-from .utils import make_colorizer, utcnow, utcformat
-from .logutils import setup_loghandlers
-from .exceptions import NoQueueError, DequeueTimeout
-from .timeouts import UnixSignalDeathPenalty
-from .version import VERSION
-from rq.compat import text_type, as_text
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')

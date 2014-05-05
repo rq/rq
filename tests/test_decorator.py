@@ -1,9 +1,14 @@
-from tests import RQTestCase
-from tests.fixtures import decorated_job
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 from rq.decorators import job
 from rq.job import Job
 from rq.worker import DEFAULT_RESULT_TTL
+
+from tests import RQTestCase
+from tests.fixtures import decorated_job
+
 
 class TestDecorator(RQTestCase):
 
