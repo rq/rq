@@ -2,12 +2,13 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import mock
 from redis import StrictRedis
 from rq.decorators import job
 from rq.job import Job
 from rq.worker import DEFAULT_RESULT_TTL
 
-from tests import mock, RQTestCase
+from tests import RQTestCase
 from tests.fixtures import decorated_job
 
 
