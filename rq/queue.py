@@ -26,6 +26,7 @@ def compact(lst):
 
 @total_ordering
 class Queue(object):
+    job_class = Job
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'
     redis_queues_keys = 'rq:queues'
@@ -95,7 +96,7 @@ class Queue(object):
 
     def fetch_job(self, job_id):
         try:
-            return Job.fetch(job_id, connection=self.connection)
+            return self.job_class.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             self.remove(job_id)
 
@@ -131,7 +132,7 @@ class Queue(object):
 
     def remove(self, job_or_id):
         """Removes Job from queue, accepts either a Job instance or ID."""
-        job_id = job_or_id.id if isinstance(job_or_id, Job) else job_or_id
+        job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
         return self.connection._lrem(self.key, 0, job_id)
 
     def compact(self):
@@ -145,7 +146,7 @@ class Queue(object):
             job_id = as_text(self.connection.lpop(COMPACT_QUEUE))
             if job_id is None:
                 break
-            if Job.exists(job_id, self.connection):
+            if self.job_class.exists(job_id, self.connection):
                 self.connection.rpush(self.key, job_id)
 
     def push_job_id(self, job_id):
@@ -164,7 +165,7 @@ class Queue(object):
         timeout = timeout or self._default_timeout
 
         # TODO: job with dependency shouldn't have "queued" as status
-        job = Job.create(func, args, kwargs, connection=self.connection,
+        job = self.job_class.create(func, args, kwargs, connection=self.connection,
                          result_ttl=result_ttl, status=Status.QUEUED,
                          description=description, depends_on=depends_on, timeout=timeout)
 
@@ -254,7 +255,7 @@ class Queue(object):
             job_id = as_text(self.connection.spop(job.dependents_key))
             if job_id is None:
                 break
-            dependent = Job.fetch(job_id, connection=self.connection)
+            dependent = self.job_class.fetch(job_id, connection=self.connection)
             self.enqueue_job(dependent)
 
     def pop_job_id(self):
@@ -294,13 +295,13 @@ class Queue(object):
     def dequeue(self):
         """Dequeues the front-most job from this queue.
 
-        Returns a Job instance, which can be executed or inspected.
+        Returns a job_class instance, which can be executed or inspected.
         """
         job_id = self.pop_job_id()
         if job_id is None:
             return None
         try:
-            job = Job.fetch(job_id, connection=self.connection)
+            job = self.job_class.fetch(job_id, connection=self.connection)
         except NoSuchJobError as e:
             # Silently pass on jobs that don't exist (anymore),
             # and continue by reinvoking itself recursively
@@ -315,7 +316,7 @@ class Queue(object):
 
     @classmethod
     def dequeue_any(cls, queues, timeout, connection=None):
-        """Class method returning the Job instance at the front of the given
+        """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
         When all of the Queues are empty, depending on the `timeout` argument,
@@ -332,7 +333,7 @@ class Queue(object):
         queue_key, job_id = map(as_text, result)
         queue = cls.from_queue_key(queue_key, connection=connection)
         try:
-            job = Job.fetch(job_id, connection=connection)
+            job = cls.job_class.fetch(job_id, connection=connection)
         except NoSuchJobError:
             # Silently pass on jobs that don't exist (anymore),
             # and continue by reinvoking the same function recursively
@@ -386,7 +387,7 @@ class FailedQueue(Queue):
     def requeue(self, job_id):
         """Requeues the job with the given job ID."""
         try:
-            job = Job.fetch(job_id, connection=self.connection)
+            job = self.job_class.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             # Silently ignore/remove this job and return (i.e. do nothing)
             self.remove(job_id)
