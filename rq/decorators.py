@@ -6,7 +6,6 @@ from functools import wraps
 
 from rq.compat import string_types
 
-from .connections import resolve_connection
 from .queue import Queue
 from .worker import DEFAULT_RESULT_TTL
 
@@ -26,7 +25,7 @@ class job(object):
             simple_add.delay(1, 2) # Puts simple_add function into queue
         """
         self.queue = queue
-        self.connection = resolve_connection(connection)
+        self.connection = connection
         self.timeout = timeout
         self.result_ttl = result_ttl
 

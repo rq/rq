@@ -2,11 +2,12 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from redis import StrictRedis
 from rq.decorators import job
 from rq.job import Job
 from rq.worker import DEFAULT_RESULT_TTL
 
-from tests import RQTestCase
+from tests import mock, RQTestCase
 from tests.fixtures import decorated_job
 
 
@@ -75,3 +76,23 @@ class TestDecorator(RQTestCase):
         self.assertEqual(bar_job.dependency, foo_job)
 
         self.assertEqual(bar_job._dependency_id, foo_job.id)
+
+    @mock.patch('rq.queue.resolve_connection')
+    def test_decorator_connection_laziness(self, resolve_connection):
+        """Ensure that job decorator resolve connection in `lazy` way """
+
+        resolve_connection.return_value = StrictRedis()
+
+        @job(queue='queue_name')
+        def foo():
+            return 'do something'
+
+        self.assertEqual(resolve_connection.call_count, 0)
+
+        foo()
+
+        self.assertEqual(resolve_connection.call_count, 0)
+
+        foo.delay()
+
+        self.assertEqual(resolve_connection.call_count, 1)
