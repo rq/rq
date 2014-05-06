@@ -1,11 +1,15 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 from redis import StrictRedis
-
-from tests import RQTestCase, mock
-from tests.fixtures import decorated_job
-
 from rq.decorators import job
 from rq.job import Job
 from rq.worker import DEFAULT_RESULT_TTL
+
+from tests import mock, RQTestCase
+from tests.fixtures import decorated_job
+
 
 class TestDecorator(RQTestCase):
 
@@ -41,7 +45,7 @@ class TestDecorator(RQTestCase):
         """Ensure that passing in result_ttl to the decorator sets the
         result_ttl on the job
         """
-        #Ensure default
+        # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.result_ttl, DEFAULT_RESULT_TTL)
 

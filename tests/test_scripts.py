@@ -1,9 +1,14 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 from rq.compat import is_python_version
+from rq.scripts import read_config_file
+
 if is_python_version((2, 7), (3, 2)):
     from unittest import TestCase
 else:
     from unittest2 import TestCase  # noqa
-from rq.scripts import read_config_file
 
 
 class TestScripts(TestCase):

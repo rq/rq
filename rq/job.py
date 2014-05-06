@@ -1,19 +1,31 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import inspect
 from uuid import uuid4
+
+from rq.compat import as_text, decode_redis_hash, string_types, text_type
+
+from .connections import resolve_connection
+from .exceptions import NoSuchJobError, UnpickleError
+from .local import LocalStack
+from .utils import import_attribute, utcformat, utcnow, utcparse
+
 try:
     from cPickle import loads, dumps, UnpicklingError
 except ImportError:  # noqa
     from pickle import loads, dumps, UnpicklingError  # noqa
-from .local import LocalStack
-from .connections import resolve_connection
-from .exceptions import UnpickleError, NoSuchJobError
-from .utils import import_attribute, utcnow, utcformat, utcparse
-from rq.compat import text_type, decode_redis_hash, as_text
 
 
 def enum(name, *sequential, **named):
     values = dict(zip(sequential, range(len(sequential))), **named)
-    return type(name, (), values)
+
+    # NOTE: Yes, we *really* want to cast using str() here.
+    # On Python 2 type() requires a byte string (which is str() on Python 2).
+    # On Python 3 it does not matter, so we'll use str(), which acts as
+    # a no-op.
+    return type(str(name), (), values)
 
 Status = enum('Status',
               QUEUED='queued', FINISHED='finished', FAILED='failed',
@@ -96,8 +108,10 @@ class Job(object):
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
             job._func_name = '%s.%s' % (func.__module__, func.__name__)
-        else:  # we expect a string
-            job._func_name = func
+        elif isinstance(func, string_types):
+            job._func_name = as_text(func)
+        else:
+            raise TypeError('Expected a function/method/string, but got: {}'.format(func))
         job._args = args
         job._kwargs = kwargs
 
@@ -433,7 +447,7 @@ class Job(object):
         cancellation.  Technically, this call is (currently) the same as just
         deleting the job hash.
         """
-        pipeline = self.connection.pipeline()
+        pipeline = self.connection._pipeline()
         self.delete(pipeline=pipeline)
         pipeline.delete(self.dependents_key)
         pipeline.execute()
@@ -448,9 +462,13 @@ class Job(object):
         """Invokes the job function with the job arguments."""
         _job_stack.push(self.id)
         try:
+            self.set_status(Status.STARTED)
             self._result = self.func(*self.args, **self.kwargs)
+            self.set_status(Status.FINISHED)
+            self.ended_at = utcnow()
         finally:
             assert self.id == _job_stack.pop()
+
         return self._result
 
     def get_ttl(self, default_ttl=None):

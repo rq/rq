@@ -1,11 +1,17 @@
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import os
-from tests import RQTestCase, slow
-from tests.fixtures import say_hello, div_by_zero, create_file, \
-        create_file_after_timeout
-from tests.helpers import strip_microseconds
-from rq import Queue, Worker, get_failed_queue
+
+from rq import get_failed_queue, Queue, Worker
 from rq.compat import as_text
 from rq.job import Job, Status
+
+from tests import RQTestCase, slow
+from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
+                            say_hello)
+from tests.helpers import strip_microseconds
 
 
 class TestWorker(RQTestCase):
@@ -20,16 +26,16 @@ class TestWorker(RQTestCase):
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
         self.assertEquals(w.work(burst=True), False,
-                'Did not expect any work on the queue.')
+                          'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
         self.assertEquals(w.work(burst=True), True,
-                'Expected at least some work done.')
+                          'Expected at least some work done.')
 
     def test_worker_ttl(self):
         """Worker ttl."""
         w = Worker([])
-        w.register_birth() # ugly: our test should only call public APIs
+        w.register_birth()  # ugly: our test should only call public APIs
         [worker_key] = self.testconn.smembers(Worker.redis_workers_keys)
         self.assertIsNotNone(self.testconn.ttl(worker_key))
         w.register_death()
@@ -40,7 +46,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         job = q.enqueue('tests.fixtures.say_hello', name='Frank')
         self.assertEquals(w.work(burst=True), True,
-                'Expected at least some work done.')
+                          'Expected at least some work done.')
         self.assertEquals(job.result, 'Hi there, Frank!')
 
     def test_work_is_unreadable(self):
@@ -169,10 +175,9 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         # Put it on the queue with a timeout value
-        res = q.enqueue(
-                create_file_after_timeout,
-                args=(sentinel_file, 4),
-                timeout=1)
+        res = q.enqueue(create_file_after_timeout,
+                        args=(sentinel_file, 4),
+                        timeout=1)
 
         try:
             os.unlink(sentinel_file)

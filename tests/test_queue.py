@@ -1,9 +1,15 @@
-from tests import RQTestCase
-from tests.fixtures import Number, div_by_zero, say_hello, some_calculation
-from rq import Queue, get_failed_queue
+# -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+from rq import get_failed_queue, Queue
+from rq.exceptions import InvalidJobOperationError
 from rq.job import Job, Status
 from rq.worker import Worker
-from rq.exceptions import InvalidJobOperationError
+
+from tests import RQTestCase
+from tests.fixtures import (div_by_zero, echo, Number, say_hello,
+                            some_calculation)
 
 
 class TestQueue(RQTestCase):
@@ -17,8 +23,7 @@ class TestQueue(RQTestCase):
         q = Queue()
         self.assertEquals(q.name, 'default')
 
-
-    def test_equality(self):  # noqa
+    def test_equality(self):
         """Mathematical equality of queues."""
         q1 = Queue('foo')
         q2 = Queue('foo')
@@ -29,8 +34,7 @@ class TestQueue(RQTestCase):
         self.assertNotEquals(q1, q3)
         self.assertNotEquals(q2, q3)
 
-
-    def test_empty_queue(self):  # noqa
+    def test_empty_queue(self):
         """Emptying queues."""
         q = Queue('example')
 
@@ -103,8 +107,7 @@ class TestQueue(RQTestCase):
 
         self.assertEquals(q.count, 2)
 
-
-    def test_enqueue(self):  # noqa
+    def test_enqueue(self):
         """Enqueueing job onto queues."""
         q = Queue()
         self.assertEquals(q.is_empty(), True)
@@ -136,8 +139,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.origin, q.name)
         self.assertIsNotNone(job.enqueued_at)
 
-
-    def test_pop_job_id(self):  # noqa
+    def test_pop_job_id(self):
         """Popping job IDs from queues."""
         # Set up
         q = Queue()
@@ -259,6 +261,32 @@ class TestQueue(RQTestCase):
         q = Queue()
         job = q.enqueue(say_hello)
         self.assertEqual(job.get_status(), Status.QUEUED)
+
+    def test_enqueue_explicit_args(self):
+        """enqueue() works for both implicit/explicit args."""
+        q = Queue()
+
+        # Implicit args/kwargs mode
+        job = q.enqueue(echo, 1, timeout=1, result_ttl=1, bar='baz')
+        self.assertEqual(job.timeout, 1)
+        self.assertEqual(job.result_ttl, 1)
+        self.assertEqual(
+            job.perform(),
+            ((1,), {'bar': 'baz'})
+        )
+
+        # Explicit kwargs mode
+        kwargs = {
+            'timeout': 1,
+            'result_ttl': 1,
+        }
+        job = q.enqueue(echo, timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
+        self.assertEqual(job.timeout, 2)
+        self.assertEqual(job.result_ttl, 2)
+        self.assertEqual(
+            job.perform(),
+            ((1,), {'timeout': 1, 'result_ttl': 1})
+        )
 
     def test_all_queues(self):
         """All queues"""

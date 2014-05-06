@@ -1,5 +1,20 @@
+### 0.4.2
+(April 28th, 2014)
+
+- Add missing depends_on kwarg to @job decorator.  Thanks, Sasha!
+
+
+### 0.4.1
+(April 22nd, 2014)
+
+- Fix bug where RQ 0.4 workers could not unpickle/process jobs from RQ < 0.4.
+
+
 ### 0.4.0
-(not released yet)
+(April 22nd, 2014)
+
+- Emptying the failed queue from the command line is now as simple as running
+  `rqinfo -X` or `rqinfo --empty-failed-queue`.
 
 - Job data is unpickled lazily. Thanks, Malthe!
 
