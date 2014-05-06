@@ -1,3 +1,11 @@
+### 0.4.3
+(May 6th, 2014)
+
+- Make job and queue classes overridable. Thanks, Marko!
+- Don't require connection for @job decorator at definition time. Thanks, Sasha!
+- Syntactic code cleanup.
+
+
 ### 0.4.2
 (April 28th, 2014)
 
