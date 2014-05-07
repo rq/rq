@@ -1,3 +1,10 @@
+### 0.4.4
+(May 7th, 2014)
+
+- Properly declare redis dependency.
+- Fix a NameError regression that was introduced in 0.4.3.
+
+
 ### 0.4.3
 (May 6th, 2014)
 
