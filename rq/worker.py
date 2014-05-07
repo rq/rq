@@ -382,7 +382,7 @@ class Worker(object):
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
-                                           connection=self.connection)
+                                                      connection=self.connection)
                 if result is not None:
                     job, queue = result
                     self.log.info('%s: %s (%s)' % (green(queue.name),
