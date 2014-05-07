@@ -103,7 +103,7 @@ class Worker(object):
         worker._state = connection.hget(worker.key, 'state') or '?'
         worker._job_id = connection.hget(worker.key, 'current_job') or None
         if queues:
-            worker.queues = [self.queue_class(queue, connection=connection)
+            worker.queues = [cls.queue_class(queue, connection=connection)
                              for queue in queues.split(',')]
         return worker
 
