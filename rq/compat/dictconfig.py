@@ -487,7 +487,7 @@ class DictConfigurator(BaseConfigurator):
                 'address' in config:
                 config['address'] = self.as_tuple(config['address'])
             factory = klass
-        kwargs = dict([(k, config[k]) for k in config if valid_ident(k)])
+        kwargs = dict([(str(k), config[k]) for k in config if valid_ident(k)])
         try:
             result = factory(**kwargs)
         except TypeError as te:
