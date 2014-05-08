@@ -1,3 +1,9 @@
+### 0.4.5
+(May 8th, 2014)
+
+- Fix where rqworker broke on Python 2.6. Thanks, Marko!
+
+
 ### 0.4.4
 (May 7th, 2014)
 
