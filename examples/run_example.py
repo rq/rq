@@ -24,20 +24,20 @@ def main():
     done = False
     while not done:
         os.system('clear')
-        print 'Asynchronously: (now = %.2f)' % (time.time() - start_time)
+        print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
         done = True
         for x in fib_range:
             result = async_results[x].return_value
             if result is None:
                 done = False
                 result = '(calculating)'
-            print 'fib(%d) = %s' % (x, result)
-        print ''
-        print 'To start the actual in the background, run a worker:'
-        print '    python examples/run_worker.py'
+            print('fib(%d) = %s' % (x, result))
+        print('')
+        print('To start the actual in the background, run a worker:')
+        print('    python examples/run_worker.py')
         time.sleep(0.2)
 
-    print 'Done'
+    print('Done')
 
 
 if __name__ == '__main__':
