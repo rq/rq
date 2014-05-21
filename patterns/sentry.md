@@ -26,7 +26,7 @@ Where `worker` is your RQ worker instance.  After that, call `worker.work(...)`
 to start the worker.  All exceptions that occur are reported to Sentry
 automatically.
 
-<div class="warning">
+<div class="warning" style="margin-top: 20px">
     <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
     <strong>Note:</strong>
     <p>
