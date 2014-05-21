@@ -3,7 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from rq import get_failed_queue, Queue
-from rq.exceptions import InvalidJobOperationError
+from rq.exceptions import InvalidJobOperationError, NoSuchJobError
 from rq.job import Job, Status
 from rq.worker import Worker
 
@@ -76,6 +76,9 @@ class TestQueue(RQTestCase):
         q.remove(job.id)
         self.assertNotIn(job.id, q.job_ids)
 
+        with self.assertRaises(NoSuchJobError):
+            job.refresh()
+
     def test_jobs(self):
         """Getting jobs out of a queue."""
         q = Queue('example')
@@ -87,6 +90,23 @@ class TestQueue(RQTestCase):
         job.delete()
         self.assertEqual(q.job_ids, [job.id])
         q.jobs
+        self.assertEqual(q.job_ids, [])
+
+    def test_remember_past_jobs(self):
+        """Getting past jobs from a queue."""
+        q = Queue('example', remember_past_jobs=True)
+        self.assertEqual(q.jobs, [])
+        job = q.enqueue(say_hello)
+        self.assertEqual(q.jobs, [job])
+
+        # Completing a job does not remove it from the job list.
+        w = Worker([q])
+        w.work(burst=True)
+        self.assertEqual(q.jobs, [job])
+        self.assertEqual(job.get_status(), Status.FINISHED)
+
+        # Deleting a job removes it from the job list.
+        job.delete()
         self.assertEqual(q.job_ids, [])
 
     def test_compact(self):
@@ -109,7 +129,7 @@ class TestQueue(RQTestCase):
 
     def test_enqueue(self):
         """Enqueueing job onto queues."""
-        q = Queue()
+        q = Queue(remember_past_jobs=True)
         self.assertEquals(q.is_empty(), True)
 
         # say_hello spec holds which queue this is sent to
@@ -121,6 +141,13 @@ class TestQueue(RQTestCase):
         self.assertEquals(self.testconn.llen(q_key), 1)
         self.assertEquals(
             self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'),
+            job_id)
+
+        q_past_jobs_key = 'rq:queue:_pastjobs:default'
+        self.assertTrue(self.testconn.exists(q_past_jobs_key))
+        self.assertEquals(self.testconn.scard(q_past_jobs_key), 1)
+        self.assertEquals(
+            self.testconn.spop(q_past_jobs_key).decode('ascii'),
             job_id)
 
     def test_enqueue_sets_metadata(self):
@@ -215,7 +242,7 @@ class TestQueue(RQTestCase):
     def test_dequeue_any(self):
         """Fetching work from any given queue."""
         fooq = Queue('foo')
-        barq = Queue('bar')
+        barq = Queue('bar', remember_past_jobs=True)
 
         self.assertEquals(Queue.dequeue_any([fooq, barq], None), None)
 
