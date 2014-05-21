@@ -1,7 +1,7 @@
 ### 0.4.6
 (not released yet)
 
-- ...
+- Fix where Sentry logging did not reliably work in the worker process.
 
 
 ### 0.4.5
