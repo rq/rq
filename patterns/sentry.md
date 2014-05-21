@@ -35,6 +35,10 @@ automatically.
       <code>sync+https://</code> or <code>requests+https://</code> versions of
       the Sentry DSN in RQ.
     </p>
+    <p>
+      For more info, see the
+      <a href="http://raven.readthedocs.org/en/latest/transports/index.html#transports">Raven docs</a>.
+    </p>
 </div>
 
 Read more on RQ's [custom exception handling](/docs/exceptions/) capabilities.
