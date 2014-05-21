@@ -1,7 +1,8 @@
 ### 0.4.6
-(not released yet)
+(May 21st, 2014)
 
-- Fix where Sentry logging did not reliably work in the worker process.
+- Raise a warning when RQ workers are used with Sentry DSNs using
+  asynchronous transports.  Thanks Wei, Selwin & Toms!
 
 
 ### 0.4.5
