@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import inspect
 from uuid import uuid4
+import warnings
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
@@ -131,8 +132,9 @@ class Job(object):
         return self._status
 
     def _get_status(self):
-        raise DeprecationWarning(
-            "job.status is deprecated. Use job.get_status() instead"
+        warnings.warn(
+            "job.status is deprecated. Use job.get_status() instead",
+            DeprecationWarning
         )
         return self.get_status()
 
@@ -141,8 +143,9 @@ class Job(object):
         self.connection.hset(self.key, 'status', self._status)
 
     def _set_status(self, status):
-        raise DeprecationWarning(
-            "job.status is deprecated. Use job.set_status() instead"
+        warnings.warn(
+            "job.status is deprecated. Use job.set_status() instead",
+            DeprecationWarning
         )
         self.set_status(status)
 
