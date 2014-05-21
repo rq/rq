@@ -26,4 +26,15 @@ Where `worker` is your RQ worker instance.  After that, call `worker.work(...)`
 to start the worker.  All exceptions that occur are reported to Sentry
 automatically.
 
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
+    <strong>Note:</strong>
+    <p>
+      Error delivery to Sentry is known to be unreliable with RQ when using
+      async transports (the default is).  So you are encouraged to use the
+      <code>sync+https://</code> or <code>requests+https://</code> versions of
+      the Sentry DSN in RQ.
+    </p>
+</div>
+
 Read more on RQ's [custom exception handling](/docs/exceptions/) capabilities.
