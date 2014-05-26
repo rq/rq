@@ -36,7 +36,7 @@ from somewhere import count_words_at_url
 redis_conn = Redis()
 q = Queue(connection=redis_conn)  # no args implies the default queue
 
-# Delay calculation of the multiplication
+# Delay execution of count_words_at_url('http://nvie.com')
 job = q.enqueue(count_words_at_url, 'http://nvie.com')
 print job.result   # => None
 
