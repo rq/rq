@@ -12,6 +12,10 @@ from tests.fixtures import (div_by_zero, echo, Number, say_hello,
                             some_calculation)
 
 
+class CustomJob(Job):
+    pass
+
+
 class TestQueue(RQTestCase):
     def test_create_queue(self):
         """Creating queues."""
@@ -437,3 +441,8 @@ class TestFailedQueue(RQTestCase):
         q = Queue(async=False)
         job = q.enqueue(some_calculation, args=(2, 3))
         self.assertEqual(job.return_value, 6)
+
+    def test_custom_job_class(self):
+        """Ensure custom job class assignment works as expected."""
+        q = Queue(job_class=CustomJob)
+        self.assertEqual(q.job_class, CustomJob)

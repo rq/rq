@@ -12,7 +12,7 @@ import sys
 import time
 import traceback
 
-from rq.compat import as_text, text_type
+from rq.compat import as_text, string_types, text_type
 
 from .connections import get_current_connection
 from .exceptions import DequeueTimeout, NoQueueError
@@ -20,7 +20,7 @@ from .job import Job, Status
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
-from .utils import make_colorizer, utcformat, utcnow
+from .utils import import_attribute, make_colorizer, utcformat, utcnow
 from .version import VERSION
 
 try:
@@ -109,7 +109,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None,
-                 exc_handler=None, default_worker_ttl=None):  # noqa
+                 exc_handler=None, default_worker_ttl=None, job_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -140,6 +140,11 @@ class Worker(object):
         self.push_exc_handler(self.move_to_failed_queue)
         if exc_handler is not None:
             self.push_exc_handler(exc_handler)
+
+        if job_class is not None:
+            if isinstance(job_class, string_types):
+                job_class = import_attribute(job_class)
+            self.job_class = job_class
 
     def validate_queues(self):
         """Sanity check for the given queues."""

@@ -27,6 +27,7 @@ def parse_args():
     parser.add_argument('--burst', '-b', action='store_true', default=False, help='Run in burst mode (quit after all work is done)')  # noqa
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
     parser.add_argument('--worker-class', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
+    parser.add_argument('--job-class', '-j', action='store', default='rq.job.Job', help='RQ Job class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--results-ttl', default=None, help='Default results timeout to be used')
     parser.add_argument('--worker-ttl', default=None, help='Default worker timeout to be used')
@@ -88,7 +89,8 @@ def main():
         w = worker_class(queues,
                          name=args.name,
                          default_worker_ttl=args.worker_ttl,
-                         default_result_ttl=args.results_ttl)
+                         default_result_ttl=args.results_ttl,
+                         job_class=args.job_class)
 
         # Should we configure Sentry?
         if args.sentry_dsn:

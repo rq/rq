@@ -14,6 +14,10 @@ from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
 from tests.helpers import strip_microseconds
 
 
+class CustomJob(Job):
+    pass
+
+
 class TestWorker(RQTestCase):
     def test_create_worker(self):
         """Worker creation."""
@@ -269,3 +273,9 @@ class TestWorker(RQTestCase):
             as_text(self.testconn.hget(worker.key, 'current_job'))
         )
         self.assertEqual(worker.get_current_job(), job)
+
+    def test_custom_job_class(self):
+        """Ensure Worker accepts custom job class."""
+        q = Queue()
+        worker = Worker([q], job_class=CustomJob)
+        self.assertEqual(worker.job_class, CustomJob)
