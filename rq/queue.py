@@ -6,7 +6,7 @@ import uuid
 
 from .connections import resolve_connection
 from .job import Job, Status
-from .utils import utcnow
+from .utils import import_attribute, utcnow
 
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
                          NoSuchJobError, UnpickleError)
@@ -55,13 +55,18 @@ class Queue(object):
         return cls(name, connection=connection)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True):
+                 async=True, job_class=None):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '%s%s' % (prefix, name)
         self._default_timeout = default_timeout
         self._async = async
+
+        if job_class is not None:
+            if isinstance(job_class, string_types):
+                job_class = import_attribute(job_class)
+            self.job_class = job_class
 
     @property
     def key(self):
