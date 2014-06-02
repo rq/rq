@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument('--job-class', '-j', action='store', default='rq.job.Job', help='RQ Job class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--results-ttl', default=None, help='Default results timeout to be used')
-    parser.add_argument('--worker-ttl', default=None, help='Default worker timeout to be used')
+    parser.add_argument('--worker-ttl', type=int, default=None, help='Default worker timeout to be used')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')  # noqa
