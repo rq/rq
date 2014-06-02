@@ -185,11 +185,13 @@ def utcformat(dt):
 
 
 def utcparse(string):
-    try:
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
-    except ValueError:
-        # This catches RQ < 0.4 datetime format
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+    for fmt in ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S+00:00', '%Y-%m-%dT%H:%M:%S.%f+00:00']:
+        try:
+            return datetime.datetime.strptime(string, fmt)
+        except ValueError:
+            logging.error("Failed to parse datetime: %s, trying format %s",
+                          string, fmt)
+    return datetime.datetime.now()
 
 
 def first(iterable, default=None, key=None):
