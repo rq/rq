@@ -214,7 +214,7 @@ class Worker(object):
                              'already.' % (self.name,))
         key = self.key
         queues = ','.join(self.queue_names())
-        with self.connection._pipeline() as p:
+        with self.connection.pipeline() as p:
             p.delete(key)
             p.hset(key, 'birth', utcformat(utcnow()))
             p.hset(key, 'queues', queues)
@@ -225,7 +225,7 @@ class Worker(object):
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with self.connection._pipeline() as p:
+        with self.connection.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             p.srem(self.redis_workers_keys, self.key)
@@ -478,7 +478,7 @@ class Worker(object):
             job.func_name,
             job.origin, time.time()))
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             try:
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()

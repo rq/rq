@@ -447,7 +447,7 @@ class Job(object):
         cancellation.  Technically, this call is (currently) the same as just
         deleting the job hash.
         """
-        pipeline = self.connection._pipeline()
+        pipeline = self.connection.pipeline()
         self.delete(pipeline=pipeline)
         pipeline.delete(self.dependents_key)
         pipeline.execute()

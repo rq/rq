@@ -138,7 +138,7 @@ class Queue(object):
     def remove(self, job_or_id):
         """Removes Job from queue, accepts either a Job instance or ID."""
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
-        return self.connection._lrem(self.key, 0, job_id)
+        return self.connection.lrem(self.key, 0, job_id)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while

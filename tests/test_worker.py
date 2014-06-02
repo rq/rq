@@ -203,13 +203,13 @@ class TestWorker(RQTestCase):
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w = Worker([q])
         w.work(burst=True)
-        self.assertNotEqual(self.testconn._ttl(job.key), 0)
+        self.assertNotEqual(self.testconn.ttl(job.key), 0)
 
         # Job with -1 result_ttl don't expire
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
         w = Worker([q])
         w.work(burst=True)
-        self.assertEqual(self.testconn._ttl(job.key), -1)
+        self.assertEqual(self.testconn.ttl(job.key), -1)
 
         # Job with result_ttl = 0 gets deleted immediately
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=0)

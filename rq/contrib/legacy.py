@@ -23,7 +23,7 @@ def cleanup_ghosts():
     """
     conn = get_current_connection()
     for worker in Worker.all():
-        if conn._ttl(worker.key) == -1:
+        if conn.ttl(worker.key) == -1:
             ttl = worker.default_worker_ttl
             conn.expire(worker.key, ttl)
             logger.info('Marked ghosted worker {0} to expire in {1} seconds.'.format(worker.name, ttl))

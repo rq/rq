@@ -6,7 +6,6 @@ from contextlib import contextmanager
 
 from redis import StrictRedis
 
-from .compat.connections import patch_connection
 from .local import LocalStack, release_local
 
 
@@ -30,7 +29,7 @@ def Connection(connection=None):
 
 def push_connection(redis):
     """Pushes the given connection on the stack."""
-    _connection_stack.push(patch_connection(redis))
+    _connection_stack.push(redis)
 
 
 def pop_connection():
@@ -63,7 +62,7 @@ def resolve_connection(connection=None):
     Raises an exception if it cannot resolve a connection now.
     """
     if connection is not None:
-        return patch_connection(connection)
+        return connection
 
     connection = get_current_connection()
     if connection is None:

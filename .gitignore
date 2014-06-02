@@ -1,6 +1,8 @@
 *.pyc
 *.egg-info
 
+*~
+
 /dump.rdb
 /.direnv
 /.envrc
