@@ -63,5 +63,5 @@ force stdin, stdout and stderr to be totally unbuffered):
 
 [1]: https://heroku.com
 [2]: https://devcenter.heroku.com/articles/redistogo
-[3]: http://supervisord.org/
+[3]: https://github.com/ddollar/foreman
 [4]: https://github.com/ddollar/foreman/wiki/Missing-Output
