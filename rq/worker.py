@@ -475,9 +475,7 @@ class Worker(object):
         self.heartbeat((job.timeout or 180) + 60)
 
         try:
-            self.procline('Processing %s from %s since %s' % (
-                job.func_name,
-                job.origin, time.time()))
+            func_name = job.func_name
         except UnpickleError:
             # Use the public setter here, to immediately update Redis
             job.set_status(Status.FAILED)
@@ -485,6 +483,10 @@ class Worker(object):
                 'RQ failed to unpickle job %s' % job.id)
             self.handle_exception(job, *sys.exc_info())
             return False
+
+        self.procline('Processing %s from %s since %s' % (
+            func_name,
+            job.origin, time.time()))
 
         with self.connection._pipeline() as pipeline:
             try:
