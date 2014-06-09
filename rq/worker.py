@@ -510,7 +510,7 @@ class Worker(object):
                 self.log.exception(
                     'RQ failed on `%s(%s)` (job %s)'
                     % (job.func_name, ', '.join(
-                        map(repr, job.args)
+                        [repr(arg) for arg in job.args]
                         + [k + '=' + repr(v) for k, v in job.kwargs.items()]),
                        job.id))
                 self.handle_exception(job, *sys.exc_info())
