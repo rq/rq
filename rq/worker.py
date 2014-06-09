@@ -496,9 +496,14 @@ class Worker(object):
 
                 pipeline.execute()
 
-            except Exception:
+            except:
                 # Use the public setter here, to immediately update Redis
                 job.set_status(Status.FAILED)
+                self.log.exception(
+                    'RQ failed on %s(%s)'
+                    % (job.func_name, ', '.join(
+                    map(repr, job.args) + [k + '=' + repr(v)
+                                           for k, v in job.kwargs.items()])))
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
@@ -518,10 +523,6 @@ class Worker(object):
 
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = ''.join(traceback.format_exception_only(*exc_info[:2]) +
-                             traceback.format_exception(*exc_info))
-        self.log.error(exc_string)
-
         for handler in reversed(self._exc_handlers):
             self.log.debug('Invoking exception handler %s' % (handler,))
             fallthrough = handler(job, *exc_info)
