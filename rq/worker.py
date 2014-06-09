@@ -15,7 +15,7 @@ import traceback
 from rq.compat import as_text, string_types, text_type
 
 from .connections import get_current_connection
-from .exceptions import DequeueTimeout, NoQueueError
+from .exceptions import DequeueTimeout, NoQueueError, UnpickleError
 from .job import Job, Status
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
@@ -474,9 +474,17 @@ class Worker(object):
         self.set_current_job_id(job.id)
         self.heartbeat((job.timeout or 180) + 60)
 
-        self.procline('Processing %s from %s since %s' % (
-            job.func_name,
-            job.origin, time.time()))
+        try:
+            self.procline('Processing %s from %s since %s' % (
+                job.func_name,
+                job.origin, time.time()))
+        except UnpickleError:
+            # Use the public setter here, to immediately update Redis
+            job.set_status(Status.FAILED)
+            self.log.exception(
+                'RQ failed to unpickle job %s' % job.id)
+            self.handle_exception(job, *sys.exc_info())
+            return False
 
         with self.connection._pipeline() as pipeline:
             try:
@@ -500,10 +508,11 @@ class Worker(object):
                 # Use the public setter here, to immediately update Redis
                 job.set_status(Status.FAILED)
                 self.log.exception(
-                    'RQ failed on %s(%s)'
+                    'RQ failed on `%s(%s)` (job %s)'
                     % (job.func_name, ', '.join(
-                    map(repr, job.args) + [k + '=' + repr(v)
-                                           for k, v in job.kwargs.items()])))
+                        map(repr, job.args)
+                        + [k + '=' + repr(v) for k, v in job.kwargs.items()]),
+                       job.id))
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
