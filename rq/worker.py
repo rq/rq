@@ -479,8 +479,7 @@ class Worker(object):
         except UnpickleError:
             # Use the public setter here, to immediately update Redis
             job.set_status(Status.FAILED)
-            self.log.exception(
-                'RQ failed to unpickle job %s' % job.id)
+            self.log.exception('RQ failed to unpickle job %s' % job.id)
             self.handle_exception(job, *sys.exc_info())
             return False
 
@@ -509,12 +508,8 @@ class Worker(object):
             except:
                 # Use the public setter here, to immediately update Redis
                 job.set_status(Status.FAILED)
-                self.log.exception(
-                    'RQ failed on `%s(%s)` (job %s)'
-                    % (job.func_name, ', '.join(
-                        [repr(arg) for arg in job.args]
-                        + [k + '=' + repr(v) for k, v in job.kwargs.items()]),
-                       job.id))
+                self.log.exception('RQ failed on `%s` (job %s)' % (func_name,
+                                                                   job.id))
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
