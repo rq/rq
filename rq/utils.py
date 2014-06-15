@@ -14,7 +14,7 @@ import logging
 import os
 import sys
 
-from .compat import is_python_version
+from .compat import is_python_version, as_text
 
 
 def gettermsize():
@@ -181,7 +181,7 @@ def utcnow():
 
 
 def utcformat(dt):
-    return dt.strftime(u'%Y-%m-%dT%H:%M:%SZ')
+    return dt.strftime(as_text('%Y-%m-%dT%H:%M:%SZ'))
 
 
 def utcparse(string):
