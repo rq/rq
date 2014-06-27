@@ -329,7 +329,7 @@ class Worker(object):
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
 
-    def work(self, burst=False):
+    def work(self, burst=False, use_default_log_handler=True):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -338,7 +338,8 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers()
+        if use_default_log_handler:
+            setup_loghandlers()
         self._install_signal_handlers()
 
         did_perform_work = False
