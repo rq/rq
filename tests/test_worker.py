@@ -260,6 +260,68 @@ class TestWorker(RQTestCase):
         job = Job.fetch(job.id)
         self.assertNotEqual(job.get_status(), Status.FINISHED)
 
+    def test_job_dependency_in_differ_queue(self):
+        """Dependent jobs are put into the initial queue."""
+        default_q = Queue('default')
+        low_q = Queue('low')
+
+        w_default = Worker([default_q])
+        w_low = Worker([low_q])
+
+        parent_job = default_q.enqueue(say_hello)
+        dependent_job = low_q.enqueue_call(say_hello, depends_on=parent_job)
+
+        # depended job wasn't performed
+        w_low.work(burst=True)
+        dependent_job = Job.fetch(dependent_job.id)
+        self.assertEqual(dependent_job.get_status(), Status.QUEUED)
+
+        w_default.work(burst=True)
+        dependent_job = Job.fetch(dependent_job.id)
+        self.assertEqual(dependent_job.get_status(), Status.QUEUED)
+
+        w_low.work(burst=True)
+        dependent_job = Job.fetch(dependent_job.id)
+        self.assertEqual(dependent_job.get_status(), Status.FINISHED)
+
+    def test_job_dependency_failed(self):
+        """Failing parent job in different queue."""
+        default_q = Queue('default')
+        low_q = Queue('low')
+
+        w_default = Worker([default_q])
+        w_low = Worker([low_q])
+
+        parent_job = default_q.enqueue(div_by_zero)
+        dependent_job = low_q.enqueue_call(say_hello, depends_on=parent_job)
+
+        w_default.work(burst=True)
+        dependent_job = Job.fetch(dependent_job.id)
+        self.assertEqual(dependent_job.get_status(), Status.QUEUED)
+
+        w_low.work(burst=True)
+        dependent_job = Job.fetch(dependent_job.id)
+        self.assertEqual(dependent_job.get_status(), Status.QUEUED)
+
+    def test_job_dependency_with_queue_params(self):
+        """Dependent jobs are put into the initial parameterized queue."""
+        default_q = Queue('default')
+        low_q = Queue('low', async=False, job_class=CustomJob)
+
+        w_default = Worker([default_q])
+
+        parent_job = default_q.enqueue(say_hello)
+        dependent_job = low_q.enqueue_call(say_hello, depends_on=parent_job)
+
+        # perform parent_job and dependent_job
+        w_default.work(burst=True)
+
+        job = Job.fetch(dependent_job.id)
+        self.assertEqual(job.get_status(), Status.FINISHED)
+
+        job = Job.fetch(parent_job.id)
+        self.assertEqual(job.get_status(), Status.FINISHED)
+
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""
         q = Queue()

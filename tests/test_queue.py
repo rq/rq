@@ -370,6 +370,14 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, 123)
 
+    def test_dump(self):
+        """Dump Queue params."""
+        q = Queue(job_class=CustomJob)
+        self.assertEqual(q.dump(), {'async': True,
+                                    'default_timeout': None,
+                                    'job_class': CustomJob,
+                                    'name': 'default'})
+
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):
