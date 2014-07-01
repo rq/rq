@@ -13,7 +13,7 @@ except ImportError:
 
 
 def setup_loghandlers(level=None):
-    if not logging._handlers:
+    if not logging._handlerList:
         dictConfig({
             'version': 1,
             'disable_existing_loggers': False,
