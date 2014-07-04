@@ -11,32 +11,15 @@ try:
 except ImportError:
     from rq.compat.dictconfig import dictConfig  # noqa
 
+from rq.utils import ColorizingStreamHandler
+
 
 def setup_loghandlers(level=None):
-    if not logging._handlers:
-        dictConfig({
-            'version': 1,
-            'disable_existing_loggers': False,
-
-            'formatters': {
-                'console': {
-                    'format': '%(asctime)s %(message)s',
-                    'datefmt': '%H:%M:%S',
-                },
-            },
-
-            'handlers': {
-                'console': {
-                    'level': 'DEBUG',
-                    # 'class': 'logging.StreamHandler',
-                    'class': 'rq.utils.ColorizingStreamHandler',
-                    'formatter': 'console',
-                    'exclude': ['%(asctime)s'],
-                },
-            },
-
-            'root': {
-                'handlers': ['console'],
-                'level': level or 'INFO',
-            }
-        })
+    logger = logging.getLogger()
+    if not logger.handlers:
+        logger.setLevel(level)
+        formatter = logging.Formatter(fmt='%(asctime)s %(message)s',
+                                      datefmt='%H:%M:%S')
+        handler = ColorizingStreamHandler()
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
