@@ -12,31 +12,30 @@ except ImportError:
     from rq.compat.dictconfig import dictConfig  # noqa
 
 
-def setup_loghandlers(level=None):
-    if not logging._handlers:
-        dictConfig({
-            'version': 1,
-            'disable_existing_loggers': False,
+def setup_loghandlers(level='INFO'):
+    dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
 
-            'formatters': {
-                'console': {
-                    'format': '%(asctime)s %(message)s',
-                    'datefmt': '%H:%M:%S',
-                },
+        'formatters': {
+            'console': {
+                'format': '%(asctime)s %(message)s',
+                'datefmt': '%H:%M:%S',
             },
+        },
 
-            'handlers': {
-                'console': {
-                    'level': 'DEBUG',
-                    # 'class': 'logging.StreamHandler',
-                    'class': 'rq.utils.ColorizingStreamHandler',
-                    'formatter': 'console',
-                    'exclude': ['%(asctime)s'],
-                },
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                # 'class': 'logging.StreamHandler',
+                'class': 'rq.utils.ColorizingStreamHandler',
+                'formatter': 'console',
+                'exclude': ['%(asctime)s'],
             },
+        },
 
-            'root': {
-                'handlers': ['console'],
-                'level': level or 'INFO',
-            }
-        })
+        'root': {
+            'handlers': ['console'],
+            'level': level,
+        }
+    })

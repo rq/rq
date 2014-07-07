@@ -338,7 +338,6 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers()
         self._install_signal_handlers()
 
         did_perform_work = False
