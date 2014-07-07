@@ -14,8 +14,8 @@ except ImportError:
 from rq.utils import ColorizingStreamHandler
 
 
-def setup_loghandlers(level=None):
-    logger = logging.getLogger()
+def setup_loghandlers(level='INFO'):
+    logger = logging.getLogger('rq.worker')
     if not logger.handlers:
         logger.setLevel(level)
         formatter = logging.Formatter(fmt='%(asctime)s %(message)s',
