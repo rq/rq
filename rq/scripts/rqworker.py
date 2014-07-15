@@ -17,8 +17,6 @@ from rq.scripts import (add_standard_arguments, read_config_file,
                         setup_default_arguments, setup_redis)
 from rq.utils import import_attribute
 
-logger = logging.getLogger(__name__)
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Starts an RQ worker.')
