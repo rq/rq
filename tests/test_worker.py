@@ -155,9 +155,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(create_file, SENTINEL_FILE)
 
         # Here, we cancel the job, so the sentinel file may not be created
-        assert q.count == 1
-        job.cancel()
-        assert q.count == 1
+        self.testconn.delete(job.key)
 
         w = Worker([q])
         w.work(burst=True)

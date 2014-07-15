@@ -321,9 +321,12 @@ class TestJob(RQTestCase):
 
     def test_cancel(self):
         """job.cancel() deletes itself & dependents mapping from Redis."""
-        job = Job.create(func=say_hello)
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
         job2 = Job.create(func=say_hello, depends_on=job)
         job2.register_dependency()
         job.cancel()
         self.assertFalse(self.testconn.exists(job.key))
         self.assertFalse(self.testconn.exists(job.dependents_key))
+
+        self.assertNotIn(job.id, queue.get_job_ids())
