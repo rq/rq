@@ -4,7 +4,6 @@ to have a low barrier to entry.  It should be integrated in your web stack
 easily.
 
 [![Build status](https://travis-ci.org/nvie/rq.svg?branch=master)](https://secure.travis-ci.org/nvie/rq)
-
 [![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
 
 
