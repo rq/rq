@@ -11,6 +11,7 @@ import socket
 import sys
 import time
 import traceback
+import warnings
 
 from rq.compat import as_text, string_types, text_type
 
@@ -240,8 +241,9 @@ class Worker(object):
 
     def _set_state(self, state):
         """Raise a DeprecationWarning if ``worker.state = X`` is used"""
-        raise DeprecationWarning(
-            "worker.state is deprecated, use worker.set_state() instead."
+        warnings.warn(
+            "worker.state is deprecated, use worker.set_state() instead.",
+            DeprecationWarning
         )
         self.set_state(state)
 
@@ -250,8 +252,9 @@ class Worker(object):
 
     def _get_state(self):
         """Raise a DeprecationWarning if ``worker.state == X`` is used"""
-        raise DeprecationWarning(
-            "worker.state is deprecated, use worker.get_state() instead."
+        warnings.warn(
+            "worker.state is deprecated, use worker.get_state() instead.",
+            DeprecationWarning
         )
         return self.get_state()
 
