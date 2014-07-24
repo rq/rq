@@ -94,16 +94,12 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
 
     def test_compact(self):
-        """Compacting queueus."""
+        """Queue.compact() removes non-existing jobs."""
         q = Queue()
 
         q.enqueue(say_hello, 'Alice')
-        bob = q.enqueue(say_hello, 'Bob')
         q.enqueue(say_hello, 'Charlie')
-        debrah = q.enqueue(say_hello, 'Debrah')
-
-        bob.cancel()
-        debrah.cancel()
+        self.testconn.lpush(q.key, '1', '2')
 
         self.assertEquals(q.count, 4)
 

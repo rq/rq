@@ -450,9 +450,14 @@ class Job(object):
         cancellation.  Technically, this call is (currently) the same as just
         deleting the job hash.
         """
+        from .queue import Queue
         pipeline = self.connection._pipeline()
         self.delete(pipeline=pipeline)
         pipeline.delete(self.dependents_key)
+
+        if self.origin:
+            queue = Queue(name=self.origin, connection=self.connection)
+            queue.remove(self, pipeline=pipeline)
         pipeline.execute()
 
     def delete(self, pipeline=None):
