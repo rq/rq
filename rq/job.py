@@ -403,7 +403,7 @@ class Job(object):
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
-    def dump(self):
+    def to_dict(self):
         """Returns a serialization of the current job instance"""
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
@@ -439,7 +439,7 @@ class Job(object):
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        connection.hmset(key, self.dump())
+        connection.hmset(key, self.to_dict())
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
