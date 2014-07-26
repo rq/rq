@@ -223,7 +223,7 @@ class TestJob(RQTestCase):
         # equivalent to a worker not having the most up-to-date source code
         # and unable to import the function)
         data = self.testconn.hget(job.key, 'data')
-        unimportable_data = data.replace(b'say_hello', b'shut_up')
+        unimportable_data = data.replace(b'say_hello', b'nay_hello')
         self.testconn.hset(job.key, 'data', unimportable_data)
 
         job.refresh()
