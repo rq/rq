@@ -483,6 +483,7 @@ class Worker(object):
 
         with self.connection._pipeline() as pipeline:
             try:
+                job.set_status(Status.STARTED)
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
@@ -494,6 +495,8 @@ class Worker(object):
 
                 result_ttl = job.get_ttl(self.default_result_ttl)
                 if result_ttl != 0:
+                    job.ended_at = utcnow()
+                    job._status = Status.FINISHED
                     job.save(pipeline=pipeline)
                 job.cleanup(result_ttl, pipeline=pipeline)
 
