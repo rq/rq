@@ -11,7 +11,8 @@ from rq.queue import Queue
 from rq.utils import utcformat
 
 from tests import RQTestCase
-from tests.fixtures import access_self, Number, say_hello, some_calculation
+from tests.fixtures import (access_self, CallableObject, Number, say_hello,
+                            some_calculation)
 from tests.helpers import strip_microseconds
 
 try:
@@ -83,6 +84,14 @@ class TestJob(RQTestCase):
         self.assertEquals(job.func, say_hello)
         self.assertIsNone(job.instance)
         self.assertEquals(job.args, ('World',))
+
+    def test_create_job_from_callable_class(self):
+        """Creation of jobs using a callable class specifier."""
+        kallable = CallableObject()
+        job = Job.create(func=kallable)
+
+        self.assertEquals(job.func, kallable.__call__)
+        self.assertEquals(job.instance, kallable)
 
     def test_job_properties_set_data_property(self):
         """Data property gets derived from the job tuple."""

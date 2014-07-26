@@ -69,6 +69,11 @@ class Number(object):
         return self.value / y
 
 
+class CallableObject(object):
+    def __call__(self):
+        return u"I'm callable"
+
+
 with Connection():
     @job(queue='default')
     def decorated_job(x, y):
