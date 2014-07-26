@@ -3,8 +3,9 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import inspect
-from uuid import uuid4
 import warnings
+from functools import partial
+from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
@@ -14,9 +15,14 @@ from .local import LocalStack
 from .utils import import_attribute, utcformat, utcnow, utcparse
 
 try:
-    from cPickle import loads, dumps, UnpicklingError
+    import cPickle as pickle
 except ImportError:  # noqa
-    from pickle import loads, dumps, UnpicklingError  # noqa
+    import pickle
+
+# Serialize pickle dumps using the highest pickle protocol (binary, default
+# uses ascii)
+dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
+loads = pickle.loads
 
 
 def enum(name, *sequential, **named):
@@ -47,7 +53,7 @@ def unpickle(pickled_string):
     """
     try:
         obj = loads(pickled_string)
-    except (Exception, UnpicklingError) as e:
+    except Exception as e:
         raise UnpickleError('Could not unpickle.', pickled_string, e)
     return obj
 
