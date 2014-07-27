@@ -179,8 +179,9 @@ class Queue(object):
                     try:
                         pipe.watch(depends_on.key)
                         if depends_on.get_status() != Status.FINISHED:
-                            job.register_dependency()
-                            job.save()
+                            job.register_dependency(pipeline=pipe)
+                            job.save(pipeline=pipe)
+                            pipe.execute()
                             return job
                         break
                     except WatchError:

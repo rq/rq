@@ -506,7 +506,7 @@ class Job(object):
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
 
-    def register_dependency(self):
+    def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
         depend on is successfully performed. We record this relation as
         a reverse dependency (a Redis set), with a key that looks something
@@ -516,8 +516,8 @@ class Job(object):
 
         This method adds the current job in its dependency's dependents set.
         """
-        # TODO: This can probably be pipelined
-        self.connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
+        connection = pipeline if pipeline is not None else self.connection
+        connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
     def __str__(self):
         return '<Job %s: %s>' % (self.id, self.description)
