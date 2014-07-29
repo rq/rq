@@ -36,3 +36,15 @@ class WorkingQueue:
         """Returns list of all job ids."""
         return self.connection.zrange(self.key, start, end)
 
+    def cleanup(self):
+        """Removes expired job ids to FailedQueue."""
+        job_ids = self.get_expired_job_ids()
+
+        if job_ids:
+            failed_queue = FailedQueue(connection=self.connection)
+            with self.connection.pipeline() as pipeline:
+                for job_id in job_ids:
+                    failed_queue.push_job_id(job_id, pipeline=pipeline)
+                pipeline.execute()
+
+        return job_ids

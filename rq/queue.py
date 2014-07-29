@@ -158,9 +158,10 @@ class Queue(object):
             if self.job_class.exists(job_id, self.connection):
                 self.connection.rpush(self.key, job_id)
 
-    def push_job_id(self, job_id):
+    def push_job_id(self, job_id, pipeline=None):
         """Pushes a job ID on the corresponding Redis queue."""
-        self.connection.rpush(self.key, job_id)
+        connection = pipeline if pipeline is not None else self.connection
+        connection.rpush(self.key, job_id)
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, description=None, depends_on=None):
