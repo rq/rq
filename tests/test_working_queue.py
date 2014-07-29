@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 from rq.job import Job
+from rq.queue import FailedQueue
 from rq.utils import current_timestamp
 from rq.working_queue import WorkingQueue
 
@@ -42,3 +43,13 @@ class TestQueue(RQTestCase):
         self.testconn.zadd(self.working_queue.key, timestamp + 10, 'bar')
 
         self.assertEqual(self.working_queue.get_expired_job_ids(), ['foo'])
+
+    def test_cleanup(self):
+        """Moving expired jobs to FailedQueue."""
+        failed_queue = FailedQueue(connection=self.testconn)
+        self.assertTrue(failed_queue.is_empty())
+        self.testconn.zadd(self.working_queue.key, 1, 'foo')
+        self.working_queue.cleanup()
+        self.assertIn('foo', failed_queue.job_ids)
+
+        
