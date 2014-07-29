@@ -8,6 +8,7 @@ terminal colorizing code, originally by Georg Brandl.
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import calendar
 import importlib
 import datetime
 import logging
@@ -229,3 +230,8 @@ def first(iterable, default=None, key=None):
                 return el
 
     return default
+
+
+def current_timestamp():
+    """Returns current UTC timestamp"""
+    return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
