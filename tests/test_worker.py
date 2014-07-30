@@ -7,6 +7,7 @@ import os
 from rq import get_failed_queue, Queue, Worker
 from rq.compat import as_text
 from rq.job import Job, Status
+from rq.working_queue import WorkingQueue
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
@@ -277,3 +278,18 @@ class TestWorker(RQTestCase):
         q = Queue()
         worker = Worker([q], job_class=CustomJob)
         self.assertEqual(worker.job_class, CustomJob)
+
+    def test_prepare_job_execution(self):
+        """Prepare job execution does the necessary bookkeeping."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.prepare_job_execution(job)
+
+        # Updates working queue
+        working_queue = WorkingQueue(connection=self.testconn)
+        self.assertEqual(working_queue.get_job_ids(), [job.id])
+
+        # Updates worker statuses
+        self.assertEqual(worker.state, 'busy')
+        self.assertEqual(worker.get_current_job_id(), job.id)
