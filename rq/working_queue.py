@@ -15,18 +15,22 @@ class WorkingQueue:
     Jobs whose score are lower than current time is considered "expired".
     """
 
-    def __init__(self, name, connection=None):
+    def __init__(self, name='default', connection=None):
         self.name = name
         self.key = 'rq:wip:%s' % name
         self.connection = resolve_connection(connection)
 
-    def add(self, job, timeout):
+    def add(self, job, timeout, pipeline=None):
         """Adds a job to WorkingQueue with expiry time of now + timeout."""
-        return self.connection._zadd(self.key, current_timestamp() + timeout,
-                                     job.id)
+        score = current_timestamp() + timeout
+        if pipeline is not None:
+            return pipeline.zadd(self.key, score, job.id)
 
-    def remove(self, job):
-        return self.connection.zrem(self.key, job.id)
+        return self.connection._zadd(self.key, score, job.id)
+
+    def remove(self, job, pipeline=None):
+        connection = pipeline if pipeline is not None else self.connection
+        return connection.zrem(self.key, job.id)
 
     def get_expired_job_ids(self):
         """Returns job ids whose score are less than current timestamp."""

@@ -2,18 +2,20 @@
 from __future__ import absolute_import
 
 from rq.job import Job
-from rq.queue import FailedQueue
+from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
+from rq.worker import Worker
 from rq.working_queue import WorkingQueue
 
 from tests import RQTestCase
+from tests.fixtures import div_by_zero, say_hello
 
 
 class TestQueue(RQTestCase):
 
     def setUp(self):
         super(TestQueue, self).setUp()
-        self.working_queue = WorkingQueue('default', connection=self.testconn)
+        self.working_queue = WorkingQueue(connection=self.testconn)
 
     def test_add_and_remove(self):
         """Adding and removing job to WorkingQueue."""
@@ -52,4 +54,25 @@ class TestQueue(RQTestCase):
         self.working_queue.cleanup()
         self.assertIn('foo', failed_queue.job_ids)
 
-        
+    def test_job_execution(self):
+        """Job is removed from WorkingQueue after execution."""
+        working_queue = WorkingQueue(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+
+        job = queue.enqueue(say_hello)
+
+        worker.prepare_job_execution(job)
+        self.assertIn(job.id, working_queue.get_job_ids())
+
+        worker.perform_job(job)
+        self.assertNotIn(job.id, working_queue.get_job_ids())
+
+        # Job that fails
+        job = queue.enqueue(div_by_zero)
+
+        worker.prepare_job_execution(job)
+        self.assertIn(job.id, working_queue.get_job_ids())
+
+        worker.perform_job(job)
+        self.assertNotIn(job.id, working_queue.get_job_ids())

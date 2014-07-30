@@ -475,9 +475,12 @@ class Worker(object):
         job execution.
         """
         with self.connection._pipeline() as pipeline:
+            timeout = (job.timeout or 180) + 60
             self.set_state('busy', pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
-            self.heartbeat((job.timeout or 180) + 60, pipeline=pipeline)
+            self.heartbeat(timeout, pipeline=pipeline)
+            working_queue = WorkingQueue(job.origin, self.connection)
+            working_queue.add(job, timeout, pipeline=pipeline)
             pipeline.execute()
 
         self.procline('Processing %s from %s since %s' % (
@@ -491,13 +494,15 @@ class Worker(object):
         self.prepare_job_execution(job)
 
         with self.connection._pipeline() as pipeline:
+            working_queue = WorkingQueue(job.origin, self.connection)
+
             try:
                 job.set_status(Status.STARTED)
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
-                # Pickle the result in the same try-except block since we need to
-                # use the same exc handling when pickling fails
+                # Pickle the result in the same try-except block since we need
+                # to use the same exc handling when pickling fails
                 job._result = rv
 
                 self.set_current_job_id(None, pipeline=pipeline)
@@ -508,12 +513,14 @@ class Worker(object):
                     job._status = Status.FINISHED
                     job.save(pipeline=pipeline)
                 job.cleanup(result_ttl, pipeline=pipeline)
+                working_queue.remove(job, pipeline=pipeline)
 
                 pipeline.execute()
 
             except Exception:
                 # Use the public setter here, to immediately update Redis
                 job.set_status(Status.FAILED)
+                working_queue.remove(job)
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
