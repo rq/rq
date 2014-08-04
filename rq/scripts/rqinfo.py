@@ -12,6 +12,7 @@ from redis.exceptions import ConnectionError
 from rq import get_failed_queue, Queue, Worker
 from rq.scripts import (add_standard_arguments, read_config_file,
                         setup_default_arguments, setup_redis)
+from rq.exceptions import InvalidJobOperationError
 from rq.utils import gettermsize, make_colorizer
 
 red = make_colorizer('darkred')
@@ -148,6 +149,7 @@ def parse_args():
     parser.add_argument('--only-workers', '-W', dest='only_workers', default=False, action='store_true', help='Show only worker info')  # noqa
     parser.add_argument('--by-queue', '-R', dest='by_queue', default=False, action='store_true', help='Shows workers by queue')  # noqa
     parser.add_argument('--empty-failed-queue', '-X', dest='empty_failed_queue', default=False, action='store_true', help='Empties the failed queue, then quits')  # noqa
+    parser.add_argument('--requeue-failed-jobs', '-Y', dest='requeue_failed_jobs', default=False, action='store_true', help='Requeue failed jobs in the failed queue, then quits')  # noqa
     parser.add_argument('queues', nargs='*', help='The queues to poll')
     return parser.parse_args()
 
@@ -181,6 +183,20 @@ def main():
         if args.empty_failed_queue:
             num_jobs = get_failed_queue().empty()
             print('{} jobs removed from failed queue'.format(num_jobs))
+        elif args.requeue_failed_jobs:
+            failed_queue = get_failed_queue()
+            job_ids = failed_queue.job_ids
+            print('Requeuing {} failed jobs......'.format(len(job_ids)))
+            requeue_failed_num = 0
+            for job_id in job_ids:
+                try:
+                    failed_queue.requeue(job_id)
+                except InvalidJobOperationError:
+                    print('Requeue job({}) failed'.format(job_id))
+                    requeue_failed_num += 1
+
+            print('Requeue over with {} jobs requeuing failed'.format(
+                requeue_failed_num))
         else:
             if args.only_queues:
                 func = show_queues
