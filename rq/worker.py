@@ -526,7 +526,12 @@ class Worker(object):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = ''.join(traceback.format_exception_only(*exc_info[:2]) +
                              traceback.format_exception(*exc_info))
-        self.log.error(exc_string)
+        self.log.error(exc_string, exc_info=True, extra={
+            'func': job.func_name,
+            'args': job.args,
+            'kwargs': job.kwargs,
+            'queue': job.origin,
+        })
 
         for handler in reversed(self._exc_handlers):
             self.log.debug('Invoking exception handler %s' % (handler,))
