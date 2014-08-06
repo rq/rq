@@ -36,10 +36,7 @@ class job(object):
                 queue = Queue(name=self.queue, connection=self.connection)
             else:
                 queue = self.queue
-            if 'depends_on' in kwargs:
-                depends_on = kwargs.pop('depends_on')
-            else:
-                depends_on = None
+            depends_on = kwargs.pop('depends_on', None)
             return queue.enqueue_call(f, args=args, kwargs=kwargs,
                                       timeout=self.timeout, result_ttl=self.result_ttl, depends_on=depends_on)
         f.delay = delay
