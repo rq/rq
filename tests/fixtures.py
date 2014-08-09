@@ -7,6 +7,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import time
+import os
 
 from rq import Connection, get_current_job
 from rq.decorators import job
@@ -18,6 +19,10 @@ def say_hello(name=None):
         name = 'Stranger'
     return 'Hi there, %s!' % (name,)
 
+def check_redis_version():
+    """Check if Redis version is >= 2.8.6. Othewise some tests may fail"""
+    if os.environ.get('REDIS_VERSION') <= "2.6.8":
+        return True
 
 def do_nothing():
     """The best job in the world."""

@@ -8,9 +8,8 @@ from rq.job import Job, Status
 from rq.worker import Worker
 
 from tests import RQTestCase
-from tests.fixtures import (div_by_zero, echo, Number, say_hello,
-                            some_calculation)
-
+from tests.fixtures import (check_redis_version, div_by_zero, echo, Number, 
+                            say_hello, some_calculation)
 
 class CustomJob(Job):
     pass
@@ -38,6 +37,7 @@ class TestQueue(RQTestCase):
         self.assertNotEquals(q1, q3)
         self.assertNotEquals(q2, q3)
 
+    @RQTestCase.skipIf(check_redis_version(), "Redis version not supported")
     def test_empty_queue(self):
         """Emptying queues."""
         q = Queue('example')
@@ -51,6 +51,7 @@ class TestQueue(RQTestCase):
         self.assertEquals(q.is_empty(), True)
         self.assertIsNone(self.testconn.lpop('rq:queue:example'))
 
+    @RQTestCase.skipIf(check_redis_version(), "Redis version not supported")
     def test_empty_removes_jobs(self):
         """Emptying a queue deletes the associated job objects"""
         q = Queue('example')
