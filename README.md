@@ -73,6 +73,10 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
 
 
+## Troubleshooting
+
+If you have issue with freeing queues, or you got an exception such us "ResponseError: unknown command 'EVALSHA'" this is because of the Redis server version you are using. Type "redis-cli --version" and make sure that the version is (>= 2.8.6).
+
 ## Project history
 
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
