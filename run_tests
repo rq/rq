@@ -1,13 +1,31 @@
 #!/bin/sh
+
+distro=$(lsb_release -i |  cut -d':' -f2)
+release=$(lsb_release -c |  cut -d':' -f2)
+
 check_redis_running() {
     redis-cli echo "just checking" > /dev/null
     return $?
 }
 
+check_redis_version() {
+
+	version=$(redis-cli --version | cut -d' ' -f2)
+	if [ $distro = "Debian" ]; then
+		dpkg --compare-versions $version "<=" 2.8.6
+	fi
+	return $?
+}
+
 # Quit early if Redis server isn't running
 if ! check_redis_running; then
-    echo "Redis not running." >&2
+    echo "[ERROR] Redis not running." >&2
     exit 2
+fi
+
+# Check redis package version on Debian
+if check_redis_version; then
+	echo "[WARN] You are using Redis $version (< 2.8.6). Some RQ fonctions may not work !"
 fi
 
 if command -v rg >/dev/null; then
