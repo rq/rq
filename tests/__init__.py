@@ -81,3 +81,10 @@ class RQTestCase(unittest.TestCase):
         testconn = pop_connection()
         assert testconn == cls.testconn, \
             'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
+
+    @classmethod
+    def skipIf(cls, test, message):
+        """This is a simple hack to use unittest.skipIf() on such test
+        without importing unittest module.
+        """
+        return unittest.skipIf(test, message)
