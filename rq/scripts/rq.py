@@ -39,7 +39,7 @@ def empty(queues):
         queues = (get_failed_queue(),)
     for queue in queues:
         num_jobs = queue.empty()
-        print('{} jobs removed from {} queue'.format(num_jobs, queue.name))
+        click.echo('{} jobs removed from {} queue'.format(num_jobs, queue.name))
 
 
 @rq.command()
@@ -47,14 +47,14 @@ def requeue():
     """Requeue all failed jobs in failed queue"""
     failed_queue = get_failed_queue()
     job_ids = failed_queue.job_ids
-    print('Requeuing {} failed jobs......'.format(len(job_ids)))
+    click.echo('Requeuing {} failed jobs......'.format(len(job_ids)))
     requeue_failed_num = 0
     for job_id in job_ids:
         try:
             failed_queue.requeue(job_id)
         except InvalidJobOperationError:
-            print('Requeue job({}) failed'.format(job_id))
+            click.echo('Requeue job({}) failed'.format(job_id))
             requeue_failed_num += 1
 
-    print('Requeue over with {} jobs requeuing failed'.format(
-        requeue_failed_num))
+    click.secho('Requeue over with {} jobs requeuing failed'.format(
+        requeue_failed_num), fg='red')
