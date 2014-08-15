@@ -47,14 +47,14 @@ def requeue():
     """Requeue all failed jobs in failed queue"""
     failed_queue = get_failed_queue()
     job_ids = failed_queue.job_ids
-    click.echo('Requeuing {} failed jobs......'.format(len(job_ids)))
+    click.echo('Requeue failed jobs: {}'.format(len(job_ids)))
     requeue_failed_num = 0
-    for job_id in job_ids:
-        try:
-            failed_queue.requeue(job_id)
-        except InvalidJobOperationError:
-            click.echo('Requeue job({}) failed'.format(job_id))
-            requeue_failed_num += 1
+    with click.progressbar(job_ids) as job_bar:
+        for job_id in job_bar:
+            try:
+                failed_queue.requeue(job_id)
+            except InvalidJobOperationError:
+                requeue_failed_num += 1
 
-    click.secho('Requeue over with {} jobs requeuing failed'.format(
+    click.secho('Requeue failed: {}'.format(
         requeue_failed_num), fg='red')
