@@ -25,7 +25,7 @@ def rq(url):
 @rq.command()
 @click.argument('queues', nargs=-1)
 def empty(queues):
-    """Empty queues, default: empty failed queue
+    """[QUEUES]: queues to empty, default: failed queue
 
     \b
     $ rq empty
