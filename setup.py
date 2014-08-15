@@ -17,7 +17,7 @@ def get_version():
 
 
 def get_dependencies():
-    deps = ['redis >= 2.7.0']
+    deps = ['redis >= 2.7.0', 'click > 3.0']
     if sys.version_info < (2, 7) or \
             (sys.version_info >= (3, 0) and sys.version_info < (3, 1)):
         deps += ['importlib']
@@ -43,6 +43,7 @@ setup(
     install_requires=get_dependencies(),
     entry_points='''\
     [console_scripts]
+    rq = rq.scripts.rq:rq
     rqworker = rq.scripts.rqworker:main
     rqinfo = rq.scripts.rqinfo:main
     ''',
