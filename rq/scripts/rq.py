@@ -27,9 +27,10 @@ def rq(url):
 def empty(queues):
     """Empty queues, default: empty failed queue
 
+    \b
     $ rq empty
     2 jobs removed from failed queue
-
+    \b
     $ rq empty default high
     10 jobs removed from default queue
     2 jobs removed from high queue
