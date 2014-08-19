@@ -43,7 +43,7 @@ setup(
     install_requires=get_dependencies(),
     entry_points='''\
     [console_scripts]
-    rq = rq.scripts.rq:rq
+    rq = rq.scripts.rq_cli:main
     rqworker = rq.scripts.rqworker:main
     rqinfo = rq.scripts.rqinfo:main
     ''',

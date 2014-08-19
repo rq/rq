@@ -11,18 +11,20 @@ import redis
 from rq import get_failed_queue, Queue, use_connection
 from rq.exceptions import InvalidJobOperationError
 
+from rqinfo import info
+
 
 @click.group()
 @click.option('--url', '-u', envvar='URL',
         help='URL describing Redis connection details.')
-def rq(url):
+def main(url):
     if url is None:
         url = "redis://localhost:6379/0"
     redis_conn = redis.from_url(url)
     use_connection(redis_conn)
 
 
-@rq.command()
+@main.command()
 @click.argument('queues', nargs=-1)
 def empty(queues):
     """[QUEUES]: queues to empty, default: failed queue
@@ -43,7 +45,7 @@ def empty(queues):
         click.echo('{} jobs removed from {} queue'.format(num_jobs, queue.name))
 
 
-@rq.command()
+@main.command()
 def requeue():
     """Requeue all failed jobs in failed queue"""
     failed_queue = get_failed_queue()
@@ -59,3 +61,6 @@ def requeue():
 
     click.secho('Requeue failed: {}'.format(
         requeue_failed_num), fg='red')
+
+
+main.add_command(info)
