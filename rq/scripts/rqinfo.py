@@ -9,7 +9,7 @@ import click
 from functools import partial
 
 from redis.exceptions import ConnectionError
-from rq import Queue, Worker
+from rq import Queue, Worker, use_connection
 
 
 red = partial(click.style, fg='red') 
@@ -155,12 +155,15 @@ def refresh(val, func, *args):
 @click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')  # noqa
 @click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')  # noqa
 @click.argument('queues', nargs=-1)
-def info(path, interval, raw, only_queues, only_workers, by_queue, queues):
+@click.pass_context
+def info(ctx, path, interval, raw, only_queues, only_workers, by_queue, queues):
     """RQ command-line monitor."""
 
     if path:
         sys.path = path.split(':') + sys.path
 
+    conn = ctx.obj['connection']
+    use_connection(conn)
     try:
         if only_queues:
             func = show_queues
