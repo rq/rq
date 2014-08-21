@@ -29,13 +29,19 @@ def main(ctx, url):
 
 
 @main.command()
+@click.option('--yes', '-y', is_flag=True,
+        help='Empty failed queue by default')
 @click.argument('queues', nargs=-1)
 @click.pass_context
-def empty(ctx, queues):
-    """[QUEUES]: queues to empty, default: failed queue
+def empty(ctx, yes, queues):
+    """[QUEUES]: queues to empty
 
     \b
     $ rq empty
+    Do you want to empty failed queue? [y/N]: y
+    2 jobs removed from failed queue
+    \b
+    $ rq empty -y
     2 jobs removed from failed queue
     \b
     $ rq empty default high
@@ -45,7 +51,9 @@ def empty(ctx, queues):
     conn = ctx.obj['connection']
     queues = [Queue(queue, connection=conn) for queue in queues]
     if not queues:
-        queues = (get_failed_queue(connection=conn),)
+        if yes or click.confirm('Do you want to empty failed queue?',
+                abort=True):
+            queues = (get_failed_queue(connection=conn),)
     for queue in queues:
         num_jobs = queue.empty()
         click.echo('{} jobs removed from {} queue'.format(num_jobs, queue.name))
