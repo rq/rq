@@ -11,7 +11,7 @@ import redis
 from rq import get_failed_queue, Queue, use_connection
 from rq.exceptions import InvalidJobOperationError
 
-from rqinfo import info
+from .rqinfo import info
 
 
 @click.group()
