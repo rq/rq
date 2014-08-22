@@ -56,7 +56,7 @@ def empty(ctx, yes, queues):
             queues = (get_failed_queue(connection=conn),)
     for queue in queues:
         num_jobs = queue.empty()
-        click.echo('{} jobs removed from {} queue'.format(num_jobs, queue.name))
+        click.echo('{0} jobs removed from {1} queue'.format(num_jobs, queue.name))
 
 
 @main.command()
@@ -66,7 +66,7 @@ def requeue(ctx):
     conn = ctx.obj['connection']
     failed_queue = get_failed_queue(connection=conn)
     job_ids = failed_queue.job_ids
-    click.echo('Requeue failed jobs: {}'.format(len(job_ids)))
+    click.echo('Requeue failed jobs: {0}'.format(len(job_ids)))
     requeue_failed_num = 0
     with click.progressbar(job_ids) as job_bar:
         for job_id in job_bar:
@@ -75,7 +75,7 @@ def requeue(ctx):
             except InvalidJobOperationError:
                 requeue_failed_num += 1
 
-    click.secho('Requeue failed: {}'.format(
+    click.secho('Requeue failed: {0}'.format(
         requeue_failed_num), fg='red')
 
 
