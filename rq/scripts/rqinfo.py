@@ -9,7 +9,7 @@ import click
 from functools import partial
 
 from redis.exceptions import ConnectionError
-from rq import Queue, Worker, use_connection
+from rq import Queue, Worker, Connection
 
 
 red = partial(click.style, fg='red') 
@@ -163,7 +163,6 @@ def info(ctx, path, interval, raw, only_queues, only_workers, by_queue, queues):
         sys.path = path.split(':') + sys.path
 
     conn = ctx.obj['connection']
-    use_connection(conn)
     try:
         if only_queues:
             func = show_queues
@@ -172,7 +171,8 @@ def info(ctx, path, interval, raw, only_queues, only_workers, by_queue, queues):
         else:
             func = show_both
 
-        refresh(interval, func, queues, raw, by_queue)
+        with Connection(conn):
+            refresh(interval, func, queues, raw, by_queue)
     except ConnectionError as e:
         click.echo(e)
         sys.exit(1)
