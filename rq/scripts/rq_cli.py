@@ -56,7 +56,8 @@ def empty(ctx, yes, queues):
             queues = (get_failed_queue(connection=conn),)
     for queue in queues:
         num_jobs = queue.empty()
-        click.echo('{0} jobs removed from {1} queue'.format(num_jobs, queue.name))
+        click.echo('{0} jobs removed from {1} queue'.format(
+            num_jobs, queue.name))
 
 
 @main.command()
