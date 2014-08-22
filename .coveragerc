@@ -4,4 +4,4 @@ omit =
     rq/compat/*
     rq/contrib/legacy.py
     rq/dummy.py
-    rq/dummy.py
+    rq/local.py
