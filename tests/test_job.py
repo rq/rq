@@ -22,10 +22,22 @@ except ImportError:
 
 
 class TestJob(RQTestCase):
+    def test_unicode(self):
+        """Unicode in job description [issue405]"""
+        job = Job.create(
+            'myfunc', 
+            args=[12, u"\u2603"],
+            kwargs=dict(snowman=u"\u2603", null=None),
+        )
+        self.assertEquals(
+            job.description, 
+            u"myfunc(12, u'\\u2603', snowman=u'\\u2603', null=None)"
+        )
+
     def test_create_empty_job(self):
         """Creation of new empty jobs."""
         job = Job()
-
+    
         # Jobs have a random UUID and a creation date
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
