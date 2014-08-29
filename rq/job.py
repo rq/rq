@@ -500,7 +500,7 @@ class Job(object):
             return None
 
         arg_list = [repr(arg).decode('utf-8') for arg in self.args]
-        arg_list += [u'{}={!r}'.format(k, v)
+        arg_list += [u'{0}={1!r}'.format(k, v)
                      for k, v in self.kwargs.items()
                  ]
         args = u', '.join(arg_list)
