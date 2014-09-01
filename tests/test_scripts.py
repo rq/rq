@@ -47,7 +47,8 @@ class TestRQCli(RQTestCase):
     def test_requeue(self):
         """rq -u <url> requeue"""
         runner = CliRunner()
-        result = runner.invoke(rq_cli.main, ['-u', self.redis_url, 'requeue', '-a'])
+        result = runner.invoke(rq_cli.main,
+                ['-u', self.redis_url, 'requeue', '-a'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('Requeueing 1 jobs from FailedQueue', result.output)
         self.assertIn('Unable to requeue 0 jobs from FailedQueue',
