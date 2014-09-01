@@ -10,7 +10,6 @@ import os
 import sys
 
 from redis.exceptions import ConnectionError
-from rq import Queue
 from rq.contrib.legacy import cleanup_ghosts
 from rq.logutils import setup_loghandlers
 from rq.scripts import (add_standard_arguments, read_config_file,
@@ -26,6 +25,7 @@ def parse_args():
     parser.add_argument('--name', '-n', default=None, help='Specify a different name')
     parser.add_argument('--worker-class', '-w', action='store', default='rq.Worker', help='RQ Worker class to use')
     parser.add_argument('--job-class', '-j', action='store', default='rq.job.Job', help='RQ Job class to use')
+    parser.add_argument('--queue-class', action='store', default='rq.Queue', help='RQ Queue class to use')
     parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
     parser.add_argument('--results-ttl', default=None, help='Default results timeout to be used')
     parser.add_argument('--worker-ttl', type=int, default=None, help='Default worker timeout to be used')
@@ -81,9 +81,10 @@ def main():
 
     cleanup_ghosts()
     worker_class = import_attribute(args.worker_class)
+    queue_class = import_attribute(args.queue_class)
 
     try:
-        queues = list(map(Queue, args.queues))
+        queues = list(map(queue_class, args.queues))
         w = worker_class(queues,
                          name=args.name,
                          default_worker_ttl=args.worker_ttl,
