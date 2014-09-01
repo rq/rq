@@ -19,7 +19,7 @@ from .rqinfo import info
         help='URL describing Redis connection details.')
 @click.pass_context
 def main(ctx, url):
-    """Entrance of RQ CLI"""
+    """RQ CLI"""
     if url is None:
         url = "redis://localhost:6379/0"
     redis_conn = redis.from_url(url)
