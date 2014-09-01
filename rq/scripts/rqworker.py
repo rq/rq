@@ -32,6 +32,8 @@ def parse_args():
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='Show more output')
     parser.add_argument('--quiet', '-q', action='store_true', default=False, help='Show less output')
     parser.add_argument('--sentry-dsn', action='store', default=None, metavar='URL', help='Report exceptions to this Sentry DSN')  # noqa
+    parser.add_argument('--ignore-failed', action='store_true', default=False,
+                        help='Do not move jobs that failed to the failed queue')  # noqa
     parser.add_argument('--pid', action='store', default=None,
                         help='Write the process ID number to a file at the specified path')
     parser.add_argument('queues', nargs='*', help='The queues to listen on (default: \'default\')')
@@ -90,6 +92,11 @@ def main():
                          default_worker_ttl=args.worker_ttl,
                          default_result_ttl=args.results_ttl,
                          job_class=args.job_class)
+
+        # Should we skip the failed queue? If yes push this handler before the
+        # Sentry one so that the latter still runs
+        if args.ignore_failed:
+            w.push_exc_handler(lambda job, *exc_info: False)
 
         # Should we configure Sentry?
         if args.sentry_dsn:
