@@ -6,13 +6,16 @@ from __future__ import (absolute_import, division, print_function,
 import sys
 import time
 import click
+import argparse
 from functools import partial
 
 from redis.exceptions import ConnectionError
-from rq import Queue, Worker, Connection
+from rq import get_failed_queue, Queue, Worker, Connection
+from rq.scripts import (add_standard_arguments, read_config_file,
+                        setup_default_arguments, setup_redis)
 
 
-red = partial(click.style, fg='red') 
+red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
 yellow = partial(click.style, fg='yellow')
 
@@ -178,4 +181,59 @@ def info(ctx, path, interval, raw, only_queues, only_workers, by_queue, queues):
         sys.exit(1)
     except KeyboardInterrupt:
         click.echo()
+        sys.exit(0)
+
+
+### The following code is for backward compatibility, will be removed in future
+def parse_args():
+    parser = argparse.ArgumentParser(description='RQ command-line monitor.')
+    add_standard_arguments(parser)
+    parser.add_argument('--path', '-P', default='.', help='Specify the import path.')
+    parser.add_argument('--interval', '-i', metavar='N', type=float, default=2.5, help='Updates stats every N seconds (default: don\'t poll)')  # noqa
+    parser.add_argument('--raw', '-r', action='store_true', default=False, help='Print only the raw numbers, no bar charts')  # noqa
+    parser.add_argument('--only-queues', '-Q', dest='only_queues', default=False, action='store_true', help='Show only queue info')  # noqa
+    parser.add_argument('--only-workers', '-W', dest='only_workers', default=False, action='store_true', help='Show only worker info')  # noqa
+    parser.add_argument('--by-queue', '-R', dest='by_queue', default=False, action='store_true', help='Shows workers by queue')  # noqa
+    parser.add_argument('--empty-failed-queue', '-X', dest='empty_failed_queue', default=False, action='store_true', help='Empties the failed queue, then quits')  # noqa
+    parser.add_argument('queues', nargs='*', help='The queues to poll')
+    return parser.parse_args()
+
+def main():
+    # warn users this command is deprecated, use `rq info`
+    import warnings
+    warnings.simplefilter('always', DeprecationWarning)
+    warnings.warn("This command will be remove in future, "
+            "use `rq info` instead", DeprecationWarning)
+
+    args = parse_args()
+
+    if args.path:
+        sys.path = args.path.split(':') + sys.path
+
+    settings = {}
+    if args.config:
+        settings = read_config_file(args.config)
+
+    setup_default_arguments(args, settings)
+
+    setup_redis(args)
+
+    try:
+        if args.empty_failed_queue:
+            num_jobs = get_failed_queue().empty()
+            print('{} jobs removed from failed queue'.format(num_jobs))
+        else:
+            if args.only_queues:
+                func = show_queues
+            elif args.only_workers:
+                func = show_workers
+            else:
+                func = show_both
+
+            refresh(args.interval, func, args.queues, args.raw, args.by_queue)
+    except ConnectionError as e:
+        print(e)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print()
         sys.exit(0)
