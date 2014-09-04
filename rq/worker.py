@@ -528,7 +528,7 @@ class Worker(object):
                              traceback.format_exception(*exc_info))
         self.log.error(exc_string, exc_info=True, extra={
             'func': job.func_name,
-            'args': job.args,
+            'arguments': job.args,
             'kwargs': job.kwargs,
             'queue': job.origin,
         })
