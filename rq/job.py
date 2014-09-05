@@ -109,7 +109,7 @@ class Job(object):
         if not isinstance(kwargs, dict):
             raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
         if not isinstance(job_id, (str, unicode, types.NoneType)):
-            raise TypeError('job_id must be a str/unicode, not {}.'.format(type(job_id)))
+            raise TypeError('job_id must be a str/unicode, not {0}.'.format(type(job_id)))
 
         job = cls(connection=connection)
         if job_id is not None:
