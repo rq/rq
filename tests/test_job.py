@@ -347,4 +347,5 @@ class TestJob(RQTestCase):
         ids = [1234, uuid4(), "somejobid"]
         for job_id in ids:
             job = queue.enqueue(say_hello, job_id=job_id)
+            self.assertEqual(job.id, str(job_id))
             job.perform()
