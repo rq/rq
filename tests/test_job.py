@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from datetime import datetime
+from uuid import uuid4
 
 from rq.compat import as_text, PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
@@ -339,3 +340,11 @@ class TestJob(RQTestCase):
         self.assertFalse(self.testconn.exists(job.dependents_key))
 
         self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_create_job_with_id(self):
+        # try a bunch of different ID types
+        queue = Queue(connection=self.testconn)
+        ids = [1234, uuid4(), "somejobid"]
+        for job_id in ids:
+            job = queue.enqueue(say_hello, job_id=job_id)
+            job.perform()

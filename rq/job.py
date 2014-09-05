@@ -6,6 +6,7 @@ import inspect
 import warnings
 from functools import partial
 from uuid import uuid4
+from uuid import UUID
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
@@ -92,7 +93,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, depends_on=None, timeout=None):
+               result_ttl=None, status=None, description=None, depends_on=None, timeout=None,
+               job_id=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -107,6 +109,8 @@ class Job(object):
             raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
 
         job = cls(connection=connection)
+        if job_id is not None:
+            job.set_id(job_id)
 
         # Set the core job tuple properties
         job._instance = None
@@ -325,7 +329,11 @@ class Job(object):
 
     def set_id(self, value):
         """Sets a job ID for the given job."""
-        self._id = value
+        try:
+            self.key_for(text_type(value))
+        except:
+            raise ValueError("Job ID invalid, failed to encode to string")
+        self._id = text_type(value)
 
     id = property(get_id, set_id)
 
