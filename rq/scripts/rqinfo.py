@@ -4,19 +4,19 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import argparse
-import os
 import sys
 import time
+from functools import partial
 
+import click
 from redis.exceptions import ConnectionError
-from rq import get_failed_queue, Queue, Worker
+from rq import Connection, get_failed_queue, Queue, Worker
 from rq.scripts import (add_standard_arguments, read_config_file,
                         setup_default_arguments, setup_redis)
-from rq.utils import gettermsize, make_colorizer
 
-red = make_colorizer('darkred')
-green = make_colorizer('darkgreen')
-yellow = make_colorizer('darkyellow')
+red = partial(click.style, fg='red')
+green = partial(click.style, fg='green')
+yellow = partial(click.style, fg='yellow')
 
 
 def pad(s, pad_to_length):
@@ -44,14 +44,14 @@ def state_symbol(state):
         return state
 
 
-def show_queues(args):
-    if len(args.queues):
-        qs = list(map(Queue, args.queues))
+def show_queues(queues, raw, by_queue):
+    if queues:
+        qs = list(map(Queue, queues))
     else:
         qs = Queue.all()
 
     num_jobs = 0
-    termwidth, _ = gettermsize()
+    termwidth, _ = click.get_terminal_size()
     chartwidth = min(20, termwidth - 20)
 
     max_count = 0
@@ -65,23 +65,23 @@ def show_queues(args):
 
     for q in qs:
         count = counts[q]
-        if not args.raw:
+        if not raw:
             chart = green('|' + '█' * int(ratio * count))
             line = '%-12s %s %d' % (q.name, chart, count)
         else:
             line = 'queue %s %d' % (q.name, count)
-        print(line)
+        click.echo(line)
 
         num_jobs += count
 
-    # Print summary when not in raw mode
-    if not args.raw:
-        print('%d queues, %d jobs total' % (len(qs), num_jobs))
+    # print summary when not in raw mode
+    if not raw:
+        click.echo('%d queues, %d jobs total' % (len(qs), num_jobs))
 
 
-def show_workers(args):
-    if len(args.queues):
-        qs = list(map(Queue, args.queues))
+def show_workers(queues, raw, by_queue):
+    if queues:
+        qs = list(map(Queue, queues))
 
         def any_matching_queue(worker):
             def queue_matches(q):
@@ -99,13 +99,13 @@ def show_workers(args):
         ws = Worker.all()
         filter_queues = lambda x: x
 
-    if not args.by_queue:
+    if not by_queue:
         for w in ws:
             worker_queues = filter_queues(w.queue_names())
-            if not args.raw:
-                print('%s %s: %s' % (w.name, state_symbol(w.get_state()), ', '.join(worker_queues)))
+            if not raw:
+                click.echo('%s %s: %s' % (w.name, state_symbol(w.get_state()), ', '.join(worker_queues)))
             else:
-                print('worker %s %s %s' % (w.name, w.get_state(), ','.join(worker_queues)))
+                click.echo('worker %s %s %s' % (w.name, w.get_state(), ','.join(worker_queues)))
     else:
         # Create reverse lookup table
         queues = dict([(q, []) for q in qs])
@@ -121,23 +121,69 @@ def show_workers(args):
                 queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queues[q])))  # noqa
             else:
                 queues_str = '–'
-            print('%s %s' % (pad(q.name + ':', max_qname + 1), queues_str))
+            click.echo('%s %s' % (pad(q.name + ':', max_qname + 1), queues_str))
 
-    if not args.raw:
-        print('%d workers, %d queues' % (len(ws), len(qs)))
+    if not raw:
+        click.echo('%d workers, %d queues' % (len(ws), len(qs)))
 
 
-def show_both(args):
-    show_queues(args)
-    if not args.raw:
-        print('')
-    show_workers(args)
-    if not args.raw:
-        print('')
+def show_both(queues, raw, by_queue):
+    show_queues(queues, raw, by_queue)
+    if not raw:
+        click.echo('')
+    show_workers(queues, raw, by_queue)
+    if not raw:
+        click.echo('')
         import datetime
-        print('Updated: %s' % datetime.datetime.now())
+        click.echo('Updated: %s' % datetime.datetime.now())
 
 
+def refresh(val, func, *args):
+    while True:
+        if val:
+            click.clear()
+        func(*args)
+        if val:
+            time.sleep(val)
+        else:
+            break
+
+
+@click.command()
+@click.option('--path', '-P', default='.', help='Specify the import path.')
+@click.option('--interval', '-i', default=2.5, help='Updates stats every N seconds (default: don\'t poll)')  # noqa
+@click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')  # noqa
+@click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')  # noqa
+@click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')  # noqa
+@click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')  # noqa
+@click.argument('queues', nargs=-1)
+@click.pass_context
+def info(ctx, path, interval, raw, only_queues, only_workers, by_queue, queues):
+    """RQ command-line monitor."""
+
+    if path:
+        sys.path = path.split(':') + sys.path
+
+    conn = ctx.obj['connection']
+    try:
+        if only_queues:
+            func = show_queues
+        elif only_workers:
+            func = show_workers
+        else:
+            func = show_both
+
+        with Connection(conn):
+            refresh(interval, func, queues, raw, by_queue)
+    except ConnectionError as e:
+        click.echo(e)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        click.echo()
+        sys.exit(0)
+
+
+# TODO: The following code is for backward compatibility, should be removed in future
 def parse_args():
     parser = argparse.ArgumentParser(description='RQ command-line monitor.')
     add_standard_arguments(parser)
@@ -152,18 +198,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def interval(val, func, args):
-    while True:
-        if val and sys.stdout.isatty():
-            os.system('clear')
-        func(args)
-        if val and sys.stdout.isatty():
-            time.sleep(val)
-        else:
-            break
-
-
 def main():
+    # warn users this command is deprecated, use `rq info`
+    import warnings
+    warnings.simplefilter('always', DeprecationWarning)
+    warnings.warn("This command will be removed in future, "
+                  "use `rq info` instead", DeprecationWarning)
+
     args = parse_args()
 
     if args.path:
@@ -189,7 +230,7 @@ def main():
             else:
                 func = show_both
 
-            interval(args.interval, func, args)
+            refresh(args.interval, func, args.queues, args.raw, args.by_queue)
     except ConnectionError as e:
         print(e)
         sys.exit(1)

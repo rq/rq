@@ -11,36 +11,9 @@ from __future__ import (absolute_import, division, print_function,
 import importlib
 import datetime
 import logging
-import os
 import sys
 
 from .compat import is_python_version, as_text
-
-
-def gettermsize():
-    def ioctl_GWINSZ(fd):
-        try:
-            import fcntl
-            import struct
-            import termios
-            cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
-        except:
-            return None
-        return cr
-    cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
-    if not cr:
-        try:
-            fd = os.open(os.ctermid(), os.O_RDONLY)
-            cr = ioctl_GWINSZ(fd)
-            os.close(fd)
-        except:
-            pass
-    if not cr:
-        try:
-            cr = (os.environ['LINES'], os.environ['COLUMNS'])
-        except:
-            cr = (25, 80)
-    return int(cr[1]), int(cr[0])
 
 
 class _Colorizer(object):
