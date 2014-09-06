@@ -41,12 +41,16 @@ setup(
     zip_safe=False,
     platforms='any',
     install_requires=get_dependencies(),
-    entry_points='''\
-    [console_scripts]
-    rq = rq.scripts.rq_cli:main
-    rqworker = rq.scripts.rqworker:main
-    rqinfo = rq.scripts.rqinfo:main
-    ''',
+    entry_points={
+        'console_scripts': [
+            'rq = rq.cli:main',
+
+            # NOTE: rqworker/rqinfo are kept for backward-compatibility,
+            # remove eventually (TODO)
+            'rqinfo = rq.cli:info',
+            'rqworker = rq.scripts.rqworker:main',  # TODO convert to click subcommand
+        ],
+    },
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
         #'Development Status :: 1 - Planning',
