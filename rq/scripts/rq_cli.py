@@ -1,7 +1,6 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-rq command line tool
+RQ command line tool
 """
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
