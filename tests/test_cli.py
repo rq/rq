@@ -18,7 +18,7 @@ else:
     from unittest2 import TestCase  # noqa
 
 
-class TestScripts(TestCase):
+class TestCommandLine(TestCase):
     def test_config_file(self):
         settings = read_config_file("tests.dummy_settings")
         self.assertIn("REDIS_HOST", settings)
@@ -40,21 +40,20 @@ class TestRQCli(RQTestCase):
     def test_empty(self):
         """rq -u <url> empty -y"""
         runner = CliRunner()
-        result = runner.invoke(main, ['-u', self.redis_url, 'empty', "-y"])
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, 'failed'])
         self.assertEqual(result.exit_code, 0)
-        self.assertEqual(result.output, '1 jobs removed from failed queue\n')
+        self.assertEqual(result.output.strip(), '1 jobs removed from failed queue')
 
     def test_requeue(self):
         """rq -u <url> requeue"""
         runner = CliRunner()
-        result = runner.invoke(main, ['-u', self.redis_url, 'requeue', '-a'])
+        result = runner.invoke(main, ['requeue', '-u', self.redis_url, '--all'])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn('Requeueing 1 jobs from FailedQueue', result.output)
-        self.assertIn('Unable to requeue 0 jobs from FailedQueue', result.output)
+        self.assertEqual(result.output.strip(), 'Requeueing 1 jobs from failed queue')
 
     def test_info(self):
         """rq -u <url> info -i 0"""
         runner = CliRunner()
-        result = runner.invoke(main, ['-u', self.redis_url, 'info', '-i 0'])
+        result = runner.invoke(main, ['info', '-u', self.redis_url])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('1 queues, 1 jobs total', result.output)
