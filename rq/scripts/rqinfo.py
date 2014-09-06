@@ -3,17 +3,16 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import argparse
 import sys
 import time
-import click
-import argparse
 from functools import partial
 
+import click
 from redis.exceptions import ConnectionError
-from rq import get_failed_queue, Queue, Worker, Connection
+from rq import Connection, get_failed_queue, Queue, Worker
 from rq.scripts import (add_standard_arguments, read_config_file,
                         setup_default_arguments, setup_redis)
-
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
@@ -184,7 +183,7 @@ def info(ctx, path, interval, raw, only_queues, only_workers, by_queue, queues):
         sys.exit(0)
 
 
-### The following code is for backward compatibility, will be removed in future
+# TODO: The following code is for backward compatibility, should be removed in future
 def parse_args():
     parser = argparse.ArgumentParser(description='RQ command-line monitor.')
     add_standard_arguments(parser)
@@ -198,12 +197,13 @@ def parse_args():
     parser.add_argument('queues', nargs='*', help='The queues to poll')
     return parser.parse_args()
 
+
 def main():
     # warn users this command is deprecated, use `rq info`
     import warnings
     warnings.simplefilter('always', DeprecationWarning)
-    warnings.warn("This command will be remove in future, "
-            "use `rq info` instead", DeprecationWarning)
+    warnings.warn("This command will be removed in future, "
+                  "use `rq info` instead", DeprecationWarning)
 
     args = parse_args()
 

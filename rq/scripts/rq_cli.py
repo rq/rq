@@ -15,8 +15,7 @@ from .rqinfo import info
 
 
 @click.group()
-@click.option('--url', '-u', envvar='URL',
-        help='URL describing Redis connection details.')
+@click.option('--url', '-u', envvar='URL', help='URL describing Redis connection details.')
 @click.pass_context
 def main(ctx, url):
     """RQ CLI"""
@@ -29,8 +28,7 @@ def main(ctx, url):
 
 
 @main.command()
-@click.option('--yes', '-y', is_flag=True,
-        help='Empty failed queue by default')
+@click.option('--yes', '-y', is_flag=True, help='Empty failed queue by default')
 @click.argument('queues', nargs=-1)
 @click.pass_context
 def empty(ctx, yes, queues):
@@ -51,8 +49,7 @@ def empty(ctx, yes, queues):
     conn = ctx.obj['connection']
     queues = [Queue(queue, connection=conn) for queue in queues]
     if not queues:
-        if yes or click.confirm('Do you want to empty failed queue?',
-                abort=True):
+        if yes or click.confirm('Do you want to empty failed queue?', abort=True):
             queues = (get_failed_queue(connection=conn),)
     for queue in queues:
         num_jobs = queue.empty()
@@ -61,8 +58,7 @@ def empty(ctx, yes, queues):
 
 
 @main.command()
-@click.option('--all', '-a', 'is_all', is_flag=True,
-        help='Requeue all failed jobs')
+@click.option('--all', '-a', 'is_all', is_flag=True, help='Requeue all failed jobs')
 @click.argument('job_ids', nargs=-1)
 @click.pass_context
 def requeue(ctx, is_all, job_ids):
