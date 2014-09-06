@@ -6,7 +6,8 @@ from click.testing import CliRunner
 from rq import get_failed_queue
 from rq.compat import is_python_version
 from rq.job import Job
-from rq.scripts import read_config_file, rq_cli
+from rq.cli import main
+from rq.scripts import read_config_file
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
@@ -39,14 +40,14 @@ class TestRQCli(RQTestCase):
     def test_empty(self):
         """rq -u <url> empty -y"""
         runner = CliRunner()
-        result = runner.invoke(rq_cli.main, ['-u', self.redis_url, 'empty', "-y"])
+        result = runner.invoke(main, ['-u', self.redis_url, 'empty', "-y"])
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.output, '1 jobs removed from failed queue\n')
 
     def test_requeue(self):
         """rq -u <url> requeue"""
         runner = CliRunner()
-        result = runner.invoke(rq_cli.main, ['-u', self.redis_url, 'requeue', '-a'])
+        result = runner.invoke(main, ['-u', self.redis_url, 'requeue', '-a'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('Requeueing 1 jobs from FailedQueue', result.output)
         self.assertIn('Unable to requeue 0 jobs from FailedQueue', result.output)
@@ -54,6 +55,6 @@ class TestRQCli(RQTestCase):
     def test_info(self):
         """rq -u <url> info -i 0"""
         runner = CliRunner()
-        result = runner.invoke(rq_cli.main, ['-u', self.redis_url, 'info', '-i 0'])
+        result = runner.invoke(main, ['-u', self.redis_url, 'info', '-i 0'])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('1 queues, 1 jobs total', result.output)
