@@ -147,9 +147,10 @@ class Job(object):
         )
         return self.get_status()
 
-    def set_status(self, status):
+    def set_status(self, status, pipeline=None):
         self._status = status
-        self.connection.hset(self.key, 'status', self._status)
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'status', self._status)
 
     def _set_status(self, status):
         warnings.warn(
