@@ -23,6 +23,7 @@ from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
 from .utils import import_attribute, make_colorizer, utcformat, utcnow
 from .version import VERSION
+from .registry import StartedJobRegistry
 
 try:
     from procname import setprocname
@@ -403,7 +404,7 @@ class Worker(object):
         self.heartbeat()
         return result
 
-    def heartbeat(self, timeout=0):
+    def heartbeat(self, timeout=0, pipeline=None):
         """Specifies a new worker timeout, typically by extending the
         expiration time of the worker, effectively making this a "heartbeat"
         to not expire the worker until the timeout passes.
@@ -415,7 +416,8 @@ class Worker(object):
         only larger.
         """
         timeout = max(timeout, self.default_worker_ttl)
-        self.connection.expire(self.key, timeout)
+        connection = pipeline if pipeline is not None else self.connection
+        connection.expire(self.key, timeout)
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
 
@@ -468,27 +470,40 @@ class Worker(object):
         # constrast to the regular sys.exit()
         os._exit(int(not success))
 
-    def perform_job(self, job):
-        """Performs the actual work of a job.  Will/should only be called
-        inside the work horse's process.
+    def prepare_job_execution(self, job):
+        """Performs misc bookkeeping like updating states prior to
+        job execution.
         """
+        timeout = (job.timeout or 180) + 60
 
-        self.set_state('busy')
-        self.set_current_job_id(job.id)
-        self.heartbeat((job.timeout or 180) + 60)
+        with self.connection._pipeline() as pipeline:
+            self.set_state('busy', pipeline=pipeline)
+            self.set_current_job_id(job.id, pipeline=pipeline)
+            self.heartbeat(timeout, pipeline=pipeline)
+            registry = StartedJobRegistry(job.origin, self.connection)
+            registry.add(job, timeout, pipeline=pipeline)
+            job.set_status(Status.STARTED, pipeline=pipeline)
+            pipeline.execute()
 
         self.procline('Processing %s from %s since %s' % (
             job.func_name,
             job.origin, time.time()))
 
+    def perform_job(self, job):
+        """Performs the actual work of a job.  Will/should only be called
+        inside the work horse's process.
+        """
+        self.prepare_job_execution(job)
+
         with self.connection._pipeline() as pipeline:
+            registry = StartedJobRegistry(job.origin, self.connection)
+
             try:
-                job.set_status(Status.STARTED)
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
-                # Pickle the result in the same try-except block since we need to
-                # use the same exc handling when pickling fails
+                # Pickle the result in the same try-except block since we need
+                # to use the same exc handling when pickling fails
                 job._result = rv
 
                 self.set_current_job_id(None, pipeline=pipeline)
@@ -499,12 +514,15 @@ class Worker(object):
                     job._status = Status.FINISHED
                     job.save(pipeline=pipeline)
                 job.cleanup(result_ttl, pipeline=pipeline)
+                registry.remove(job, pipeline=pipeline)
 
                 pipeline.execute()
 
             except Exception:
-                # Use the public setter here, to immediately update Redis
-                job.set_status(Status.FAILED)
+                job.set_status(Status.FAILED, pipeline=pipeline)
+                registry.remove(job, pipeline=pipeline)
+                pipeline.execute()
+                
                 self.handle_exception(job, *sys.exc_info())
                 return False
 

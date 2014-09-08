@@ -7,10 +7,11 @@ import os
 from rq import get_failed_queue, Queue, Worker, SimpleWorker
 from rq.compat import as_text
 from rq.job import Job, Status
+from rq.registry import StartedJobRegistry
 
 from tests import RQTestCase, slow
-from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
-                            say_hello, say_pid)
+from tests.fixtures import (create_file, create_file_after_timeout,
+                            div_by_zero, say_hello, say_pid)
 from tests.helpers import strip_microseconds
 
 
@@ -291,3 +292,18 @@ class TestWorker(RQTestCase):
                           'Expected at least some work done.')
         self.assertEquals(job.result, os.getpid(),
                           'PID mismatch, fork() is not supposed to happen here')
+
+    def test_prepare_job_execution(self):
+        """Prepare job execution does the necessary bookkeeping."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.prepare_job_execution(job)
+
+        # Updates working queue
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+
+        # Updates worker statuses
+        self.assertEqual(worker.state, 'busy')
+        self.assertEqual(worker.get_current_job_id(), job.id)
