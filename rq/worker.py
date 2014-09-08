@@ -559,7 +559,7 @@ class Worker(object):
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
 
-class WorkerTest(Worker):
+class SimpleWorker(Worker):
     def _install_signal_handlers(self, *args, **kwargs):
         """Signal handlers are useless for test worker, as it
         does not have fork() ability"""

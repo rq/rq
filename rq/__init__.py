@@ -7,7 +7,7 @@ from .connections import (Connection, get_current_connection, pop_connection,
 from .job import cancel_job, get_current_job, requeue_job
 from .queue import get_failed_queue, Queue
 from .version import VERSION
-from .worker import Worker, WorkerTest
+from .worker import Worker, SimpleWorker
 
 __all__ = [
     'use_connection', 'get_current_connection',
