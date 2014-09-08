@@ -4,10 +4,10 @@ from .queue import FailedQueue
 from .utils import current_timestamp
 
 
-class WorkingQueue:
+class StartedJobRegistry:
     """
-    Registry of currently executing jobs. Each queue maintains a WorkingQueue.
-    WorkingQueue contains job keys that are currently being executed.
+    Registry of currently executing jobs. Each queue maintains a StartedJobRegistry.
+    StartedJobRegistry contains job keys that are currently being executed.
     Each key is scored by job's expiration time (datetime started + timeout).
 
     Jobs are added to registry right before they are executed and removed
@@ -22,7 +22,7 @@ class WorkingQueue:
         self.connection = resolve_connection(connection)
 
     def add(self, job, timeout, pipeline=None):
-        """Adds a job to WorkingQueue with expiry time of now + timeout."""
+        """Adds a job to StartedJobRegistry with expiry time of now + timeout."""
         score = current_timestamp() + timeout
         if pipeline is not None:
             return pipeline.zadd(self.key, score, job.id)

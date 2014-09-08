@@ -7,7 +7,7 @@ import os
 from rq import get_failed_queue, Queue, Worker
 from rq.compat import as_text
 from rq.job import Job, Status
-from rq.working_queue import WorkingQueue
+from rq.registry import StartedJobRegistry
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
@@ -287,8 +287,8 @@ class TestWorker(RQTestCase):
         worker.prepare_job_execution(job)
 
         # Updates working queue
-        working_queue = WorkingQueue(connection=self.testconn)
-        self.assertEqual(working_queue.get_job_ids(), [job.id])
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_job_ids(), [job.id])
 
         # Updates worker statuses
         self.assertEqual(worker.state, 'busy')

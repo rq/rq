@@ -23,7 +23,7 @@ from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
 from .utils import import_attribute, make_colorizer, utcformat, utcnow
 from .version import VERSION
-from .working_queue import WorkingQueue
+from .registry import StartedJobRegistry
 
 try:
     from procname import setprocname
@@ -480,8 +480,8 @@ class Worker(object):
             self.set_state('busy', pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.heartbeat(timeout, pipeline=pipeline)
-            working_queue = WorkingQueue(job.origin, self.connection)
-            working_queue.add(job, timeout, pipeline=pipeline)
+            registry = StartedJobRegistry(job.origin, self.connection)
+            registry.add(job, timeout, pipeline=pipeline)
             job.set_status(Status.STARTED, pipeline=pipeline)
             pipeline.execute()
 
@@ -496,7 +496,7 @@ class Worker(object):
         self.prepare_job_execution(job)
 
         with self.connection._pipeline() as pipeline:
-            working_queue = WorkingQueue(job.origin, self.connection)
+            registry = StartedJobRegistry(job.origin, self.connection)
 
             try:
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
@@ -514,13 +514,13 @@ class Worker(object):
                     job._status = Status.FINISHED
                     job.save(pipeline=pipeline)
                 job.cleanup(result_ttl, pipeline=pipeline)
-                working_queue.remove(job, pipeline=pipeline)
+                registry.remove(job, pipeline=pipeline)
 
                 pipeline.execute()
 
             except Exception:
                 job.set_status(Status.FAILED, pipeline=pipeline)
-                working_queue.remove(job, pipeline=pipeline)
+                registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
                 
                 self.handle_exception(job, *sys.exc_info())
