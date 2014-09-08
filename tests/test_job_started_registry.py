@@ -25,7 +25,7 @@ class TestQueue(RQTestCase):
         # Test that job is added with the right score
         self.registry.add(job, 1000)
         self.assertLess(self.testconn.zscore(self.registry.key, job.id),
-                        timestamp + 1001)
+                        timestamp + 1002)
 
         # Ensure that job is properly removed from sorted set
         self.registry.remove(job)
