@@ -290,4 +290,4 @@ class TestWorker(RQTestCase):
         self.assertEquals(w.work(burst=True), True,
                           'Expected at least some work done.')
         self.assertEquals(job.result, os.getpid(),
-            'PID mismatch, fork() is not supposed to happen here')
+                          'PID mismatch, fork() is not supposed to happen here')

@@ -1,3 +1,4 @@
+# flake8: noqa
 # This is a copy of the Python logging.config.dictconfig module.  It is
 # provided here for backwards compatibility for Python versions prior to 2.7.
 #
