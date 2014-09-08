@@ -522,7 +522,6 @@ class Worker(object):
                 job.set_status(Status.FAILED, pipeline=pipeline)
                 registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
-                
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
