@@ -4,13 +4,13 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 
-from rq import get_failed_queue, Queue, Worker
+from rq import get_failed_queue, Queue, Worker, WorkerTest
 from rq.compat import as_text
 from rq.job import Job, Status
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout, div_by_zero,
-                            say_hello)
+                            say_hello, say_pid)
 from tests.helpers import strip_microseconds
 
 
@@ -277,3 +277,18 @@ class TestWorker(RQTestCase):
         q = Queue()
         worker = Worker([q], job_class=CustomJob)
         self.assertEqual(worker.job_class, CustomJob)
+
+    def test_work_via_workertest(self):
+        """Worker processes work, with forking disabled,
+        then returns."""
+        fooq, barq = Queue('foo'), Queue('bar')
+        w = WorkerTest([fooq, barq], fork=False)
+        self.assertEquals(w.work(burst=True), False,
+                          'Did not expect any work on the queue.')
+
+        job = fooq.enqueue(say_pid)
+        self.assertEquals(w.work(burst=True), True,
+                          'Expected at least some work done.')
+        self.assertEquals(job.result, os.getpid(),
+            'PID mismatch, fork() is not supposed to happen here')
+        
