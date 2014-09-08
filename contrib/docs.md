@@ -9,14 +9,12 @@ layout: contrib
 If you're running these docs on your local machine;
 
 ```
-sudo apt-get -y install ruby-dev nodejs
-sudo gem install jekyll
 jekyll serve
 ```
 
 ### Running docs on Vagrant
 
-If you're a [Vagrant](https://www.vagrantup.com/) user;
+This requires several libraries, and you can keep these self contained by using [Vagrant](https://www.vagrantup.com/). 
 
 ```
 vagrant init ubuntu/trusty64

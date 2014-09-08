@@ -46,3 +46,5 @@ navigation:
     url: contrib/github/
   - text: Documentation
     url: contrib/docs/
+  - text: Testing
+    url: contrib/testing/
