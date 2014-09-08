@@ -1,3 +1,4 @@
+from .compat import as_text
 from .connections import resolve_connection
 from .queue import FailedQueue
 from .utils import current_timestamp
@@ -34,11 +35,13 @@ class WorkingQueue:
 
     def get_expired_job_ids(self):
         """Returns job ids whose score are less than current timestamp."""
-        return self.connection.zrangebyscore(self.key, 0, current_timestamp())
+        return [as_text(job_id) for job_id in
+                self.connection.zrangebyscore(self.key, 0, current_timestamp())]
 
     def get_job_ids(self, start=0, end=-1):
         """Returns list of all job ids."""
-        return self.connection.zrange(self.key, start, end)
+        return [as_text(job_id) for job_id in
+                self.connection.zrange(self.key, start, end)]
 
     def cleanup(self):
         """Removes expired job ids to FailedQueue."""
