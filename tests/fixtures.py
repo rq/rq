@@ -6,11 +6,14 @@ fixtures has a slighty different characteristics.
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import os
 import time
 
 from rq import Connection, get_current_job
 from rq.decorators import job
 
+def say_pid():
+    return os.getpid()
 
 def say_hello(name=None):
     """A job with a single argument and a return value."""
