@@ -44,3 +44,5 @@ navigation:
     url: contrib/
   - text: GitHub
     url: contrib/github/
+  - text: Documentation
+    url: contrib/docs/

@@ -1,21 +1,22 @@
+---
+title: "Documentation"
+layout: contrib
+---
+
 ### Running docs locally
 
-Install the following packages;
+
+If you're running these docs on your local machine;
 
 ```
-gem install jekyll
-```
-
-Then use;
-
-```
+sudo apt-get -y install ruby-dev nodejs
+sudo gem install jekyll
 jekyll serve
 ```
 
+### Running docs on Vagrant
 
-### Using Vagrant
-
-If you're a [Vagrant](https://www.vagrantup.com/) user, you can use;
+If you're a [Vagrant](https://www.vagrantup.com/) user;
 
 ```
 vagrant init ubuntu/trusty64
