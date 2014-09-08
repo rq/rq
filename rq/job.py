@@ -95,7 +95,7 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, status=None, description=None, depends_on=None, timeout=None,
-               job_id=None):
+               id=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -108,12 +108,12 @@ class Job(object):
             raise TypeError('{0!r} is not a valid args list.'.format(args))
         if not isinstance(kwargs, dict):
             raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
-        if not isinstance(job_id, (str, unicode, types.NoneType)):
-            raise TypeError('job_id must be a str/unicode, not {0}.'.format(type(job_id)))
+        if not isinstance(id, (string_types, types.NoneType)):
+            raise TypeError('id must be a string, not {0}.'.format(type(id)))
 
         job = cls(connection=connection)
-        if job_id is not None:
-            job.set_id(job_id)
+        if id is not None:
+            job.set_id(id)
 
         # Set the core job tuple properties
         job._instance = None

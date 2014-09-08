@@ -164,7 +164,7 @@ class Queue(object):
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, description=None, depends_on=None,
-                     job_id=None):
+                     id=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -178,7 +178,7 @@ class Queue(object):
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
                                     result_ttl=result_ttl, status=Status.QUEUED,
                                     description=description, depends_on=depends_on, timeout=timeout,
-                                    job_id=job_id)
+                                    id=id)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -234,7 +234,7 @@ class Queue(object):
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl,
                                  description=description, depends_on=depends_on,
-                                 job_id=job_id)
+                                 id=job_id)
 
     def enqueue_job(self, job, set_meta_data=True):
         """Enqueues a job for delayed execution.
