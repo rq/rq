@@ -282,7 +282,7 @@ class TestWorker(RQTestCase):
         """Worker processes work, with forking disabled,
         then returns."""
         fooq, barq = Queue('foo'), Queue('bar')
-        w = WorkerTest([fooq, barq], fork=False)
+        w = WorkerTest([fooq, barq])
         self.assertEquals(w.work(burst=True), False,
                           'Did not expect any work on the queue.')
 
