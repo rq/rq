@@ -40,11 +40,12 @@ class StartedJobRegistry:
 
     def get_job_ids(self, start=0, end=-1):
         """Returns list of all job ids."""
+        self.move_expired_jobs_to_failed_queue()
         return [as_text(job_id) for job_id in
                 self.connection.zrange(self.key, start, end)]
 
-    def cleanup(self):
-        """Removes expired job ids to FailedQueue."""
+    def move_expired_jobs_to_failed_queue(self):
+        """Remove expired jobs from registry and add them to FailedQueue."""
         job_ids = self.get_expired_job_ids()
 
         if job_ids:

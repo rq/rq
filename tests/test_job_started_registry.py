@@ -51,7 +51,7 @@ class TestQueue(RQTestCase):
         failed_queue = FailedQueue(connection=self.testconn)
         self.assertTrue(failed_queue.is_empty())
         self.testconn.zadd(self.registry.key, 1, 'foo')
-        self.registry.cleanup()
+        self.registry.move_expired_jobs_to_failed_queue()
         self.assertIn('foo', failed_queue.job_ids)
 
     def test_job_execution(self):
