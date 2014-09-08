@@ -108,8 +108,6 @@ class Job(object):
             raise TypeError('{0!r} is not a valid args list.'.format(args))
         if not isinstance(kwargs, dict):
             raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
-        if not isinstance(id, (string_types, types.NoneType)):
-            raise TypeError('id must be a string, not {0}.'.format(type(id)))
 
         job = cls(connection=connection)
         if id is not None:
@@ -332,6 +330,8 @@ class Job(object):
 
     def set_id(self, value):
         """Sets a job ID for the given job."""
+        if not isinstance(value, string_types):
+            raise TypeError('id must be a string, not {0}.'.format(type(value)))
         self._id = value
 
     id = property(get_id, set_id)
