@@ -24,6 +24,8 @@ navigation:
     url: docs/connections/
   - text: Exceptions
     url: docs/exceptions/
+  - text: Testing
+    url: docs/testing/
 - text: Patterns
   url: patterns/
   subs:
