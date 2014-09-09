@@ -234,7 +234,7 @@ class Queue(object):
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl,
                                  description=description, depends_on=depends_on,
-                                 id=job_id)
+                                 job_id=job_id)
 
     def enqueue_job(self, job, set_meta_data=True):
         """Enqueues a job for delayed execution.
