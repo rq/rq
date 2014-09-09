@@ -8,7 +8,7 @@ layout: contrib
 To run tests locally;
 
 ```
-./run_tests
+tox
 ```
 
 ### Testing RQ with Vagrant
