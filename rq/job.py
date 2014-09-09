@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import types
 import inspect
 import warnings
 from functools import partial
@@ -92,7 +93,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, depends_on=None, timeout=None):
+               result_ttl=None, status=None, description=None, depends_on=None, timeout=None,
+               id=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -107,6 +109,8 @@ class Job(object):
             raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
 
         job = cls(connection=connection)
+        if id is not None:
+            job.set_id(id)
 
         # Set the core job tuple properties
         job._instance = None
@@ -326,6 +330,8 @@ class Job(object):
 
     def set_id(self, value):
         """Sets a job ID for the given job."""
+        if not isinstance(value, string_types):
+            raise TypeError('id must be a string, not {0}.'.format(type(value)))
         self._id = value
 
     id = property(get_id, set_id)

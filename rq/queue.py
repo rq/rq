@@ -164,7 +164,8 @@ class Queue(object):
         connection.rpush(self.key, job_id)
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, description=None, depends_on=None):
+                     result_ttl=None, description=None, depends_on=None,
+                     job_id=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -177,7 +178,8 @@ class Queue(object):
         # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
                                     result_ttl=result_ttl, status=Status.QUEUED,
-                                    description=description, depends_on=depends_on, timeout=timeout)
+                                    description=description, depends_on=depends_on, timeout=timeout,
+                                    id=job_id)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -223,6 +225,7 @@ class Queue(object):
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
         depends_on = kwargs.pop('depends_on', None)
+        job_id = kwargs.pop('job_id', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
@@ -231,7 +234,8 @@ class Queue(object):
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl,
-                                 description=description, depends_on=depends_on)
+                                 description=description, depends_on=depends_on,
+                                 job_id=job_id)
 
     def enqueue_job(self, job, set_meta_data=True):
         """Enqueues a job for delayed execution.

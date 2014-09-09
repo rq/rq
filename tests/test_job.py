@@ -339,3 +339,12 @@ class TestJob(RQTestCase):
         self.assertFalse(self.testconn.exists(job.dependents_key))
 
         self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_create_job_with_id(self):
+        """test creating jobs with a custom ID"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello, job_id="1234")
+        self.assertEqual(job.id, "1234")
+        job.perform()
+        
+        self.assertRaises(TypeError, queue.enqueue, say_hello, job_id=1234)
