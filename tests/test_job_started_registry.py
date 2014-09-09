@@ -76,3 +76,10 @@ class TestQueue(RQTestCase):
 
         worker.perform_job(job)
         self.assertNotIn(job.id, registry.get_job_ids())
+
+    def test_get_job_count(self):
+        """StartedJobRegistry returns the right number of job count."""
+        self.testconn.zadd(self.registry.key, 1, 'foo')
+        self.testconn.zadd(self.registry.key, 10, 'bar')
+        self.assertEqual(self.registry.get_job_count(), 2)
+        self.assertEqual(len(self.registry), 2)
