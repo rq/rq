@@ -10,17 +10,12 @@ You may wish to include your RQ tasks inside unit tests. However many frameworks
 Therefore, you must use the SimpleWorker class to avoid fork();
 
 {% highlight python %}
-from rq import SimpleWorker
-SimpleWorker()
-{% endhighlight %}
+from redis import Redis
+from rq import SimpleWorker, Queue
 
-To run your tasks inside a unit test, you might want to use something like;
-
-{% highlight python %}
-from rq import SimpleWorker
-
-def run_task_queue(queues=None):
-    qs = map(Queue, queues) or [Queue()]
-    w = SimpleWorker(qs, fork=False)
-    w.work(burst=True)
+queue = Queue(connection=Redis())
+queue.enqueue(my_long_running_job)
+worker = SimpleWorker([queue])
+worker.work(burst=True)  # Runs enqueued job
+# Check for result...
 {% endhighlight %}
