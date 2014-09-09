@@ -3,7 +3,6 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from datetime import datetime
-from uuid import uuid4
 
 from rq.compat import as_text, PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
