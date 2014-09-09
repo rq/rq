@@ -68,6 +68,9 @@ class Queue(object):
                 job_class = import_attribute(job_class)
             self.job_class = job_class
 
+    def __len__(self):
+        return self.count
+
     @property
     def key(self):
         """Returns the Redis key for this Queue."""
