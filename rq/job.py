@@ -7,7 +7,6 @@ import inspect
 import warnings
 from functools import partial
 from uuid import uuid4
-from uuid import UUID
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
