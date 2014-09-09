@@ -23,9 +23,10 @@ class StartedJobRegistry:
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
-        return self.get_job_count()
+        return self.count
 
-    def get_job_count(self):
+    @property
+    def count(self):
         """Returns the number of jobs in this registry"""
         self.move_expired_jobs_to_failed_queue()
         return self.connection.zcard(self.key)

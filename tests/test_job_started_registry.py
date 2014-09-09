@@ -81,5 +81,5 @@ class TestQueue(RQTestCase):
         """StartedJobRegistry returns the right number of job count."""
         self.testconn.zadd(self.registry.key, 1, 'foo')
         self.testconn.zadd(self.registry.key, 10, 'bar')
-        self.assertEqual(self.registry.get_job_count(), 2)
+        self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
