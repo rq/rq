@@ -7,7 +7,7 @@ from rq import get_failed_queue
 from rq.compat import is_python_version
 from rq.job import Job
 from rq.cli import main
-from rq.scripts import read_config_file
+from rq.cli.helpers import read_config_file
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
