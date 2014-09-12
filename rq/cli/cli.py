@@ -153,8 +153,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
     if not queues:
         queues = settings.get('QUEUES', ['default'])
 
-    if sentry_dsn is None:
-        sentry_dsn = settings.get('SENTRY_DSN')
+    sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
