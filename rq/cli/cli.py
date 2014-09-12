@@ -141,18 +141,14 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
         worker_ttl, verbose, quiet, sentry_dsn, pid, queues):
     """Starts an RQ worker."""
 
+    conn = connect(url)
+
     if path:
         sys.path = path.split(':') + sys.path
 
-    settings = {}
-    if config:
-        settings = read_config_file(config)
-
-    conn = connect(url)
+    settings = read_config_file(config) if config else {}
     # Worker specific default arguments
-    if not queues:
-        queues = settings.get('QUEUES', ['default'])
-
+    queues = queues or settings.get('QUEUES', ['default'])
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
 
     if pid:
