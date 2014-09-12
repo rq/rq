@@ -21,12 +21,12 @@ from .helpers import (read_config_file, refresh, setup_loghandlers_from_args,
                       show_both, show_queues, show_workers)
 
 
-url_option = click.option('--url', '-u', envvar='RQ_REDIS_URL', default='redis://localhost:6379/0',
+url_option = click.option('--url', '-u', envvar='RQ_REDIS_URL',
                           help='URL describing Redis connection details.')
 
 
 def connect(url):
-    return StrictRedis.from_url(url)
+    return StrictRedis.from_url(url or 'redis://localhost:6379/0')
 
 
 @click.group()
