@@ -21,6 +21,16 @@ class StartedJobRegistry:
         self.key = 'rq:wip:%s' % name
         self.connection = resolve_connection(connection)
 
+    def __len__(self):
+        """Returns the number of jobs in this registry"""
+        return self.count
+
+    @property
+    def count(self):
+        """Returns the number of jobs in this registry"""
+        self.move_expired_jobs_to_failed_queue()
+        return self.connection.zcard(self.key)
+
     def add(self, job, timeout, pipeline=None):
         """Adds a job to StartedJobRegistry with expiry time of now + timeout."""
         score = current_timestamp() + timeout
