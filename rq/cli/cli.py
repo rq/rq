@@ -21,7 +21,7 @@ from .helpers import (read_config_file, refresh, setup_loghandlers_from_args,
                       show_both, show_queues, show_workers)
 
 
-url_option = click.option('--url', '-u', envvar='URL', default='redis://localhost:6379/0',
+url_option = click.option('--url', '-u', envvar='RQ_REDIS_URL', default='redis://localhost:6379/0',
                           help='URL describing Redis connection details.')
 
 
@@ -141,13 +141,12 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
         worker_ttl, verbose, quiet, sentry_dsn, pid, queues):
     """Starts an RQ worker."""
 
-    conn = connect(url)
-
     if path:
         sys.path = path.split(':') + sys.path
 
     settings = read_config_file(config) if config else {}
     # Worker specific default arguments
+    url = url or settings.get('REDIS_URL')
     queues = queues or settings.get('QUEUES', ['default'])
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
 
@@ -157,6 +156,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
 
     setup_loghandlers_from_args(verbose, quiet)
 
+    conn = connect(url)
     cleanup_ghosts(conn)
     worker_class = import_attribute(worker_class)
     queue_class = import_attribute(queue_class)
