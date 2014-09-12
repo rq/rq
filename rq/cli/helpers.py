@@ -2,15 +2,25 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import importlib
 import time
 from functools import partial
 
 import click
 from rq import Queue, Worker
+from rq.logutils import setup_loghandlers
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
 yellow = partial(click.style, fg='yellow')
+
+
+def read_config_file(module):
+    """Reads all UPPERCASE variables defined in the given module file."""
+    settings = importlib.import_module(module)
+    return dict([(k, v)
+                 for k, v in settings.__dict__.items()
+                 if k.upper() == k])
 
 
 def pad(s, pad_to_length):
@@ -141,3 +151,16 @@ def refresh(interval, func, *args):
             time.sleep(interval)
         else:
             break
+
+
+def setup_loghandlers_from_args(verbose, quiet):
+    if verbose and quiet:
+        raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
+
+    if verbose:
+        level = 'DEBUG'
+    elif quiet:
+        level = 'WARNING'
+    else:
+        level = 'INFO'
+    setup_loghandlers(level)
