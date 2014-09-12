@@ -135,7 +135,7 @@ def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
 def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl, worker_ttl,
-        verbose, quiet, sentry_dsn, pid, queues):
+           verbose, quiet, sentry_dsn, pid, queues):
     """Starts an RQ worker."""
 
     if path:
