@@ -88,11 +88,11 @@ def requeue(url, all, job_ids):
 @main.command()
 @url_option
 @click.option('--path', '-P', default='.', help='Specify the import path.')
-@click.option('--interval', '-i', default=0.0, help='Updates stats every N seconds (default: don\'t poll)')  # noqa
-@click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')  # noqa
-@click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')  # noqa
-@click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')  # noqa
-@click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')  # noqa
+@click.option('--interval', '-i', default=0.0, help='Updates stats every N seconds (default: don\'t poll)')
+@click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
+@click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')
+@click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')
+@click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')
 @click.argument('queues', nargs=-1)
 def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
     """RQ command-line monitor."""
@@ -121,7 +121,7 @@ def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
 @main.command()
 @url_option
 @click.option('--config', '-c', help='Module containing RQ settings.')
-@click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')  # noqa
+@click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--name', '-n', help='Specify a different name')
 @click.option('--worker-class', '-w', default='rq.Worker', help='RQ Worker class to use')
 @click.option('--job-class', '-j', default='rq.job.Job', help='RQ Job class to use')
@@ -134,8 +134,8 @@ def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
 @click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
-def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl,
-        worker_ttl, verbose, quiet, sentry_dsn, pid, queues):
+def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl, worker_ttl,
+        verbose, quiet, sentry_dsn, pid, queues):
     """Starts an RQ worker."""
 
     if path:
