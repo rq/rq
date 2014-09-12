@@ -39,8 +39,7 @@ def main():
 @url_option
 @click.option('--all', '-a', is_flag=True, help='Empty all queues')
 @click.argument('queues', nargs=-1)
-@click.pass_context
-def empty(ctx, url, all, queues):
+def empty(url, all, queues):
     """Empty given queues."""
     conn = connect(url)
 
@@ -61,8 +60,7 @@ def empty(ctx, url, all, queues):
 @url_option
 @click.option('--all', '-a', is_flag=True, help='Requeue all failed jobs')
 @click.argument('job_ids', nargs=-1)
-@click.pass_context
-def requeue(ctx, url, all, job_ids):
+def requeue(url, all, job_ids):
     """Requeue failed jobs."""
     conn = connect(url)
     failed_queue = get_failed_queue(connection=conn)
@@ -96,8 +94,7 @@ def requeue(ctx, url, all, job_ids):
 @click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')  # noqa
 @click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')  # noqa
 @click.argument('queues', nargs=-1)
-@click.pass_context
-def info(ctx, url, path, interval, raw, only_queues, only_workers, by_queue, queues):
+def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
     """RQ command-line monitor."""
 
     if path:
