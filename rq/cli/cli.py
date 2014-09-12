@@ -134,7 +134,7 @@ def info(ctx, url, path, interval, raw, only_queues, only_workers, by_queue, que
 @click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
-@click.option('--sentry-dsn', help='Report exceptions to this Sentry DSN')
+@click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
 def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl,
@@ -154,8 +154,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
         queues = settings.get('QUEUES', ['default'])
 
     if sentry_dsn is None:
-        sentry_dsn = settings.get('SENTRY_DSN',
-                                       os.environ.get('SENTRY_DSN', None))
+        sentry_dsn = settings.get('SENTRY_DSN')
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
