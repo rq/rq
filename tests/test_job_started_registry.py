@@ -33,8 +33,9 @@ class TestQueue(RQTestCase):
 
     def test_get_job_ids(self):
         """Getting job ids from StartedJobRegistry."""
-        self.testconn.zadd(self.registry.key, 1, 'foo')
-        self.testconn.zadd(self.registry.key, 10, 'bar')
+        timestamp = current_timestamp()
+        self.testconn.zadd(self.registry.key, timestamp + 10, 'foo')
+        self.testconn.zadd(self.registry.key, timestamp + 20, 'bar')
         self.assertEqual(self.registry.get_job_ids(), ['foo', 'bar'])
 
     def test_get_expired_job_ids(self):
@@ -51,8 +52,9 @@ class TestQueue(RQTestCase):
         failed_queue = FailedQueue(connection=self.testconn)
         self.assertTrue(failed_queue.is_empty())
         self.testconn.zadd(self.registry.key, 1, 'foo')
-        self.registry.move_expired_jobs_to_failed_queue()
+        self.registry.cleanup()
         self.assertIn('foo', failed_queue.job_ids)
+        self.assertEqual(self.testconn.zscore(self.registry.key, 'foo'), None)
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
@@ -79,7 +81,8 @@ class TestQueue(RQTestCase):
 
     def test_get_job_count(self):
         """StartedJobRegistry returns the right number of job count."""
-        self.testconn.zadd(self.registry.key, 1, 'foo')
-        self.testconn.zadd(self.registry.key, 10, 'bar')
+        timestamp = current_timestamp() + 10
+        self.testconn.zadd(self.registry.key, timestamp, 'foo')
+        self.testconn.zadd(self.registry.key, timestamp, 'bar')
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
