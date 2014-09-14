@@ -346,5 +346,5 @@ class TestJob(RQTestCase):
         job = queue.enqueue(say_hello, job_id="1234")
         self.assertEqual(job.id, "1234")
         job.perform()
-        
+
         self.assertRaises(TypeError, queue.enqueue, say_hello, job_id=1234)

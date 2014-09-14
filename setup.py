@@ -48,7 +48,7 @@ setup(
             # NOTE: rqworker/rqinfo are kept for backward-compatibility,
             # remove eventually (TODO)
             'rqinfo = rq.cli:info',
-            'rqworker = rq.scripts.rqworker:main',  # TODO convert to click subcommand
+            'rqworker = rq.cli:worker',
         ],
     },
     classifiers=[

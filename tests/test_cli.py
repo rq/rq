@@ -7,7 +7,7 @@ from rq import get_failed_queue
 from rq.compat import is_python_version
 from rq.job import Job
 from rq.cli import main
-from rq.scripts import read_config_file
+from rq.cli.helpers import read_config_file
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
@@ -38,22 +38,28 @@ class TestRQCli(RQTestCase):
         get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
 
     def test_empty(self):
-        """rq -u <url> empty -y"""
+        """rq empty -u <url> failed"""
         runner = CliRunner()
         result = runner.invoke(main, ['empty', '-u', self.redis_url, 'failed'])
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.output.strip(), '1 jobs removed from failed queue')
 
     def test_requeue(self):
-        """rq -u <url> requeue"""
+        """rq requeue -u <url> --all"""
         runner = CliRunner()
         result = runner.invoke(main, ['requeue', '-u', self.redis_url, '--all'])
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.output.strip(), 'Requeueing 1 jobs from failed queue')
 
     def test_info(self):
-        """rq -u <url> info -i 0"""
+        """rq info -u <url>"""
         runner = CliRunner()
         result = runner.invoke(main, ['info', '-u', self.redis_url])
         self.assertEqual(result.exit_code, 0)
         self.assertIn('1 queues, 1 jobs total', result.output)
+
+    def test_worker(self):
+        """rq worker -u <url> -b"""
+        runner = CliRunner()
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        self.assertEqual(result.exit_code, 0)
