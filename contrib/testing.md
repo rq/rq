@@ -11,16 +11,6 @@ To run tests locally;
 tox
 ```
 
-### Testing RQ with Vagrant
+If you rather use Vagrant, see [these instructions][v].
 
-This requires several libraries, and you can keep these self contained by using [Vagrant](https://www.vagrantup.com/). 
-
-To create a working vagrant environment, use the following;
-
-```
-vagrant init ubuntu/trusty64
-vagrant up
-vagrant ssh -- "sudo apt-get -y install redis-server python-dev python-pip"
-vagrant ssh -- "sudo pip install --no-input redis hiredis mock"
-vagrant ssh -- "(cd /vagrant; ./run_tests)"
-```
+[v]: {{site.baseurl}}docs/contrib/vagrant/

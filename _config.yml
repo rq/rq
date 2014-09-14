@@ -48,3 +48,5 @@ navigation:
     url: contrib/docs/
   - text: Testing
     url: contrib/testing/
+  - text: Vagrant
+    url: contrib/vagrant/

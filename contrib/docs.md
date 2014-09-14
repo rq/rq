@@ -5,39 +5,12 @@ layout: contrib
 
 ### Running docs locally
 
-
-If you're running these docs on your local machine;
+To build the docs, run [jekyll](http://jekyllrb.com/):
 
 ```
 jekyll serve
 ```
 
-### Running docs on Vagrant
+If you rather use Vagrant, see [these instructions][v].
 
-This requires several libraries, and you can keep these self contained by using [Vagrant](https://www.vagrantup.com/). 
-
-```
-vagrant init ubuntu/trusty64
-vagrant up
-vagrant ssh -- "sudo apt-get -y install ruby-dev nodejs"
-vagrant ssh -- "sudo gem install jekyll"
-vagrant ssh -- "(cd /vagrant; jekyll serve)"
-```
-
-You'll also need to add a port forward entry to your `Vagrantfile`;
-
-```
-config.vm.network "forwarded_port", guest: 4000, host: 4001
-```
-
-Then you can access the docs using;
-
-```
-http://127.0.0.1:4001
-```
-
-You also may need to forcibly kill Jekyll if you ctrl+c;
-
-```
-vagrant ssh -- "sudo killall -9 jekyll"
-```
+[v]: {{site.baseurl}}docs/contrib/vagrant/
