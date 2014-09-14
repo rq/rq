@@ -80,3 +80,18 @@ class StartedJobRegistry(BaseRegistry):
                 pipeline.execute()
 
         return job_ids
+
+
+class FinishedJobRegistry(BaseRegistry):
+    """
+    Registry of jobs that have been completed. Jobs are added to this
+    registry after they have successfully completed for monitoring purposes.
+    """
+
+    def __init__(self, name='default', connection=None):
+        super(FinishedJobRegistry, self).__init__(name, connection)
+        self.key = 'rq:finished:%s' % name
+
+    def cleanup(self):
+        """Remove expired jobs from registry."""
+        self.connection.zremrangebyscore(self.key, 0, current_timestamp())

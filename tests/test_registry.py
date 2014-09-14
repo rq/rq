@@ -5,16 +5,16 @@ from rq.job import Job
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import StartedJobRegistry
+from rq.registry import FinishedJobRegistry, StartedJobRegistry
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
 
-class TestQueue(RQTestCase):
+class TestRegistry(RQTestCase):
 
     def setUp(self):
-        super(TestQueue, self).setUp()
+        super(TestRegistry, self).setUp()
         self.registry = StartedJobRegistry(connection=self.testconn)
 
     def test_add_and_remove(self):
@@ -86,3 +86,35 @@ class TestQueue(RQTestCase):
         self.testconn.zadd(self.registry.key, timestamp, 'bar')
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
+
+
+class TestFinishedJobRegistry(RQTestCase):
+
+    def setUp(self):
+        super(TestFinishedJobRegistry, self).setUp()
+        self.registry = FinishedJobRegistry(connection=self.testconn)
+
+    def test_cleanup(self):
+        """Finished job registry removes expired jobs."""
+        timestamp = current_timestamp()
+        self.testconn.zadd(self.registry.key, 1, 'foo')
+        self.testconn.zadd(self.registry.key, timestamp + 10, 'bar')
+
+        self.registry.cleanup()
+        self.assertEqual(self.registry.get_job_ids(), ['bar'])
+
+    def test_jobs_are_put_in_registry(self):
+        """Completed jobs are added to FinishedJobRegistry."""
+        self.assertEqual(self.registry.get_job_ids(), [])
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+
+        # Completed jobs are put in FinishedJobRegistry
+        job = queue.enqueue(say_hello)
+        worker.perform_job(job)
+        self.assertEqual(self.registry.get_job_ids(), [job.id])
+
+        # Failed jobs are not put in FinishedJobRegistry
+        failed_job = queue.enqueue(div_by_zero)
+        worker.perform_job(failed_job)
+        self.assertEqual(self.registry.get_job_ids(), [job.id])

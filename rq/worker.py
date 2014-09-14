@@ -23,7 +23,7 @@ from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
 from .utils import import_attribute, make_colorizer, utcformat, utcnow
 from .version import VERSION
-from .registry import StartedJobRegistry
+from .registry import FinishedJobRegistry, StartedJobRegistry
 
 try:
     from procname import setprocname
@@ -496,7 +496,7 @@ class Worker(object):
         self.prepare_job_execution(job)
 
         with self.connection._pipeline() as pipeline:
-            registry = StartedJobRegistry(job.origin, self.connection)
+            started_job_registry = StartedJobRegistry(job.origin)
 
             try:
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
@@ -513,14 +513,18 @@ class Worker(object):
                     job.ended_at = utcnow()
                     job._status = Status.FINISHED
                     job.save(pipeline=pipeline)
+
+                    finished_job_registry = FinishedJobRegistry(job.origin)
+                    finished_job_registry.add(job, result_ttl, pipeline)
+
                 job.cleanup(result_ttl, pipeline=pipeline)
-                registry.remove(job, pipeline=pipeline)
+                started_job_registry.remove(job, pipeline=pipeline)
 
                 pipeline.execute()
 
             except Exception:
                 job.set_status(Status.FAILED, pipeline=pipeline)
-                registry.remove(job, pipeline=pipeline)
+                started_job_registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
                 self.handle_exception(job, *sys.exc_info())
                 return False
