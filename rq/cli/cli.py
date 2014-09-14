@@ -88,7 +88,7 @@ def requeue(url, all, job_ids):
 @main.command()
 @url_option
 @click.option('--path', '-P', default='.', help='Specify the import path.')
-@click.option('--interval', '-i', default=0.0, help='Updates stats every N seconds (default: don\'t poll)')
+@click.option('--interval', '-i', type=float, help='Updates stats every N seconds (default: don\'t poll)')
 @click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
 @click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')
 @click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')
