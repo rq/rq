@@ -62,16 +62,16 @@ The life-cycle of a worker consists of a few phases:
 3. _Start listening_. A job is popped from any of the given Redis queues.
    If all queues are empty and the worker is running in burst mode, quit now.
    Else, wait until jobs arrive.
-{% comment %}  (Not implemented yet.)
-4. _Broadcast work began_. The worker tells the system that it will begin work.
-{% endcomment %}
+4. _Prepare job execution_. The worker tells the system that it will begin work
+   by setting its status to `busy` and registers job in the `StartedJobRegistry`.
 5. _Fork a child process._
    A child process (the "work horse") is forked off to do the actual work in
    a fail-safe context.
 6. _Process work_. This performs the actual job work in the work horse.
-{% comment %}  (Not implemented yet.)
-7. _Broadcast work ended_. The worker tells the system that it ended work.
-{% endcomment %}
+7. _Cleanup job execution_. The worker sets its status to `idle` and sets both
+   the job and its result to expire based on `result_ttl`. Job is also removed
+   from `StartedJobRegistry` and added to to `FinishedJobRegistry` in the case
+   of successful execution, or `FailedQueue` in the case of failure.
 8. _Loop_.  Repeat from step 3.
 
 

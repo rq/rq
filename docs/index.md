@@ -28,7 +28,7 @@ To put this potentially expensive word count for a given URL in the background,
 simply do this:
 
 {% highlight python %}
-from rq import Connection, Queue
+from rq import Queue
 from redis import Redis
 from somewhere import count_words_at_url
 
@@ -77,6 +77,26 @@ q = Queue('low', connection=redis_conn)
 q.enqueue('my_package.my_module.my_func', 3, 4)
 {% endhighlight %}
 
+
+## Working with Queues
+
+Besides enqueuing jobs, Queues have a few useful methods:
+
+{% highlight python %}
+from rq import Queue
+from redis import Redis
+
+redis_conn = Redis()
+q = Queue(connection=redis_conn) 
+
+# Getting the number of jobs in the queue
+print len(q)
+
+# Retrieving jobs
+queued_job_ids = q.job_ids # Gets a list of job IDs from the queue
+queued_jobs = q.jobs # Gets a list of enqueued job instances
+job = q.fetch_job('my_id') # Returns job having ID "my_id"
+{% endhighlight %}
 
 ### On the Design
 
