@@ -4,22 +4,28 @@ from .queue import FailedQueue
 from .utils import current_timestamp
 
 
-class StartedJobRegistry:
+class BaseRegistry(object):
     """
-    Registry of currently executing jobs. Each queue maintains a StartedJobRegistry.
-    StartedJobRegistry contains job keys that are currently being executed.
-    Each key is scored by job's expiration time (datetime started + timeout).
+    Base implementation of job registry, implemented in Redis sorted set. Each job
+    is stored as a key in the registry, scored by expiration time (unix timestamp).
 
-    Jobs are added to registry right before they are executed and removed
-    right after completion (success or failure).
-
-    Jobs whose score are lower than current time is considered "expired".
+    Jobs with scores are lower than current time is considered "expired" and
+    should be cleaned up.
     """
 
     def __init__(self, name='default', connection=None):
         self.name = name
-        self.key = 'rq:wip:%s' % name
         self.connection = resolve_connection(connection)
+
+    def __len__(self):
+        """Returns the number of jobs in this registry"""
+        return self.count
+
+    @property
+    def count(self):
+        """Returns the number of jobs in this registry"""
+        self.cleanup()
+        return self.connection.zcard(self.key)
 
     def add(self, job, timeout, pipeline=None):
         """Adds a job to StartedJobRegistry with expiry time of now + timeout."""
@@ -40,11 +46,28 @@ class StartedJobRegistry:
 
     def get_job_ids(self, start=0, end=-1):
         """Returns list of all job ids."""
-        self.move_expired_jobs_to_failed_queue()
+        self.cleanup()
         return [as_text(job_id) for job_id in
                 self.connection.zrange(self.key, start, end)]
 
-    def move_expired_jobs_to_failed_queue(self):
+
+class StartedJobRegistry(BaseRegistry):
+    """
+    Registry of currently executing jobs. Each queue maintains a
+    StartedJobRegistry. Jobs in this registry are ones that are currently
+    being executed.
+
+    Jobs are added to registry right before they are executed and removed
+    right after completion (success or failure).
+
+    Jobs whose score are lower than current time is considered "expired".
+    """
+
+    def __init__(self, name='default', connection=None):
+        super(StartedJobRegistry, self).__init__(name, connection)
+        self.key = 'rq:wip:%s' % name
+
+    def cleanup(self):
         """Remove expired jobs from registry and add them to FailedQueue."""
         job_ids = self.get_expired_job_ids()
 
@@ -53,6 +76,22 @@ class StartedJobRegistry:
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
                     failed_queue.push_job_id(job_id, pipeline=pipeline)
+                pipeline.zremrangebyscore(self.key, 0, current_timestamp())
                 pipeline.execute()
 
         return job_ids
+
+
+class FinishedJobRegistry(BaseRegistry):
+    """
+    Registry of jobs that have been completed. Jobs are added to this
+    registry after they have successfully completed for monitoring purposes.
+    """
+
+    def __init__(self, name='default', connection=None):
+        super(FinishedJobRegistry, self).__init__(name, connection)
+        self.key = 'rq:finished:%s' % name
+
+    def cleanup(self):
+        """Remove expired jobs from registry."""
+        self.connection.zremrangebyscore(self.key, 0, current_timestamp())

@@ -101,11 +101,13 @@ class TestQueue(RQTestCase):
         q.enqueue(say_hello, 'Charlie')
         self.testconn.lpush(q.key, '1', '2')
 
-        self.assertEquals(q.count, 4)
+        self.assertEqual(q.count, 4)
+        self.assertEqual(len(q), 4)
 
         q.compact()
 
-        self.assertEquals(q.count, 2)
+        self.assertEqual(q.count, 2)
+        self.assertEqual(len(q), 2)
 
     def test_enqueue(self):
         """Enqueueing job onto queues."""
