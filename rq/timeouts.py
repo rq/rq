@@ -64,3 +64,15 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         """
         signal.alarm(0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
+# signal.SIGALRM is not supported under Windows, and RQ doesn't support
+# Windows as a production platform, so the dummy class below
+# gives a reasonable fallback for non-forked behavior when developing
+# under Windows. See https://github.com/nvie/rq/issues/226
+class NTDummySignalDeathPenalty(BaseDeathPenalty):
+
+    def setup_death_penalty(self):
+        """Dummy implemenation, do nothing"""
+
+    def cancel_death_penalty(self):
+        """Dummy implemenation, do nothing"""
