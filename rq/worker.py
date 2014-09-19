@@ -20,10 +20,18 @@ from .exceptions import DequeueTimeout, NoQueueError
 from .job import Job, Status
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
-from .timeouts import UnixSignalDeathPenalty
 from .utils import import_attribute, make_colorizer, utcformat, utcnow
 from .version import VERSION
 from .registry import FinishedJobRegistry, StartedJobRegistry
+
+# Unix signals are not supported under Windows, and RQ doesn't support
+# Windows as a production platform, so load the replacement class
+# under Windows to allow non-forked behavior when developing
+# under Windows. See https://github.com/nvie/rq/issues/226
+if os.name != 'nt':
+    from .timeouts import UnixSignalDeathPenalty
+else:
+    from .timeouts import NTDummySignalDeathPenalty
 
 try:
     from procname import setprocname
@@ -68,7 +76,16 @@ def signal_name(signum):
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = 'rq:workers'
-    death_penalty_class = UnixSignalDeathPenalty
+
+    # Unix signals are not supported under Windows, and RQ doesn't support
+    # Windows as a production platform, so load the replacement class
+    # under Windows to allow non-forked behavior when developing
+    # under Windows. See https://github.com/nvie/rq/issues/226
+    if os.name != 'nt':
+        death_penalty_class = UnixSignalDeathPenalty
+    else:
+        death_penalty_class = NTDummySignalDeathPenalty
+
     queue_class = Queue
     job_class = Job
 
@@ -427,7 +444,16 @@ class Worker(object):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
-        child_pid = os.fork()
+
+        # os.fork() is not supported under Windows, and RQ doesn't support
+        # Windows as a production platform, so the conditional below
+        # gives a reasonable fallback for non-forked behavior when developing
+        # under Windows. See https://github.com/nvie/rq/issues/226
+        if os.name != 'nt':
+            child_pid = os.fork()
+        else:
+            child_pid = 0
+
         if child_pid == 0:
             self.main_work_horse(job)
         else:
@@ -466,9 +492,14 @@ class Worker(object):
 
         success = self.perform_job(job)
 
-        # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
-        os._exit(int(not success))
+        # os.fork() is not supported under Windows, and RQ doesn't support
+        # Windows as a production platform, so the conditional below
+        # gives a reasonable fallback for non-forked behavior when developing
+        # under Windows. See https://github.com/nvie/rq/issues/226
+        if os.name != 'nt':
+            # os._exit() is the way to exit from childs after a fork(), in
+            # constrast to the regular sys.exit()
+            os._exit(int(not success))
 
     def prepare_job_execution(self, job):
         """Performs misc bookkeeping like updating states prior to
