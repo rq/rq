@@ -24,17 +24,17 @@ class TestWorker(RQTestCase):
         """Worker creation."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
-        self.assertEquals(w.queues, [fooq, barq])
+        self.assertEqual(w.queues, [fooq, barq])
 
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
-        self.assertEquals(w.work(burst=True), False,
+        self.assertEqual(w.work(burst=True), False,
                           'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
-        self.assertEquals(w.work(burst=True), True,
+        self.assertEqual(w.work(burst=True), True,
                           'Expected at least some work done.')
 
     def test_worker_ttl(self):
@@ -50,17 +50,17 @@ class TestWorker(RQTestCase):
         q = Queue('foo')
         w = Worker([q])
         job = q.enqueue('tests.fixtures.say_hello', name='Frank')
-        self.assertEquals(w.work(burst=True), True,
+        self.assertEqual(w.work(burst=True), True,
                           'Expected at least some work done.')
-        self.assertEquals(job.result, 'Hi there, Frank!')
+        self.assertEqual(job.result, 'Hi there, Frank!')
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
         q = Queue()
         failed_q = get_failed_queue()
 
-        self.assertEquals(failed_q.count, 0)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
 
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
@@ -76,13 +76,13 @@ class TestWorker(RQTestCase):
         # validity checks)
         q.push_job_id(job.id)
 
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         # All set, we're going to process it
         w = Worker([q])
         w.work(burst=True)   # should silently pass
-        self.assertEquals(q.count, 0)
-        self.assertEquals(failed_q.count, 1)
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 1)
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
@@ -90,12 +90,12 @@ class TestWorker(RQTestCase):
         failed_q = get_failed_queue()
 
         # Preconditions
-        self.assertEquals(failed_q.count, 0)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
 
         # Action
         job = q.enqueue(div_by_zero)
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         # keep for later
         enqueued_at_date = strip_microseconds(job.enqueued_at)
@@ -104,16 +104,16 @@ class TestWorker(RQTestCase):
         w.work(burst=True)  # should silently pass
 
         # Postconditions
-        self.assertEquals(q.count, 0)
-        self.assertEquals(failed_q.count, 1)
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 1)
 
         # Check the job
         job = Job.fetch(job.id)
-        self.assertEquals(job.origin, q.name)
+        self.assertEqual(job.origin, q.name)
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
-        self.assertEquals(job.enqueued_at, enqueued_at_date)
+        self.assertEqual(job.enqueued_at, enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
     def test_custom_exc_handling(self):
@@ -126,23 +126,23 @@ class TestWorker(RQTestCase):
         failed_q = get_failed_queue()
 
         # Preconditions
-        self.assertEquals(failed_q.count, 0)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
 
         # Action
         job = q.enqueue(div_by_zero)
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         w = Worker([q], exc_handler=black_hole)
         w.work(burst=True)  # should silently pass
 
         # Postconditions
-        self.assertEquals(q.count, 0)
-        self.assertEquals(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
 
         # Check the job
         job = Job.fetch(job.id)
-        self.assertEquals(job.is_failed, True)
+        self.assertEqual(job.is_failed, True)
 
     def test_cancelled_jobs_arent_executed(self):  # noqa
         """Cancelling jobs."""
@@ -167,7 +167,7 @@ class TestWorker(RQTestCase):
         assert q.count == 0
 
         # Should not have created evidence of execution
-        self.assertEquals(os.path.exists(SENTINEL_FILE), False)
+        self.assertEqual(os.path.exists(SENTINEL_FILE), False)
 
     @slow  # noqa
     def test_timeouts(self):
@@ -188,9 +188,9 @@ class TestWorker(RQTestCase):
             if e.errno == 2:
                 pass
 
-        self.assertEquals(os.path.exists(sentinel_file), False)
+        self.assertEqual(os.path.exists(sentinel_file), False)
         w.work(burst=True)
-        self.assertEquals(os.path.exists(sentinel_file), False)
+        self.assertEqual(os.path.exists(sentinel_file), False)
 
         # TODO: Having to do the manual refresh() here is really ugly!
         res.refresh()
@@ -284,13 +284,13 @@ class TestWorker(RQTestCase):
         then returns."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = SimpleWorker([fooq, barq])
-        self.assertEquals(w.work(burst=True), False,
+        self.assertEqual(w.work(burst=True), False,
                           'Did not expect any work on the queue.')
 
         job = fooq.enqueue(say_pid)
-        self.assertEquals(w.work(burst=True), True,
+        self.assertEqual(w.work(burst=True), True,
                           'Expected at least some work done.')
-        self.assertEquals(job.result, os.getpid(),
+        self.assertEqual(job.result, os.getpid(),
                           'PID mismatch, fork() is not supposed to happen here')
 
     def test_prepare_job_execution(self):
