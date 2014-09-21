@@ -478,7 +478,8 @@ class Job(object):
     def delete(self, pipeline=None):
         """Deletes the job hash from Redis."""
         connection = pipeline if pipeline is not None else self.connection
-        connection.delete(self.key)
+        dependents_keys = [Job.key_for(jid) for jid in self.connection.smembers(self.dependents_key)]
+        connection.delete(self.key, *dependents_keys)
 
     # Job execution
     def perform(self):  # noqa
