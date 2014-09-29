@@ -496,7 +496,7 @@ class Worker(object):
         self.prepare_job_execution(job)
 
         with self.connection._pipeline() as pipeline:
-            started_job_registry = StartedJobRegistry(job.origin)
+            started_job_registry = StartedJobRegistry(job.origin, self.connection)
 
             try:
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
@@ -514,7 +514,7 @@ class Worker(object):
                     job._status = Status.FINISHED
                     job.save(pipeline=pipeline)
 
-                    finished_job_registry = FinishedJobRegistry(job.origin)
+                    finished_job_registry = FinishedJobRegistry(job.origin, self.connection)
                     finished_job_registry.add(job, result_ttl, pipeline)
 
                 job.cleanup(result_ttl, pipeline=pipeline)
