@@ -8,7 +8,9 @@ from functools import partial
 
 import click
 from rq import Queue, Worker
+from rq.worker import WorkerStatus
 from rq.logutils import setup_loghandlers
+from rq.suspension import is_suspended
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
@@ -39,8 +41,9 @@ def get_scale(x):
 
 def state_symbol(state):
     symbols = {
-        'busy': red('busy'),
-        'idle': green('idle'),
+        WorkerStatus.BUSY: red('busy'),
+        WorkerStatus.IDLE: green('idle'),
+        WorkerStatus.SUSPENDED: yellow('suspended'),
     }
     try:
         return symbols[state]

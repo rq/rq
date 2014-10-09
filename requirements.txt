@@ -1,2 +1,2 @@
-redis
-click
+redis==2.7.0
+click>=3.0.0

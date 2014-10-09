@@ -6,8 +6,9 @@ import os
 
 from rq import get_failed_queue, Queue, Worker, SimpleWorker
 from rq.compat import as_text
-from rq.job import Job, Status
+from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
+from rq.suspension import suspend, resume
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
@@ -222,14 +223,14 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         job = q.enqueue(say_hello)
-        self.assertEqual(job.get_status(), Status.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
         self.assertEqual(job.is_queued, True)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, False)
 
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.FINISHED)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, True)
         self.assertEqual(job.is_failed, False)
@@ -238,7 +239,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(div_by_zero, args=(1,))
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.FAILED)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
@@ -251,13 +252,13 @@ class TestWorker(RQTestCase):
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.FINISHED)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
         parent_job = q.enqueue(div_by_zero)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertNotEqual(job.get_status(), Status.FINISHED)
+        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""
@@ -318,3 +319,33 @@ class TestWorker(RQTestCase):
                           'Expected at least some work done.')
         self.assertEquals(job.result, 'Hi there, Adam!')
         self.assertEquals(job.description, '你好 世界!')
+
+    def test_pause_worker_execution(self):
+        """Test Pause Worker Execution"""
+
+        SENTINEL_FILE = '/tmp/rq-tests.txt'
+
+        try:
+            # Remove the sentinel if it is leftover from a previous test run
+            os.remove(SENTINEL_FILE)
+        except OSError as e:
+            if e.errno != 2:
+                raise
+
+        q = Queue()
+        job = q.enqueue(create_file, SENTINEL_FILE)
+
+        w = Worker([q])
+
+        suspend(self.testconn)
+
+        w.work(burst=True)
+        assert q.count == 1
+
+        # Should not have created evidence of execution
+        self.assertEquals(os.path.exists(SENTINEL_FILE), False)
+
+        resume(self.testconn)
+        w.work(burst=True)
+        assert q.count == 0
+        self.assertEquals(os.path.exists(SENTINEL_FILE), True)
