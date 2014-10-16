@@ -407,7 +407,8 @@ class Job(object):
 
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
-        self.description = as_text(obj.get('description'))
+        self.description = (as_text(obj.get('description')).decode('unicode_escape')
+                            if obj.get('description') else None)
         self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa

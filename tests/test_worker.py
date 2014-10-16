@@ -307,3 +307,14 @@ class TestWorker(RQTestCase):
         # Updates worker statuses
         self.assertEqual(worker.state, 'busy')
         self.assertEqual(worker.get_current_job_id(), job.id)
+
+    def test_work_unicode_friendly(self):
+        """Worker processes work with unicode description, then quits."""
+        q = Queue('foo')
+        w = Worker([q])
+        job = q.enqueue('tests.fixtures.say_hello', name='Adam',
+                        description='你好 世界!')
+        self.assertEquals(w.work(burst=True), True,
+                          'Expected at least some work done.')
+        self.assertEquals(job.result, 'Hi there, Adam!')
+        self.assertEquals(job.description, '你好 世界!')
