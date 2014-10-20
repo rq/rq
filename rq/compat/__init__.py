@@ -69,7 +69,9 @@ else:
     string_types = (str, unicode)
 
     def as_text(v):
-        return v
+        if v is None:
+            return None
+        return v.decode('utf-8')
 
     def decode_redis_hash(h):
         return h
