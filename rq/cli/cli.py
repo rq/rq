@@ -132,10 +132,11 @@ def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
+@click.option('--exception-handler', default="None", help='Exception handler to use')
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
 def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl, worker_ttl,
-           verbose, quiet, sentry_dsn, pid, queues):
+           verbose, quiet, sentry_dsn, exception_handler, pid, queues):
     """Starts an RQ worker."""
 
     if path:
@@ -157,6 +158,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
     cleanup_ghosts(conn)
     worker_class = import_attribute(worker_class)
     queue_class = import_attribute(queue_class)
+    exc_handler = import_attribute(exception_handler) if exception_handler else None
 
     try:
         queues = [queue_class(queue, connection=conn) for queue in queues]
@@ -165,7 +167,8 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
                          connection=conn,
                          default_worker_ttl=worker_ttl,
                          default_result_ttl=results_ttl,
-                         job_class=job_class)
+                         job_class=job_class,
+                         exc_handler=exc_handler)
 
         # Should we configure Sentry?
         if sentry_dsn:
