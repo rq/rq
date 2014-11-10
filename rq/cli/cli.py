@@ -132,7 +132,7 @@ def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
-@click.option('--exception-handler', default="None", help='Exception handler to use')
+@click.option('--exception-handler', help='Exception handler to use')
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
 def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl, worker_ttl,
