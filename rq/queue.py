@@ -189,6 +189,8 @@ class Queue(object):
         # If WatchError is raised in the process, that means something else is
         # modifying the dependency. In this case we simply retry
         if depends_on is not None:
+            if not isinstance(depends_on, Job):
+                depends_on = Job.fetch(id=depends_on, connection=self.connection)
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
