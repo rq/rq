@@ -87,3 +87,7 @@ with Connection():
 
 def long_running_job():
     time.sleep(10)
+
+def black_hole(job, *exc_info):
+    # Don't fall through to default behaviour (moving to failed queue)
+    return False

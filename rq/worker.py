@@ -140,7 +140,10 @@ class Worker(object):
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
         self.push_exc_handler(self.move_to_failed_queue)
-        if exc_handler is not None:
+        if isinstance(exc_handler, list):
+            for h in exc_handler:
+                self.push_exc_handler(h)
+        elif exc_handler is not None:
             self.push_exc_handler(exc_handler)
 
         if job_class is not None:
