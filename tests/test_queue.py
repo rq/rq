@@ -352,6 +352,23 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
 
+    def test_enqueue_job_with_dependency_by_id(self):
+        """Enqueueing jobs should work as expected by id as well as job-objects."""
+        parent_job = Job.create(func=say_hello)
+        # We need to save the job for the ID to exist in redis
+        parent_job.save()
+        
+        q = Queue()
+        q.enqueue_call(say_hello, depends_on=parent_job.id)
+        self.assertEqual(q.job_ids, [])
+
+        # Jobs dependent on finished jobs are immediately enqueued
+        parent_job.set_status(Status.FINISHED)
+        parent_job.save()
+        job = q.enqueue_call(say_hello, depends_on=parent_job.id)
+        self.assertEqual(q.job_ids, [job.id])
+        self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+
     def test_enqueue_job_with_dependency_and_timeout(self):
         """Jobs still know their specified timeout after being scheduled as a dependency."""
         # Job with unfinished dependency is not immediately enqueued
