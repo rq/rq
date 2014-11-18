@@ -464,6 +464,9 @@ class Job(object):
         try:
             self.set_status(Status.STARTED)
             self._result = self.func(*self.args, **self.kwargs)
+            if self.kwargs.get("pubsub") == "true":
+                answer = { "id": self.id, "result": self._result }
+                self.connection.publish("go_background_processing", json.dumps(answer))
             self.set_status(Status.FINISHED)
             self.ended_at = utcnow()
         finally:
