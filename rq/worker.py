@@ -508,7 +508,7 @@ class Worker(object):
 
                 self.set_current_job_id(None, pipeline=pipeline)
 
-                result_ttl = job.get_ttl(self.default_result_ttl)
+                result_ttl = job.get_result_ttl(self.default_result_ttl)
                 if result_ttl != 0:
                     job.ended_at = utcnow()
                     job._status = Status.FINISHED
