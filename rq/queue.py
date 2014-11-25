@@ -312,6 +312,36 @@ class Queue(object):
                     return queue_key, blob
             return None
 
+    @classmethod
+    def rpop(cls, queue_keys, timeout, connection=None):
+        """Helper method.  Intermediate method to abstract away from some
+        Redis API details, where RPOP accepts only a single key, whereas BRPOP
+        accepts multiple.  So if we want the non-blocking RPOP, we need to
+        iterate over all queues, do individual RPOPs, and return the result.
+
+        Until Redis receives a specific method for this, we'll have to wrap it
+        this way.
+
+        The timeout parameter is interpreted as follows:
+            None - non-blocking (return immediately)
+             > 0 - maximum number of seconds to block
+        """
+        connection = resolve_connection(connection)
+        if timeout is not None:  # blocking variant
+            if timeout == 0:
+                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0.')
+            result = connection.brpop(queue_keys, timeout)
+            if result is None:
+                raise DequeueTimeout(timeout, queue_keys)
+            queue_key, job_id = result
+            return queue_key, job_id
+        else:  # non-blocking variant
+            for queue_key in queue_keys:
+                blob = connection.rpop(queue_key)
+                if blob is not None:
+                    return queue_key, blob
+            return None
+
     def dequeue(self):
         """Dequeues the front-most job from this queue.
 
@@ -335,7 +365,7 @@ class Queue(object):
         return job
 
     @classmethod
-    def dequeue_any(cls, queues, timeout, connection=None):
+    def dequeue_any(cls, queues, timeout, connection=None, lifo=False):
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -347,7 +377,10 @@ class Queue(object):
         See the documentation of cls.lpop for the interpretation of timeout.
         """
         queue_keys = [q.key for q in queues]
-        result = cls.lpop(queue_keys, timeout, connection=connection)
+        if lifo:
+            result = cls.rpop(queue_keys, timeout, connection=connection)
+        else:
+            result = cls.lpop(queue_keys, timeout, connection=connection)
         if result is None:
             return None
         queue_key, job_id = map(as_text, result)

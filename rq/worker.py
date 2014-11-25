@@ -333,7 +333,7 @@ class Worker(object):
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
 
-    def work(self, burst=False):
+    def work(self, burst=False, lifo=False):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -357,7 +357,7 @@ class Worker(object):
 
                 timeout = None if burst else max(1, self.default_worker_ttl - 60)
                 try:
-                    result = self.dequeue_job_and_maintain_ttl(timeout)
+                    result = self.dequeue_job_and_maintain_ttl(timeout, lifo)
                     if result is None:
                         break
                 except StopRequested:
@@ -376,7 +376,7 @@ class Worker(object):
                 self.register_death()
         return did_perform_work
 
-    def dequeue_job_and_maintain_ttl(self, timeout):
+    def dequeue_job_and_maintain_ttl(self, timeout, lifo=False):
         result = None
         qnames = self.queue_names()
 
@@ -391,7 +391,8 @@ class Worker(object):
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
-                                                      connection=self.connection)
+                                                      connection=self.connection,
+                                                      lifo=lifo)
                 if result is not None:
                     job, queue = result
                     self.log.info('%s: %s (%s)' % (green(queue.name),
