@@ -28,8 +28,8 @@ class BaseRegistry(object):
         return self.connection.zcard(self.key)
 
     def add(self, job, timeout, pipeline=None):
-        """Adds a job to StartedJobRegistry with expiry time of now + timeout."""
-        score = current_timestamp() + timeout
+        """Adds a job to a registry with expiry time of now + timeout."""
+        score = timeout if timeout == -1 else current_timestamp() + timeout
         if pipeline is not None:
             return pipeline.zadd(self.key, score, job.id)
 
