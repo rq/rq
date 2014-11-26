@@ -305,10 +305,10 @@ class TestJob(RQTestCase):
 
     def test_get_job_ttl(self):
         """Getting job TTL."""
-        job_ttl = 1
-        job = Job.create(func=say_hello, job_ttl=job_ttl)
+        ttl = 1
+        job = Job.create(func=say_hello, ttl=ttl)
         job.save()
-        self.assertEqual(job.get_ttl(), job_ttl)
+        self.assertEqual(job.get_ttl(), ttl)
         job = Job.create(func=say_hello)
         job.save()
         self.assertEqual(job.get_ttl(), None)
