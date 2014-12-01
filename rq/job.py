@@ -457,8 +457,7 @@ class Job(object):
         connection = pipeline if pipeline is not None else self.connection
 
         connection.hmset(key, self.to_dict())
-        if self.ttl:
-            connection.expire(key, self.ttl)
+        self.cleanup(self.ttl)
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -524,14 +523,16 @@ class Job(object):
     def cleanup(self, ttl=None, pipeline=None):
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
-        result depends on the value of result_ttl:
-        - If result_ttl is 0, cleanup the job immediately.
+        result depends on the value of ttl:
+        - If ttl is 0, cleanup the job immediately.
         - If it's a positive number, set the job to expire in X seconds.
-        - If result_ttl is negative, don't set an expiry to it (persist
+        - If ttl is negative, don't set an expiry to it (persist
           forever)
         """
         if ttl == 0:
             self.cancel()
+        elif not ttl:
+            return
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
