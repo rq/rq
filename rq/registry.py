@@ -29,7 +29,7 @@ class BaseRegistry(object):
 
     def add(self, job, timeout, pipeline=None):
         """Adds a job to a registry with expiry time of now + timeout."""
-        score = timeout if timeout == -1 else current_timestamp() + timeout
+        score = timeout if timeout < 0 else current_timestamp() + timeout
         if pipeline is not None:
             return pipeline.zadd(self.key, score, job.id)
 
