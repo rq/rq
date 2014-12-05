@@ -16,7 +16,7 @@ class TestConnectionInheritance(RQTestCase):
     def test_connection_detection(self):
         """Automatic detection of the connection."""
         q = Queue()
-        self.assertEquals(q.connection, self.testconn)
+        self.assertEqual(q.connection, self.testconn)
 
     def test_connection_stacking(self):
         """Connection stacking."""
@@ -27,7 +27,7 @@ class TestConnectionInheritance(RQTestCase):
             q1 = Queue()
             with Connection(conn2):
                 q2 = Queue()
-        self.assertNotEquals(q1.connection, q2.connection)
+        self.assertNotEqual(q1.connection, q2.connection)
 
     def test_connection_pass_thru(self):
         """Connection passed through from queues to jobs."""
@@ -36,5 +36,5 @@ class TestConnectionInheritance(RQTestCase):
             q2 = Queue()
         job1 = q1.enqueue(do_nothing)
         job2 = q2.enqueue(do_nothing)
-        self.assertEquals(q1.connection, job1.connection)
-        self.assertEquals(q2.connection, job2.connection)
+        self.assertEqual(q1.connection, job1.connection)
+        self.assertEqual(q2.connection, job2.connection)

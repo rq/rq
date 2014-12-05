@@ -19,6 +19,7 @@ from .connections import get_current_connection
 from .exceptions import DequeueTimeout, NoQueueError
 from .job import Job, Status
 from .logutils import setup_loghandlers
+from .namespace import rq_key
 from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
 from .utils import import_attribute, make_colorizer, utcformat, utcnow
@@ -66,8 +67,8 @@ def signal_name(signum):
 
 
 class Worker(object):
-    redis_worker_namespace_prefix = 'rq:worker:'
-    redis_workers_keys = 'rq:workers'
+    redis_worker_namespace_prefix = rq_key('worker:')
+    redis_workers_keys = rq_key('workers')
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
@@ -252,7 +253,7 @@ class Worker(object):
         return self._state
 
     def _get_state(self):
-        """Raise a DeprecationWarning if ``worker.state == X`` is used"""
+        """Raise a DeprecationWarning if ``worker.state`` is used"""
         warnings.warn(
             "worker.state is deprecated, use worker.get_state() instead.",
             DeprecationWarning

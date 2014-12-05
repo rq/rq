@@ -6,6 +6,7 @@ import uuid
 
 from .connections import resolve_connection
 from .job import Job, Status
+from .namespace import rq_key
 from .utils import import_attribute, utcnow
 
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
@@ -28,8 +29,14 @@ def compact(lst):
 class Queue(object):
     job_class = Job
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix = 'rq:queue:'
-    redis_queues_keys = 'rq:queues'
+
+    @classmethod
+    def redis_queue_namespace_prefix(cls):
+        return rq_key('queue:')
+
+    @classmethod
+    def redis_queues_keys(cls):
+        return rq_key('queues')
 
     @classmethod
     def all(cls, connection=None):
@@ -40,7 +47,7 @@ class Queue(object):
         def to_queue(queue_key):
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection)
-        return [to_queue(rq_key) for rq_key in connection.smembers(cls.redis_queues_keys) if rq_key]
+        return [to_queue(key) for key in connection.smembers(cls.redis_queues_keys()) if key]
 
     @classmethod
     def from_queue_key(cls, queue_key, connection=None):
@@ -48,7 +55,7 @@ class Queue(object):
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
         Redis keys.
         """
-        prefix = cls.redis_queue_namespace_prefix
+        prefix = cls.redis_queue_namespace_prefix()
         if not queue_key.startswith(prefix):
             raise ValueError('Not a valid RQ queue key: %s' % (queue_key,))
         name = queue_key[len(prefix):]
@@ -57,7 +64,7 @@ class Queue(object):
     def __init__(self, name='default', default_timeout=None, connection=None,
                  async=True, job_class=None):
         self.connection = resolve_connection(connection)
-        prefix = self.redis_queue_namespace_prefix
+        prefix = self.redis_queue_namespace_prefix()
         self.name = name
         self._key = '%s%s' % (prefix, name)
         self._default_timeout = default_timeout
@@ -78,8 +85,8 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        script = b"""
-            local prefix = "rq:job:"
+        script = """
+            local prefix = "{prefix}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -94,8 +101,8 @@ class Queue(object):
                 count = count + 1
             end
             return count
-        """
-        script = self.connection.register_script(script)
+        """.format(prefix=rq_key("job:"))
+        script = self.connection.register_script(script.encode("utf-8"))
         return script(keys=[self.key])
 
     def is_empty(self):
@@ -251,7 +258,7 @@ class Queue(object):
         If Queue is instantiated with async=False, job is executed immediately.
         """
         # Add Queue key set
-        self.connection.sadd(self.redis_queues_keys, self.key)
+        self.connection.sadd(self.redis_queues_keys(), self.key)
 
         if set_meta_data:
             job.origin = self.name
