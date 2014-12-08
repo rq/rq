@@ -318,3 +318,12 @@ class TestWorker(RQTestCase):
                           'Expected at least some work done.')
         self.assertEquals(job.result, 'Hi there, Adam!')
         self.assertEquals(job.description, '你好 世界!')
+
+    def test_worker_hash_(self):
+        """Workers are hashed by their .name attribute"""
+        q = Queue('foo')
+        w1 = Worker([q], name="worker1")
+        w2 = Worker([q], name="worker2")
+        w3 = Worker([q], name="worker1")
+        worker_set = {w1, w2, w3}
+        self.assertEquals(len(worker_set), 2)
