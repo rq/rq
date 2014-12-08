@@ -42,3 +42,19 @@ def add(x, y):
     job.save()
     return x + y
 {% endhighlight %}
+
+
+## Time to live for job in queue
+
+_New in version 0.4.7._
+
+A job has two TTLs, one for the job result and one for the job itself. This means you can define a TTL for a job that
+expires the job before it is processed. To define a TTL for a job:
+
+{% highlight python %}
+# When creating the job:
+job = Job.create(func=say_hello, ttl=43)
+
+# or when queueing a new job:
+job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
+{% endhighlight %}
