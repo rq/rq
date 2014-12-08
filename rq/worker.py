@@ -580,6 +580,14 @@ class Worker(object):
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            raise TypeError('Cannot compare workers to other types (of workers)')
+        return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
+
 
 class SimpleWorker(Worker):
     def _install_signal_handlers(self, *args, **kwargs):
