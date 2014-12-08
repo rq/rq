@@ -581,11 +581,13 @@ class Worker(object):
         return self._exc_handlers.pop()
 
     def __eq__(self, other):
+        """Equality does not take the database/connection into account"""
         if not isinstance(other, self.__class__):
             raise TypeError('Cannot compare workers to other types (of workers)')
         return self.name == other.name
 
     def __hash__(self):
+        """The hash does not take the database/connection into account"""
         return hash(self.name)
 
 
