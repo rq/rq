@@ -149,7 +149,7 @@ class Queue(object):
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
-        guarantueeing FIFO semantics.
+        guaranteeing FIFO semantics.
         """
         COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
 
