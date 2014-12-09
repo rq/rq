@@ -459,3 +459,13 @@ class TestFailedQueue(RQTestCase):
         """Ensure custom job class assignment works as expected."""
         q = Queue(job_class=CustomJob)
         self.assertEqual(q.job_class, CustomJob)
+
+    def test_skip_queue(self):
+        """Ensure the skip_queue option functions"""
+        q = Queue('foo')
+        job1 = q.enqueue(say_hello)
+        job2 = q.enqueue(say_hello)
+        assert q.dequeue() == job1
+        skip_job = q.enqueue(say_hello, skip_queue=True)
+        assert q.dequeue() == skip_job
+        assert q.dequeue() == job2
