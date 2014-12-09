@@ -325,5 +325,5 @@ class TestWorker(RQTestCase):
         w1 = Worker([q], name="worker1")
         w2 = Worker([q], name="worker2")
         w3 = Worker([q], name="worker1")
-        worker_set = {w1, w2, w3}
+        worker_set = set([w1, w2, w3])
         self.assertEquals(len(worker_set), 2)
