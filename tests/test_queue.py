@@ -245,6 +245,24 @@ class TestQueue(RQTestCase):
         self.assertEquals(job.args[0], 'for Bar',
                           'Bar should be dequeued second.')
 
+    def test_dequeue_any_rpop(self):
+        fooq = Queue('foo')
+        first_in = fooq.enqueue(say_hello, 'for Foo')
+        last_in = fooq.enqueue(say_hello, 'for Bar')
+        job, queue = Queue.dequeue_any([fooq, ], None, lifo=True)
+        self.assertEqual(job.id, last_in.id)
+        job, queue = Queue.dequeue_any([fooq, ], None, lifo=True)
+        self.assertEqual(job.id, first_in.id)
+
+    def test_dequeue_any_lpop(self):
+        fooq = Queue('foo')
+        first_in = fooq.enqueue(say_hello, 'for Foo')
+        last_in = fooq.enqueue(say_hello, 'for Bar')
+        job, queue = Queue.dequeue_any([fooq, ], None, lifo=False)
+        self.assertEqual(job.id, first_in.id)
+        job, queue = Queue.dequeue_any([fooq, ], None, lifo=False)
+        self.assertEqual(job.id, last_in.id)
+
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
 
