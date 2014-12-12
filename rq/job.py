@@ -92,7 +92,7 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, depends_on=None, timeout=None,
+               result_ttl=None, ttl=None, status=None, description=None, depends_on=None, timeout=None,
                id=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -131,6 +131,7 @@ class Job(object):
         # Extra meta data
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
+        job.ttl = ttl
         job.timeout = timeout
         job._status = status
 
@@ -311,6 +312,7 @@ class Job(object):
         self.exc_info = None
         self.timeout = None
         self.result_ttl = None
+        self.ttl = None
         self._status = None
         self._dependency_id = None
         self.meta = {}
@@ -455,6 +457,7 @@ class Job(object):
         connection = pipeline if pipeline is not None else self.connection
 
         connection.hmset(key, self.to_dict())
+        self.cleanup(self.ttl)
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -491,8 +494,15 @@ class Job(object):
         return self._result
 
     def get_ttl(self, default_ttl=None):
-        """Returns ttl for a job that determines how long a job and its result
-        will be persisted. In the future, this method will also be responsible
+        """Returns ttl for a job that determines how long a job will be
+        persisted. In the future, this method will also be responsible
+        for determining ttl for repeated jobs.
+        """
+        return default_ttl if self.ttl is None else self.ttl
+
+    def get_result_ttl(self, default_ttl=None):
+        """Returns ttl for a job that determines how long a jobs result will
+        be persisted. In the future, this method will also be responsible
         for determining ttl for repeated jobs.
         """
         return default_ttl if self.result_ttl is None else self.result_ttl
@@ -513,14 +523,16 @@ class Job(object):
     def cleanup(self, ttl=None, pipeline=None):
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
-        result depends on the value of result_ttl:
-        - If result_ttl is 0, cleanup the job immediately.
+        result depends on the value of ttl:
+        - If ttl is 0, cleanup the job immediately.
         - If it's a positive number, set the job to expire in X seconds.
-        - If result_ttl is negative, don't set an expiry to it (persist
+        - If ttl is negative, don't set an expiry to it (persist
           forever)
         """
         if ttl == 0:
             self.cancel()
+        elif not ttl:
+            return
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
