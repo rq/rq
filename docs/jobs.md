@@ -48,8 +48,8 @@ def add(x, y):
 
 _New in version 0.4.7._
 
-A job has two TTLs, one for the job result and one for the job itself. This means you can define a TTL for a job that
-expires the job before it is processed. To define a TTL for a job:
+A job has two TTLs, one for the job result and one for the job itself. This means that if you have
+job that shouldn't be executed after a certain amount of time, you can define a TTL as such:
 
 {% highlight python %}
 # When creating the job:
