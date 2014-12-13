@@ -7,7 +7,9 @@
 /.tox
 /dist
 /build
+/venv
 .tox
+.coverage
 .vagrant
 Vagrantfile
 

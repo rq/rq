@@ -12,6 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
+from .namespace import rq_key
 from .utils import import_attribute, utcformat, utcnow, utcparse
 
 try:
@@ -340,12 +341,12 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('utf-8')
+        return rq_key('job:' + job_id).encode('utf-8')
 
     @classmethod
     def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s:dependents' % (job_id,)
+        return rq_key('job:%s:dependents' % (job_id,))
 
     @property
     def key(self):
@@ -548,6 +549,7 @@ class Job(object):
         This method adds the current job in its dependency's dependents set.
         """
         connection = pipeline if pipeline is not None else self.connection
+        """:type: StrictRedis"""
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
     def __str__(self):

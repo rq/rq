@@ -1,5 +1,6 @@
 from .compat import as_text
 from .connections import resolve_connection
+from .namespace import rq_key
 from .queue import FailedQueue
 from .utils import current_timestamp
 
@@ -66,7 +67,7 @@ class StartedJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(StartedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:wip:%s' % name
+        self.key = rq_key('wip:%s' % name)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedQueue.
@@ -97,7 +98,7 @@ class FinishedJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(FinishedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:finished:%s' % name
+        self.key = rq_key('finished:%s' % name)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
