@@ -171,8 +171,8 @@ class Queue(object):
             connection.rpush(self.key, job_id)
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, description=None, depends_on=None,
-                     job_id=None, at_front=False):
+                     result_ttl=None, ttl=None, description=None,
+                     depends_on=None, job_id=None, at_front=False):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -184,7 +184,7 @@ class Queue(object):
 
         # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
-                                    result_ttl=result_ttl, status=Status.QUEUED,
+                                    result_ttl=result_ttl, ttl=ttl, status=Status.QUEUED,
                                     description=description, depends_on=depends_on, timeout=timeout,
                                     id=job_id)
 
@@ -233,6 +233,7 @@ class Queue(object):
         timeout = kwargs.pop('timeout', None)
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
+        ttl = kwargs.pop('ttl', None)
         depends_on = kwargs.pop('depends_on', None)
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
@@ -243,7 +244,7 @@ class Queue(object):
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
-                                 timeout=timeout, result_ttl=result_ttl,
+                                 timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                                  description=description, depends_on=depends_on,
                                  job_id=job_id, at_front=at_front)
 

@@ -508,7 +508,7 @@ class Worker(object):
 
                 self.set_current_job_id(None, pipeline=pipeline)
 
-                result_ttl = job.get_ttl(self.default_result_ttl)
+                result_ttl = job.get_result_ttl(self.default_result_ttl)
                 if result_ttl != 0:
                     job.ended_at = utcnow()
                     job._status = Status.FINISHED
@@ -579,6 +579,16 @@ class Worker(object):
     def pop_exc_handler(self):
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
+
+    def __eq__(self, other):
+        """Equality does not take the database/connection into account"""
+        if not isinstance(other, self.__class__):
+            raise TypeError('Cannot compare workers to other types (of workers)')
+        return self.name == other.name
+
+    def __hash__(self):
+        """The hash does not take the database/connection into account"""
+        return hash(self.name)
 
 
 class SimpleWorker(Worker):

@@ -48,14 +48,22 @@ class TestRegistry(RQTestCase):
 
         self.testconn.zadd(self.registry.key, 1, 'foo')
         self.testconn.zadd(self.registry.key, timestamp + 10, 'bar')
+        self.testconn.zadd(self.registry.key, timestamp + 30, 'baz')
 
         self.assertEqual(self.registry.get_expired_job_ids(), ['foo'])
+        self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
+                         ['foo', 'bar'])
 
     def test_cleanup(self):
         """Moving expired jobs to FailedQueue."""
         failed_queue = FailedQueue(connection=self.testconn)
         self.assertTrue(failed_queue.is_empty())
-        self.testconn.zadd(self.registry.key, 1, 'foo')
+        self.testconn.zadd(self.registry.key, 2, 'foo')
+
+        self.registry.cleanup(1)
+        self.assertNotIn('foo', failed_queue.job_ids)
+        self.assertEqual(self.testconn.zscore(self.registry.key, 'foo'), 2)
+
         self.registry.cleanup()
         self.assertIn('foo', failed_queue.job_ids)
         self.assertEqual(self.testconn.zscore(self.registry.key, 'foo'), None)
@@ -103,9 +111,14 @@ class TestFinishedJobRegistry(RQTestCase):
         timestamp = current_timestamp()
         self.testconn.zadd(self.registry.key, 1, 'foo')
         self.testconn.zadd(self.registry.key, timestamp + 10, 'bar')
+        self.testconn.zadd(self.registry.key, timestamp + 30, 'baz')
 
         self.registry.cleanup()
-        self.assertEqual(self.registry.get_job_ids(), ['bar'])
+        self.assertEqual(self.registry.get_job_ids(), ['bar', 'baz'])
+
+        self.registry.cleanup(timestamp + 20)
+        self.assertEqual(self.registry.get_job_ids(), ['baz'])
+
 
     def test_jobs_are_put_in_registry(self):
         """Completed jobs are added to FinishedJobRegistry."""

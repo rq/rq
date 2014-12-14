@@ -290,17 +290,27 @@ class TestJob(RQTestCase):
         self.assertEqual(job.id, id)
         self.assertEqual(job.func, access_self)
 
-    def test_get_ttl(self):
-        """Getting job TTL."""
-        job_ttl = 1
+    def test_get_result_ttl(self):
+        """Getting job result TTL."""
+        job_result_ttl = 1
         default_ttl = 2
-        job = Job.create(func=say_hello, result_ttl=job_ttl)
+        job = Job.create(func=say_hello, result_ttl=job_result_ttl)
         job.save()
-        self.assertEqual(job.get_ttl(default_ttl=default_ttl), job_ttl)
-        self.assertEqual(job.get_ttl(), job_ttl)
+        self.assertEqual(job.get_result_ttl(default_ttl=default_ttl), job_result_ttl)
+        self.assertEqual(job.get_result_ttl(), job_result_ttl)
         job = Job.create(func=say_hello)
         job.save()
-        self.assertEqual(job.get_ttl(default_ttl=default_ttl), default_ttl)
+        self.assertEqual(job.get_result_ttl(default_ttl=default_ttl), default_ttl)
+        self.assertEqual(job.get_result_ttl(), None)
+
+    def test_get_job_ttl(self):
+        """Getting job TTL."""
+        ttl = 1
+        job = Job.create(func=say_hello, ttl=ttl)
+        job.save()
+        self.assertEqual(job.get_ttl(), ttl)
+        job = Job.create(func=say_hello)
+        job.save()
         self.assertEqual(job.get_ttl(), None)
 
     def test_cleanup(self):
