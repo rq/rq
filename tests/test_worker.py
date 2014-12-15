@@ -370,3 +370,12 @@ class TestWorker(RQTestCase):
         # The suspension should be expired now, and a burst of work should now clear the queue
         w.work(burst=True)
         assert q.count == 0
+
+    def test_worker_hash_(self):
+        """Workers are hashed by their .name attribute"""
+        q = Queue('foo')
+        w1 = Worker([q], name="worker1")
+        w2 = Worker([q], name="worker2")
+        w3 = Worker([q], name="worker1")
+        worker_set = set([w1, w2, w3])
+        self.assertEquals(len(worker_set), 2)

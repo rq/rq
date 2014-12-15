@@ -167,8 +167,8 @@ class Queue(object):
         connection.rpush(self.key, job_id)
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, description=None, depends_on=None,
-                     job_id=None):
+                     result_ttl=None, ttl=None, description=None,
+                     depends_on=None, job_id=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -190,7 +190,7 @@ class Queue(object):
         # modifying the dependency. In this case we simply retry
         if depends_on is not None:
             if not isinstance(depends_on, self.job_class):
-                depends_on = Job.fetch(id=depends_on, connection=self.connection)
+                depends_on = Job(id=depends_on, connection=self.connection)
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
@@ -229,6 +229,7 @@ class Queue(object):
         timeout = kwargs.pop('timeout', None)
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
+        ttl = kwargs.pop('ttl', None)
         depends_on = kwargs.pop('depends_on', None)
         job_id = kwargs.pop('job_id', None)
 
@@ -238,7 +239,7 @@ class Queue(object):
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
-                                 timeout=timeout, result_ttl=result_ttl,
+                                 timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                                  description=description, depends_on=depends_on,
                                  job_id=job_id)
 
