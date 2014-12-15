@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import os
+from time import sleep
 
 from rq import get_failed_queue, Queue, Worker, SimpleWorker
 from rq.compat import as_text
@@ -12,7 +13,7 @@ from rq.suspension import suspend, resume
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
-                            div_by_zero, say_hello, say_pid)
+                            div_by_zero, say_hello, say_pid, do_nothing)
 from tests.helpers import strip_microseconds
 
 
@@ -320,7 +321,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(job.result, 'Hi there, Adam!')
         self.assertEquals(job.description, '你好 世界!')
 
-    def test_pause_worker_execution(self):
+    def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
 
         SENTINEL_FILE = '/tmp/rq-tests.txt'
@@ -349,3 +350,23 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
         assert q.count == 0
         self.assertEquals(os.path.exists(SENTINEL_FILE), True)
+
+    def test_suspend_with_duration(self):
+        q = Queue()
+        for _ in xrange(5):
+            q.enqueue(do_nothing)
+
+        w = Worker([q])
+
+        # This suspends workers for working for 2 second
+        suspend(self.testconn, 2)
+
+        # So when this burst of work happens the queue should remain at 5
+        w.work(burst=True)
+        assert q.count == 5
+
+        sleep(3)
+
+        # The suspension should be expired now, and a burst of work should now clear the queue
+        w.work(burst=True)
+        assert q.count == 0

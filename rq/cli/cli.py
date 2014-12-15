@@ -164,7 +164,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
     queue_class = import_attribute(queue_class)
 
     if is_suspended(conn):
-        click.secho("The worker has been paused, run reset_paused", fg='red')
+        click.secho('RQ is currently suspended, to resume job execution run "rq resume"', fg='red')
         sys.exit(1)
 
     try:
