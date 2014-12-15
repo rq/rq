@@ -353,7 +353,7 @@ class TestWorker(RQTestCase):
 
     def test_suspend_with_duration(self):
         q = Queue()
-        for _ in xrange(5):
+        for _ in range(5):
             q.enqueue(do_nothing)
 
         w = Worker([q])
