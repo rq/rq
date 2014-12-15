@@ -466,6 +466,6 @@ class TestFailedQueue(RQTestCase):
         job1 = q.enqueue(say_hello)
         job2 = q.enqueue(say_hello)
         assert q.dequeue() == job1
-        skip_job = q.enqueue(say_hello, skip_queue=True)
+        skip_job = q.enqueue(say_hello, at_front=True)
         assert q.dequeue() == skip_job
         assert q.dequeue() == job2
