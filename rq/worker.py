@@ -18,7 +18,6 @@ from rq.compat import as_text, string_types, text_type
 from .connections import get_current_connection
 from .exceptions import DequeueTimeout, NoQueueError
 from .job import Job, Status
-from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
 from .utils import import_attribute, make_colorizer, utcformat, utcnow
@@ -342,7 +341,6 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers()
         self._install_signal_handlers()
 
         did_perform_work = False
