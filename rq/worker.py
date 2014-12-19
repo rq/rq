@@ -21,7 +21,7 @@ from .job import Job, Status
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
 from .timeouts import UnixSignalDeathPenalty
-from .utils import import_attribute, make_colorizer, utcformat, utcnow
+from .utils import import_attribute, make_colorizer, utcformat, utcnow, utcparse
 from .version import VERSION
 from .registry import FinishedJobRegistry, StartedJobRegistry
 
@@ -234,6 +234,21 @@ class Worker(object):
             p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
+
+    @property
+    def birth_date(self):
+        """Fetches birth date from Redis."""
+        birth_timestamp = self.connection.hget(self.key, 'birth')
+        if birth_timestamp:
+            return utcparse(birth_timestamp)
+
+    @property
+    def death_date(self):
+        """Fetches death date from Redis."""
+        death_timestamp = self.connection.hget(self.key, 'death')
+        if death_timestamp:
+            return utcparse(death_timestamp)
+
 
     def set_state(self, state, pipeline=None):
         self._state = state
