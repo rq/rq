@@ -92,7 +92,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, ttl=None, status=None, description=None, depends_on=None, timeout=None,
+               result_ttl=None, ttl=None, status=None, description=None,
+               user_id=None, act_as_user_id=None, depends_on=None, timeout=None,
                id=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -130,10 +131,15 @@ class Job(object):
 
         # Extra meta data
         job.description = description or job.get_call_string()
+        job.act_as_user_id = act_as_user_id
         job.result_ttl = result_ttl
         job.ttl = ttl
         job.timeout = timeout
         job._status = status
+
+        # Optional parameter to identify what user created the job. This
+        # makes it easier to enable impersonation on the backend.
+        job.user_id = user_id
 
         # dependency could be job instance or id
         if depends_on is not None:
@@ -305,6 +311,8 @@ class Job(object):
         self._args = UNEVALUATED
         self._kwargs = UNEVALUATED
         self.description = None
+        self.user_id = None
+        self.username = None
         self.origin = None
         self.enqueued_at = None
         self.ended_at = None
@@ -410,6 +418,8 @@ class Job(object):
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
+        self.user_id = as_text(obj.get('user_id'))
+        self.act_as_user_id = as_text(obj.get('user_id'))
         self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
@@ -430,6 +440,8 @@ class Job(object):
             obj['origin'] = self.origin
         if self.description is not None:
             obj['description'] = self.description
+        if self.user_id is not None:
+            obj['user_id'] = self.user_id
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
         if self.ended_at is not None:
