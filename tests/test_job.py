@@ -48,18 +48,19 @@ class TestJob(RQTestCase):
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
-        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2),
+                         user_id='abcd')
 
         # Jobs have a random UUID
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
-        self.assertIsNotNone(job.description)
         self.assertIsNone(job.instance)
 
         # Job data is set...
         self.assertEquals(job.func, some_calculation)
         self.assertEquals(job.args, (3, 4))
         self.assertEquals(job.kwargs, {'z': 2})
+        self.assertEquals(job.user_id, 'abcd')
 
         # ...but metadata is not
         self.assertIsNone(job.origin)
@@ -184,13 +185,15 @@ class TestJob(RQTestCase):
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=some_calculation, args=(3, 4), kwargs=dict(z=2),
+                         user_id='abcd')
         job.save()
 
         job2 = Job.fetch(job.id)
         self.assertEquals(job.func, job2.func)
         self.assertEquals(job.args, job2.args)
         self.assertEquals(job.kwargs, job2.kwargs)
+        self.assertEquals(job.user_id, job2.user_id)
 
         # Mathematical equation
         self.assertEquals(job, job2)
