@@ -473,7 +473,9 @@ class Worker(object):
             self.procline('Forked %d at %d' % (child_pid, time.time()))
             while True:
                 try:
+                    self.set_state('busy')
                     os.waitpid(child_pid, 0)
+                    self.set_state('idle')
                     break
                 except OSError as e:
                     # In case we encountered an OSError due to EINTR (which is
