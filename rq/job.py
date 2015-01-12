@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import import_attribute, utcformat, utcnow, utcparse
+from .utils import import_attribute, utcformat, utcnow, utcparse, enum
 
 try:
     import cPickle as pickle
@@ -25,16 +25,7 @@ dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
 
-def enum(name, *sequential, **named):
-    values = dict(zip(sequential, range(len(sequential))), **named)
-
-    # NOTE: Yes, we *really* want to cast using str() here.
-    # On Python 2 type() requires a byte string (which is str() on Python 2).
-    # On Python 3 it does not matter, so we'll use str(), which acts as
-    # a no-op.
-    return type(str(name), (), values)
-
-Status = enum('Status',
+JobStatus = enum('JobStatus',
               QUEUED='queued', FINISHED='finished', FAILED='failed',
               STARTED='started')
 
@@ -167,19 +158,19 @@ class Job(object):
 
     @property
     def is_finished(self):
-        return self.get_status() == Status.FINISHED
+        return self.get_status() == JobStatus.FINISHED
 
     @property
     def is_queued(self):
-        return self.get_status() == Status.QUEUED
+        return self.get_status() == JobStatus.QUEUED
 
     @property
     def is_failed(self):
-        return self.get_status() == Status.FAILED
+        return self.get_status() == JobStatus.FAILED
 
     @property
     def is_started(self):
-        return self.get_status() == Status.STARTED
+        return self.get_status() == JobStatus.STARTED
 
     @property
     def dependency(self):

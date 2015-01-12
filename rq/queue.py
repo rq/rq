@@ -5,7 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 import uuid
 
 from .connections import resolve_connection
-from .job import Job, Status
+from .job import Job, JobStatus
 from .utils import import_attribute, utcnow
 
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
@@ -180,7 +180,7 @@ class Queue(object):
 
         # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
-                                    result_ttl=result_ttl, ttl=ttl, status=Status.QUEUED,
+                                    result_ttl=result_ttl, status=JobStatus.QUEUED,
                                     description=description, depends_on=depends_on, timeout=timeout,
                                     id=job_id)
 
@@ -195,7 +195,7 @@ class Queue(object):
                 while True:
                     try:
                         pipe.watch(depends_on.key)
-                        if depends_on.get_status() != Status.FINISHED:
+                        if depends_on.get_status() != JobStatus.FINISHED:
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
                             pipe.execute()
@@ -391,7 +391,7 @@ class Queue(object):
 
 class FailedQueue(Queue):
     def __init__(self, connection=None):
-        super(FailedQueue, self).__init__(Status.FAILED, connection=connection)
+        super(FailedQueue, self).__init__(JobStatus.FAILED, connection=connection)
 
     def quarantine(self, job, exc_info):
         """Puts the given Job in quarantine (i.e. put it on the failed
@@ -418,7 +418,7 @@ class FailedQueue(Queue):
         if self.remove(job) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
-        job.set_status(Status.QUEUED)
+        job.set_status(JobStatus.QUEUED)
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
         q.enqueue_job(job)

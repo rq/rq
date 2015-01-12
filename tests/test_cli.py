@@ -26,6 +26,17 @@ class TestCommandLine(TestCase):
 
 
 class TestRQCli(RQTestCase):
+
+    def assert_normal_execution(self, result):
+        if result.exit_code == 0:
+            return True
+        else:
+            print("Non normal execution")
+            print("Exit Code: {}".format(result.exit_code))
+            print("Output: {}".format(result.output))
+            print("Exception: {}".format(result.exception))
+            self.assertEqual(result.exit_code, 0)
+
     """Test rq_cli script"""
     def setUp(self):
         super(TestRQCli, self).setUp()
@@ -41,25 +52,58 @@ class TestRQCli(RQTestCase):
         """rq empty -u <url> failed"""
         runner = CliRunner()
         result = runner.invoke(main, ['empty', '-u', self.redis_url, 'failed'])
-        self.assertEqual(result.exit_code, 0)
+        self.assert_normal_execution(result)
         self.assertEqual(result.output.strip(), '1 jobs removed from failed queue')
 
     def test_requeue(self):
         """rq requeue -u <url> --all"""
         runner = CliRunner()
         result = runner.invoke(main, ['requeue', '-u', self.redis_url, '--all'])
-        self.assertEqual(result.exit_code, 0)
+        self.assert_normal_execution(result)
         self.assertEqual(result.output.strip(), 'Requeueing 1 jobs from failed queue')
 
     def test_info(self):
         """rq info -u <url>"""
         runner = CliRunner()
         result = runner.invoke(main, ['info', '-u', self.redis_url])
-        self.assertEqual(result.exit_code, 0)
+        self.assert_normal_execution(result)
         self.assertIn('1 queues, 1 jobs total', result.output)
 
     def test_worker(self):
         """rq worker -u <url> -b"""
         runner = CliRunner()
         result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
-        self.assertEqual(result.exit_code, 0)
+        self.assert_normal_execution(result)
+
+    def test_suspend_and_resume(self):
+        """rq suspend -u <url>
+           rq resume -u <url>
+        """
+        runner = CliRunner()
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url])
+        self.assert_normal_execution(result)
+
+        result = runner.invoke(main, ['resume', '-u', self.redis_url])
+        self.assert_normal_execution(result)
+
+    def test_suspend_with_ttl(self):
+        """rq suspend -u <url> --duration=2
+        """
+        runner = CliRunner()
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 1])
+        self.assert_normal_execution(result)
+
+    def test_suspend_with_invalid_ttl(self):
+        """rq suspend -u <url> --duration=0
+        """
+        runner = CliRunner()
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 0])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Duration must be an integer greater than 1", result.output)
+
+
+
+
+
+
