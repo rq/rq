@@ -88,8 +88,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, ttl=None, status=None, description=None, depends_on=None, timeout=None,
-               id=None):
+               result_ttl=None, ttl=None, status=None, description=None,
+               depends_on=None, timeout=None, id=None, origin=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -106,6 +106,9 @@ class Job(object):
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
+
+        if origin is not None:
+            job.origin = origin
 
         # Set the core job tuple properties
         job._instance = None

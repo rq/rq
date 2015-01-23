@@ -182,10 +182,11 @@ class Queue(object):
         """
         timeout = timeout or self._default_timeout
 
-        job = self.job_class.create(func, args, kwargs, connection=self.connection,
-                                    result_ttl=result_ttl, status=JobStatus.QUEUED,
-                                    description=description, depends_on=depends_on, timeout=timeout,
-                                    id=job_id)
+        job = self.job_class.create(
+            func, args, kwargs, connection=self.connection,
+            result_ttl=result_ttl, status=JobStatus.QUEUED,
+            description=description, depends_on=depends_on,
+            timeout=timeout, id=job_id, origin=self.name)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.

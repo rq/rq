@@ -117,6 +117,7 @@ class TestQueue(RQTestCase):
         # say_hello spec holds which queue this is sent to
         job = q.enqueue(say_hello, 'Nick', foo='bar')
         job_id = job.id
+        self.assertEqual(job.origin, q.name)
 
         # Inspect data inside Redis
         q_key = 'rq:queue:default'
@@ -131,14 +132,12 @@ class TestQueue(RQTestCase):
         job = Job.create(func=say_hello, args=('Nick',), kwargs=dict(foo='bar'))
 
         # Preconditions
-        self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
 
         # Action
         q.enqueue_job(job)
 
         # Postconditions
-        self.assertEquals(job.origin, q.name)
         self.assertIsNotNone(job.enqueued_at)
 
     def test_pop_job_id(self):
