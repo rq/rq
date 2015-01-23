@@ -5,7 +5,8 @@ from rq.job import Job
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import FinishedJobRegistry, StartedJobRegistry
+from rq.registry import (DeferredJobRegistry, FinishedJobRegistry,
+                         StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -135,3 +136,19 @@ class TestFinishedJobRegistry(RQTestCase):
         failed_job = queue.enqueue(div_by_zero)
         worker.perform_job(failed_job)
         self.assertEqual(self.registry.get_job_ids(), [job.id])
+
+
+class TestRegistry(RQTestCase):
+
+    def setUp(self):
+        super(TestRegistry, self).setUp()
+        self.registry = DeferredJobRegistry(connection=self.testconn)
+
+    def test_add(self):
+        """Adding a job to DeferredJobsRegistry."""
+        job = Job()
+        self.registry.add(job)
+        self.assertEqual(
+            self.testconn.zrange(self.registry.key, 0, -1),
+            [job.id]
+        )

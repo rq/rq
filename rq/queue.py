@@ -279,11 +279,16 @@ class Queue(object):
     def enqueue_dependents(self, job):
         """Enqueues all jobs in the given job's dependents set and clears it."""
         # TODO: can probably be pipelined
+        from .registry import DeferredJobRegistry
+
+        registry = DeferredJobRegistry(self.name, self.connection)
+
         while True:
             job_id = as_text(self.connection.spop(job.dependents_key))
             if job_id is None:
                 break
             dependent = self.job_class.fetch(job_id, connection=self.connection)
+            registry.remove(dependent)
             self.enqueue_job(dependent)
 
     def pop_job_id(self):

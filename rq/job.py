@@ -544,8 +544,14 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the current job in its dependency's dependents set.
+        This method adds the job in its dependency's dependents set
+        and adds the job to DeferredJobRegistry.
         """
+        from .registry import DeferredJobRegistry
+
+        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry.add(self, pipeline=pipeline)
+
         connection = pipeline if pipeline is not None else self.connection
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
