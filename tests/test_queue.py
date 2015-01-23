@@ -342,8 +342,9 @@ class TestQueue(RQTestCase):
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
-        q.enqueue_call(say_hello, depends_on=parent_job)
+        job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
 
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.set_status(JobStatus.FINISHED)
@@ -351,6 +352,7 @@ class TestQueue(RQTestCase):
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_job_with_dependency_by_id(self):
         """Enqueueing jobs should work as expected by id as well as job-objects."""
@@ -368,7 +370,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
 
     def test_enqueue_job_with_dependency_and_timeout(self):
-        """Jobs still know their specified timeout after being scheduled as a dependency."""
+        """Jobs remember their timeout when enqueued as a dependency."""
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()

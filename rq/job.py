@@ -25,9 +25,14 @@ dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
 
-JobStatus = enum('JobStatus',
-              QUEUED='queued', FINISHED='finished', FAILED='failed',
-              STARTED='started')
+JobStatus = enum(
+    'JobStatus',
+    QUEUED='queued',
+    FINISHED='finished',
+    FAILED='failed',
+    STARTED='started',
+    DEFERRED='deferred'
+)
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.

@@ -182,7 +182,6 @@ class Queue(object):
         """
         timeout = timeout or self._default_timeout
 
-        # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
                                     result_ttl=result_ttl, status=JobStatus.QUEUED,
                                     description=description, depends_on=depends_on, timeout=timeout,
@@ -200,6 +199,7 @@ class Queue(object):
                     try:
                         pipe.watch(depends_on.key)
                         if depends_on.get_status() != JobStatus.FINISHED:
+                            job.set_status(JobStatus.DEFERRED)
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
                             pipe.execute()
