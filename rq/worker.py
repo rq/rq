@@ -67,10 +67,13 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
 
 
-WorkerStatus = enum('WorkerStatus',
-                    STARTED='started', SUSPENDED='suspended', BUSY='busy',
-                    IDLE='idle'
-                    )
+WorkerStatus = enum(
+    'WorkerStatus',
+    STARTED='started',
+    SUSPENDED='suspended',
+    BUSY='busy',
+    IDLE='idle'
+)
 
 
 class Worker(object):
@@ -342,7 +345,7 @@ class Worker(object):
         signal.signal(signal.SIGTERM, request_stop)
 
     def check_for_suspension(self, burst):
-        """Check to see if the workers have been suspended by something like `rq suspend`"""
+        """Check to see if workers have been suspended by `rq suspend`"""
 
         before_state = None
         notified = False
@@ -350,8 +353,8 @@ class Worker(object):
         while not self.stopped and is_suspended(self.connection):
 
             if burst:
-                self.log.info('Suspended in burst mode -- exiting.')
-                self.log.info('Note:  There could still be unperformed jobs on the queue')
+                self.log.info('Suspended in burst mode -- exiting.'
+                              'Note: There could still be unperformed jobs on the queue')
                 raise StopRequested
 
             if not notified:
