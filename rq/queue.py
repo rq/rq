@@ -5,7 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 import uuid
 
 from .connections import resolve_connection
-from .job import Job, Status
+from .job import Job, JobStatus
 from .utils import import_attribute, utcnow
 
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
@@ -149,7 +149,7 @@ class Queue(object):
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
-        guarantueeing FIFO semantics.
+        guaranteeing FIFO semantics.
         """
         COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
 
@@ -161,14 +161,18 @@ class Queue(object):
             if self.job_class.exists(job_id, self.connection):
                 self.connection.rpush(self.key, job_id)
 
-    def push_job_id(self, job_id, pipeline=None):
-        """Pushes a job ID on the corresponding Redis queue."""
+    def push_job_id(self, job_id, pipeline=None, at_front=False):
+        """Pushes a job ID on the corresponding Redis queue.
+        'at_front' allows you to push the job onto the front instead of the back of the queue"""
         connection = pipeline if pipeline is not None else self.connection
-        connection.rpush(self.key, job_id)
+        if at_front:
+            connection.lpush(self.key, job_id)
+        else:
+            connection.rpush(self.key, job_id)
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, description=None, depends_on=None,
-                     job_id=None):
+                     result_ttl=None, ttl=None, description=None,
+                     depends_on=None, job_id=None, at_front=False):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -180,7 +184,7 @@ class Queue(object):
 
         # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
-                                    result_ttl=result_ttl, status=Status.QUEUED,
+                                    result_ttl=result_ttl, status=JobStatus.QUEUED,
                                     description=description, depends_on=depends_on, timeout=timeout,
                                     id=job_id)
 
@@ -189,11 +193,13 @@ class Queue(object):
         # If WatchError is raised in the process, that means something else is
         # modifying the dependency. In this case we simply retry
         if depends_on is not None:
+            if not isinstance(depends_on, self.job_class):
+                depends_on = Job(id=depends_on, connection=self.connection)
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
                         pipe.watch(depends_on.key)
-                        if depends_on.get_status() != Status.FINISHED:
+                        if depends_on.get_status() != JobStatus.FINISHED:
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
                             pipe.execute()
@@ -202,7 +208,7 @@ class Queue(object):
                     except WatchError:
                         continue
 
-        return self.enqueue_job(job)
+        return self.enqueue_job(job, at_front=at_front)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues
@@ -227,8 +233,10 @@ class Queue(object):
         timeout = kwargs.pop('timeout', None)
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
+        ttl = kwargs.pop('ttl', None)
         depends_on = kwargs.pop('depends_on', None)
         job_id = kwargs.pop('job_id', None)
+        at_front = kwargs.pop('at_front', False)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
@@ -236,11 +244,11 @@ class Queue(object):
             kwargs = kwargs.pop('kwargs', None)
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
-                                 timeout=timeout, result_ttl=result_ttl,
+                                 timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                                  description=description, depends_on=depends_on,
-                                 job_id=job_id)
+                                 job_id=job_id, at_front=at_front)
 
-    def enqueue_job(self, job, set_meta_data=True):
+    def enqueue_job(self, job, set_meta_data=True, at_front=False):
         """Enqueues a job for delayed execution.
 
         If the `set_meta_data` argument is `True` (default), it will update
@@ -260,7 +268,7 @@ class Queue(object):
         job.save()
 
         if self._async:
-            self.push_job_id(job.id)
+            self.push_job_id(job.id, at_front=at_front)
         else:
             job.perform()
             job.save()
@@ -388,7 +396,7 @@ class Queue(object):
 
 class FailedQueue(Queue):
     def __init__(self, connection=None):
-        super(FailedQueue, self).__init__(Status.FAILED, connection=connection)
+        super(FailedQueue, self).__init__(JobStatus.FAILED, connection=connection)
 
     def quarantine(self, job, exc_info):
         """Puts the given Job in quarantine (i.e. put it on the failed
@@ -415,7 +423,7 @@ class FailedQueue(Queue):
         if self.remove(job) == 0:
             raise InvalidJobOperationError('Cannot requeue non-failed jobs.')
 
-        job.set_status(Status.QUEUED)
+        job.set_status(JobStatus.QUEUED)
         job.exc_info = None
         q = Queue(job.origin, connection=self.connection)
         q.enqueue_job(job)
