@@ -111,7 +111,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None,
-                 exc_handler=None, default_worker_ttl=None, job_class=None):  # noqa
+                 exception_handlers="default", default_worker_ttl=None, job_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -139,12 +139,13 @@ class Worker(object):
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
-        self.push_exc_handler(self.move_to_failed_queue)
-        if isinstance(exc_handler, list):
-            for h in exc_handler:
+        if exception_handlers == "default":
+            self.push_exc_handler(self.move_to_failed_queue)
+        elif isinstance(exception_handlers, list):
+            for h in exception_handlers:
                 self.push_exc_handler(h)
-        elif exc_handler is not None:
-            self.push_exc_handler(exc_handler)
+        elif exception_handlers is not None:
+            self.push_exc_handler(exception_handlers)
 
         if job_class is not None:
             if isinstance(job_class, string_types):
