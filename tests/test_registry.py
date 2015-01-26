@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from rq.compat import as_text
 from rq.job import Job
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
@@ -120,7 +121,6 @@ class TestFinishedJobRegistry(RQTestCase):
         self.registry.cleanup(timestamp + 20)
         self.assertEqual(self.registry.get_job_ids(), ['baz'])
 
-
     def test_jobs_are_put_in_registry(self):
         """Completed jobs are added to FinishedJobRegistry."""
         self.assertEqual(self.registry.get_job_ids(), [])
@@ -138,7 +138,7 @@ class TestFinishedJobRegistry(RQTestCase):
         self.assertEqual(self.registry.get_job_ids(), [job.id])
 
 
-class TestRegistry(RQTestCase):
+class TestDeferredRegistry(RQTestCase):
 
     def setUp(self):
         super(TestRegistry, self).setUp()
@@ -148,7 +148,6 @@ class TestRegistry(RQTestCase):
         """Adding a job to DeferredJobsRegistry."""
         job = Job()
         self.registry.add(job)
-        self.assertEqual(
-            self.testconn.zrange(self.registry.key, 0, -1),
-            [job.id]
-        )
+        job_ids = [as_text(job_id) for job_id in
+                   self.testconn.zrange(self.registry.key, 0, -1)]
+        self.assertEqual(job_ids, [job.id])
