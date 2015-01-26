@@ -141,7 +141,7 @@ class TestFinishedJobRegistry(RQTestCase):
 class TestDeferredRegistry(RQTestCase):
 
     def setUp(self):
-        super(TestRegistry, self).setUp()
+        super(TestDeferredRegistry, self).setUp()
         self.registry = DeferredJobRegistry(connection=self.testconn)
 
     def test_add(self):
