@@ -184,7 +184,7 @@ class Queue(object):
 
         # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(func, args, kwargs, connection=self.connection,
-                                    result_ttl=result_ttl, status=JobStatus.QUEUED,
+                                    result_ttl=result_ttl, ttl=ttl, status=JobStatus.QUEUED,
                                     description=description, depends_on=depends_on, timeout=timeout,
                                     id=job_id)
 
