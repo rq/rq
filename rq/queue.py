@@ -182,7 +182,6 @@ class Queue(object):
         """
         timeout = timeout or self._default_timeout
 
-        # TODO: job with dependency shouldn't have "queued" as status
         job = self.job_class.create(
             func, args, kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, status=JobStatus.QUEUED,
