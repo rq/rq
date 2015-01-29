@@ -85,5 +85,6 @@ with Connection():
         return x + y
 
 
-def long_running_job():
-    time.sleep(10)
+def long_running_job(timeout=10):
+    time.sleep(timeout)
+    return 'Done sleeping...'

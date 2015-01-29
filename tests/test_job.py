@@ -12,7 +12,7 @@ from rq.utils import utcformat
 
 from tests import RQTestCase
 from tests.fixtures import (access_self, CallableObject, Number, say_hello,
-                            some_calculation)
+                            some_calculation, long_running_job)
 from tests.helpers import strip_microseconds
 
 try:
@@ -312,6 +312,22 @@ class TestJob(RQTestCase):
         job = Job.create(func=say_hello)
         job.save()
         self.assertEqual(job.get_ttl(), None)
+
+    def test_ttl_via_enqueue(self):
+        ttl = 1
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello, ttl=ttl)
+        self.assertEqual(job.get_ttl(), ttl)
+
+    def test_expire_during_execution(self):
+        """Test what happens when job expires during execution"""
+        ttl = 2
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(long_running_job, args=(4,), ttl=ttl)
+        self.assertEqual(job.get_ttl(), ttl)
+        job.perform()
+        self.assertFalse(job.exists(job.id))
+        self.assertEqual(job.result, 'Done sleeping...')
 
     def test_cleanup(self):
         """Test that jobs and results are expired properly."""
