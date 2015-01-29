@@ -24,7 +24,7 @@ class BaseRegistry(object):
         self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job, ttl, pipeline=None):
+    def add(self, job, ttl=0, pipeline=None):
         """Adds a job to a registry with expiry time of now + ttl."""
         score = ttl if ttl < 0 else current_timestamp() + ttl
         if pipeline is not None:
@@ -108,3 +108,19 @@ class FinishedJobRegistry(BaseRegistry):
         """
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
+
+
+class DeferredJobRegistry(BaseRegistry):
+    """
+    Registry of deferred jobs (waiting for another job to finish).
+    """
+
+    def __init__(self, name='default', connection=None):
+        super(DeferredJobRegistry, self).__init__(name, connection)
+        self.key = 'rq:deferred:%s' % name
+
+    def cleanup(self):
+        """This method is only here to prevent errors because this method is
+        automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry."""
+        pass
