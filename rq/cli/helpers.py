@@ -8,9 +8,8 @@ from functools import partial
 
 import click
 from rq import Queue, Worker
-from rq.worker import WorkerStatus
 from rq.logutils import setup_loghandlers
-from rq.suspension import is_suspended
+from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')

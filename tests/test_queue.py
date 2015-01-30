@@ -2,15 +2,15 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from tests import RQTestCase
+from tests.fixtures import (div_by_zero, echo, Number, say_hello,
+                            some_calculation)
+
 from rq import get_failed_queue, Queue
 from rq.exceptions import InvalidJobOperationError
 from rq.job import Job, JobStatus
 from rq.registry import DeferredJobRegistry
 from rq.worker import Worker
-
-from tests import RQTestCase
-from tests.fixtures import (div_by_zero, echo, Number, say_hello,
-                            some_calculation)
 
 
 class CustomJob(Job):

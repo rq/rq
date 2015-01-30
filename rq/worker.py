@@ -21,11 +21,11 @@ from .exceptions import DequeueTimeout, NoQueueError
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
-from .timeouts import UnixSignalDeathPenalty
-from .utils import import_attribute, make_colorizer, utcformat, utcnow, enum
-from .version import VERSION
 from .registry import FinishedJobRegistry, StartedJobRegistry
 from .suspension import is_suspended
+from .timeouts import UnixSignalDeathPenalty
+from .utils import enum, import_attribute, make_colorizer, utcformat, utcnow
+from .version import VERSION
 
 try:
     from procname import setprocname

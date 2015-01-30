@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import import_attribute, utcformat, utcnow, utcparse, enum
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse
 
 try:
     import cPickle as pickle
