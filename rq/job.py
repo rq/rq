@@ -25,9 +25,14 @@ dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
 
-JobStatus = enum('JobStatus',
-              QUEUED='queued', FINISHED='finished', FAILED='failed',
-              STARTED='started')
+JobStatus = enum(
+    'JobStatus',
+    QUEUED='queued',
+    FINISHED='finished',
+    FAILED='failed',
+    STARTED='started',
+    DEFERRED='deferred'
+)
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -83,8 +88,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, ttl=None, status=None, description=None, depends_on=None, timeout=None,
-               id=None):
+               result_ttl=None, ttl=None, status=None, description=None,
+               depends_on=None, timeout=None, id=None, origin=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -101,6 +106,9 @@ class Job(object):
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
+
+        if origin is not None:
+            job.origin = origin
 
         # Set the core job tuple properties
         job._instance = None
@@ -536,8 +544,14 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the current job in its dependency's dependents set.
+        This method adds the job in its dependency's dependents set
+        and adds the job to DeferredJobRegistry.
         """
+        from .registry import DeferredJobRegistry
+
+        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry.add(self, pipeline=pipeline)
+
         connection = pipeline if pipeline is not None else self.connection
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
