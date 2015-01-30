@@ -101,9 +101,3 @@ class TestRQCli(RQTestCase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn("Duration must be an integer greater than 1", result.output)
-
-
-
-
-
-

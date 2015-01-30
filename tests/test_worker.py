@@ -334,7 +334,7 @@ class TestWorker(RQTestCase):
                 raise
 
         q = Queue()
-        job = q.enqueue(create_file, SENTINEL_FILE)
+        q.enqueue(create_file, SENTINEL_FILE)
 
         w = Worker([q])
 

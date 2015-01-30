@@ -253,7 +253,6 @@ class Queue(object):
 
         If Queue is instantiated with async=False, job is executed immediately.
         """
-        
         with self.connection._pipeline() as pipeline:
             # Add Queue key set
             self.connection.sadd(self.redis_queues_keys, self.key)

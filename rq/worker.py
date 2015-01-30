@@ -12,7 +12,6 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import datetime
 
 from rq.compat import as_text, string_types, text_type
 
@@ -54,8 +53,8 @@ def compact(l):
     return [x for x in l if x is not None]
 
 _signames = dict((getattr(signal, signame), signame)
-    for signame in dir(signal)
-    if signame.startswith('SIG') and '_' not in signame)
+                 for signame in dir(signal)
+                 if signame.startswith('SIG') and '_' not in signame)
 
 
 def signal_name(signum):
@@ -367,7 +366,6 @@ class Worker(object):
         if before_state:
             self.set_state(before_state)
 
-
     def work(self, burst=False):
         """Starts the work loop.
 
@@ -415,7 +413,6 @@ class Worker(object):
             if not self.is_horse:
                 self.register_death()
         return did_perform_work
-
 
     def dequeue_job_and_maintain_ttl(self, timeout):
         result = None

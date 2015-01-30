@@ -339,7 +339,7 @@ class TestJob(RQTestCase):
         job = Job.create(func=say_hello, origin=origin)
         job._dependency_id = 'id'
         job.save()
-        
+
         self.assertEqual(registry.get_job_ids(), [])
         job.register_dependency()
         self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)

@@ -340,7 +340,7 @@ class TestQueue(RQTestCase):
         self.assertFalse(self.testconn.exists(parent_job.dependents_key))
 
         # DeferredJobRegistry should also be empty
-        self.assertEqual(registry.get_job_ids(), [])        
+        self.assertEqual(registry.get_job_ids(), [])
 
     def test_enqueue_job_with_dependency(self):
         """Jobs are enqueued only when their dependencies are finished."""
