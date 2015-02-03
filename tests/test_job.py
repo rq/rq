@@ -6,7 +6,7 @@ from datetime import datetime
 
 from tests import RQTestCase
 from tests.fixtures import (access_self, CallableObject, Number, say_hello,
-                            some_calculation)
+                            some_calculation, store_meta)
 from tests.helpers import strip_microseconds
 
 from rq.compat import as_text, PY2
@@ -239,6 +239,14 @@ class TestJob(RQTestCase):
 
         raw_data = self.testconn.hget(job.key, 'meta')
         self.assertEqual(loads(raw_data)['foo'], 'bar')
+
+        job2 = Job.fetch(job.id)
+        self.assertEqual(job2.meta['foo'], 'bar')
+
+    def test_custom_meta_from_inside_job_is_persisted(self):
+        """Additional meta data on jobs are stored persisted correctly from inside job."""
+        job = Job.create(func=store_meta, args=({'foo':'bar'},))
+        job.save()
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
