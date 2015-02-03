@@ -58,6 +58,12 @@ def access_self():
     return job.id
 
 
+def store_meta(new_meta):
+    job = get_current_job()
+    job.meta.update(new_meta)
+    job.save()
+
+
 def echo(*args, **kwargs):
     return (args, kwargs)
 
