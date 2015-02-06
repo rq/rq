@@ -10,6 +10,3 @@
 .tox
 .vagrant
 Vagrantfile
-
-# PyCharm
-.idea

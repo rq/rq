@@ -4,16 +4,17 @@ from __future__ import (absolute_import, division, print_function,
 
 from datetime import datetime
 
-from rq.compat import as_text, PY2
-from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import get_current_job, Job
-from rq.queue import Queue
-from rq.utils import utcformat
-
 from tests import RQTestCase
 from tests.fixtures import (access_self, CallableObject, Number, say_hello,
                             some_calculation)
 from tests.helpers import strip_microseconds
+
+from rq.compat import as_text, PY2
+from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.job import get_current_job, Job
+from rq.queue import Queue
+from rq.registry import DeferredJobRegistry
+from rq.utils import utcformat
 
 try:
     from cPickle import loads, dumps
@@ -331,12 +332,18 @@ class TestJob(RQTestCase):
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
     def test_register_dependency(self):
-        """Test that jobs updates the correct job dependents."""
-        job = Job.create(func=say_hello)
+        """Ensure dependency registration works properly."""
+        origin = 'some_queue'
+        registry = DeferredJobRegistry(origin, self.testconn)
+
+        job = Job.create(func=say_hello, origin=origin)
         job._dependency_id = 'id'
         job.save()
+
+        self.assertEqual(registry.get_job_ids(), [])
         job.register_dependency()
         self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)
+        self.assertEqual(registry.get_job_ids(), [job.id])
 
     def test_cancel(self):
         """job.cancel() deletes itself & dependents mapping from Redis."""

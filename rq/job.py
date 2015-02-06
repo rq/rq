@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import import_attribute, utcformat, utcnow, utcparse
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse
 
 try:
     import cPickle as pickle
@@ -25,18 +25,14 @@ dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
 
-def enum(name, *sequential, **named):
-    values = dict(zip(sequential, range(len(sequential))), **named)
-
-    # NOTE: Yes, we *really* want to cast using str() here.
-    # On Python 2 type() requires a byte string (which is str() on Python 2).
-    # On Python 3 it does not matter, so we'll use str(), which acts as
-    # a no-op.
-    return type(str(name), (), values)
-
-Status = enum('Status',
-              QUEUED='queued', FINISHED='finished', FAILED='failed',
-              STARTED='started')
+JobStatus = enum(
+    'JobStatus',
+    QUEUED='queued',
+    FINISHED='finished',
+    FAILED='failed',
+    STARTED='started',
+    DEFERRED='deferred'
+)
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -92,8 +88,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, ttl=None, status=None, description=None, depends_on=None, timeout=None,
-               id=None):
+               result_ttl=None, ttl=None, status=None, description=None,
+               depends_on=None, timeout=None, id=None, origin=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -110,6 +106,9 @@ class Job(object):
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
+
+        if origin is not None:
+            job.origin = origin
 
         # Set the core job tuple properties
         job._instance = None
@@ -167,19 +166,19 @@ class Job(object):
 
     @property
     def is_finished(self):
-        return self.get_status() == Status.FINISHED
+        return self.get_status() == JobStatus.FINISHED
 
     @property
     def is_queued(self):
-        return self.get_status() == Status.QUEUED
+        return self.get_status() == JobStatus.QUEUED
 
     @property
     def is_failed(self):
-        return self.get_status() == Status.FAILED
+        return self.get_status() == JobStatus.FAILED
 
     @property
     def is_started(self):
-        return self.get_status() == Status.STARTED
+        return self.get_status() == JobStatus.STARTED
 
     @property
     def dependency(self):
@@ -545,8 +544,14 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the current job in its dependency's dependents set.
+        This method adds the job in its dependency's dependents set
+        and adds the job to DeferredJobRegistry.
         """
+        from .registry import DeferredJobRegistry
+
+        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry.add(self, pipeline=pipeline)
+
         connection = pipeline if pipeline is not None else self.connection
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 

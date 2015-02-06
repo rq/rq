@@ -9,12 +9,12 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import calendar
-import importlib
 import datetime
+import importlib
 import logging
 import sys
 
-from .compat import is_python_version, as_text
+from .compat import as_text, is_python_version
 
 
 class _Colorizer(object):
@@ -208,3 +208,13 @@ def first(iterable, default=None, key=None):
 def current_timestamp():
     """Returns current UTC timestamp"""
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+
+
+def enum(name, *sequential, **named):
+    values = dict(zip(sequential, range(len(sequential))), **named)
+
+    # NOTE: Yes, we *really* want to cast using str() here.
+    # On Python 2 type() requires a byte string (which is str() on Python 2).
+    # On Python 3 it does not matter, so we'll use str(), which acts as
+    # a no-op.
+    return type(str(name), (), values)
