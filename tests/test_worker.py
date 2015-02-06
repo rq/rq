@@ -379,3 +379,23 @@ class TestWorker(RQTestCase):
         w3 = Worker([q], name="worker1")
         worker_set = set([w1, w2, w3])
         self.assertEquals(len(worker_set), 2)
+
+    def test_worker_sets_birth(self):
+        """Ensure worker correctly sets worker birth date."""
+        q = Queue()
+        w = Worker([q])
+
+        birth_date = w.birth_date
+        self.assertIsNotNone(birth_date)
+        self.assertEquals(type(birth_date).__name__, 'datetime')
+
+    def test_worker_sets_death(self):
+        """Ensure worker correctly sets worker birth date."""
+        q = Queue()
+        w = Worker([q])
+
+        w.register_death()
+
+        death_date = w.death_date
+        self.assertIsNotNone(death_date)
+        self.assertEquals(type(death_date).__name__, 'datetime')
