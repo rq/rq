@@ -385,6 +385,8 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q])
 
+        w.register_birth()
+
         birth_date = w.birth_date
         self.assertIsNotNone(birth_date)
         self.assertEquals(type(birth_date).__name__, 'datetime')
