@@ -250,14 +250,14 @@ class Worker(object):
         """Fetches birth date from Redis."""
         birth_timestamp = self.connection.hget(self.key, 'birth')
         if birth_timestamp:
-            return utcparse(birth_timestamp)
+            return utcparse(as_text(birth_timestamp))
 
     @property
     def death_date(self):
         """Fetches death date from Redis."""
         death_timestamp = self.connection.hget(self.key, 'death')
         if death_timestamp:
-            return utcparse(death_timestamp)
+            return utcparse(as_text(death_timestamp))
 
 
     def set_state(self, state, pipeline=None):
