@@ -68,7 +68,7 @@ job function.
 * `ttl` specifies the maximum queued time of the job before it'll be cancelled
 * `depends_on` specifies another job (or job id) that must complete before this
   job will be queued
-* `job_id` allows you to manually specify this jobs job_id
+* `job_id` allows you to manually specify this job's `job_id`
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
 * `kwargs` and `args` lets you bypass the auto-pop of these arguments, ie:
@@ -189,7 +189,7 @@ q.enqueue(send_report, depends_on=report_job)
 
 The ability to handle job dependencies allows you to split a big job into
 several smaller ones. A job that is dependent on another is enqueued only when
-it's dependency finishes *successfully*.
+its dependency finishes *successfully*.
 
 
 ## The worker
