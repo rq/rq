@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import import_attribute, utcformat, utcnow, utcparse, enum
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse
 
 try:
     import cPickle as pickle
@@ -25,9 +25,14 @@ dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
 
-JobStatus = enum('JobStatus',
-              QUEUED='queued', FINISHED='finished', FAILED='failed',
-              STARTED='started')
+JobStatus = enum(
+    'JobStatus',
+    QUEUED='queued',
+    FINISHED='finished',
+    FAILED='failed',
+    STARTED='started',
+    DEFERRED='deferred'
+)
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -83,8 +88,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, ttl=None, status=None, description=None, depends_on=None, timeout=None,
-               id=None):
+               result_ttl=None, ttl=None, status=None, description=None,
+               depends_on=None, timeout=None, id=None, origin=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -101,6 +106,9 @@ class Job(object):
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
+
+        if origin is not None:
+            job.origin = origin
 
         # Set the core job tuple properties
         job._instance = None
@@ -506,8 +514,15 @@ class Job(object):
         if self.func_name is None:
             return None
 
-        arg_list = [repr(arg) for arg in self.args]
-        arg_list += ['%s=%r' % (k, v) for k, v in self.kwargs.items()]
+        # Python 2/3 compatibility
+        try:
+            arg_list = [repr(arg).decode('utf-8') for arg in self.args]
+        except AttributeError:
+            arg_list = [repr(arg) for arg in self.args]
+
+        kwargs = ['{0}={1!r}'.format(k, v) for k, v in self.kwargs.items()]
+        # Sort here because python 3.3 & 3.4 makes different call_string
+        arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
         return '%s(%s)' % (self.func_name, args)
 
@@ -536,8 +551,14 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the current job in its dependency's dependents set.
+        This method adds the job in its dependency's dependents set
+        and adds the job to DeferredJobRegistry.
         """
+        from .registry import DeferredJobRegistry
+
+        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry.add(self, pipeline=pipeline)
+
         connection = pipeline if pipeline is not None else self.connection
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 

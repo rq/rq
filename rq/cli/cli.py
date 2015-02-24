@@ -16,22 +16,27 @@ from rq import Connection, get_failed_queue, Queue
 from rq.contrib.legacy import cleanup_ghosts
 from rq.exceptions import InvalidJobOperationError
 from rq.utils import import_attribute
-from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
+from rq.suspension import (suspend as connection_suspend,
+                           resume as connection_resume, is_suspended)
 
-from .helpers import (read_config_file, refresh, setup_loghandlers_from_args,
-                      show_both, show_queues, show_workers)
+from .helpers import (get_redis_from_config, read_config_file, refresh,
+                      setup_loghandlers_from_args, show_both, show_queues,
+                      show_workers)
 
 
 url_option = click.option('--url', '-u', envvar='RQ_REDIS_URL',
                           help='URL describing Redis connection details.')
 
-config_option = click.option('--config', '-c', help='Module containing RQ settings.')
+config_option = click.option('--config', '-c',
+                             help='Module containing RQ settings.')
 
 
 def connect(url, config=None):
+    if url:
+        return StrictRedis.from_url(url)
+
     settings = read_config_file(config) if config else {}
-    url = url or settings.get('REDIS_URL')
-    return StrictRedis.from_url(url or 'redis://localhost:6379/0')
+    return get_redis_from_config(settings)
 
 
 @click.group()
@@ -149,7 +154,6 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
 
     settings = read_config_file(config) if config else {}
     # Worker specific default arguments
-    url = url or settings.get('REDIS_URL')
     queues = queues or settings.get('QUEUES', ['default'])
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
 
@@ -159,7 +163,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
 
     setup_loghandlers_from_args(verbose, quiet)
 
-    conn = connect(url)
+    conn = connect(url, config)
     cleanup_ghosts(conn)
     worker_class = import_attribute(worker_class)
     queue_class = import_attribute(queue_class)
