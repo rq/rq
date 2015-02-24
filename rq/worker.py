@@ -121,7 +121,7 @@ class Worker(object):
         return worker
 
     def __init__(self, queues, name=None,
-                 default_result_ttl=None, connection=None,
+                 default_result_ttl=None, connection=None, exc_handler=None
                  exception_handlers=None, default_worker_ttl=None, job_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
@@ -152,6 +152,12 @@ class Worker(object):
         # the stack
         if exception_handlers is None:
             self.push_exc_handler(self.move_to_failed_queue)
+            if exc_handler is not None:
+                self.push_exc_handler(exc_handler)
+                warnings.warn(
+                        "use of exc_handler is deprecated, pass a list to exception_handlers instead.",
+                        DeprecationWarning
+                        )
         elif isinstance(exception_handlers, list):
             for h in exception_handlers:
                 self.push_exc_handler(h)
