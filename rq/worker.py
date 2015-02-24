@@ -120,7 +120,7 @@ class Worker(object):
         return worker
 
     def __init__(self, queues, name=None,
-                 default_result_ttl=None, connection=None, exc_handler=None
+                 default_result_ttl=None, connection=None, exc_handler=None,
                  exception_handlers=None, default_worker_ttl=None, job_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
