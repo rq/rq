@@ -23,6 +23,26 @@ except ImportError:
 
 
 class TestJob(RQTestCase):
+    def test_unicode(self):
+        """Unicode in job description [issue405]"""
+        job = Job.create(
+            'myfunc',
+            args=[12, "☃"],
+            kwargs=dict(snowman="☃", null=None),
+        )
+
+        try:
+            # Python 2
+            test_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode('utf-8')
+        except AttributeError:
+            # Python 3
+            test_string = "myfunc(12, '☃', null=None, snowman='☃')"
+
+        self.assertEquals(
+            job.description,
+            test_string,
+        )
+
     def test_create_empty_job(self):
         """Creation of new empty jobs."""
         job = Job()

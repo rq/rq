@@ -514,8 +514,15 @@ class Job(object):
         if self.func_name is None:
             return None
 
-        arg_list = [repr(arg) for arg in self.args]
-        arg_list += ['%s=%r' % (k, v) for k, v in self.kwargs.items()]
+        # Python 2/3 compatibility
+        try:
+            arg_list = [repr(arg).decode('utf-8') for arg in self.args]
+        except AttributeError:
+            arg_list = [repr(arg) for arg in self.args]
+
+        kwargs = ['{0}={1!r}'.format(k, v) for k, v in self.kwargs.items()]
+        # Sort here because python 3.3 & 3.4 makes different call_string
+        arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
         return '%s(%s)' % (self.func_name, args)
 
