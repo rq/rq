@@ -199,6 +199,7 @@ class Queue(object):
                     try:
                         pipe.watch(depends_on.key)
                         if depends_on.get_status() != JobStatus.FINISHED:
+                            pipe.multi()
                             job.set_status(JobStatus.DEFERRED)
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
