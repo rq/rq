@@ -392,7 +392,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(type(birth_date).__name__, 'datetime')
 
     def test_worker_sets_death(self):
-        """Ensure worker correctly sets worker birth date."""
+        """Ensure worker correctly sets worker death date."""
         q = Queue()
         w = Worker([q])
 
