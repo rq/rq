@@ -23,7 +23,7 @@ from .queue import get_failed_queue, Queue
 from .registry import FinishedJobRegistry, StartedJobRegistry
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
-from .utils import enum, import_attribute, make_colorizer, utcformat, utcnow
+from .utils import enum, import_attribute, make_colorizer, utcformat, utcnow, utcparse
 from .version import VERSION
 
 try:
@@ -244,6 +244,21 @@ class Worker(object):
             p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
+
+    @property
+    def birth_date(self):
+        """Fetches birth date from Redis."""
+        birth_timestamp = self.connection.hget(self.key, 'birth')
+        if birth_timestamp is not None:
+            return utcparse(as_text(birth_timestamp))
+
+    @property
+    def death_date(self):
+        """Fetches death date from Redis."""
+        death_timestamp = self.connection.hget(self.key, 'death')
+        if death_timestamp is not None:
+            return utcparse(as_text(death_timestamp))
+
 
     def set_state(self, state, pipeline=None):
         self._state = state
