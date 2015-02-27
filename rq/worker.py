@@ -12,7 +12,6 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import datetime
 
 from rq.compat import as_text, string_types, text_type
 
@@ -21,11 +20,11 @@ from .exceptions import DequeueTimeout, NoQueueError
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
-from .timeouts import UnixSignalDeathPenalty
-from .utils import import_attribute, make_colorizer, utcformat, utcnow, enum
-from .version import VERSION
 from .registry import FinishedJobRegistry, StartedJobRegistry
 from .suspension import is_suspended
+from .timeouts import UnixSignalDeathPenalty
+from .utils import enum, import_attribute, make_colorizer, utcformat, utcnow, utcparse
+from .version import VERSION
 
 try:
     from procname import setprocname
@@ -54,8 +53,8 @@ def compact(l):
     return [x for x in l if x is not None]
 
 _signames = dict((getattr(signal, signame), signame)
-    for signame in dir(signal)
-    if signame.startswith('SIG') and '_' not in signame)
+                 for signame in dir(signal)
+                 if signame.startswith('SIG') and '_' not in signame)
 
 
 def signal_name(signum):
@@ -246,6 +245,21 @@ class Worker(object):
             p.expire(self.key, 60)
             p.execute()
 
+    @property
+    def birth_date(self):
+        """Fetches birth date from Redis."""
+        birth_timestamp = self.connection.hget(self.key, 'birth')
+        if birth_timestamp is not None:
+            return utcparse(as_text(birth_timestamp))
+
+    @property
+    def death_date(self):
+        """Fetches death date from Redis."""
+        death_timestamp = self.connection.hget(self.key, 'death')
+        if death_timestamp is not None:
+            return utcparse(as_text(death_timestamp))
+
+
     def set_state(self, state, pipeline=None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
@@ -367,7 +381,6 @@ class Worker(object):
         if before_state:
             self.set_state(before_state)
 
-
     def work(self, burst=False):
         """Starts the work loop.
 
@@ -415,7 +428,6 @@ class Worker(object):
             if not self.is_horse:
                 self.register_death()
         return did_perform_work
-
 
     def dequeue_job_and_maintain_ttl(self, timeout):
         result = None

@@ -4,15 +4,14 @@ from __future__ import (absolute_import, division, print_function,
 
 import uuid
 
-from .connections import resolve_connection
-from .job import Job, JobStatus
-from .utils import import_attribute, utcnow
+from redis import WatchError
 
+from .compat import as_text, string_types, total_ordering
+from .connections import resolve_connection
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
                          NoSuchJobError, UnpickleError)
-from .compat import total_ordering, string_types, as_text
-
-from redis import WatchError
+from .job import Job, JobStatus
+from .utils import import_attribute, utcnow
 
 
 def get_failed_queue(connection=None):
@@ -143,9 +142,9 @@ class Queue(object):
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
         if pipeline is not None:
-            pipeline.lrem(self.key, 0, job_id)
+            pipeline.lrem(self.key, 1, job_id)
 
-        return self.connection._lrem(self.key, 0, job_id)
+        return self.connection._lrem(self.key, 1, job_id)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
@@ -200,6 +199,7 @@ class Queue(object):
                     try:
                         pipe.watch(depends_on.key)
                         if depends_on.get_status() != JobStatus.FINISHED:
+                            pipe.multi()
                             job.set_status(JobStatus.DEFERRED)
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
@@ -254,7 +254,6 @@ class Queue(object):
 
         If Queue is instantiated with async=False, job is executed immediately.
         """
-        
         with self.connection._pipeline() as pipeline:
             # Add Queue key set
             self.connection.sadd(self.redis_queues_keys, self.key)

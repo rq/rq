@@ -9,12 +9,12 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import calendar
-import importlib
 import datetime
+import importlib
 import logging
 import sys
 
-from .compat import is_python_version, as_text
+from .compat import as_text, is_python_version
 
 
 class _Colorizer(object):

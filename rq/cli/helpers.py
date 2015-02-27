@@ -7,10 +7,11 @@ import time
 from functools import partial
 
 import click
+from redis import StrictRedis
+
 from rq import Queue, Worker
-from rq.worker import WorkerStatus
 from rq.logutils import setup_loghandlers
-from rq.suspension import is_suspended
+from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
@@ -23,6 +24,19 @@ def read_config_file(module):
     return dict([(k, v)
                  for k, v in settings.__dict__.items()
                  if k.upper() == k])
+
+
+def get_redis_from_config(settings):
+    """Returns a StrictRedis instance from a dictionary of settings."""
+    if settings.get('REDIS_URL') is not None:
+        return StrictRedis.from_url(settings['REDIS_URL'])
+
+    return StrictRedis(
+        host=settings.get('REDIS_HOST', 'localhost'),
+        port=settings.get('REDIS_PORT', 6379),
+        db=settings.get('REDIS_DB', 0),
+        password=settings.get('REDIS_PASSWORD', None),
+    )
 
 
 def pad(s, pad_to_length):

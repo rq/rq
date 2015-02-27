@@ -33,7 +33,7 @@ def count_words_at_url(url):
 
 You do use the excellent [requests][r] package, don't you?
 
-Then, create a RQ queue:
+Then, create an RQ queue:
 
 ```python
 from rq import Queue, use_connection

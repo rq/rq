@@ -5,16 +5,16 @@ from __future__ import (absolute_import, division, print_function,
 import os
 from time import sleep
 
-from rq import get_failed_queue, Queue, Worker, SimpleWorker
+from tests import RQTestCase, slow
+from tests.fixtures import (create_file, create_file_after_timeout,
+                            div_by_zero, do_nothing, say_hello, say_pid)
+from tests.helpers import strip_microseconds
+
+from rq import get_failed_queue, Queue, SimpleWorker, Worker
 from rq.compat import as_text
 from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
-from rq.suspension import suspend, resume
-
-from tests import RQTestCase, slow
-from tests.fixtures import (create_file, create_file_after_timeout,
-                            div_by_zero, say_hello, say_pid, do_nothing)
-from tests.helpers import strip_microseconds
+from rq.suspension import resume, suspend
 
 
 class CustomJob(Job):
@@ -334,7 +334,7 @@ class TestWorker(RQTestCase):
                 raise
 
         q = Queue()
-        job = q.enqueue(create_file, SENTINEL_FILE)
+        q.enqueue(create_file, SENTINEL_FILE)
 
         w = Worker([q])
 
@@ -379,3 +379,25 @@ class TestWorker(RQTestCase):
         w3 = Worker([q], name="worker1")
         worker_set = set([w1, w2, w3])
         self.assertEquals(len(worker_set), 2)
+
+    def test_worker_sets_birth(self):
+        """Ensure worker correctly sets worker birth date."""
+        q = Queue()
+        w = Worker([q])
+
+        w.register_birth()
+
+        birth_date = w.birth_date
+        self.assertIsNotNone(birth_date)
+        self.assertEquals(type(birth_date).__name__, 'datetime')
+
+    def test_worker_sets_death(self):
+        """Ensure worker correctly sets worker death date."""
+        q = Queue()
+        w = Worker([q])
+
+        w.register_death()
+
+        death_date = w.death_date
+        self.assertIsNotNone(death_date)
+        self.assertEquals(type(death_date).__name__, 'datetime')

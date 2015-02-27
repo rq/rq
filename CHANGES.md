@@ -1,3 +1,25 @@
+### 0.5.0
+(Jan 30th, 2015)
+
+- RQ workers can now be paused and resumed using `rq suspend` and
+  `rq resume` commands. Thanks Jonathan Tushman!
+- Jobs that are being performed are now stored in `StartedJobRegistry`
+  for monitoring purposes. This also prevents currently active jobs from
+  being orphaned/lost in the case of hard shutdowns.
+- You can now monitor finished jobs by checking `FinishedJobRegistry`.
+  Thanks Nic Cope for helping!
+- Jobs with unmet dependencies are now created with `deferred` as their
+  status. You can monitor deferred jobs by checking `DeferredJobRegistry`.
+- It is now possible to enqueue a job at the beginning of queue using
+  `queue.enqueue(func, at_front=True)`. Thanks Travis Johnson!
+- Command line scripts have all been refactored to use `click`. Thanks Lyon Zhang!
+- Added a new `SimpleWorker` that does not fork when executing jobs.
+  Useful for testing purposes. Thanks Cal Leeming!
+- Added `--queue-class` and `--job-class` arguments to `rqworker` script.
+  Thanks David Bonner!
+- Many other minor bug fixes and enhancements.
+
+
 ### 0.4.6
 (May 21st, 2014)
 

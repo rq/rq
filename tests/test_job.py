@@ -4,11 +4,16 @@ from __future__ import (absolute_import, division, print_function,
 
 from datetime import datetime
 
+from tests import RQTestCase
+from tests.fixtures import (access_self, CallableObject, Number, say_hello,
+                            some_calculation)
+from tests.helpers import strip_microseconds
+
 from rq.compat import as_text, PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import get_current_job, Job
-from rq.registry import DeferredJobRegistry
 from rq.queue import Queue
+from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 
 from tests import RQTestCase
@@ -23,6 +28,26 @@ except ImportError:
 
 
 class TestJob(RQTestCase):
+    def test_unicode(self):
+        """Unicode in job description [issue405]"""
+        job = Job.create(
+            'myfunc',
+            args=[12, "☃"],
+            kwargs=dict(snowman="☃", null=None),
+        )
+
+        try:
+            # Python 2
+            test_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode('utf-8')
+        except AttributeError:
+            # Python 3
+            test_string = "myfunc(12, '☃', null=None, snowman='☃')"
+
+        self.assertEquals(
+            job.description,
+            test_string,
+        )
+
     def test_create_empty_job(self):
         """Creation of new empty jobs."""
         job = Job()
@@ -355,7 +380,7 @@ class TestJob(RQTestCase):
         job = Job.create(func=say_hello, origin=origin)
         job._dependency_id = 'id'
         job.save()
-        
+
         self.assertEqual(registry.get_job_ids(), [])
         job.register_dependency()
         self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)
