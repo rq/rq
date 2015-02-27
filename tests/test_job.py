@@ -345,14 +345,16 @@ class TestJob(RQTestCase):
         job = queue.enqueue(say_hello, ttl=ttl)
         self.assertEqual(job.get_ttl(), ttl)
 
-    def test_expire_during_execution(self):
+    def test_never_expire_during_execution(self):
         """Test what happens when job expires during execution"""
-        ttl = 2
+        ttl = 1
         queue = Queue(connection=self.testconn)
-        job = queue.enqueue(long_running_job, args=(4,), ttl=ttl)
+        job = queue.enqueue(long_running_job, args=(2,), ttl=ttl)
         self.assertEqual(job.get_ttl(), ttl)
+        job.save()
         job.perform()
-        self.assertFalse(job.exists(job.id))
+        self.assertEqual(job.get_ttl(), -1)
+        self.assertTrue(job.exists(job.id))
         self.assertEqual(job.result, 'Done sleeping...')
 
     def test_cleanup(self):
