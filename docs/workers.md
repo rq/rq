@@ -175,7 +175,7 @@ more common requests so far are:
 
 1. Managing database connectivity prior to running a job.
 2. Using a job execution model that does not require `os.fork`.
-3. The ability use different concurrency models such as
+3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
 
 You can use the `-w` option to specify a different worker class to use:
