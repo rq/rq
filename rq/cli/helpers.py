@@ -36,6 +36,7 @@ def get_redis_from_config(settings):
         port=settings.get('REDIS_PORT', 6379),
         db=settings.get('REDIS_DB', 0),
         password=settings.get('REDIS_PASSWORD', None),
+        ssl=settings.get('REDIS_SSL',False)
     )
 
 
