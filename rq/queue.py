@@ -194,7 +194,7 @@ class Queue(object):
         if depends_on is not None:
             if not isinstance(depends_on, self.job_class):
                 depends_on = Job(id=depends_on, connection=self.connection)
-            with self.connection.pipeline() as pipe:
+            with self.connection._pipeline() as pipe:
                 while True:
                     try:
                         pipe.watch(depends_on.key)
