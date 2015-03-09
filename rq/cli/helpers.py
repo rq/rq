@@ -7,8 +7,8 @@ import time
 from functools import partial
 
 import click
+import redis
 from redis import StrictRedis
-
 from rq import Queue, Worker
 from rq.logutils import setup_loghandlers
 from rq.worker import WorkerStatus
@@ -31,13 +31,28 @@ def get_redis_from_config(settings):
     if settings.get('REDIS_URL') is not None:
         return StrictRedis.from_url(settings['REDIS_URL'])
 
-    return StrictRedis(
-        host=settings.get('REDIS_HOST', 'localhost'),
-        port=settings.get('REDIS_PORT', 6379),
-        db=settings.get('REDIS_DB', 0),
-        password=settings.get('REDIS_PASSWORD', None),
-        ssl=settings.get('REDIS_SSL',False)
-    )
+    kwargs = {
+        'host': settings.get('REDIS_HOST', 'localhost'),
+        'port': settings.get('REDIS_PORT', 6379),
+        'db': settings.get('REDIS_DB', 0),
+        'password': settings.get('REDIS_PASSWORD', None),
+    }
+
+    use_ssl = settings.get('REDIS_SSL', False)
+    if use_ssl:
+        # If SSL is required, we need to depend on redis-py being 2.10 at
+        # least
+        def safeint(x):
+            try:
+                return int(x)
+            except ValueError:
+                return 0
+
+        version_info = tuple(safeint(x) for x in redis.__version__.split('.'))
+        if not version_info >= (2, 10):
+            raise RuntimeError('Using SSL requires a redis-py version >= 2.10')
+        kwargs['ssl'] = use_ssl
+    return StrictRedis(**kwargs)
 
 
 def pad(s, pad_to_length):
