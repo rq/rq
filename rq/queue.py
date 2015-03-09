@@ -171,7 +171,7 @@ class Queue(object):
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, description=None,
-                     depends_on=None, job_id=None, at_front=False):
+                     depends_on=None, job_id=None, at_front=False, deferred=False):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -186,6 +186,20 @@ class Queue(object):
             result_ttl=result_ttl, status=JobStatus.QUEUED,
             description=description, depends_on=depends_on,
             timeout=timeout, id=job_id, origin=self.name)
+
+        # Job built as "deferred" intentionally
+        if deferred:
+            with self.connection.pipeline() as pipe:
+                while True:
+                    try:
+                        pipe.multi()
+                        job.set_status(JobStatus.DEFERRED)
+                        job.register_deferred(pipeline=pipe)
+                        job.save(pipeline=pipe)
+                        pipe.execute()
+                        return job
+                    except WatchError:
+                        continue
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -238,6 +252,7 @@ class Queue(object):
         depends_on = kwargs.pop('depends_on', None)
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
+        deferred = kwargs.pop('deferred', False)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs.'  # noqa
@@ -247,7 +262,7 @@ class Queue(object):
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                                  description=description, depends_on=depends_on,
-                                 job_id=job_id, at_front=at_front)
+                                 job_id=job_id, at_front=at_front, deferred=deferred)
 
     def enqueue_job(self, job, at_front=False):
         """Enqueues a job for delayed execution.

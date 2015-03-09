@@ -89,7 +89,7 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None):
+               depends_on=None, timeout=None, id=None, origin=None, deferred=False):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -133,6 +133,7 @@ class Job(object):
         job.ttl = ttl
         job.timeout = timeout
         job._status = status
+        job.deferred = deferred
 
         # dependency could be job instance or id
         if depends_on is not None:
@@ -543,6 +544,11 @@ class Job(object):
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
 
+    def register_deferred(self, pipeline=None):
+        from .registry import DeferredJobRegistry
+        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry.add(self, pipeline=pipeline)
+
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
         depend on is successfully performed. We record this relation as
@@ -554,11 +560,7 @@ class Job(object):
         This method adds the job in its dependency's dependents set
         and adds the job to DeferredJobRegistry.
         """
-        from .registry import DeferredJobRegistry
-
-        registry = DeferredJobRegistry(self.origin, connection=self.connection)
-        registry.add(self, pipeline=pipeline)
-
+        self.register_deferred(pipeline)
         connection = pipeline if pipeline is not None else self.connection
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
