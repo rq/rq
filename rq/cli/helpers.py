@@ -134,7 +134,7 @@ def show_workers(queues, raw, by_queue):
     else:
         qs = Queue.all()
         ws = Worker.all()
-        filter_queues = lambda x: x
+        filter_queues = (lambda x: x)
 
     if not by_queue:
         for w in ws:
