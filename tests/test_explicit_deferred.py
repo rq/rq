@@ -45,5 +45,3 @@ class TestExplicitDeferredJob(RQTestCase):
 
         # Freeing the job
         j.perform()
-        dummy = 0
-
