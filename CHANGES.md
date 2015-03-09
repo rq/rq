@@ -1,3 +1,15 @@
+### 0.5.1
+
+(March 9th, 2015)
+
+- Resolve performance issue when queues contain many jobs
+- Restore the ability to specify connection params in config
+- Record `birth_date` and `death_date` on Worker
+- Add support for SSL URLs in Redis (and `REDIS_SSL` config option)
+- Fix encoding issues with non-ASCII characters in function arguments
+- Fix Redis transaction management issue with job dependencies
+
+
 ### 0.5.0
 (Jan 30th, 2015)
 
