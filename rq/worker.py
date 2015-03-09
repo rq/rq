@@ -259,7 +259,6 @@ class Worker(object):
         if death_timestamp is not None:
             return utcparse(as_text(death_timestamp))
 
-
     def set_state(self, state, pipeline=None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
