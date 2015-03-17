@@ -329,22 +329,22 @@ class Queue(object):
 
         Returns a job_class instance, which can be executed or inspected.
         """
-        job_id = self.pop_job_id()
-        if job_id is None:
-            return None
-        try:
-            job = self.job_class.fetch(job_id, connection=self.connection)
-        except NoSuchJobError as e:
-            # Silently pass on jobs that don't exist (anymore),
-            # and continue by reinvoking itself recursively
-            return self.dequeue()
-        except UnpickleError as e:
-            # Attach queue information on the exception for improved error
-            # reporting
-            e.job_id = job_id
-            e.queue = self
-            raise e
-        return job
+        while True:
+            job_id = self.pop_job_id()
+            if job_id is None:
+                return None
+            try:
+                job = self.job_class.fetch(job_id, connection=self.connection)
+            except NoSuchJobError as e:
+                # Silently pass on jobs that don't exist (anymore),
+                continue
+            except UnpickleError as e:
+                # Attach queue information on the exception for improved error
+                # reporting
+                e.job_id = job_id
+                e.queue = self
+                raise e
+            return job
 
     @classmethod
     def dequeue_any(cls, queues, timeout, connection=None):
