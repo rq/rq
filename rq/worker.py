@@ -586,7 +586,7 @@ class Worker(object):
         if rv is None:
             self.log.info('Job OK')
         else:
-            self.log.info('Job OK, result = %s' % (yellow(text_type(rv)),))
+            self.log.info('Job OK, result = %s [type = %s]' % (yellow(text_type(str(rv), 'utf-8')), type(rv)))
 
         if result_ttl == 0:
             self.log.info('Result discarded immediately.')
