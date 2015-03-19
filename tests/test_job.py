@@ -4,11 +4,6 @@ from __future__ import (absolute_import, division, print_function,
 
 from datetime import datetime
 
-from tests import RQTestCase
-from tests.fixtures import (access_self, CallableObject, Number, say_hello,
-                            some_calculation)
-from tests.helpers import strip_microseconds
-
 from rq.compat import as_text, PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import get_current_job, Job

@@ -486,7 +486,7 @@ class Job(object):
     def perform(self):  # noqa
         """Invokes the job function with the job arguments."""
         self.connection.persist(self.key)
-        self.ttl = self.connection.ttl(self.key)
+        self.ttl = -1
         _job_stack.push(self.id)
         try:
             self._result = self.func(*self.args, **self.kwargs)
