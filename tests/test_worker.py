@@ -135,7 +135,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(div_by_zero)
         self.assertEquals(q.count, 1)
 
-        w = Worker([q], exc_handler=black_hole)
+        w = Worker([q], exception_handlers=black_hole)
         w.work(burst=True)  # should silently pass
 
         # Postconditions

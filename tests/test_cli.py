@@ -3,7 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from click.testing import CliRunner
-from rq import get_failed_queue
+from rq import get_failed_queue, Queue
 from rq.compat import is_python_version
 from rq.job import Job
 from rq.cli import main
@@ -75,6 +75,30 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
         self.assert_normal_execution(result)
 
+    def test_exception_handlers(self):
+        """rq worker -u <url> -b --exception-handler <handler>"""
+        q = Queue()
+        failed_q = get_failed_queue()
+        failed_q.empty()
+        # Preconditions
+        self.assertEquals(failed_q.count, 0)
+        self.assertEquals(q.count, 0)
+
+        # Action
+        job = q.enqueue(div_by_zero)
+        self.assertEquals(q.count, 1)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--exception-handler', 'tests.fixtures.black_hole'])
+        self.assertEqual(result.exit_code, 0)
+        # Postconditions
+        self.assertEquals(q.count, 0)
+        self.assertEquals(failed_q.count, 0)
+
+        # Check the job
+        job = Job.fetch(job.id)
+        self.assertEquals(job.is_failed, True)
+
     def test_suspend_and_resume(self):
         """rq suspend -u <url>
            rq resume -u <url>
@@ -101,3 +125,4 @@ class TestRQCli(RQTestCase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn("Duration must be an integer greater than 1", result.output)
+
