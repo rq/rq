@@ -394,7 +394,7 @@ class Worker(object):
 
         did_perform_work = False
         self.register_birth()
-        self.log.info('RQ worker started, version %s' % VERSION)
+        self.log.info("RQ worker, '%s', started, version %s" % (self.key, VERSION))
         self.set_state(WorkerStatus.STARTED)
 
         try:
@@ -410,6 +410,8 @@ class Worker(object):
 
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
+                        if burst:
+                            self.log.info("RQ worker, '%s', has died." % self.key)
                         break
                 except StopRequested:
                     break
