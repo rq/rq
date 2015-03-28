@@ -411,7 +411,7 @@ class Worker(object):
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
-                            self.log.info("RQ worker, '%s', has died." % self.key)
+                            self.log.info("RQ worker, '%s', done, quitting." % self.key)
                         break
                 except StopRequested:
                     break
