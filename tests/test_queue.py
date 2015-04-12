@@ -176,7 +176,7 @@ class TestQueue(RQTestCase):
     def test_dequeue_deleted_jobs(self):
         """Dequeueing deleted jobs from queues don't blow the stack."""
         q = Queue()
-        for _ in range(1,1000):
+        for _ in range(1, 1000):
             job = q.enqueue(say_hello)
             job.delete()
         q.dequeue()
