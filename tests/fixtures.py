@@ -54,8 +54,7 @@ def create_file_after_timeout(path, timeout):
 
 
 def access_self():
-    job = get_current_job()
-    return job.id
+    assert get_current_job() is not None
 
 
 def echo(*args, **kwargs):
