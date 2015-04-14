@@ -1,3 +1,11 @@
+### 0.5.2
+
+(April 14th, 2015)
+
+- Support SSL connection to Redis (requires redis-py>=2.10)
+- Fix to prevent deep call stacks with large queues
+
+
 ### 0.5.1
 
 (March 9th, 2015)
