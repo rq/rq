@@ -646,11 +646,6 @@ class Worker(object):
 
 
 class SimpleWorker(Worker):
-    def _install_signal_handlers(self, *args, **kwargs):
-        """Signal handlers are useless for test worker, as it
-        does not have fork() ability"""
-        pass
-
     def main_work_horse(self, *args, **kwargs):
         raise NotImplementedError("Test worker does not implement this method")
 
