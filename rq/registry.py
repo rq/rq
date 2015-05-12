@@ -1,5 +1,7 @@
 from .compat import as_text
 from .connections import resolve_connection
+from .exceptions import NoSuchJobError
+from .job import Job, JobStatus
 from .queue import FailedQueue
 from .utils import current_timestamp
 
@@ -80,9 +82,17 @@ class StartedJobRegistry(BaseRegistry):
 
         if job_ids:
             failed_queue = FailedQueue(connection=self.connection)
+
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
-                    failed_queue.push_job_id(job_id, pipeline=pipeline)
+                    try:
+                        job = Job.fetch(job_id, connection=self.connection)
+                        job.status = JobStatus.FAILED
+                        job.save(pipeline=pipeline)
+                        failed_queue.push_job_id(job_id, pipeline=pipeline)
+                    except NoSuchJobError:
+                        pass
+
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
