@@ -28,6 +28,14 @@ class TestWorker(RQTestCase):
         w = Worker([fooq, barq])
         self.assertEquals(w.queues, [fooq, barq])
 
+    def test_create_worker_args(self):
+        """ Test Worker creating with variety arg types """
+        fooq, barq, bazq  = Queue('foo'), Queue('bar'), Queue('baz')
+        w = Worker([fooq, barq], bazq, map(Queue, ['foomap1', 'foomap2']),
+            'foobar', 'foobaz')
+        self.assertEquals(w.queue_keys(), ['rq:queue:foo', 'rq:queue:bar', 'rq:queue:baz',
+            'rq:queue:foomap1', 'rq:queue:foomap2', 'rq:queue:foobar', 'rq:queue:foobaz'])
+
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
