@@ -70,6 +70,9 @@ class Queue(object):
     def __len__(self):
         return self.count
 
+    def __iter__(self):
+        yield  self
+
     @property
     def key(self):
         """Returns the Redis key for this Queue."""

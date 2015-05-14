@@ -12,6 +12,7 @@ import sys
 import time
 import traceback
 import warnings
+import itertools
 
 from rq.compat import as_text, string_types, text_type
 
@@ -119,14 +120,13 @@ class Worker(object):
                              for queue in queues.split(',')]
         return worker
 
-    def __init__(self, queues, name=None,
+    def __init__(self, *queues, name=None,
                  default_result_ttl=None, connection=None,
                  exc_handler=None, default_worker_ttl=None, job_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
-        if isinstance(queues, self.queue_class):
-            queues = [queues]
+        queues = self.process_queue_args(queues)
         self._name = name
         self.queues = queues
         self.validate_queues()
@@ -160,11 +160,17 @@ class Worker(object):
 
     def validate_queues(self):
         """Sanity check for the given queues."""
-        if not iterable(self.queues):
-            raise ValueError('Argument queues not iterable.')
         for queue in self.queues:
             if not isinstance(queue, self.queue_class):
                 raise NoQueueError('Give each worker at least one Queue.')
+
+    def process_queue_args(self, queue_args):
+        """ allow for a variety arguements to queues:
+        A string or iterable of strings
+        An instance of Queue or iterble of Queue instances"""
+        queue_args = [[queue_arg] if isinstance(queue_arg, str) else list(queue_arg) for queue_arg in queue_args]
+        queue_args = itertools.chain.from_iterable(queue_args)
+        return  [self.queue_class(name = queue_arg) if isinstance(queue_arg, str) else queue_arg for queue_arg in queue_args]
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""
