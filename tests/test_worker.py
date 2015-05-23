@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import os
+from datetime import timedelta
 from time import sleep
 
 from tests import RQTestCase, slow
@@ -15,6 +16,7 @@ from rq.compat import as_text
 from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
+from rq.utils import utcnow
 
 
 class CustomJob(Job):
@@ -420,3 +422,24 @@ class TestWorker(RQTestCase):
         self.assertNotEqual(worker.maintenance_date, None)
         self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
         self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
+
+    def test_should_run_maintenance_tasks(self):
+        """Workers should run maintenance tasks on startup and every hour."""
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queue)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+
+        worker.maintenance_date = utcnow()
+        self.assertFalse(worker.should_run_maintenance_tasks)
+        worker.maintenance_date = utcnow() - timedelta(seconds=3700)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+
+    def test_worker_calls_clean_registries(self):
+        """Worker calls clean_registries when run."""
+        queue = Queue(connection=self.testconn)
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(registry.key, 1, 'foo')
+
+        worker = Worker(queue, connection=self.testconn)
+        worker.work(burst=True)
+        self.assertEqual(self.testconn.zcard(registry.key), 0)
