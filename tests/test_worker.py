@@ -401,3 +401,22 @@ class TestWorker(RQTestCase):
         death_date = w.death_date
         self.assertIsNotNone(death_date)
         self.assertEquals(type(death_date).__name__, 'datetime')
+
+    def test_clean_queue_registries(self):
+        """worker.clean_registries sets maintenance_date and cleans registries."""
+        foo_queue = Queue('foo', connection=self.testconn)
+        foo_registry = StartedJobRegistry('foo', connection=self.testconn)
+        self.testconn.zadd(foo_registry.key, 1, 'foo')
+        self.assertEqual(self.testconn.zcard(foo_registry.key), 1)
+
+        bar_queue = Queue('bar', connection=self.testconn)
+        bar_registry = StartedJobRegistry('bar', connection=self.testconn)
+        self.testconn.zadd(bar_registry.key, 1, 'bar')
+        self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
+
+        worker = Worker([foo_queue, bar_queue])
+        self.assertEqual(worker.maintenance_date, None)
+        worker.clean_registries()
+        self.assertNotEqual(worker.maintenance_date, None)
+        self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(bar_registry.key), 0)

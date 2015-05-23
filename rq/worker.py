@@ -20,7 +20,7 @@ from .exceptions import DequeueTimeout, NoQueueError
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
-from .registry import FinishedJobRegistry, StartedJobRegistry
+from .registry import clean_registries, FinishedJobRegistry, StartedJobRegistry
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
 from .utils import enum, import_attribute, make_colorizer, utcformat, utcnow, utcparse
@@ -146,6 +146,7 @@ class Worker(object):
         self._stopped = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
+        self.maintenance_date = None
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -645,6 +646,12 @@ class Worker(object):
     def __hash__(self):
         """The hash does not take the database/connection into account"""
         return hash(self.name)
+
+    def clean_registries(self):
+        """Runs maintenance jobs on each Queue's registries."""
+        for queue in self.queues:
+            clean_registries(queue)
+        self.maintenance_date = utcnow()
 
 
 class SimpleWorker(Worker):
