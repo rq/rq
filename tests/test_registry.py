@@ -6,8 +6,8 @@ from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import (DeferredJobRegistry, FinishedJobRegistry,
-                         StartedJobRegistry)
+from rq.registry import (clean_registries, DeferredJobRegistry,
+                         FinishedJobRegistry, StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -106,6 +106,21 @@ class TestRegistry(RQTestCase):
         self.testconn.zadd(self.registry.key, timestamp, 'bar')
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
+
+    def test_clean_registries(self):
+        """clean_registries() cleans Started and Finished job registries."""
+
+        queue = Queue(connection=self.testconn)
+
+        finished_job_registry = FinishedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(finished_job_registry.key, 1, 'foo')
+
+        started_job_registry = StartedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(started_job_registry.key, 1, 'foo')
+
+        clean_registries(queue)
+        self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
 
 
 class TestFinishedJobRegistry(RQTestCase):

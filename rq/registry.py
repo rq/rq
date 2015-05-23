@@ -8,8 +8,9 @@ from .utils import current_timestamp
 
 class BaseRegistry(object):
     """
-    Base implementation of job registry, implemented in Redis sorted set. Each job
-    is stored as a key in the registry, scored by expiration time (unix timestamp).
+    Base implementation of a job registry, implemented in Redis sorted set.
+    Each job is stored as a key in the registry, scored by expiration time
+    (unix timestamp).
     """
 
     def __init__(self, name='default', connection=None):
@@ -134,3 +135,11 @@ class DeferredJobRegistry(BaseRegistry):
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
         pass
+
+
+def clean_registries(queue):
+    """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
+    registry = FinishedJobRegistry(name=queue.name, connection=queue.connection)
+    registry.cleanup()
+    registry = StartedJobRegistry(name=queue.name, connection=queue.connection)
+    registry.cleanup()
