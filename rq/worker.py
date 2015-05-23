@@ -125,8 +125,7 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
-        if isinstance(queues, self.queue_class):
-            queues = [queues]
+        queues = self.process_queue_args(queues)
         self._name = name
         self.queues = queues
         self.validate_queues()
@@ -160,11 +159,18 @@ class Worker(object):
 
     def validate_queues(self):
         """Sanity check for the given queues."""
-        if not iterable(self.queues):
-            raise ValueError('Argument queues not iterable.')
         for queue in self.queues:
             if not isinstance(queue, self.queue_class):
-                raise NoQueueError('Give each worker at least one Queue.')
+                raise NoQueueError('{0} is not a queue'.format(queue))
+
+    def process_queue_args(self, queue_args):
+        """ allow for a string, a queue an iterable of strings
+        or an iterable of queues"""
+        if isinstance(queue_args, text_type):
+            return self.queue_class(name = queue_args)
+        else:
+            return  [self.queue_class(name=queue_arg) if isinstance(queue_arg, text_type) 
+                    else queue_arg for queue_arg in queue_args]
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""

@@ -12,6 +12,7 @@ from tests.helpers import strip_microseconds
 
 from rq import get_failed_queue, Queue, SimpleWorker, Worker
 from rq.compat import as_text
+from rq.exceptions import NoQueueError
 from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
@@ -27,6 +28,40 @@ class TestWorker(RQTestCase):
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
         self.assertEquals(w.queues, [fooq, barq])
+
+    def test_create_worker_args_single_queue(self):
+        """Test Worker creation with single queue instance arg"""
+        fooq = Queue('foo')
+        w = Worker(fooq)
+        self.assertEquals(w.queue_keys(), ['rq:queue:foo'])
+
+    def test_create_worker_args_single_string(self):
+        """ Test Worker creation with single string arg"""
+        w = Worker('foo')
+        self.assertEquals(w.queue_keys(),['rq:queue:foo'])
+
+    def test_create_worker_args_iterable_strings(self):
+        """ Test Worker creation with iterable of strings"""
+        w = Worker(['foo', 'bar'])
+        self.assertEquals(w.queue_keys(),['rq:queue:foo', 'rq:queue:bar'])
+
+    def test_create_worker_args_iterable_queues(self):
+        """ Test Worker test worker creation 
+        with an iterable of queue instance args"""
+        w = Worker(map(Queue, ['foo', 'bar']))
+        self.assertEquals(w.queue_keys(),['rq:queue:foo', 'rq:queue:bar'])
+
+    def test_create_worker_args_list_map(self):
+        """ Test Worker test worker creation 
+        with a list of queue from map"""
+        w = Worker(list(map(Queue, ['foo', 'bar'])))
+        self.assertEquals(w.queue_keys(),['rq:queue:foo', 'rq:queue:bar'])
+
+    def test_create_worker_raises_noqueue_error(self):
+        """ make sure raises noqueue error if a
+        a non string or queue is passed"""
+        with self.assertRaises(NoQueueError):
+            w = Worker([1])
 
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
