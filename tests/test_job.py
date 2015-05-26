@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import time
 from datetime import datetime
 
 from tests import RQTestCase
@@ -15,7 +16,7 @@ from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 from rq.worker import Worker
 
-from . import fixtures
+import fixtures
 
 try:
     from cPickle import loads, dumps
@@ -103,7 +104,8 @@ class TestJob(RQTestCase):
         job = Job.create(func='tests.fixtures.say_hello', args=('World',))
 
         # Job data is set
-        self.assertEquals(job.func, fixtures.say_hello)
+        self.assertTrue(job.func.func_code.co_filename in fixtures.say_hello.func_code.co_filename)
+        self.assertEquals(job.func.func_code.co_firstlineno, fixtures.say_hello.func_code.co_firstlineno)
         self.assertIsNone(job.instance)
         self.assertEquals(job.args, ('World',))
 
@@ -147,7 +149,7 @@ class TestJob(RQTestCase):
 
         # Saving writes pickled job data
         unpickled_data = loads(self.testconn.hget(job.key, 'data'))
-        self.assertEquals(unpickled_data[0], 'tests.fixtures.some_calculation')
+        self.assertEquals(unpickled_data[0], 'fixtures.some_calculation')
 
     def test_fetch(self):
         """Fetching jobs."""
@@ -288,9 +290,9 @@ class TestJob(RQTestCase):
         job.save()
         Job.fetch(job.id, connection=self.testconn)
         if PY2:
-            self.assertEqual(job.description, "tests.fixtures.say_hello(u'Lionel')")
+            self.assertEqual(job.description, "fixtures.say_hello(u'Lionel')")
         else:
-            self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
+            self.assertEqual(job.description, "fixtures.say_hello('Lionel')")
 
     def test_job_access_outside_job_fails(self):
         """The current job is accessible only within a job context."""
@@ -407,3 +409,17 @@ class TestJob(RQTestCase):
         job = queue.enqueue(fixtures.echo, arg_with_unicode=fixtures.UnicodeStringObject())
         self.assertIsNotNone(job.get_call_string())
         job.perform()
+
+    def test_create_job_with_ttl_should_have_ttl_after_enqueued(self):
+        """test creating jobs with ttl and checks if get_jobs returns it properly [issue502]"""
+        queue = Queue(connection=self.testconn)
+        queue.enqueue(fixtures.say_hello, job_id="1234", ttl=10)
+        job = queue.get_jobs()[0]
+        self.assertEqual(job.ttl, 10)
+
+    def test_create_job_with_ttl_should_expire(self):
+        """test if a job created with ttl expires [issue502]"""
+        queue = Queue(connection=self.testconn)
+        queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
+        time.sleep(1)
+        self.assertEqual(0, len(queue.get_jobs()))
