@@ -2,8 +2,8 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import time
 from datetime import datetime
+import time
 
 from tests import RQTestCase
 from tests.helpers import strip_microseconds
@@ -16,7 +16,7 @@ from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 from rq.worker import Worker
 
-import fixtures
+from . import fixtures
 
 try:
     from cPickle import loads, dumps
@@ -104,8 +104,7 @@ class TestJob(RQTestCase):
         job = Job.create(func='tests.fixtures.say_hello', args=('World',))
 
         # Job data is set
-        self.assertTrue(job.func.func_code.co_filename in fixtures.say_hello.func_code.co_filename)
-        self.assertEquals(job.func.func_code.co_firstlineno, fixtures.say_hello.func_code.co_firstlineno)
+        self.assertEquals(job.func, fixtures.say_hello)
         self.assertIsNone(job.instance)
         self.assertEquals(job.args, ('World',))
 
@@ -149,7 +148,7 @@ class TestJob(RQTestCase):
 
         # Saving writes pickled job data
         unpickled_data = loads(self.testconn.hget(job.key, 'data'))
-        self.assertEquals(unpickled_data[0], 'fixtures.some_calculation')
+        self.assertEquals(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
         """Fetching jobs."""
@@ -290,9 +289,9 @@ class TestJob(RQTestCase):
         job.save()
         Job.fetch(job.id, connection=self.testconn)
         if PY2:
-            self.assertEqual(job.description, "fixtures.say_hello(u'Lionel')")
+            self.assertEqual(job.description, "tests.fixtures.say_hello(u'Lionel')")
         else:
-            self.assertEqual(job.description, "fixtures.say_hello('Lionel')")
+            self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
     def test_job_access_outside_job_fails(self):
         """The current job is accessible only within a job context."""
