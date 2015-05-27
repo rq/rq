@@ -518,7 +518,7 @@ class Job(object):
 
         arg_list = [as_text(repr(arg)) for arg in self.args]
 
-        kwargs = ['{0}={1!r}'.format(k, v) for k, v in self.kwargs.items()]
+        kwargs = ['{0}={1}'.format(k, as_text(repr(v))) for k, v in self.kwargs.items()]
         # Sort here because python 3.3 & 3.4 makes different call_string
         arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
