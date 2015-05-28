@@ -78,6 +78,11 @@ class CallableObject(object):
         return u"I'm callable"
 
 
+class UnicodeStringObject(object):
+    def __repr__(self):
+        return u'é'.encode('utf-8')
+
+
 with Connection():
     @job(queue='default')
     def decorated_job(x, y):
