@@ -399,3 +399,11 @@ class TestJob(RQTestCase):
         job.perform()
 
         self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
+
+    def test_get_call_string_unicode(self):
+        """test call string with unicode keyword arguments"""
+        queue = Queue(connection=self.testconn)
+
+        job = queue.enqueue(fixtures.echo, arg_with_unicode=fixtures.UnicodeStringObject())
+        self.assertIsNotNone(job.get_call_string())
+        job.perform()

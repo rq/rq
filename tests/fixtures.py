@@ -11,7 +11,7 @@ import time
 
 from rq import Connection, get_current_job
 from rq.decorators import job
-
+from rq.compat import PY2
 
 def say_pid():
     return os.getpid()
@@ -76,6 +76,14 @@ class Number(object):
 class CallableObject(object):
     def __call__(self):
         return u"I'm callable"
+
+
+class UnicodeStringObject(object):
+    def __repr__(self):
+        if PY2:
+            return u'é'.encode('utf-8')
+        else:
+            return u'é'
 
 
 with Connection():
