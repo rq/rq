@@ -417,7 +417,7 @@ class Job(object):
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
-        self.ttl = int(obj.get('ttl', -1))
+        self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def to_dict(self):
