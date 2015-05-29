@@ -417,6 +417,7 @@ class Job(object):
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
+        self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def to_dict(self):
@@ -447,6 +448,8 @@ class Job(object):
             obj['dependency_id'] = self._dependency_id
         if self.meta:
             obj['meta'] = dumps(self.meta)
+        if self.ttl:
+            obj['ttl'] = self.ttl
 
         return obj
 
@@ -456,7 +459,7 @@ class Job(object):
         connection = pipeline if pipeline is not None else self.connection
 
         connection.hmset(key, self.to_dict())
-        self.cleanup(self.ttl)
+        self.cleanup(self.ttl, pipeline=connection)
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being

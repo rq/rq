@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from datetime import datetime
+import time
 
 from tests import RQTestCase
 from tests.helpers import strip_microseconds
@@ -407,3 +408,17 @@ class TestJob(RQTestCase):
         job = queue.enqueue(fixtures.echo, arg_with_unicode=fixtures.UnicodeStringObject())
         self.assertIsNotNone(job.get_call_string())
         job.perform()
+
+    def test_create_job_with_ttl_should_have_ttl_after_enqueued(self):
+        """test creating jobs with ttl and checks if get_jobs returns it properly [issue502]"""
+        queue = Queue(connection=self.testconn)
+        queue.enqueue(fixtures.say_hello, job_id="1234", ttl=10)
+        job = queue.get_jobs()[0]
+        self.assertEqual(job.ttl, 10)
+
+    def test_create_job_with_ttl_should_expire(self):
+        """test if a job created with ttl expires [issue502]"""
+        queue = Queue(connection=self.testconn)
+        queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
+        time.sleep(1)
+        self.assertEqual(0, len(queue.get_jobs()))
