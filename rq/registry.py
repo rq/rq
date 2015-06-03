@@ -69,7 +69,7 @@ class StartedJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(StartedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:wip:%s' % name
+        self.key = 'rq:wip:{0}'.format(name)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedQueue.
@@ -108,7 +108,7 @@ class FinishedJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(FinishedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:finished:%s' % name
+        self.key = 'rq:finished:{0}'.format(name)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -128,7 +128,7 @@ class DeferredJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(DeferredJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:deferred:%s' % name
+        self.key = 'rq:deferred:{0}'.format(name)
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is
