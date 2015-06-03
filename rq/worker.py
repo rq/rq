@@ -17,7 +17,7 @@ import warnings
 from rq.compat import as_text, string_types, text_type
 
 from .connections import get_current_connection
-from .exceptions import DequeueTimeout, NoQueueError
+from .exceptions import DequeueTimeout
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import get_failed_queue, Queue
@@ -163,7 +163,7 @@ class Worker(object):
         """Sanity check for the given queues."""
         for queue in self.queues:
             if not isinstance(queue, self.queue_class):
-                raise NoQueueError('{0} is not a queue'.format(queue))
+                raise TypeError('{0} is not a Queue or a string'.format(queue))
 
     def process_queue_args(self, queue_args):
         """Allow for a string, a queue an iterable of strings or an iterable of queues"""
