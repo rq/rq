@@ -1,13 +1,14 @@
 ### 0.5.3
 
-(June 1st, 2015)
+(June 3rd, 2015)
 
-- enqueue_call() no longer ignores `ttl`. Thanks @mbodock!
-- Better support for unicode kwargs. Thanks @nealtodd and @brownstein!
 - Better API for instantiating Workers. Thanks @RyanMTB!
-- Jobs that are moved from `StartedJobRegistry` to `FailedQueue` now
-  have their statuses assigned properly.
-- Workers now automatically cleans up job registries every hour.
+- Better support for unicode kwargs. Thanks @nealtodd and @brownstein!
+- Workers now automatically cleans up job registries every hour
+- Jobs in `FailedQueue` now have their statuses set properly
+- `enqueue_call()` no longer ignores `ttl`. Thanks @mbodock!
+- Improved logging. Thanks @trevorprater!
+
 
 ### 0.5.2
 
