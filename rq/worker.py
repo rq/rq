@@ -149,7 +149,7 @@ class Worker(object):
         self._stopped = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
-        self.maintenance_date = None
+        self.last_cleaned_at = None
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -653,14 +653,14 @@ class Worker(object):
         """Runs maintenance jobs on each Queue's registries."""
         for queue in self.queues:
             clean_registries(queue)
-        self.maintenance_date = utcnow()
+        self.last_cleaned_at = utcnow()
 
     @property
     def should_run_maintenance_tasks(self):
         """Maintenance tasks should run on first startup or every hour."""
-        if self.maintenance_date is None:
+        if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.maintenance_date) > timedelta(seconds=3600):
+        if (utcnow() - self.last_cleaned_at) > timedelta(hours=1):
             return True
         return False
 

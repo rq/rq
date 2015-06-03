@@ -430,7 +430,7 @@ class TestWorker(RQTestCase):
         self.assertEquals(type(death_date).__name__, 'datetime')
 
     def test_clean_queue_registries(self):
-        """worker.clean_registries sets maintenance_date and cleans registries."""
+        """worker.clean_registries sets last_cleaned_at and cleans registries."""
         foo_queue = Queue('foo', connection=self.testconn)
         foo_registry = StartedJobRegistry('foo', connection=self.testconn)
         self.testconn.zadd(foo_registry.key, 1, 'foo')
@@ -442,9 +442,9 @@ class TestWorker(RQTestCase):
         self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
 
         worker = Worker([foo_queue, bar_queue])
-        self.assertEqual(worker.maintenance_date, None)
+        self.assertEqual(worker.last_cleaned_at, None)
         worker.clean_registries()
-        self.assertNotEqual(worker.maintenance_date, None)
+        self.assertNotEqual(worker.last_cleaned_at, None)
         self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
         self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
 
@@ -454,9 +454,9 @@ class TestWorker(RQTestCase):
         worker = Worker(queue)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
-        worker.maintenance_date = utcnow()
+        worker.last_cleaned_at = utcnow()
         self.assertFalse(worker.should_run_maintenance_tasks)
-        worker.maintenance_date = utcnow() - timedelta(seconds=3700)
+        worker.last_cleaned_at = utcnow() - timedelta(seconds=3700)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
     def test_worker_calls_clean_registries(self):
