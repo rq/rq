@@ -35,14 +35,14 @@ class TestJob(RQTestCase):
 
         if not PY2:
             # Python 3
-            test_string = "myfunc(12, '☃', null=None, snowman='☃')"
+            expected_string = "myfunc(12, '☃', null=None, snowman='☃')"
         else:
             # Python 2
-            test_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode('utf-8')
+            expected_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode('utf-8')
 
         self.assertEquals(
             job.description,
-            test_string,
+            expected_string,
         )
 
     def test_create_empty_job(self):
