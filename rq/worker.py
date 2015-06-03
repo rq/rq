@@ -146,7 +146,7 @@ class Worker(object):
         self._state = 'starting'
         self._is_horse = False
         self._horse_pid = 0
-        self._stopped = False
+        self._stop_requested = False
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
         self.last_cleaned_at = None
@@ -308,10 +308,6 @@ class Worker(object):
 
         return self.job_class.fetch(job_id, self.connection)
 
-    @property
-    def stopped(self):
-        return self._stopped
-
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
         gracefully.
@@ -350,7 +346,7 @@ class Worker(object):
             # If shutdown is requested in the middle of a job, wait until
             # finish before shutting down
             if self.get_state() == 'busy':
-                self._stopped = True
+                self._stop_requested = True
                 self.log.debug('Stopping after current horse is finished. '
                                'Press Ctrl+C again for a cold shutdown.')
             else:
@@ -365,7 +361,7 @@ class Worker(object):
         before_state = None
         notified = False
 
-        while not self.stopped and is_suspended(self.connection):
+        while not self._stop_requested and is_suspended(self.connection):
 
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
@@ -407,7 +403,7 @@ class Worker(object):
                     if self.should_run_maintenance_tasks:
                         self.clean_registries()
 
-                    if self.stopped:
+                    if self._stop_requested:
                         self.log.info('Stopping on request')
                         break
 
