@@ -13,8 +13,9 @@ import datetime
 import importlib
 import logging
 import sys
+from collections import Iterable
 
-from .compat import as_text, is_python_version
+from .compat import as_text, is_python_version, string_types
 
 
 class _Colorizer(object):
@@ -203,6 +204,19 @@ def first(iterable, default=None, key=None):
                 return el
 
     return default
+
+
+def is_nonstring_iterable(obj):
+    """Returns whether the obj is an iterable, but not a string"""
+    return isinstance(obj, Iterable) and not isinstance(obj, string_types)
+
+
+def ensure_list(obj):
+    """
+    When passed an iterable of objects, does nothing, otherwise, it returns
+    a list with just that object in it.
+    """
+    return obj if is_nonstring_iterable(obj) else [obj]
 
 
 def current_timestamp():
