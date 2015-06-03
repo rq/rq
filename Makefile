@@ -4,7 +4,7 @@ all:
 clean:
 	rm -rf build/ dist/
 
-release:
+release: clean
 	# Check if latest tag is the current head we're releasing
 	echo "Latest tag = $$(git tag | sort -nr | head -n1)"
 	echo "HEAD SHA       = $$(git sha head)"
