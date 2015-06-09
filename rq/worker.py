@@ -392,7 +392,7 @@ class Worker(object):
 
         did_perform_work = False
         self.register_birth()
-        self.log.info("RQ worker {0!r} started, version %s".format(self.key, VERSION))
+        self.log.info("RQ worker {0!r} started, version {1}".format(self.key, VERSION))
         self.set_state(WorkerStatus.STARTED)
 
         try:
