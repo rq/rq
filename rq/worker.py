@@ -523,6 +523,7 @@ class Worker(object):
                 pipeline.execute()
 
             except Exception:
+                job.refresh()
                 job.set_status(Status.FAILED, pipeline=pipeline)
                 started_job_registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
