@@ -13,4 +13,4 @@ tox
 
 If you rather use Vagrant, see [these instructions][v].
 
-[v]: {{site.baseurl}}docs/contrib/vagrant/
+[v]: {{site.baseurl}}contrib/vagrant/
