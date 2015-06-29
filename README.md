@@ -10,6 +10,8 @@ RQ requires Redis >= 2.7.0.
 [![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
 [![Coverage Status](https://img.shields.io/coveralls/nvie/rq.svg)](https://coveralls.io/r/nvie/rq)
 
+Full documentation can be found [here][d].
+
 
 ## Getting started
 
@@ -85,7 +87,7 @@ and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
 [r]: http://python-requests.org
-[d]: http://nvie.github.com/rq/docs/
+[d]: http://python-rq.org/
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
 [1]: http://www.celeryproject.org/
