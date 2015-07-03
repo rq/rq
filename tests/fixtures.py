@@ -11,6 +11,7 @@ import time
 
 from rq import Connection, get_current_job
 from rq.decorators import job
+from rq.compat import PY2
 
 
 def say_pid():
@@ -54,8 +55,7 @@ def create_file_after_timeout(path, timeout):
 
 
 def access_self():
-    job = get_current_job()
-    return job.id
+    assert get_current_job() is not None
 
 
 def echo(*args, **kwargs):
@@ -79,15 +79,25 @@ class CallableObject(object):
         return u"I'm callable"
 
 
+class UnicodeStringObject(object):
+    def __repr__(self):
+        if PY2:
+            return u'é'.encode('utf-8')
+        else:
+            return u'é'
+
+
 with Connection():
     @job(queue='default')
     def decorated_job(x, y):
         return x + y
 
 
-def long_running_job():
-    time.sleep(10)
-
 def black_hole(job, *exc_info):
     # Don't fall through to default behaviour (moving to failed queue)
     return False
+
+
+def long_running_job(timeout=10):
+    time.sleep(timeout)
+    return 'Done sleeping...'

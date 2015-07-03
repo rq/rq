@@ -1,13 +1,16 @@
 from .compat import as_text
 from .connections import resolve_connection
+from .exceptions import NoSuchJobError
+from .job import Job, JobStatus
 from .queue import FailedQueue
 from .utils import current_timestamp
 
 
 class BaseRegistry(object):
     """
-    Base implementation of job registry, implemented in Redis sorted set. Each job
-    is stored as a key in the registry, scored by expiration time (unix timestamp).
+    Base implementation of a job registry, implemented in Redis sorted set.
+    Each job is stored as a key in the registry, scored by expiration time
+    (unix timestamp).
     """
 
     def __init__(self, name='default', connection=None):
@@ -66,7 +69,7 @@ class StartedJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(StartedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:wip:%s' % name
+        self.key = 'rq:wip:{0}'.format(name)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedQueue.
@@ -80,9 +83,17 @@ class StartedJobRegistry(BaseRegistry):
 
         if job_ids:
             failed_queue = FailedQueue(connection=self.connection)
+
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
-                    failed_queue.push_job_id(job_id, pipeline=pipeline)
+                    try:
+                        job = Job.fetch(job_id, connection=self.connection)
+                        job.status = JobStatus.FAILED
+                        job.save(pipeline=pipeline)
+                        failed_queue.push_job_id(job_id, pipeline=pipeline)
+                    except NoSuchJobError:
+                        pass
+
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
@@ -97,7 +108,7 @@ class FinishedJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(FinishedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:finished:%s' % name
+        self.key = 'rq:finished:{0}'.format(name)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -117,10 +128,18 @@ class DeferredJobRegistry(BaseRegistry):
 
     def __init__(self, name='default', connection=None):
         super(DeferredJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:deferred:%s' % name
+        self.key = 'rq:deferred:{0}'.format(name)
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
         pass
+
+
+def clean_registries(queue):
+    """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
+    registry = FinishedJobRegistry(name=queue.name, connection=queue.connection)
+    registry.cleanup()
+    registry = StartedJobRegistry(name=queue.name, connection=queue.connection)
+    registry.cleanup()

@@ -173,6 +173,14 @@ class TestQueue(RQTestCase):
         # ...and assert the queue count when down
         self.assertEquals(q.count, 0)
 
+    def test_dequeue_deleted_jobs(self):
+        """Dequeueing deleted jobs from queues don't blow the stack."""
+        q = Queue()
+        for _ in range(1, 1000):
+            job = q.enqueue(say_hello)
+            job.delete()
+        q.dequeue()
+
     def test_dequeue_instance_method(self):
         """Dequeueing instance method jobs from queues."""
         q = Queue()

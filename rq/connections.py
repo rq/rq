@@ -43,7 +43,7 @@ def use_connection(redis=None):
     use of use_connection() and stacked connection contexts.
     """
     assert len(_connection_stack) <= 1, \
-        'You should not mix Connection contexts with use_connection().'
+        'You should not mix Connection contexts with use_connection()'
     release_local(_connection_stack)
 
     if redis is None:
@@ -67,7 +67,7 @@ def resolve_connection(connection=None):
 
     connection = get_current_connection()
     if connection is None:
-        raise NoRedisConnectionException('Could not resolve a Redis connection.')
+        raise NoRedisConnectionException('Could not resolve a Redis connection')
     return connection
 
 

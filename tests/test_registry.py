@@ -2,12 +2,12 @@
 from __future__ import absolute_import
 
 from rq.compat import as_text
-from rq.job import Job
+from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import (DeferredJobRegistry, FinishedJobRegistry,
-                         StartedJobRegistry)
+from rq.registry import (clean_registries, DeferredJobRegistry,
+                         FinishedJobRegistry, StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -60,15 +60,21 @@ class TestRegistry(RQTestCase):
         """Moving expired jobs to FailedQueue."""
         failed_queue = FailedQueue(connection=self.testconn)
         self.assertTrue(failed_queue.is_empty())
-        self.testconn.zadd(self.registry.key, 2, 'foo')
+
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        self.testconn.zadd(self.registry.key, 2, job.id)
 
         self.registry.cleanup(1)
-        self.assertNotIn('foo', failed_queue.job_ids)
-        self.assertEqual(self.testconn.zscore(self.registry.key, 'foo'), 2)
+        self.assertNotIn(job.id, failed_queue.job_ids)
+        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), 2)
 
         self.registry.cleanup()
-        self.assertIn('foo', failed_queue.job_ids)
-        self.assertEqual(self.testconn.zscore(self.registry.key, 'foo'), None)
+        self.assertIn(job.id, failed_queue.job_ids)
+        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), None)
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.FAILED)
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
@@ -100,6 +106,21 @@ class TestRegistry(RQTestCase):
         self.testconn.zadd(self.registry.key, timestamp, 'bar')
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
+
+    def test_clean_registries(self):
+        """clean_registries() cleans Started and Finished job registries."""
+
+        queue = Queue(connection=self.testconn)
+
+        finished_job_registry = FinishedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(finished_job_registry.key, 1, 'foo')
+
+        started_job_registry = StartedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(started_job_registry.key, 1, 'foo')
+
+        clean_registries(queue)
+        self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
 
 
 class TestFinishedJobRegistry(RQTestCase):

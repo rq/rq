@@ -1,3 +1,35 @@
+### 0.5.3
+
+(June 3rd, 2015)
+
+- Better API for instantiating Workers. Thanks @RyanMTB!
+- Better support for unicode kwargs. Thanks @nealtodd and @brownstein!
+- Workers now automatically cleans up job registries every hour
+- Jobs in `FailedQueue` now have their statuses set properly
+- `enqueue_call()` no longer ignores `ttl`. Thanks @mbodock!
+- Improved logging. Thanks @trevorprater!
+
+
+### 0.5.2
+
+(April 14th, 2015)
+
+- Support SSL connection to Redis (requires redis-py>=2.10)
+- Fix to prevent deep call stacks with large queues
+
+
+### 0.5.1
+
+(March 9th, 2015)
+
+- Resolve performance issue when queues contain many jobs
+- Restore the ability to specify connection params in config
+- Record `birth_date` and `death_date` on Worker
+- Add support for SSL URLs in Redis (and `REDIS_SSL` config option)
+- Fix encoding issues with non-ASCII characters in function arguments
+- Fix Redis transaction management issue with job dependencies
+
+
 ### 0.5.0
 (Jan 30th, 2015)
 
