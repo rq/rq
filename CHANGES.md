@@ -1,3 +1,10 @@
+### 0.5.4
+
+(July 8th, 2015)
+
+- Fix compatibility with raven>=5.4.0
+
+
 ### 0.5.3
 
 (June 3rd, 2015)
