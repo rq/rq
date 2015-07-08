@@ -16,8 +16,8 @@ An example:
 
 {% highlight python %}
 from raven import Client
+from raven.transport.http import HTTPTransport
 from rq.contrib.sentry import register_sentry
-from sentry.transport.http import HTTPTransport
 
 client = Client('<YOUR_DSN>', transport=HTTPTransport)
 register_sentry(client, worker)
