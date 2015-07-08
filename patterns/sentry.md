@@ -17,8 +17,9 @@ An example:
 {% highlight python %}
 from raven import Client
 from rq.contrib.sentry import register_sentry
+from sentry.transport.http import HTTPTransport
 
-client = Client('your sentry DSN here')
+client = Client('<YOUR_DSN>', transport=HTTPTransport)
 register_sentry(client, worker)
 {% endhighlight %}
 
@@ -32,8 +33,10 @@ automatically.
     <p>
       Error delivery to Sentry is known to be unreliable with RQ when using
       async transports (the default is).  So you are encouraged to use the
-      <code>sync+https://</code> or <code>requests+https://</code> versions of
-      the Sentry DSN in RQ.
+      <code>HTTPTransport</code> or <code>RequestsHTTPTransport</code> when
+      creating your client.  See the code sample above, or the <a
+      href="http://raven.readthedocs.org/en/latest/transports/index.html">Raven
+      documentation</a>.
     </p>
     <p>
       For more info, see the
