@@ -13,6 +13,7 @@ from rq import Connection, get_current_job
 from rq.decorators import job
 from rq.compat import PY2
 
+
 def say_pid():
     return os.getpid()
 
@@ -90,6 +91,11 @@ with Connection():
     @job(queue='default')
     def decorated_job(x, y):
         return x + y
+
+
+def black_hole(job, *exc_info):
+    # Don't fall through to default behaviour (moving to failed queue)
+    return False
 
 
 def long_running_job(timeout=10):
