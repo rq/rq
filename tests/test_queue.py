@@ -368,7 +368,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_job_with_dependency_by_id(self):
-        """Enqueueing jobs should work as expected by id as well as job-objects."""
+        """"Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello)
 
         q = Queue()
@@ -465,10 +465,11 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(int(job_from_queue.result_ttl), 10)
 
     def test_async_false(self):
-        """Executes a job immediately if async=False."""
+        """Job executes and cleaned up immediately if async=False."""
         q = Queue(async=False)
         job = q.enqueue(some_calculation, args=(2, 3))
         self.assertEqual(job.return_value, 6)
+        self.assertNotEqual(self.testconn.ttl(job.key), -1)
 
     def test_custom_job_class(self):
         """Ensure custom job class assignment works as expected."""

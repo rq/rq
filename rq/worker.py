@@ -17,6 +17,7 @@ from datetime import timedelta
 from rq.compat import as_text, string_types, text_type
 
 from .connections import get_current_connection
+from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
 from .exceptions import DequeueTimeout
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
@@ -38,8 +39,7 @@ green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
 
-DEFAULT_WORKER_TTL = 420
-DEFAULT_RESULT_TTL = 500
+
 logger = logging.getLogger(__name__)
 
 

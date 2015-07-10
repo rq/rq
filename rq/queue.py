@@ -8,6 +8,7 @@ from redis import WatchError
 
 from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
+from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import (DequeueTimeout, InvalidJobOperationError,
                          NoSuchJobError, UnpickleError)
 from .job import Job, JobStatus
@@ -212,7 +213,14 @@ class Queue(object):
                     except WatchError:
                         continue
 
-        return self.enqueue_job(job, at_front=at_front)
+        job = self.enqueue_job(job, at_front=at_front)
+
+        if not self._async:
+            job.perform()
+            job.save()
+            job.cleanup(DEFAULT_RESULT_TTL)
+
+        return job
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues
@@ -273,9 +281,7 @@ class Queue(object):
 
         if self._async:
             self.push_job_id(job.id, at_front=at_front)
-        else:
-            job.perform()
-            job.save()
+
         return job
 
     def enqueue_dependents(self, job):
