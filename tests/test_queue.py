@@ -350,6 +350,44 @@ class TestQueue(RQTestCase):
         # DeferredJobRegistry should also be empty
         self.assertEqual(registry.get_job_ids(), [])
 
+    def test_enqueue_dependents_on_multiple_queues(self):
+        """Enqueueing dependent jobs pushes all jobs in the depends set to the queue
+        and removes them from DeferredJobRegistry for each different queue."""
+        q_1 = Queue("queue_1")
+        q_2 = Queue("queue_2")
+        parent_job = Job.create(func=say_hello)
+        parent_job.save()
+        job_1 = q_1.enqueue(say_hello, depends_on=parent_job)
+        job_2 = q_2.enqueue(say_hello, depends_on=parent_job)
+
+        # Each queue has its own DeferredJobRegistry
+        registry_1 = DeferredJobRegistry(q_1.name, connection=self.testconn)
+        self.assertEqual(
+            set(registry_1.get_job_ids()),
+            set([job_1.id])
+        )
+        registry_2 = DeferredJobRegistry(q_2.name, connection=self.testconn)
+        self.assertEqual(
+            set(registry_2.get_job_ids()),
+            set([job_2.id])
+        )
+
+        # After dependents is enqueued, job_1 on queue_1 and
+        # job_2 should be in queue_2
+        self.assertEqual(q_1.job_ids, [])
+        self.assertEqual(q_2.job_ids, [])
+        q_1.enqueue_dependents(parent_job)
+        q_2.enqueue_dependents(parent_job)
+        self.assertEqual(set(q_1.job_ids), set([job_1.id]))
+        self.assertEqual(set(q_2.job_ids), set([job_2.id]))
+        self.assertFalse(self.testconn.exists(parent_job.dependents_key))
+
+        # DeferredJobRegistry should also be empty
+        self.assertEqual(registry_1.get_job_ids(), [])
+        self.assertEqual(registry_2.get_job_ids(), [])
+
+
+
     def test_enqueue_job_with_dependency(self):
         """Jobs are enqueued only when their dependencies are finished."""
         # Job with unfinished dependency is not immediately enqueued
