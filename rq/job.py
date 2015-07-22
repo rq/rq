@@ -569,7 +569,7 @@ class Job(object):
 
     # Job equality
     def __eq__(self, other):  # noqa
-        return self.id == other.id
+        return isinstance(other, self.__class__) and self.id == other.id
 
     def __hash__(self):
         return hash(self.id)
