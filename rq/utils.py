@@ -60,7 +60,7 @@ class _Colorizer(object):
         return self.codes["reset"]
 
     def colorize(self, color_key, text):
-        if not sys.stdout.isatty():
+        if self.notty:
             return text
         else:
             return self.codes[color_key] + text + self.codes["reset"]
