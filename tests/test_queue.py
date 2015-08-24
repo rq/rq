@@ -350,8 +350,9 @@ class TestQueue(RQTestCase):
         # DeferredJobRegistry should also be empty
         self.assertEqual(registry.get_job_ids(), [])
 
+
     def test_enqueue_dependents_on_multiple_queues(self):
-        """Enqueueing dependent jobs pushes all jobs in the depends set to the queue
+        """Enqueueing dependent jobs on multiple queues pushes jobs in the queues
         and removes them from DeferredJobRegistry for each different queue."""
         q_1 = Queue("queue_1")
         q_2 = Queue("queue_2")
