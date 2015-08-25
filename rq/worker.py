@@ -158,9 +158,9 @@ class Worker(object):
             if exc_handler is not None:
                 self.push_exc_handler(exc_handler)
                 warnings.warn(
-                        "use of exc_handler is deprecated, pass a list to exception_handlers instead.",
-                        DeprecationWarning
-                        )
+                    "use of exc_handler is deprecated, pass a list to exception_handlers instead.",
+                    DeprecationWarning
+                )
         elif isinstance(exception_handlers, list):
             for h in exception_handlers:
                 self.push_exc_handler(h)
