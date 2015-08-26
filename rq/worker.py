@@ -590,7 +590,12 @@ class Worker(object):
             except Exception:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 started_job_registry.remove(job, pipeline=pipeline)
-                pipeline.execute()
+                try:
+                    pipeline.execute()
+                except Exception:
+                    # Ensure that custom exception handlers are called
+                    # even if Redis is down
+                    pass
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
