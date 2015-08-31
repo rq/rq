@@ -599,10 +599,12 @@ class Worker(object):
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
-        if rv is None:
-            self.log.info('Job OK')
-        else:
-            self.log.info('Job OK, result = {0!r}'.format(yellow(text_type(rv))))
+        self.log.info(green('Job OK'))
+        if rv:
+            log_result = "{0!r}".format(text_type(rv))
+            if len(log_result) > 2000:
+                log_result = "{}..\n..output truncated".format(log_result[:2000])
+            self.log.debug('Result: {}'.format(yellow(log_result)))
 
         if result_ttl == 0:
             self.log.info('Result discarded immediately')
