@@ -1,3 +1,13 @@
+### 0.5.5
+
+(August 25th, 2015)
+
+- Add support for `--exception-handler` command line flag
+- Fix compatibility with click>=5.0
+- Fix maximum recursion depth problem for very large queues that contain jobs
+  that all fail
+
+
 ### 0.5.4
 
 (July 8th, 2015)

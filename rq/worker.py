@@ -158,9 +158,9 @@ class Worker(object):
             if exc_handler is not None:
                 self.push_exc_handler(exc_handler)
                 warnings.warn(
-                        "use of exc_handler is deprecated, pass a list to exception_handlers instead.",
-                        DeprecationWarning
-                        )
+                    "use of exc_handler is deprecated, pass a list to exception_handlers instead.",
+                    DeprecationWarning
+                )
         elif isinstance(exception_handlers, list):
             for h in exception_handlers:
                 self.push_exc_handler(h)
@@ -590,7 +590,12 @@ class Worker(object):
             except Exception:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 started_job_registry.remove(job, pipeline=pipeline)
-                pipeline.execute()
+                try:
+                    pipeline.execute()
+                except Exception:
+                    # Ensure that custom exception handlers are called
+                    # even if Redis is down
+                    pass
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
