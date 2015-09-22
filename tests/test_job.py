@@ -5,7 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 from datetime import datetime
 import time
 
-from tests import RQTestCase
+from tests import fixtures, RQTestCase
 from tests.helpers import strip_microseconds
 
 from rq.compat import PY2, as_text
@@ -15,8 +15,6 @@ from rq.queue import Queue
 from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 from rq.worker import Worker
-
-from . import fixtures
 
 try:
     from cPickle import loads, dumps
