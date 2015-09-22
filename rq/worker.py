@@ -491,6 +491,8 @@ class Worker(object):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
         child_pid = os.fork()
         if child_pid == 0:
             self.main_work_horse(job)
