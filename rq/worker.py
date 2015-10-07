@@ -601,7 +601,7 @@ class Worker(object):
 
         self.log.info(green('Job OK'))
         if rv:
-            log_result = "{0!r}".format(text_type(rv))
+            log_result = "{0!r}".format(as_text(rv))
             self.log.debug('Result: {0}'.format(yellow(log_result)))
 
         if result_ttl == 0:
