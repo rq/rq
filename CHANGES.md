@@ -1,3 +1,10 @@
+### 0.5.6
+
+- Job results are now logged on `DEBUG` level. Thanks @tbaugis!
+- Modified `patch_connection` so Redis connection can be easily mocked
+- Customer exception handlers are now called if Redis connection is lost. Thanks @jlopex!
+- Jobs can now depend on jobs in a different queue. Thanks @jlopex!
+
 ### 0.5.5
 
 (August 25th, 2015)
