@@ -564,6 +564,7 @@ class Worker(object):
             started_job_registry = StartedJobRegistry(job.origin, self.connection)
 
             try:
+                job.started_at = utcnow()
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
