@@ -11,7 +11,7 @@ from multiprocessing import Process
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
-                            div_by_zero, do_nothing, say_hello, say_pid, long_running_job)
+                            div_by_zero, do_nothing, say_hello, say_pid)
 from tests.helpers import strip_microseconds
 
 from rq import get_failed_queue, Queue, SimpleWorker, Worker
@@ -496,6 +496,7 @@ class TestWorkerShutdown(RQTestCase):
 
     @slow
     def test_idle_worker_warm_shutdown(self):
+        """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
         w = Worker('foo')
         self.assertFalse(w._stop_requested)
         p = Process(target=kill_worker, args=(os.getpid(), False))
@@ -508,23 +509,29 @@ class TestWorkerShutdown(RQTestCase):
 
     @slow
     def test_working_worker_warm_shutdown(self):
+        """worker with an ongoing job receiving single SIGTERM signal, allowing job to finish then shutting down"""
         fooq = Queue('foo')
         w = Worker(fooq)
-        fooq.enqueue(long_running_job, 2)
+
+        sentinel_file = '/tmp/.rq_sentinel_warm'
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
         self.assertFalse(w._stop_requested)
         p = Process(target=kill_worker, args=(os.getpid(), False))
         p.start()
 
         w.work()
 
-        p.join(1)
+        p.join(2)
         self.assertTrue(w._stop_requested)
+        self.assertTrue(os.path.exists(sentinel_file))
 
     @slow
     def test_working_worker_cold_shutdown(self):
+        """worker with an ongoing job receiving double SIGTERM signal and shutting down immediately"""
         fooq = Queue('foo')
         w = Worker(fooq)
-        fooq.enqueue(long_running_job, 10)
+        sentinel_file = '/tmp/.rq_sentinel_cold'
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
         self.assertFalse(w._stop_requested)
         p = Process(target=kill_worker, args=(os.getpid(), True))
         p.start()
@@ -533,4 +540,5 @@ class TestWorkerShutdown(RQTestCase):
 
         p.join(1)
         self.assertTrue(w._stop_requested)
+        self.assertFalse(os.path.exists(sentinel_file))
 
