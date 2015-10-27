@@ -5,6 +5,9 @@ from __future__ import (absolute_import, division, print_function,
 import os
 from datetime import timedelta
 from time import sleep
+import signal
+import time
+from multiprocessing import Process
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
@@ -468,3 +471,74 @@ class TestWorker(RQTestCase):
         worker = Worker(queue, connection=self.testconn)
         worker.work(burst=True)
         self.assertEqual(self.testconn.zcard(registry.key), 0)
+
+
+def kill_worker(pid, double_kill):
+    # wait for the worker to be started over on the main process
+    time.sleep(0.5)
+    os.kill(pid, signal.SIGTERM)
+    if double_kill:
+        # give the worker time to switch signal handler
+        time.sleep(0.5)
+        os.kill(pid, signal.SIGTERM)
+
+
+class TestWorkerShutdown(RQTestCase):
+    def setUp(self):
+        # we want tests to fail if signal are ignored and the work remain running,
+        # so set a signal to kill them after 5 seconds
+        signal.signal(signal.SIGALRM, self._timeout)
+        signal.alarm(5)
+
+    def _timeout(self, signal, frame):
+        raise AssertionError("test still running after 5 seconds, "
+                             "likely the worker wasn't shutdown correctly")
+
+    @slow
+    def test_idle_worker_warm_shutdown(self):
+        """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
+        w = Worker('foo')
+        self.assertFalse(w._stop_requested)
+        p = Process(target=kill_worker, args=(os.getpid(), False))
+        p.start()
+
+        w.work()
+
+        p.join(1)
+        self.assertFalse(w._stop_requested)
+
+    @slow
+    def test_working_worker_warm_shutdown(self):
+        """worker with an ongoing job receiving single SIGTERM signal, allowing job to finish then shutting down"""
+        fooq = Queue('foo')
+        w = Worker(fooq)
+
+        sentinel_file = '/tmp/.rq_sentinel_warm'
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
+        self.assertFalse(w._stop_requested)
+        p = Process(target=kill_worker, args=(os.getpid(), False))
+        p.start()
+
+        w.work()
+
+        p.join(2)
+        self.assertTrue(w._stop_requested)
+        self.assertTrue(os.path.exists(sentinel_file))
+
+    @slow
+    def test_working_worker_cold_shutdown(self):
+        """worker with an ongoing job receiving double SIGTERM signal and shutting down immediately"""
+        fooq = Queue('foo')
+        w = Worker(fooq)
+        sentinel_file = '/tmp/.rq_sentinel_cold'
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
+        self.assertFalse(w._stop_requested)
+        p = Process(target=kill_worker, args=(os.getpid(), True))
+        p.start()
+
+        self.assertRaises(SystemExit, w.work)
+
+        p.join(1)
+        self.assertTrue(w._stop_requested)
+        self.assertFalse(os.path.exists(sentinel_file))
+

@@ -323,47 +323,47 @@ class Worker(object):
         gracefully.
         """
 
-        def request_force_stop(signum, frame):
-            """Terminates the application (cold shutdown).
-            """
-            self.log.warning('Cold shut down')
+        signal.signal(signal.SIGINT, self.request_stop)
+        signal.signal(signal.SIGTERM, self.request_stop)
 
-            # Take down the horse with the worker
-            if self.horse_pid:
-                msg = 'Taking down horse {0} with me'.format(self.horse_pid)
-                self.log.debug(msg)
-                try:
-                    os.kill(self.horse_pid, signal.SIGKILL)
-                except OSError as e:
-                    # ESRCH ("No such process") is fine with us
-                    if e.errno != errno.ESRCH:
-                        self.log.debug('Horse already down')
-                        raise
-            raise SystemExit()
+    def request_force_stop(self, signum, frame):
+        """Terminates the application (cold shutdown).
+        """
+        self.log.warning('Cold shut down')
 
-        def request_stop(signum, frame):
-            """Stops the current worker loop but waits for child processes to
-            end gracefully (warm shutdown).
-            """
-            self.log.debug('Got signal {0}'.format(signal_name(signum)))
+        # Take down the horse with the worker
+        if self.horse_pid:
+            msg = 'Taking down horse {0} with me'.format(self.horse_pid)
+            self.log.debug(msg)
+            try:
+                os.kill(self.horse_pid, signal.SIGKILL)
+            except OSError as e:
+                # ESRCH ("No such process") is fine with us
+                if e.errno != errno.ESRCH:
+                    self.log.debug('Horse already down')
+                    raise
+        raise SystemExit()
 
-            signal.signal(signal.SIGINT, request_force_stop)
-            signal.signal(signal.SIGTERM, request_force_stop)
+    def request_stop(self, signum, frame):
+        """Stops the current worker loop but waits for child processes to
+        end gracefully (warm shutdown).
+        """
+        self.log.debug('Got signal {0}'.format(signal_name(signum)))
 
-            msg = 'Warm shut down requested'
-            self.log.warning(msg)
+        signal.signal(signal.SIGINT, self.request_force_stop)
+        signal.signal(signal.SIGTERM, self.request_force_stop)
 
-            # If shutdown is requested in the middle of a job, wait until
-            # finish before shutting down
-            if self.get_state() == 'busy':
-                self._stop_requested = True
-                self.log.debug('Stopping after current horse is finished. '
-                               'Press Ctrl+C again for a cold shutdown.')
-            else:
-                raise StopRequested()
+        msg = 'Warm shut down requested'
+        self.log.warning(msg)
 
-        signal.signal(signal.SIGINT, request_stop)
-        signal.signal(signal.SIGTERM, request_stop)
+        # If shutdown is requested in the middle of a job, wait until
+        # finish before shutting down
+        if self.get_state() == 'busy':
+            self._stop_requested = True
+            self.log.debug('Stopping after current horse is finished. '
+                           'Press Ctrl+C again for a cold shutdown.')
+        else:
+            raise StopRequested()
 
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
