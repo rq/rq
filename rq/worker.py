@@ -599,7 +599,7 @@ class Worker(object):
                 self.handle_exception(job, *sys.exc_info())
                 return False
 
-        self.log.info(green('Job OK'))
+        self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv:
             log_result = "{0!r}".format(as_text(text_type(rv)))
             self.log.debug('Result: {0}'.format(yellow(log_result)))
