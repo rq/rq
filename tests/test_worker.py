@@ -83,10 +83,6 @@ class TestWorker(RQTestCase):
                           'Expected at least some work done.')
         self.assertEquals(job.result, 'Hi there, Frank!')
 
-    def assert_dt_between(self, dt, before, after):
-        if not before <= dt <= after:  # pragma: no cover
-            raise AssertionError('Not %s <= %s <= %s' % (before, dt, after))
-
     def test_job_times(self):
         """job times are set correctly."""
         q = Queue('foo')
@@ -102,9 +98,9 @@ class TestWorker(RQTestCase):
         self.assertEquals(job.result, 'Hi there, Stranger!')
         after = utcnow()
         job.refresh()
-        self.assert_dt_between(job.enqueued_at, before, after)
-        self.assert_dt_between(job.started_at, before, after)
-        self.assert_dt_between(job.ended_at, before, after)
+        self.assertTrue(before <= job.enqueued_at <= after, 'Not %s <= %s <= %s' % (before, job.enqueued_at, after))
+        self.assertTrue(before <= job.started_at <= after, 'Not %s <= %s <= %s' % (before, job.started_at, after))
+        self.assertTrue(before <= job.ended_at <= after, 'Not %s <= %s <= %s' % (before, job.ended_at, after))
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
