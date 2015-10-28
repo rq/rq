@@ -491,6 +491,7 @@ class Worker(object):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
+        self.set_state('busy')
         child_pid = os.fork()
         if child_pid == 0:
             self.main_work_horse(job)
@@ -499,7 +500,6 @@ class Worker(object):
             self.procline('Forked {0} at {0}'.format(child_pid, time.time()))
             while True:
                 try:
-                    self.set_state('busy')
                     os.waitpid(child_pid, 0)
                     self.set_state('idle')
                     break
