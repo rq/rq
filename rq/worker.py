@@ -428,7 +428,9 @@ class Worker(object):
                     break
 
                 job, queue = result
+                self.set_state('busy')
                 self.execute_job(job)
+                self.set_state('idle')
                 self.heartbeat()
 
                 if job.get_status() == JobStatus.FINISHED:
