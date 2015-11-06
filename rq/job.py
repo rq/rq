@@ -467,8 +467,7 @@ class Job(object):
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
-        cancellation.  Technically, this call is (currently) the same as just
-        deleting the job hash.
+        cancellation.
         """
         from .queue import Queue
         pipeline = self.connection._pipeline()
@@ -478,7 +477,8 @@ class Job(object):
         pipeline.execute()
 
     def delete(self, pipeline=None):
-        """Deletes the job hash from Redis."""
+        """Cancels the job and deletes the job hash from Redis."""
+        self.cancel()
         connection = pipeline if pipeline is not None else self.connection
         connection.delete(self.key)
 
