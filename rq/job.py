@@ -467,9 +467,6 @@ class Job(object):
         """
         from .queue import Queue
         pipeline = self.connection._pipeline()
-        self.delete(pipeline=pipeline)
-        pipeline.delete(self.dependents_key)
-
         if self.origin:
             queue = Queue(name=self.origin, connection=self.connection)
             queue.remove(self, pipeline=pipeline)
