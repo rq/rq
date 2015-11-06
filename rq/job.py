@@ -481,6 +481,7 @@ class Job(object):
         self.cancel()
         connection = pipeline if pipeline is not None else self.connection
         connection.delete(self.key)
+        connection.delete(self.dependents_key)
 
     # Job execution
     def perform(self):  # noqa
@@ -535,7 +536,7 @@ class Job(object):
           forever)
         """
         if ttl == 0:
-            self.cancel()
+            self.delete()
         elif not ttl:
             return
         elif ttl > 0:

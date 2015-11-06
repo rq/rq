@@ -88,10 +88,8 @@ class TestQueue(RQTestCase):
         job = q.enqueue(say_hello)
         self.assertEqual(q.jobs, [job])
 
-        # Fetching a deleted removes it from queue
+        # Deleting job removes it from queue
         job.delete()
-        self.assertEqual(q.job_ids, [job.id])
-        q.jobs
         self.assertEqual(q.job_ids, [])
 
     def test_compact(self):
