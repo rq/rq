@@ -183,3 +183,18 @@ You can use the `-w` option to specify a different worker class to use:
 {% highlight console %}
 $ rqworker -w 'path.to.GeventWorker'
 {% endhighlight %}
+
+
+## Custom exception handlers
+
+_New in version 0.5.5._
+
+If you need to handle errors differently for different types of jobs, or simply want to customize
+RQ's default error handling behavior, run `rqworker` using the `--exception-handler` option:
+
+{% highlight console %}
+$ rqworker --exception-handler 'path.to.my.ErrorHandler'
+
+# Multiple exception handlers is also supported
+$ rqworker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
+{% endhighlight %}

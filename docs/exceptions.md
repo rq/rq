@@ -32,12 +32,12 @@ with Connection():
 {% endhighlight %}
 
 While the exception handlers are a FILO stack, most times you only want to
-register a single handler.  Therefore, for convenience, you can pass it to the
+register a single handler. Therefore, for convenience, you can pass it to the
 constructor directly, too:
 
 {% highlight python %}
 with Connection():
-    w = Worker([q], exc_handler=my_handler)
+    w = Worker([q], exception_handlers=[my_handler, self.move_to_failed_queue])
     ...
 {% endhighlight %}
 
