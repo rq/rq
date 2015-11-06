@@ -17,9 +17,9 @@ else
     safe_rg=cat
 fi
 
-export ONLY_RUN_FAST_TESTS=1
+export RUN_SLOW_TESTS_TOO=1
 if [ "$1" = '-f' ]; then  # Poor man's argparse
-    unset ONLY_RUN_FAST_TESTS
+    unset RUN_SLOW_TESTS_TOO
     shift 1
 fi
 

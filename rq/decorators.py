@@ -6,8 +6,8 @@ from functools import wraps
 
 from rq.compat import string_types
 
+from .defaults import DEFAULT_RESULT_TTL
 from .queue import Queue
-from .worker import DEFAULT_RESULT_TTL
 
 
 class job(object):

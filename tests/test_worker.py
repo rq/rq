@@ -3,16 +3,23 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import os
-
-from rq import get_failed_queue, Queue, Worker, SimpleWorker
-from rq.compat import as_text
-from rq.job import Job, Status
-from rq.registry import StartedJobRegistry
+from datetime import timedelta
+from time import sleep
+import signal
+import time
+from multiprocessing import Process
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
-                            div_by_zero, say_hello, say_pid)
+                            div_by_zero, do_nothing, say_hello, say_pid)
 from tests.helpers import strip_microseconds
+
+from rq import get_failed_queue, Queue, SimpleWorker, Worker
+from rq.compat import as_text
+from rq.job import Job, JobStatus
+from rq.registry import StartedJobRegistry
+from rq.suspension import resume, suspend
+from rq.utils import utcnow
 
 
 class CustomJob(Job):
@@ -21,10 +28,35 @@ class CustomJob(Job):
 
 class TestWorker(RQTestCase):
     def test_create_worker(self):
-        """Worker creation."""
-        fooq, barq = Queue('foo'), Queue('bar')
-        w = Worker([fooq, barq])
-        self.assertEquals(w.queues, [fooq, barq])
+        """Worker creation using various inputs."""
+
+        # With single string argument
+        w = Worker('foo')
+        self.assertEquals(w.queues[0].name, 'foo')
+
+        # With list of strings
+        w = Worker(['foo', 'bar'])
+        self.assertEquals(w.queues[0].name, 'foo')
+        self.assertEquals(w.queues[1].name, 'bar')
+
+        # With iterable of strings
+        w = Worker(iter(['foo', 'bar']))
+        self.assertEquals(w.queues[0].name, 'foo')
+        self.assertEquals(w.queues[1].name, 'bar')
+
+        # With single Queue
+        w = Worker(Queue('foo'))
+        self.assertEquals(w.queues[0].name, 'foo')
+
+        # With iterable of Queues
+        w = Worker(iter([Queue('foo'), Queue('bar')]))
+        self.assertEquals(w.queues[0].name, 'foo')
+        self.assertEquals(w.queues[1].name, 'bar')
+
+        # With list of Queues
+        w = Worker([Queue('foo'), Queue('bar')])
+        self.assertEquals(w.queues[0].name, 'foo')
+        self.assertEquals(w.queues[1].name, 'bar')
 
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
@@ -133,7 +165,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(div_by_zero)
         self.assertEquals(q.count, 1)
 
-        w = Worker([q], exc_handler=black_hole)
+        w = Worker([q], exception_handlers=black_hole)
         w.work(burst=True)  # should silently pass
 
         # Postconditions
@@ -222,14 +254,14 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         job = q.enqueue(say_hello)
-        self.assertEqual(job.get_status(), Status.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
         self.assertEqual(job.is_queued, True)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, False)
 
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.FINISHED)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, True)
         self.assertEqual(job.is_failed, False)
@@ -238,7 +270,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(div_by_zero, args=(1,))
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.FAILED)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
@@ -251,13 +283,13 @@ class TestWorker(RQTestCase):
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.FINISHED)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
         parent_job = q.enqueue(div_by_zero)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
-        self.assertNotEqual(job.get_status(), Status.FINISHED)
+        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""
@@ -318,3 +350,195 @@ class TestWorker(RQTestCase):
                           'Expected at least some work done.')
         self.assertEquals(job.result, 'Hi there, Adam!')
         self.assertEquals(job.description, '你好 世界!')
+
+    def test_suspend_worker_execution(self):
+        """Test Pause Worker Execution"""
+
+        SENTINEL_FILE = '/tmp/rq-tests.txt'
+
+        try:
+            # Remove the sentinel if it is leftover from a previous test run
+            os.remove(SENTINEL_FILE)
+        except OSError as e:
+            if e.errno != 2:
+                raise
+
+        q = Queue()
+        q.enqueue(create_file, SENTINEL_FILE)
+
+        w = Worker([q])
+
+        suspend(self.testconn)
+
+        w.work(burst=True)
+        assert q.count == 1
+
+        # Should not have created evidence of execution
+        self.assertEquals(os.path.exists(SENTINEL_FILE), False)
+
+        resume(self.testconn)
+        w.work(burst=True)
+        assert q.count == 0
+        self.assertEquals(os.path.exists(SENTINEL_FILE), True)
+
+    def test_suspend_with_duration(self):
+        q = Queue()
+        for _ in range(5):
+            q.enqueue(do_nothing)
+
+        w = Worker([q])
+
+        # This suspends workers for working for 2 second
+        suspend(self.testconn, 2)
+
+        # So when this burst of work happens the queue should remain at 5
+        w.work(burst=True)
+        assert q.count == 5
+
+        sleep(3)
+
+        # The suspension should be expired now, and a burst of work should now clear the queue
+        w.work(burst=True)
+        assert q.count == 0
+
+    def test_worker_hash_(self):
+        """Workers are hashed by their .name attribute"""
+        q = Queue('foo')
+        w1 = Worker([q], name="worker1")
+        w2 = Worker([q], name="worker2")
+        w3 = Worker([q], name="worker1")
+        worker_set = set([w1, w2, w3])
+        self.assertEquals(len(worker_set), 2)
+
+    def test_worker_sets_birth(self):
+        """Ensure worker correctly sets worker birth date."""
+        q = Queue()
+        w = Worker([q])
+
+        w.register_birth()
+
+        birth_date = w.birth_date
+        self.assertIsNotNone(birth_date)
+        self.assertEquals(type(birth_date).__name__, 'datetime')
+
+    def test_worker_sets_death(self):
+        """Ensure worker correctly sets worker death date."""
+        q = Queue()
+        w = Worker([q])
+
+        w.register_death()
+
+        death_date = w.death_date
+        self.assertIsNotNone(death_date)
+        self.assertEquals(type(death_date).__name__, 'datetime')
+
+    def test_clean_queue_registries(self):
+        """worker.clean_registries sets last_cleaned_at and cleans registries."""
+        foo_queue = Queue('foo', connection=self.testconn)
+        foo_registry = StartedJobRegistry('foo', connection=self.testconn)
+        self.testconn.zadd(foo_registry.key, 1, 'foo')
+        self.assertEqual(self.testconn.zcard(foo_registry.key), 1)
+
+        bar_queue = Queue('bar', connection=self.testconn)
+        bar_registry = StartedJobRegistry('bar', connection=self.testconn)
+        self.testconn.zadd(bar_registry.key, 1, 'bar')
+        self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
+
+        worker = Worker([foo_queue, bar_queue])
+        self.assertEqual(worker.last_cleaned_at, None)
+        worker.clean_registries()
+        self.assertNotEqual(worker.last_cleaned_at, None)
+        self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
+
+    def test_should_run_maintenance_tasks(self):
+        """Workers should run maintenance tasks on startup and every hour."""
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queue)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+
+        worker.last_cleaned_at = utcnow()
+        self.assertFalse(worker.should_run_maintenance_tasks)
+        worker.last_cleaned_at = utcnow() - timedelta(seconds=3700)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+
+    def test_worker_calls_clean_registries(self):
+        """Worker calls clean_registries when run."""
+        queue = Queue(connection=self.testconn)
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(registry.key, 1, 'foo')
+
+        worker = Worker(queue, connection=self.testconn)
+        worker.work(burst=True)
+        self.assertEqual(self.testconn.zcard(registry.key), 0)
+
+
+def kill_worker(pid, double_kill):
+    # wait for the worker to be started over on the main process
+    time.sleep(0.5)
+    os.kill(pid, signal.SIGTERM)
+    if double_kill:
+        # give the worker time to switch signal handler
+        time.sleep(0.5)
+        os.kill(pid, signal.SIGTERM)
+
+
+class TestWorkerShutdown(RQTestCase):
+    def setUp(self):
+        # we want tests to fail if signal are ignored and the work remain running,
+        # so set a signal to kill them after 5 seconds
+        signal.signal(signal.SIGALRM, self._timeout)
+        signal.alarm(5)
+
+    def _timeout(self, signal, frame):
+        raise AssertionError("test still running after 5 seconds, "
+                             "likely the worker wasn't shutdown correctly")
+
+    @slow
+    def test_idle_worker_warm_shutdown(self):
+        """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
+        w = Worker('foo')
+        self.assertFalse(w._stop_requested)
+        p = Process(target=kill_worker, args=(os.getpid(), False))
+        p.start()
+
+        w.work()
+
+        p.join(1)
+        self.assertFalse(w._stop_requested)
+
+    @slow
+    def test_working_worker_warm_shutdown(self):
+        """worker with an ongoing job receiving single SIGTERM signal, allowing job to finish then shutting down"""
+        fooq = Queue('foo')
+        w = Worker(fooq)
+
+        sentinel_file = '/tmp/.rq_sentinel_warm'
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
+        self.assertFalse(w._stop_requested)
+        p = Process(target=kill_worker, args=(os.getpid(), False))
+        p.start()
+
+        w.work()
+
+        p.join(2)
+        self.assertTrue(w._stop_requested)
+        self.assertTrue(os.path.exists(sentinel_file))
+
+    @slow
+    def test_working_worker_cold_shutdown(self):
+        """worker with an ongoing job receiving double SIGTERM signal and shutting down immediately"""
+        fooq = Queue('foo')
+        w = Worker(fooq)
+        sentinel_file = '/tmp/.rq_sentinel_cold'
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
+        self.assertFalse(w._stop_requested)
+        p = Process(target=kill_worker, args=(os.getpid(), True))
+        p.start()
+
+        self.assertRaises(SystemExit, w.work)
+
+        p.join(1)
+        self.assertTrue(w._stop_requested)
+        self.assertFalse(os.path.exists(sentinel_file))
+

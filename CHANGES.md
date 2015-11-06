@@ -1,3 +1,81 @@
+### 0.5.6
+
+- Job results are now logged on `DEBUG` level. Thanks @tbaugis!
+- Modified `patch_connection` so Redis connection can be easily mocked
+- Customer exception handlers are now called if Redis connection is lost. Thanks @jlopex!
+- Jobs can now depend on jobs in a different queue. Thanks @jlopex!
+
+### 0.5.5
+
+(August 25th, 2015)
+
+- Add support for `--exception-handler` command line flag
+- Fix compatibility with click>=5.0
+- Fix maximum recursion depth problem for very large queues that contain jobs
+  that all fail
+
+
+### 0.5.4
+
+(July 8th, 2015)
+
+- Fix compatibility with raven>=5.4.0
+
+
+### 0.5.3
+
+(June 3rd, 2015)
+
+- Better API for instantiating Workers. Thanks @RyanMTB!
+- Better support for unicode kwargs. Thanks @nealtodd and @brownstein!
+- Workers now automatically cleans up job registries every hour
+- Jobs in `FailedQueue` now have their statuses set properly
+- `enqueue_call()` no longer ignores `ttl`. Thanks @mbodock!
+- Improved logging. Thanks @trevorprater!
+
+
+### 0.5.2
+
+(April 14th, 2015)
+
+- Support SSL connection to Redis (requires redis-py>=2.10)
+- Fix to prevent deep call stacks with large queues
+
+
+### 0.5.1
+
+(March 9th, 2015)
+
+- Resolve performance issue when queues contain many jobs
+- Restore the ability to specify connection params in config
+- Record `birth_date` and `death_date` on Worker
+- Add support for SSL URLs in Redis (and `REDIS_SSL` config option)
+- Fix encoding issues with non-ASCII characters in function arguments
+- Fix Redis transaction management issue with job dependencies
+
+
+### 0.5.0
+(Jan 30th, 2015)
+
+- RQ workers can now be paused and resumed using `rq suspend` and
+  `rq resume` commands. Thanks Jonathan Tushman!
+- Jobs that are being performed are now stored in `StartedJobRegistry`
+  for monitoring purposes. This also prevents currently active jobs from
+  being orphaned/lost in the case of hard shutdowns.
+- You can now monitor finished jobs by checking `FinishedJobRegistry`.
+  Thanks Nic Cope for helping!
+- Jobs with unmet dependencies are now created with `deferred` as their
+  status. You can monitor deferred jobs by checking `DeferredJobRegistry`.
+- It is now possible to enqueue a job at the beginning of queue using
+  `queue.enqueue(func, at_front=True)`. Thanks Travis Johnson!
+- Command line scripts have all been refactored to use `click`. Thanks Lyon Zhang!
+- Added a new `SimpleWorker` that does not fork when executing jobs.
+  Useful for testing purposes. Thanks Cal Leeming!
+- Added `--queue-class` and `--job-class` arguments to `rqworker` script.
+  Thanks David Bonner!
+- Many other minor bug fixes and enhancements.
+
+
 ### 0.4.6
 (May 21st, 2014)
 

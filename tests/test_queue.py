@@ -2,14 +2,15 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from rq import get_failed_queue, Queue
-from rq.exceptions import InvalidJobOperationError
-from rq.job import Job, Status
-from rq.worker import Worker
-
 from tests import RQTestCase
 from tests.fixtures import (div_by_zero, echo, Number, say_hello,
                             some_calculation)
+
+from rq import get_failed_queue, Queue
+from rq.exceptions import InvalidJobOperationError
+from rq.job import Job, JobStatus
+from rq.registry import DeferredJobRegistry
+from rq.worker import Worker
 
 
 class CustomJob(Job):
@@ -117,6 +118,7 @@ class TestQueue(RQTestCase):
         # say_hello spec holds which queue this is sent to
         job = q.enqueue(say_hello, 'Nick', foo='bar')
         job_id = job.id
+        self.assertEqual(job.origin, q.name)
 
         # Inspect data inside Redis
         q_key = 'rq:queue:default'
@@ -131,14 +133,12 @@ class TestQueue(RQTestCase):
         job = Job.create(func=say_hello, args=('Nick',), kwargs=dict(foo='bar'))
 
         # Preconditions
-        self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
 
         # Action
         q.enqueue_job(job)
 
         # Postconditions
-        self.assertEquals(job.origin, q.name)
         self.assertIsNotNone(job.enqueued_at)
 
     def test_pop_job_id(self):
@@ -172,6 +172,14 @@ class TestQueue(RQTestCase):
 
         # ...and assert the queue count when down
         self.assertEquals(q.count, 0)
+
+    def test_dequeue_deleted_jobs(self):
+        """Dequeueing deleted jobs from queues don't blow the stack."""
+        q = Queue()
+        for _ in range(1, 1000):
+            job = q.enqueue(say_hello)
+            job.delete()
+        q.dequeue()
 
     def test_dequeue_instance_method(self):
         """Dequeueing instance method jobs from queues."""
@@ -262,7 +270,7 @@ class TestQueue(RQTestCase):
         """Enqueueing a job sets its status to "queued"."""
         q = Queue()
         job = q.enqueue(say_hello)
-        self.assertEqual(job.get_status(), Status.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
@@ -320,57 +328,101 @@ class TestQueue(RQTestCase):
         self.assertEquals(len(Queue.all()), 3)
 
     def test_enqueue_dependents(self):
-        """Enqueueing the dependent jobs pushes all jobs in the depends set to the queue."""
+        """Enqueueing dependent jobs pushes all jobs in the depends set to the queue
+        and removes them from DeferredJobQueue."""
         q = Queue()
         parent_job = Job.create(func=say_hello)
         parent_job.save()
-        job_1 = Job.create(func=say_hello, depends_on=parent_job)
-        job_1.save()
-        job_1.register_dependency()
-        job_2 = Job.create(func=say_hello, depends_on=parent_job)
-        job_2.save()
-        job_2.register_dependency()
+        job_1 = q.enqueue(say_hello, depends_on=parent_job)
+        job_2 = q.enqueue(say_hello, depends_on=parent_job)
 
+        registry = DeferredJobRegistry(q.name, connection=self.testconn)
+        self.assertEqual(
+            set(registry.get_job_ids()),
+            set([job_1.id, job_2.id])
+        )
         # After dependents is enqueued, job_1 and job_2 should be in queue
         self.assertEqual(q.job_ids, [])
         q.enqueue_dependents(parent_job)
-        self.assertEqual(set(q.job_ids), set([job_1.id, job_2.id]))
+        self.assertEqual(set(q.job_ids), set([job_2.id, job_1.id]))
         self.assertFalse(self.testconn.exists(parent_job.dependents_key))
+
+        # DeferredJobRegistry should also be empty
+        self.assertEqual(registry.get_job_ids(), [])
+
+
+    def test_enqueue_dependents_on_multiple_queues(self):
+        """Enqueueing dependent jobs on multiple queues pushes jobs in the queues
+        and removes them from DeferredJobRegistry for each different queue."""
+        q_1 = Queue("queue_1")
+        q_2 = Queue("queue_2")
+        parent_job = Job.create(func=say_hello)
+        parent_job.save()
+        job_1 = q_1.enqueue(say_hello, depends_on=parent_job)
+        job_2 = q_2.enqueue(say_hello, depends_on=parent_job)
+
+        # Each queue has its own DeferredJobRegistry
+        registry_1 = DeferredJobRegistry(q_1.name, connection=self.testconn)
+        self.assertEqual(
+            set(registry_1.get_job_ids()),
+            set([job_1.id])
+        )
+        registry_2 = DeferredJobRegistry(q_2.name, connection=self.testconn)
+        self.assertEqual(
+            set(registry_2.get_job_ids()),
+            set([job_2.id])
+        )
+
+        # After dependents is enqueued, job_1 on queue_1 and
+        # job_2 should be in queue_2
+        self.assertEqual(q_1.job_ids, [])
+        self.assertEqual(q_2.job_ids, [])
+        q_1.enqueue_dependents(parent_job)
+        q_2.enqueue_dependents(parent_job)
+        self.assertEqual(set(q_1.job_ids), set([job_1.id]))
+        self.assertEqual(set(q_2.job_ids), set([job_2.id]))
+        self.assertFalse(self.testconn.exists(parent_job.dependents_key))
+
+        # DeferredJobRegistry should also be empty
+        self.assertEqual(registry_1.get_job_ids(), [])
+        self.assertEqual(registry_2.get_job_ids(), [])
+
+
 
     def test_enqueue_job_with_dependency(self):
         """Jobs are enqueued only when their dependencies are finished."""
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
-        q.enqueue_call(say_hello, depends_on=parent_job)
+        job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.set_status(Status.FINISHED)
+        parent_job.set_status(JobStatus.FINISHED)
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_job_with_dependency_by_id(self):
-        """Enqueueing jobs should work as expected by id as well as job-objects."""
+        """"Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello)
-        # We need to save the job for the ID to exist in redis
-        parent_job.save()
-        
+
         q = Queue()
         q.enqueue_call(say_hello, depends_on=parent_job.id)
         self.assertEqual(q.job_ids, [])
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.set_status(Status.FINISHED)
+        parent_job.set_status(JobStatus.FINISHED)
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job.id)
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
 
     def test_enqueue_job_with_dependency_and_timeout(self):
-        """Jobs still know their specified timeout after being scheduled as a dependency."""
+        """Jobs remember their timeout when enqueued as a dependency."""
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
         q = Queue()
@@ -379,7 +431,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, 123)
 
         # Jobs dependent on finished jobs are immediately enqueued
-        parent_job.set_status(Status.FINISHED)
+        parent_job.set_status(JobStatus.FINISHED)
         parent_job.save()
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=123)
         self.assertEqual(q.job_ids, [job.id])
@@ -441,7 +493,7 @@ class TestFailedQueue(RQTestCase):
         get_failed_queue().requeue(job.id)
 
         job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), Status.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_preserves_result_ttl(self):
         """Enqueueing persists result_ttl."""
@@ -452,12 +504,23 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(int(job_from_queue.result_ttl), 10)
 
     def test_async_false(self):
-        """Executes a job immediately if async=False."""
+        """Job executes and cleaned up immediately if async=False."""
         q = Queue(async=False)
         job = q.enqueue(some_calculation, args=(2, 3))
         self.assertEqual(job.return_value, 6)
+        self.assertNotEqual(self.testconn.ttl(job.key), -1)
 
     def test_custom_job_class(self):
         """Ensure custom job class assignment works as expected."""
         q = Queue(job_class=CustomJob)
         self.assertEqual(q.job_class, CustomJob)
+
+    def test_skip_queue(self):
+        """Ensure the skip_queue option functions"""
+        q = Queue('foo')
+        job1 = q.enqueue(say_hello)
+        job2 = q.enqueue(say_hello)
+        assert q.dequeue() == job1
+        skip_job = q.enqueue(say_hello, at_front=True)
+        assert q.dequeue() == skip_job
+        assert q.dequeue() == job2
