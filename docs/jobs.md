@@ -42,3 +42,14 @@ def add(x, y):
     job.save()
     return x + y
 {% endhighlight %}
+
+
+## Failed Jobs
+
+If a job fails and raises an exception, the worker will put the job in a failed job queue. 
+On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan 
+through the `get_failed_queue()` queue.
+
+{% highlight python %}
+
+{% endhighlight %}
