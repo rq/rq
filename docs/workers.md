@@ -139,10 +139,11 @@ through command line arguments, you can do this by creating a Python file like
 `settings.py`:
 
 {% highlight python %}
-REDIS_HOST = 'redis.example.com'
-REDIS_PORT = 6380
+REDIS_URL = 'redis://localhost:6379/1'
 
 # You can also specify the Redis DB to use
+# REDIS_HOST = 'redis.example.com'
+# REDIS_PORT = 6380
 # REDIS_DB = 3
 # REDIS_PASSWORD = 'very secret'
 
@@ -174,11 +175,26 @@ more common requests so far are:
 
 1. Managing database connectivity prior to running a job.
 2. Using a job execution model that does not require `os.fork`.
-3. The ability use different concurrency models such as
+3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
 
 You can use the `-w` option to specify a different worker class to use:
 
 {% highlight console %}
 $ rqworker -w 'path.to.GeventWorker'
+{% endhighlight %}
+
+
+## Custom exception handlers
+
+_New in version 0.5.5._
+
+If you need to handle errors differently for different types of jobs, or simply want to customize
+RQ's default error handling behavior, run `rqworker` using the `--exception-handler` option:
+
+{% highlight console %}
+$ rqworker --exception-handler 'path.to.my.ErrorHandler'
+
+# Multiple exception handlers is also supported
+$ rqworker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
 {% endhighlight %}

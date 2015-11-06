@@ -57,9 +57,25 @@ you can quite flexibly distribute work to your own desire.  A common naming
 pattern is to name your queues after priorities (e.g.  `high`, `medium`,
 `low`).
 
-For cases where you want to pass in options to `.enqueue()` itself (rather than
-to the job function), use `.enqueue_call()`, which is the more explicit
-counterpart.  A typical use case for this is to pass in a `timeout` argument:
+In addition, you can add a few options to modify the behaviour of the queued
+job. By default, these are popped out of the kwargs that will be passed to the
+job function.
+
+* `timeout` specifies the maximum runtime of the job before it'll be considered
+  'lost'
+* `result_ttl` specifies the expiry time of the key where the job result will
+  be stored
+* `ttl` specifies the maximum queued time of the job before it'll be cancelled
+* `depends_on` specifies another job (or job id) that must complete before this
+  job will be queued
+* `job_id` allows you to manually specify this job's `job_id`
+* `at_front` will place the job at the *front* of the queue, instead of the
+  back
+* `kwargs` and `args` lets you bypass the auto-pop of these arguments, ie:
+  specify a `timeout` argument for the underlying job function.
+
+In the last case, it may be advantageous to instead use the explicit version of
+`.enqueue()`, `.enqueue_call()`:
 
 {% highlight python %}
 q = Queue('low', connection=redis_conn)
@@ -173,7 +189,7 @@ q.enqueue(send_report, depends_on=report_job)
 
 The ability to handle job dependencies allows you to split a big job into
 several smaller ones. A job that is dependent on another is enqueued only when
-it's dependency finishes *successfully*.
+its dependency finishes *successfully*.
 
 
 ## The worker
