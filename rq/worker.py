@@ -663,6 +663,7 @@ class Worker(object):
     def clean_registries(self):
         """Runs maintenance jobs on each Queue's registries."""
         for queue in self.queues:
+            self.log.info('Cleaning registries for queue: {0}'.format(queue.name))
             clean_registries(queue)
         self.last_cleaned_at = utcnow()
 
