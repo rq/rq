@@ -58,3 +58,35 @@ job = Job.create(func=say_hello, ttl=43)
 # or when queueing a new job:
 job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
 {% endhighlight %}
+
+
+## Failed Jobs
+
+If a job fails and raises an exception, the worker will put the job in a failed job queue. 
+On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan 
+through the `get_failed_queue()` queue.
+
+{% highlight python %}
+from redis import StrictRedis
+from rq import push_connection, get_failed_queue, Queue
+from rq.job import Job
+
+
+con = StrictRedis()
+push_connection(con)
+
+def div_by_zero(x):
+    return x / 0
+
+job = Job.create(func=div_by_zero, args=(1, 2, 3))
+job.origin = 'fake'
+job.save()
+fq = get_failed_queue()
+fq.quarantine(job, Exception('Some fake error'))
+assert(fq.count == 1)
+
+fq.requeue(job.id)
+
+assert(fq.count == 0)
+assert(Queue('fake').count == 1)
+{% endhighlight %}
