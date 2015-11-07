@@ -103,6 +103,7 @@ def requeue(url, all, job_ids):
 
 @main.command()
 @url_option
+@config_option
 @click.option('--path', '-P', default='.', help='Specify the import path.')
 @click.option('--interval', '-i', type=float, help='Updates stats every N seconds (default: don\'t poll)')
 @click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
@@ -110,7 +111,7 @@ def requeue(url, all, job_ids):
 @click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')
 @click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')
 @click.argument('queues', nargs=-1)
-def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
+def info(url, config, path, interval, raw, only_queues, only_workers, by_queue, queues):
     """RQ command-line monitor."""
 
     if path:
@@ -124,7 +125,7 @@ def info(url, path, interval, raw, only_queues, only_workers, by_queue, queues):
         func = show_both
 
     try:
-        with Connection(connect(url)):
+        with Connection(connect(url, config)):
             refresh(interval, func, queues, raw, by_queue)
     except ConnectionError as e:
         click.echo(e)
