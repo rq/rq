@@ -32,41 +32,41 @@ class TestWorker(RQTestCase):
 
         # With single string argument
         w = Worker('foo')
-        self.assertEquals(w.queues[0].name, 'foo')
+        self.assertEqual(w.queues[0].name, 'foo')
 
         # With list of strings
         w = Worker(['foo', 'bar'])
-        self.assertEquals(w.queues[0].name, 'foo')
-        self.assertEquals(w.queues[1].name, 'bar')
+        self.assertEqual(w.queues[0].name, 'foo')
+        self.assertEqual(w.queues[1].name, 'bar')
 
         # With iterable of strings
         w = Worker(iter(['foo', 'bar']))
-        self.assertEquals(w.queues[0].name, 'foo')
-        self.assertEquals(w.queues[1].name, 'bar')
+        self.assertEqual(w.queues[0].name, 'foo')
+        self.assertEqual(w.queues[1].name, 'bar')
 
         # With single Queue
         w = Worker(Queue('foo'))
-        self.assertEquals(w.queues[0].name, 'foo')
+        self.assertEqual(w.queues[0].name, 'foo')
 
         # With iterable of Queues
         w = Worker(iter([Queue('foo'), Queue('bar')]))
-        self.assertEquals(w.queues[0].name, 'foo')
-        self.assertEquals(w.queues[1].name, 'bar')
+        self.assertEqual(w.queues[0].name, 'foo')
+        self.assertEqual(w.queues[1].name, 'bar')
 
         # With list of Queues
         w = Worker([Queue('foo'), Queue('bar')])
-        self.assertEquals(w.queues[0].name, 'foo')
-        self.assertEquals(w.queues[1].name, 'bar')
+        self.assertEqual(w.queues[0].name, 'foo')
+        self.assertEqual(w.queues[1].name, 'bar')
 
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
-        self.assertEquals(w.work(burst=True), False,
+        self.assertEqual(w.work(burst=True), False,
                           'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
-        self.assertEquals(w.work(burst=True), True,
+        self.assertEqual(w.work(burst=True), True,
                           'Expected at least some work done.')
 
     def test_worker_ttl(self):
@@ -82,17 +82,17 @@ class TestWorker(RQTestCase):
         q = Queue('foo')
         w = Worker([q])
         job = q.enqueue('tests.fixtures.say_hello', name='Frank')
-        self.assertEquals(w.work(burst=True), True,
+        self.assertEqual(w.work(burst=True), True,
                           'Expected at least some work done.')
-        self.assertEquals(job.result, 'Hi there, Frank!')
+        self.assertEqual(job.result, 'Hi there, Frank!')
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed queue."""
         q = Queue()
         failed_q = get_failed_queue()
 
-        self.assertEquals(failed_q.count, 0)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
 
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
@@ -108,13 +108,13 @@ class TestWorker(RQTestCase):
         # validity checks)
         q.push_job_id(job.id)
 
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         # All set, we're going to process it
         w = Worker([q])
         w.work(burst=True)   # should silently pass
-        self.assertEquals(q.count, 0)
-        self.assertEquals(failed_q.count, 1)
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 1)
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
@@ -122,12 +122,12 @@ class TestWorker(RQTestCase):
         failed_q = get_failed_queue()
 
         # Preconditions
-        self.assertEquals(failed_q.count, 0)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
 
         # Action
         job = q.enqueue(div_by_zero)
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         # keep for later
         enqueued_at_date = strip_microseconds(job.enqueued_at)
@@ -136,16 +136,16 @@ class TestWorker(RQTestCase):
         w.work(burst=True)  # should silently pass
 
         # Postconditions
-        self.assertEquals(q.count, 0)
-        self.assertEquals(failed_q.count, 1)
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 1)
 
         # Check the job
         job = Job.fetch(job.id)
-        self.assertEquals(job.origin, q.name)
+        self.assertEqual(job.origin, q.name)
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
-        self.assertEquals(job.enqueued_at, enqueued_at_date)
+        self.assertEqual(job.enqueued_at, enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
     def test_custom_exc_handling(self):
@@ -158,23 +158,23 @@ class TestWorker(RQTestCase):
         failed_q = get_failed_queue()
 
         # Preconditions
-        self.assertEquals(failed_q.count, 0)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
 
         # Action
         job = q.enqueue(div_by_zero)
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         w = Worker([q], exception_handlers=black_hole)
         w.work(burst=True)  # should silently pass
 
         # Postconditions
-        self.assertEquals(q.count, 0)
-        self.assertEquals(failed_q.count, 0)
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 0)
 
         # Check the job
         job = Job.fetch(job.id)
-        self.assertEquals(job.is_failed, True)
+        self.assertEqual(job.is_failed, True)
 
     def test_cancelled_jobs_arent_executed(self):  # noqa
         """Cancelling jobs."""
@@ -199,7 +199,7 @@ class TestWorker(RQTestCase):
         assert q.count == 0
 
         # Should not have created evidence of execution
-        self.assertEquals(os.path.exists(SENTINEL_FILE), False)
+        self.assertEqual(os.path.exists(SENTINEL_FILE), False)
 
     @slow  # noqa
     def test_timeouts(self):
@@ -220,9 +220,9 @@ class TestWorker(RQTestCase):
             if e.errno == 2:
                 pass
 
-        self.assertEquals(os.path.exists(sentinel_file), False)
+        self.assertEqual(os.path.exists(sentinel_file), False)
         w.work(burst=True)
-        self.assertEquals(os.path.exists(sentinel_file), False)
+        self.assertEqual(os.path.exists(sentinel_file), False)
 
         # TODO: Having to do the manual refresh() here is really ugly!
         res.refresh()
@@ -316,14 +316,14 @@ class TestWorker(RQTestCase):
         then returns."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = SimpleWorker([fooq, barq])
-        self.assertEquals(w.work(burst=True), False,
-                          'Did not expect any work on the queue.')
+        self.assertEqual(w.work(burst=True), False,
+                         'Did not expect any work on the queue.')
 
         job = fooq.enqueue(say_pid)
-        self.assertEquals(w.work(burst=True), True,
-                          'Expected at least some work done.')
-        self.assertEquals(job.result, os.getpid(),
-                          'PID mismatch, fork() is not supposed to happen here')
+        self.assertEqual(w.work(burst=True), True,
+                         'Expected at least some work done.')
+        self.assertEqual(job.result, os.getpid(),
+                         'PID mismatch, fork() is not supposed to happen here')
 
     def test_prepare_job_execution(self):
         """Prepare job execution does the necessary bookkeeping."""
@@ -337,7 +337,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(registry.get_job_ids(), [job.id])
 
         # Updates worker statuses
-        self.assertEqual(worker.state, 'busy')
+        self.assertEqual(worker.get_state(), 'busy')
         self.assertEqual(worker.get_current_job_id(), job.id)
 
     def test_work_unicode_friendly(self):
@@ -346,10 +346,10 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         job = q.enqueue('tests.fixtures.say_hello', name='Adam',
                         description='你好 世界!')
-        self.assertEquals(w.work(burst=True), True,
-                          'Expected at least some work done.')
-        self.assertEquals(job.result, 'Hi there, Adam!')
-        self.assertEquals(job.description, '你好 世界!')
+        self.assertEqual(w.work(burst=True), True,
+                         'Expected at least some work done.')
+        self.assertEqual(job.result, 'Hi there, Adam!')
+        self.assertEqual(job.description, '你好 世界!')
 
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
@@ -374,12 +374,12 @@ class TestWorker(RQTestCase):
         assert q.count == 1
 
         # Should not have created evidence of execution
-        self.assertEquals(os.path.exists(SENTINEL_FILE), False)
+        self.assertEqual(os.path.exists(SENTINEL_FILE), False)
 
         resume(self.testconn)
         w.work(burst=True)
         assert q.count == 0
-        self.assertEquals(os.path.exists(SENTINEL_FILE), True)
+        self.assertEqual(os.path.exists(SENTINEL_FILE), True)
 
     def test_suspend_with_duration(self):
         q = Queue()
@@ -408,7 +408,7 @@ class TestWorker(RQTestCase):
         w2 = Worker([q], name="worker2")
         w3 = Worker([q], name="worker1")
         worker_set = set([w1, w2, w3])
-        self.assertEquals(len(worker_set), 2)
+        self.assertEqual(len(worker_set), 2)
 
     def test_worker_sets_birth(self):
         """Ensure worker correctly sets worker birth date."""
@@ -419,7 +419,7 @@ class TestWorker(RQTestCase):
 
         birth_date = w.birth_date
         self.assertIsNotNone(birth_date)
-        self.assertEquals(type(birth_date).__name__, 'datetime')
+        self.assertEqual(type(birth_date).__name__, 'datetime')
 
     def test_worker_sets_death(self):
         """Ensure worker correctly sets worker death date."""
@@ -430,7 +430,7 @@ class TestWorker(RQTestCase):
 
         death_date = w.death_date
         self.assertIsNotNone(death_date)
-        self.assertEquals(type(death_date).__name__, 'datetime')
+        self.assertEqual(type(death_date).__name__, 'datetime')
 
     def test_clean_queue_registries(self):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""

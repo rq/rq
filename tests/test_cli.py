@@ -86,13 +86,13 @@ class TestRQCli(RQTestCase):
         # If exception handler is not given, failed job goes to FailedQueue
         q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
-        self.assertEquals(failed_q.count, 1)
+        self.assertEqual(failed_q.count, 1)
 
         # Black hole exception handler doesn't add failed jobs to FailedQueue
         q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
                              '--exception-handler', 'tests.fixtures.black_hole'])
-        self.assertEquals(failed_q.count, 1)
+        self.assertEqual(failed_q.count, 1)
 
     def test_suspend_and_resume(self):
         """rq suspend -u <url>
