@@ -87,9 +87,8 @@ default: Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
 
 ## Interval polling
 
-By default, if `rqinfo` is ran in a terminal session, it will print stats and
-autorefresh them every 2.5 seconds.  You can specify a different poll interval,
-by using the `--interval` flag.
+By default, `rqinfo` will print stats and exit.
+You can specify a poll interval, by using the `--interval` flag.
 
 {% highlight console %}
 $ rqinfo --interval 1
@@ -102,8 +101,5 @@ increase the load on Redis, of course.
 {% highlight console %}
 $ rqinfo --interval 0.5
 {% endhighlight %}
-
-Note that if stdout is redirected (i.e. stdout is not a TTY), `rqinfo` will
-only output the stats once, and won't loop.
 
 [dashboard]: https://github.com/nvie/rq-dashboard
