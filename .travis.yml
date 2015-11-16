@@ -3,18 +3,20 @@ language: python
 services:
   - redis
 python:
-  - "2.6"
   - "2.7"
   - "3.3"
   - "3.4"
+  - "3.5"
+  - "3.6"
+  - "3.6-dev"
   - "pypy"
 install:
-  - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install -r py26-requirements.txt; fi
-  - pip install -r requirements.txt
-  - pip install pytest-cov --use-mirrors
-  - pip install coveralls --use-mirrors
+  - pip install -e .
+  - pip install pytest-cov
+  # - pip install coveralls
+  - pip install codecov
   #- pip install pytest  # installed by Travis by default already
 script:
-  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq
+  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5
 after_success:
-  - coveralls
+  - codecov

@@ -8,10 +8,12 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import time
+import sys
 
-from rq import Connection, get_current_job
+from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
 from rq.compat import PY2
+from rq.worker import HerokuWorker
 
 
 def say_pid():
@@ -23,6 +25,11 @@ def say_hello(name=None):
     if name is None:
         name = 'Stranger'
     return 'Hi there, %s!' % (name,)
+
+
+def say_hello_unicode(name=None):
+    """A job with a single argument and a return value."""
+    return unicode(say_hello(name))  # noqa
 
 
 def do_nothing():
@@ -55,11 +62,25 @@ def create_file_after_timeout(path, timeout):
 
 
 def access_self():
+    assert get_current_connection() is not None
     assert get_current_job() is not None
 
 
+def modify_self(meta):
+    j = get_current_job()
+    j.meta.update(meta)
+    j.save()
+
+
+def modify_self_and_error(meta):
+    j = get_current_job()
+    j.meta.update(meta)
+    j.save()
+    return 1 / 0
+
+
 def echo(*args, **kwargs):
-    return (args, kwargs)
+    return args, kwargs
 
 
 class Number(object):
@@ -101,3 +122,31 @@ def black_hole(job, *exc_info):
 def long_running_job(timeout=10):
     time.sleep(timeout)
     return 'Done sleeping...'
+
+
+def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
+    """
+    Run the work horse for a simplified heroku worker where perform_job just
+    creates two sentinel files 2 seconds apart.
+    :param sandbox: directory to create files in
+    :param _imminent_shutdown_delay: delay to use for HerokuWorker
+    """
+    sys.stderr = open(os.path.join(sandbox, 'stderr.log'), 'w')
+
+    class TestHerokuWorker(HerokuWorker):
+        imminent_shutdown_delay = _imminent_shutdown_delay
+
+        def perform_job(self, job, queue):
+            create_file(os.path.join(sandbox, 'started'))
+            # have to loop here rather than one sleep to avoid holding the GIL
+            # and preventing signals being received
+            for i in range(20):
+                time.sleep(0.1)
+            create_file(os.path.join(sandbox, 'finished'))
+
+    w = TestHerokuWorker(Queue('dummy'))
+    w.main_work_horse(None, None)
+
+
+class DummyQueue(object):
+    pass

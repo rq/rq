@@ -20,7 +20,7 @@ def find_empty_redis_database():
     """
     for dbnum in range(4, 17):
         testconn = StrictRedis(db=dbnum)
-        empty = len(testconn.keys('*')) == 0
+        empty = testconn.dbsize() == 0
         if empty:
             return testconn
     assert False, 'No empty Redis database found to run tests in.'
@@ -70,7 +70,7 @@ class RQTestCase(unittest.TestCase):
 
     # Implement assertIsNotNone for Python runtimes < 2.7 or < 3.1
     if not hasattr(unittest.TestCase, 'assertIsNotNone'):
-        def assertIsNotNone(self, value, *args):
+        def assertIsNotNone(self, value, *args):  # noqa
             self.assertNotEqual(value, None, *args)
 
     @classmethod

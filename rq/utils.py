@@ -12,10 +12,12 @@ import calendar
 import datetime
 import importlib
 import logging
+import numbers
 import sys
 from collections import Iterable
 
 from .compat import as_text, is_python_version, string_types
+from .exceptions import TimeoutFormatError
 
 
 class _Colorizer(object):
@@ -155,16 +157,19 @@ def utcnow():
     return datetime.datetime.utcnow()
 
 
+_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
+
+
 def utcformat(dt):
-    return dt.strftime(as_text('%Y-%m-%dT%H:%M:%SZ'))
+    return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
 def utcparse(string):
     try:
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+        return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
-        # This catches RQ < 0.4 datetime format
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+        # This catches any jobs remain with old datetime format
+        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
 def first(iterable, default=None, key=None):
@@ -232,3 +237,31 @@ def enum(name, *sequential, **named):
     # On Python 3 it does not matter, so we'll use str(), which acts as
     # a no-op.
     return type(str(name), (), values)
+
+
+def backend_class(holder, default_name, override=None):
+    """Get a backend class using its default attribute name or an override"""
+    if override is None:
+        return getattr(holder, default_name)
+    elif isinstance(override, string_types):
+        return import_attribute(override)
+    else:
+        return override
+
+
+def parse_timeout(timeout):
+    """Transfer all kinds of timeout format to an integer representing seconds"""
+    if not isinstance(timeout, numbers.Integral) and timeout is not None:
+        try:
+            timeout = int(timeout)
+        except ValueError:
+            digit, unit = timeout[:-1], (timeout[-1:]).lower()
+            unit_second = {'d': 86400, 'h': 3600, 'm': 60, 's': 1}
+            try:
+                timeout = int(digit) * unit_second[unit]
+            except (ValueError, KeyError):
+                raise TimeoutFormatError('Timeout must be an integer or a string representing an integer, or '
+                                         'a string with format: digits + unit, unit can be "d", "h", "m", "s", '
+                                         'such as "1h", "23m".')
+
+    return timeout

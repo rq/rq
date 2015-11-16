@@ -15,7 +15,7 @@ class NoRedisConnectionException(Exception):
 
 
 @contextmanager
-def Connection(connection=None):
+def Connection(connection=None):  # noqa
     if connection is None:
         connection = StrictRedis()
     push_connection(connection)

@@ -1,3 +1,97 @@
+### 0.10.0
+- `@job` decorator now accepts `description`, `meta`, `at_front` and `depends_on` kwargs. Thanks @jlucas91 and @nlyubchich!
+- Added the capability to fetch workers by queue using `Worker.all(queue=queue)` and `Worker.count(queue=queue)`.
+- Improved RQ's default logging configuration. Thanks @samuelcolvin!
+- `job.data` and `job.exc_info` are now stored in compressed format in Redis.
+
+### 0.9.2
+- Fixed an issue where `worker.refresh()` may fail when `birth_date` is not set. Thanks @vanife!
+
+### 0.9.1
+- Fixed an issue where `worker.refresh()` may fail when upgrading from previous versions of RQ.
+
+### 0.9.0
+- `Worker` statistics! `Worker` now keeps track of `last_heartbeat`, `successful_job_count`, `failed_job_count` and `total_working_time`. Thanks @selwin!
+- `Worker` now sends heartbeat during suspension check. Thanks @theodesp!
+- Added `queue.delete()` method to delete `Queue` objects entirely from Redis. Thanks @theodesp!
+- More robust exception string decoding. Thanks @stylight!
+- Added `--logging-level` option to command line scripts. Thanks @jiajunhuang!
+- Added millisecond precision to job timestamps. Thanks @samuelcolvin!
+- Python 2.6 is no longer supported. Thanks @samuelcolvin!
+
+### 0.8.2
+- Fixed an issue where `job.save()` may fail with unpickleable return value.
+
+### 0.8.1
+
+- Replace `job.id` with `Job` instance in local `_job_stack `. Thanks @katichev!
+- `job.save()` no longer implicitly calls `job.cleanup()`. Thanks @katichev!
+- Properly catch `StopRequested` `worker.heartbeat()`. Thanks @fate0!
+- You can now pass in timeout in days. Thanks @yaniv-g!
+- The core logic of sending job to `FailedQueue` has been moved to `rq.handlers.move_to_failed_queue`. Thanks @yaniv-g!
+- RQ cli commands now accept `--path` parameter. Thanks @kirill and @sjtbham!
+- Make `job.dependency` slightly more efficient. Thanks @liangsijian!
+- `FailedQueue` now returns jobs with the correct class. Thanks @amjith!
+
+### 0.8.0
+
+- Refactored APIs to allow custom `Connection`, `Job`, `Worker` and `Queue` classes via CLI. Thanks @jezdez!
+- `job.delete()` now properly cleans itself from job registries. Thanks @selwin!
+- `Worker` should no longer overwrite `job.meta`. Thanks @WeatherGod!
+- `job.save_meta()` can now be used to persist custom job data. Thanks @katichev!
+- Added Redis Sentinel support. Thanks @strawposter!
+- Make `Worker.find_by_key()` more efficient. Thanks @selwin!
+- You can now specify job `timeout` using strings such as `queue.enqueue(foo, timeout='1m')`. Thanks @luojiebin!
+- Better unicode handling. Thanks @myme5261314 and @jaywink!
+- Sentry should default to HTTP transport. Thanks @Atala!
+- Improve `HerokuWorker` termination logic. Thanks @samuelcolvin!
+
+
+### 0.7.1
+
+- Fixes a bug that prevents fetching jobs from `FailedQueue` (#765). Thanks @jsurloppe!
+- Fixes race condition when enqueueing jobs with dependency (#742). Thanks @th3hamm0r!
+- Skip a test that requires Linux signals on MacOS (#763). Thanks @jezdez!
+- `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf!
+
+### 0.7.0
+
+- Better support for Heroku workers (#584, #715)
+- Support for connecting using a custom connection class (#741)
+- Fix: connection stack in default worker (#479, #641)
+- Fix: `fetch_job` now checks that a job requested actually comes from the
+  intended queue (#728, #733)
+- Fix: Properly raise exception if a job dependency does not exist (#747)
+- Fix: Job status not updated when horse dies unexpectedly (#710)
+- Fix: `request_force_stop_sigrtmin` failing for Python 3 (#727)
+- Fix `Job.cancel()` method on failed queue (#707)
+- Python 3.5 compatibility improvements (#729)
+- Improved signal name lookup (#722)
+
+
+### 0.6.0
+
+- Jobs that depend on job with result_ttl == 0 are now properly enqueued.
+- `cancel_job` now works properly. Thanks @jlopex!
+- Jobs that execute successfully now no longer tries to remove itself from queue. Thanks @amyangfei!
+- Worker now properly logs Falsy return values. Thanks @liorsbg!
+- `Worker.work()` now accepts `logging_level` argument. Thanks @jlopex!
+- Logging related fixes by @redbaron4 and @butla!
+- `@job` decorator now accepts `ttl` argument. Thanks @javimb!
+- `Worker.__init__` now accepts `queue_class` keyword argument. Thanks @antoineleclair!
+- `Worker` now saves warm shutdown time. You can access this property from `worker.shutdown_requested_date`. Thanks @olingerc!
+- Synchronous queues now properly sets completed job status as finished. Thanks @ecarreras!
+- `Worker` now correctly deletes `current_job_id` after failed job execution. Thanks @olingerc!
+- `Job.create()` and `queue.enqueue_call()` now accepts `meta` argument. Thanks @tornstrom!
+- Added `job.started_at` property. Thanks @samuelcolvin!
+- Cleaned up the implementation of `job.cancel()` and `job.delete()`. Thanks @glaslos!
+- `Worker.execute_job()` now exports `RQ_WORKER_ID` and `RQ_JOB_ID` to OS environment variables. Thanks @mgk!
+- `rqinfo` now accepts `--config` option. Thanks @kfrendrich!
+- `Worker` class now has `request_force_stop()` and `request_stop()` methods that can be overridden by custom worker classes. Thanks @samuelcolvin!
+- Other minor fixes by @VicarEscaped, @kampfschlaefer, @ccurvey, @zfz, @antoineleclair,
+  @orangain, @nicksnell, @SkyLothar, @ahxxm and @horida.
+
+
 ### 0.5.6
 
 - Job results are now logged on `DEBUG` level. Thanks @tbaugis!

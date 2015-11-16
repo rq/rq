@@ -7,6 +7,7 @@ from redis import StrictRedis
 from rq.decorators import job
 from rq.job import Job
 from rq.worker import DEFAULT_RESULT_TTL
+from rq.queue import Queue
 
 from tests import RQTestCase
 from tests.fixtures import decorated_job
@@ -56,10 +57,73 @@ class TestDecorator(RQTestCase):
         result = hello.delay()
         self.assertEqual(result.result_ttl, 10)
 
+    def test_decorator_accepts_ttl_as_argument(self):
+        """Ensure that passing in ttl to the decorator sets the ttl on the job
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.ttl, None)
+
+        @job('default', ttl=30)
+        def hello():
+            return 'Hello'
+        result = hello.delay()
+        self.assertEqual(result.ttl, 30)
+
+    def test_decorator_accepts_meta_as_argument(self):
+        """Ensure that passing in meta to the decorator sets the meta on the job
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.meta, {})
+
+        test_meta = {
+            'metaKey1': 1,
+            'metaKey2': 2,
+        }
+
+        @job('default', meta=test_meta)
+        def hello():
+            return 'Hello'
+        result = hello.delay()
+        self.assertEqual(result.meta, test_meta)
+
     def test_decorator_accepts_result_depends_on_as_argument(self):
         """Ensure that passing in depends_on to the decorator sets the
         correct dependency on the job
         """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.dependency, None)
+        self.assertEqual(result._dependency_id, None)
+
+        @job(queue='queue_name')
+        def foo():
+            return 'Firstly'
+
+        foo_job = foo.delay()
+
+        @job(queue='queue_name', depends_on=foo_job)
+        def bar():
+            return 'Secondly'
+
+        bar_job = bar.delay()
+
+        self.assertIsNone(foo_job._dependency_id)
+
+        self.assertEqual(bar_job.dependency, foo_job)
+
+        self.assertEqual(bar_job._dependency_id, foo_job.id)
+
+    def test_decorator_delay_accepts_depends_on_as_argument(self):
+        """Ensure that passing in depends_on to the delay method of
+        a decorated function overrides the depends_on set in the
+        constructor.
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.dependency, None)
+        self.assertEqual(result._dependency_id, None)
 
         @job(queue='queue_name')
         def foo():
@@ -67,16 +131,22 @@ class TestDecorator(RQTestCase):
 
         @job(queue='queue_name')
         def bar():
-            return 'Secondly'
+            return 'Firstly'
 
         foo_job = foo.delay()
-        bar_job = bar.delay(depends_on=foo_job)
+        bar_job = bar.delay()
+
+        @job(queue='queue_name', depends_on=foo_job)
+        def baz():
+            return 'Secondly'
+
+        baz_job = bar.delay(depends_on=bar_job)
 
         self.assertIsNone(foo_job._dependency_id)
+        self.assertIsNone(bar_job._dependency_id)
 
-        self.assertEqual(bar_job.dependency, foo_job)
-
-        self.assertEqual(bar_job._dependency_id, foo_job.id)
+        self.assertEqual(baz_job.dependency, bar_job)
+        self.assertEqual(baz_job._dependency_id, bar_job.id)
 
     @mock.patch('rq.queue.resolve_connection')
     def test_decorator_connection_laziness(self, resolve_connection):
@@ -97,3 +167,39 @@ class TestDecorator(RQTestCase):
         foo.delay()
 
         self.assertEqual(resolve_connection.call_count, 1)
+
+    def test_decorator_custom_queue_class(self):
+        """Ensure that a custom queue class can be passed to the job decorator"""
+        class CustomQueue(Queue):
+            pass
+        CustomQueue.enqueue_call = mock.MagicMock(
+            spec=lambda *args, **kwargs: None,
+            name='enqueue_call'
+        )
+
+        custom_decorator = job(queue='default', queue_class=CustomQueue)
+        self.assertIs(custom_decorator.queue_class, CustomQueue)
+
+        @custom_decorator
+        def custom_queue_class_job(x, y):
+            return x + y
+
+        custom_queue_class_job.delay(1, 2)
+        self.assertEqual(CustomQueue.enqueue_call.call_count, 1)
+
+    def test_decorate_custom_queue(self):
+        """Ensure that a custom queue instance can be passed to the job decorator"""
+        class CustomQueue(Queue):
+            pass
+        CustomQueue.enqueue_call = mock.MagicMock(
+            spec=lambda *args, **kwargs: None,
+            name='enqueue_call'
+        )
+        queue = CustomQueue()
+
+        @job(queue=queue)
+        def custom_queue_job(x, y):
+            return x + y
+
+        custom_queue_job.delay(1, 2)
+        self.assertEqual(queue.enqueue_call.call_count, 1)

@@ -11,7 +11,7 @@ from tests import RQTestCase
 class FakeSentry(object):
     servers = []
 
-    def captureException(self, *args, **kwds):
+    def captureException(self, *args, **kwds):  # noqa
         pass  # we cannot check this, because worker forks
 
 
@@ -24,7 +24,7 @@ class TestSentry(RQTestCase):
 
         # Action
         q.enqueue('_non.importable.job')
-        self.assertEquals(q.count, 1)
+        self.assertEqual(q.count, 1)
 
         w = Worker([q])
         register_sentry(FakeSentry(), w)
@@ -32,5 +32,5 @@ class TestSentry(RQTestCase):
         w.work(burst=True)
 
         # Postconditions
-        self.assertEquals(failed_q.count, 1)
-        self.assertEquals(q.count, 0)
+        self.assertEqual(failed_q.count, 1)
+        self.assertEqual(q.count, 0)

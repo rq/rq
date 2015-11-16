@@ -2,29 +2,20 @@
 rq is a simple, lightweight, library for creating background jobs, and
 processing them.
 """
-import sys
 import os
 from setuptools import setup, find_packages
 
 
 def get_version():
     basedir = os.path.dirname(__file__)
-    with open(os.path.join(basedir, 'rq/version.py')) as f:
-        locals = {}
-        exec(f.read(), locals)
-        return locals['VERSION']
-    raise RuntimeError('No version info found.')
+    try:
+        with open(os.path.join(basedir, 'rq/version.py')) as f:
+            locals = {}
+            exec(f.read(), locals)
+            return locals['VERSION']
+    except FileNotFoundError:
+        raise RuntimeError('No version info found.')
 
-
-def get_dependencies():
-    deps = ['redis >= 2.7.0', 'click >= 3.0']
-    if sys.version_info < (2, 7) or \
-            (sys.version_info >= (3, 0) and sys.version_info < (3, 1)):
-        deps += ['importlib']
-    if sys.version_info < (2, 7) or \
-            (sys.version_info >= (3, 0) and sys.version_info < (3, 2)):
-        deps += ['argparse']
-    return deps
 
 setup(
     name='rq',
@@ -40,7 +31,11 @@ setup(
     include_package_data=True,
     zip_safe=False,
     platforms='any',
-    install_requires=get_dependencies(),
+    install_requires=[
+        'redis >= 2.7.0',
+        'click >= 5.0'
+    ],
+    python_requires='>=2.7',
     entry_points={
         'console_scripts': [
             'rq = rq.cli:main',
@@ -51,18 +46,15 @@ setup(
             'rqworker = rq.cli:worker',
         ],
     },
-    extras_require={
-        ':python_version=="2.6"': ['argparse', 'importlib'],
-    },
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
-        #'Development Status :: 1 - Planning',
-        #'Development Status :: 2 - Pre-Alpha',
-        #'Development Status :: 3 - Alpha',
-        #'Development Status :: 4 - Beta',
+        # 'Development Status :: 1 - Planning',
+        # 'Development Status :: 2 - Pre-Alpha',
+        # 'Development Status :: 3 - Alpha',
+        # 'Development Status :: 4 - Beta',
         'Development Status :: 5 - Production/Stable',
-        #'Development Status :: 6 - Mature',
-        #'Development Status :: 7 - Inactive',
+        # 'Development Status :: 6 - Mature',
+        # 'Development Status :: 7 - Inactive',
         'Intended Audience :: Developers',
         'Intended Audience :: End Users/Desktop',
         'Intended Audience :: Information Technology',
@@ -74,7 +66,12 @@ setup(
         'Operating System :: Unix',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: Internet',
         'Topic :: Scientific/Engineering',

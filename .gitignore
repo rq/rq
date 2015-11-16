@@ -1,6 +1,8 @@
 *.pyc
 *.egg-info
 
+.DS_Store
+
 /dump.rdb
 /.direnv
 /.envrc
@@ -10,3 +12,6 @@
 .tox
 .vagrant
 Vagrantfile
+.idea/
+.coverage*
+/.cache

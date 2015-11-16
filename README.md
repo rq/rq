@@ -5,10 +5,9 @@ easily.
 
 RQ requires Redis >= 2.7.0.
 
-[![Build status](https://travis-ci.org/nvie/rq.svg?branch=master)](https://secure.travis-ci.org/nvie/rq)
-[![Downloads](https://img.shields.io/pypi/dm/rq.svg)](https://pypi.python.org/pypi/rq)
-[![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
-[![Coverage Status](https://img.shields.io/coveralls/nvie/rq.svg)](https://coveralls.io/r/nvie/rq)
+[![Build status](https://travis-ci.org/rq/rq.svg?branch=master)](https://secure.travis-ci.org/rq/rq)
+[![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
+[![Coverage](https://codecov.io/gh/rq/rq/branch/master/graph/badge.svg)](https://codecov.io/gh/rq/rq)
 
 Full documentation can be found [here][d].
 
@@ -38,16 +37,17 @@ You do use the excellent [requests][r] package, don't you?
 Then, create an RQ queue:
 
 ```python
-from rq import Queue, use_connection
-use_connection()
-q = Queue()
+from redis import Redis
+from rq import Queue
+
+q = Queue(connection=Redis())
 ```
 
 And enqueue the function call:
 
 ```python
 from my_module import count_words_at_url
-result = q.enqueue(count_words_at_url, 'http://nvie.com')
+job = q.enqueue(count_words_at_url, 'http://nvie.com')
 ```
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
@@ -59,7 +59,7 @@ To start executing enqueued function calls in the background, start a worker
 from your project's directory:
 
 ```console
-$ rqworker
+$ rq worker
 *** Listening for work on default
 Got count_words_at_url('http://nvie.com') from default
 Job result = 818
@@ -77,7 +77,7 @@ Simply use the following command to install the latest released version:
 
 If you want the cutting edge version (that may well be broken), use this:
 
-    pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
+    pip install -e git+https://github.com/nvie/rq.git@master#egg=rq
 
 
 ## Project history
