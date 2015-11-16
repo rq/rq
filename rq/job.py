@@ -89,7 +89,7 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -133,6 +133,7 @@ class Job(object):
         job.ttl = ttl
         job.timeout = timeout
         job._status = status
+        job.meta = meta or {}
 
         # dependency could be job instance or id
         if depends_on is not None:

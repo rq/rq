@@ -272,6 +272,13 @@ class TestQueue(RQTestCase):
         job = q.enqueue(say_hello)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
+    def test_enqueue_meta_arg(self):
+        """enqueue() can set the job.meta contents."""
+        q = Queue()
+        job = q.enqueue(say_hello, meta={'foo': 'bar', 'baz': 42})
+        self.assertEqual(job.meta['foo'], 'bar')
+        self.assertEqual(job.meta['baz'], 42)
+
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
         q = Queue()
