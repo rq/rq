@@ -153,6 +153,9 @@ class Job(object):
     def set_status(self, status, pipeline=None):
         self._status = status
         connection = pipeline if pipeline is not None else self.connection
+        if status == JobStatus.STARTED:
+            self.started_at = utcnow()
+            connection.hset(self.key, 'started_at', self.started_at)    
         connection.hset(self.key, 'status', self._status)
 
     def _set_status(self, status):
@@ -306,6 +309,7 @@ class Job(object):
         self.description = None
         self.origin = None
         self.enqueued_at = None
+        self.started_at = None
         self.ended_at = None
         self._result = None
         self.exc_info = None
@@ -410,6 +414,7 @@ class Job(object):
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
         self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
+        self.started_at = to_date(as_text(obj.get('started_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = obj.get('exc_info')
@@ -432,6 +437,8 @@ class Job(object):
             obj['description'] = self.description
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
+        if self.started_at is not None:
+            obj['started_at'] = utcformat(self.started_at)
         if self.ended_at is not None:
             obj['ended_at'] = utcformat(self.ended_at)
         if self._result is not None:

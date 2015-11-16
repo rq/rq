@@ -116,6 +116,7 @@ class Worker(object):
         queues = as_text(connection.hget(worker.key, 'queues'))
         worker._state = connection.hget(worker.key, 'state') or '?'
         worker._job_id = connection.hget(worker.key, 'current_job') or None
+        worker.started_job_at = utcparse(connection.hget(worker.key, 'started_job_at'))
         if queues:
             worker.queues = [cls.queue_class(queue, connection=connection)
                              for queue in queues.split(',')]
@@ -144,6 +145,7 @@ class Worker(object):
         self.default_worker_ttl = default_worker_ttl
 
         self._state = 'starting'
+        self.started_job_at = None
         self._is_horse = False
         self._horse_pid = 0
         self._stop_requested = False
@@ -274,6 +276,9 @@ class Worker(object):
     def set_state(self, state, pipeline=None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
+        if state == WorkerStatus.BUSY:
+            self.started_job_at = utcnow()
+            connection.hset(self.key, 'started_job_at', utcformat(self.started_job_at))
         connection.hset(self.key, 'state', state)
 
     def _set_state(self, state):
