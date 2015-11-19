@@ -124,7 +124,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None, exc_handler=None,
-                 exception_handlers=None, default_worker_ttl=None, job_class=None):  # noqa
+                 exception_handlers=None, default_worker_ttl=None, job_class=None, finish_handlers=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -152,6 +152,14 @@ class Worker(object):
         self.log = logger
         self.failed_queue = get_failed_queue(connection=self.connection)
         self.last_cleaned_at = None
+
+        self.finish_handlers = []        
+        if finish_handlers is not None:
+            if isinstance(finish_handlers, list):
+                for f in finish_handlers:
+                    self.push_finish_handlers(f)
+            else:
+                self.push_finish_handlers(finish_handlers)
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -592,6 +600,9 @@ class Worker(object):
 
                 pipeline.execute()
 
+                for f in self.finish_handlers():
+                    f(job)
+
             except Exception:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 started_job_registry.remove(job, pipeline=pipeline)
@@ -646,6 +657,9 @@ class Worker(object):
         exc_string = ''.join(traceback.format_exception(*exc_info))
         self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
         self.failed_queue.quarantine(job, exc_info=exc_string)
+
+    def push_finish_handlers(self, finish_handler):
+        self.finish_handlers.append(finish_handler)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
