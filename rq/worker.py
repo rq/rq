@@ -493,6 +493,8 @@ class Worker(object):
         """
         self.set_state('busy')
         child_pid = os.fork()
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
             self.main_work_horse(job)
         else:
