@@ -32,7 +32,7 @@ def slow(f):
 
     @wraps(f)
     def _inner(*args, **kwargs):
-        if os.environ.get('ONLY_RUN_FAST_TESTS'):
+        if os.environ.get('RUN_SLOW_TESTS_TOO'):
             f(*args, **kwargs)
 
     return _inner
