@@ -74,7 +74,7 @@ class TestRegistry(RQTestCase):
         self.assertIn(job.id, failed_queue.job_ids)
         self.assertEqual(self.testconn.zscore(self.registry.key, job.id), None)
         job.refresh()
-        self.assertEqual(job.status, JobStatus.FAILED)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""

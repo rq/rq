@@ -88,7 +88,7 @@ class StartedJobRegistry(BaseRegistry):
                 for job_id in job_ids:
                     try:
                         job = Job.fetch(job_id, connection=self.connection)
-                        job.status = JobStatus.FAILED
+                        job.set_status(JobStatus.FAILED)
                         job.save(pipeline=pipeline)
                         failed_queue.push_job_id(job_id, pipeline=pipeline)
                     except NoSuchJobError:
