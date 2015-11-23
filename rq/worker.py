@@ -600,7 +600,8 @@ class Worker(object):
 
                 pipeline.execute()
 
-                for f in self.finish_handlers():
+                logger.info('Call %d handlers on successful finish of job %s', len(self.finish_handlers), job.id)
+                for f in self.finish_handlers:
                     f(job)
 
             except Exception:
