@@ -160,7 +160,8 @@ class Worker(object):
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
                  queue_class=None,
-                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
+                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL, # noqa
+                 finish_handlers=None, final_handlers=None):
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -812,7 +813,6 @@ class Worker(object):
         started_job_registry = StartedJobRegistry(job.origin,
                                                   self.connection,
                                                   job_class=self.job_class)
-
         try:
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
@@ -836,6 +836,7 @@ class Worker(object):
             return False
 
         finally:
+            # nuglab custom finish handler
             logger.info('Call %d handlers on finishing job, success or failure, %s', len(self.finish_handlers), job.id)
             for f in self.final_handlers:
                 f(job, self.connection)
