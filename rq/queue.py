@@ -30,6 +30,7 @@ class Queue(object):
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'
     redis_queues_keys = 'rq:queues'
+    round_robin_loop = 0
 
     @classmethod
     def all(cls, connection=None):
@@ -311,7 +312,7 @@ class Queue(object):
         return as_text(self.connection.lpop(self.key))
 
     @classmethod
-    def lpop(cls, queue_keys, timeout, connection=None):
+    def lpop(cls, queue_keys, timeout, connection=None, round_robin=False):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -328,6 +329,11 @@ class Queue(object):
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
+            if round_robin:
+                if cls.round_robin_loop >= len(queue_keys):
+                    cls.round_robin_loop = 0
+                queue_keys = queue_keys[-1*cls.round_robin_loop:] + queue_keys[:-1*cls.round_robin_loop]
+                cls.round_robin_loop += 1
             result = connection.blpop(queue_keys, timeout)
             if result is None:
                 raise DequeueTimeout(timeout, queue_keys)
@@ -363,7 +369,7 @@ class Queue(object):
             return job
 
     @classmethod
-    def dequeue_any(cls, queues, timeout, connection=None):
+    def dequeue_any(cls, queues, timeout, connection=None, round_robin=False):
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -376,7 +382,7 @@ class Queue(object):
         """
         while True:
             queue_keys = [q.key for q in queues]
-            result = cls.lpop(queue_keys, timeout, connection=connection)
+            result = cls.lpop(queue_keys, timeout, connection=connection, round_robin=round_robin)
             if result is None:
                 return None
             queue_key, job_id = map(as_text, result)

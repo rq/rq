@@ -83,6 +83,7 @@ class Worker(object):
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
+    round_robin = False
 
     @classmethod
     def all(cls, connection=None):
@@ -123,7 +124,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None, exc_handler=None,
-                 exception_handlers=None, default_worker_ttl=None, job_class=None):  # noqa
+                 exception_handlers=None, default_worker_ttl=None, job_class=None, round_robin=False):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -134,6 +135,7 @@ class Worker(object):
         self.queues = queues
         self.validate_queues()
         self._exc_handlers = []
+        self.round_robin = round_robin
 
         if default_result_ttl is None:
             default_result_ttl = DEFAULT_RESULT_TTL
@@ -455,7 +457,8 @@ class Worker(object):
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
-                                                      connection=self.connection)
+                                                      connection=self.connection,
+                                                      round_robin=self.round_robin)
                 if result is not None:
                     job, queue = result
                     self.log.info('{0}: {1} ({2})'.format(green(queue.name),
