@@ -549,6 +549,7 @@ class Worker(object):
             registry = StartedJobRegistry(job.origin, self.connection)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
+            job.set_started_at_now(pipeline=pipeline)
             pipeline.execute()
 
         msg = 'Processing {0} from {1} since {2}'
@@ -564,7 +565,6 @@ class Worker(object):
             started_job_registry = StartedJobRegistry(job.origin, self.connection)
 
             try:
-                job.started_at = utcnow()
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 

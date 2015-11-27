@@ -152,8 +152,7 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'status', self._status)
+        self.hset_value('status', self._status, pipeline)
 
     def _set_status(self, status):
         warnings.warn(
@@ -163,6 +162,14 @@ class Job(object):
         self.set_status(status)
 
     status = property(_get_status, _set_status)
+
+    def set_started_at_now(self, pipeline=None):
+        now_fmt = utcformat(utcnow())
+        self.hset_value('started_at', now_fmt, pipeline)
+
+    def hset_value(self, key, value, pipeline=None):
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, key, value)
 
     @property
     def is_finished(self):
