@@ -163,10 +163,6 @@ class Job(object):
 
     status = property(_get_status, _set_status)
 
-    def set_started_at_now(self, pipeline=None):
-        now_fmt = utcformat(utcnow())
-        self.connection._hset(self.key, 'started_at', now_fmt, pipeline)
-
     @property
     def is_finished(self):
         return self.get_status() == JobStatus.FINISHED
