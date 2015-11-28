@@ -21,10 +21,17 @@ def fix_return_type(func):
 PATCHED_METHODS = ['_setex', '_lrem', '_zadd', '_pipeline', '_ttl']
 
 
+def _hset(self, key, field_name, value, pipeline=None):
+    connection = pipeline if pipeline is not None else self
+    connection.hset(key, field_name, value)
+
+
 def patch_connection(connection):
     # Don't patch already patches objects
     if all([hasattr(connection, attr) for attr in PATCHED_METHODS]):
         return connection
+
+    connection._hset = partial(_hset, connection)
 
     if isinstance(connection, Redis):
         connection._setex = partial(StrictRedis.setex, connection)
