@@ -551,6 +551,7 @@ class Worker(object):
             registry = StartedJobRegistry(job.origin, self.connection)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
+            job.set_started_at_now(pipeline=pipeline)
             pipeline.execute()
 
         msg = 'Processing {0} from {1} since {2}'

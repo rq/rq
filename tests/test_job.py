@@ -54,6 +54,7 @@ class TestJob(RQTestCase):
         # ...and nothing else
         self.assertIsNone(job.origin)
         self.assertIsNone(job.enqueued_at)
+        self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
         self.assertIsNone(job.result)
         self.assertIsNone(job.exc_info)
