@@ -77,10 +77,10 @@ flag:
 $ rqinfo -R
 ...
 
-default: Mickey.26421 (idle)
 high:    Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
 low:     Bricktop.25458 (busy)
 default: Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
+failed:  –
 3 workers, 4 queues
 {% endhighlight %}
 
