@@ -440,7 +440,7 @@ class FailedQueue(Queue):
 
         return job
 
-    def requeue(self, job_id):
+    def requeue(self, job_id, queue=None):
         """Requeues the job with the given job ID."""
         try:
             job = self.job_class.fetch(job_id, connection=self.connection)
@@ -455,5 +455,5 @@ class FailedQueue(Queue):
 
         job.set_status(JobStatus.QUEUED)
         job.exc_info = None
-        q = Queue(job.origin, connection=self.connection)
+        q = Queue(queue or job.origin, connection=self.connection)
         q.enqueue_job(job)
