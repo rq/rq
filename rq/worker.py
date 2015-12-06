@@ -114,7 +114,7 @@ class Worker(object):
         name = worker_key[len(prefix):]
         worker = cls([], name, connection=connection)
         queues = as_text(connection.hget(worker.key, 'queues'))
-        worker._state = connection.hget(worker.key, 'state') or '?'
+        worker._state = as_text(connection.hget(worker.key, 'state') or '?')
         worker._job_id = connection.hget(worker.key, 'current_job') or None
         if queues:
             worker.queues = [cls.queue_class(queue, connection=connection)
