@@ -413,7 +413,7 @@ class Job(object):
         self.started_at = to_date(as_text(obj.get('started_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.exc_info = obj.get('exc_info')
+        self.exc_info = as_text(obj.get('exc_info'))
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
