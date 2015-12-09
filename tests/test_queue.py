@@ -443,6 +443,32 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, 123)
 
 
+class TestBatch(RQTestCase):
+    def test_batch_jobs(self):
+        q = Queue()
+        batch = q.batch()
+
+        job = batch.enqueue(say_hello)
+        self.assertEqual(q.is_empty(), True)
+        self.assertEqual(q.jobs, [])
+
+        batch.commit()
+
+        self.assertEqual(q.is_empty(), False)
+        self.assertEqual(q.jobs, [job])
+
+    def test_batch_jobs_with_context_manager(self):
+        q = Queue()
+
+        with q.batch() as batch:
+            job = batch.enqueue(say_hello)
+            self.assertEqual(q.is_empty(), True)
+            self.assertEqual(q.jobs, [])
+
+        self.assertEqual(q.is_empty(), False)
+        self.assertEqual(q.jobs, [job])
+
+
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):
         """Requeueing existing jobs."""
