@@ -476,9 +476,15 @@ class Job(object):
         pipeline.execute()
 
     def delete(self, pipeline=None):
-        """Deletes the job hash from Redis."""
-        connection = pipeline if pipeline is not None else self.connection
-        connection.delete(self.key)
+        """Deletes the job hash from Redis, including the StartedJobRegistry."""
+        from .registry import StartedJobRegistry
+        pipeline = pipeline if pipeline is not None else self.connection._pipeline()
+        pipeline.delete(self.key)
+
+        if self.origin:
+            registry = StartedJobRegistry(name=self.origin, connection=self.connection)
+            registry.remove(self, pipeline=pipeline)
+        pipeline.execute()
 
     # Job execution
     def perform(self):  # noqa
