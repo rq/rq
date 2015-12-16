@@ -608,6 +608,7 @@ class Worker(object):
             except Exception:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 started_job_registry.remove(job, pipeline=pipeline)
+                self.set_current_job_id(None, pipeline=pipeline)
                 try:
                     pipeline.execute()
                 except Exception:

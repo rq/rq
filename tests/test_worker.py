@@ -157,6 +157,7 @@ class TestWorker(RQTestCase):
         # Postconditions
         self.assertEqual(q.count, 0)
         self.assertEqual(failed_q.count, 1)
+        self.assertEquals(w.get_current_job_id(), None)
 
         # Check the job
         job = Job.fetch(job.id)
