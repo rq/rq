@@ -482,6 +482,7 @@ class Job(object):
 
     def delete(self, pipeline=None):
         """Deletes the job hash from Redis, including the StartedJobRegistry."""
+        self.cancel()
         from .registry import StartedJobRegistry
         pipeline = pipeline if pipeline is not None else self.connection._pipeline()
         pipeline.delete(self.key)
