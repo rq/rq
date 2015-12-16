@@ -545,6 +545,10 @@ class TestWorkerShutdown(RQTestCase):
         self.assertTrue(w._stop_requested)
         self.assertTrue(os.path.exists(sentinel_file))
 
+        shutdown_requested_date = w.shutdown_requested_date
+        self.assertIsNotNone(shutdown_requested_date)
+        self.assertEqual(type(shutdown_requested_date).__name__, 'datetime')
+
     @slow
     def test_working_worker_cold_shutdown(self):
         """worker with an ongoing job receiving double SIGTERM signal and shutting down immediately"""
@@ -562,3 +566,6 @@ class TestWorkerShutdown(RQTestCase):
         self.assertTrue(w._stop_requested)
         self.assertFalse(os.path.exists(sentinel_file))
 
+        shutdown_requested_date = w.shutdown_requested_date
+        self.assertIsNotNone(shutdown_requested_date)
+        self.assertEqual(type(shutdown_requested_date).__name__, 'datetime')
