@@ -3,12 +3,14 @@ them in the background with workers.  It is backed by Redis and it is designed
 to have a low barrier to entry.  It should be integrated in your web stack
 easily.
 
-RQ requires Redis >= 2.6.0.
+RQ requires Redis >= 2.7.0.
 
 [![Build status](https://travis-ci.org/nvie/rq.svg?branch=master)](https://secure.travis-ci.org/nvie/rq)
-[![Downloads](https://pypip.in/d/rq/badge.svg)](https://pypi.python.org/pypi/rq)
+[![Downloads](https://img.shields.io/pypi/dm/rq.svg)](https://pypi.python.org/pypi/rq)
 [![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
 [![Coverage Status](https://img.shields.io/coveralls/nvie/rq.svg)](https://coveralls.io/r/nvie/rq)
+
+Full documentation can be found [here][d].
 
 
 ## Getting started
@@ -33,7 +35,7 @@ def count_words_at_url(url):
 
 You do use the excellent [requests][r] package, don't you?
 
-Then, create a RQ queue:
+Then, create an RQ queue:
 
 ```python
 from rq import Queue, use_connection
@@ -85,7 +87,7 @@ and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
 [r]: http://python-requests.org
-[d]: http://nvie.github.com/rq/docs/
+[d]: http://python-rq.org/
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
 [1]: http://www.celeryproject.org/

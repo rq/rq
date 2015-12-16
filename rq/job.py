@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import import_attribute, utcformat, utcnow, utcparse
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse
 
 try:
     import cPickle as pickle
@@ -25,18 +25,14 @@ dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
 
-def enum(name, *sequential, **named):
-    values = dict(zip(sequential, range(len(sequential))), **named)
-
-    # NOTE: Yes, we *really* want to cast using str() here.
-    # On Python 2 type() requires a byte string (which is str() on Python 2).
-    # On Python 3 it does not matter, so we'll use str(), which acts as
-    # a no-op.
-    return type(str(name), (), values)
-
-Status = enum('Status',
-              QUEUED='queued', FINISHED='finished', FAILED='failed',
-              STARTED='started')
+JobStatus = enum(
+    'JobStatus',
+    QUEUED='queued',
+    FINISHED='finished',
+    FAILED='failed',
+    STARTED='started',
+    DEFERRED='deferred'
+)
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -54,7 +50,7 @@ def unpickle(pickled_string):
     try:
         obj = loads(pickled_string)
     except Exception as e:
-        raise UnpickleError('Could not unpickle.', pickled_string, e)
+        raise UnpickleError('Could not unpickle', pickled_string, e)
     return obj
 
 
@@ -92,8 +88,8 @@ class Job(object):
     # Job construction
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
-               result_ttl=None, status=None, description=None, depends_on=None, timeout=None,
-               id=None):
+               result_ttl=None, ttl=None, status=None, description=None,
+               depends_on=None, timeout=None, id=None, origin=None, meta=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -103,13 +99,16 @@ class Job(object):
             kwargs = {}
 
         if not isinstance(args, (tuple, list)):
-            raise TypeError('{0!r} is not a valid args list.'.format(args))
+            raise TypeError('{0!r} is not a valid args list'.format(args))
         if not isinstance(kwargs, dict):
-            raise TypeError('{0!r} is not a valid kwargs dict.'.format(kwargs))
+            raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
 
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
+
+        if origin is not None:
+            job.origin = origin
 
         # Set the core job tuple properties
         job._instance = None
@@ -117,7 +116,7 @@ class Job(object):
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '%s.%s' % (func.__module__, func.__name__)
+            job._func_name = '{0}.{1}'.format(func.__module__, func.__name__)
         elif isinstance(func, string_types):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
@@ -131,8 +130,10 @@ class Job(object):
         # Extra meta data
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
+        job.ttl = ttl
         job.timeout = timeout
         job._status = status
+        job.meta = meta or {}
 
         # dependency could be job instance or id
         if depends_on is not None:
@@ -152,8 +153,7 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'status', self._status)
+        self.connection._hset(self.key, 'status', self._status, pipeline)
 
     def _set_status(self, status):
         warnings.warn(
@@ -166,19 +166,19 @@ class Job(object):
 
     @property
     def is_finished(self):
-        return self.get_status() == Status.FINISHED
+        return self.get_status() == JobStatus.FINISHED
 
     @property
     def is_queued(self):
-        return self.get_status() == Status.QUEUED
+        return self.get_status() == JobStatus.QUEUED
 
     @property
     def is_failed(self):
-        return self.get_status() == Status.FAILED
+        return self.get_status() == JobStatus.FAILED
 
     @property
     def is_started(self):
-        return self.get_status() == Status.STARTED
+        return self.get_status() == JobStatus.STARTED
 
     @property
     def dependency(self):
@@ -212,7 +212,7 @@ class Job(object):
     def data(self):
         if self._data is UNEVALUATED:
             if self._func_name is UNEVALUATED:
-                raise ValueError('Cannot build the job data.')
+                raise ValueError('Cannot build the job data')
 
             if self._instance is UNEVALUATED:
                 self._instance = None
@@ -306,17 +306,19 @@ class Job(object):
         self.description = None
         self.origin = None
         self.enqueued_at = None
+        self.started_at = None
         self.ended_at = None
         self._result = None
         self.exc_info = None
         self.timeout = None
         self.result_ttl = None
+        self.ttl = None
         self._status = None
         self._dependency_id = None
         self.meta = {}
 
     def __repr__(self):  # noqa
-        return 'Job(%r, enqueued_at=%r)' % (self._id, self.enqueued_at)
+        return 'Job({0!r}, enqueued_at={1!r})'.format(self._id, self.enqueued_at)
 
     # Data access
     def get_id(self):  # noqa
@@ -330,7 +332,7 @@ class Job(object):
     def set_id(self, value):
         """Sets a job ID for the given job."""
         if not isinstance(value, string_types):
-            raise TypeError('id must be a string, not {0}.'.format(type(value)))
+            raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
     id = property(get_id, set_id)
@@ -343,7 +345,7 @@ class Job(object):
     @classmethod
     def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:%s:dependents' % (job_id,)
+        return 'rq:job:{0}:dependents'.format(job_id)
 
     @property
     def key(self):
@@ -392,7 +394,7 @@ class Job(object):
         key = self.key
         obj = decode_redis_hash(self.connection.hgetall(key))
         if len(obj) == 0:
-            raise NoSuchJobError('No such job: %s' % (key,))
+            raise NoSuchJobError('No such job: {0}'.format(key))
 
         def to_date(date_str):
             if date_str is None:
@@ -409,13 +411,15 @@ class Job(object):
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
         self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
+        self.started_at = to_date(as_text(obj.get('started_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.exc_info = obj.get('exc_info')
+        self.exc_info = as_text(obj.get('exc_info'))
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
+        self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
     def to_dict(self):
@@ -430,6 +434,8 @@ class Job(object):
             obj['description'] = self.description
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
+        if self.started_at is not None:
+            obj['started_at'] = utcformat(self.started_at)
         if self.ended_at is not None:
             obj['ended_at'] = utcformat(self.ended_at)
         if self._result is not None:
@@ -446,6 +452,8 @@ class Job(object):
             obj['dependency_id'] = self._dependency_id
         if self.meta:
             obj['meta'] = dumps(self.meta)
+        if self.ttl:
+            obj['ttl'] = self.ttl
 
         return obj
 
@@ -455,6 +463,7 @@ class Job(object):
         connection = pipeline if pipeline is not None else self.connection
 
         connection.hmset(key, self.to_dict())
+        self.cleanup(self.ttl, pipeline=connection)
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
@@ -462,14 +471,10 @@ class Job(object):
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
-        cancellation.  Technically, this call is (currently) the same as just
-        deleting the job hash.
+        cancellation.
         """
         from .queue import Queue
         pipeline = self.connection._pipeline()
-        self.delete(pipeline=pipeline)
-        pipeline.delete(self.dependents_key)
-
         if self.origin:
             queue = Queue(name=self.origin, connection=self.connection)
             queue.remove(self, pipeline=pipeline)
@@ -489,6 +494,8 @@ class Job(object):
     # Job execution
     def perform(self):  # noqa
         """Invokes the job function with the job arguments."""
+        self.connection.persist(self.key)
+        self.ttl = -1
         _job_stack.push(self.id)
         try:
             self._result = self.func(*self.args, **self.kwargs)
@@ -497,8 +504,15 @@ class Job(object):
         return self._result
 
     def get_ttl(self, default_ttl=None):
-        """Returns ttl for a job that determines how long a job and its result
-        will be persisted. In the future, this method will also be responsible
+        """Returns ttl for a job that determines how long a job will be
+        persisted. In the future, this method will also be responsible
+        for determining ttl for repeated jobs.
+        """
+        return default_ttl if self.ttl is None else self.ttl
+
+    def get_result_ttl(self, default_ttl=None):
+        """Returns ttl for a job that determines how long a jobs result will
+        be persisted. In the future, this method will also be responsible
         for determining ttl for repeated jobs.
         """
         return default_ttl if self.result_ttl is None else self.result_ttl
@@ -511,22 +525,28 @@ class Job(object):
         if self.func_name is None:
             return None
 
-        arg_list = [repr(arg) for arg in self.args]
-        arg_list += ['%s=%r' % (k, v) for k, v in self.kwargs.items()]
+        arg_list = [as_text(repr(arg)) for arg in self.args]
+
+        kwargs = ['{0}={1}'.format(k, as_text(repr(v))) for k, v in self.kwargs.items()]
+        # Sort here because python 3.3 & 3.4 makes different call_string
+        arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
-        return '%s(%s)' % (self.func_name, args)
+
+        return '{0}({1})'.format(self.func_name, args)
 
     def cleanup(self, ttl=None, pipeline=None):
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
-        result depends on the value of result_ttl:
-        - If result_ttl is 0, cleanup the job immediately.
+        result depends on the value of ttl:
+        - If ttl is 0, cleanup the job immediately.
         - If it's a positive number, set the job to expire in X seconds.
-        - If result_ttl is negative, don't set an expiry to it (persist
+        - If ttl is negative, don't set an expiry to it (persist
           forever)
         """
         if ttl == 0:
-            self.cancel()
+            self.delete()
+        elif not ttl:
+            return
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
@@ -539,17 +559,23 @@ class Job(object):
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the current job in its dependency's dependents set.
+        This method adds the job in its dependency's dependents set
+        and adds the job to DeferredJobRegistry.
         """
+        from .registry import DeferredJobRegistry
+
+        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry.add(self, pipeline=pipeline)
+
         connection = pipeline if pipeline is not None else self.connection
         connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
 
     def __str__(self):
-        return '<Job %s: %s>' % (self.id, self.description)
+        return '<Job {0}: {1}>'.format(self.id, self.description)
 
     # Job equality
     def __eq__(self, other):  # noqa
-        return self.id == other.id
+        return isinstance(other, self.__class__) and self.id == other.id
 
     def __hash__(self):
         return hash(self.id)

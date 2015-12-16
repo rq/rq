@@ -9,12 +9,13 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import calendar
-import importlib
 import datetime
+import importlib
 import logging
 import sys
+from collections import Iterable
 
-from .compat import is_python_version, as_text
+from .compat import as_text, is_python_version, string_types
 
 
 class _Colorizer(object):
@@ -59,7 +60,7 @@ class _Colorizer(object):
         return self.codes["reset"]
 
     def colorize(self, color_key, text):
-        if not sys.stdout.isatty():
+        if self.notty:
             return text
         else:
             return self.codes[color_key] + text + self.codes["reset"]
@@ -205,6 +206,29 @@ def first(iterable, default=None, key=None):
     return default
 
 
+def is_nonstring_iterable(obj):
+    """Returns whether the obj is an iterable, but not a string"""
+    return isinstance(obj, Iterable) and not isinstance(obj, string_types)
+
+
+def ensure_list(obj):
+    """
+    When passed an iterable of objects, does nothing, otherwise, it returns
+    a list with just that object in it.
+    """
+    return obj if is_nonstring_iterable(obj) else [obj]
+
+
 def current_timestamp():
     """Returns current UTC timestamp"""
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+
+
+def enum(name, *sequential, **named):
+    values = dict(zip(sequential, range(len(sequential))), **named)
+
+    # NOTE: Yes, we *really* want to cast using str() here.
+    # On Python 2 type() requires a byte string (which is str() on Python 2).
+    # On Python 3 it does not matter, so we'll use str(), which acts as
+    # a no-op.
+    return type(str(name), (), values)

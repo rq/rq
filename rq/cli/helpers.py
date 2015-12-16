@@ -7,8 +7,11 @@ import time
 from functools import partial
 
 import click
+import redis
+from redis import StrictRedis
 from rq import Queue, Worker
 from rq.logutils import setup_loghandlers
+from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
@@ -21,6 +24,35 @@ def read_config_file(module):
     return dict([(k, v)
                  for k, v in settings.__dict__.items()
                  if k.upper() == k])
+
+
+def get_redis_from_config(settings):
+    """Returns a StrictRedis instance from a dictionary of settings."""
+    if settings.get('REDIS_URL') is not None:
+        return StrictRedis.from_url(settings['REDIS_URL'])
+
+    kwargs = {
+        'host': settings.get('REDIS_HOST', 'localhost'),
+        'port': settings.get('REDIS_PORT', 6379),
+        'db': settings.get('REDIS_DB', 0),
+        'password': settings.get('REDIS_PASSWORD', None),
+    }
+
+    use_ssl = settings.get('REDIS_SSL', False)
+    if use_ssl:
+        # If SSL is required, we need to depend on redis-py being 2.10 at
+        # least
+        def safeint(x):
+            try:
+                return int(x)
+            except ValueError:
+                return 0
+
+        version_info = tuple(safeint(x) for x in redis.__version__.split('.'))
+        if not version_info >= (2, 10):
+            raise RuntimeError('Using SSL requires a redis-py version >= 2.10')
+        kwargs['ssl'] = use_ssl
+    return StrictRedis(**kwargs)
 
 
 def pad(s, pad_to_length):
@@ -39,8 +71,9 @@ def get_scale(x):
 
 def state_symbol(state):
     symbols = {
-        'busy': red('busy'),
-        'idle': green('idle'),
+        WorkerStatus.BUSY: red('busy'),
+        WorkerStatus.IDLE: green('idle'),
+        WorkerStatus.SUSPENDED: yellow('suspended'),
     }
     try:
         return symbols[state]
@@ -101,7 +134,7 @@ def show_workers(queues, raw, by_queue):
     else:
         qs = Queue.all()
         ws = Worker.all()
-        filter_queues = lambda x: x
+        filter_queues = (lambda x: x)
 
     if not by_queue:
         for w in ws:

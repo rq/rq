@@ -18,14 +18,20 @@ def fix_return_type(func):
     return _inner
 
 
-def patch_connection(connection):
-    if not isinstance(connection, StrictRedis):
-        raise ValueError('A StrictRedis or Redis connection is required.')
+PATCHED_METHODS = ['_setex', '_lrem', '_zadd', '_pipeline', '_ttl']
 
+
+def _hset(self, key, field_name, value, pipeline=None):
+    connection = pipeline if pipeline is not None else self
+    connection.hset(key, field_name, value)
+
+
+def patch_connection(connection):
     # Don't patch already patches objects
-    PATCHED_METHODS = ['_setex', '_lrem', '_zadd', '_pipeline', '_ttl']
     if all([hasattr(connection, attr) for attr in PATCHED_METHODS]):
         return connection
+
+    connection._hset = partial(_hset, connection)
 
     if isinstance(connection, Redis):
         connection._setex = partial(StrictRedis.setex, connection)
@@ -35,7 +41,9 @@ def patch_connection(connection):
         connection._ttl = fix_return_type(partial(StrictRedis.ttl, connection))
         if hasattr(connection, 'pttl'):
             connection._pttl = fix_return_type(partial(StrictRedis.pttl, connection))
-    elif isinstance(connection, StrictRedis):
+
+    # add support for mock redis objects
+    elif hasattr(connection, 'setex'):
         connection._setex = connection.setex
         connection._lrem = connection.lrem
         connection._zadd = connection.zadd

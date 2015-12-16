@@ -11,10 +11,6 @@ class InvalidJobOperationError(Exception):
     pass
 
 
-class NoQueueError(Exception):
-    pass
-
-
 class UnpickleError(Exception):
     def __init__(self, message, raw_data, inner_exception=None):
         super(UnpickleError, self).__init__(message, inner_exception)

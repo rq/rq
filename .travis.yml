@@ -1,3 +1,4 @@
+sudo: false
 language: python
 services:
   - redis
@@ -14,6 +15,6 @@ install:
   - pip install coveralls --use-mirrors
   #- pip install pytest  # installed by Travis by default already
 script:
-  - py.test --cov rq
+  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq
 after_success:
   - coveralls
