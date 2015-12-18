@@ -602,7 +602,7 @@ class Worker(object):
 
                 logger.info('Call %d handlers on successful finish of job %s', len(self.finish_handlers), job.id)
                 for f in self.finish_handlers:
-                    f(job)
+                    f(job, self.connection)
 
             except Exception:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
