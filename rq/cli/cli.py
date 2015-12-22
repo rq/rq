@@ -144,7 +144,7 @@ def info(url, config, path, interval, raw, only_queues, only_workers, by_queue, 
 @click.option('--job-class', '-j', default='rq.job.Job', help='RQ Job class to use')
 @click.option('--queue-class', default='rq.Queue', help='RQ Queue class to use')
 @click.option('--path', '-P', default='.', help='Specify the import path.')
-@click.option('--results-ttl', help='Default results timeout to be used')
+@click.option('--results-ttl', type=int, help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
