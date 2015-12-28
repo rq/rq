@@ -116,7 +116,8 @@ class Worker(object):
         queues = as_text(connection.hget(worker.key, 'queues'))
         worker._state = connection.hget(worker.key, 'state') or '?'
         worker._job_id = connection.hget(worker.key, 'current_job') or None
-        worker.started_job_at = utcparse(connection.hget(worker.key, 'started_job_at'))
+        sja = connection.hget(worker.key, 'started_job_at')
+        worker.started_job_at = None if sja is None else utcparse(sja)
         if queues:
             worker.queues = [cls.queue_class(queue, connection=connection)
                              for queue in queues.split(',')]
