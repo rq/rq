@@ -10,7 +10,7 @@ from tests.helpers import strip_microseconds
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import Job, get_current_job
+from rq.job import Job, get_current_job, JobStatus
 from rq.queue import Queue
 from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
@@ -306,6 +306,12 @@ class TestJob(RQTestCase):
     def test_job_access_within_synchronous_job_function(self):
         queue = Queue(async=False)
         queue.enqueue(fixtures.access_self)
+
+    def test_job_async_status_finished(self):
+        queue = Queue(async=False)
+        job = queue.enqueue(fixtures.say_hello)
+        self.assertEqual(job.result, 'Hi there, Stranger!')
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_get_result_ttl(self):
         """Getting job result TTL."""
