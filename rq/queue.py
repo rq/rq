@@ -217,6 +217,7 @@ class Queue(object):
 
         if not self._async:
             job.perform()
+            job.set_status(JobStatus.FINISHED)
             job.save()
             job.cleanup(DEFAULT_RESULT_TTL)
 
