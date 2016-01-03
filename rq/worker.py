@@ -125,7 +125,8 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None, exc_handler=None,
-                 exception_handlers=None, default_worker_ttl=None, job_class=None, finish_handlers=None):  # noqa
+                 exception_handlers=None, default_worker_ttl=None, job_class=None, # noqa
+                 finish_handlers=None, final_handlers=None):
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -161,6 +162,14 @@ class Worker(object):
                     self.push_finish_handlers(f)
             else:
                 self.push_finish_handlers(finish_handlers)
+
+        self.final_handlers = []
+        if final_handlers is not None:
+            if isinstance(final_handlers, list):
+                for f in final_handlers:
+                    self.push_final_handlers(f)
+            else:
+                self.push_final_handlers(final_handlers)
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -616,6 +625,10 @@ class Worker(object):
                     pass
                 self.handle_exception(job, *sys.exc_info())
                 return False
+            finally:
+                logger.info('Call %d handlers on finishing job, success or failure, %s', len(self.finish_handlers), job.id)
+                for f in self.final_handlers:
+                    f(job, self.connection)
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv:
@@ -662,6 +675,9 @@ class Worker(object):
 
     def push_finish_handlers(self, finish_handler):
         self.finish_handlers.append(finish_handler)
+
+    def push_final_handlers(self, final_handler):
+        self.final_handlers.append(final_handler)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
