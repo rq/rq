@@ -16,7 +16,7 @@ from datetime import timedelta
 
 from rq.compat import as_text, string_types, text_type
 
-from .connections import get_current_connection
+from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
 from .exceptions import DequeueTimeout
 from .job import Job, JobStatus
@@ -581,6 +581,9 @@ class Worker(object):
         self.prepare_job_execution(job)
 
         with self.connection._pipeline() as pipeline:
+
+            push_connection(self.connection)
+
             started_job_registry = StartedJobRegistry(job.origin, self.connection)
 
             try:
@@ -622,6 +625,9 @@ class Worker(object):
                     pass
                 self.handle_exception(job, *sys.exc_info())
                 return False
+
+            finally:
+                pop_connection()
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv is not None:
