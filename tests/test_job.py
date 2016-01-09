@@ -302,6 +302,7 @@ class TestJob(RQTestCase):
         q.enqueue(fixtures.access_self)  # access_self calls get_current_job() and asserts
         w = Worker([q])
         w.work(burst=True)
+        assert get_failed_queue(self.testconn).count == 0
 
     def test_job_access_within_synchronous_job_function(self):
         queue = Queue(async=False)
