@@ -51,7 +51,7 @@ To start executing enqueued function calls in the background, start a worker
 from your project's directory:
 
 {% highlight console %}
-$ rqworker
+$ rq worker
 *** Listening for work on default
 Got count_words_at_url('http://nvie.com') from default
 Job result = 818

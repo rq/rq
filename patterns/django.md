@@ -19,5 +19,5 @@ environmental variable will already do the trick.
 If `settings.py` is your Django settings file (as it is by default), use this:
 
 {% highlight console %}
-$ DJANGO_SETTINGS_MODULE=settings rqworker high default low
+$ DJANGO_SETTINGS_MODULE=settings rq worker high default low
 {% endhighlight %}

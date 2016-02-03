@@ -23,10 +23,10 @@ It can also be integrated easily in your Flask app.
 
 ## Monitoring at the console
 
-To see what queues exist and what workers are active, just type `rqinfo`:
+To see what queues exist and what workers are active, just type `rq info`:
 
 {% highlight console %}
-$ rqinfo
+$ rq info
 high       |██████████████████████████ 20
 low        |██████████████ 12
 default    |█████████ 8
@@ -44,7 +44,7 @@ Bricktop.18349 idle: default
 You can also query for a subset of queues, if you're looking for specific ones:
 
 {% highlight console %}
-$ rqinfo high default
+$ rq info high default
 high       |██████████████████████████ 20
 default    |█████████ 8
 2 queues, 28 jobs total
@@ -57,11 +57,11 @@ Bricktop.18349 idle: default
 
 ## Organising workers by queue
 
-By default, `rqinfo` prints the workers that are currently active, and the
+By default, `rq info` prints the workers that are currently active, and the
 queues that they are listening on, like this:
 
 {% highlight console %}
-$ rqinfo
+$ rq info
 ...
 
 Mickey.26421 idle: high, default
@@ -74,7 +74,7 @@ To see the same data, but organised by queue, use the `-R` (or `--by-queue`)
 flag:
 
 {% highlight console %}
-$ rqinfo -R
+$ rq info -R
 ...
 
 high:    Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
@@ -87,19 +87,19 @@ failed:  –
 
 ## Interval polling
 
-By default, `rqinfo` will print stats and exit.
+By default, `rq info` will print stats and exit.
 You can specify a poll interval, by using the `--interval` flag.
 
 {% highlight console %}
-$ rqinfo --interval 1
+$ rq info --interval 1
 {% endhighlight %}
 
-`rqinfo` will now update the screen every second.  You may specify a float
+`rq info` will now update the screen every second.  You may specify a float
 value to indicate fractions of seconds.  Be aware that low interval values will
 increase the load on Redis, of course.
 
 {% highlight console %}
-$ rqinfo --interval 0.5
+$ rq info --interval 0.5
 {% endhighlight %}
 
 [dashboard]: https://github.com/nvie/rq-dashboard
