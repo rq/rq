@@ -14,7 +14,7 @@ To start crunching work, simply start a worker from the root of your project
 directory:
 
 {% highlight console %}
-$ rqworker high normal low
+$ rq worker high normal low
 *** Listening for work on high, normal, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
@@ -38,7 +38,7 @@ mode_ to finish all currently available work and quit as soon as all given
 queues are emptied.
 
 {% highlight console %}
-$ rqworker --burst high normal low
+$ rq worker --burst high normal low
 *** Listening for work on high, normal, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
@@ -77,7 +77,7 @@ The life-cycle of a worker consists of a few phases:
 
 ## Performance notes
 
-Basically the `rqworker` shell script is a simple fetch-fork-execute loop.
+Basically the `rq worker` shell script is a simple fetch-fork-execute loop.
 When a lot of your jobs do lengthy setups, or they all depend on the same set
 of modules, you pay this overhead each time you run a job (since you're doing
 the import _after_ the moment of forking).  This is clean, because RQ won't
@@ -88,7 +88,7 @@ jobs can be to import the necessary modules _before_ the fork.  There is no way
 of telling RQ workers to perform this set up for you, but you can do it
 yourself before starting the work loop.
 
-To do this, provide your own worker script (instead of using `rqworker`).
+To do this, provide your own worker script (instead of using `rq worker`).
 A simple implementation example:
 
 {% highlight python %}
@@ -100,7 +100,7 @@ from rq import Queue, Connection, Worker
 import library_that_you_want_preloaded
 
 # Provide queue names to listen to as arguments to this script,
-# similar to rqworker
+# similar to rq worker
 with Connection():
     qs = map(Queue, sys.argv[1:]) or [Queue()]
 
@@ -134,7 +134,7 @@ will still try to register its own death.
 
 _New in version 0.3.2._
 
-If you'd like to configure `rqworker` via a configuration file instead of
+If you'd like to configure `rq worker` via a configuration file instead of
 through command line arguments, you can do this by creating a Python file like
 `settings.py`:
 
@@ -162,7 +162,7 @@ _Note: The_ `QUEUES` _and_ `REDIS_PASSWORD` _settings are new since 0.3.3._
 To specify which module to read settings from, use the `-c` option:
 
 {% highlight console %}
-$ rqworker -c settings
+$ rq worker -c settings
 {% endhighlight %}
 
 
@@ -181,7 +181,7 @@ more common requests so far are:
 You can use the `-w` option to specify a different worker class to use:
 
 {% highlight console %}
-$ rqworker -w 'path.to.GeventWorker'
+$ rq worker -w 'path.to.GeventWorker'
 {% endhighlight %}
 
 
@@ -190,11 +190,11 @@ $ rqworker -w 'path.to.GeventWorker'
 _New in version 0.5.5._
 
 If you need to handle errors differently for different types of jobs, or simply want to customize
-RQ's default error handling behavior, run `rqworker` using the `--exception-handler` option:
+RQ's default error handling behavior, run `rq worker` using the `--exception-handler` option:
 
 {% highlight console %}
-$ rqworker --exception-handler 'path.to.my.ErrorHandler'
+$ rq worker --exception-handler 'path.to.my.ErrorHandler'
 
 # Multiple exception handlers is also supported
-$ rqworker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
+$ rq worker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
 {% endhighlight %}

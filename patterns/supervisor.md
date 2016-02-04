@@ -15,12 +15,12 @@ use the following supervisor settings:
 
 {% highlight ini %}
 [program:myworker]
-; Point the command to the specific rqworker command you want to run.
+; Point the command to the specific rq command you want to run.
 ; If you use virtualenv, be sure to point it to
-; /path/to/virtualenv/bin/rqworker
+; /path/to/virtualenv/bin/rq
 ; Also, you probably want to include a settings module to configure this
 ; worker.  For more info on that, see http://python-rq.org/docs/workers/
-command=/path/to/rqworker -c mysettings high normal low
+command=/path/to/rq worker -c mysettings high normal low
 process_name=%(program_name)s
 
 ; If you want to run more than one worker instance, increase this
