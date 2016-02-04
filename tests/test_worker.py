@@ -15,7 +15,7 @@ from tests.fixtures import (create_file, create_file_after_timeout,
 from tests.helpers import strip_microseconds
 
 from rq import get_failed_queue, Queue, SimpleWorker, Worker
-from rq.compat import as_text
+from rq.compat import as_text, PY2
 from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
@@ -43,6 +43,22 @@ class TestWorker(RQTestCase):
         w = Worker(iter(['foo', 'bar']))
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
+
+        # Also accept byte strings in Python 2
+        if PY2:
+            # With single byte string argument
+            w = Worker(b'foo')
+            self.assertEqual(w.queues[0].name, 'foo')
+
+            # With list of byte strings
+            w = Worker([b'foo', b'bar'])
+            self.assertEqual(w.queues[0].name, 'foo')
+            self.assertEqual(w.queues[1].name, 'bar')
+
+            # With iterable of byte strings
+            w = Worker(iter([b'foo', b'bar']))
+            self.assertEqual(w.queues[0].name, 'foo')
+            self.assertEqual(w.queues[1].name, 'bar')
 
         # With single Queue
         w = Worker(Queue('foo'))

@@ -128,7 +128,7 @@ class Worker(object):
             connection = get_current_connection()
         self.connection = connection
 
-        queues = [self.queue_class(name=q) if isinstance(q, text_type) else q
+        queues = [self.queue_class(name=q) if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
         self._name = name
         self.queues = queues
@@ -176,7 +176,7 @@ class Worker(object):
         """Sanity check for the given queues."""
         for queue in self.queues:
             if not isinstance(queue, self.queue_class):
-                raise TypeError('{0} is not of type {1} or text type'.format(queue, self.queue_class))
+                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""
