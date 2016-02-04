@@ -38,9 +38,10 @@ You do use the excellent [requests][r] package, don't you?
 Then, create an RQ queue:
 
 ```python
-from rq import Queue, use_connection
-use_connection()
-q = Queue()
+from redis import Redis
+from rq import Queue
+
+q = Queue(connection=Redis())
 ```
 
 And enqueue the function call:
@@ -59,7 +60,7 @@ To start executing enqueued function calls in the background, start a worker
 from your project's directory:
 
 ```console
-$ rqworker
+$ rq worker
 *** Listening for work on default
 Got count_words_at_url('http://nvie.com') from default
 Job result = 818
