@@ -257,12 +257,23 @@ class Worker(object):
             p.expire(self.key, 60)
             p.execute()
 
+    def set_shutdown_requested_date(self):
+        """Sets the date on which the worker received a (warm) shutdown request"""
+        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(utcnow()))
+
     @property
     def birth_date(self):
         """Fetches birth date from Redis."""
         birth_timestamp = self.connection.hget(self.key, 'birth')
         if birth_timestamp is not None:
             return utcparse(as_text(birth_timestamp))
+
+    @property
+    def shutdown_requested_date(self):
+        """Fetches shutdown_requested_date from Redis."""
+        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
+        if shutdown_requested_timestamp is not None:
+            return utcparse(as_text(shutdown_requested_timestamp))
 
     @property
     def death_date(self):
@@ -357,9 +368,10 @@ class Worker(object):
         self.log.warning(msg)
 
         # If shutdown is requested in the middle of a job, wait until
-        # finish before shutting down
+        # finish before shutting down and save the request in redis
         if self.get_state() == 'busy':
             self._stop_requested = True
+            self.set_shutdown_requested_date()
             self.log.debug('Stopping after current horse is finished. '
                            'Press Ctrl+C again for a cold shutdown.')
         else:
