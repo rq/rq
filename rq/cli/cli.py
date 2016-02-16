@@ -191,6 +191,7 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
                          default_worker_ttl=worker_ttl,
                          default_result_ttl=results_ttl,
                          job_class=job_class,
+                         queue_class=queue_class,
                          exception_handlers=exception_handlers or None)
 
         # Should we configure Sentry?

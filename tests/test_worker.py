@@ -26,6 +26,10 @@ class CustomJob(Job):
     pass
 
 
+class CustomQueue(Queue):
+    pass
+
+
 class TestWorker(RQTestCase):
     def test_create_worker(self):
         """Worker creation using various inputs."""
@@ -346,6 +350,28 @@ class TestWorker(RQTestCase):
         q = Queue()
         worker = Worker([q], job_class=CustomJob)
         self.assertEqual(worker.job_class, CustomJob)
+
+    def test_custom_queue_class(self):
+        """Ensure Worker accepts custom queue class."""
+        q = CustomQueue()
+        worker = Worker([q], queue_class=CustomQueue)
+        self.assertEqual(worker.queue_class, CustomQueue)
+
+    def test_custom_queue_class_by_string(self):
+        """Ensure Worker accepts custom queue class using dotted notation."""
+        q = CustomQueue()
+        worker = Worker([q], queue_class='test_worker.CustomQueue')
+        self.assertEqual(worker.queue_class, CustomQueue)
+
+    def test_custom_queue_class_is_not_global(self):
+        """Ensure Worker custom queue class is not global."""
+        q = CustomQueue()
+        worker_custom = Worker([q], queue_class=CustomQueue)
+        q_generic = Queue()
+        worker_generic = Worker([q_generic])
+        self.assertEqual(worker_custom.queue_class, CustomQueue)
+        self.assertEqual(worker_generic.queue_class, Queue)
+        self.assertEqual(Worker.queue_class, Queue)
 
     def test_work_via_simpleworker(self):
         """Worker processes work, with forking disabled,
