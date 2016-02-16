@@ -112,9 +112,9 @@ class TestWorker(RQTestCase):
         self.assertIsNotNone(job.enqueued_at)
         self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
-        self.assertEquals(w.work(burst=True), True,
+        self.assertEqual(w.work(burst=True), True,
                           'Expected at least some work done.')
-        self.assertEquals(job.result, 'Hi there, Stranger!')
+        self.assertEqual(job.result, 'Hi there, Stranger!')
         after = utcnow()
         job.refresh()
         self.assertTrue(before <= job.enqueued_at <= after, 'Not %s <= %s <= %s' % (before, job.enqueued_at, after))
@@ -173,7 +173,7 @@ class TestWorker(RQTestCase):
         # Postconditions
         self.assertEqual(q.count, 0)
         self.assertEqual(failed_q.count, 1)
-        self.assertEquals(w.get_current_job_id(), None)
+        self.assertEqual(w.get_current_job_id(), None)
 
         # Check the job
         job = Job.fetch(job.id)
@@ -346,6 +346,16 @@ class TestWorker(RQTestCase):
         q = Queue()
         worker = Worker([q], job_class=CustomJob)
         self.assertEqual(worker.job_class, CustomJob)
+
+    def test_custom_job_class_is_not_global(self):
+        """Ensure Worker custom job class is not global."""
+        q = Queue()
+        worker_custom = Worker([q], job_class=CustomJob)
+        q_generic = Queue()
+        worker_generic = Worker([q_generic])
+        self.assertEqual(worker_custom.job_class, CustomJob)
+        self.assertEqual(worker_generic.job_class, Job)
+        self.assertEqual(Worker.job_class, Job)
 
     def test_work_via_simpleworker(self):
         """Worker processes work, with forking disabled,
