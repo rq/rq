@@ -412,7 +412,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_enqueue_job_with_dependency_by_id(self):
-        """"Can specify job dependency with job object or job id."""
+        """Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello)
 
         q = Queue()
