@@ -357,12 +357,6 @@ class TestWorker(RQTestCase):
         worker = Worker([q], queue_class=CustomQueue)
         self.assertEqual(worker.queue_class, CustomQueue)
 
-    def test_custom_queue_class_by_string(self):
-        """Ensure Worker accepts custom queue class using dotted notation."""
-        q = CustomQueue()
-        worker = Worker([q], queue_class='test_worker.CustomQueue')
-        self.assertEqual(worker.queue_class, CustomQueue)
-
     def test_custom_queue_class_is_not_global(self):
         """Ensure Worker custom queue class is not global."""
         q = CustomQueue()
