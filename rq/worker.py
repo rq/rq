@@ -592,7 +592,7 @@ class Worker(object):
                 result_ttl = job.get_result_ttl(self.default_result_ttl)
                 if result_ttl != 0:
                     job.ended_at = utcnow()
-                    job._status = JobStatus.FINISHED
+                    job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     job.save(pipeline=pipeline)
 
                     finished_job_registry = FinishedJobRegistry(job.origin, self.connection)
