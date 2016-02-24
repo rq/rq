@@ -123,10 +123,21 @@ class Worker(object):
 
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None, exc_handler=None,
-                 exception_handlers=None, default_worker_ttl=None, job_class=None):  # noqa
+                 exception_handlers=None, default_worker_ttl=None,
+                 job_class=None, queue_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
+
+        if job_class is not None:
+            if isinstance(job_class, string_types):
+                job_class = import_attribute(job_class)
+            self.job_class = job_class
+
+        if queue_class is not None:
+            if isinstance(queue_class, string_types):
+                queue_class = import_attribute(queue_class)
+            self.queue_class = queue_class
 
         queues = [self.queue_class(name=q) if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
@@ -166,11 +177,6 @@ class Worker(object):
                 self.push_exc_handler(h)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
-
-        if job_class is not None:
-            if isinstance(job_class, string_types):
-                job_class = import_attribute(job_class)
-            self.job_class = job_class
 
     def validate_queues(self):
         """Sanity check for the given queues."""
