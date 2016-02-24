@@ -185,6 +185,36 @@ $ rq worker -w 'path.to.GeventWorker'
 {% endhighlight %}
 
 
+## Custom Job and Queue classes
+
+_Will be available in next release._
+
+You can tell the worker to use a custom class for jobs and queues using
+`--job-class` and/or `--queue-class`.
+
+{% highlight console %}
+$ rq worker --job-class 'custom.JobClass' --queue-class 'custom.QueueClass'
+{% endhighlight %}
+
+Don't forget to use those same classes when enqueueing the jobs.
+
+For example:
+
+{% highlight python %}
+from rq import Queue
+from rq.job import Job
+
+class CustomJob(Job):
+    pass
+
+class CustomQueue(Queue):
+    job_class = CustomJob
+
+queue = CustomQueue('default', connection=redis_conn)
+queue.enqueue(some_func)
+{% endhighlight %}
+
+
 ## Custom exception handlers
 
 _New in version 0.5.5._
