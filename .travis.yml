@@ -16,6 +16,6 @@ install:
   - pip install coveralls
   #- pip install pytest  # installed by Travis by default already
 script:
-  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq
+  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5
 after_success:
   - coveralls

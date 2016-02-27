@@ -578,13 +578,15 @@ def kill_worker(pid, double_kill):
 class TestWorkerShutdown(RQTestCase):
     def setUp(self):
         # we want tests to fail if signal are ignored and the work remain
-        # running, so set a signal to kill them after 5 seconds
+        # running, so set a signal to kill them after X seconds
+        self.killtimeout = 10
         signal.signal(signal.SIGALRM, self._timeout)
-        signal.alarm(5)
+        signal.alarm(self.killtimeout)
 
     def _timeout(self, signal, frame):
-        raise AssertionError("test still running after 5 seconds, "
-                             "likely the worker wasn't shutdown correctly")
+        raise AssertionError(
+            "test still running after %i seconds, likely the worker wasn't shutdown correctly" % self.killtimeout
+        )
 
     @slow
     def test_idle_worker_warm_shutdown(self):
