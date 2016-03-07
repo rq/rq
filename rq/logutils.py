@@ -4,13 +4,6 @@ from __future__ import (absolute_import, division, print_function,
 
 import logging
 
-# Make sure that dictConfig is available
-# This was added in Python 2.7/3.2
-try:
-    from logging.config import dictConfig
-except ImportError:
-    from rq.compat.dictconfig import dictConfig  # noqa
-
 from rq.utils import ColorizingStreamHandler
 
 
@@ -18,6 +11,13 @@ def setup_loghandlers(level='INFO'):
     logger = logging.getLogger('rq.worker')
     if not _has_effective_handler(logger):
         logger.setLevel(level)
+        # This statement doesn't set level properly in Python-2.6
+        # Following is an additional check to see if level has been set to
+        # appropriate(int) value
+        if logger.getEffectiveLevel() == level:
+            # Python-2.6. Set again by using logging.INFO etc.
+            level_int = getattr(logging, level)
+            logger.setLevel(level_int)
         formatter = logging.Formatter(fmt='%(asctime)s %(message)s',
                                       datefmt='%H:%M:%S')
         handler = ColorizingStreamHandler()
