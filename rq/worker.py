@@ -20,7 +20,6 @@ from .connections import get_current_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
 from .exceptions import DequeueTimeout
 from .job import Job, JobStatus
-from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
 from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
 from .suspension import is_suspended
@@ -415,7 +414,6 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers()
         self._install_signal_handlers()
 
         did_perform_work = False
