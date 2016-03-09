@@ -517,7 +517,7 @@ class Worker(object):
             self.main_work_horse(job)
         else:
             self._horse_pid = child_pid
-            self.procline('Forked {0} at {0}'.format(child_pid, time.time()))
+            self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
             while True:
                 try:
                     os.waitpid(child_pid, 0)
