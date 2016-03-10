@@ -62,9 +62,9 @@ def cancel_job(job_id, connection=None):
 
 
 def requeue_job(job_id, connection=None):
-    """Requeues the job with the given job ID.  The job ID should refer to
-    a failed job (i.e. it should be on the failed queue).  If no such (failed)
-    job exists, a NoSuchJobError is raised.
+    """Requeues the job with the given job ID.  If no such job exists, just
+    remove the job ID from the failed queue, otherwise the job ID should refer
+    to a failed job (i.e. it should be on the failed queue).
     """
     from .queue import get_failed_queue
     fq = get_failed_queue(connection=connection)
