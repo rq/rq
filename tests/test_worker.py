@@ -83,11 +83,11 @@ class TestWorker(RQTestCase):
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
         self.assertEqual(w.work(burst=True), False,
-                          'Did not expect any work on the queue.')
+                         'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
         self.assertEqual(w.work(burst=True), True,
-                          'Expected at least some work done.')
+                         'Expected at least some work done.')
 
     def test_worker_ttl(self):
         """Worker ttl."""
@@ -103,7 +103,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         job = q.enqueue('tests.fixtures.say_hello', name='Frank')
         self.assertEqual(w.work(burst=True), True,
-                          'Expected at least some work done.')
+                         'Expected at least some work done.')
         self.assertEqual(job.result, 'Hi there, Frank!')
 
     def test_job_times(self):
@@ -117,7 +117,7 @@ class TestWorker(RQTestCase):
         self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
         self.assertEqual(w.work(burst=True), True,
-                          'Expected at least some work done.')
+                         'Expected at least some work done.')
         self.assertEqual(job.result, 'Hi there, Stranger!')
         after = utcnow()
         job.refresh()

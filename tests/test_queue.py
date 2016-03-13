@@ -242,14 +242,14 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, fooq.name)
         self.assertEqual(job.args[0], 'for Foo',
-                          'Foo should be dequeued first.')
+                         'Foo should be dequeued first.')
 
         job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEqual(queue, barq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
         self.assertEqual(job.args[0], 'for Bar',
-                          'Bar should be dequeued second.')
+                         'Bar should be dequeued second.')
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
@@ -355,7 +355,6 @@ class TestQueue(RQTestCase):
         # DeferredJobRegistry should also be empty
         self.assertEqual(registry.get_job_ids(), [])
 
-
     def test_enqueue_dependents_on_multiple_queues(self):
         """Enqueueing dependent jobs on multiple queues pushes jobs in the queues
         and removes them from DeferredJobRegistry for each different queue."""
@@ -391,8 +390,6 @@ class TestQueue(RQTestCase):
         # DeferredJobRegistry should also be empty
         self.assertEqual(registry_1.get_job_ids(), [])
         self.assertEqual(registry_2.get_job_ids(), [])
-
-
 
     def test_enqueue_job_with_dependency(self):
         """Jobs are enqueued only when their dependencies are finished."""
