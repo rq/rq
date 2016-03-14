@@ -198,6 +198,8 @@ class Queue(object):
         if depends_on is not None:
             if not isinstance(depends_on, self.job_class):
                 depends_on = Job(id=depends_on, connection=self.connection)
+            if depends_on.result_ttl == 0:
+                raise ValueError('Cannot depend on job with result_ttl == 0')
             with self.connection._pipeline() as pipe:
                 while True:
                     try:
