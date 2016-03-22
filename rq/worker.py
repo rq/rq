@@ -139,7 +139,8 @@ class Worker(object):
                 queue_class = import_attribute(queue_class)
             self.queue_class = queue_class
 
-        queues = [self.queue_class(name=q) if isinstance(q, string_types) else q
+        queues = [self.queue_class(name=q, connection=connection)
+                  if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
         self._name = name
         self.queues = queues
