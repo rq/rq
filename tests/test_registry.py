@@ -87,7 +87,7 @@ class TestRegistry(RQTestCase):
         worker.prepare_job_execution(job)
         self.assertIn(job.id, registry.get_job_ids())
 
-        worker.perform_job(job)
+        worker.perform_job(job, queue)
         self.assertNotIn(job.id, registry.get_job_ids())
 
         # Job that fails
@@ -96,7 +96,7 @@ class TestRegistry(RQTestCase):
         worker.prepare_job_execution(job)
         self.assertIn(job.id, registry.get_job_ids())
 
-        worker.perform_job(job)
+        worker.perform_job(job, queue)
         self.assertNotIn(job.id, registry.get_job_ids())
 
     def test_get_job_count(self):
@@ -150,12 +150,12 @@ class TestFinishedJobRegistry(RQTestCase):
 
         # Completed jobs are put in FinishedJobRegistry
         job = queue.enqueue(say_hello)
-        worker.perform_job(job)
+        worker.perform_job(job, queue)
         self.assertEqual(self.registry.get_job_ids(), [job.id])
 
         # Failed jobs are not put in FinishedJobRegistry
         failed_job = queue.enqueue(div_by_zero)
-        worker.perform_job(failed_job)
+        worker.perform_job(failed_job, queue)
         self.assertEqual(self.registry.get_job_ids(), [job.id])
 
 

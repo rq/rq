@@ -232,3 +232,13 @@ def enum(name, *sequential, **named):
     # On Python 3 it does not matter, so we'll use str(), which acts as
     # a no-op.
     return type(str(name), (), values)
+
+
+def build_key(key, namespace):
+    """ Returns a key and the namespace, if available """
+    if namespace:
+        namespace = '%s:%s' % (namespace, key)
+    else:
+        namespace = key
+
+    return namespace

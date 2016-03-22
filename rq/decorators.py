@@ -12,7 +12,7 @@ from .queue import Queue
 
 class job(object):
     def __init__(self, queue, connection=None, timeout=None,
-                 result_ttl=DEFAULT_RESULT_TTL, ttl=None):
+                 result_ttl=DEFAULT_RESULT_TTL, ttl=None, namespace=None):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
         ``queue`` argument that can be either a ``Queue`` instance or a string
@@ -29,12 +29,13 @@ class job(object):
         self.timeout = timeout
         self.result_ttl = result_ttl
         self.ttl = ttl
+        self.namespace = namespace
 
     def __call__(self, f):
         @wraps(f)
         def delay(*args, **kwargs):
             if isinstance(self.queue, string_types):
-                queue = Queue(name=self.queue, connection=self.connection)
+                queue = Queue(name=self.queue, connection=self.connection, namespace=self.namespace)
             else:
                 queue = self.queue
             depends_on = kwargs.pop('depends_on', None)

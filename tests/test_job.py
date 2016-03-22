@@ -10,8 +10,8 @@ from tests.helpers import strip_microseconds
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import Job, get_current_job, JobStatus
-from rq.queue import Queue
+from rq.job import Job, get_current_job, JobStatus, cancel_job
+from rq.queue import Queue, get_failed_queue
 from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 from rq.worker import Worker
@@ -427,3 +427,20 @@ class TestJob(RQTestCase):
         queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
         time.sleep(1)
         self.assertEqual(0, len(queue.get_jobs()))
+
+    def test_create_and_cancel_job(self):
+        """test creating and using cancel_job deletes job properly"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello)
+        self.assertEqual(1, len(queue.get_jobs()))
+        cancel_job(job.id)
+        self.assertEqual(0, len(queue.get_jobs()))
+
+    def test_create_failed_and_cancel_job(self):
+        """test creating and using cancel_job deletes job properly"""
+        failed = get_failed_queue(connection=self.testconn)
+        job = failed.enqueue(fixtures.say_hello)
+        job.set_status(JobStatus.FAILED)
+        self.assertEqual(1, len(failed.get_jobs()))
+        cancel_job(job.id)
+        self.assertEqual(0, len(failed.get_jobs()))
