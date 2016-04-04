@@ -14,7 +14,7 @@ except ImportError:
 from rq.utils import ColorizingStreamHandler
 
 
-def setup_loghandlers(level='INFO'):
+def setup_loghandlers(level):
     logger = logging.getLogger('rq.worker')
     if not logger.handlers:
         logger.setLevel(level)
