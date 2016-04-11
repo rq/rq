@@ -605,7 +605,7 @@ class Worker(object):
                 return False
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
-        if rv:
+        if rv is not None:
             log_result = "{0!r}".format(as_text(text_type(rv)))
             self.log.debug('Result: {0}'.format(yellow(log_result)))
 
