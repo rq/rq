@@ -15,7 +15,7 @@ from rq import SimpleWorker, Queue
 
 queue = Queue(connection=Redis())
 queue.enqueue(my_long_running_job)
-worker = SimpleWorker([queue])
+worker = SimpleWorker([queue], connection=queue.connection)
 worker.work(burst=True)  # Runs enqueued job
 # Check for result...
 {% endhighlight %}
