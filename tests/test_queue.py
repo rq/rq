@@ -275,7 +275,7 @@ class TestQueue(RQTestCase):
 
         class OtherCustomJob(Job):
             @classmethod
-            def fetch(cls,id, connection=None):
+            def fetch(cls, id, connection=None):
                 return self.__init__(id, connection)
 
         q = Queue('high', job_class=OtherCustomJob)
