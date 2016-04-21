@@ -296,7 +296,7 @@ class Job(object):
         if len(obj) == 0:
             raise NoSuchJobError('No such job: {0}'.format(key))
 
-        job_cls = unpickle(obj['cls'])
+        job_cls = unpickle(obj.get('cls')) if obj.get('cls') else Job
         job = job_cls(id, connection=connection)
         job.refresh()
         return job
