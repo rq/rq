@@ -352,7 +352,7 @@ class Queue(object):
             if job_id is None:
                 return None
             try:
-                job = self.job_class.fetch(job_id, connection=self.connection)
+                job = Job.fetch(job_id, connection=self.connection)
             except NoSuchJobError as e:
                 # Silently pass on jobs that don't exist (anymore),
                 continue
@@ -384,7 +384,7 @@ class Queue(object):
             queue_key, job_id = map(as_text, result)
             queue = cls.from_queue_key(queue_key, connection=connection)
             try:
-                job = cls.job_class.fetch(job_id, connection=connection)
+                job = Job.fetch(job_id, connection=connection)
             except NoSuchJobError:
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look

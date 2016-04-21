@@ -290,7 +290,14 @@ class Job(object):
         """Fetches a persisted job from its corresponding Redis key and
         instantiates it.
         """
-        job = cls(id, connection=connection)
+        connection = resolve_connection(connection)
+        key = cls.key_for(id)
+        obj = decode_redis_hash(connection.hgetall(key))
+        if len(obj) == 0:
+            raise NoSuchJobError('No such job: {0}'.format(key))
+
+        job_cls = unpickle(obj['cls'])
+        job = job_cls(id, connection=connection)
         job.refresh()
         return job
 
@@ -427,6 +434,7 @@ class Job(object):
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
         obj['data'] = self.data
+        obj['cls'] = dumps(type(self))
 
         if self.origin is not None:
             obj['origin'] = self.origin

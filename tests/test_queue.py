@@ -264,6 +264,46 @@ class TestQueue(RQTestCase):
                 None)
         self.assertEqual(q.count, 0)
 
+    def test_dequeue_any_preserves_custom_job_class(self):
+        """Dequeuing (from any queue) preserves the Job class"""
+        q = Queue('low')
+
+        # Enqueue a single item
+        q.enqueue_job(CustomJob.create(say_hello))
+        job, queue = Queue.dequeue_any([q], None)
+        self.assertIsInstance(job, CustomJob)
+
+        class OtherCustomJob(Job):
+            @classmethod
+            def fetch(cls,id, connection=None):
+                return self.__init__(id, connection)
+
+        q = Queue('high', job_class=OtherCustomJob)
+        # Enqueue a single item
+        q.enqueue_job(CustomJob.create(say_hello))
+        job, queue = Queue.dequeue_any([q], None)
+        self.assertIsInstance(job, CustomJob)
+
+    def test_dequeue_preserves_custom_job_class(self):
+        """Dequeuing preserves the Job class"""
+        q = Queue('low')
+
+        # Enqueue a single item
+        q.enqueue_job(CustomJob.create(say_hello))
+        job = q.dequeue()
+        self.assertIsInstance(job, CustomJob)
+
+        class OtherCustomJob(Job):
+            @classmethod
+            def fetch(cls, id, connection=None):
+                return cls(id, connection)
+
+        q = Queue('high', job_class=OtherCustomJob)
+        # Enqueue a single item
+        q.enqueue_job(CustomJob.create(say_hello))
+        job = q.dequeue()
+        self.assertIsInstance(job, CustomJob)
+
     def test_enqueue_sets_status(self):
         """Enqueueing a job sets its status to "queued"."""
         q = Queue()
