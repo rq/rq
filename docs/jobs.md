@@ -83,10 +83,10 @@ job.origin = 'fake'
 job.save()
 fq = get_failed_queue()
 fq.quarantine(job, Exception('Some fake error'))
-assert(fq.count == 1)
+assert fq.count == 1
 
 fq.requeue(job.id)
 
-assert(fq.count == 0)
-assert(Queue('fake').count == 1)
+assert fq.count == 0
+assert Queue('fake').count == 1
 {% endhighlight %}
