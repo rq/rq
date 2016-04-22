@@ -407,7 +407,7 @@ class Worker(object):
         if before_state:
             self.set_state(before_state)
 
-    def work(self, burst=False, logging_level=logging.INFO):
+    def work(self, burst=False, logging_level="INFO"):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
