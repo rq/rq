@@ -81,6 +81,13 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
 
 
+## Development
+
+    virtualenv .venv
+    source .venv/bin/activate
+    pip install -r requiments.txt
+    python -m rq.cli.cli info
+
 ## Project history
 
 This project has been inspired by the good parts of [Celery][1], [Resque][2]

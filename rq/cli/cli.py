@@ -12,12 +12,9 @@ import click
 from redis import StrictRedis
 from redis.exceptions import ConnectionError
 
-from rq import Connection, get_failed_queue, Queue
-from rq.contrib.legacy import cleanup_ghosts
+from rq import RQConnection, Queue
 from rq.exceptions import InvalidJobOperationError
 from rq.utils import import_attribute
-from rq.suspension import (suspend as connection_suspend,
-                           resume as connection_resume, is_suspended)
 
 from .helpers import (get_redis_from_config, read_config_file, refresh,
                       setup_loghandlers_from_args, show_both, show_queues,
@@ -37,12 +34,12 @@ config_option = click.option('--config', '-c',
                              help='Module containing RQ settings.')
 
 
-def connect(url, config=None):
+def connect(url, config=None, **kwargs):
     if url:
-        return StrictRedis.from_url(url)
-
-    settings = read_config_file(config) if config else {}
-    return get_redis_from_config(settings)
+        return RQConnection(StrictRedis.from_url(url), **kwargs)
+    else:
+        settings = read_config_file(config) if config else {}
+        return RQConnection(get_redis_from_config(settings), **kwargs)
 
 
 @click.group()
@@ -60,7 +57,7 @@ def empty(url, all, queues):
     conn = connect(url)
 
     if all:
-        queues = Queue.all(connection=conn)
+        queues = conn.get_all_queues()
     else:
         queues = [Queue(queue, connection=conn) for queue in queues]
 
@@ -79,7 +76,7 @@ def empty(url, all, queues):
 def requeue(url, all, job_ids):
     """Requeue failed jobs."""
     conn = connect(url)
-    failed_queue = get_failed_queue(connection=conn)
+    failed_queue = conn.get_failed_queue()
 
     if all:
         job_ids = failed_queue.job_ids
@@ -125,8 +122,8 @@ def info(url, config, path, interval, raw, only_queues, only_workers, by_queue, 
         func = show_both
 
     try:
-        with Connection(connect(url, config)):
-            refresh(interval, func, queues, raw, by_queue)
+        conn = connect(url, config)
+        refresh(interval, func, conn, queues, raw, by_queue)
     except ConnectionError as e:
         click.echo(e)
         sys.exit(1)
@@ -170,28 +167,24 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
 
     setup_loghandlers_from_args(verbose, quiet)
 
-    conn = connect(url, config)
-    cleanup_ghosts(conn)
     worker_class = import_attribute(worker_class)
     queue_class = import_attribute(queue_class)
+    conn = connect(url, config, worker_class=worker_class,
+                   queue_class=queue_class, job_class=job_class)
     exception_handlers = []
     for h in exception_handler:
         exception_handlers.append(import_attribute(h))
 
-    if is_suspended(conn):
+    if conn.is_suspended():
         click.secho('RQ is currently suspended, to resume job execution run "rq resume"', fg='red')
         sys.exit(1)
 
     try:
-
-        queues = [queue_class(queue, connection=conn) for queue in queues]
         w = worker_class(queues,
                          name=name,
                          connection=conn,
                          default_worker_ttl=worker_ttl,
                          default_result_ttl=results_ttl,
-                         job_class=job_class,
-                         queue_class=queue_class,
                          exception_handlers=exception_handlers or None)
 
         # Should we configure Sentry?
@@ -210,22 +203,27 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
 @main.command()
 @url_option
 @config_option
-@click.option('--duration', help='Seconds you want the workers to be suspended.  Default is forever.', type=int)
+@click.option('--duration', type=int, help='Seconds you want the workers to be '
+              'suspended.  Default is forever.')
 def suspend(url, config, duration):
     """Suspends all workers, to resume run `rq resume`"""
     if duration is not None and duration < 1:
         click.echo("Duration must be an integer greater than 1")
         sys.exit(1)
 
-    connection = connect(url, config)
-    connection_suspend(connection, duration)
+    conn = connect(url, config)
+    conn.suspend(duration)
 
     if duration:
-        msg = """Suspending workers for {0} seconds.  No new jobs will be started during that time, but then will
-        automatically resume""".format(duration)
+        msg = """
+        Suspending workers for {0} seconds.  No new jobs will be
+        started during that time, but then will
+        automatically resume
+        """.format(duration)
         click.echo(msg)
     else:
-        click.echo("Suspending workers.  No new jobs will be started.  But current jobs will be completed")
+        click.echo("Suspending workers.  No new jobs will be started.  But "
+                   "current jobs will be completed")
 
 
 @main.command()
@@ -233,6 +231,10 @@ def suspend(url, config, duration):
 @config_option
 def resume(url, config):
     """Resumes processing of queues, that where suspended with `rq suspend`"""
-    connection = connect(url, config)
-    connection_resume(connection)
+    conn = connect(url, config)
+    conn.resume()
     click.echo("Resuming workers.")
+
+if __name__ == '__main__':
+    main()
+

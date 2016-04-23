@@ -3,10 +3,12 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import logging
+from uuid import uuid4
 
 from redis import StrictRedis
-from rq import pop_connection, push_connection
+from rq.job import Job
 from rq.compat import is_python_version
+from rq.connections import RQConnection, pop_connection
 
 if is_python_version((2, 7), (3, 2)):
     import unittest
@@ -52,7 +54,6 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
-        push_connection(testconn)
 
         # Store the connection (for sanity checking)
         cls.testconn = testconn
@@ -63,6 +64,9 @@ class RQTestCase(unittest.TestCase):
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.testconn.flushdb()
+        self.conn = RQConnection(self.testconn)
+        while pop_connection():
+            pass
 
     def tearDown(self):
         # Flush afterwards
@@ -77,7 +81,12 @@ class RQTestCase(unittest.TestCase):
     def tearDownClass(cls):
         logging.disable(logging.NOTSET)
 
-        # Pop the connection to Redis
-        testconn = pop_connection()
-        assert testconn == cls.testconn, \
-            'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
+    def create_job(self, *args, **kwargs):
+        if 'origin' not in kwargs:
+            kwargs['origin'] = str(uuid4())
+        if 'func' not in kwargs and len(args) == 0:
+            kwargs['func'] = 'tests.fixtures.say_hello'
+
+        job = Job.create(connection=self.conn, *args, **kwargs)
+        return job
+

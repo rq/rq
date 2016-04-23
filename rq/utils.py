@@ -10,10 +10,12 @@ from __future__ import (absolute_import, division, print_function,
 
 import calendar
 import datetime
+from functools import wraps
 import importlib
 import logging
 import sys
 from collections import Iterable
+from redis.client import WatchError
 
 from .compat import as_text, is_python_version, string_types
 
@@ -232,3 +234,52 @@ def enum(name, *sequential, **named):
     # On Python 3 it does not matter, so we'll use str(), which acts as
     # a no-op.
     return type(str(name), (), values)
+
+
+def compact(lst):
+    return [item for item in lst if item is not None]
+
+
+def transaction(wrapped):
+    """
+    If the specified RQConnection already contains a transaction use it,
+    otherwise, create a new transaction, which will end at the end of the
+    wrapped function.  The entire function will be retried in case of WatchError
+    error.
+
+    Usage:
+
+    >>> @transaction
+    >>> def foo(self, arg):
+    >>>     blah
+    """
+
+    @wraps(wrapped)
+    def wrapper(self, *args, **kwargs):
+        from rq.connections import RQConnection
+        assert hasattr(self, 'rq_conn')
+        assert isinstance(self.rq_conn, RQConnection)
+
+        if self.rq_conn._active_transaction():
+            out = wrapped(self, *args, **kwargs)
+        else:
+            with self.rq_conn._pipeline() as pipe:
+                self.rq_conn._pipe = pipe
+                while True:
+                    try:
+                        out = wrapped(self, *args, **kwargs)
+                        pipe.execute()
+                    except WatchError:
+                        pass
+                    except:
+                        self.rq_conn._pipe = None
+                        raise
+                    else:
+                        break
+
+                # transaction successful!
+                self.rq_conn._pipe = None
+
+        return out
+    return wrapper
+
