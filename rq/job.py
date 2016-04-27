@@ -481,11 +481,16 @@ class Job(object):
         pipeline.execute()
 
     def delete(self, pipeline=None):
-        """Cancels the job and deletes the job hash from Redis."""
+        """Deletes the job hash from Redis, including the StartedJobRegistry."""
+        from .registry import StartedJobRegistry
         self.cancel()
         connection = pipeline if pipeline is not None else self.connection
         connection.delete(self.key)
         connection.delete(self.dependents_key)
+
+        if self.origin:
+            registry = StartedJobRegistry(name=self.origin, connection=self.connection)
+            registry.remove(self)
 
     # Job execution
     def perform(self):  # noqa
