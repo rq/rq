@@ -605,7 +605,7 @@ class Worker(object):
                     finished_job_registry = FinishedJobRegistry(job.origin, self.connection)
                     finished_job_registry.add(job, result_ttl, pipeline)
 
-                job.cleanup(result_ttl, pipeline=pipeline)
+                job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                 started_job_registry.remove(job, pipeline=pipeline)
 
                 pipeline.execute()

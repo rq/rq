@@ -480,9 +480,10 @@ class Job(object):
             queue.remove(self, pipeline=pipeline)
         pipeline.execute()
 
-    def delete(self, pipeline=None):
+    def delete(self, pipeline=None, remove_from_queue=True):
         """Cancels the job and deletes the job hash from Redis."""
-        self.cancel()
+        if remove_from_queue:
+            self.cancel()
         connection = pipeline if pipeline is not None else self.connection
         connection.delete(self.key)
         connection.delete(self.dependents_key)
@@ -530,7 +531,7 @@ class Job(object):
 
         return '{0}({1})'.format(self.func_name, args)
 
-    def cleanup(self, ttl=None, pipeline=None):
+    def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
         result depends on the value of ttl:
@@ -540,7 +541,7 @@ class Job(object):
           forever)
         """
         if ttl == 0:
-            self.delete()
+            self.delete(remove_from_queue=remove_from_queue)
         elif not ttl:
             return
         elif ttl > 0:
