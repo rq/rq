@@ -63,6 +63,12 @@ if not PY2:
 
     def decode_redis_hash(h):
         return dict((as_text(k), h[k]) for k in h)
+
+    def decode_redis_set(s):
+        return set([as_text(k) for k in s])
+
+    def decode_redis_list(s):
+        return [as_text(k) for k in s]
 else:
     # Python 2.x
     text_type = unicode
@@ -75,3 +81,10 @@ else:
 
     def decode_redis_hash(h):
         return h
+
+    def decode_redis_set(s):
+        return set([k for k in s])
+
+    def decode_redis_list(s):
+        return [k for k in s]
+

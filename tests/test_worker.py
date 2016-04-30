@@ -22,8 +22,6 @@ from rq.utils import utcnow
 from rq.keys import WORKERS_KEY
 
 
-@patch('os.fork', lambda: 0)
-@patch('os._exit', lambda ret: None)
 class TestWorker(RQTestCase):
 
     def test_create_worker(self):
@@ -522,6 +520,7 @@ def kill_worker(pid, double_kill):
 
 class TestWorkerShutdown(RQTestCase):
     def setUp(self):
+        super(TestWorkerShutdown, self).setUp()
         # we want tests to fail if signal are ignored and the work remain running,
         # so set a signal to kill them after 5 seconds
         signal.signal(signal.SIGALRM, self._timeout)

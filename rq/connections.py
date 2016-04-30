@@ -10,7 +10,8 @@ from .worker import Worker
 from .queue import Queue
 from .job import Job
 from .local import LocalStack
-from .compat import string_types, as_text
+from .compat import (string_types, as_text, decode_redis_set, decode_redis_list,
+                     decode_redis_hash)
 from .utils import import_attribute, compact, transaction
 from .keys import (QUEUES_KEY, queue_name_from_key, worker_key_from_name,
                    WORKERS_KEY, queue_key_from_name, SUSPENDED_KEY)
@@ -266,7 +267,7 @@ class RQConnection(object):
         result = self._redis_conn.blpop(keys, int(math.ceil(timeout)))
 
         if result:
-            queue_key, job_id = result
+            queue_key, job_id = decode_redis_list(result)
             reg = self.get_started_registry(queue_name_from_key(queue_key))
             reg.add(job_id)
             return job_id, queue_name_from_key(queue_key)
@@ -420,7 +421,7 @@ class RQConnection(object):
 
     def _smembers(self, name):
         self.redis_read.watch(name)
-        return self.redis_read.smembers(name)
+        return decode_redis_set(self.redis_read.smembers(name))
 
     def _llen(self, name):
         self.redis_read.watch(name)
@@ -428,7 +429,7 @@ class RQConnection(object):
 
     def _lrange(self, name, start, end):
         self.redis_read.watch(name)
-        return self.redis_read.lrange(name, start, end)
+        return decode_redis_list(self.redis_read.lrange(name, start, end))
 
     def _zcard(self, name):
         self.redis_read.watch(name)
@@ -436,11 +437,12 @@ class RQConnection(object):
 
     def _zrangebyscore(self, name, *args, **kwargs):
         self.redis_read.watch(name)
-        return self.redis_read.zrangebyscore(name, *args, **kwargs)
+        return decode_redis_list(self.redis_read.zrangebyscore(name, *args,
+                                                               **kwargs))
 
     def _zrange(self, name, *args, **kwargs):
         self.redis_read.watch(name)
-        return self.redis_read.zrange(name, *args, **kwargs)
+        return decode_redis_list(self.redis_read.zrange(name, *args, **kwargs))
 
     def _scard(self, name):
         self.redis_read.watch(name)
@@ -448,7 +450,7 @@ class RQConnection(object):
 
     def _hgetall(self, name):
         self.redis_read.watch(name)
-        return self.redis_read.hgetall(name)
+        return decode_redis_hash(self.redis_read.hgetall(name))
 
     def _hget(self, name, key):
         self.redis_read.watch(name)

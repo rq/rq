@@ -8,7 +8,7 @@ import time
 from tests import fixtures, RQTestCase
 from tests.helpers import strip_microseconds
 
-from rq.compat import PY2, as_text
+from rq.compat import PY2, as_text, decode_redis_set
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, JobStatus
 from rq.utils import utcformat
@@ -384,8 +384,10 @@ class TestJob(RQTestCase):
                             depends_on=[parent_jobs[0], parent_ids[1]])
 
         for parent in parent_jobs:
-            self.assertEqual(self.testconn.smembers(parent.children_key),
-                             set([job.id]))
+            self.assertEqual(
+                decode_redis_set(self.testconn.smembers(parent.children_key)),
+                set([job.id])
+            )
         self.assertEqual(registry.get_job_ids(), [job.id])
 
         job.delete()

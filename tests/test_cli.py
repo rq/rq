@@ -30,9 +30,9 @@ class TestRQCli(RQTestCase):
             return True
         else:
             print("Non normal execution")
-            print("Exit Code: {}".format(result.exit_code))
-            print("Output: {}".format(result.output))
-            print("Exception: {}".format(result.exception))
+            print("Exit Code: {0}".format(result.exit_code))
+            print("Output: {0}".format(result.output))
+            print("Exception: {0}".format(result.exception))
             self.assertEqual(result.exit_code, 0)
 
     """Test rq_cli script"""

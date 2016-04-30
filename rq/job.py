@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-
-import inspect
-import warnings
 from functools import partial
+import inspect
+import sys
 from uuid import uuid4
+import warnings
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
@@ -95,7 +95,7 @@ class Job(object):
             job._instance = func
             job._func_name = '__call__'
         else:
-            raise TypeError('Expected a callable or a string, but got: {}'.format(func))
+            raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
         job._args = args
         job._kwargs = kwargs
 
@@ -464,15 +464,16 @@ class Job(object):
         """
         self.connection._persist(self.key)
 
+        exc_info = None
         self.ttl = -1
         _job_stack.push(self.id)
-        exc = None
         try:
             self._result = self.func(*self.args, **self.kwargs)
-        except Exception as exc:
+        except Exception:
+            exc_info = sys.exc_info()
             raise
         finally:
-            self._job_ended(default_result_ttl, exc)
+            self._job_ended(default_result_ttl, exc_info)
             assert self.id == _job_stack.pop()
         return self._result
 
@@ -517,7 +518,7 @@ class Job(object):
 
         for child_id in self.connection._smembers(self.children_key):
             child = self.connection.get_job(child_id)
-            if child._unfinished_parents(ignore={self.id}):
+            if child._unfinished_parents(ignore=set([self.id])):
                 non_ready_jobs.append(child)
             else:
                 # Save jobs, queues and registries of jobs that we are about to

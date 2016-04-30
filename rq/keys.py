@@ -35,4 +35,4 @@ def deferred_registry_key_from_name(name):
     return 'rq:deferred:{0}'.format(name)
 
 def worker_key_from_name(name):
-    return 'rq:worker:{}'.format(name)
+    return 'rq:worker:{0}'.format(name)
