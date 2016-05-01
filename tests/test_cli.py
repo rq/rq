@@ -3,9 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from click.testing import CliRunner
-from rq import get_failed_queue, Queue
 from rq.compat import is_python_version
-from rq.job import Job
 from rq.cli import main
 from rq.cli.helpers import read_config_file
 
@@ -32,9 +30,9 @@ class TestRQCli(RQTestCase):
             return True
         else:
             print("Non normal execution")
-            print("Exit Code: {}".format(result.exit_code))
-            print("Output: {}".format(result.output))
-            print("Exception: {}".format(result.exception))
+            print("Exit Code: {0}".format(result.exit_code))
+            print("Output: {0}".format(result.output))
+            print("Exception: {0}".format(result.exception))
             self.assertEqual(result.exit_code, 0)
 
     """Test rq_cli script"""
@@ -43,10 +41,9 @@ class TestRQCli(RQTestCase):
         db_num = self.testconn.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 
-        job = Job.create(func=div_by_zero, args=(1, 2, 3))
-        job.origin = 'fake'
+        job = self.create_job(func=div_by_zero, args=(1, 2, 3), origin='fake')
         job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
+        self.conn.get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
 
     def test_empty(self):
         """rq empty -u <url> failed"""
@@ -77,12 +74,11 @@ class TestRQCli(RQTestCase):
 
     def test_exception_handlers(self):
         """rq worker -u <url> -b --exception-handler <handler>"""
-        q = Queue()
-        failed_q = get_failed_queue()
+        q = self.conn.mkqueue()
+        failed_q = self.conn.get_failed_queue()
         failed_q.empty()
 
         runner = CliRunner()
-
         # If exception handler is not given, failed job goes to FailedQueue
         q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])

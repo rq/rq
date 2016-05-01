@@ -1,2 +1,3 @@
 redis>=2.7
 click>=3.0.0
+mock

@@ -6,8 +6,6 @@ from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import (clean_registries, DeferredJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -17,12 +15,12 @@ class TestRegistry(RQTestCase):
 
     def setUp(self):
         super(TestRegistry, self).setUp()
-        self.registry = StartedJobRegistry(connection=self.testconn)
+        self.registry = self.conn.get_started_registry('default')
 
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
         timestamp = current_timestamp()
-        job = Job()
+        job = self.create_job()
 
         # Test that job is added with the right score
         self.registry.add(job, 1000)
@@ -58,10 +56,10 @@ class TestRegistry(RQTestCase):
 
     def test_cleanup(self):
         """Moving expired jobs to FailedQueue."""
-        failed_queue = FailedQueue(connection=self.testconn)
+        failed_queue = self.conn.get_failed_queue()
         self.assertTrue(failed_queue.is_empty())
 
-        queue = Queue(connection=self.testconn)
+        queue = self.conn.mkqueue()
         job = queue.enqueue(say_hello)
 
         self.testconn.zadd(self.registry.key, 2, job.id)
@@ -78,9 +76,9 @@ class TestRegistry(RQTestCase):
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
-        registry = StartedJobRegistry(connection=self.testconn)
-        queue = Queue(connection=self.testconn)
-        worker = Worker([queue])
+        registry = self.conn.get_started_registry()
+        queue = self.conn.mkqueue()
+        worker = Worker([queue], connection=self.conn)
 
         job = queue.enqueue(say_hello)
 
@@ -100,25 +98,35 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job.id, registry.get_job_ids())
 
     def test_get_job_count(self):
-        """StartedJobRegistry returns the right number of job count."""
-        timestamp = current_timestamp() + 10
-        self.testconn.zadd(self.registry.key, timestamp, 'foo')
-        self.testconn.zadd(self.registry.key, timestamp, 'bar')
+        """
+        StartedJobRegistry returns the right number of job count. It should
+        return the number of non-expired jobs -- regardless of whether the job
+        exists or not
+        """
+        foo = self.create_job('foo')
+        bar = self.create_job('foo')
+        keep_time = current_timestamp() + 10
+        remove_time = current_timestamp() - 10
+
+        self.testconn.zadd(self.registry.key, keep_time, foo.id)
+        self.testconn.zadd(self.registry.key, remove_time, bar.id)
+        self.testconn.zadd(self.registry.key, keep_time, 'missing1')
+        self.testconn.zadd(self.registry.key, remove_time, 'missing2')
+
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
 
     def test_clean_registries(self):
         """clean_registries() cleans Started and Finished job registries."""
+        queue = self.conn.mkqueue()
 
-        queue = Queue(connection=self.testconn)
-
-        finished_job_registry = FinishedJobRegistry(connection=self.testconn)
+        finished_job_registry = self.conn.get_finished_registry()
         self.testconn.zadd(finished_job_registry.key, 1, 'foo')
 
-        started_job_registry = StartedJobRegistry(connection=self.testconn)
+        started_job_registry = self.conn.get_started_registry()
         self.testconn.zadd(started_job_registry.key, 1, 'foo')
 
-        clean_registries(queue)
+        self.conn.clean_registries(queue)
         self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
 
@@ -127,7 +135,7 @@ class TestFinishedJobRegistry(RQTestCase):
 
     def setUp(self):
         super(TestFinishedJobRegistry, self).setUp()
-        self.registry = FinishedJobRegistry(connection=self.testconn)
+        self.registry = self.conn.get_finished_registry('default')
 
     def test_cleanup(self):
         """Finished job registry removes expired jobs."""
@@ -145,8 +153,8 @@ class TestFinishedJobRegistry(RQTestCase):
     def test_jobs_are_put_in_registry(self):
         """Completed jobs are added to FinishedJobRegistry."""
         self.assertEqual(self.registry.get_job_ids(), [])
-        queue = Queue(connection=self.testconn)
-        worker = Worker([queue])
+        queue = self.conn.mkqueue()
+        worker = Worker([queue], connection=self.conn)
 
         # Completed jobs are put in FinishedJobRegistry
         job = queue.enqueue(say_hello)
@@ -163,11 +171,11 @@ class TestDeferredRegistry(RQTestCase):
 
     def setUp(self):
         super(TestDeferredRegistry, self).setUp()
-        self.registry = DeferredJobRegistry(connection=self.testconn)
+        self.registry = self.conn.get_deferred_registry('default')
 
     def test_add(self):
         """Adding a job to DeferredJobsRegistry."""
-        job = Job()
+        job = self.create_job()
         self.registry.add(job)
         job_ids = [as_text(job_id) for job_id in
                    self.testconn.zrange(self.registry.key, 0, -1)]

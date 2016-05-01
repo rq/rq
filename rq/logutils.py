@@ -7,7 +7,7 @@ import logging
 from rq.utils import ColorizingStreamHandler
 
 
-def setup_loghandlers(level):
+def setup_loghandlers(level='INFO'):
     logger = logging.getLogger('rq.worker')
     if not _has_effective_handler(logger):
         logger.setLevel(level)

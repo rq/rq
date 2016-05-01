@@ -8,11 +8,11 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import time
+from redis import StrictRedis
 
-from rq import Connection, get_current_job
 from rq.decorators import job
 from rq.compat import PY2
-
+from rq.connections import RQConnection
 
 def say_pid():
     return os.getpid()
@@ -54,10 +54,6 @@ def create_file_after_timeout(path, timeout):
     create_file(path)
 
 
-def access_self():
-    assert get_current_job() is not None
-
-
 def echo(*args, **kwargs):
     return (args, kwargs)
 
@@ -87,14 +83,15 @@ class UnicodeStringObject(object):
             return u'é'
 
 
-with Connection():
+with RQConnection(StrictRedis()):
     @job(queue='default')
     def decorated_job(x, y):
         return x + y
 
 
 def black_hole(job, *exc_info):
-    # Don't fall through to default behaviour (moving to failed queue)
+    failed_queue = job.connection.get_failed_queue()
+    failed_queue.remove(job)
     return False
 
 

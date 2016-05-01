@@ -1,14 +1,9 @@
-RQ (_Redis Queue_) is a simple Python library for queueing jobs and processing
-them in the background with workers.  It is backed by Redis and it is designed
-to have a low barrier to entry.  It should be integrated in your web stack
-easily.
+Redflow is a simple Python library for queueing jobs with dependencies and
+processing them in the background with workers.  It is a fork of the very
+easy-to-use redis-backed [RQ][d].
 
-RQ requires Redis >= 2.7.0.
-
-[![Build status](https://travis-ci.org/nvie/rq.svg?branch=master)](https://secure.travis-ci.org/nvie/rq)
-[![Downloads](https://img.shields.io/pypi/dm/rq.svg)](https://pypi.python.org/pypi/rq)
-[![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
-[![Coverage Status](https://img.shields.io/coveralls/nvie/rq.svg)](https://coveralls.io/r/nvie/rq)
+[![Build status](https://api.travis-ci.org/MicahChambers/redflow.svg?branch=master)](https://travis-ci.org/MicahChambers/redflow)
+[![Coverage Status](https://coveralls.io/repos/github/MicahChambers/redflow/badge.svg?branch=master)](https://coveralls.io/github/MicahChambers/redflow?branch=master)
 
 Full documentation can be found [here][d].
 
@@ -80,6 +75,13 @@ If you want the cutting edge version (that may well be broken), use this:
 
     pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
 
+
+## Development
+
+    virtualenv .venv
+    source .venv/bin/activate
+    pip install -r requiments.txt
+    python -m rq.cli.cli info
 
 ## Project history
 
