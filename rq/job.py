@@ -58,7 +58,7 @@ def cancel_job(job_id, connection=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job(job_id, connection=connection).cancel()
+    Job.fetch(job_id, connection=connection).cancel()
 
 
 def requeue_job(job_id, connection=None):
