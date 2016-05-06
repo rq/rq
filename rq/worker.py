@@ -587,6 +587,7 @@ class Worker(object):
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
+                job.refresh()
                 # Pickle the result in the same try-except block since we need
                 # to use the same exc handling when pickling fails
                 job._result = rv
