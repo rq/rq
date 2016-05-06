@@ -288,7 +288,7 @@ class Queue(object):
 
         return job
 
-    def enqueue_dependents(self, job):
+    def enqueue_dependents(self, job, pipeline=None):
         """Enqueues all jobs in the given job's dependents set and clears it."""
         # TODO: can probably be pipelined
         from .registry import DeferredJobRegistry

@@ -319,7 +319,7 @@ class TestWorker(RQTestCase):
         """Enqueue dependent jobs only if their parents don't fail"""
         q = Queue()
         w = Worker([q])
-        parent_job = q.enqueue(say_hello)
+        parent_job = q.enqueue(say_hello, result_ttl=0)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)

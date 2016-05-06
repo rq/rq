@@ -447,11 +447,8 @@ class Worker(object):
                     break
 
                 job, queue = result
-                self.execute_job(job)
+                self.execute_job(job, queue)
                 self.heartbeat()
-
-                if job.get_status() == JobStatus.FINISHED:
-                    queue.enqueue_dependents(job)
 
                 did_perform_work = True
 
@@ -504,7 +501,7 @@ class Worker(object):
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
 
-    def execute_job(self, job):
+    def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
         The worker will wait for the work horse and make sure it executes
         within the given timeout bounds, or will end the work horse with
@@ -515,7 +512,7 @@ class Worker(object):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
-            self.main_work_horse(job)
+            self.main_work_horse(job, queue)
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
@@ -534,7 +531,7 @@ class Worker(object):
                     if e.errno != errno.EINTR:
                         raise
 
-    def main_work_horse(self, job):
+    def main_work_horse(self, job, queue):
         """This is the entry point of the newly spawned work horse."""
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
@@ -551,7 +548,7 @@ class Worker(object):
         self._is_horse = True
         self.log = logger
 
-        success = self.perform_job(job)
+        success = self.perform_job(job, queue)
 
         # os._exit() is the way to exit from childs after a fork(), in
         # constrast to the regular sys.exit()
@@ -577,7 +574,7 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def perform_job(self, job):
+    def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
@@ -602,9 +599,11 @@ class Worker(object):
                     job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     job.save(pipeline=pipeline)
 
-                    finished_job_registry = FinishedJobRegistry(job.origin, self.connection)
+                    finished_job_registry = FinishedJobRegistry(job.origin,
+                                                                self.connection)
                     finished_job_registry.add(job, result_ttl, pipeline)
 
+                queue.enqueue_dependents(job, pipeline=pipeline)
                 job.cleanup(result_ttl, pipeline=pipeline)
                 started_job_registry.remove(job, pipeline=pipeline)
 
