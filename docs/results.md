@@ -95,19 +95,8 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 
 {% highlight python %}
 q = Queue()
-q.enqueue_call(func=mytask, args=(foo,), kwargs={'bar': qux}, timeout=600)  # 10 mins
+q.enqueue(func=mytask, args=(foo,), kwargs={'bar': qux}, timeout=600)  # 10 mins
 {% endhighlight %}
-
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
-    <strong>Warning!</strong>
-    <p>
-Before RQ 0.3.0, the `.enqueue()` method accepted a `timeout` keyword argument,
-but this introduced an ambiguity as it was impossible to pass that keyword
-argument to the target function.  So, from RQ >= 0.3.0, you can use
-`.enqueue_call()` for that.
-    </p>
-</div>
 
 You can also change the default timeout for jobs that are enqueued via specific
 queue instances at once, which can be useful for patterns like this:
