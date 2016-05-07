@@ -30,7 +30,7 @@ from .utils import (ensure_list, enum, import_attribute, make_colorizer,
 from .version import VERSION
 
 try:
-    from procname import setprocname
+    from setproctitle import setproctitle
 except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
@@ -234,7 +234,7 @@ class Worker(object):
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname('rq: {0}'.format(message))
+        setproctitle('rq: {0}'.format(message))
 
     def register_birth(self):
         """Registers its own birth."""
