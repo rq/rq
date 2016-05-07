@@ -32,7 +32,7 @@ from .version import VERSION
 try:
     from setproctitle import setproctitle
 except ImportError:
-    def setprocname(*args, **kwargs):  # noqa
+    def setproctitle(*args, **kwargs):  # noqa
         pass
 
 green = make_colorizer('darkgreen')
