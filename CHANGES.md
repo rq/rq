@@ -12,7 +12,6 @@
 - Synchronous queues now properly sets completed job status as finished. Thanks @ecarreras!
 - `Worker` now correctly deletes `current_job_id` after failed job execution. Thanks @olingerc!
 - `Job.create()` and `queue.enqueue_call()` now accepts `meta` argument. Thanks @tornstrom!
-- You can now use `FakeRedis` for testing purposes. Thanks @foxx!
 - Added `job.started_at` property. Thanks @samuelcolvin!
 - Cleaned up the implementation of `job.cancel()` and `job.delete()`. Thanks @glaslos!
 - `Worker.execute_job()` now exports `RQ_WORKER_ID` and `RQ_JOB_ID` to OS environment variables. Thanks @mgk!
