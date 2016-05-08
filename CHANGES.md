@@ -1,3 +1,27 @@
+### 0.6.0
+
+- Jobs that depend on job with result_ttl == 0 are now properly enqueued.
+- `cancel_job` now works properly. Thanks @jlopex!
+- Jobs that execute successfully now no longer tries to remove itself from queue. Thanks @amyangfei!
+- Worker now properly logs Falsy return values. Thanks @liorsbg!
+- `Worker.work()` now accepts `logging_level` argument. Thanks @jlopex!
+- Logging related fixes by @redbaron4 and @butla!
+- `@job` decorator now accepts `ttl` argument. Thanks @javimb!
+- `Worker.__init__` now accepts `queue_class` keyword argument. Thanks @antoineleclair!
+- `Worker` now saves warm shutdown time. You can access this property from `worker.shutdown_requested_date`. Thanks @olingerc!
+- Synchronous queues now properly sets completed job status as finished. Thanks @ecarreras!
+- `Worker` now correctly deletes `current_job_id` after failed job execution. Thanks @olingerc!
+- `Job.create()` and `queue.enqueue_call()` now accepts `meta` argument. Thanks @tornstrom!
+- You can now use `FakeRedis` for testing purposes. Thanks @foxx!
+- Added `job.started_at` property. Thanks @samuelcolvin!
+- Cleaned up the implementation of `job.cancel()` and `job.delete()`. Thanks @glaslos!
+- `Worker.execute_job()` now exports `RQ_WORKER_ID` and `RQ_JOB_ID` to OS environment variables. Thanks @mgk!
+- `rqinfo` now accepts `--config` option. Thanks @kfrendrich!
+- `Worker` class now has `request_force_stop()` and `request_stop()` methods that can be overridden by custom worker classes. Thanks @samuelcolvin!
+- Other minor fixes by @VicarEscaped, @kampfschlaefer, @ccurvey, @zfz, @antoineleclair,
+  @orangain, @nicksnell, @SkyLothar, @ahxxm and @horida.
+
+
 ### 0.5.6
 
 - Job results are now logged on `DEBUG` level. Thanks @tbaugis!
