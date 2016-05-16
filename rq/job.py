@@ -473,11 +473,13 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.
         """
-        from .queue import Queue
+        from .queue import Queue, get_failed_queue
         pipeline = self.connection._pipeline()
         if self.origin:
-            queue = Queue(name=self.origin, connection=self.connection)
-            queue.remove(self, pipeline=pipeline)
+            q = (get_failed_queue(connection=self.connection)
+                 if self.is_failed
+                 else Queue(name=self.origin, connection=self.connection))
+            q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
     def delete(self, pipeline=None, remove_from_queue=True):
