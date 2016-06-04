@@ -9,9 +9,10 @@ from __future__ import (absolute_import, division, print_function,
 import os
 import time
 
-from rq import Connection, get_current_job, get_current_connection
+from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
 from rq.compat import PY2
+from rq.worker import HerokuWorker
 
 
 def say_pid():
@@ -102,3 +103,24 @@ def black_hole(job, *exc_info):
 def long_running_job(timeout=10):
     time.sleep(timeout)
     return 'Done sleeping...'
+
+
+def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
+    """
+    Run a simplified heroku worker where perform_job job just creates two files 2 seconds apart
+    :param sandbox: directory to create files in
+    :param _imminent_shutdown_delay: delay to use for TestHerokuWorker
+    :return:
+    """
+    class TestHerokuWorker(HerokuWorker):
+        imminent_shutdown_delay = _imminent_shutdown_delay
+
+        def perform_job(self, job, queue):
+            create_file(os.path.join(sandbox, 'started'))
+            # have to loop here rather than one sleep to avoid holding the GIL and preventing signals being recieved
+            for i in range(20):
+                time.sleep(0.1)
+            create_file(os.path.join(sandbox, 'finished'))
+
+    w = TestHerokuWorker(Queue('dummy'))
+    w.main_work_horse(None, None)

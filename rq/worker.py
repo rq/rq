@@ -371,8 +371,7 @@ class Worker(object):
         signal.signal(signal.SIGINT, self.request_force_stop)
         signal.signal(signal.SIGTERM, self.request_force_stop)
 
-        msg = 'Warm shut down requested'
-        self.log.warning(msg)
+        self.handle_warm_shutdown_request()
 
         # If shutdown is requested in the middle of a job, wait until
         # finish before shutting down and save the request in redis
@@ -383,6 +382,9 @@ class Worker(object):
                            'Press Ctrl+C again for a cold shutdown.')
         else:
             raise StopRequested()
+
+    def handle_warm_shutdown_request(self):
+        self.log.warning('Warm shut down requested')
 
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
@@ -727,11 +729,10 @@ class HerokuWorker(Worker):
     Modified version of rq worker which:
     * stops work horses getting killed with SIGTERM
     * sends SIGRTMIN to work horses on SIGTERM to the main process so they can crash as they wish
-    Note: coverage doesn't work inside the forked thread so code expected to be processed there has pragma: no cover
     """
-    imminent_shutdown_delay = 8
-    frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_lasti', 'f_lineno', 'f_locals',
-                        'f_restricted', 'f_trace']
+    imminent_shutdown_delay = 6
+    frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value',
+                        'f_lasti', 'f_lineno', 'f_locals', 'f_restricted', 'f_trace']
 
     def main_work_horse(self, job, queue):
         """Modified entry point which ignores SIGINT and SIGTERM and only handles SIGRTMIN"""
@@ -747,36 +748,13 @@ class HerokuWorker(Worker):
         success = self.perform_job(job, queue)
         os._exit(int(not success))
 
-    def request_stop(self, signum, frame):
-        """Stops the current worker loop but waits for child processes to
-        end gracefully (warm shutdown).
-        """
-        self.log.debug('Got signal {0}'.format(signal_name(signum)))
-
-        signal.signal(signal.SIGINT, self.request_force_stop)
-        signal.signal(signal.SIGTERM, self.request_force_stop)
-
-        # start altered {
+    def handle_warm_shutdown_request(self):
+        """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
             self.log.warning('Warm shut down requested, sending horse SIGRTMIN signal')
-            try:
-                os.kill(self.horse_pid, signal.SIGRTMIN)
-            except OSError as e:
-                if e.errno != errno.ESRCH:
-                    self.log.debug('Horse already down')
-                    raise
+            os.kill(self.horse_pid, signal.SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')
-        # } end altered
-
-        # If shutdown is requested in the middle of a job, wait until
-        # finish before shutting down
-        if self.get_state() == 'busy':
-            self._stop_requested = True
-            self.log.debug('Stopping after current horse is finished. '
-                           'Press Ctrl+C again for a cold shutdown.')
-        else:
-            raise StopRequested()
 
     def handle_shutdown_imminent(self, signum, frame):
         if self.imminent_shutdown_delay == 0:
