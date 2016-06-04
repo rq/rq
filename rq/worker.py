@@ -730,6 +730,8 @@ class HerokuWorker(Worker):
     Note: coverage doesn't work inside the forked thread so code expected to be processed there has pragma: no cover
     """
     imminent_shutdown_delay = 8
+    frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_lasti', 'f_lineno', 'f_locals',
+                        'f_restricted', 'f_trace']
 
     def main_work_horse(self, job, queue):
         """Modified entry point which ignores SIGINT and SIGTERM and only handles SIGRTMIN"""
@@ -786,9 +788,7 @@ class HerokuWorker(Worker):
             signal.signal(signal.SIGALRM, self.force_shutdown)
             signal.alarm(self.imminent_shutdown_delay)
 
-    @staticmethod
-    def force_shutdown(signum, frame):
-        info = {attr: getattr(frame, attr) for attr in ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value',
-                                                        'f_lasti', 'f_lineno', 'f_locals', 'f_restricted', 'f_trace']}
+    def force_shutdown(self, signum, frame):
+        info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         logger.warn('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
