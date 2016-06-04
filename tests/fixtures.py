@@ -107,17 +107,18 @@ def long_running_job(timeout=10):
 
 def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
     """
-    Run a simplified heroku worker where perform_job job just creates two files 2 seconds apart
+    Run the work horse for a simplified heroku worker where perform_job just
+    creates two sentinel files 2 seconds apart.
     :param sandbox: directory to create files in
-    :param _imminent_shutdown_delay: delay to use for TestHerokuWorker
-    :return:
+    :param _imminent_shutdown_delay: delay to use for HerokuWorker
     """
     class TestHerokuWorker(HerokuWorker):
         imminent_shutdown_delay = _imminent_shutdown_delay
 
         def perform_job(self, job, queue):
             create_file(os.path.join(sandbox, 'started'))
-            # have to loop here rather than one sleep to avoid holding the GIL and preventing signals being recieved
+            # have to loop here rather than one sleep to avoid holding the GIL
+            # and preventing signals being received
             for i in range(20):
                 time.sleep(0.1)
             create_file(os.path.join(sandbox, 'finished'))

@@ -692,19 +692,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         shutil.rmtree(self.sandbox, ignore_errors=True)
 
     @slow
-    def test_idle_worker_shutdown(self):
-        """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
-        w = HerokuWorker('foo')
-        self.assertFalse(w._stop_requested)
-        p = Process(target=kill_worker, args=(os.getpid(), False))
-        p.start()
-
-        w.work()
-
-        p.join(1)
-        self.assertFalse(w._stop_requested)
-
-    @slow
     def test_immediate_shutdown(self):
         """Heroku work horse shutdown with immediate (0 second) kill"""
         p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 0))
@@ -752,7 +739,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
 
     def test_handle_shutdown_request(self):
-        """Mutate HerokuWorker so _horse_pid refers to an artificial process and test handle_warm_shutdown_request"""
+        """Mutate HerokuWorker so _horse_pid refers to an artificial process
+        and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo')
 
         path = os.path.join(self.sandbox, 'shouldnt_exist')
@@ -767,7 +755,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertFalse(os.path.exists(path))
 
     def test_handle_shutdown_request_no_horse(self):
-        """Mutate HerokuWorker so _horse_pid refers to non existent process and test handle_warm_shutdown_request"""
+        """Mutate HerokuWorker so _horse_pid refers to non existent process
+        and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo')
 
         w._horse_pid = 19999

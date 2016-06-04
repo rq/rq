@@ -732,7 +732,8 @@ class HerokuWorker(Worker):
     """
     Modified version of rq worker which:
     * stops work horses getting killed with SIGTERM
-    * sends SIGRTMIN to work horses on SIGTERM to the main process so they can crash as they wish
+    * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
+    causes the horse to crash `imminent_shutdown_delay` seconds later
     """
     imminent_shutdown_delay = 6
     frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value',
