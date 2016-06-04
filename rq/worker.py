@@ -539,13 +539,7 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
-        # Always ignore Ctrl+C in the work horse, as it might abort the
-        # currently running job.
-        # The main worker catches the Ctrl+C and requests graceful shutdown
-        # after the current work is done.  When cold shutdown is requested, it
-        # kills the current job anyway.
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        self.setup_work_horse_signals()
 
         self._is_horse = True
         self.log = logger
@@ -555,6 +549,16 @@ class Worker(object):
         # os._exit() is the way to exit from childs after a fork(), in
         # constrast to the regular sys.exit()
         os._exit(int(not success))
+
+    def setup_work_horse_signals(self):
+        """Setup signal handing for the newly spawned work horse."""
+        # Always ignore Ctrl+C in the work horse, as it might abort the
+        # currently running job.
+        # The main worker catches the Ctrl+C and requests graceful shutdown
+        # after the current work is done.  When cold shutdown is requested, it
+        # kills the current job anyway.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
     def prepare_job_execution(self, job):
         """Performs misc bookkeeping like updating states prior to
@@ -734,19 +738,11 @@ class HerokuWorker(Worker):
     frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value',
                         'f_lasti', 'f_lineno', 'f_locals', 'f_restricted', 'f_trace']
 
-    def main_work_horse(self, job, queue):
-        """Modified entry point which ignores SIGINT and SIGTERM and only handles SIGRTMIN"""
-        random.seed()
-
-        signal.signal(signal.SIGRTMIN, self.handle_shutdown_imminent)
+    def setup_work_horse_signals(self):
+        """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
+        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
-
-        self._is_horse = True
-        self.log = logger
-
-        success = self.perform_job(job, queue)
-        os._exit(int(not success))
 
     def handle_warm_shutdown_request(self):
         """If horse is alive send it SIGRTMIN"""
@@ -756,17 +752,18 @@ class HerokuWorker(Worker):
         else:
             self.log.warning('Warm shut down requested, no horse found')
 
-    def handle_shutdown_imminent(self, signum, frame):
+    def request_stop_sigrtmin(self, signum, frame):
         if self.imminent_shutdown_delay == 0:
             logger.warn('Imminent shutdown, raising ShutDownImminentException immediately')
-            self.force_shutdown(signum, frame)
+            self.request_force_stop_sigrtmin(signum, frame)
         else:
             logger.warn('Imminent shutdown, raising ShutDownImminentException in %d seconds',
                         self.imminent_shutdown_delay)
-            signal.signal(signal.SIGALRM, self.force_shutdown)
+            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
+            signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
             signal.alarm(self.imminent_shutdown_delay)
 
-    def force_shutdown(self, signum, frame):
+    def request_force_stop_sigrtmin(self, signum, frame):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         logger.warn('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)

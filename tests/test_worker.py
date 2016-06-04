@@ -734,6 +734,23 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
 
+    @slow
+    def test_shutdown_double_sigrtmin(self):
+        """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10))
+        p.start()
+        time.sleep(0.5)
+
+        os.kill(p.pid, signal.SIGRTMIN)
+        # we have to wait a short while otherwise the second signal wont bet processed.
+        time.sleep(0.1)
+        os.kill(p.pid, signal.SIGRTMIN)
+        p.join(2)
+        self.assertEqual(p.exitcode, 1)
+
+        self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
+        self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+
     def test_handle_shutdown_request(self):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo')
