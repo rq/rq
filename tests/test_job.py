@@ -186,7 +186,7 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description'])
+            [b'created_at', b'data', b'description', b'meta'])
 
     def test_persistence_of_parent_job(self):
         """Storing jobs with parent job, either instance or key."""
