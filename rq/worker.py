@@ -18,7 +18,7 @@ from rq.compat import as_text, string_types, text_type
 
 from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
-from .exceptions import DequeueTimeout
+from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
@@ -720,12 +720,6 @@ class SimpleWorker(Worker):
     def execute_job(self, *args, **kwargs):
         """Execute job in same thread/process, do not fork()"""
         return self.perform_job(*args, **kwargs)
-
-
-class ShutDownImminentException(Exception):
-    def __init__(self, msg, extra_info):
-        self.extra_info = extra_info
-        super(ShutDownImminentException, self).__init__(msg)
 
 
 class HerokuWorker(Worker):
