@@ -9,7 +9,7 @@ from __future__ import (absolute_import, division, print_function,
 import os
 import time
 
-from rq import Connection, get_current_job
+from rq import Connection, get_current_job, get_current_connection
 from rq.decorators import job
 from rq.compat import PY2
 
@@ -55,6 +55,7 @@ def create_file_after_timeout(path, timeout):
 
 
 def access_self():
+    assert get_current_connection() is not None
     assert get_current_job() is not None
 
 
