@@ -1,3 +1,8 @@
+### 0.7.0
+
+- ...
+
+
 ### 0.6.0
 
 - Jobs that depend on job with result_ttl == 0 are now properly enqueued.
