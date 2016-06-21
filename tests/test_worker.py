@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import os
+import shutil
 from datetime import timedelta
 from time import sleep
 import signal
@@ -13,7 +14,7 @@ import subprocess
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
-                            access_self)
+                            run_dummy_heroku_worker, access_self)
 from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
@@ -23,6 +24,7 @@ from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
+from rq.worker import HerokuWorker
 
 
 class CustomJob(Job):
@@ -473,6 +475,7 @@ class TestWorker(RQTestCase):
         assert q.count == 0
         self.assertEqual(os.path.exists(SENTINEL_FILE), True)
 
+    @slow
     def test_suspend_with_duration(self):
         q = Queue()
         for _ in range(5):
@@ -575,7 +578,7 @@ def kill_worker(pid, double_kill):
         os.kill(pid, signal.SIGTERM)
 
 
-class TestWorkerShutdown(RQTestCase):
+class TimeoutTestCase:
     def setUp(self):
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
@@ -588,6 +591,8 @@ class TestWorkerShutdown(RQTestCase):
             "test still running after %i seconds, likely the worker wasn't shutdown correctly" % self.killtimeout
         )
 
+
+class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_idle_worker_warm_shutdown(self):
         """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
@@ -616,12 +621,12 @@ class TestWorkerShutdown(RQTestCase):
         w.work()
 
         p.join(2)
+        self.assertFalse(p.is_alive())
         self.assertTrue(w._stop_requested)
         self.assertTrue(os.path.exists(sentinel_file))
 
-        shutdown_requested_date = w.shutdown_requested_date
-        self.assertIsNotNone(shutdown_requested_date)
-        self.assertEqual(type(shutdown_requested_date).__name__, 'datetime')
+        self.assertIsNotNone(w.shutdown_requested_date)
+        self.assertEqual(type(w.shutdown_requested_date).__name__, 'datetime')
 
     @slow
     def test_working_worker_cold_shutdown(self):
@@ -675,3 +680,85 @@ class TestWorkerSubprocess(RQTestCase):
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
         assert get_failed_queue().count == 0
         assert q.count == 0
+
+
+class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+    def setUp(self):
+        super(HerokuWorkerShutdownTestCase, self).setUp()
+        self.sandbox = '/tmp/rq_shutdown/'
+        os.makedirs(self.sandbox)
+
+    def tearDown(self):
+        shutil.rmtree(self.sandbox, ignore_errors=True)
+
+    @slow
+    def test_immediate_shutdown(self):
+        """Heroku work horse shutdown with immediate (0 second) kill"""
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 0))
+        p.start()
+        time.sleep(0.5)
+
+        os.kill(p.pid, signal.SIGRTMIN)
+
+        p.join(2)
+        self.assertEqual(p.exitcode, 1)
+        self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
+        self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+
+    @slow
+    def test_1_sec_shutdown(self):
+        """Heroku work horse shutdown with 1 second kill"""
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 1))
+        p.start()
+        time.sleep(0.5)
+
+        os.kill(p.pid, signal.SIGRTMIN)
+        time.sleep(0.1)
+        self.assertEqual(p.exitcode, None)
+        p.join(2)
+        self.assertEqual(p.exitcode, 1)
+
+        self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
+        self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+
+    @slow
+    def test_shutdown_double_sigrtmin(self):
+        """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10))
+        p.start()
+        time.sleep(0.5)
+
+        os.kill(p.pid, signal.SIGRTMIN)
+        # we have to wait a short while otherwise the second signal wont bet processed.
+        time.sleep(0.1)
+        os.kill(p.pid, signal.SIGRTMIN)
+        p.join(2)
+        self.assertEqual(p.exitcode, 1)
+
+        self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
+        self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+
+    def test_handle_shutdown_request(self):
+        """Mutate HerokuWorker so _horse_pid refers to an artificial process
+        and test handle_warm_shutdown_request"""
+        w = HerokuWorker('foo')
+
+        path = os.path.join(self.sandbox, 'shouldnt_exist')
+        p = Process(target=create_file_after_timeout, args=(path, 2))
+        p.start()
+        self.assertEqual(p.exitcode, None)
+
+        w._horse_pid = p.pid
+        w.handle_warm_shutdown_request()
+        p.join(2)
+        self.assertEqual(p.exitcode, -34)
+        self.assertFalse(os.path.exists(path))
+
+    def test_handle_shutdown_request_no_horse(self):
+        """Mutate HerokuWorker so _horse_pid refers to non existent process
+        and test handle_warm_shutdown_request"""
+        w = HerokuWorker('foo')
+
+        w._horse_pid = 19999
+        with self.assertRaises(OSError):
+            w.handle_warm_shutdown_request()
