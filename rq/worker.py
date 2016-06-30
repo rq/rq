@@ -516,9 +516,9 @@ class Worker(object):
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
     def monitor_work_horse(self, job):
-        """The worker will wait for the work horse and make sure it executes
-        within the given timeout bounds, or will end the work horse with
-        SIGALRM.
+        """The worker will monitor the work horse and make sure that it
+        either executes successfully or the status of the job is set to
+        failed
         """
         while True:
             try:
