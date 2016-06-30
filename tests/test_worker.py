@@ -578,7 +578,8 @@ def kill_worker(pid, double_kill):
         time.sleep(0.5)
         os.kill(pid, signal.SIGTERM)
 
-def kill_work_horse(pid):
+def wait_and_kill_work_horse(pid, time_to_wait=0.0):
+    time.sleep(time_to_wait)
     os.kill(pid, signal.SIGKILL)
 
 
@@ -663,18 +664,17 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertEqual(failed_q.count, 0)
         self.assertEqual(fooq.count, 0)
         w = Worker(fooq)
-        registry = StartedJobRegistry(connection=self.testconn)
         sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
         if os.path.exists(sentinel_file):
             os.remove(sentinel_file)
         fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
         job, queue = w.dequeue_job_and_maintain_ttl(5)
         w.fork_work_horse(job, queue)
-        p = Process(target=kill_work_horse, args=(w._horse_pid,))
+        p = Process(target=wait_and_kill_work_horse, args=(w._horse_pid, 0.5))
         p.start()
-        p.join(1)
         w.monitor_work_horse(job)
         job_status = job.get_status()
+        p.join(1)
         if os.path.exists(sentinel_file):
             self.assertEqual(job_status, JobStatus.FINISHED)
             os.remove(sentinel_file)
