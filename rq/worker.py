@@ -523,7 +523,7 @@ class Worker(object):
         while True:
             try:
                 _, ret_val = os.waitpid(self._horse_pid, 0)
-                if not (ret_val == os.EX_OK):
+                if ret_val != os.EX_OK:
                     job_status = job.get_status()
                     if job_status is None:
                         # Job completed and its ttl has expired
