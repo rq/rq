@@ -2,4 +2,4 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-VERSION = '0.6.0-atlassian'
+VERSION = '0.7.0dev0'

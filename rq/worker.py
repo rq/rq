@@ -16,9 +16,9 @@ from datetime import timedelta
 
 from rq.compat import as_text, string_types, text_type
 
-from .connections import get_current_connection
+from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
-from .exceptions import DequeueTimeout
+from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
@@ -60,11 +60,15 @@ _signames = dict((getattr(signal, signame), signame)
 
 
 def signal_name(signum):
-    # Hackety-hack-hack: is there really no better way to reverse lookup the
-    # signal name?  If you read this and know a way: please provide a patch :)
     try:
-        return _signames[signum]
+        if sys.version_info[:2] >= (3, 5):
+            return signal.Signals(signum).name
+        else:
+            return _signames[signum]
+
     except KeyError:
+        return 'SIG_UNKNOWN'
+    except ValueError:
         return 'SIG_UNKNOWN'
 
 
@@ -372,8 +376,7 @@ class Worker(object):
         signal.signal(signal.SIGINT, self.request_force_stop)
         signal.signal(signal.SIGTERM, self.request_force_stop)
 
-        msg = 'Warm shut down requested'
-        self.log.warning(msg)
+        self.handle_warm_shutdown_request()
 
         # If shutdown is requested in the middle of a job, wait until
         # finish before shutting down and save the request in redis
@@ -384,6 +387,9 @@ class Worker(object):
                            'Press Ctrl+C again for a cold shutdown.')
         else:
             raise StopRequested()
+
+    def handle_warm_shutdown_request(self):
+        self.log.warning('Warm shut down requested')
 
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
@@ -538,13 +544,7 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
-        # Always ignore Ctrl+C in the work horse, as it might abort the
-        # currently running job.
-        # The main worker catches the Ctrl+C and requests graceful shutdown
-        # after the current work is done.  When cold shutdown is requested, it
-        # kills the current job anyway.
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        self.setup_work_horse_signals()
 
         self._is_horse = True
         self.log = logger
@@ -554,6 +554,16 @@ class Worker(object):
         # os._exit() is the way to exit from childs after a fork(), in
         # constrast to the regular sys.exit()
         os._exit(int(not success))
+
+    def setup_work_horse_signals(self):
+        """Setup signal handing for the newly spawned work horse."""
+        # Always ignore Ctrl+C in the work horse, as it might abort the
+        # currently running job.
+        # The main worker catches the Ctrl+C and requests graceful shutdown
+        # after the current work is done.  When cold shutdown is requested, it
+        # kills the current job anyway.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
     def prepare_job_execution(self, job):
         """Performs misc bookkeeping like updating states prior to
@@ -582,6 +592,9 @@ class Worker(object):
         self.prepare_job_execution(job)
 
         with self.connection._pipeline() as pipeline:
+
+            push_connection(self.connection)
+
             started_job_registry = StartedJobRegistry(job.origin, self.connection, self.namespace)
 
             try:
@@ -600,7 +613,9 @@ class Worker(object):
                     job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     job.save(pipeline=pipeline)
 
-                    finished_job_registry = FinishedJobRegistry(job.origin, self.connection, self.namespace)
+                    finished_job_registry = FinishedJobRegistry(job.origin, 
+                                                                self.connection, 
+                                                                self.namespace)
                     finished_job_registry.add(job, result_ttl, pipeline)
 
                 queue.enqueue_dependents(job, pipeline=pipeline)
@@ -622,6 +637,9 @@ class Worker(object):
                     pass
                 self.handle_exception(job, *sys.exc_info())
                 return False
+
+            finally:
+                pop_connection()
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv is not None:
@@ -708,3 +726,45 @@ class SimpleWorker(Worker):
     def execute_job(self, *args, **kwargs):
         """Execute job in same thread/process, do not fork()"""
         return self.perform_job(*args, **kwargs)
+
+
+class HerokuWorker(Worker):
+    """
+    Modified version of rq worker which:
+    * stops work horses getting killed with SIGTERM
+    * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
+    causes the horse to crash `imminent_shutdown_delay` seconds later
+    """
+    imminent_shutdown_delay = 6
+    frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value',
+                        'f_lasti', 'f_lineno', 'f_locals', 'f_restricted', 'f_trace']
+
+    def setup_work_horse_signals(self):
+        """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
+        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+    def handle_warm_shutdown_request(self):
+        """If horse is alive send it SIGRTMIN"""
+        if self.horse_pid != 0:
+            self.log.warning('Warm shut down requested, sending horse SIGRTMIN signal')
+            os.kill(self.horse_pid, signal.SIGRTMIN)
+        else:
+            self.log.warning('Warm shut down requested, no horse found')
+
+    def request_stop_sigrtmin(self, signum, frame):
+        if self.imminent_shutdown_delay == 0:
+            logger.warn('Imminent shutdown, raising ShutDownImminentException immediately')
+            self.request_force_stop_sigrtmin(signum, frame)
+        else:
+            logger.warn('Imminent shutdown, raising ShutDownImminentException in %d seconds',
+                        self.imminent_shutdown_delay)
+            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
+            signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
+            signal.alarm(self.imminent_shutdown_delay)
+
+    def request_force_stop_sigrtmin(self, signum, frame):
+        info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
+        logger.warn('raising ShutDownImminentException to cancel job...')
+        raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)

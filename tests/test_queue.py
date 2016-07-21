@@ -308,15 +308,19 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue, fooq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, fooq.name)
-        self.assertEqual(job.args[0], 'for Foo',
-                         'Foo should be dequeued first.')
+        self.assertEqual(
+            job.args[0], 'for Foo',
+            'Foo should be dequeued first.'
+        )
 
         job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEqual(queue, barq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
-        self.assertEqual(job.args[0], 'for Bar',
-                         'Bar should be dequeued second.')
+        self.assertEqual(
+            job.args[0], 'for Bar',
+            'Bar should be dequeued second.'
+        )
 
     def test_dequeue_any_with_namespace(self):
         """Fetching work from any given queue."""
@@ -359,8 +363,10 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEqual(q.count, 1)
-        self.assertEqual(Queue.dequeue_any([Queue(), Queue('low')], None),  # noqa
-                None)
+        self.assertEqual(
+            Queue.dequeue_any([Queue(), Queue('low')], None),  # noqa
+            None
+        )
         self.assertEqual(q.count, 0)
 
     def test_enqueue_sets_status(self):
