@@ -467,7 +467,7 @@ class TestJob(RQTestCase):
         failed = get_failed_queue(connection=self.testconn, namespace=namespace)
         self.assertEqual('ns:rq:queue:failed', failed.key)
         job = failed.enqueue(fixtures.say_hello)
-        self.assertEqual("ns:rq:job:{}".format(job.id), job.key)
+        self.assertEqual("ns:rq:job:{0}".format(job.id), job.key.decode('utf-8'))
         job.set_status(JobStatus.FAILED)
         self.assertEqual(1, len(failed.get_jobs()))
         cancel_job(job.id, namespace=namespace)
