@@ -656,8 +656,8 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
     @slow
     def test_work_horse_death_sets_job_failed(self):
-        """worker with an ongoing job whose work horse dies unexpectadly should
-        set the job's status either to FINISHED or FAILED
+        """worker with an ongoing job whose work horse dies unexpectadly (before
+        completing the job) should set the job's status to FAILED
         """
         fooq = Queue('foo')
         failed_q = get_failed_queue()
@@ -675,13 +675,9 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w.monitor_work_horse(job)
         job_status = job.get_status()
         p.join(1)
-        if os.path.exists(sentinel_file):
-            self.assertEqual(job_status, JobStatus.FINISHED)
-            os.remove(sentinel_file)
-        else:
-            self.assertEqual(job_status, JobStatus.FAILED)
-            self.assertEqual(failed_q.count, 1)
-            self.assertEqual(fooq.count, 0)
+        self.assertEqual(job_status, JobStatus.FAILED)
+        self.assertEqual(failed_q.count, 1)
+        self.assertEqual(fooq.count, 0)
 
 def schedule_access_self():
     q = Queue('default', connection=get_current_connection())
