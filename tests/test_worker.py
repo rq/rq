@@ -14,7 +14,9 @@ import subprocess
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
-                            run_dummy_heroku_worker, access_self)
+                            run_dummy_heroku_worker, access_self,
+                            schedule_access_self,
+                            )
 from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
@@ -648,11 +650,6 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         shutdown_requested_date = w.shutdown_requested_date
         self.assertIsNotNone(shutdown_requested_date)
         self.assertEqual(type(shutdown_requested_date).__name__, 'datetime')
-
-
-def schedule_access_self():
-    q = Queue('default', connection=get_current_connection())
-    q.enqueue(access_self)
 
 
 class TestWorkerSubprocess(RQTestCase):

@@ -18,7 +18,6 @@ from rq.worker import HerokuWorker
 def say_pid():
     return os.getpid()
 
-
 def say_hello(name=None):
     """A job with a single argument and a return value."""
     if name is None:
@@ -59,6 +58,9 @@ def access_self():
     assert get_current_connection() is not None
     assert get_current_job() is not None
 
+def schedule_access_self():
+    q = Queue('default', connection=get_current_connection())
+    q.enqueue(access_self)
 
 def echo(*args, **kwargs):
     return (args, kwargs)
