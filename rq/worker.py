@@ -538,9 +538,19 @@ class Worker(object):
                                 pipeline.execute()
                             except Exception:
                                 pass
-                            self.move_to_failed_queue_unhandled(
+
+                            #Unhandled failure: move the job to the failed queue
+                            self.log.warning(
+                                'Moving job to {0!r} queue'.format(
+                                    self.failed_queue.name
+                                )
+                            )
+                            self.failed_queue.quarantine(
                                 job,
-                                "Work-horse proccess was terminated unexpectedly"
+                                exc_info=(
+                                    "Work-horse proccess "
+                                    "was terminated unexpectedly"
+                                )
                             )
                 break
             except OSError as e:
@@ -731,11 +741,6 @@ class Worker(object):
         exc_string = ''.join(traceback.format_exception(*exc_info))
         self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
         self.failed_queue.quarantine(job, exc_info=exc_string)
-
-    def move_to_failed_queue_unhandled(self, job, message):
-        """Unhandled failure default handler: move the job to the failed queue."""
-        self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
-        self.failed_queue.quarantine(job, exc_info=message)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
