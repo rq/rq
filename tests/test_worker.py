@@ -15,8 +15,7 @@ from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
                             run_dummy_heroku_worker, access_self,
-                            schedule_access_self,
-                            )
+                            schedule_access_self, long_running_job,)
 from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
@@ -579,6 +578,10 @@ def kill_worker(pid, double_kill):
         time.sleep(0.5)
         os.kill(pid, signal.SIGTERM)
 
+def wait_and_kill_work_horse(pid, time_to_wait=0.0):
+    time.sleep(time_to_wait)
+    os.kill(pid, signal.SIGKILL)
+
 
 class TimeoutTestCase:
     def setUp(self):
@@ -651,6 +654,30 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertIsNotNone(shutdown_requested_date)
         self.assertEqual(type(shutdown_requested_date).__name__, 'datetime')
 
+    @slow
+    def test_work_horse_death_sets_job_failed(self):
+        """worker with an ongoing job whose work horse dies unexpectadly (before
+        completing the job) should set the job's status to FAILED
+        """
+        fooq = Queue('foo')
+        failed_q = get_failed_queue()
+        self.assertEqual(failed_q.count, 0)
+        self.assertEqual(fooq.count, 0)
+        w = Worker(fooq)
+        sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
+        if os.path.exists(sentinel_file):
+            os.remove(sentinel_file)
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
+        job, queue = w.dequeue_job_and_maintain_ttl(5)
+        w.fork_work_horse(job, queue)
+        p = Process(target=wait_and_kill_work_horse, args=(w._horse_pid, 0.5))
+        p.start()
+        w.monitor_work_horse(job)
+        job_status = job.get_status()
+        p.join(1)
+        self.assertEqual(job_status, JobStatus.FAILED)
+        self.assertEqual(failed_q.count, 1)
+        self.assertEqual(fooq.count, 0)
 
 class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
