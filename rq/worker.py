@@ -507,13 +507,9 @@ class Worker(object):
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
 
-    def execute_job(self, job, queue):
+    def fork_work_horse(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
-        The worker will wait for the work horse and make sure it executes
-        within the given timeout bounds, or will end the work horse with
-        SIGALRM.
         """
-        self.set_state('busy')
         child_pid = os.fork()
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
@@ -522,20 +518,65 @@ class Worker(object):
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
-            while True:
-                try:
-                    os.waitpid(child_pid, 0)
-                    self.set_state('idle')
-                    break
-                except OSError as e:
-                    # In case we encountered an OSError due to EINTR (which is
-                    # caused by a SIGINT or SIGTERM signal during
-                    # os.waitpid()), we simply ignore it and enter the next
-                    # iteration of the loop, waiting for the child to end.  In
-                    # any other case, this is some other unexpected OS error,
-                    # which we don't want to catch, so we re-raise those ones.
-                    if e.errno != errno.EINTR:
-                        raise
+
+    def monitor_work_horse(self, job):
+        """The worker will monitor the work horse and make sure that it
+        either executes successfully or the status of the job is set to
+        failed
+        """
+        while True:
+            try:
+                _, ret_val = os.waitpid(self._horse_pid, 0)
+                if ret_val != os.EX_OK:
+                    job_status = job.get_status()
+                    if job_status is None:
+                        # Job completed and its ttl has expired
+                        break
+                    if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
+                        with self.connection._pipeline() as pipeline:
+                            self.handle_job_failure(
+                                job=job,
+                                pipeline=pipeline
+                            )
+                            try:
+                                pipeline.execute()
+                            except Exception:
+                                pass
+
+                            #Unhandled failure: move the job to the failed queue
+                            self.log.warning(
+                                'Moving job to {0!r} queue'.format(
+                                    self.failed_queue.name
+                                )
+                            )
+                            self.failed_queue.quarantine(
+                                job,
+                                exc_info=(
+                                    "Work-horse proccess "
+                                    "was terminated unexpectedly"
+                                )
+                            )
+                break
+            except OSError as e:
+                # In case we encountered an OSError due to EINTR (which is
+                # caused by a SIGINT or SIGTERM signal during
+                # os.waitpid()), we simply ignore it and enter the next
+                # iteration of the loop, waiting for the child to end.  In
+                # any other case, this is some other unexpected OS error,
+                # which we don't want to catch, so we re-raise those ones.
+                if e.errno != errno.EINTR:
+                    raise
+
+    def execute_job(self, job, queue):
+        """Spawns a work horse to perform the actual work and passes it a job.
+        The worker will wait for the work horse and make sure it executes
+        within the given timeout bounds, or will end the work horse with
+        SIGALRM.
+        """
+        self.set_state('busy')
+        self.fork_work_horse(job, queue)
+        self.monitor_work_horse(job)
+        self.set_state('idle')
 
     def main_work_horse(self, job, queue):
         """This is the entry point of the newly spawned work horse."""
@@ -584,6 +625,27 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
+    def handle_job_failure(
+        self,
+        job,
+        started_job_registry=None,
+        pipeline=None
+    ):
+        """Handles the failure or an executing job by:
+            1. Setting the job status to failed
+            2. Removing the job from the started_job_registry
+            3. Setting the workers current job to None
+        """
+
+        if started_job_registry is None:
+            started_job_registry = StartedJobRegistry(
+                job.origin,
+                self.connection
+            )
+        job.set_status(JobStatus.FAILED, pipeline=pipeline)
+        started_job_registry.remove(job, pipeline=pipeline)
+        self.set_current_job_id(None, pipeline=pipeline)
+
     def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -624,9 +686,11 @@ class Worker(object):
                 pipeline.execute()
 
             except Exception:
-                job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                started_job_registry.remove(job, pipeline=pipeline)
-                self.set_current_job_id(None, pipeline=pipeline)
+                self.handle_job_failure(
+                    job=job,
+                    started_job_registry=started_job_registry,
+                    pipeline=pipeline
+                )
                 try:
                     pipeline.execute()
                 except Exception:
