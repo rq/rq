@@ -798,8 +798,12 @@ class HerokuWorker(Worker):
     causes the horse to crash `imminent_shutdown_delay` seconds later
     """
     imminent_shutdown_delay = 6
-    frame_properties = ['f_code', 'f_exc_traceback', 'f_exc_type', 'f_exc_value',
-                        'f_lasti', 'f_lineno', 'f_locals', 'f_restricted', 'f_trace']
+
+    frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
+    if sys.version_info[:2] < (3, 0):
+        frame_properties.extend(
+            ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
+        )
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
@@ -817,10 +821,10 @@ class HerokuWorker(Worker):
 
     def request_stop_sigrtmin(self, signum, frame):
         if self.imminent_shutdown_delay == 0:
-            logger.warn('Imminent shutdown, raising ShutDownImminentException immediately')
+            self.log.warning('Imminent shutdown, raising ShutDownImminentException immediately')
             self.request_force_stop_sigrtmin(signum, frame)
         else:
-            logger.warn('Imminent shutdown, raising ShutDownImminentException in %d seconds',
+            self.log.warning('Imminent shutdown, raising ShutDownImminentException in %d seconds',
                         self.imminent_shutdown_delay)
             signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
             signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
@@ -828,5 +832,5 @@ class HerokuWorker(Worker):
 
     def request_force_stop_sigrtmin(self, signum, frame):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
-        logger.warn('raising ShutDownImminentException to cancel job...')
+        self.log.warning('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
