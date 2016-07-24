@@ -736,7 +736,7 @@ class HerokuWorker(Worker):
     imminent_shutdown_delay = 6
 
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
-    if sys.version_info[:2] <= (3, 0):
+    if sys.version_info[:2] < (3, 0):
         frame_properties.extend(
             ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
         )
