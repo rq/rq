@@ -60,7 +60,6 @@ def access_self():
 
 def schedule_access_self():
     q = Queue('default', connection=get_current_connection())
-    assert get_current_job() is not None
     q.enqueue(access_self)
 
 def echo(*args, **kwargs):
