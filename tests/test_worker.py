@@ -26,6 +26,7 @@ from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.worker import HerokuWorker
+import redis
 
 
 class CustomJob(Job):
@@ -683,6 +684,7 @@ class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
         super(TestWorkerSubprocess, self).setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
+        self.db_num = db_num
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 
     def test_run_empty_queue(self):
@@ -699,6 +701,8 @@ class TestWorkerSubprocess(RQTestCase):
 
     def test_run_scheduled_access_self(self):
         """Schedule a job that schedules a job, then run the worker as subprocess"""
+        r = redis.StrictRedis(db=self.db_num)
+        self.assertEqual(r.keys(), 0, msg='{}'.format(r.keys()))
         q = Queue()
         q.enqueue(schedule_access_self)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
