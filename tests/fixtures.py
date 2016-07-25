@@ -8,6 +8,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import time
+import sys
 
 from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
@@ -112,6 +113,8 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
     :param sandbox: directory to create files in
     :param _imminent_shutdown_delay: delay to use for HerokuWorker
     """
+    sys.stderr = open(os.path.join(sandbox, 'stderr.log'), 'w')
+
     class TestHerokuWorker(HerokuWorker):
         imminent_shutdown_delay = _imminent_shutdown_delay
 

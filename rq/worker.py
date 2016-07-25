@@ -16,6 +16,7 @@ from datetime import timedelta
 
 from rq.compat import as_text, string_types, text_type
 
+from .compat import PY2
 from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
 from .exceptions import DequeueTimeout, ShutDownImminentException
@@ -800,7 +801,7 @@ class HerokuWorker(Worker):
     imminent_shutdown_delay = 6
 
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
-    if sys.version_info[:2] < (3, 0):
+    if PY2:
         frame_properties.extend(
             ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
         )

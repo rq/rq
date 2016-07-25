@@ -14,8 +14,7 @@ import subprocess
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
-                            run_dummy_heroku_worker, access_self,
-                            long_running_job)
+                            run_dummy_heroku_worker, access_self)
 from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
@@ -733,6 +732,10 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertEqual(p.exitcode, 1)
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
+            stderr = f.read().strip('\n')
+            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
+            self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
     def test_1_sec_shutdown(self):
@@ -749,6 +752,10 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
+            stderr = f.read().strip('\n')
+            err = 'ShutDownImminentException: shut down imminent (signal: SIGALRM)'
+            self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
     def test_shutdown_double_sigrtmin(self):
@@ -766,6 +773,10 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
+        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
+            stderr = f.read().strip('\n')
+            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
+            self.assertTrue(stderr.endswith(err), stderr)
 
     def test_handle_shutdown_request(self):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process
