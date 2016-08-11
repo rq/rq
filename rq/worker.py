@@ -14,6 +14,8 @@ import traceback
 import warnings
 from datetime import timedelta
 
+from redis import WatchError
+
 from rq.compat import as_text, string_types, text_type
 
 from .compat import PY2
@@ -667,24 +669,34 @@ class Worker(object):
                 # to use the same exc handling when pickling fails
                 job._result = rv
 
-                self.set_current_job_id(None, pipeline=pipeline)
-
                 result_ttl = job.get_result_ttl(self.default_result_ttl)
                 if result_ttl != 0:
                     job.ended_at = utcnow()
-                    job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                    job.save(pipeline=pipeline)
 
-                    finished_job_registry = FinishedJobRegistry(job.origin,
-                                                                self.connection)
-                    finished_job_registry.add(job, result_ttl, pipeline)
+                while True:
+                    try:
+                        self.set_current_job_id(None, pipeline=pipeline)
 
-                queue.enqueue_dependents(job, pipeline=pipeline)
-                job.cleanup(result_ttl, pipeline=pipeline,
-                            remove_from_queue=False)
-                started_job_registry.remove(job, pipeline=pipeline)
+                        if result_ttl != 0:
+                            job.set_status(JobStatus.FINISHED, pipeline=pipeline)
+                            job.save(pipeline=pipeline)
 
-                pipeline.execute()
+                            finished_job_registry = FinishedJobRegistry(job.origin,
+                                                                        self.connection)
+                            finished_job_registry.add(job, result_ttl, pipeline)
+
+                        # avoid missing dependents that where inserted after enqueue_dependents()
+                        pipeline.watch(job.dependents_key)
+                        queue.enqueue_dependents(job, pipeline=pipeline)
+
+                        job.cleanup(result_ttl, pipeline=pipeline,
+                                    remove_from_queue=False)
+                        started_job_registry.remove(job, pipeline=pipeline)
+
+                        pipeline.execute()
+                        break
+                    except WatchError:
+                        continue
 
             except Exception:
                 self.handle_job_failure(

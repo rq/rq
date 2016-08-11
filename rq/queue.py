@@ -293,8 +293,10 @@ class Queue(object):
         # TODO: can probably be pipelined
         from .registry import DeferredJobRegistry
 
+        dependents_connection = pipeline if pipeline is not None else self.connection
+
         while True:
-            job_id = as_text(self.connection.spop(job.dependents_key))
+            job_id = as_text(dependents_connection.spop(job.dependents_key))
             if job_id is None:
                 break
             dependent = self.job_class.fetch(job_id, connection=self.connection)
