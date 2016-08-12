@@ -675,6 +675,13 @@ class Worker(object):
 
                 while True:
                     try:
+                        # if dependencies are inserted after enqueue_dependents
+                        # a WatchError is thrown by execute()
+                        pipeline.watch(job.dependents_key)
+                        queue.enqueue_dependents(job, pipeline=pipeline)
+
+                        # pipeline all following commands (reads won't work!)
+                        pipeline.multi()
                         self.set_current_job_id(None, pipeline=pipeline)
 
                         if result_ttl != 0:
@@ -684,10 +691,6 @@ class Worker(object):
                             finished_job_registry = FinishedJobRegistry(job.origin,
                                                                         self.connection)
                             finished_job_registry.add(job, result_ttl, pipeline)
-
-                        # avoid missing dependents that where inserted after enqueue_dependents()
-                        pipeline.watch(job.dependents_key)
-                        queue.enqueue_dependents(job, pipeline=pipeline)
 
                         job.cleanup(result_ttl, pipeline=pipeline,
                                     remove_from_queue=False)
