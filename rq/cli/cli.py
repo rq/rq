@@ -37,7 +37,7 @@ config_option = click.option('--config', '-c',
                              help='Module containing RQ settings.')
 
 
-def connect(url, config=None, connection_class='redis.StrictRedis'):
+def connect(url, config=None, connection_class=StrictRedis):
     if url:
         return connection_class.from_url(url)
 
