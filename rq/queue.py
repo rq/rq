@@ -280,35 +280,61 @@ class Queue(object):
             job.timeout = self.DEFAULT_TIMEOUT
         job.save(pipeline=pipe)
 
+        if self._async:
+            self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
+
         if pipeline is None:
             pipe.execute()
-
-        if self._async:
-            self.push_job_id(job.id, at_front=at_front)
 
         return job
 
     def enqueue_dependents(self, job, pipeline=None):
-        """Enqueues all jobs in the given job's dependents set and clears it."""
-        # TODO: can probably be pipelined
+        """Enqueues all jobs in the given job's dependents set and clears it.
+
+        When called without a pipeline, this method uses WATCH/MULTI/EXEC.
+        If you pass a pipeline, only MULTI is called. The rest is up to the
+        caller.
+        """
         from .registry import DeferredJobRegistry
 
-        dependents_connection = pipeline if pipeline is not None else self.connection
+        pipe = pipeline if pipeline is not None else self.connection._pipeline()
+        dependents_key = job.dependents_key
 
         while True:
-            job_id = as_text(dependents_connection.spop(job.dependents_key))
-            if job_id is None:
+            try:
+                # if a pipeline is passed, the caller is responsible for calling WATCH
+                # to ensure all jobs are enqueued
+                if pipeline is None:
+                    pipe.watch(dependents_key)
+
+                dependent_jobs = [self.job_class.fetch(as_text(job_id), connection=self.connection)
+                                  for job_id in pipe.smembers(dependents_key)]
+
+                pipe.multi()
+
+                for dependent in dependent_jobs:
+                    registry = DeferredJobRegistry(dependent.origin, self.connection)
+                    registry.remove(dependent, pipeline=pipe)
+                    if dependent.origin == self.name:
+                        self.enqueue_job(dependent, pipeline=pipe)
+                    else:
+                        queue = Queue(name=dependent.origin, connection=self.connection)
+                        queue.enqueue_job(dependent, pipeline=pipe)
+
+                pipe.delete(dependents_key)
+
+                if pipeline is None:
+                    pipe.execute()
+
                 break
-            dependent = self.job_class.fetch(job_id, connection=self.connection)
-            registry = DeferredJobRegistry(dependent.origin, self.connection)
-            with self.connection._pipeline() as pipeline:
-                registry.remove(dependent, pipeline=pipeline)
-                if dependent.origin == self.name:
-                    self.enqueue_job(dependent, pipeline=pipeline)
+            except WatchError:
+                if pipeline is None:
+                    continue
                 else:
-                    queue = Queue(name=dependent.origin, connection=self.connection)
-                    queue.enqueue_job(dependent, pipeline=pipeline)
-                pipeline.execute()
+                    # if the pipeline comes from the caller, we re-raise the
+                    # exception as it it the responsibility of the caller to
+                    # handle it
+                    raise
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""

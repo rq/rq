@@ -543,7 +543,7 @@ class Job(object):
           forever)
         """
         if ttl == 0:
-            self.delete(remove_from_queue=remove_from_queue)
+            self.delete(pipeline=pipeline, remove_from_queue=remove_from_queue)
         elif not ttl:
             return
         elif ttl > 0:
