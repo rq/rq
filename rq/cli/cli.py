@@ -37,12 +37,12 @@ config_option = click.option('--config', '-c',
                              help='Module containing RQ settings.')
 
 
-def connect(url, config=None):
+def connect(url, config=None, connection_class=StrictRedis):
     if url:
-        return StrictRedis.from_url(url)
+        return connection_class.from_url(url)
 
     settings = read_config_file(config) if config else {}
-    return get_redis_from_config(settings)
+    return get_redis_from_config(settings, connection_class)
 
 
 @click.group()
@@ -143,6 +143,7 @@ def info(url, config, path, interval, raw, only_queues, only_workers, by_queue, 
 @click.option('--worker-class', '-w', default='rq.Worker', help='RQ Worker class to use')
 @click.option('--job-class', '-j', default='rq.job.Job', help='RQ Job class to use')
 @click.option('--queue-class', default='rq.Queue', help='RQ Queue class to use')
+@click.option('--connection-class', default='redis.StrictRedis', help='Redis client class to use')
 @click.option('--path', '-P', default='.', help='Specify the import path.')
 @click.option('--results-ttl', type=int, help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
@@ -152,7 +153,7 @@ def info(url, config, path, interval, raw, only_queues, only_workers, by_queue, 
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
-def worker(url, config, burst, name, worker_class, job_class, queue_class, path, results_ttl, worker_ttl,
+def worker(url, config, burst, name, worker_class, job_class, queue_class, connection_class, path, results_ttl, worker_ttl,
            verbose, quiet, sentry_dsn, exception_handler, pid, queues):
     """Starts an RQ worker."""
 
@@ -170,7 +171,8 @@ def worker(url, config, burst, name, worker_class, job_class, queue_class, path,
 
     setup_loghandlers_from_args(verbose, quiet)
 
-    conn = connect(url, config)
+    connection_class = import_attribute(connection_class)
+    conn = connect(url, config, connection_class)
     cleanup_ghosts(conn)
     worker_class = import_attribute(worker_class)
     queue_class = import_attribute(queue_class)
