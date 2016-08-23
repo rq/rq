@@ -175,7 +175,7 @@ class Queue(object):
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, description=None,
-                     depends_on=None, job_id=None, at_front=False, meta=None):
+                     depends_on=None, require_dependency=True, job_id=None, at_front=False, meta=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -202,7 +202,8 @@ class Queue(object):
                 while True:
                     try:
                         pipe.watch(depends_on.key)
-                        if depends_on.get_status() != JobStatus.FINISHED:
+                        status = depends_on.get_status()
+                        if (require_dependency or status is not None) and status != JobStatus.FINISHED:
                             pipe.multi()
                             job.set_status(JobStatus.DEFERRED)
                             job.register_dependency(pipeline=pipe)
@@ -248,6 +249,7 @@ class Queue(object):
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)
         depends_on = kwargs.pop('depends_on', None)
+        require_dependency = kwargs.pop('require_dependency', True)
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
@@ -259,7 +261,7 @@ class Queue(object):
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl, ttl=ttl,
-                                 description=description, depends_on=depends_on,
+                                 description=description, depends_on=depends_on, require_dependency=require_dependency,
                                  job_id=job_id, at_front=at_front, meta=meta)
 
     def enqueue_job(self, job, pipeline=None, at_front=False):
