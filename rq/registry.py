@@ -3,7 +3,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .job import Job, JobStatus
 from .queue import FailedQueue
-from .utils import current_timestamp
+from .utils import current_timestamp, build_key
 
 
 class BaseRegistry(object):
@@ -67,9 +67,9 @@ class StartedJobRegistry(BaseRegistry):
     right after completion (success or failure).
     """
 
-    def __init__(self, name='default', connection=None):
+    def __init__(self, name='default', connection=None, namespace=None):
         super(StartedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:wip:{0}'.format(name)
+        self.key = build_key('rq:wip:{0}'.format(name), namespace)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedQueue.
@@ -106,9 +106,9 @@ class FinishedJobRegistry(BaseRegistry):
     registry after they have successfully completed for monitoring purposes.
     """
 
-    def __init__(self, name='default', connection=None):
+    def __init__(self, name='default', connection=None, namespace=None):
         super(FinishedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:finished:{0}'.format(name)
+        self.key = build_key('rq:finished:{0}'.format(name), namespace)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -126,9 +126,9 @@ class DeferredJobRegistry(BaseRegistry):
     Registry of deferred jobs (waiting for another job to finish).
     """
 
-    def __init__(self, name='default', connection=None):
+    def __init__(self, name='default', connection=None, namespace=None):
         super(DeferredJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:deferred:{0}'.format(name)
+        self.key = build_key('rq:deferred:{0}'.format(name), namespace)
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is
@@ -139,7 +139,7 @@ class DeferredJobRegistry(BaseRegistry):
 
 def clean_registries(queue):
     """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
-    registry = FinishedJobRegistry(name=queue.name, connection=queue.connection)
+    registry = FinishedJobRegistry(name=queue.name, connection=queue.connection, namespace=queue.namespace)
     registry.cleanup()
-    registry = StartedJobRegistry(name=queue.name, connection=queue.connection)
+    registry = StartedJobRegistry(name=queue.name, connection=queue.connection, namespace=queue.namespace)
     registry.cleanup()

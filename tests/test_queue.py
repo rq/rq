@@ -28,6 +28,11 @@ class TestQueue(RQTestCase):
         q = Queue()
         self.assertEqual(q.name, 'default')
 
+    def test_create_default_queue_with_namespace(self):
+        """Instantiating the default queue."""
+        q = Queue(namespace="ns")
+        self.assertEqual(q.name, 'default')
+
     def test_equality(self):
         """Mathematical equality of queues."""
         q1 = Queue('foo')
@@ -92,6 +97,18 @@ class TestQueue(RQTestCase):
         job.delete()
         self.assertEqual(q.job_ids, [])
 
+    def test_jobs_with_namespace(self):
+        """Getting jobs out of a queue."""
+        q = Queue('example', namespace="ns")
+        self.assertEqual(q.jobs, [])
+        job = q.enqueue(say_hello)
+        self.assertEqual(q.namespace, job.namespace)
+        self.assertEqual(q.jobs, [job])
+
+        # Deleting job removes it from queue
+        job.delete()
+        self.assertEqual(q.job_ids, [])
+
     def test_compact(self):
         """Queue.compact() removes non-existing jobs."""
         q = Queue()
@@ -125,6 +142,24 @@ class TestQueue(RQTestCase):
             self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'),
             job_id)
 
+    def test_enqueue_with_namespace(self):
+        """Enqueueing job onto queues."""
+        q = Queue(namespace="ns")
+        self.assertEqual(q.is_empty(), True)
+
+        # say_hello spec holds which queue this is sent to
+        job = q.enqueue(say_hello, 'Nick', foo='bar')
+        job_id = job.id
+        self.assertEqual(job.origin, q.name)
+        self.assertEqual(job.namespace, q.namespace)
+
+        # Inspect data inside Redis
+        q_key = 'ns:rq:queue:default'
+        self.assertEqual(self.testconn.llen(q_key), 1)
+        self.assertEqual(
+            self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'),
+            job_id)
+
     def test_enqueue_sets_metadata(self):
         """Enqueueing job onto queues modifies meta data."""
         q = Queue()
@@ -153,10 +188,42 @@ class TestQueue(RQTestCase):
         # ...and assert the queue count when down
         self.assertEqual(q.count, 0)
 
+    def test_pop_job_id_with_namespace(self):
+        """Popping job IDs from queues."""
+        # Set up
+        q = Queue(namespace="ns")
+        uuid = '112188ae-4e9d-4a5b-a5b3-f26f2cb054da'
+        q.push_job_id(uuid)
+
+        # Pop it off the queue...
+        self.assertEqual(q.count, 1)
+        self.assertEqual(q.pop_job_id(), uuid)
+
+        # ...and assert the queue count when down
+        self.assertEqual(q.count, 0)
+
     def test_dequeue(self):
         """Dequeueing jobs from queues."""
         # Set up
         q = Queue()
+        result = q.enqueue(say_hello, 'Rick', foo='bar')
+
+        # Dequeue a job (not a job ID) off the queue
+        self.assertEqual(q.count, 1)
+        job = q.dequeue()
+        self.assertEqual(job.id, result.id)
+        self.assertEqual(job.func, say_hello)
+        self.assertEqual(job.origin, q.name)
+        self.assertEqual(job.args[0], 'Rick')
+        self.assertEqual(job.kwargs['foo'], 'bar')
+
+        # ...and assert the queue count when down
+        self.assertEqual(q.count, 0)
+
+    def test_dequeue_with_namespace(self):
+        """Dequeueing jobs from queues."""
+        # Set up
+        q = Queue(namespace="ns")
         result = q.enqueue(say_hello, 'Rick', foo='bar')
 
         # Dequeue a job (not a job ID) off the queue
@@ -254,6 +321,38 @@ class TestQueue(RQTestCase):
             job.args[0], 'for Bar',
             'Bar should be dequeued second.'
         )
+
+    def test_dequeue_any_with_namespace(self):
+        """Fetching work from any given queue."""
+        fooq = Queue('foo', namespace="ns")
+        barq = Queue('bar', namespace="ns")
+
+        self.assertEqual(Queue.dequeue_any([fooq, barq], None, namespace="ns"), None)
+
+        # Enqueue a single item
+        barq.enqueue(say_hello)
+        job, queue = Queue.dequeue_any([fooq, barq], None, namespace="ns")
+        self.assertEqual(job.func, say_hello)
+        self.assertEqual(queue, barq)
+
+        # Enqueue items on both queues
+        barq.enqueue(say_hello, 'for Bar')
+        fooq.enqueue(say_hello, 'for Foo')
+
+        job, queue = Queue.dequeue_any([fooq, barq], None, namespace="ns")
+        self.assertEqual(queue, fooq)
+        self.assertEqual(job.func, say_hello)
+        self.assertEqual(job.origin, fooq.name)
+        self.assertEqual(job.args[0], 'for Foo',
+                         'Foo should be dequeued first.')
+
+        job, queue = Queue.dequeue_any([fooq, barq], None, namespace="ns")
+        self.assertEqual(queue, barq)
+        self.assertEqual(job.func, say_hello)
+        self.assertEqual(job.origin, barq.name)
+        self.assertEqual(job.args[0], 'for Bar',
+                         'Bar should be dequeued second.')
+
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""

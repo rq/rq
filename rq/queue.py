@@ -12,12 +12,12 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import (DequeueTimeout, InvalidJobDependency,
                          InvalidJobOperationError, NoSuchJobError, UnpickleError)
 from .job import Job, JobStatus
-from .utils import import_attribute, utcnow
+from .utils import import_attribute, utcnow, build_key
 
 
-def get_failed_queue(connection=None):
+def get_failed_queue(connection=None, namespace=None):
     """Returns a handle to the special failed queue."""
-    return FailedQueue(connection=connection)
+    return FailedQueue(connection=connection, namespace=namespace)
 
 
 def compact(lst):
@@ -32,33 +32,35 @@ class Queue(object):
     redis_queues_keys = 'rq:queues'
 
     @classmethod
-    def all(cls, connection=None):
+    def all(cls, connection=None, namespace=None):
         """Returns an iterable of all Queues.
         """
         connection = resolve_connection(connection)
+        redis_queues_keys = build_key(cls.redis_queues_keys, namespace)
 
         def to_queue(queue_key):
-            return cls.from_queue_key(as_text(queue_key),
-                                      connection=connection)
-        return [to_queue(rq_key) for rq_key in connection.smembers(cls.redis_queues_keys) if rq_key]
+            return cls.from_queue_key(as_text(queue_key), connection=connection, namespace=namespace)
+        return [to_queue(rq_key) for rq_key in connection.smembers(redis_queues_keys) if rq_key]
 
     @classmethod
-    def from_queue_key(cls, queue_key, connection=None):
+    def from_queue_key(cls, queue_key, connection=None, namespace=None):
         """Returns a Queue instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
         Redis keys.
         """
-        prefix = cls.redis_queue_namespace_prefix
+        prefix = build_key(cls.redis_queue_namespace_prefix, namespace)
+
         if not queue_key.startswith(prefix):
             raise ValueError('Not a valid RQ queue key: {0}'.format(queue_key))
         name = queue_key[len(prefix):]
-        return cls(name, connection=connection)
+        return cls(name, connection=connection, namespace=namespace)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 async=True, job_class=None, namespace=None):
         self.connection = resolve_connection(connection)
-        prefix = self.redis_queue_namespace_prefix
         self.name = name
+        self.namespace = namespace
+        prefix = build_key(self.redis_queue_namespace_prefix, namespace)
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = default_timeout
         self._async = async
@@ -81,8 +83,8 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        script = b"""
-            local prefix = "rq:job:"
+        script = """
+            local prefix = "{prefix}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -97,7 +99,7 @@ class Queue(object):
                 count = count + 1
             end
             return count
-        """
+        """.format(prefix=build_key("rq:job:", self.namespace)).encode()
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
@@ -107,7 +109,7 @@ class Queue(object):
 
     def fetch_job(self, job_id):
         try:
-            return self.job_class.fetch(job_id, connection=self.connection)
+            return self.job_class.fetch(job_id, connection=self.connection, namespace=self.namespace)
         except NoSuchJobError:
             self.remove(job_id)
 
@@ -154,7 +156,7 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
+        COMPACT_QUEUE = build_key('rq:queue:_compact:{0}'.format(uuid.uuid4()), self.namespace)
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
@@ -189,7 +191,7 @@ class Queue(object):
             func, args=args, kwargs=kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, status=JobStatus.QUEUED,
             description=description, depends_on=depends_on,
-            timeout=timeout, id=job_id, origin=self.name, meta=meta)
+            timeout=timeout, id=job_id, origin=self.name, meta=meta, namespace=self.namespace)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -197,7 +199,7 @@ class Queue(object):
         # modifying the dependency. In this case we simply retry
         if depends_on is not None:
             if not isinstance(depends_on, self.job_class):
-                depends_on = Job(id=depends_on, connection=self.connection)
+                depends_on = Job(id=depends_on, connection=self.connection, namespace=self.namespace)
             with self.connection._pipeline() as pipe:
                 while True:
                     try:
@@ -277,7 +279,7 @@ class Queue(object):
         pipe = pipeline if pipeline is not None else self.connection._pipeline()
 
         # Add Queue key set
-        pipe.sadd(self.redis_queues_keys, self.key)
+        pipe.sadd(build_key(self.redis_queues_keys, self.namespace), self.key)
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
 
         job.origin = self.name
@@ -304,14 +306,14 @@ class Queue(object):
             job_id = as_text(self.connection.spop(job.dependents_key))
             if job_id is None:
                 break
-            dependent = self.job_class.fetch(job_id, connection=self.connection)
+            dependent = self.job_class.fetch(job_id, connection=self.connection, namespace=self.namespace)
             registry = DeferredJobRegistry(dependent.origin, self.connection)
             with self.connection._pipeline() as pipeline:
                 registry.remove(dependent, pipeline=pipeline)
                 if dependent.origin == self.name:
                     self.enqueue_job(dependent, pipeline=pipeline)
                 else:
-                    queue = Queue(name=dependent.origin, connection=self.connection)
+                    queue = Queue(name=dependent.origin, connection=self.connection, namespace=self.namespace)
                     queue.enqueue_job(dependent, pipeline=pipeline)
                 pipeline.execute()
 
@@ -359,7 +361,7 @@ class Queue(object):
             if job_id is None:
                 return None
             try:
-                job = self.job_class.fetch(job_id, connection=self.connection)
+                job = self.job_class.fetch(job_id, connection=self.connection, namespace=self.namespace)
             except NoSuchJobError as e:
                 # Silently pass on jobs that don't exist (anymore),
                 continue
@@ -372,7 +374,7 @@ class Queue(object):
             return job
 
     @classmethod
-    def dequeue_any(cls, queues, timeout, connection=None):
+    def dequeue_any(cls, queues, timeout, connection=None, namespace=None):
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -389,9 +391,9 @@ class Queue(object):
             if result is None:
                 return None
             queue_key, job_id = map(as_text, result)
-            queue = cls.from_queue_key(queue_key, connection=connection)
+            queue = cls.from_queue_key(queue_key, connection=connection, namespace=namespace)
             try:
-                job = cls.job_class.fetch(job_id, connection=connection)
+                job = cls.job_class.fetch(job_id, connection=connection, namespace=namespace)
             except NoSuchJobError:
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look
@@ -428,8 +430,8 @@ class Queue(object):
 
 
 class FailedQueue(Queue):
-    def __init__(self, connection=None):
-        super(FailedQueue, self).__init__(JobStatus.FAILED, connection=connection)
+    def __init__(self, connection=None, namespace=None):
+        super(FailedQueue, self).__init__(JobStatus.FAILED, connection=connection, namespace=namespace)
 
     def quarantine(self, job, exc_info):
         """Puts the given Job in quarantine (i.e. put it on the failed
@@ -452,7 +454,7 @@ class FailedQueue(Queue):
     def requeue(self, job_id):
         """Requeues the job with the given job ID."""
         try:
-            job = self.job_class.fetch(job_id, connection=self.connection)
+            job = self.job_class.fetch(job_id, connection=self.connection, namespace=self.namespace)
         except NoSuchJobError:
             # Silently ignore/remove this job and return (i.e. do nothing)
             self.remove(job_id)
@@ -464,5 +466,5 @@ class FailedQueue(Queue):
 
         job.set_status(JobStatus.QUEUED)
         job.exc_info = None
-        q = Queue(job.origin, connection=self.connection)
+        q = Queue(job.origin, connection=self.connection, namespace=self.namespace)
         q.enqueue_job(job)

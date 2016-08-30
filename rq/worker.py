@@ -27,7 +27,7 @@ from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
 from .utils import (ensure_list, enum, import_attribute, make_colorizer,
-                    utcformat, utcnow, utcparse)
+                    utcformat, utcnow, utcparse, build_key)
 from .version import VERSION
 
 try:
@@ -90,30 +90,30 @@ class Worker(object):
     job_class = Job
 
     @classmethod
-    def all(cls, connection=None):
+    def all(cls, connection=None, namespace=None):
         """Returns an iterable of all Workers.
         """
         if connection is None:
             connection = get_current_connection()
-        reported_working = connection.smembers(cls.redis_workers_keys)
+        reported_working = connection.smembers(build_key(cls.redis_workers_keys, namespace))
         workers = [cls.find_by_key(as_text(key), connection)
                    for key in reported_working]
         return compact(workers)
 
     @classmethod
-    def find_by_key(cls, worker_key, connection=None):
+    def find_by_key(cls, worker_key, connection=None, namespace=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
         """
-        prefix = cls.redis_worker_namespace_prefix
+        prefix = build_key(cls.redis_worker_namespace_prefix, namespace)
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: {0}'.format(worker_key))
 
         if connection is None:
             connection = get_current_connection()
         if not connection.exists(worker_key):
-            connection.srem(cls.redis_workers_keys, worker_key)
+            connection.srem(build_key(cls.redis_workers_keys, namespace), worker_key)
             return None
 
         name = worker_key[len(prefix):]
@@ -129,7 +129,7 @@ class Worker(object):
     def __init__(self, queues, name=None,
                  default_result_ttl=None, connection=None, exc_handler=None,
                  exception_handlers=None, default_worker_ttl=None,
-                 job_class=None, queue_class=None):  # noqa
+                 job_class=None, queue_class=None, namespace=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -147,6 +147,7 @@ class Worker(object):
         queues = [self.queue_class(name=q, connection=connection)
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
+        self.namespace = namespace
         self._name = name
         self.queues = queues
         self.validate_queues()
@@ -165,7 +166,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stop_requested = False
         self.log = logger
-        self.failed_queue = get_failed_queue(connection=self.connection)
+        self.failed_queue = get_failed_queue(connection=self.connection, namespace=self.namespace)
         self.last_cleaned_at = None
 
         # By default, push the "move-to-failed-queue" exception handler onto
@@ -215,7 +216,7 @@ class Worker(object):
     @property
     def key(self):
         """Returns the worker's Redis hash key."""
-        return self.redis_worker_namespace_prefix + self.name
+        return build_key(self.redis_worker_namespace_prefix + self.name, self.namespace)
 
     @property
     def pid(self):
@@ -254,7 +255,7 @@ class Worker(object):
             p.delete(key)
             p.hset(key, 'birth', utcformat(utcnow()))
             p.hset(key, 'queues', queues)
-            p.sadd(self.redis_workers_keys, key)
+            p.sadd(build_key(self.redis_workers_keys, self.namespace), key)
             p.expire(key, self.default_worker_ttl)
             p.execute()
 
@@ -264,7 +265,7 @@ class Worker(object):
         with self.connection._pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
-            p.srem(self.redis_workers_keys, self.key)
+            p.srem(build_key(self.redis_workers_keys, self.namespace), self.key)
             p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
@@ -339,7 +340,7 @@ class Worker(object):
         if job_id is None:
             return None
 
-        return self.job_class.fetch(job_id, self.connection)
+        return self.job_class.fetch(job_id, self.connection, self.namespace)
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
@@ -445,7 +446,7 @@ class Worker(object):
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 60)
 
-                    result = self.dequeue_job_and_maintain_ttl(timeout)
+                    result = self.dequeue_job_and_maintain_ttl(timeout, self.namespace)
                     if result is None:
                         if burst:
                             self.log.info("RQ worker {0!r} done, quitting".format(self.key))
@@ -464,7 +465,7 @@ class Worker(object):
                 self.register_death()
         return did_perform_work
 
-    def dequeue_job_and_maintain_ttl(self, timeout):
+    def dequeue_job_and_maintain_ttl(self, timeout, namespace=None):
         result = None
         qnames = self.queue_names()
 
@@ -478,7 +479,7 @@ class Worker(object):
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
-                                                      connection=self.connection)
+                                                      connection=self.connection, namespace=namespace)
                 if result is not None:
                     job, queue = result
                     self.log.info('{0}: {1} ({2})'.format(green(queue.name),
@@ -616,7 +617,7 @@ class Worker(object):
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.heartbeat(timeout, pipeline=pipeline)
-            registry = StartedJobRegistry(job.origin, self.connection)
+            registry = StartedJobRegistry(job.origin, self.connection, self.namespace)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
             self.connection._hset(job.key, 'started_at',
@@ -657,7 +658,7 @@ class Worker(object):
 
             push_connection(self.connection)
 
-            started_job_registry = StartedJobRegistry(job.origin, self.connection)
+            started_job_registry = StartedJobRegistry(job.origin, self.connection, self.namespace)
 
             try:
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
@@ -675,8 +676,9 @@ class Worker(object):
                     job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     job.save(pipeline=pipeline)
 
-                    finished_job_registry = FinishedJobRegistry(job.origin,
-                                                                self.connection)
+                    finished_job_registry = FinishedJobRegistry(job.origin, 
+                                                                self.connection, 
+                                                                self.namespace)
                     finished_job_registry.add(job, result_ttl, pipeline)
 
                 queue.enqueue_dependents(job, pipeline=pipeline)

@@ -386,6 +386,21 @@ class TestJob(RQTestCase):
         self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)
         self.assertEqual(registry.get_job_ids(), [job.id])
 
+    def test_register_dependency_with_namespace(self):
+        """Ensure dependency registration works properly when using namespaces."""
+        origin = 'some_queue'
+        namespace = 'ns'
+        registry = DeferredJobRegistry(origin, self.testconn, namespace)
+
+        job = Job.create(func=fixtures.say_hello, origin=origin, namespace=namespace)
+        job._dependency_id = 'id'
+        job.save()
+
+        self.assertEqual(registry.get_job_ids(), [])
+        job.register_dependency()
+        self.assertEqual(as_text(self.testconn.spop('ns:rq:job:id:dependents')), job.id)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+
     def test_delete(self):
         """job.delete() deletes itself & dependents mapping from Redis."""
         queue = Queue(connection=self.testconn)
@@ -444,4 +459,16 @@ class TestJob(RQTestCase):
         job.set_status(JobStatus.FAILED)
         self.assertEqual(1, len(failed.get_jobs()))
         cancel_job(job.id)
+        self.assertEqual(0, len(failed.get_jobs()))
+
+    def test_create_failed_and_cancel_job_with_namespace(self):
+        """test creating and using cancel_job deletes job properly when using namespaces"""
+        namespace = 'ns'
+        failed = get_failed_queue(connection=self.testconn, namespace=namespace)
+        self.assertEqual('ns:rq:queue:failed', failed.key)
+        job = failed.enqueue(fixtures.say_hello)
+        self.assertEqual("ns:rq:job:{0}".format(job.id), job.key.decode('utf-8'))
+        job.set_status(JobStatus.FAILED)
+        self.assertEqual(1, len(failed.get_jobs()))
+        cancel_job(job.id, namespace=namespace)
         self.assertEqual(0, len(failed.get_jobs()))

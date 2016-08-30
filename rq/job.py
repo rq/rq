@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import enum, import_attribute, utcformat, utcnow, utcparse
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse, build_key
 
 try:
     import cPickle as pickle
@@ -54,31 +54,31 @@ def unpickle(pickled_string):
     return obj
 
 
-def cancel_job(job_id, connection=None):
+def cancel_job(job_id, connection=None, namespace=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job.fetch(job_id, connection=connection).cancel()
+    Job.fetch(job_id, connection=connection, namespace=namespace).cancel()
 
 
-def requeue_job(job_id, connection=None):
+def requeue_job(job_id, connection=None, namespace=None):
     """Requeues the job with the given job ID.  If no such job exists, just
     remove the job ID from the failed queue, otherwise the job ID should refer
     to a failed job (i.e. it should be on the failed queue).
     """
     from .queue import get_failed_queue
-    fq = get_failed_queue(connection=connection)
+    fq = get_failed_queue(connection=connection, namespace=namespace)
     fq.requeue(job_id)
 
 
-def get_current_job(connection=None):
+def get_current_job(connection=None, namespace=None):
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
     """
     job_id = _job_stack.top
     if job_id is None:
         return None
-    return Job.fetch(job_id, connection=connection)
+    return Job.fetch(job_id, connection=connection, namespace=namespace)
 
 
 class Job(object):
@@ -89,7 +89,7 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None, namespace=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -103,7 +103,7 @@ class Job(object):
         if not isinstance(kwargs, dict):
             raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
 
-        job = cls(connection=connection)
+        job = cls(connection=connection, namespace=namespace)
         if id is not None:
             job.set_id(id)
 
@@ -134,6 +134,7 @@ class Job(object):
         job.timeout = timeout
         job._status = status
         job.meta = meta or {}
+        job.namespace = namespace
 
         # dependency could be job instance or id
         if depends_on is not None:
@@ -189,7 +190,7 @@ class Job(object):
             return None
         if hasattr(self, '_dependency'):
             return self._dependency
-        job = Job.fetch(self._dependency_id, connection=self.connection)
+        job = Job.fetch(self._dependency_id, connection=self.connection, namespace=self.namespace)
         job.refresh()
         self._dependency = job
         return job
@@ -280,21 +281,21 @@ class Job(object):
         self._data = UNEVALUATED
 
     @classmethod
-    def exists(cls, job_id, connection=None):
+    def exists(cls, job_id, connection=None, namespace=None):
         """Returns whether a job hash exists for the given job ID."""
         conn = resolve_connection(connection)
-        return conn.exists(cls.key_for(job_id))
+        return conn.exists(cls.key_for(job_id, namespace))
 
     @classmethod
-    def fetch(cls, id, connection=None):
+    def fetch(cls, id, connection=None, namespace=None):
         """Fetches a persisted job from its corresponding Redis key and
         instantiates it.
         """
-        job = cls(id, connection=connection)
+        job = cls(id, connection=connection, namespace=namespace)
         job.refresh()
         return job
 
-    def __init__(self, id=None, connection=None):
+    def __init__(self, id=None, connection=None, namespace=None):
         self.connection = resolve_connection(connection)
         self._id = id
         self.created_at = utcnow()
@@ -316,6 +317,7 @@ class Job(object):
         self._status = None
         self._dependency_id = None
         self.meta = {}
+        self.namespace = namespace
 
     def __repr__(self):  # noqa
         return 'Job({0!r}, enqueued_at={1!r})'.format(self._id, self.enqueued_at)
@@ -338,24 +340,24 @@ class Job(object):
     id = property(get_id, set_id)
 
     @classmethod
-    def key_for(cls, job_id):
+    def key_for(cls, job_id, namespace=None):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('utf-8')
+        return build_key('rq:job:{0}'.format(job_id), namespace).encode('utf-8')
 
     @classmethod
-    def dependents_key_for(cls, job_id):
+    def dependents_key_for(cls, job_id, namespace=None):
         """The Redis key that is used to store job hash under."""
-        return 'rq:job:{0}:dependents'.format(job_id)
+        return build_key('rq:job:{0}:dependents'.format(job_id), namespace)
 
     @property
     def key(self):
         """The Redis key that is used to store job hash under."""
-        return self.key_for(self.id)
+        return self.key_for(self.id, self.namespace)
 
     @property
     def dependents_key(self):
         """The Redis key that is used to store job hash under."""
-        return self.dependents_key_for(self.id)
+        return self.dependents_key_for(self.id, self.namespace)
 
     @property
     def result(self):
@@ -421,6 +423,7 @@ class Job(object):
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
+        self.namespace = as_text(obj.get('namespace') if obj.get('namespace') else None)
 
     def to_dict(self):
         """Returns a serialization of the current job instance"""
@@ -454,6 +457,8 @@ class Job(object):
             obj['meta'] = dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
+        if self.namespace:
+            obj['namespace'] = self.namespace
 
         return obj
 
@@ -476,9 +481,9 @@ class Job(object):
         from .queue import Queue, get_failed_queue
         pipeline = self.connection._pipeline()
         if self.origin:
-            q = (get_failed_queue(connection=self.connection)
+            q = (get_failed_queue(connection=self.connection, namespace=self.namespace)
                  if self.is_failed
-                 else Queue(name=self.origin, connection=self.connection))
+                 else Queue(name=self.origin, connection=self.connection, namespace=self.namespace))
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
@@ -563,11 +568,11 @@ class Job(object):
         """
         from .registry import DeferredJobRegistry
 
-        registry = DeferredJobRegistry(self.origin, connection=self.connection)
+        registry = DeferredJobRegistry(self.origin, connection=self.connection, namespace=self.namespace)
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
-        connection.sadd(Job.dependents_key_for(self._dependency_id), self.id)
+        connection.sadd(Job.dependents_key_for(self._dependency_id, self.namespace), self.id)
 
     def __str__(self):
         return '<Job {0}: {1}>'.format(self.id, self.description)
