@@ -130,16 +130,16 @@ class DeferredJobRegistry(BaseRegistry):
         super(DeferredJobRegistry, self).__init__(name, connection)
         self.key = 'rq:deferred:{0}'.format(name)
 
-    def cleanup(self):
+    def cleanup(self, timestamp=None):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
         pass
 
 
-def clean_registries(queue):
+def clean_registries(queue, timestamp=None):
     """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name, connection=queue.connection)
-    registry.cleanup()
+    registry.cleanup(timestamp=timestamp)
     registry = StartedJobRegistry(name=queue.name, connection=queue.connection)
-    registry.cleanup()
+    registry.cleanup(timestamp=timestamp)
