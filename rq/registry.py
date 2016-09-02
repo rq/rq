@@ -50,9 +50,9 @@ class BaseRegistry(object):
         return [as_text(job_id) for job_id in
                 self.connection.zrangebyscore(self.key, 0, score)]
 
-    def get_job_ids(self, start=0, end=-1):
+    def get_job_ids(self, start=0, end=-1, timestamp=None):
         """Returns list of all job ids."""
-        self.cleanup()
+        self.cleanup(timestamp=timestamp)
         return [as_text(job_id) for job_id in
                 self.connection.zrange(self.key, start, end)]
 
