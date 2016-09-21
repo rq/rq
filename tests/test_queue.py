@@ -462,6 +462,32 @@ class TestQueue(RQTestCase):
 
         self.assertEqual(q.job_ids, [])
 
+    def test_fetch_job_successful(self):
+        """Fetch a job from a queue."""
+        q = Queue('example')
+        job_orig = q.enqueue(say_hello)
+        job_fetch = q.fetch_job(job_orig.id)
+        self.assertIsNotNone(job_fetch)
+        self.assertEqual(job_orig.id, job_fetch.id)
+        self.assertEqual(job_orig.description, job_fetch.description)
+
+    def test_fetch_job_missing(self):
+        """Fetch a job from a queue which doesn't exist."""
+        q = Queue('example')
+        job = q.fetch_job('123')
+        self.assertIsNone(job)
+
+    def test_fetch_job_different_queue(self):
+        """Fetch a job from a queue which is in a different queue."""
+        q1 = Queue('example1')
+        q2 = Queue('example2')
+        job_orig = q1.enqueue(say_hello)
+        job_fetch = q2.fetch_job(job_orig.id)
+        self.assertIsNone(job_fetch)
+
+        job_fetch = q1.fetch_job(job_orig.id)
+        self.assertIsNotNone(job_fetch)
+
 
 class TestFailedQueue(RQTestCase):
     def test_requeue_job(self):

@@ -107,9 +107,12 @@ class Queue(object):
 
     def fetch_job(self, job_id):
         try:
-            return self.job_class.fetch(job_id, connection=self.connection)
+            job = self.job_class.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             self.remove(job_id)
+        else:
+            if job.origin == self.name:
+                return job
 
     def get_job_ids(self, offset=0, length=-1):
         """Returns a slice of job IDs in the queue."""
