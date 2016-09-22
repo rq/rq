@@ -578,7 +578,7 @@ class TestWorker(RQTestCase):
 
         def new_enqueue_dependents(self, job, *args, **kwargs):
             orig_enqueue_dependents(self, job, *args, **kwargs)
-            if hasattr(Queue, '_add_enqueue') and Queue._add_enqueue.id == job.id:
+            if hasattr(Queue, '_add_enqueue') and Queue._add_enqueue is not None and Queue._add_enqueue.id == job.id:
                 Queue._add_enqueue = None
                 Queue().enqueue_call(say_hello, depends_on=job)
 

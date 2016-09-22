@@ -536,29 +536,23 @@ class Worker(object):
                         # Job completed and its ttl has expired
                         break
                     if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-                        with self.connection._pipeline() as pipeline:
-                            self.handle_job_failure(
-                                job=job,
-                                pipeline=pipeline
-                            )
-                            try:
-                                pipeline.execute()
-                            except Exception:
-                                pass
+                        self.handle_job_failure(
+                            job=job
+                        )
 
-                            #Unhandled failure: move the job to the failed queue
-                            self.log.warning(
-                                'Moving job to {0!r} queue'.format(
-                                    self.failed_queue.name
-                                )
+                        #Unhandled failure: move the job to the failed queue
+                        self.log.warning(
+                            'Moving job to {0!r} queue'.format(
+                                self.failed_queue.name
                             )
-                            self.failed_queue.quarantine(
-                                job,
-                                exc_info=(
-                                    "Work-horse proccess "
-                                    "was terminated unexpectedly"
-                                )
+                        )
+                        self.failed_queue.quarantine(
+                            job,
+                            exc_info=(
+                                "Work-horse proccess "
+                                "was terminated unexpectedly"
                             )
+                        )
                 break
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
@@ -631,8 +625,7 @@ class Worker(object):
     def handle_job_failure(
         self,
         job,
-        started_job_registry=None,
-        pipeline=None
+        started_job_registry=None
     ):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
@@ -640,14 +633,56 @@ class Worker(object):
             3. Setting the workers current job to None
         """
 
-        if started_job_registry is None:
-            started_job_registry = StartedJobRegistry(
-                job.origin,
-                self.connection
-            )
-        job.set_status(JobStatus.FAILED, pipeline=pipeline)
-        started_job_registry.remove(job, pipeline=pipeline)
-        self.set_current_job_id(None, pipeline=pipeline)
+        with self.connection._pipeline() as pipeline:
+            if started_job_registry is None:
+                started_job_registry = StartedJobRegistry(
+                    job.origin,
+                    self.connection
+                )
+            job.set_status(JobStatus.FAILED, pipeline=pipeline)
+            started_job_registry.remove(job, pipeline=pipeline)
+            self.set_current_job_id(None, pipeline=pipeline)
+            try:
+                pipeline.execute()
+            except Exception:
+                # Ensure that custom exception handlers are called
+                # even if Redis is down
+                pass
+
+    def handle_job_success(
+        self,
+        job,
+        queue,
+        started_job_registry
+    ):
+        with self.connection._pipeline() as pipeline:
+            while True:
+                try:
+                    # if dependencies are inserted after enqueue_dependents
+                    # a WatchError is thrown by execute()
+                    pipeline.watch(job.dependents_key)
+                    # enqueue_dependents calls multi() on the pipeline!
+                    queue.enqueue_dependents(job, pipeline=pipeline)
+
+                    self.set_current_job_id(None, pipeline=pipeline)
+
+                    result_ttl = job.get_result_ttl(self.default_result_ttl)
+                    if result_ttl != 0:
+                        job.set_status(JobStatus.FINISHED, pipeline=pipeline)
+                        job.save(pipeline=pipeline)
+
+                        finished_job_registry = FinishedJobRegistry(job.origin,
+                                                                    self.connection)
+                        finished_job_registry.add(job, result_ttl, pipeline)
+
+                    job.cleanup(result_ttl, pipeline=pipeline,
+                                remove_from_queue=False)
+                    started_job_registry.remove(job, pipeline=pipeline)
+
+                    pipeline.execute()
+                    break
+                except WatchError:
+                    continue
 
     def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
@@ -655,74 +690,42 @@ class Worker(object):
         """
         self.prepare_job_execution(job)
 
-        with self.connection._pipeline() as pipeline:
+        push_connection(self.connection)
 
-            push_connection(self.connection)
+        started_job_registry = StartedJobRegistry(job.origin, self.connection)
 
-            started_job_registry = StartedJobRegistry(job.origin, self.connection)
+        try:
+            with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
+                rv = job.perform()
 
-            try:
-                with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
-                    rv = job.perform()
+            job.ended_at = utcnow()
 
-                # Pickle the result in the same try-except block since we need
-                # to use the same exc handling when pickling fails
-                job._result = rv
+            # Pickle the result in the same try-except block since we need
+            # to use the same exc handling when pickling fails
+            job._result = rv
 
-                result_ttl = job.get_result_ttl(self.default_result_ttl)
-                if result_ttl != 0:
-                    job.ended_at = utcnow()
+            self.handle_job_success(
+                job=job,
+                queue=queue,
+                started_job_registry=started_job_registry
+            )
+        except Exception:
+            self.handle_job_failure(
+                job=job,
+                started_job_registry=started_job_registry
+            )
+            self.handle_exception(job, *sys.exc_info())
+            return False
 
-                while True:
-                    try:
-                        # if dependencies are inserted after enqueue_dependents
-                        # a WatchError is thrown by execute()
-                        pipeline.watch(job.dependents_key)
-                        # enqueue_dependents calls multi() on the pipeline!
-                        queue.enqueue_dependents(job, pipeline=pipeline)
-
-                        self.set_current_job_id(None, pipeline=pipeline)
-
-                        if result_ttl != 0:
-                            job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                            job.save(pipeline=pipeline)
-
-                            finished_job_registry = FinishedJobRegistry(job.origin,
-                                                                        self.connection)
-                            finished_job_registry.add(job, result_ttl, pipeline)
-
-                        job.cleanup(result_ttl, pipeline=pipeline,
-                                    remove_from_queue=False)
-                        started_job_registry.remove(job, pipeline=pipeline)
-
-                        pipeline.execute()
-                        break
-                    except WatchError:
-                        continue
-
-            except Exception:
-                self.handle_job_failure(
-                    job=job,
-                    started_job_registry=started_job_registry,
-                    pipeline=pipeline
-                )
-                try:
-                    pipeline.execute()
-                except Exception:
-                    # Ensure that custom exception handlers are called
-                    # even if Redis is down
-                    pass
-                self.handle_exception(job, *sys.exc_info())
-                return False
-
-            finally:
-                pop_connection()
+        finally:
+            pop_connection()
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv is not None:
             log_result = "{0!r}".format(as_text(text_type(rv)))
             self.log.debug('Result: {0}'.format(yellow(log_result)))
 
+        result_ttl = job.get_result_ttl(self.default_result_ttl)
         if result_ttl == 0:
             self.log.info('Result discarded immediately')
         elif result_ttl > 0:
