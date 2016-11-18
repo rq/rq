@@ -55,6 +55,7 @@ def iterable(x):
 def compact(l):
     return [x for x in l if x is not None]
 
+
 _signames = dict((getattr(signal, signame), signame)
                  for signame in dir(signal)
                  if signame.startswith('SIG') and '_' not in signame)
@@ -544,7 +545,7 @@ class Worker(object):
                             except Exception:
                                 pass
 
-                            #Unhandled failure: move the job to the failed queue
+                            # Unhandled failure: move the job to the failed queue
                             self.log.warning(
                                 'Moving job to {0!r} queue'.format(
                                     self.failed_queue.name
@@ -826,7 +827,7 @@ class HerokuWorker(Worker):
             self.request_force_stop_sigrtmin(signum, frame)
         else:
             self.log.warning('Imminent shutdown, raising ShutDownImminentException in %d seconds',
-                        self.imminent_shutdown_delay)
+                             self.imminent_shutdown_delay)
             signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
             signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
             signal.alarm(self.imminent_shutdown_delay)

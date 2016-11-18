@@ -577,6 +577,7 @@ def kill_worker(pid, double_kill):
         time.sleep(0.5)
         os.kill(pid, signal.SIGTERM)
 
+
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
     os.kill(pid, signal.SIGKILL)
@@ -677,6 +678,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertEqual(job_status, JobStatus.FAILED)
         self.assertEqual(failed_q.count, 1)
         self.assertEqual(fooq.count, 0)
+
 
 def schedule_access_self():
     q = Queue('default', connection=get_current_connection())

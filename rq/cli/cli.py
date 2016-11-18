@@ -153,8 +153,8 @@ def info(url, config, path, interval, raw, only_queues, only_workers, by_queue, 
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
-def worker(url, config, burst, name, worker_class, job_class, queue_class, connection_class, path, results_ttl, worker_ttl,
-           verbose, quiet, sentry_dsn, exception_handler, pid, queues):
+def worker(url, config, burst, name, worker_class, job_class, queue_class, connection_class, path, results_ttl,
+           worker_ttl, verbose, quiet, sentry_dsn, exception_handler, pid, queues):
     """Starts an RQ worker."""
 
     if path:
