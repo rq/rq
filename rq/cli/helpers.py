@@ -26,10 +26,10 @@ def read_config_file(module):
                  if k.upper() == k])
 
 
-def get_redis_from_config(settings):
+def get_redis_from_config(settings, connection_class=StrictRedis):
     """Returns a StrictRedis instance from a dictionary of settings."""
     if settings.get('REDIS_URL') is not None:
-        return StrictRedis.from_url(settings['REDIS_URL'])
+        return connection_class.from_url(settings['REDIS_URL'])
 
     kwargs = {
         'host': settings.get('REDIS_HOST', 'localhost'),
@@ -52,7 +52,7 @@ def get_redis_from_config(settings):
         if not version_info >= (2, 10):
             raise RuntimeError('Using SSL requires a redis-py version >= 2.10')
         kwargs['ssl'] = use_ssl
-    return StrictRedis(**kwargs)
+    return connection_class(**kwargs)
 
 
 def pad(s, pad_to_length):

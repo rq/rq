@@ -579,4 +579,5 @@ class Job(object):
     def __hash__(self):
         return hash(self.id)
 
+
 _job_stack = LocalStack()

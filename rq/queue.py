@@ -9,8 +9,8 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import (DequeueTimeout, InvalidJobOperationError,
-                         NoSuchJobError, UnpickleError)
+from .exceptions import (DequeueTimeout, InvalidJobDependency,
+                         InvalidJobOperationError, NoSuchJobError, UnpickleError)
 from .job import Job, JobStatus
 from .utils import import_attribute, utcnow
 
@@ -107,9 +107,12 @@ class Queue(object):
 
     def fetch_job(self, job_id):
         try:
-            return self.job_class.fetch(job_id, connection=self.connection)
+            job = self.job_class.fetch(job_id, connection=self.connection)
         except NoSuchJobError:
             self.remove(job_id)
+        else:
+            if job.origin == self.name:
+                return job
 
     def get_job_ids(self, offset=0, length=-1):
         """Returns a slice of job IDs in the queue."""
@@ -202,6 +205,13 @@ class Queue(object):
                 while True:
                     try:
                         pipe.watch(depends_on.key)
+
+                        # If the dependency does not exist, we raise an
+                        # exception. So the caller is able to avoid an orphaned
+                        # job.
+                        if not self.job_class.exists(depends_on.id):
+                            raise InvalidJobDependency('Job {0} does not exist'.format(depends_on.id))
+
                         if depends_on.get_status() != JobStatus.FINISHED:
                             pipe.multi()
                             job.set_status(JobStatus.DEFERRED)

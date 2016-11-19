@@ -7,7 +7,7 @@ from tests.fixtures import (div_by_zero, echo, Number, say_hello,
                             some_calculation)
 
 from rq import get_failed_queue, Queue
-from rq.exceptions import InvalidJobOperationError
+from rq.exceptions import InvalidJobDependency, InvalidJobOperationError
 from rq.job import Job, JobStatus
 from rq.registry import DeferredJobRegistry
 from rq.worker import Worker
@@ -401,6 +401,7 @@ class TestQueue(RQTestCase):
         """Jobs are enqueued only when their dependencies are finished."""
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
+        parent_job.save()
         q = Queue()
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         self.assertEqual(q.job_ids, [])
@@ -417,6 +418,7 @@ class TestQueue(RQTestCase):
     def test_enqueue_job_with_dependency_by_id(self):
         """Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello)
+        parent_job.save()
 
         q = Queue()
         q.enqueue_call(say_hello, depends_on=parent_job.id)
@@ -433,6 +435,7 @@ class TestQueue(RQTestCase):
         """Jobs remember their timeout when enqueued as a dependency."""
         # Job with unfinished dependency is not immediately enqueued
         parent_job = Job.create(func=say_hello)
+        parent_job.save()
         q = Queue()
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=123)
         self.assertEqual(q.job_ids, [])
@@ -444,6 +447,46 @@ class TestQueue(RQTestCase):
         job = q.enqueue_call(say_hello, depends_on=parent_job, timeout=123)
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, 123)
+
+    def test_enqueue_job_with_invalid_dependency(self):
+        """Enqueuing a job fails, if the dependency does not exist at all."""
+        parent_job = Job.create(func=say_hello)
+        # without save() the job is not visible to others
+
+        q = Queue()
+        with self.assertRaises(InvalidJobDependency):
+            q.enqueue_call(say_hello, depends_on=parent_job)
+
+        with self.assertRaises(InvalidJobDependency):
+            q.enqueue_call(say_hello, depends_on=parent_job.id)
+
+        self.assertEqual(q.job_ids, [])
+
+    def test_fetch_job_successful(self):
+        """Fetch a job from a queue."""
+        q = Queue('example')
+        job_orig = q.enqueue(say_hello)
+        job_fetch = q.fetch_job(job_orig.id)
+        self.assertIsNotNone(job_fetch)
+        self.assertEqual(job_orig.id, job_fetch.id)
+        self.assertEqual(job_orig.description, job_fetch.description)
+
+    def test_fetch_job_missing(self):
+        """Fetch a job from a queue which doesn't exist."""
+        q = Queue('example')
+        job = q.fetch_job('123')
+        self.assertIsNone(job)
+
+    def test_fetch_job_different_queue(self):
+        """Fetch a job from a queue which is in a different queue."""
+        q1 = Queue('example1')
+        q2 = Queue('example2')
+        job_orig = q1.enqueue(say_hello)
+        job_fetch = q2.fetch_job(job_orig.id)
+        self.assertIsNone(job_fetch)
+
+        job_fetch = q1.fetch_job(job_orig.id)
+        self.assertIsNotNone(job_fetch)
 
 
 class TestFailedQueue(RQTestCase):

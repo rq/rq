@@ -1,6 +1,16 @@
 ### 0.7.0
 
-- ...
+- Better support for Heroku workers (#584, #715)
+- Support for connecting using a custom connection class (#741)
+- Fix: connection stack in default worker (#479, #641)
+- Fix: `fetch_job` now checks that a job requested actually comes from the
+  intended queue (#728, #733)
+- Fix: Properly raise exception if a job dependency does not exist (#747)
+- Fix: Job status not updated when horse dies unexpectedly (#710)
+- Fix: `request_force_stop_sigrtmin` failing for Python 3 (#727)
+- Fix `Job.cancel()` method on failed queue (#707)
+- Python 3.5 compatibility improvements (#729)
+- Improved signal name lookup (#722)
 
 
 ### 0.6.0
