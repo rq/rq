@@ -290,11 +290,11 @@ class Queue(object):
             job.timeout = self.DEFAULT_TIMEOUT
         job.save(pipeline=pipe)
 
+        if self._async:
+            self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
+
         if pipeline is None:
             pipe.execute()
-
-        if self._async:
-            self.push_job_id(job.id, at_front=at_front)
 
         return job
 
