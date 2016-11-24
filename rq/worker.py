@@ -31,9 +31,9 @@ from .utils import (ensure_list, enum, import_attribute, make_colorizer,
 from .version import VERSION
 
 try:
-    from procname import setprocname
+    from setproctitle import setproctitle
 except ImportError:
-    def setprocname(*args, **kwargs):  # noqa
+    def setproctitle(*args, **kwargs):  # noqa
         pass
 
 green = make_colorizer('darkgreen')
@@ -240,7 +240,7 @@ class Worker(object):
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname('rq: {0}'.format(message))
+        setproctitle('rq: {0}'.format(message))
 
     def register_birth(self):
         """Registers its own birth."""
@@ -664,6 +664,7 @@ class Worker(object):
                 with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                     rv = job.perform()
 
+                job.refresh()
                 # Pickle the result in the same try-except block since we need
                 # to use the same exc handling when pickling fails
                 job._result = rv
