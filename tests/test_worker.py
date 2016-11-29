@@ -10,6 +10,9 @@ import signal
 import time
 from multiprocessing import Process
 import subprocess
+import sys
+
+import pytest
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
@@ -712,6 +715,7 @@ class TestWorkerSubprocess(RQTestCase):
         assert q.count == 0
 
 
+@pytest.mark.skipif(sys.platform == 'darwin', reason='requires Linux signals')
 class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def setUp(self):
         super(HerokuWorkerShutdownTestCase, self).setUp()
