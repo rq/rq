@@ -524,6 +524,18 @@ class TestFailedQueue(RQTestCase):
 
         self.assertEqual(job.timeout, 200)
 
+    def test_fetching_failed_job(self):
+        job = Job.create(func=div_by_zero, args=(1, 2, 3), origin='fake')
+        job.set_status(JobStatus.FAILED)
+        job.save()
+        failed_queue = get_failed_queue()
+        failed_queue.quarantine(job, Exception('Some fake error'))
+
+        job = failed_queue.fetch_job(job.id)
+
+        self.assertIsNotNone(job)
+        self.assertTrue(job.is_failed)
+
     def test_requeueing_preserves_timeout(self):
         """Requeueing preserves job timeout."""
         job = Job.create(func=div_by_zero, args=(1, 2, 3))
