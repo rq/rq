@@ -111,7 +111,7 @@ class Queue(object):
         except NoSuchJobError:
             self.remove(job_id)
         else:
-            if job.origin == self.name:
+            if self == get_failed_queue(connection=self.connection) or job.origin == self.name:
                 return job
 
     def get_job_ids(self, offset=0, length=-1):
