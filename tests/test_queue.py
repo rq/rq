@@ -505,6 +505,27 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(get_failed_queue().count, 0)
         self.assertEqual(Queue('fake').count, 1)
 
+    def test_get_job_on_failed_queue(self):
+        default_queue = Queue()
+        failed_queue = get_failed_queue()
+
+        job = default_queue.enqueue(div_by_zero, args=(1, 2, 3))
+
+        job_on_default_queue = default_queue.fetch_job(job.id)
+        job_on_failed_queue = failed_queue.fetch_job(job.id)
+
+        self.assertIsNotNone(job_on_default_queue)
+        self.assertIsNone(job_on_failed_queue)
+
+        job.set_status(JobStatus.FAILED)
+
+        job_on_default_queue = default_queue.fetch_job(job.id)
+        job_on_failed_queue = failed_queue.fetch_job(job.id)
+
+        self.assertIsNotNone(job_on_default_queue)
+        self.assertIsNotNone(job_on_failed_queue)
+        self.assertTrue(job_on_default_queue.is_failed)
+
     def test_requeue_nonfailed_job_fails(self):
         """Requeueing non-failed jobs raises error."""
         q = Queue()
