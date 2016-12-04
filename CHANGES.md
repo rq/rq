@@ -1,3 +1,10 @@
+### 0.7.1
+
+- Fixes a bug that prevents fetching jobs from `FailedQueue` (#765). Thanks @jsurloppe!
+- Fixes race condition when enqueueing jobs with dependency (#742). Thanks @th3hamm0r!
+- Skip a test that requires Linux signals on MacOS (#763). Thanks @jezdez!
+- `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf! 
+
 ### 0.7.0
 
 - Better support for Heroku workers (#584, #715)
