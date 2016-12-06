@@ -206,10 +206,10 @@ class Queue(object):
                     try:
                         pipe.watch(depends_on.key)
 
-                        # If the dependency does not exist, we raise an
-                        # exception. So the caller is able to avoid an orphaned
-                        # job.
-                        if not self.job_class.exists(depends_on.id):
+                        # If the dependency does not exist, raise an
+                        # exception to avoid creating an orphaned job.
+                        if not self.job_class.exists(depends_on.id,
+                                                     self.connection):
                             raise InvalidJobDependency('Job {0} does not exist'.format(depends_on.id))
 
                         if depends_on.get_status() != JobStatus.FINISHED:
