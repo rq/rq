@@ -150,6 +150,7 @@ class Queue(object):
 
         if pipeline is not None:
             pipeline.lrem(self.key, 1, job_id)
+            return
 
         return self.connection._lrem(self.key, 1, job_id)
 
