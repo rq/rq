@@ -161,19 +161,20 @@ print job.result
 ## Bypassing workers
 
 For testing purposes, you can enqueue jobs without delegating the actual
-execution to a worker (available since version 0.3.1).  To do this, pass the
+execution to a worker (available since version 0.3.1). To do this, pass the
 `async=False` argument into the Queue constructor:
 
 {% highlight pycon %}
->>> q = Queue('low', async=False)
+>>> q = Queue('low', async=False, connection=my_redis_conn)
 >>> job = q.enqueue(fib, 8)
 >>> job.result
 21
 {% endhighlight %}
 
 The above code runs without an active worker and executes `fib(8)`
-synchronously within the same process.  You may know this behaviour from Celery
-as `ALWAYS_EAGER`.
+synchronously within the same process. You may know this behaviour from Celery
+as `ALWAYS_EAGER`. Note, however, that you still need a working connection to
+a redis instance for storing states related to job execution and completion.
 
 
 ## Job dependencies
@@ -182,7 +183,7 @@ New in RQ 0.4.0 is the ability to chain the execution of multiple jobs.
 To execute a job that depends on another job, use the `depends_on` argument:
 
 {% highlight python %}
-q = Queue('low', async=False)
+q = Queue('low', connection=my_redis_conn)
 report_job = q.enqueue(generate_report)
 q.enqueue(send_report, depends_on=report_job)
 {% endhighlight %}
