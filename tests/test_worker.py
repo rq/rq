@@ -833,7 +833,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w._horse_pid = p.pid
         w.handle_warm_shutdown_request()
         p.join(2)
-        self.assertEqual(p.exitcode, -34)
+        self.assertEqual(p.exitcode, -9)
         self.assertFalse(os.path.exists(path))
 
     def test_handle_shutdown_request_no_horse(self):
@@ -842,5 +842,4 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo')
 
         w._horse_pid = 19999
-        with self.assertRaises(OSError):
-            w.handle_warm_shutdown_request()
+        w.handle_warm_shutdown_request()
