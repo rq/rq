@@ -705,6 +705,7 @@ class Worker(object):
         try:
             with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                 rv = job.perform()
+            job.refresh()
 
             job.ended_at = utcnow()
 
@@ -718,6 +719,7 @@ class Worker(object):
                 started_job_registry=started_job_registry
             )
         except Exception:
+            job.refresh()
             self.handle_job_failure(
                 job=job,
                 started_job_registry=started_job_registry
