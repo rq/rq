@@ -67,6 +67,13 @@ def modify_self(meta):
     j.save()
 
 
+def modify_self_and_error(meta):
+    j = get_current_job()
+    j.meta.update(meta)
+    j.save()
+    return 1 / 0
+
+
 def echo(*args, **kwargs):
     return (args, kwargs)
 
