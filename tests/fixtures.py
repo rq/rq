@@ -61,6 +61,12 @@ def access_self():
     assert get_current_job() is not None
 
 
+def modify_self(meta):
+    j = get_current_job()
+    j.meta.update(meta)
+    j.save()
+
+
 def echo(*args, **kwargs):
     return (args, kwargs)
 

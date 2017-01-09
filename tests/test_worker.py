@@ -19,7 +19,8 @@ import mock
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
-                            run_dummy_heroku_worker, access_self)
+                            run_dummy_heroku_worker, access_self,
+                            modify_self)
 from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
@@ -605,6 +606,25 @@ class TestWorker(RQTestCase):
             #   which was enqueued before the "rollback" was executed twice.
             #   So before that fix the call count was 4 instead of 3
             self.assertEqual(mocked.call_count, 3)
+
+    def test_self_modification_persistence(self):
+        """Make sure that any meta modification done by
+        the job itself persists completely through the
+        queue/worker/job stack."""
+        q = Queue()
+        # Also make sure that previously existing metadata
+        # persists properly
+        job = q.enqueue(modify_self, meta={'foo': 'bar', 'baz': 42},
+                        args=[{'baz': 10, 'newinfo': 'waka'}])
+
+        w = Worker([q])
+        w.work(burst=True)
+
+        job_check = Job.fetch(job.id)
+        self.assertEqual(set(job_check.meta.keys()), {'foo', 'baz', 'newinfo'})
+        self.assertEqual(job_check.meta['foo'], 'bar')
+        self.assertEqual(job_check.meta['baz'], 10)
+        self.assertEqual(job_check.meta['newinfo'], 'waka')
 
 
 def kill_worker(pid, double_kill):
