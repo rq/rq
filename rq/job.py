@@ -498,6 +498,8 @@ class Job(object):
         _job_stack.push(self.id)
         try:
             self._result = self.func(*self.args, **self.kwargs)
+            if self.kwargs.get("pubsub") == "true":
+                self.connection.publish(self.id, self._result)
         finally:
             assert self.id == _job_stack.pop()
         return self._result

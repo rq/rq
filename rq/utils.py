@@ -63,7 +63,7 @@ class _Colorizer(object):
         if self.notty:
             return text
         else:
-            return self.codes[color_key] + text + self.codes["reset"]
+            return self.codes[color_key] + str(text) + self.codes["reset"]
 
     def ansiformat(self, attr, text):
         """
