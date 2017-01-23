@@ -669,6 +669,8 @@ class Worker(object):
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
+                        # See issue #784. Avoid losing job information.
+                        job.refresh()
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         job.save(pipeline=pipeline)
 
