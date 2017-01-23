@@ -12,9 +12,11 @@ class BaseRegistry(object):
     Each job is stored as a key in the registry, scored by expiration time
     (unix timestamp).
     """
+    key_template = 'rq:registry:{0}'
 
     def __init__(self, name='default', connection=None):
         self.name = name
+        self.key = self.key_template.format(name)
         self.connection = resolve_connection(connection)
 
     def __len__(self):
@@ -66,10 +68,7 @@ class StartedJobRegistry(BaseRegistry):
     Jobs are added to registry right before they are executed and removed
     right after completion (success or failure).
     """
-
-    def __init__(self, name='default', connection=None):
-        super(StartedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:wip:{0}'.format(name)
+    key_template = 'rq:wip:{0}'
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedQueue.
@@ -105,10 +104,7 @@ class FinishedJobRegistry(BaseRegistry):
     Registry of jobs that have been completed. Jobs are added to this
     registry after they have successfully completed for monitoring purposes.
     """
-
-    def __init__(self, name='default', connection=None):
-        super(FinishedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:finished:{0}'.format(name)
+    key_template = 'rq:finished:{0}'
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -125,10 +121,7 @@ class DeferredJobRegistry(BaseRegistry):
     """
     Registry of deferred jobs (waiting for another job to finish).
     """
-
-    def __init__(self, name='default', connection=None):
-        super(DeferredJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:deferred:{0}'.format(name)
+    key_template = 'rq:deferred:{0}'
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is

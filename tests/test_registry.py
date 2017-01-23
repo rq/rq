@@ -19,6 +19,9 @@ class TestRegistry(RQTestCase):
         super(TestRegistry, self).setUp()
         self.registry = StartedJobRegistry(connection=self.testconn)
 
+    def test_key(self):
+        self.assertEqual(self.registry.key, 'rq:wip:default')
+
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
         timestamp = current_timestamp()
@@ -129,6 +132,9 @@ class TestFinishedJobRegistry(RQTestCase):
         super(TestFinishedJobRegistry, self).setUp()
         self.registry = FinishedJobRegistry(connection=self.testconn)
 
+    def test_key(self):
+        self.assertEqual(self.registry.key, 'rq:finished:default')
+
     def test_cleanup(self):
         """Finished job registry removes expired jobs."""
         timestamp = current_timestamp()
@@ -164,6 +170,9 @@ class TestDeferredRegistry(RQTestCase):
     def setUp(self):
         super(TestDeferredRegistry, self).setUp()
         self.registry = DeferredJobRegistry(connection=self.testconn)
+
+    def test_key(self):
+        self.assertEqual(self.registry.key, 'rq:deferred:default')
 
     def test_add(self):
         """Adding a job to DeferredJobsRegistry."""
