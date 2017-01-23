@@ -28,8 +28,8 @@ from .queue import Queue, get_failed_queue
 from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
-from .utils import (ensure_list, enum, import_attribute, make_colorizer,
-                    utcformat, utcnow, utcparse)
+from .utils import (backend_class, ensure_list, enum,
+                    make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 
 try:
@@ -93,18 +93,22 @@ class Worker(object):
     job_class = Job
 
     @classmethod
-    def all(cls, connection=None):
+    def all(cls, connection=None, job_class=None, queue_class=None):
         """Returns an iterable of all Workers.
         """
         if connection is None:
             connection = get_current_connection()
         reported_working = connection.smembers(cls.redis_workers_keys)
-        workers = [cls.find_by_key(as_text(key), connection)
+        workers = [cls.find_by_key(as_text(key),
+                                   connection=connection,
+                                   job_class=job_class,
+                                   queue_class=queue_class)
                    for key in reported_working]
         return compact(workers)
 
     @classmethod
-    def find_by_key(cls, worker_key, connection=None):
+    def find_by_key(cls, worker_key, connection=None, job_class=None,
+                    queue_class=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -120,12 +124,18 @@ class Worker(object):
             return None
 
         name = worker_key[len(prefix):]
-        worker = cls([], name, connection=connection)
+        worker = cls([],
+                     name,
+                     connection=connection,
+                     job_class=job_class,
+                     queue_class=queue_class)
         queues = as_text(connection.hget(worker.key, 'queues'))
         worker._state = as_text(connection.hget(worker.key, 'state') or '?')
         worker._job_id = connection.hget(worker.key, 'current_job') or None
         if queues:
-            worker.queues = [cls.queue_class(queue, connection=connection)
+            worker.queues = [worker.queue_class(queue,
+                                                connection=connection,
+                                                job_class=job_class)
                              for queue in queues.split(',')]
         return worker
 
@@ -137,17 +147,12 @@ class Worker(object):
             connection = get_current_connection()
         self.connection = connection
 
-        if job_class is not None:
-            if isinstance(job_class, string_types):
-                job_class = import_attribute(job_class)
-            self.job_class = job_class
+        self.job_class = backend_class(self, 'job_class', override=job_class)
+        self.queue_class = backend_class(self, 'queue_class', override=queue_class)
 
-        if queue_class is not None:
-            if isinstance(queue_class, string_types):
-                queue_class = import_attribute(queue_class)
-            self.queue_class = queue_class
-
-        queues = [self.queue_class(name=q, connection=connection)
+        queues = [self.queue_class(name=q,
+                                   connection=connection,
+                                   job_class=self.job_class)
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
         self._name = name
@@ -168,7 +173,8 @@ class Worker(object):
         self._horse_pid = 0
         self._stop_requested = False
         self.log = logger
-        self.failed_queue = get_failed_queue(connection=self.connection)
+        self.failed_queue = get_failed_queue(connection=self.connection,
+                                             job_class=self.job_class)
         self.last_cleaned_at = None
 
         # By default, push the "move-to-failed-queue" exception handler onto
@@ -488,7 +494,8 @@ class Worker(object):
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
-                                                      connection=self.connection)
+                                                      connection=self.connection,
+                                                      job_class=self.job_class)
                 if result is not None:
                     job, queue = result
                     self.log.info('{0}: {1} ({2})'.format(green(queue.name),
@@ -544,9 +551,7 @@ class Worker(object):
                         # Job completed and its ttl has expired
                         break
                     if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-                        self.handle_job_failure(
-                            job=job
-                        )
+                        self.handle_job_failure(job=job)
 
                         # Unhandled failure: move the job to the failed queue
                         self.log.warning(
@@ -620,7 +625,9 @@ class Worker(object):
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.heartbeat(timeout, pipeline=pipeline)
-            registry = StartedJobRegistry(job.origin, self.connection)
+            registry = StartedJobRegistry(job.origin,
+                                          self.connection,
+                                          job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
             self.connection._hset(job.key, 'started_at',
@@ -630,11 +637,7 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_failure(
-        self,
-        job,
-        started_job_registry=None
-    ):
+    def handle_job_failure(self, job, started_job_registry=None):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
             2. Removing the job from the started_job_registry
@@ -643,10 +646,9 @@ class Worker(object):
 
         with self.connection._pipeline() as pipeline:
             if started_job_registry is None:
-                started_job_registry = StartedJobRegistry(
-                    job.origin,
-                    self.connection
-                )
+                started_job_registry = StartedJobRegistry(job.origin,
+                                                          self.connection,
+                                                          job_class=self.job_class)
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
@@ -657,12 +659,7 @@ class Worker(object):
                 # even if Redis is down
                 pass
 
-    def handle_job_success(
-        self,
-        job,
-        queue,
-        started_job_registry
-    ):
+    def handle_job_success(self, job, queue, started_job_registry):
         with self.connection._pipeline() as pipeline:
             while True:
                 try:
@@ -680,7 +677,8 @@ class Worker(object):
                         job.save(pipeline=pipeline)
 
                         finished_job_registry = FinishedJobRegistry(job.origin,
-                                                                    self.connection)
+                                                                    self.connection,
+                                                                    job_class=self.job_class)
                         finished_job_registry.add(job, result_ttl, pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline,
@@ -700,7 +698,9 @@ class Worker(object):
 
         push_connection(self.connection)
 
-        started_job_registry = StartedJobRegistry(job.origin, self.connection)
+        started_job_registry = StartedJobRegistry(job.origin,
+                                                  self.connection,
+                                                  job_class=self.job_class)
 
         try:
             with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
@@ -712,16 +712,12 @@ class Worker(object):
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            self.handle_job_success(
-                job=job,
-                queue=queue,
-                started_job_registry=started_job_registry
-            )
+            self.handle_job_success(job=job,
+                                    queue=queue,
+                                    started_job_registry=started_job_registry)
         except Exception:
-            self.handle_job_failure(
-                job=job,
-                started_job_registry=started_job_registry
-            )
+            self.handle_job_failure(job=job,
+                                    started_job_registry=started_job_registry)
             self.handle_exception(job, *sys.exc_info())
             return False
 

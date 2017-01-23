@@ -626,7 +626,7 @@ class TimeoutTestCase:
     def setUp(self):
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
-        self.killtimeout = 10
+        self.killtimeout = 15
         signal.signal(signal.SIGALRM, self._timeout)
         signal.alarm(self.killtimeout)
 
