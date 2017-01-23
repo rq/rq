@@ -18,11 +18,11 @@ from redis import WatchError
 
 from rq.compat import as_text, string_types, text_type
 
-from .compat import PY2
+from .compat import PY2, decode_redis_hash
 from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
 from .exceptions import DequeueTimeout, ShutDownImminentException
-from .job import Job, JobStatus
+from .job import Job, JobStatus, unpickle
 from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
 from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
@@ -669,9 +669,11 @@ class Worker(object):
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        # See issue #784. Avoid losing job information.
-                        job.refresh()
+                        # See issue #784. Avoid losing job meta information.
+                        obj = decode_redis_hash(self.connection.hgetall(job.key))
+                        meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
+                        job.meta = meta
                         job.save(pipeline=pipeline)
 
                         finished_job_registry = FinishedJobRegistry(job.origin,

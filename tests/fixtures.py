@@ -27,6 +27,13 @@ def say_hello(name=None):
     return 'Hi there, %s!' % (name,)
 
 
+def update_meta():
+    job = get_current_job()
+    job.meta['progress'] = 'Some progress was made'
+    job.save()
+    return 'update_meta was successful'
+
+
 def do_nothing():
     """The best job in the world."""
     pass

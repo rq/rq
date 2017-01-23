@@ -122,6 +122,20 @@ class TestWorker(RQTestCase):
         )
         self.assertEqual(job.result, 'Hi there, Frank!')
 
+    def test_work_meta_preserved(self):
+        """Issue #784: Work meta information not lost"""
+        q = Queue('foo')
+        w = Worker([q])
+        meta = {'progress': 'Queued'}
+        job = q.enqueue('tests.fixtures.update_meta', meta=meta)
+        self.assertEqual(
+            w.work(burst=True), True,
+            'Expected at least some work done.'
+        )
+        job.refresh()
+        self.assertEqual(job.result, 'update_meta was successful')
+        self.assertEqual(job.meta['progress'], 'Some progress was made')
+
     def test_job_times(self):
         """job times are set correctly."""
         q = Queue('foo')
