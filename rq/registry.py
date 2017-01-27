@@ -89,7 +89,7 @@ class StartedJobRegistry(BaseRegistry):
                     try:
                         job = Job.fetch(job_id, connection=self.connection)
                         job.set_status(JobStatus.FAILED)
-                        job.save(pipeline=pipeline)
+                        job.save(pipeline=pipeline, include_meta=False)
                         failed_queue.push_job_id(job_id, pipeline=pipeline)
                     except NoSuchJobError:
                         pass

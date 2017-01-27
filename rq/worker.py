@@ -677,7 +677,8 @@ class Worker(object):
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        job.save(pipeline=pipeline)
+                        # Don't clobber the user's meta dictionary!
+                        job.save(pipeline=pipeline, include_meta=False)
 
                         finished_job_registry = FinishedJobRegistry(job.origin,
                                                                     self.connection)
@@ -705,7 +706,6 @@ class Worker(object):
         try:
             with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                 rv = job.perform()
-            job.refresh()
 
             job.ended_at = utcnow()
 
@@ -719,7 +719,6 @@ class Worker(object):
                 started_job_registry=started_job_registry
             )
         except Exception:
-            job.refresh()
             self.handle_job_failure(
                 job=job,
                 started_job_registry=started_job_registry

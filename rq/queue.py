@@ -229,7 +229,7 @@ class Queue(object):
         if not self._async:
             job.perform()
             job.set_status(JobStatus.FINISHED)
-            job.save()
+            job.save(include_meta=False)
             job.cleanup(DEFAULT_RESULT_TTL)
 
         return job
@@ -474,7 +474,7 @@ class FailedQueue(Queue):
 
             job.ended_at = utcnow()
             job.exc_info = exc_info
-            job.save(pipeline=pipeline)
+            job.save(pipeline=pipeline, include_meta=False)
 
             self.push_job_id(job.id, pipeline=pipeline)
             pipeline.execute()
