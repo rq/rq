@@ -156,6 +156,26 @@ class TestJob(RQTestCase):
                            "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
                            '2012-02-07T22:13:24Z')
+        self.testconn.hset('rq:job:some_id', 'cls',
+                           dumps(Job))
+
+        # Fetch returns a job
+        job = Job.fetch('some_id')
+        self.assertEqual(job.id, 'some_id')
+        self.assertEqual(job.func_name, 'tests.fixtures.some_calculation')
+        self.assertIsNone(job.instance)
+        self.assertEqual(job.args, (3, 4))
+        self.assertEqual(job.kwargs, dict(z=2))
+        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
+
+    def test_fetch_defaults_to_Job_class_when_cls_is_missing(self):
+        """Fetching jobs."""
+        # Prepare test
+        self.testconn.hset('rq:job:some_id', 'data',
+                           "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
+        self.testconn.hset('rq:job:some_id', 'created_at',
+                           '2012-02-07T22:13:24Z')
+        # don't set 'cls', as compared to test_fetch()
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -186,7 +206,7 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description'])
+            [b'cls', b'created_at', b'data', b'description'])
 
     def test_persistence_of_parent_job(self):
         """Storing jobs with parent job, either instance or key."""
