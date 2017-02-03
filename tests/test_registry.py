@@ -13,11 +13,22 @@ from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
 
+class CustomJob(Job):
+    """A custom job class just to test it"""
+
+
 class TestRegistry(RQTestCase):
 
     def setUp(self):
         super(TestRegistry, self).setUp()
         self.registry = StartedJobRegistry(connection=self.testconn)
+
+    def test_key(self):
+        self.assertEqual(self.registry.key, 'rq:wip:default')
+
+    def test_custom_job_class(self):
+        registry = StartedJobRegistry(job_class=CustomJob)
+        self.assertFalse(registry.job_class == self.registry.job_class)
 
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
@@ -83,12 +94,15 @@ class TestRegistry(RQTestCase):
         worker = Worker([queue])
 
         job = queue.enqueue(say_hello)
+        self.assertTrue(job.is_queued)
 
         worker.prepare_job_execution(job)
         self.assertIn(job.id, registry.get_job_ids())
+        self.assertTrue(job.is_started)
 
         worker.perform_job(job, queue)
         self.assertNotIn(job.id, registry.get_job_ids())
+        self.assertTrue(job.is_finished)
 
         # Job that fails
         job = queue.enqueue(div_by_zero)
@@ -129,6 +143,9 @@ class TestFinishedJobRegistry(RQTestCase):
         super(TestFinishedJobRegistry, self).setUp()
         self.registry = FinishedJobRegistry(connection=self.testconn)
 
+    def test_key(self):
+        self.assertEqual(self.registry.key, 'rq:finished:default')
+
     def test_cleanup(self):
         """Finished job registry removes expired jobs."""
         timestamp = current_timestamp()
@@ -164,6 +181,9 @@ class TestDeferredRegistry(RQTestCase):
     def setUp(self):
         super(TestDeferredRegistry, self).setUp()
         self.registry = DeferredJobRegistry(connection=self.testconn)
+
+    def test_key(self):
+        self.assertEqual(self.registry.key, 'rq:deferred:default')
 
     def test_add(self):
         """Adding a job to DeferredJobsRegistry."""

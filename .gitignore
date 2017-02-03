@@ -11,5 +11,5 @@
 .vagrant
 Vagrantfile
 .idea/
-.coverage.*
+.coverage*
 /.cache
