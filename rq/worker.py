@@ -677,7 +677,8 @@ class Worker(object):
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        job.save(pipeline=pipeline)
+                        # Don't clobber the user's meta dictionary!
+                        job.save(pipeline=pipeline, include_meta=False)
 
                         finished_job_registry = FinishedJobRegistry(job.origin,
                                                                     self.connection)

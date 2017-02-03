@@ -422,8 +422,14 @@ class Job(object):
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
-    def to_dict(self):
-        """Returns a serialization of the current job instance"""
+    def to_dict(self, include_meta=True):
+        """
+        Returns a serialization of the current job instance
+
+        You can exclude serializing the `meta` dictionary by setting
+        `include_meta=False`.
+
+        """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
         obj['data'] = self.data
@@ -450,19 +456,26 @@ class Job(object):
             obj['status'] = self._status
         if self._dependency_id is not None:
             obj['dependency_id'] = self._dependency_id
-        if self.meta:
+        if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
 
         return obj
 
-    def save(self, pipeline=None):
-        """Persists the current job instance to its corresponding Redis key."""
+    def save(self, pipeline=None, include_meta=True):
+        """
+        Persists the current job instance to its corresponding Redis key.
+
+        Exclude persisting the `meta` dictionary by setting
+        `include_meta=False`. This is useful to prevent clobbering
+        user metadata without an expensive `refresh()` call first.
+
+        """
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        connection.hmset(key, self.to_dict())
+        connection.hmset(key, self.to_dict(include_meta=include_meta))
         self.cleanup(self.ttl, pipeline=connection)
 
     def cancel(self):
