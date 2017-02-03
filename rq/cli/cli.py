@@ -33,7 +33,7 @@ click.disable_unicode_literals_warning = True
 url_option = click.option('--url', '-u', envvar='RQ_REDIS_URL',
                           help='URL describing Redis connection details.')
 
-config_option = click.option('--config', '-c',
+config_option = click.option('--config', '-c', envvar='RQ_CONFIG',
                              help='Module containing RQ settings.')
 
 
