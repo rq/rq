@@ -27,8 +27,8 @@ To do this, register your custom exception handler to an RQ worker as follows:
 with Connection():
     q = Queue()
     w = Worker([q])
-    worker.push_exc_handler(my_handler)
-    worker.work()
+    w.push_exc_handler(my_handler)
+    w.work()
 {% endhighlight %}
 
 While the exception handlers are a FILO stack, most times you only want to
