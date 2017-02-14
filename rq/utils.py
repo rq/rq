@@ -232,3 +232,13 @@ def enum(name, *sequential, **named):
     # On Python 3 it does not matter, so we'll use str(), which acts as
     # a no-op.
     return type(str(name), (), values)
+
+
+def backend_class(holder, default_name, override=None):
+    """Get a backend class using its default attribute name or an override"""
+    if override is None:
+        return getattr(holder, default_name)
+    elif isinstance(override, string_types):
+        return import_attribute(override)
+    else:
+        return override

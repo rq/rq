@@ -19,7 +19,8 @@ import mock
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
-                            run_dummy_heroku_worker, access_self)
+                            run_dummy_heroku_worker, access_self,
+                            modify_self, modify_self_and_error)
 from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
@@ -606,6 +607,52 @@ class TestWorker(RQTestCase):
             #   So before that fix the call count was 4 instead of 3
             self.assertEqual(mocked.call_count, 3)
 
+    def test_self_modification_persistence(self):
+        """Make sure that any meta modification done by
+        the job itself persists completely through the
+        queue/worker/job stack."""
+        q = Queue()
+        # Also make sure that previously existing metadata
+        # persists properly
+        job = q.enqueue(modify_self, meta={'foo': 'bar', 'baz': 42},
+                        args=[{'baz': 10, 'newinfo': 'waka'}])
+
+        w = Worker([q])
+        w.work(burst=True)
+
+        job_check = Job.fetch(job.id)
+        self.assertEqual(set(job_check.meta.keys()),
+                         set(['foo', 'baz', 'newinfo']))
+        self.assertEqual(job_check.meta['foo'], 'bar')
+        self.assertEqual(job_check.meta['baz'], 10)
+        self.assertEqual(job_check.meta['newinfo'], 'waka')
+
+    def test_self_modification_persistence_with_error(self):
+        """Make sure that any meta modification done by
+        the job itself persists completely through the
+        queue/worker/job stack -- even if the job errored"""
+        q = Queue()
+        failed_q = get_failed_queue()
+        # Also make sure that previously existing metadata
+        # persists properly
+        job = q.enqueue(modify_self_and_error, meta={'foo': 'bar', 'baz': 42},
+                        args=[{'baz': 10, 'newinfo': 'waka'}])
+
+        w = Worker([q])
+        w.work(burst=True)
+
+        # Postconditions
+        self.assertEqual(q.count, 0)
+        self.assertEqual(failed_q.count, 1)
+        self.assertEqual(w.get_current_job_id(), None)
+
+        job_check = Job.fetch(job.id)
+        self.assertEqual(set(job_check.meta.keys()),
+                         set(['foo', 'baz', 'newinfo']))
+        self.assertEqual(job_check.meta['foo'], 'bar')
+        self.assertEqual(job_check.meta['baz'], 10)
+        self.assertEqual(job_check.meta['newinfo'], 'waka')
+
 
 def kill_worker(pid, double_kill):
     # wait for the worker to be started over on the main process
@@ -626,7 +673,7 @@ class TimeoutTestCase:
     def setUp(self):
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
-        self.killtimeout = 10
+        self.killtimeout = 15
         signal.signal(signal.SIGALRM, self._timeout)
         signal.alarm(self.killtimeout)
 

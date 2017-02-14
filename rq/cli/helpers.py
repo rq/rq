@@ -9,8 +9,10 @@ from functools import partial
 import click
 import redis
 from redis import StrictRedis
-from rq import Queue, Worker
+from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
+                         DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
 from rq.logutils import setup_loghandlers
+from rq.utils import import_attribute
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
@@ -81,11 +83,11 @@ def state_symbol(state):
         return state
 
 
-def show_queues(queues, raw, by_queue):
+def show_queues(queues, raw, by_queue, queue_class, worker_class):
     if queues:
-        qs = list(map(Queue, queues))
+        qs = list(map(queue_class, queues))
     else:
-        qs = Queue.all()
+        qs = queue_class.all()
 
     num_jobs = 0
     termwidth, _ = click.get_terminal_size()
@@ -116,9 +118,9 @@ def show_queues(queues, raw, by_queue):
         click.echo('%d queues, %d jobs total' % (len(qs), num_jobs))
 
 
-def show_workers(queues, raw, by_queue):
+def show_workers(queues, raw, by_queue, queue_class, worker_class):
     if queues:
-        qs = list(map(Queue, queues))
+        qs = list(map(queue_class, queues))
 
         def any_matching_queue(worker):
             def queue_matches(q):
@@ -126,14 +128,14 @@ def show_workers(queues, raw, by_queue):
             return any(map(queue_matches, worker.queues))
 
         # Filter out workers that don't match the queue filter
-        ws = [w for w in Worker.all() if any_matching_queue(w)]
+        ws = [w for w in worker_class.all() if any_matching_queue(w)]
 
         def filter_queues(queue_names):
-            return [qname for qname in queue_names if Queue(qname) in qs]
+            return [qname for qname in queue_names if queue_class(qname) in qs]
 
     else:
-        qs = Queue.all()
-        ws = Worker.all()
+        qs = queue_class.all()
+        ws = worker_class.all()
         filter_queues = (lambda x: x)
 
     if not by_queue:
@@ -164,11 +166,11 @@ def show_workers(queues, raw, by_queue):
         click.echo('%d workers, %d queues' % (len(ws), len(qs)))
 
 
-def show_both(queues, raw, by_queue):
-    show_queues(queues, raw, by_queue)
+def show_both(queues, raw, by_queue, queue_class, worker_class):
+    show_queues(queues, raw, by_queue, queue_class, worker_class)
     if not raw:
         click.echo('')
-    show_workers(queues, raw, by_queue)
+    show_workers(queues, raw, by_queue, queue_class, worker_class)
     if not raw:
         click.echo('')
         import datetime
@@ -197,3 +199,43 @@ def setup_loghandlers_from_args(verbose, quiet):
     else:
         level = 'INFO'
     setup_loghandlers(level)
+
+
+class CliConfig(object):
+    """A helper class to be used with click commands, to handle shared options"""
+    def __init__(self, url=None, config=None, worker_class=DEFAULT_WORKER_CLASS,
+                 job_class=DEFAULT_JOB_CLASS, queue_class=DEFAULT_QUEUE_CLASS,
+                 connection_class=DEFAULT_CONNECTION_CLASS, *args, **kwargs):
+        self._connection = None
+        self.url = url
+        self.config = config
+
+        try:
+            self.worker_class = import_attribute(worker_class)
+        except (ImportError, AttributeError) as exc:
+            raise click.BadParameter(str(exc), param_hint='--worker-class')
+        try:
+            self.job_class = import_attribute(job_class)
+        except (ImportError, AttributeError) as exc:
+            raise click.BadParameter(str(exc), param_hint='--job-class')
+
+        try:
+            self.queue_class = import_attribute(queue_class)
+        except (ImportError, AttributeError) as exc:
+            raise click.BadParameter(str(exc), param_hint='--queue-class')
+
+        try:
+            self.connection_class = import_attribute(connection_class)
+        except (ImportError, AttributeError) as exc:
+            raise click.BadParameter(str(exc), param_hint='--connection-class')
+
+    @property
+    def connection(self):
+        if self._connection is None:
+            if self.url:
+                self._connection = self.connection_class.from_url(self.url)
+            else:
+                settings = read_config_file(self.config) if self.config else {}
+                self._connection = get_redis_from_config(settings,
+                                                         self.connection_class)
+        return self._connection

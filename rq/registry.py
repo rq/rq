@@ -3,7 +3,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .job import Job, JobStatus
 from .queue import FailedQueue
-from .utils import current_timestamp
+from .utils import backend_class, current_timestamp
 
 
 class BaseRegistry(object):
@@ -12,10 +12,14 @@ class BaseRegistry(object):
     Each job is stored as a key in the registry, scored by expiration time
     (unix timestamp).
     """
+    job_class = Job
+    key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection=None):
+    def __init__(self, name='default', connection=None, job_class=None):
         self.name = name
+        self.key = self.key_template.format(name)
         self.connection = resolve_connection(connection)
+        self.job_class = backend_class(self, 'job_class', override=job_class)
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -66,10 +70,7 @@ class StartedJobRegistry(BaseRegistry):
     Jobs are added to registry right before they are executed and removed
     right after completion (success or failure).
     """
-
-    def __init__(self, name='default', connection=None):
-        super(StartedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:wip:{0}'.format(name)
+    key_template = 'rq:wip:{0}'
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedQueue.
@@ -82,14 +83,16 @@ class StartedJobRegistry(BaseRegistry):
         job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
-            failed_queue = FailedQueue(connection=self.connection)
+            failed_queue = FailedQueue(connection=self.connection,
+                                       job_class=self.job_class)
 
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
                     try:
-                        job = Job.fetch(job_id, connection=self.connection)
+                        job = self.job_class.fetch(job_id,
+                                                   connection=self.connection)
                         job.set_status(JobStatus.FAILED)
-                        job.save(pipeline=pipeline)
+                        job.save(pipeline=pipeline, include_meta=False)
                         failed_queue.push_job_id(job_id, pipeline=pipeline)
                     except NoSuchJobError:
                         pass
@@ -105,10 +108,7 @@ class FinishedJobRegistry(BaseRegistry):
     Registry of jobs that have been completed. Jobs are added to this
     registry after they have successfully completed for monitoring purposes.
     """
-
-    def __init__(self, name='default', connection=None):
-        super(FinishedJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:finished:{0}'.format(name)
+    key_template = 'rq:finished:{0}'
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -125,10 +125,7 @@ class DeferredJobRegistry(BaseRegistry):
     """
     Registry of deferred jobs (waiting for another job to finish).
     """
-
-    def __init__(self, name='default', connection=None):
-        super(DeferredJobRegistry, self).__init__(name, connection)
-        self.key = 'rq:deferred:{0}'.format(name)
+    key_template = 'rq:deferred:{0}'
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is
@@ -139,7 +136,11 @@ class DeferredJobRegistry(BaseRegistry):
 
 def clean_registries(queue):
     """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
-    registry = FinishedJobRegistry(name=queue.name, connection=queue.connection)
+    registry = FinishedJobRegistry(name=queue.name,
+                                   connection=queue.connection,
+                                   job_class=queue.job_class)
     registry.cleanup()
-    registry = StartedJobRegistry(name=queue.name, connection=queue.connection)
+    registry = StartedJobRegistry(name=queue.name,
+                                  connection=queue.connection,
+                                  job_class=queue.job_class)
     registry.cleanup()

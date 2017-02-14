@@ -10,7 +10,7 @@ from tests.helpers import strip_microseconds
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import Job, get_current_job, JobStatus, cancel_job
+from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
 from rq.queue import Queue, get_failed_queue
 from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
@@ -46,10 +46,12 @@ class TestJob(RQTestCase):
     def test_create_empty_job(self):
         """Creation of new empty jobs."""
         job = Job()
+        job.description = 'test job'
 
         # Jobs have a random UUID and a creation date
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
+        self.assertEqual(str(job), "<Job %s: test job>" % job.id)
 
         # ...and nothing else
         self.assertIsNone(job.origin)
@@ -67,6 +69,12 @@ class TestJob(RQTestCase):
             job.args
         with self.assertRaises(ValueError):
             job.kwargs
+
+    def test_create_param_errors(self):
+        """Creation of jobs may result in errors"""
+        self.assertRaises(TypeError, Job.create, fixtures.say_hello, args="string")
+        self.assertRaises(TypeError, Job.create, fixtures.say_hello, kwargs="string")
+        self.assertRaises(TypeError, Job.create, func=42)
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
@@ -439,9 +447,25 @@ class TestJob(RQTestCase):
 
     def test_create_failed_and_cancel_job(self):
         """test creating and using cancel_job deletes job properly"""
-        failed = get_failed_queue(connection=self.testconn)
-        job = failed.enqueue(fixtures.say_hello)
+        failed_queue = get_failed_queue(connection=self.testconn)
+        job = failed_queue.enqueue(fixtures.say_hello)
         job.set_status(JobStatus.FAILED)
-        self.assertEqual(1, len(failed.get_jobs()))
+        self.assertEqual(1, len(failed_queue.get_jobs()))
         cancel_job(job.id)
-        self.assertEqual(0, len(failed.get_jobs()))
+        self.assertEqual(0, len(failed_queue.get_jobs()))
+
+    def test_create_and_requeue_job(self):
+        """Requeueing existing jobs."""
+        job = Job.create(func=fixtures.div_by_zero, args=(1, 2, 3))
+        job.origin = 'fake'
+        job.save()
+        get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
+
+        self.assertEqual(Queue.all(), [get_failed_queue()])  # noqa
+        self.assertEqual(get_failed_queue().count, 1)
+
+        requeued_job = requeue_job(job.id)
+
+        self.assertEqual(get_failed_queue().count, 0)
+        self.assertEqual(Queue('fake').count, 1)
+        self.assertEqual(requeued_job.origin, job.origin)
