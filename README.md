@@ -78,7 +78,7 @@ Simply use the following command to install the latest released version:
 
 If you want the cutting edge version (that may well be broken), use this:
 
-    pip install -e git+git@github.com:nvie/rq.git@master#egg=rq
+    pip install -e git+https://github.com/nvie/rq.git@master#egg=rq
 
 
 ## Project history
