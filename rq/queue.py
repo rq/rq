@@ -231,9 +231,6 @@ class Queue(object):
 
         job = self.enqueue_job(job, at_front=at_front)
 
-        if not self._async:
-            job = self.run_job(job)
-
         return job
 
     def run_job(self, job):
@@ -305,6 +302,9 @@ class Queue(object):
 
         if pipeline is None:
             pipe.execute()
+
+        if not self._async:
+            job = self.run_job(job)
 
         return job
 

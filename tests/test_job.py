@@ -322,6 +322,13 @@ class TestJob(RQTestCase):
         self.assertEqual(job.result, 'Hi there, Stranger!')
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
+    def test_enqueue_job_async_status_finished(self):
+        queue = Queue(async=False)
+        job = Job.create(func=fixtures.say_hello)
+        job = queue.enqueue_job(job)
+        self.assertEqual(job.result, 'Hi there, Stranger!')
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
     def test_get_result_ttl(self):
         """Getting job result TTL."""
         job_result_ttl = 1
