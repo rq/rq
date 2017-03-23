@@ -358,12 +358,12 @@ class Worker(object):
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
-    def kill_horse(self):
+    def kill_horse(self, sig=signal.SIGKILL):
         """
         Kill the horse but catch "No such process" error has the horse could already be dead.
         """
         try:
-            os.kill(self.horse_pid, signal.SIGKILL)
+            os.kill(self.horse_pid, sig)
         except OSError as e:
             if e.errno == errno.ESRCH:
                 # "No such process" is fine with us
@@ -838,7 +838,7 @@ class HerokuWorker(Worker):
         """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
             self.log.warning('Warm shut down requested, sending horse SIGRTMIN signal')
-            self.kill_horse()
+            self.kill_horse(sig=signal.SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')
 
