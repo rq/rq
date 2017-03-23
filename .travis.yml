@@ -8,6 +8,8 @@ python:
   - "3.3"
   - "3.4"
   - "3.5"
+  - "3.6"
+  - "3.6-dev"
   - "pypy"
 install:
   - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install -r py26-requirements.txt; fi
