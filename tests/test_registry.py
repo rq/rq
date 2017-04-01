@@ -113,6 +113,21 @@ class TestRegistry(RQTestCase):
         worker.perform_job(job, queue)
         self.assertNotIn(job.id, registry.get_job_ids())
 
+    def test_job_deletion(self):
+        """Ensure job is removed from StartedJobRegistry when deleted."""
+        registry = StartedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+
+        job = queue.enqueue(say_hello)
+        self.assertTrue(job.is_queued)
+
+        worker.prepare_job_execution(job)
+        self.assertIn(job.id, registry.get_job_ids())
+
+        job.delete()
+        self.assertNotIn(job.id, registry.get_job_ids())
+
     def test_get_job_count(self):
         """StartedJobRegistry returns the right number of job count."""
         timestamp = current_timestamp() + 10
@@ -170,10 +185,15 @@ class TestFinishedJobRegistry(RQTestCase):
         worker.perform_job(job, queue)
         self.assertEqual(self.registry.get_job_ids(), [job.id])
 
+        # When job is deleted, it should be removed from FinishedJobRegistry
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        job.delete()
+        self.assertEqual(self.registry.get_job_ids(), [])
+
         # Failed jobs are not put in FinishedJobRegistry
         failed_job = queue.enqueue(div_by_zero)
         worker.perform_job(failed_job, queue)
-        self.assertEqual(self.registry.get_job_ids(), [job.id])
+        self.assertEqual(self.registry.get_job_ids(), [])
 
 
 class TestDeferredRegistry(RQTestCase):
@@ -192,3 +212,16 @@ class TestDeferredRegistry(RQTestCase):
         job_ids = [as_text(job_id) for job_id in
                    self.testconn.zrange(self.registry.key, 0, -1)]
         self.assertEqual(job_ids, [job.id])
+
+    def test_register_dependency(self):
+        """Ensure job creation and deletion works properly with DeferredJobRegistry."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        job2 = queue.enqueue(say_hello, depends_on=job)
+
+        registry = DeferredJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_job_ids(), [job2.id])
+
+        # When deleted, job removes itself from DeferredJobRegistry
+        job2.delete()
+        self.assertEqual(registry.get_job_ids(), [])

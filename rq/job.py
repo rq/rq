@@ -501,13 +501,10 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.
         """
-        from .queue import Queue, get_failed_queue
+        from .queue import Queue
         pipeline = self.connection._pipeline()
         if self.origin:
-            q = (get_failed_queue(connection=self.connection,
-                                  job_class=self.__class__)
-                 if self.is_failed
-                 else Queue(name=self.origin, connection=self.connection))
+            q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
@@ -516,8 +513,37 @@ class Job(object):
         if remove_from_queue:
             self.cancel()
         connection = pipeline if pipeline is not None else self.connection
+
+        if self.get_status() == JobStatus.FINISHED:
+            from .registry import FinishedJobRegistry
+            registry = FinishedJobRegistry(self.origin,
+                                           connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.DEFERRED:
+            from .registry import DeferredJobRegistry
+            registry = DeferredJobRegistry(self.origin,
+                                           connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.STARTED:
+            from .registry import StartedJobRegistry
+            registry = StartedJobRegistry(self.origin,
+                                          connection=self.connection,
+                                          job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.FAILED:
+            from .queue import get_failed_queue
+            failed_queue = get_failed_queue(connection=self.connection,
+                                            job_class=self.__class__)
+            failed_queue.remove(self, pipeline=pipeline)
+
         connection.delete(self.key)
         connection.delete(self.dependents_key)
+
 
     # Job execution
     def perform(self):  # noqa

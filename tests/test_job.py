@@ -380,20 +380,6 @@ class TestJob(RQTestCase):
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
-    def test_register_dependency(self):
-        """Ensure dependency registration works properly."""
-        origin = 'some_queue'
-        registry = DeferredJobRegistry(origin, self.testconn)
-
-        job = Job.create(func=fixtures.say_hello, origin=origin)
-        job._dependency_id = 'id'
-        job.save()
-
-        self.assertEqual(registry.get_job_ids(), [])
-        job.register_dependency()
-        self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)
-        self.assertEqual(registry.get_job_ids(), [job.id])
-
     def test_delete(self):
         """job.delete() deletes itself & dependents mapping from Redis."""
         queue = Queue(connection=self.testconn)
