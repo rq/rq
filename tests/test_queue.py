@@ -633,3 +633,20 @@ class TestFailedQueue(RQTestCase):
         skip_job = q.enqueue(say_hello, at_front=True)
         assert q.dequeue() == skip_job
         assert q.dequeue() == job2
+
+    def test_job_deletion(self):
+        """Ensure job.delete() removes itself from FailedQueue."""
+        job = Job.create(func=div_by_zero, args=(1, 2, 3))
+        job.origin = 'fake'
+        job.timeout = 200
+        job.save()
+
+        job.set_status(JobStatus.FAILED)
+
+        failed_queue = get_failed_queue()
+        failed_queue.quarantine(job, Exception('Some fake error'))
+
+        self.assertTrue(job.id in failed_queue.get_job_ids())
+
+        job.delete()
+        self.assertFalse(job.id in failed_queue.get_job_ids())
