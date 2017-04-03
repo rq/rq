@@ -552,10 +552,13 @@ class Job(object):
         self.ttl = -1
         _job_stack.push(self.id)
         try:
-            self._result = self.func(*self.args, **self.kwargs)
+            self._result = self._execute()
         finally:
             assert self.id == _job_stack.pop()
         return self._result
+
+    def _execute(self):
+        return self.func(*self.args, **self.kwargs)
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job will be

@@ -232,11 +232,15 @@ class Queue(object):
         job = self.enqueue_job(job, at_front=at_front)
 
         if not self._async:
-            job.perform()
-            job.set_status(JobStatus.FINISHED)
-            job.save(include_meta=False)
-            job.cleanup(DEFAULT_RESULT_TTL)
+            job = self.run_job(job)
 
+        return job
+
+    def run_job(self, job):
+        job.perform()
+        job.set_status(JobStatus.FINISHED)
+        job.save(include_meta=False)
+        job.cleanup(DEFAULT_RESULT_TTL)
         return job
 
     def enqueue(self, f, *args, **kwargs):
