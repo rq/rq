@@ -30,7 +30,11 @@ def read_config_file(module):
 
 
 def get_redis_from_config(settings, connection_class=StrictRedis):
-    """Returns a StrictRedis instance from a dictionary of settings."""
+    """Returns a StrictRedis instance from a dictionary of settings.
+       To use redis sentinel, you must specify a dictionary in the configuration file.
+       Example of a dictionary with keys without values:
+       SENTINEL: {'INSTANCES':, 'SOCKET_TIMEOUT':, 'PASSWORD':,'DB':, 'MASTER_NAME':}
+    """
     if settings.get('REDIS_URL') is not None:
         return connection_class.from_url(settings['REDIS_URL'])
 
