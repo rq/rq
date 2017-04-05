@@ -410,6 +410,7 @@ class Worker(object):
                 self.set_state(WorkerStatus.SUSPENDED)
                 notified = True
             time.sleep(1)
+            self.heartbeat()
 
         if before_state:
             self.set_state(before_state)
