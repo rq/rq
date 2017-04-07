@@ -562,7 +562,7 @@ class Worker(object):
                         self.failed_queue.quarantine(
                             job,
                             exc_info=(
-                                "Work-horse proccess "
+                                "Work-horse process "
                                 "was terminated unexpectedly"
                             )
                         )
