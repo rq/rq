@@ -9,6 +9,7 @@ from functools import partial
 import click
 import redis
 from redis import StrictRedis
+from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
 from rq.logutils import setup_loghandlers
@@ -29,9 +30,22 @@ def read_config_file(module):
 
 
 def get_redis_from_config(settings, connection_class=StrictRedis):
-    """Returns a StrictRedis instance from a dictionary of settings."""
+    """Returns a StrictRedis instance from a dictionary of settings.
+       To use redis sentinel, you must specify a dictionary in the configuration file.
+       Example of a dictionary with keys without values:
+       SENTINEL: {'INSTANCES':, 'SOCKET_TIMEOUT':, 'PASSWORD':,'DB':, 'MASTER_NAME':}
+    """
     if settings.get('REDIS_URL') is not None:
         return connection_class.from_url(settings['REDIS_URL'])
+
+    elif settings.get('SENTINEL') is not None:
+        instances = settings['SENTINEL'].get('INSTANCES', [('localhost', 26379)])
+        socket_timeout = settings['SENTINEL'].get('SOCKET_TIMEOUT', None)
+        password = settings['SENTINEL'].get('PASSWORD', None)
+        db = settings['SENTINEL'].get('DB', 0)
+        master_name = settings['SENTINEL'].get('MASTER_NAME', 'mymaster')
+        sn = Sentinel(instances, socket_timeout=socket_timeout, password=password, db=db)
+        return sn.master_for(master_name)
 
     kwargs = {
         'host': settings.get('REDIS_HOST', 'localhost'),
