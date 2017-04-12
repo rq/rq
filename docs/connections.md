@@ -129,3 +129,17 @@ class MyTest(unittest.TestCase):
         q = Queue()
         ...
 {% endhighlight %}
+
+### Sentinel support
+
+To use redis sentinel, you must specify a dictionary in the configuration file.
+Using this setting in conjunction with the systemd or docker containers with the
+automatic restart option allows the worker to have a fault-tolerant connection to the redis.
+
+{% highlight python %}
+SENTINEL: {'INSTANCES':[(192.168.1.2, 26379), (192.168.1.3, 26379), (192.168.1.4, 26379)],
+           'SOCKET_TIMEOUT': None,
+           'PASSWORD': 'secret',
+           'DB': 2,
+           'MASTER_NAME': 'master'}
+{% endhighlight %}
