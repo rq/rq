@@ -452,6 +452,20 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.result, 'Hi there, Adam!')
         self.assertEqual(job.description, '你好 世界!')
 
+    def test_work_log_unicode_friendly(self):
+        """Worker process work with unicode or str other than pure ascii content,
+        logging work properly"""
+        q = Queue("foo")
+        w = Worker([q])
+        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆',
+                        description='你好 世界!')
+        self.assertEqual(w.work(burst=True), True,
+                         'Expected at least some work done.')
+        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
+                        description='你好 世界!')
+        self.assertEqual(w.work(burst=True), True,
+                         'Expected at least some work done.')
+
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
 

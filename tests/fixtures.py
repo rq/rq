@@ -27,6 +27,11 @@ def say_hello(name=None):
     return 'Hi there, %s!' % (name,)
 
 
+def say_hello_unicode(name=None):
+    """A job with a single argument and a return value."""
+    return unicode(say_hello(name))
+
+
 def do_nothing():
     """The best job in the world."""
     pass
