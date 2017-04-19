@@ -14,3 +14,4 @@ class TestUtils(RQTestCase):
         self.assertEqual(12, transfer_timeout('12s'))
         self.assertEqual(720, transfer_timeout('12m'))
         self.assertEqual(3600, transfer_timeout('1h'))
+        self.assertEqual(3600, transfer_timeout('1H'))

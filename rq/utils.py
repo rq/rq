@@ -252,7 +252,7 @@ def transfer_timeout(timeout):
         try:
             timeout = int(timeout)
         except ValueError:
-            digit, unit = timeout[:-1], timeout[-1:]
+            digit, unit = timeout[:-1], (timeout[-1:]).lower()
             unit_second = {'h': 3600, 'm': 60, 's': 1}
             try:
                 timeout = int(digit) * unit_second[unit]
