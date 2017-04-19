@@ -12,7 +12,7 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import (DequeueTimeout, InvalidJobDependency,
                          InvalidJobOperationError, NoSuchJobError, UnpickleError)
 from .job import Job, JobStatus
-from .utils import backend_class, import_attribute, utcnow
+from .utils import backend_class, import_attribute, utcnow, transfer_timeout
 
 
 def get_failed_queue(connection=None, job_class=None):
@@ -63,7 +63,7 @@ class Queue(object):
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
-        self._default_timeout = default_timeout
+        self._default_timeout = transfer_timeout(default_timeout)
         self._async = async
 
         # override class attribute job_class if one was passed
@@ -191,7 +191,7 @@ class Queue(object):
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
         """
-        timeout = timeout or self._default_timeout
+        timeout = transfer_timeout(timeout) or self._default_timeout
 
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
