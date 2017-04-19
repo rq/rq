@@ -31,5 +31,5 @@ class ShutDownImminentException(Exception):
         super(ShutDownImminentException, self).__init__(msg)
 
 
-class TimeoutFormat(Exception):
+class TimeoutFormatError(Exception):
     pass

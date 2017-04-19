@@ -257,8 +257,8 @@ def transfer_timeout(timeout):
             try:
                 timeout = int(digit) * unit_second[unit]
             except (ValueError, KeyError):
-                raise TimeoutFormatError('Timeout must be an integer or a string representing an integer, or'
-                                         'an string with format: digits + unit, unit can be "h", "m", "s", '
+                raise TimeoutFormatError('Timeout must be an integer or a string representing an integer, or '
+                                         'a string with format: digits + unit, unit can be "h", "m", "s", '
                                          'such as "1h", "23m".')
 
     return timeout
