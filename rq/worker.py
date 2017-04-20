@@ -567,17 +567,16 @@ class Worker(object):
             self.handle_job_failure(job=job)
 
             # Unhandled failure: move the job to the failed queue
-            self.log.warning(
-                'Moving job to {0!r} queue'.format(
-                    self.failed_queue.name
-                )
-            )
+            self.log.warning((
+                'Moving job to {0!r} queue '
+                '(work-horse terminated unexpectedly; waitpid returned {1})'
+            ).format(self.failed_queue.name, ret_val))
             self.failed_queue.quarantine(
                 job,
                 exc_info=(
-                    "Work-horse process "
-                    "was terminated unexpectedly"
-                )
+                    "Work-horse process was terminated unexpectedly "
+                    "(waitpid returned {0})"
+                ).format(ret_val)
             )
 
     def execute_job(self, job, queue):
