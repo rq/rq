@@ -246,7 +246,7 @@ def backend_class(holder, default_name, override=None):
         return override
 
 
-def transfer_timeout(timeout):
+def parse_timeout(timeout):
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
