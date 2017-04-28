@@ -272,6 +272,26 @@ class TestJob(RQTestCase):
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
 
+    def test_custom_meta_is_rewriten_by_update_meta(self):
+        """New meta data can be stored by update_meta."""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.save()
+        serialized = job.to_dict()
+
+        job.meta['foo'] = 'bar'
+        job.update_meta()
+
+        raw_meta = self.testconn.hget(job.key, 'meta')
+        self.assertEqual(loads(raw_meta)['foo'], 'bar')
+
+        job2 = Job.fetch(job.id)
+        self.assertEqual(job2.meta['foo'], 'bar')
+
+        # nothing else was changed
+        serialized2 = job2.to_dict()
+        serialized2.pop('meta')
+        self.assertDictEqual(serialized, serialized2)
+
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',), result_ttl=10)
