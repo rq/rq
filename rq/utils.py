@@ -12,10 +12,12 @@ import calendar
 import datetime
 import importlib
 import logging
+import numbers
 import sys
 from collections import Iterable
 
 from .compat import as_text, is_python_version, string_types
+from .exceptions import TimeoutFormatError
 
 
 class _Colorizer(object):
@@ -242,3 +244,21 @@ def backend_class(holder, default_name, override=None):
         return import_attribute(override)
     else:
         return override
+
+
+def parse_timeout(timeout):
+    """Transfer all kinds of timeout format to an integer representing seconds"""
+    if not isinstance(timeout, numbers.Integral) and timeout is not None:
+        try:
+            timeout = int(timeout)
+        except ValueError:
+            digit, unit = timeout[:-1], (timeout[-1:]).lower()
+            unit_second = {'h': 3600, 'm': 60, 's': 1}
+            try:
+                timeout = int(digit) * unit_second[unit]
+            except (ValueError, KeyError):
+                raise TimeoutFormatError('Timeout must be an integer or a string representing an integer, or '
+                                         'a string with format: digits + unit, unit can be "h", "m", "s", '
+                                         'such as "1h", "23m".')
+
+    return timeout
