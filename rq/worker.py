@@ -129,9 +129,10 @@ class Worker(object):
                      connection=connection,
                      job_class=job_class,
                      queue_class=queue_class)
-        queues = as_text(connection.hget(worker.key, 'queues'))
-        worker._state = as_text(connection.hget(worker.key, 'state') or '?')
-        worker._job_id = connection.hget(worker.key, 'current_job') or None
+        queues, state, job_id = connection.hmget(worker.key, 'queues', 'state', 'current_job')
+        queues = as_text(queues)
+        worker._state = as_text(state or '?')
+        worker._job_id = job_id or None
         if queues:
             worker.queues = [worker.queue_class(queue,
                                                 connection=connection,
@@ -139,9 +140,8 @@ class Worker(object):
                              for queue in queues.split(',')]
         return worker
 
-    def __init__(self, queues, name=None,
-                 default_result_ttl=None, connection=None, exc_handler=None,
-                 exception_handlers=None, default_worker_ttl=None,
+    def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
+                 exc_handler=None, exception_handlers=None, default_worker_ttl=None,
                  job_class=None, queue_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
