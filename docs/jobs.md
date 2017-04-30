@@ -27,7 +27,7 @@ def add(x, y):
 
 ## Storing arbitrary data on jobs
 
-_New in version 0.3.3._
+_Improved in 0.8.0._
 
 To add/update custom status information on this job, you have access to the
 `meta` property, which allows you to store arbitrary pickleable data on the job
@@ -39,21 +39,14 @@ import socket
 def add(x, y):
     job = get_current_job()
     job.meta['handled_by'] = socket.gethostname()
-    job.update_meta()
+    job.save_meta()
     
     # do more work
     time.sleep(1)
     return x + y
 {% endhighlight %}
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
-    <strong>Warning!</strong>
-    <p>
-The `.update_meta()` was introduced in RQ 0.7.2. You can use the `.save()` method instead 
-for RQ <= 0.7.1. For that case you also have to set the job `ttl` greater than the job `timeout`, otherwise the job may dissappear from the queue during execution.
-    </p>
-</div>
+
 ## Time to live for job in queue
 
 _New in version 0.4.7._
