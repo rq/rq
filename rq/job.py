@@ -493,15 +493,10 @@ class Job(object):
         connection.hmset(key, self.to_dict(include_meta=include_meta))
         self.cleanup(self.ttl, pipeline=connection)
 
-    def update_meta(self):
+    def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
-        key = self.key
-        meta = dumps(self.meta) if self.meta else None
-        pipeline = self.connection._pipeline()
-        pipeline.hdel(key, 'meta')
-        if meta:
-            pipeline.hset(key, 'meta', meta)
-        pipeline.execute()
+        meta = dumps(self.meta)
+        self.connection.hset(self.key, 'meta', meta)
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
