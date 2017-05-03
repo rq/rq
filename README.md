@@ -81,6 +81,25 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install -e git+https://github.com/nvie/rq.git@master#egg=rq
 
 
+## Testing
+
+To run tests, simply use;
+
+```
+./run_tests
+```
+
+This requires several libraries, and you can keep these self contained by using [Vagrant](https://www.vagrantup.com/). To create a working vagrant environment, use the following;
+
+```
+vagrant init ubuntu/trusty64
+vagrant up
+vagrant ssh -- "sudo apt-get -y install redis-server python-dev python-pip"
+vagrant ssh -- "sudo pip install --no-input redis hiredis mock"
+vagrant ssh -- "(cd /vagrant; ./run_tests)"
+```
+
+
 ## Project history
 
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
