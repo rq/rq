@@ -12,7 +12,7 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import (DequeueTimeout, InvalidJobDependency,
                          InvalidJobOperationError, NoSuchJobError, UnpickleError)
 from .job import Job, JobStatus
-from .utils import backend_class, import_attribute, utcnow
+from .utils import backend_class, import_attribute, utcnow, parse_timeout
 
 
 def get_failed_queue(connection=None, job_class=None):
@@ -63,7 +63,7 @@ class Queue(object):
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
-        self._default_timeout = default_timeout
+        self._default_timeout = parse_timeout(default_timeout)
         self._async = async
 
         # override class attribute job_class if one was passed
@@ -191,7 +191,7 @@ class Queue(object):
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
         """
-        timeout = timeout or self._default_timeout
+        timeout = parse_timeout(timeout) or self._default_timeout
 
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
@@ -231,12 +231,13 @@ class Queue(object):
 
         job = self.enqueue_job(job, at_front=at_front)
 
-        if not self._async:
-            job.perform()
-            job.set_status(JobStatus.FINISHED)
-            job.save(include_meta=False)
-            job.cleanup(DEFAULT_RESULT_TTL)
+        return job
 
+    def run_job(self, job):
+        job.perform()
+        job.set_status(JobStatus.FINISHED)
+        job.save(include_meta=False)
+        job.cleanup(DEFAULT_RESULT_TTL)
         return job
 
     def enqueue(self, f, *args, **kwargs):
@@ -301,6 +302,9 @@ class Queue(object):
 
         if pipeline is None:
             pipe.execute()
+
+        if not self._async:
+            job = self.run_job(job)
 
         return job
 

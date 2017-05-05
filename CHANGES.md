@@ -1,3 +1,17 @@
+### 0.8.0
+
+- Refactored APIs to allow custom `Connection`, `Job`, `Worker` and `Queue` classes via CLI. Thanks @jezdez!
+- `job.delete()` now properly cleans itself from job registries. Thanks @selwin!
+- `Worker` should no longer overwrite `job.meta`. Thanks @WeatherGod!
+- `job.save_meta()` can now be used to persist custom job data. Thanks @katichev!
+- Added Redis Sentinel support. Thanks @strawposter!
+- Make `Worker.find_by_key()` more efficient. Thanks @selwin!
+- You can now specify job `timeout` using strings such as `queue.enqueue(foo, timeout='1m')`. Thanks @luojiebin!
+- Better unicode handling. Thanks @myme5261314 and @jaywink!
+- Sentry should default to HTTP transport. Thanks @Atala!
+- Improve `HerokuWorker` termination logic. Thanks @samuelcolvin!
+
+
 ### 0.7.1
 
 - Fixes a bug that prevents fetching jobs from `FailedQueue` (#765). Thanks @jsurloppe!

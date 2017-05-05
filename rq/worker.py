@@ -129,9 +129,10 @@ class Worker(object):
                      connection=connection,
                      job_class=job_class,
                      queue_class=queue_class)
-        queues = as_text(connection.hget(worker.key, 'queues'))
-        worker._state = as_text(connection.hget(worker.key, 'state') or '?')
-        worker._job_id = connection.hget(worker.key, 'current_job') or None
+        queues, state, job_id = connection.hmget(worker.key, 'queues', 'state', 'current_job')
+        queues = as_text(queues)
+        worker._state = as_text(state or '?')
+        worker._job_id = job_id or None
         if queues:
             worker.queues = [worker.queue_class(queue,
                                                 connection=connection,
@@ -139,9 +140,8 @@ class Worker(object):
                              for queue in queues.split(',')]
         return worker
 
-    def __init__(self, queues, name=None,
-                 default_result_ttl=None, connection=None, exc_handler=None,
-                 exception_handlers=None, default_worker_ttl=None,
+    def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
+                 exc_handler=None, exception_handlers=None, default_worker_ttl=None,
                  job_class=None, queue_class=None):  # noqa
         if connection is None:
             connection = get_current_connection()
@@ -544,28 +544,7 @@ class Worker(object):
         """
         while True:
             try:
-                _, ret_val = os.waitpid(self._horse_pid, 0)
-                if ret_val != os.EX_OK:
-                    job_status = job.get_status()
-                    if job_status is None:
-                        # Job completed and its ttl has expired
-                        break
-                    if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-                        self.handle_job_failure(job=job)
-
-                        # Unhandled failure: move the job to the failed queue
-                        self.log.warning(
-                            'Moving job to {0!r} queue'.format(
-                                self.failed_queue.name
-                            )
-                        )
-                        self.failed_queue.quarantine(
-                            job,
-                            exc_info=(
-                                "Work-horse proccess "
-                                "was terminated unexpectedly"
-                            )
-                        )
+                self._monitor_work_horse_tick(job)
                 break
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
@@ -576,6 +555,29 @@ class Worker(object):
                 # which we don't want to catch, so we re-raise those ones.
                 if e.errno != errno.EINTR:
                     raise
+
+    def _monitor_work_horse_tick(self, job):
+        _, ret_val = os.waitpid(self._horse_pid, 0)
+        if ret_val == os.EX_OK:  # The process exited normally.
+            return
+        job_status = job.get_status()
+        if job_status is None:  # Job completed and its ttl has expired
+            return
+        if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
+            self.handle_job_failure(job=job)
+
+            # Unhandled failure: move the job to the failed queue
+            self.log.warning((
+                'Moving job to {0!r} queue '
+                '(work-horse terminated unexpectedly; waitpid returned {1})'
+            ).format(self.failed_queue.name, ret_val))
+            self.failed_queue.quarantine(
+                job,
+                exc_info=(
+                    "Work-horse process was terminated unexpectedly "
+                    "(waitpid returned {0})"
+                ).format(ret_val)
+            )
 
     def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -742,8 +744,9 @@ class Worker(object):
 
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = ''.join(traceback.format_exception_only(*exc_info[:2]) +
-                             traceback.format_exception(*exc_info))
+        exc_string = self._get_safe_exception_string(
+            traceback.format_exception_only(*exc_info[:2]) + traceback.format_exception(*exc_info)
+        )
         self.log.error(exc_string, exc_info=True, extra={
             'func': job.func_name,
             'arguments': job.args,
@@ -765,9 +768,15 @@ class Worker(object):
 
     def move_to_failed_queue(self, job, *exc_info):
         """Default exception handler: move the job to the failed queue."""
-        exc_string = ''.join(traceback.format_exception(*exc_info))
+        exc_string = self._get_safe_exception_string(traceback.format_exception(*exc_info))
         self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
         self.failed_queue.quarantine(job, exc_info=exc_string)
+
+    def _get_safe_exception_string(self, exc_strings):
+        """Ensure list of exception strings is decoded on Python 2 and joined as one string safely."""
+        if sys.version_info[0] < 3:
+            exc_strings = [exc.decode("utf-8") for exc in exc_strings]
+        return ''.join(exc_strings)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""

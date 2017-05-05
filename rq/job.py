@@ -493,6 +493,11 @@ class Job(object):
         connection.hmset(key, self.to_dict(include_meta=include_meta))
         self.cleanup(self.ttl, pipeline=connection)
 
+    def save_meta(self):
+        """Stores job meta from the job instance to the corresponding Redis key."""
+        meta = dumps(self.meta)
+        self.connection.hset(self.key, 'meta', meta)
+
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
@@ -501,13 +506,10 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.
         """
-        from .queue import Queue, get_failed_queue
+        from .queue import Queue
         pipeline = self.connection._pipeline()
         if self.origin:
-            q = (get_failed_queue(connection=self.connection,
-                                  job_class=self.__class__)
-                 if self.is_failed
-                 else Queue(name=self.origin, connection=self.connection))
+            q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
@@ -516,8 +518,37 @@ class Job(object):
         if remove_from_queue:
             self.cancel()
         connection = pipeline if pipeline is not None else self.connection
+
+        if self.get_status() == JobStatus.FINISHED:
+            from .registry import FinishedJobRegistry
+            registry = FinishedJobRegistry(self.origin,
+                                           connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.DEFERRED:
+            from .registry import DeferredJobRegistry
+            registry = DeferredJobRegistry(self.origin,
+                                           connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.STARTED:
+            from .registry import StartedJobRegistry
+            registry = StartedJobRegistry(self.origin,
+                                          connection=self.connection,
+                                          job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.FAILED:
+            from .queue import get_failed_queue
+            failed_queue = get_failed_queue(connection=self.connection,
+                                            job_class=self.__class__)
+            failed_queue.remove(self, pipeline=pipeline)
+
         connection.delete(self.key)
         connection.delete(self.dependents_key)
+
 
     # Job execution
     def perform(self):  # noqa
@@ -526,10 +557,13 @@ class Job(object):
         self.ttl = -1
         _job_stack.push(self.id)
         try:
-            self._result = self.func(*self.args, **self.kwargs)
+            self._result = self._execute()
         finally:
             assert self.id == _job_stack.pop()
         return self._result
+
+    def _execute(self):
+        return self.func(*self.args, **self.kwargs)
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job will be

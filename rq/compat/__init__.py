@@ -65,13 +65,23 @@ if not PY2:
         return dict((as_text(k), h[k]) for k in h)
 else:
     # Python 2.x
-    text_type = unicode
+    def text_type(v):
+        try:
+            return unicode(v)
+        except Exception:
+            return unicode(v, "utf-8", errors="ignore")
+
     string_types = (str, unicode)
 
     def as_text(v):
         if v is None:
             return None
-        return v.decode('utf-8')
+        elif isinstance(v, str):
+            return v.decode('utf-8')
+        elif isinstance(v, unicode):
+            return v
+        else:
+            raise Exception("Input cannot be decoded into literal thing.")
 
     def decode_redis_hash(h):
         return h

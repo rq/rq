@@ -13,8 +13,8 @@ import subprocess
 import sys
 
 import pytest
-
 import mock
+from mock import Mock
 
 from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
@@ -30,7 +30,7 @@ from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
-from rq.worker import HerokuWorker
+from rq.worker import HerokuWorker, WorkerStatus
 
 
 class CustomJob(Job):
@@ -42,6 +42,7 @@ class CustomQueue(Queue):
 
 
 class TestWorker(RQTestCase):
+
     def test_create_worker(self):
         """Worker creation using various inputs."""
 
@@ -104,10 +105,23 @@ class TestWorker(RQTestCase):
             'Expected at least some work done.'
         )
 
+    def test_find_by_key(self):
+        """Worker.find_by_key restores queues, state and job_id."""
+        queues = [Queue('foo'), Queue('bar')]
+        w = Worker(queues)
+        w.register_death()
+        w.register_birth()
+        w.set_state(WorkerStatus.STARTED)
+        worker = Worker.find_by_key(w.key)
+        self.assertEqual(worker.queues, queues)
+        self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
+        self.assertEqual(worker._job_id, None)
+        w.register_death()
+
     def test_worker_ttl(self):
         """Worker ttl."""
         w = Worker([])
-        w.register_birth()  # ugly: our test should only call public APIs
+        w.register_birth()
         [worker_key] = self.testconn.smembers(Worker.redis_workers_keys)
         self.assertIsNotNone(self.testconn.ttl(worker_key))
         w.register_death()
@@ -450,6 +464,20 @@ class TestWorker(RQTestCase):
                          'Expected at least some work done.')
         self.assertEqual(job.result, 'Hi there, Adam!')
         self.assertEqual(job.description, '你好 世界!')
+
+    def test_work_log_unicode_friendly(self):
+        """Worker process work with unicode or str other than pure ascii content,
+        logging work properly"""
+        q = Queue("foo")
+        w = Worker([q])
+        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆',
+                        description='你好 世界!')
+        self.assertEqual(w.work(burst=True), True,
+                         'Expected at least some work done.')
+        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
+                        description='你好 世界!')
+        self.assertEqual(w.work(burst=True), True,
+                         'Expected at least some work done.')
 
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
@@ -893,4 +921,25 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo')
 
         w._horse_pid = 19999
-        w.handle_warm_shutdown_request()
+        w.handle_warm_shutdown_request()        
+
+
+class TestExceptionHandlerMessageEncoding(RQTestCase):
+    def test_handle_exception_handles_non_ascii_in_exception_message(self):
+        """Test that handle_exception doesn't crash on non-ascii in exception message."""
+        self.worker.handle_exception(Mock(), *self.exc_info)
+
+    def test_move_to_failed_queue_handles_non_ascii_in_exception_message(self):
+        """Test that move_to_failed_queue doesn't crash on non-ascii in exception message."""
+        self.worker.move_to_failed_queue(Mock(), *self.exc_info)
+
+    def setUp(self):
+        super(TestExceptionHandlerMessageEncoding, self).setUp()
+        self.worker = Worker("foo")
+        self.worker._exc_handlers = []
+        self.worker.failed_queue = Mock()
+        # Mimic how exception info is actually passed forwards
+        try:
+            raise Exception(u"💪")
+        except:
+            self.exc_info = sys.exc_info()

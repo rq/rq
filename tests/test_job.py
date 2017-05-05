@@ -272,6 +272,26 @@ class TestJob(RQTestCase):
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
 
+    def test_custom_meta_is_rewriten_by_save_meta(self):
+        """New meta data can be stored by save_meta."""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.save()
+        serialized = job.to_dict()
+
+        job.meta['foo'] = 'bar'
+        job.save_meta()
+
+        raw_meta = self.testconn.hget(job.key, 'meta')
+        self.assertEqual(loads(raw_meta)['foo'], 'bar')
+
+        job2 = Job.fetch(job.id)
+        self.assertEqual(job2.meta['foo'], 'bar')
+
+        # nothing else was changed
+        serialized2 = job2.to_dict()
+        serialized2.pop('meta')
+        self.assertDictEqual(serialized, serialized2)
+
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',), result_ttl=10)
@@ -319,6 +339,13 @@ class TestJob(RQTestCase):
     def test_job_async_status_finished(self):
         queue = Queue(async=False)
         job = queue.enqueue(fixtures.say_hello)
+        self.assertEqual(job.result, 'Hi there, Stranger!')
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_enqueue_job_async_status_finished(self):
+        queue = Queue(async=False)
+        job = Job.create(func=fixtures.say_hello)
+        job = queue.enqueue_job(job)
         self.assertEqual(job.result, 'Hi there, Stranger!')
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
@@ -379,20 +406,6 @@ class TestJob(RQTestCase):
         # Jobs with 0 TTL are immediately deleted
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
-
-    def test_register_dependency(self):
-        """Ensure dependency registration works properly."""
-        origin = 'some_queue'
-        registry = DeferredJobRegistry(origin, self.testconn)
-
-        job = Job.create(func=fixtures.say_hello, origin=origin)
-        job._dependency_id = 'id'
-        job.save()
-
-        self.assertEqual(registry.get_job_ids(), [])
-        job.register_dependency()
-        self.assertEqual(as_text(self.testconn.spop('rq:job:id:dependents')), job.id)
-        self.assertEqual(registry.get_job_ids(), [job.id])
 
     def test_delete(self):
         """job.delete() deletes itself & dependents mapping from Redis."""
