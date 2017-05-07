@@ -223,6 +223,7 @@ class Queue(object):
                             job.set_status(JobStatus.DEFERRED)
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
+                            job.cleanup(ttl=job.ttl, pipeline=pipe)
                             pipe.execute()
                             return job
                         break
@@ -296,6 +297,7 @@ class Queue(object):
         if job.timeout is None:
             job.timeout = self.DEFAULT_TIMEOUT
         job.save(pipeline=pipe)
+        job.cleanup(ttl=job.ttl, pipeline=pipe)
 
         if self._async:
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
@@ -492,6 +494,7 @@ class FailedQueue(Queue):
             job.ended_at = utcnow()
             job.exc_info = exc_info
             job.save(pipeline=pipeline, include_meta=False)
+            job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire
 
             self.push_job_id(job.id, pipeline=pipeline)
             pipeline.execute()

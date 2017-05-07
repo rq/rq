@@ -386,7 +386,7 @@ class TestJob(RQTestCase):
         self.assertEqual(job.get_ttl(), ttl)
         job.save()
         job.perform()
-        self.assertEqual(job.get_ttl(), -1)
+        self.assertEqual(job.get_ttl(), ttl)
         self.assertTrue(job.exists(job.id))
         self.assertEqual(job.result, 'Done sleeping...')
 

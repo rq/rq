@@ -480,18 +480,18 @@ class Job(object):
 
     def save(self, pipeline=None, include_meta=True):
         """
-        Persists the current job instance to its corresponding Redis key.
+        Dumps the current job instance to its corresponding Redis key.
 
-        Exclude persisting the `meta` dictionary by setting
+        Exclude saving the `meta` dictionary by setting
         `include_meta=False`. This is useful to prevent clobbering
         user metadata without an expensive `refresh()` call first.
 
+        Redis key persistence may be altered by `cleanup()` method.
         """
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
         connection.hmset(key, self.to_dict(include_meta=include_meta))
-        self.cleanup(self.ttl, pipeline=connection)
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
@@ -549,12 +549,10 @@ class Job(object):
         connection.delete(self.key)
         connection.delete(self.dependents_key)
 
-
     # Job execution
     def perform(self):  # noqa
         """Invokes the job function with the job arguments."""
         self.connection.persist(self.key)
-        self.ttl = -1
         _job_stack.push(self.id)
         try:
             self._result = self._execute()
@@ -609,9 +607,12 @@ class Job(object):
             self.delete(pipeline=pipeline, remove_from_queue=remove_from_queue)
         elif not ttl:
             return
-        elif ttl > 0:
+        else: 
             connection = pipeline if pipeline is not None else self.connection
-            connection.expire(self.key, ttl)
+            if ttl > 0:
+                connection.expire(self.key, ttl)
+            else:
+                connection.persist(self.key)
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they

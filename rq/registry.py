@@ -93,6 +93,7 @@ class StartedJobRegistry(BaseRegistry):
                                                    connection=self.connection)
                         job.set_status(JobStatus.FAILED)
                         job.save(pipeline=pipeline, include_meta=False)
+                        job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_queue.push_job_id(job_id, pipeline=pipeline)
                     except NoSuchJobError:
                         pass
