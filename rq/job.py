@@ -75,11 +75,10 @@ def get_current_job(connection=None, job_class=None):
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
     """
-    job_class = job_class or Job
-    job_id = _job_stack.top
-    if job_id is None:
-        return None
-    return job_class.fetch(job_id, connection=connection)
+    if job_class:
+        warnings.warn("job_class argument for get_current_job is deprecated.",
+                      DeprecationWarning)
+    return _job_stack.top
 
 
 class Job(object):
@@ -553,11 +552,11 @@ class Job(object):
     def perform(self):  # noqa
         """Invokes the job function with the job arguments."""
         self.connection.persist(self.key)
-        _job_stack.push(self.id)
+        _job_stack.push(self)
         try:
             self._result = self._execute()
         finally:
-            assert self.id == _job_stack.pop()
+            assert self is _job_stack.pop()
         return self._result
 
     def _execute(self):
@@ -607,7 +606,7 @@ class Job(object):
             self.delete(pipeline=pipeline, remove_from_queue=remove_from_queue)
         elif not ttl:
             return
-        else: 
+        else:
             connection = pipeline if pipeline is not None else self.connection
             if ttl > 0:
                 connection.expire(self.key, ttl)
