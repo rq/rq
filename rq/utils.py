@@ -253,12 +253,12 @@ def parse_timeout(timeout):
             timeout = int(timeout)
         except ValueError:
             digit, unit = timeout[:-1], (timeout[-1:]).lower()
-            unit_second = {'h': 3600, 'm': 60, 's': 1}
+            unit_second = {'d': 86400, 'h': 3600, 'm': 60, 's': 1}
             try:
                 timeout = int(digit) * unit_second[unit]
             except (ValueError, KeyError):
                 raise TimeoutFormatError('Timeout must be an integer or a string representing an integer, or '
-                                         'a string with format: digits + unit, unit can be "h", "m", "s", '
+                                         'a string with format: digits + unit, unit can be "d", "h", "m", "s", '
                                          'such as "1h", "23m".')
 
     return timeout
