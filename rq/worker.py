@@ -9,9 +9,11 @@ import random
 import signal
 import socket
 import sys
+import threading
 import time
 import traceback
 import warnings
+from contextlib import contextmanager
 from datetime import timedelta
 
 from redis import WatchError
@@ -20,7 +22,8 @@ from rq.compat import as_text, string_types, text_type
 
 from .compat import PY2
 from .connections import get_current_connection, push_connection, pop_connection
-from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
+from .defaults import (DEFAULT_RESULT_TTL, DEFAULT_WORKER_SHUTDOWN_DELAY,
+                       DEFAULT_WORKER_TTL)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
@@ -45,9 +48,14 @@ blue = make_colorizer('darkblue')
 
 logger = logging.getLogger(__name__)
 
+_local = threading.local()
+
 
 class StopRequested(Exception):
     pass
+
+
+EX_WORKER_SHUTDOWN = 143
 
 
 def iterable(x):
@@ -74,6 +82,21 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
     except ValueError:
         return 'SIG_UNKNOWN'
+
+
+@contextmanager
+def critical_section():
+    if not hasattr(_local, 'critical_section'):
+        _local.critical_section = 0
+    try:
+        _local.critical_section += 1
+        yield
+    finally:
+        _local.critical_section -= 1
+
+        if _local.critical_section == 0 and getattr(_local, 'raise_shutdown', False):
+            logger.warning('Critical section left, raising ShutDownImminentException')
+            raise ShutDownImminentException
 
 
 WorkerStatus = enum(
@@ -142,7 +165,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
                  exc_handler=None, exception_handlers=None, default_worker_ttl=None,
-                 job_class=None, queue_class=None):  # noqa
+                 job_class=None, queue_class=None, default_worker_shutdown_delay=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -167,6 +190,12 @@ class Worker(object):
         if default_worker_ttl is None:
             default_worker_ttl = DEFAULT_WORKER_TTL
         self.default_worker_ttl = default_worker_ttl
+
+        if default_worker_shutdown_delay is None:
+            default_worker_shutdown_delay = DEFAULT_WORKER_SHUTDOWN_DELAY
+        self.default_worker_shutdown_delay = default_worker_shutdown_delay
+
+        self.ignore_repeated_sigterm = False
 
         self._state = 'starting'
         self._is_horse = False
@@ -384,21 +413,26 @@ class Worker(object):
         raise SystemExit()
 
     def request_stop(self, signum, frame):
-        """Stops the current worker loop but waits for child processes to
-        end gracefully (warm shutdown).
+        """Stops the current worker loop but gives the child processes a
+        little time to finish and clean up.
         """
         self.log.debug('Got signal {0}'.format(signal_name(signum)))
 
         signal.signal(signal.SIGINT, self.request_force_stop)
-        signal.signal(signal.SIGTERM, self.request_force_stop)
+        signal.signal(signal.SIGTERM,
+                      signal.SIGIGN
+                      if self.ignore_repeated_sigterm else
+                      self.request_force_stop)
 
         self.handle_warm_shutdown_request()
 
-        # If shutdown is requested in the middle of a job, wait until
-        # finish before shutting down and save the request in redis
+        # If shutdown is requested in the middle of a job, inform the work
+        # horse and wait for it to stop before shutting down.
         if self.get_state() == 'busy':
             self._stop_requested = True
+            # Save the request in redis
             self.set_shutdown_requested_date()
+            self.kill_hourse(signal.SIGTERM)
             self.log.debug('Stopping after current horse is finished. '
                            'Press Ctrl+C again for a cold shutdown.')
         else:
@@ -466,13 +500,13 @@ class Worker(object):
                         if burst:
                             self.log.info("RQ worker {0!r} done, quitting".format(self.key))
                         break
-                        
+
                     job, queue = result
                     self.execute_job(job, queue)
                     self.heartbeat()
-                    
+
                     did_perform_work = True
-                    
+
                 except StopRequested:
                     break
         finally:
@@ -544,8 +578,7 @@ class Worker(object):
         """
         while True:
             try:
-                self._monitor_work_horse_tick(job)
-                break
+                _, ret_val = os.waitpid(self._horse_pid, 0)
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
                 # caused by a SIGINT or SIGTERM signal during
@@ -553,31 +586,44 @@ class Worker(object):
                 # iteration of the loop, waiting for the child to end.  In
                 # any other case, this is some other unexpected OS error,
                 # which we don't want to catch, so we re-raise those ones.
-                if e.errno != errno.EINTR:
+                if e.errno == errno.EINTR:
+                    continue
+                else:
                     raise
+            else:
+                if ret_val != os.EX_OK:
+                    self.handle_work_hourse_death(job, ret_val)
+                break
 
-    def _monitor_work_horse_tick(self, job):
-        _, ret_val = os.waitpid(self._horse_pid, 0)
-        if ret_val == os.EX_OK:  # The process exited normally.
-            return
+    def handle_work_horse_death(self, job, ret_val):
         job_status = job.get_status()
         if job_status is None:  # Job completed and its ttl has expired
             return
-        if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-            self.handle_job_failure(job=job)
 
-            # Unhandled failure: move the job to the failed queue
-            self.log.warning((
-                'Moving job to {0!r} queue '
-                '(work-horse terminated unexpectedly; waitpid returned {1})'
-            ).format(self.failed_queue.name, ret_val))
-            self.failed_queue.quarantine(
-                job,
-                exc_info=(
-                    "Work-horse process was terminated unexpectedly "
-                    "(waitpid returned {0})"
-                ).format(ret_val)
-            )
+        if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
+            job_is_reentrant = job.reentrant or getattr(job.func, '_python_rq__reentrant')
+            if ret_val == EX_WORKER_SHUTDOWN and job_is_reentrant:
+                self.log.warning('Workhorse shut down on reentrant task, reenqueing')
+
+                self.handle_reentrant_job(job)
+                # Reenqueu the job
+                queue = next(q for q in self.queues if job.origin == q.name)
+                queue.enqueue_job(job, at_front=True)
+            else:
+                self.handle_job_failure(job=job)
+
+                # Unhandled failure: move the job to the failed queue
+                self.log.warning((
+                    'Moving job to {0!r} queue '
+                    '(work-horse terminated unexpectedly; waitpid returned {1})'
+                ).format(self.failed_queue.name, ret_val))
+                self.failed_queue.quarantine(
+                    job,
+                    exc_info=(
+                        "Work-horse process was terminated unexpectedly "
+                        "(waitpid returned {0})"
+                    ).format(ret_val)
+                )
 
     def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -601,11 +647,15 @@ class Worker(object):
         self._is_horse = True
         self.log = logger
 
-        success = self.perform_job(job, queue)
-
-        # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
-        os._exit(int(not success))
+        success = False
+        try:
+            success = self.perform_job(job, queue)
+        except ShutDownImminentException:
+            os._exit(EX_WORKER_SHUTDOWN)
+        finally:
+            # os._exit() is the way to exit from childs after a fork(), in
+            # constrast to the regular sys.exit()
+            os._exit(int(not success))
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse."""
@@ -615,7 +665,25 @@ class Worker(object):
         # after the current work is done.  When cold shutdown is requested, it
         # kills the current job anyway.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        signal.signal(signal.SIGTERM, self.request_horse_stop)
+
+    def request_horse_stop(self):
+        self.log.warning('SIGTERM recieved, raising ShutDownImminentException'
+                         ' in {} seconds'.format(self.default_worker_shutdown_delay))
+        signal.signal(signal.SIGTERM,
+                      signal.SIGIGN
+                      if self.ignore_repeated_sigterm else
+                      self.request_horse_force_stop)
+        signal.signal(signal.SIGALRM, self.request_horse_force_stop)
+        signal.alarm(self.default_worker_shutdown_delay)
+
+    def request_horse_force_stop(self, signum, frame):
+        if getattr(_local, 'critical_section', 0):
+            self.log.warning('Delaying ShutDownImminentException till critical section is finished')
+            _local.raise_shutdown = True
+        else:
+            self.log.warning('Raising ShutDownImminentException to cancel job')
+            raise ShutDownImminentException
 
     def prepare_job_execution(self, job):
         """Performs misc bookkeeping like updating states prior to
@@ -660,6 +728,23 @@ class Worker(object):
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
+
+    def handle_reentrant_job(self, job, started_job_registry=None):
+        """Handles a reentrant job beeing interrupted by ShutDownImminentException by:
+            1. Setting the job status to queued
+            2. Removing the job from the started_job_registry
+            3. Setting the workers current job to None
+        """
+        with self.connection._pipeline() as pipeline:
+            if started_job_registry is None:
+                started_job_registry = StartedJobRegistry(job.origin,
+                                                          self.connection,
+                                                          job_class=self.job_class)
+            job.set_status(JobStatus.QUEUED, pipeline=pipeline)
+            started_job_registry.remove(job, pipeline=pipeline)
+
+            self.set_current_job_id(None, pipeline=pipeline)
+            pipeline.execute()
 
     def handle_job_success(self, job, queue, started_job_registry):
         with self.connection._pipeline() as pipeline:
@@ -830,6 +915,10 @@ class HerokuWorker(Worker):
     causes the horse to crash `imminent_shutdown_delay` seconds later
     """
     imminent_shutdown_delay = 6
+
+    def __init__(self, *args, **kwargs):
+        super(HerokuWorker, self).__init__(*args, **kwargs)
+        self.ignore_repeated_sigterm = True
 
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
     if PY2:

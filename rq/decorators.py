@@ -16,7 +16,7 @@ class job(object):
 
     def __init__(self, queue, connection=None, timeout=None,
                  result_ttl=DEFAULT_RESULT_TTL, ttl=None,
-                 queue_class=None):
+                 queue_class=None, reentrant=False):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
         ``queue`` argument that can be either a ``Queue`` instance or a string
@@ -34,6 +34,7 @@ class job(object):
         self.timeout = timeout
         self.result_ttl = result_ttl
         self.ttl = ttl
+        self.reentrant = reentrant
 
     def __call__(self, f):
         @wraps(f)
@@ -46,6 +47,12 @@ class job(object):
             depends_on = kwargs.pop('depends_on', None)
             return queue.enqueue_call(f, args=args, kwargs=kwargs,
                                       timeout=self.timeout, result_ttl=self.result_ttl,
-                                      ttl=self.ttl, depends_on=depends_on)
+                                      ttl=self.ttl, depends_on=depends_on,
+                                      reentrant=self.reentrant)
         f.delay = delay
         return f
+
+
+def reentrant(f):
+    f._python_rq__reentrant = True
+    return f

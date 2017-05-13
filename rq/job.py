@@ -90,7 +90,8 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None,
+               reentrant=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -133,6 +134,7 @@ class Job(object):
         job.result_ttl = result_ttl
         job.ttl = ttl
         job.timeout = timeout
+        job.reentrant = reentrant
         job._status = status
         job.meta = meta or {}
 
@@ -432,6 +434,7 @@ class Job(object):
         self.exc_info = as_text(obj.get('exc_info'))
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
+        self.reentrant = obj.get('reentrant')
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
@@ -467,6 +470,8 @@ class Job(object):
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
+        if self.reentrant is not None:
+            obj['reentrant'] = self.reentrant
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_id is not None:
