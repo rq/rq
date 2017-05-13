@@ -22,7 +22,7 @@ from rq.compat import as_text, string_types, text_type
 
 from .compat import PY2
 from .connections import get_current_connection, push_connection, pop_connection
-from .defaults import (DEFAULT_RESULT_TTL, DEFAULT_WORKER_SHUTDOWN_DELAY,
+from .defaults import (DEFAULT_RESULT_TTL, DEFAULT_IMMINENT_SHUTDOWN_DELAY,
                        DEFAULT_WORKER_TTL)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
@@ -96,7 +96,7 @@ def critical_section():
 
         if _local.critical_section == 0 and getattr(_local, 'raise_shutdown', False):
             logger.warning('Critical section left, raising ShutDownImminentException')
-            raise ShutDownImminentException
+            raise ShutDownImminentException(extra_info=_local.frame_info)
 
 
 WorkerStatus = enum(
@@ -114,6 +114,12 @@ class Worker(object):
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
+
+    frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
+    if PY2:
+        frame_properties.extend(
+            ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
+        )
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None):
@@ -165,7 +171,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
                  exc_handler=None, exception_handlers=None, default_worker_ttl=None,
-                 job_class=None, queue_class=None, default_worker_shutdown_delay=None):  # noqa
+                 job_class=None, queue_class=None, imminent_shutdown_delay=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -191,9 +197,9 @@ class Worker(object):
             default_worker_ttl = DEFAULT_WORKER_TTL
         self.default_worker_ttl = default_worker_ttl
 
-        if default_worker_shutdown_delay is None:
-            default_worker_shutdown_delay = DEFAULT_WORKER_SHUTDOWN_DELAY
-        self.default_worker_shutdown_delay = default_worker_shutdown_delay
+        if imminent_shutdown_delay is None:
+            imminent_shutdown_delay = DEFAULT_IMMINENT_SHUTDOWN_DELAY
+        self.imminent_shutdown_delay = imminent_shutdown_delay
 
         self.ignore_repeated_sigterm = False
 
@@ -668,8 +674,8 @@ class Worker(object):
         signal.signal(signal.SIGTERM, self.request_horse_stop)
 
     def request_horse_stop(self):
-        self.log.warning('SIGTERM recieved, raising ShutDownImminentException'
-                         ' in {} seconds'.format(self.default_worker_shutdown_delay))
+        self.log.warning('SIGTERM recieved, raising ShutDownImminentException '
+                         'in {} seconds'.format(self.default_worker_shutdown_delay))
         signal.signal(signal.SIGTERM,
                       signal.SIGIGN
                       if self.ignore_repeated_sigterm else
@@ -678,12 +684,14 @@ class Worker(object):
         signal.alarm(self.default_worker_shutdown_delay)
 
     def request_horse_force_stop(self, signum, frame):
+        info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         if getattr(_local, 'critical_section', 0):
             self.log.warning('Delaying ShutDownImminentException till critical section is finished')
             _local.raise_shutdown = True
+            _local.frame_info = info
         else:
             self.log.warning('Raising ShutDownImminentException to cancel job')
-            raise ShutDownImminentException
+            raise ShutDownImminentException(extra_info=info)
 
     def prepare_job_execution(self, job):
         """Performs misc bookkeeping like updating states prior to
@@ -908,50 +916,8 @@ class SimpleWorker(Worker):
 
 
 class HerokuWorker(Worker):
-    """
-    Modified version of rq worker which:
-    * stops work horses getting killed with SIGTERM
-    * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
-    causes the horse to crash `imminent_shutdown_delay` seconds later
-    """
-    imminent_shutdown_delay = 6
+    """Modified version of rq worker which ignores repeated SIGTERM signals"""
 
     def __init__(self, *args, **kwargs):
         super(HerokuWorker, self).__init__(*args, **kwargs)
         self.ignore_repeated_sigterm = True
-
-    frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
-    if PY2:
-        frame_properties.extend(
-            ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
-        )
-
-    def setup_work_horse_signals(self):
-        """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
-        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
-
-    def handle_warm_shutdown_request(self):
-        """If horse is alive send it SIGRTMIN"""
-        if self.horse_pid != 0:
-            self.log.warning('Warm shut down requested, sending horse SIGRTMIN signal')
-            self.kill_horse(sig=signal.SIGRTMIN)
-        else:
-            self.log.warning('Warm shut down requested, no horse found')
-
-    def request_stop_sigrtmin(self, signum, frame):
-        if self.imminent_shutdown_delay == 0:
-            self.log.warning('Imminent shutdown, raising ShutDownImminentException immediately')
-            self.request_force_stop_sigrtmin(signum, frame)
-        else:
-            self.log.warning('Imminent shutdown, raising ShutDownImminentException in %d seconds',
-                             self.imminent_shutdown_delay)
-            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
-            signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
-            signal.alarm(self.imminent_shutdown_delay)
-
-    def request_force_stop_sigrtmin(self, signum, frame):
-        info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
-        self.log.warning('raising ShutDownImminentException to cancel job...')
-        raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
