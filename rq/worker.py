@@ -466,15 +466,15 @@ class Worker(object):
                         if burst:
                             self.log.info("RQ worker {0!r} done, quitting".format(self.key))
                         break
+                        
+                    job, queue = result
+                    self.execute_job(job, queue)
+                    self.heartbeat()
+                    
+                    did_perform_work = True
+                    
                 except StopRequested:
                     break
-
-                job, queue = result
-                self.execute_job(job, queue)
-                self.heartbeat()
-
-                did_perform_work = True
-
         finally:
             if not self.is_horse:
                 self.register_death()
