@@ -23,7 +23,6 @@ from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
-from .handlers import move_to_failed_queue
 from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
@@ -768,6 +767,7 @@ class Worker(object):
     def move_to_failed_queue(self, job, *exc_info):
         """Default exception handler: move the job to the failed queue."""
         self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
+        from .handlers import move_to_failed_queue
         move_to_failed_queue(job, *exc_info)
 
     @staticmethod
