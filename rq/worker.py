@@ -16,15 +16,14 @@ from datetime import timedelta
 
 from redis import WatchError
 
-from rq.compat import as_text, string_types, text_type
-
-from .compat import PY2
+from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
+from .handlers import move_to_failed_queue
 from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
@@ -83,13 +82,6 @@ WorkerStatus = enum(
     BUSY='busy',
     IDLE='idle'
 )
-
-
-def move_to_failed_queue(job, *exc_info):
-    """Default exception handler: move the job to the failed queue."""
-    exc_string = Worker._get_safe_exception_string(traceback.format_exception(*exc_info))
-    failed_queue = get_failed_queue(get_current_connection(), job.__class__)
-    failed_queue.quarantine(job, exc_info=exc_string)
 
 
 class Worker(object):
