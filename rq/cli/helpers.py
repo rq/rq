@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import sys
 import importlib
 import time
 from functools import partial
@@ -219,10 +220,14 @@ class CliConfig(object):
     """A helper class to be used with click commands, to handle shared options"""
     def __init__(self, url=None, config=None, worker_class=DEFAULT_WORKER_CLASS,
                  job_class=DEFAULT_JOB_CLASS, queue_class=DEFAULT_QUEUE_CLASS,
-                 connection_class=DEFAULT_CONNECTION_CLASS, *args, **kwargs):
+                 connection_class=DEFAULT_CONNECTION_CLASS, path=None, *args, **kwargs):
         self._connection = None
         self.url = url
         self.config = config
+
+        if path:
+            for pth in path:
+                sys.path.append(pth)
 
         try:
             self.worker_class = import_attribute(worker_class)
