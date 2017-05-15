@@ -226,7 +226,8 @@ class CliConfig(object):
         self.config = config
 
         if path:
-            sys.path = path.split(':') + sys.path
+            for pth in path:
+                sys.path.append(pth)
 
         try:
             self.worker_class = import_attribute(worker_class)
