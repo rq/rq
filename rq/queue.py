@@ -192,6 +192,8 @@ class Queue(object):
         contain options for RQ itself.
         """
         timeout = parse_timeout(timeout) or self._default_timeout
+        result_ttl = parse_timeout(result_ttl)
+        ttl = parse_timeout(ttl)
 
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
