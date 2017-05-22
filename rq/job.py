@@ -606,12 +606,9 @@ class Job(object):
             self.delete(pipeline=pipeline, remove_from_queue=remove_from_queue)
         elif not ttl:
             return
-        else:
+        elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
-            if ttl > 0:
-                connection.expire(self.key, ttl)
-            else:
-                connection.persist(self.key)
+            connection.expire(self.key, ttl)
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
