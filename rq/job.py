@@ -191,7 +191,6 @@ class Job(object):
         if hasattr(self, '_dependency'):
             return self._dependency
         job = self.fetch(self._dependency_id, connection=self.connection)
-        job.refresh()
         self._dependency = job
         return job
 
