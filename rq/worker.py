@@ -394,7 +394,7 @@ class Worker(object):
 
         # If shutdown is requested in the middle of a job, wait until
         # finish before shutting down and save the request in redis
-        if self.get_state() == 'busy':
+        if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
             self.log.debug('Stopping after current horse is finished. '
@@ -583,10 +583,10 @@ class Worker(object):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
-        self.set_state('busy')
+        self.set_state(WorkerStatus.BUSY)
         self.fork_work_horse(job, queue)
         self.monitor_work_horse(job)
-        self.set_state('idle')
+        self.set_state(WorkerStatus.IDLE)
 
     def main_work_horse(self, job, queue):
         """This is the entry point of the newly spawned work horse."""
