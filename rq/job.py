@@ -90,7 +90,8 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None,
+               meta=None, notify=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -135,6 +136,7 @@ class Job(object):
         job.timeout = timeout
         job._status = status
         job.meta = meta or {}
+        job.meta['_notify'] = notify
 
         # dependency could be job instance or id
         if depends_on is not None:
@@ -155,6 +157,11 @@ class Job(object):
     def set_status(self, status, pipeline=None):
         self._status = status
         self.connection._hset(self.key, 'status', self._status, pipeline)
+        notify = self.meta.get('_notify')
+        if notify:
+            chan = self._id if notify is True else notify
+            con = pipeline if pipeline else self.connection
+            con.publish(chan, status)
 
     def _set_status(self, status):
         warnings.warn(
