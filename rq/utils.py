@@ -16,12 +16,19 @@ import numbers
 import sys
 from collections import Iterable
 
+try:
+    import colorama
+except ImportError:
+    colorama = None
+
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
 
 
 class _Colorizer(object):
     def __init__(self):
+        colorama and colorama.init()
+        
         esc = "\x1b["
 
         self.codes = {}
@@ -55,6 +62,7 @@ class _Colorizer(object):
 
         if hasattr(sys.stdout, "isatty"):
             self.notty = not sys.stdout.isatty()
+            self.notty = sys.platform == 'win32' and not colorama
         else:
             self.notty = True
 
