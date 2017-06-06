@@ -716,7 +716,7 @@ class Worker(object):
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
-        except Exception:
+        except Exception as e:
             self.handle_job_failure(job=job,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *sys.exc_info())
@@ -745,11 +745,13 @@ class Worker(object):
         exc_string = Worker._get_safe_exception_string(
             traceback.format_exception_only(*exc_info[:2]) + traceback.format_exception(*exc_info)
         )
-        self.log.error(exc_string, exc_info=True, extra={
+        self.log.error(exc_string, exc_info=exc_info, extra={
+            'job_id': job.id,
             'func': job.func_name,
             'arguments': job.args,
             'kwargs': job.kwargs,
             'queue': job.origin,
+            'description': job.description,
         })
 
         for handler in reversed(self._exc_handlers):
