@@ -6,5 +6,6 @@ DEFAULT_WORKER_CLASS = 'rq.Worker'
 DEFAULT_CONNECTION_CLASS = 'redis.StrictRedis'
 DEFAULT_WORKER_TTL = 420
 DEFAULT_RESULT_TTL = 500
-DEFAULT_NAMESPACE = os.getenv('RQ_NAMESPACE', 'namespace')
+namespace = os.getenv('RQ_NAMESPACE')
+DEFAULT_NAMESPACE = ":{}".format(namespace) if namespace else ''
 DEFAULT_QUEUE_TIMEOUT = int(os.getenv('DEFAULT_QUEUE_TIMEOUT', 180))

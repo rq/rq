@@ -85,8 +85,8 @@ WorkerStatus = enum(
 
 
 class Worker(object):
-    redis_worker_namespace_prefix = 'rq:worker:{}'.format(DEFAULT_NAMESPACE)
-    redis_workers_keys = 'rq:workers:{}'.format(DEFAULT_NAMESPACE)
+    redis_worker_namespace_prefix = 'rq:worker{}'.format(DEFAULT_NAMESPACE)
+    redis_workers_keys = 'rq:workers{}'.format(DEFAULT_NAMESPACE)
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job

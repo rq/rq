@@ -85,8 +85,8 @@ class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
 
-    enqueued_stat_key = '{0}:{1}'.format('rq:enqueued:stats', DEFAULT_NAMESPACE)
-    processed_stat_key = '{0}:{1}'.format('rq:processed:stats', DEFAULT_NAMESPACE)
+    enqueued_stat_key = '{0}{1}'.format('rq:enqueued:stats', DEFAULT_NAMESPACE)
+    processed_stat_key = '{0}{1}'.format('rq:processed:stats', DEFAULT_NAMESPACE)
 
     # Job construction
     @classmethod
