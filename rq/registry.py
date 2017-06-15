@@ -1,3 +1,4 @@
+from rq.defaults import DEFAULT_NAMESPACE
 from .compat import as_text
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
@@ -17,7 +18,7 @@ class BaseRegistry(object):
 
     def __init__(self, name='default', connection=None, job_class=None):
         self.name = name
-        self.key = self.key_template.format(name)
+        self.key = self.key_template.format("{}{}".format(name, DEFAULT_NAMESPACE))
         self.connection = resolve_connection(connection)
         self.job_class = backend_class(self, 'job_class', override=job_class)
 

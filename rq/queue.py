@@ -6,6 +6,7 @@ import uuid
 
 from redis import WatchError
 
+from rq.defaults import DEFAULT_QUEUE_TIMEOUT, DEFAULT_NAMESPACE
 from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
@@ -27,9 +28,9 @@ def compact(lst):
 @total_ordering
 class Queue(object):
     job_class = Job
-    DEFAULT_TIMEOUT = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix = 'rq:queue:'
-    redis_queues_keys = 'rq:queues'
+    DEFAULT_TIMEOUT = DEFAULT_QUEUE_TIMEOUT  # Default timeout seconds.
+    redis_queue_namespace_prefix = 'rq:queue{}'.format(DEFAULT_NAMESPACE)
+    redis_queues_keys = 'rq:queues{}'.format(DEFAULT_NAMESPACE)
 
     @classmethod
     def all(cls, connection=None, job_class=None):
@@ -41,6 +42,7 @@ class Queue(object):
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection,
                                       job_class=job_class)
+
         return [to_queue(rq_key)
                 for rq_key in connection.smembers(cls.redis_queues_keys)
                 if rq_key]

@@ -16,6 +16,7 @@ from datetime import timedelta
 
 from redis import WatchError
 
+from rq.defaults import DEFAULT_NAMESPACE
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
@@ -84,8 +85,8 @@ WorkerStatus = enum(
 
 
 class Worker(object):
-    redis_worker_namespace_prefix = 'rq:worker:'
-    redis_workers_keys = 'rq:workers'
+    redis_worker_namespace_prefix = 'rq:worker{}'.format(DEFAULT_NAMESPACE)
+    redis_workers_keys = 'rq:workers{}'.format(DEFAULT_NAMESPACE)
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job

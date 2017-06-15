@@ -1,3 +1,12 @@
+from os.path import join, dirname, exists
+
+from dotenv import load_dotenv
+
+dotenv_path = join(dirname(__file__), '/etc/environment')
+if exists(dotenv_path):
+    print("loading environment variables from /etc/environment file..")
+    load_dotenv(dotenv_path)
+
 # flake8: noqa
 from .cli import main
 
