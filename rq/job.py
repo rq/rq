@@ -155,10 +155,9 @@ class Job(object):
         return self.get_status()
 
     def set_status(self, status, pipeline=None):
-        self._new_status = status
         self.__set_job_stats(status)
-        self.connection._hset(self.key, 'status', self._new_status, pipeline)
-        self._status = self._new_status
+        self.connection._hset(self.key, 'status', status, pipeline)
+        self._status = status
 
     def __set_job_stats(self, status):
         if status == JobStatus.QUEUED:
