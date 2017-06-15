@@ -8,7 +8,7 @@ from functools import partial
 from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
-
+from rq.defaults import DEFAULT_NAMESPACE
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
@@ -23,7 +23,6 @@ except ImportError:  # noqa  # pragma: no cover
 # uses ascii)
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
-
 
 JobStatus = enum(
     'JobStatus',
@@ -85,6 +84,9 @@ def get_current_job(connection=None, job_class=None):
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+
+    enqueued_stat_key = '{0}{1}'.format('rq:enqueued:stats', DEFAULT_NAMESPACE)
+    processed_stat_key = '{0}{1}'.format('rq:processed:stats', DEFAULT_NAMESPACE)
 
     # Job construction
     @classmethod
@@ -153,8 +155,24 @@ class Job(object):
         return self.get_status()
 
     def set_status(self, status, pipeline=None):
+        self.__set_job_stats(status)
+        self.connection._hset(self.key, 'status', status, pipeline)
         self._status = status
-        self.connection._hset(self.key, 'status', self._status, pipeline)
+
+    def __set_job_stats(self, status):
+        if status == JobStatus.QUEUED:
+            if not self.is_queued:
+                self.__set_stats(self.enqueued_stat_key)
+        else:
+            if self.is_queued:
+                self.connection.decr(self.enqueued_stat_key)
+                self.__set_stats(self.processed_stat_key)
+
+    def __set_stats(self, queue_name):
+        if self.connection.exists(queue_name):
+            self.connection.incr(queue_name)
+        else:
+            self.connection.set(queue_name, 1)
 
     def _set_status(self, status):
         warnings.warn(
@@ -547,7 +565,6 @@ class Job(object):
 
         connection.delete(self.key)
         connection.delete(self.dependents_key)
-
 
     # Job execution
     def perform(self):  # noqa
