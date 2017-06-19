@@ -14,6 +14,11 @@ import traceback
 import warnings
 from datetime import timedelta
 
+try:
+    from signal import SIGKILL
+except ImportError:
+    from signal import SIGTERM as SIGKILL
+
 from redis import WatchError
 
 from .compat import PY2, as_text, string_types, text_type
@@ -356,7 +361,7 @@ class Worker(object):
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
-    def kill_horse(self, sig=signal.SIGKILL):
+    def kill_horse(self, sig=SIGKILL):
         """
         Kill the horse but catch "No such process" error has the horse could already be dead.
         """
