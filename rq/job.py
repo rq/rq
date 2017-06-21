@@ -75,11 +75,10 @@ def get_current_job(connection=None, job_class=None):
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
     """
-    job_class = job_class or Job
-    job_id = _job_stack.top
-    if job_id is None:
-        return None
-    return job_class.fetch(job_id, connection=connection)
+    if job_class:
+        warnings.warn("job_class argument for get_current_job is deprecated.",
+                      DeprecationWarning)
+    return _job_stack.top
 
 
 class Job(object):
@@ -479,18 +478,18 @@ class Job(object):
 
     def save(self, pipeline=None, include_meta=True):
         """
-        Persists the current job instance to its corresponding Redis key.
+        Dumps the current job instance to its corresponding Redis key.
 
-        Exclude persisting the `meta` dictionary by setting
+        Exclude saving the `meta` dictionary by setting
         `include_meta=False`. This is useful to prevent clobbering
         user metadata without an expensive `refresh()` call first.
 
+        Redis key persistence may be altered by `cleanup()` method.
         """
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
         connection.hmset(key, self.to_dict(include_meta=include_meta))
-        self.cleanup(self.ttl, pipeline=connection)
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
@@ -548,17 +547,15 @@ class Job(object):
         connection.delete(self.key)
         connection.delete(self.dependents_key)
 
-
     # Job execution
     def perform(self):  # noqa
         """Invokes the job function with the job arguments."""
         self.connection.persist(self.key)
-        self.ttl = -1
-        _job_stack.push(self.id)
+        _job_stack.push(self)
         try:
             self._result = self._execute()
         finally:
-            assert self.id == _job_stack.pop()
+            assert self is _job_stack.pop()
         return self._result
 
     def _execute(self):
