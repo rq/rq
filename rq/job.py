@@ -31,6 +31,7 @@ JobStatus = enum(
     FINISHED='finished',
     FAILED='failed',
     STARTED='started',
+    CANCELED='canceled',
     DEFERRED='deferred'
 )
 
@@ -135,9 +136,15 @@ class Job(object):
         job._status = status
         job.meta = meta or {}
 
-        # dependency could be job instance or id
-        if depends_on is not None:
-            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
+        # dependencies could be a single job or a list of jobs
+        if depends_on is None:
+            depends_on = []
+        if isinstance(depends_on, list):
+            job._dependency_ids = [x.id for x in depends_on]
+        else:
+            job._dependency_ids = ([depends_on.id]
+                                   if isinstance(depends_on, Job)
+                                   else [depends_on])
         return job
 
     def get_status(self):
@@ -181,17 +188,39 @@ class Job(object):
         return self.get_status() == JobStatus.STARTED
 
     @property
-    def dependency(self):
-        """Returns a job's dependency. To avoid repeated Redis fetches, we cache
-        job.dependency as job._dependency.
+    def dependencies(self):
+        """Returns a list of job's dependencies. To avoid repeated
+        Redis fetches, we cache job.dependencies
         """
-        if self._dependency_id is None:
+        if self._dependency_ids is None:
             return None
-        if hasattr(self, '_dependency'):
-            return self._dependency
-        job = self.fetch(self._dependency_id, connection=self.connection)
-        self._dependency = job
-        return job
+        if hasattr(self, '_dependencies'):
+            return self._dependencies
+        self._dependencies = [Job.fetch(
+            dependency_id, connection=self.connection)
+            for dependency_id in self._dependency_ids]
+
+        for job in self._dependencies:
+            job.refresh()
+        return self._dependencies
+
+    def remove_dependency(self, dependency_id, pipeline=None):
+        """Removes a dependency from job. This is usually called when
+        dependency is successfully executed."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.srem(self.dependencies_key, dependency_id)
+
+    def has_unmet_dependencies(self):
+        """Checks whether job has dependencies that aren't yet finished."""
+        return bool(self.connection.scard(self.dependencies_key))
+
+    @property
+    def dependents(self):
+        """Returns a list of jobs whose execution depends on this
+        job's successful execution"""
+        dependents_ids = self.connection.smembers(self.dependents_key)
+        return [Job.fetch(x, connection=self.connection)
+                for x in dependents_ids]
 
     @property
     def func(self):
@@ -313,7 +342,7 @@ class Job(object):
         self.result_ttl = None
         self.ttl = None
         self._status = None
-        self._dependency_id = None
+        self._dependency_ids = None
         self.meta = {}
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -353,12 +382,21 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('utf-8')
+        try:
+            return b'rq:job:' + job_id.encode('utf-8')
+        except:
+            # HACK TODO added during jlopex multi-dependencies merge
+            return b'rq:job:' + job_id
 
     @classmethod
     def dependents_key_for(cls, job_id):
-        """The Redis key that is used to store job hash under."""
+        """The Redis key that is used to store job dependents hash under."""
         return 'rq:job:{0}:dependents'.format(job_id)
+
+    @classmethod
+    def dependencies_key_for(cls, job_id):
+        """The Redis key that is used to store job dependencies hash under."""
+        return 'rq:job:{0}:dependencies'.format(job_id)
 
     @property
     def key(self):
@@ -367,8 +405,13 @@ class Job(object):
 
     @property
     def dependents_key(self):
-        """The Redis key that is used to store job hash under."""
+        """The Redis key that is used to store job dependents hash under."""
         return self.dependents_key_for(self.id)
+
+    @property
+    def dependencies_key(self):
+        """The Redis key that is used to store job dependancies hash under."""
+        return self.dependencies_key_for(self.id)
 
     @property
     def result(self):
@@ -435,6 +478,16 @@ class Job(object):
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
+        if obj.get('dependency_ids'):
+            self._dependency_ids = as_text(obj.get('dependency_ids', '')).split(' ')
+        else:
+            self._dependency_ids = []
+
+        if obj.get('dependency_ids'):
+            self._dependency_ids = as_text(obj.get('dependency_ids', '')).split(' ')
+        else:
+            self._dependency_ids = []
+
     def to_dict(self, include_meta=True):
         """
         Returns a serialization of the current job instance
@@ -467,8 +520,8 @@ class Job(object):
             obj['result_ttl'] = self.result_ttl
         if self._status is not None:
             obj['status'] = self._status
-        if self._dependency_id is not None:
-            obj['dependency_id'] = self._dependency_id
+        if self._dependency_ids is not None:
+            obj['dependency_ids'] = ' '.join(self._dependency_ids)
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
@@ -498,18 +551,38 @@ class Job(object):
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
-        ran (or inspected).
+        ran (or inspected). Jobs that depend on the given job as well as its'
+        dependencies will be cancelled as well since they will never be run.
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
         cancellation.
         """
         from .queue import Queue
+        from.registry import DeferredJobRegistry
+        self.set_status(JobStatus.CANCELED)
         pipeline = self.connection._pipeline()
         if self.origin:
-            q = Queue(name=self.origin, connection=self.connection)
-            q.remove(self, pipeline=pipeline)
+            queue = Queue(name=self.origin, connection=self.connection)
+            queue.remove(self, pipeline=pipeline)
+            DeferredJobRegistry(
+                name=self.origin,
+                connection=self.connection).remove(self, pipeline=pipeline)
         pipeline.execute()
+
+        if self.dependents is not None:
+            for dependent in self.dependents:
+                if dependent.get_status() != JobStatus.CANCELED:
+                    dependent.cancel()
+
+        if self.dependencies is not None:
+            for dependency in self.dependencies:
+                if dependency.get_status() != JobStatus.CANCELED:
+                    dependency.cancel()
+
+        self.connection.delete(self.dependents_key)
+        self.connection.delete(self.dependencies_key)
+        self.connection.expire(self.key, 2)
 
     def delete(self, pipeline=None, remove_from_queue=True):
         """Cancels the job and deletes the job hash from Redis."""
@@ -537,6 +610,29 @@ class Job(object):
                                           connection=self.connection,
                                           job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
+
+        elif self.get_status() == JobStatus.CANCELED:
+            # TODO: A job can be in any of the registries when receiving a
+            # cancel signal.
+            from .registry import StartedJobRegistry
+            registry = StartedJobRegistry(self.origin,
+                                          connection=self.connection,
+                                          job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+            from .registry import DeferredJobRegistry
+            registry = DeferredJobRegistry(self.origin,
+                                           connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+            from .registry import FinishedJobRegistry
+            registry = FinishedJobRegistry(self.origin,
+                                           connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+            from .queue import get_failed_queue
+            failed_queue = get_failed_queue(connection=self.connection,
+                                            job_class=self.__class__)
+            failed_queue.remove(self, pipeline=pipeline)
 
         elif self.get_status() == JobStatus.FAILED:
             from .queue import get_failed_queue
@@ -609,7 +705,7 @@ class Job(object):
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
 
-    def register_dependency(self, pipeline=None):
+    def register_dependencies(self, dependencies, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
         depend on is successfully performed. We record this relation as
         a reverse dependency (a Redis set), with a key that looks something
@@ -628,7 +724,9 @@ class Job(object):
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
-        connection.sadd(self.dependents_key_for(self._dependency_id), self.id)
+        for dependency in dependencies:
+            connection.sadd(Job.dependencies_key_for(self.id), dependency.id)
+            connection.sadd(Job.dependents_key_for(dependency.id), self.id)
 
 
 _job_stack = LocalStack()

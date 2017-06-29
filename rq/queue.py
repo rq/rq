@@ -205,25 +205,36 @@ class Queue(object):
         # parent's dependents instead of enqueueing it.
         # If WatchError is raised in the process, that means something else is
         # modifying the dependency. In this case we simply retry
-        if depends_on is not None:
-            if not isinstance(depends_on, self.job_class):
-                depends_on = self.job_class(id=depends_on,
-                                            connection=self.connection)
+        if depends_on:
+            if not isinstance(depends_on, list):
+                if not isinstance(depends_on, self.job_class):
+                    depends_on = Job(id=depends_on, connection=self.connection)
+
+                dependencies = [depends_on]
+            else:
+                dependencies = depends_on
+
+            remaining_dependencies = []
             with self.connection._pipeline() as pipe:
                 while True:
                     try:
-                        pipe.watch(depends_on.key)
+                        pipe.watch(*[dependency.key for dependency in dependencies])
 
-                        # If the dependency does not exist, raise an
-                        # exception to avoid creating an orphaned job.
-                        if not self.job_class.exists(depends_on.id,
-                                                     self.connection):
-                            raise InvalidJobDependency('Job {0} does not exist'.format(depends_on.id))
+                        for dependency in dependencies:
+                            if dependency.get_status() != JobStatus.FINISHED:
+                                remaining_dependencies.append(dependency)
 
-                        if depends_on.get_status() != JobStatus.FINISHED:
+                            # If the dependency does not exist, raise an
+                            # exception to avoid creating an orphaned job.
+                            if not self.job_class.exists(dependency.id,
+                                                         self.connection):
+                                raise InvalidJobDependency('Job {0} does not exist'.format(dependency.id))
+
+                        if remaining_dependencies:
                             pipe.multi()
                             job.set_status(JobStatus.DEFERRED)
-                            job.register_dependency(pipeline=pipe)
+                            job.register_dependencies(remaining_dependencies,
+                                                      pipeline=pipe)
                             job.save(pipeline=pipe)
                             job.cleanup(ttl=job.ttl, pipeline=pipe)
                             pipe.execute()
@@ -337,17 +348,19 @@ class Queue(object):
                 pipe.multi()
 
                 for dependent in dependent_jobs:
-                    registry = DeferredJobRegistry(dependent.origin,
-                                                   self.connection,
-                                                   job_class=self.job_class)
-                    registry.remove(dependent, pipeline=pipe)
-                    if dependent.origin == self.name:
-                        self.enqueue_job(dependent, pipeline=pipe)
-                    else:
-                        queue = Queue(name=dependent.origin, connection=self.connection)
-                        queue.enqueue_job(dependent, pipeline=pipe)
-
-                pipe.delete(dependents_key)
+                    dependent.remove_dependency(job.id)
+                    # TODO: pipelining of removal not possible since next if
+                    # expects an empty dependencies key. Is there a better way?
+                    if dependent.has_unmet_dependencies() is False:
+                        registry = DeferredJobRegistry(dependent.origin,
+                                                       self.connection,
+                                                       job_class=self.job_class)
+                        registry.remove(dependent, pipeline=pipe)
+                        if dependent.origin == self.name:
+                            self.enqueue_job(dependent, pipeline=pipe)
+                        else:
+                            queue = Queue(name=dependent.origin, connection=self.connection)
+                            queue.enqueue_job(dependent, pipeline=pipe)
 
                 if pipeline is None:
                     pipe.execute()
