@@ -588,8 +588,8 @@ class Job(object):
                 self.remove_from_dependents(dependency.dependents_key)
 
         # Delete all keys related to this job
-        self.connection.delete(self.dependents_key)
-        self.connection.delete(self.dependencies_key)
+        self.connection.expire(self.dependents_key, 2)
+        self.connection.expire(self.dependencies_key, 2)
         self.connection.expire(self.key, 2)
 
     def delete(self, pipeline=None, remove_from_queue=True):
@@ -712,6 +712,8 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+            connection.expire(self.dependencies_key, ttl)
+            connection.expire(self.dependents_key, ttl)
 
     def register_dependencies(self, dependencies, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
