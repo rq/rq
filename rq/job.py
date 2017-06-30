@@ -583,7 +583,6 @@ class Job(object):
                     dependent.cancel()
 
         if self.dependencies is not None:
-            # TODO: write a test for this
             for dependency in self.dependencies:
                 self.remove_from_dependents(dependency.dependents_key)
 
