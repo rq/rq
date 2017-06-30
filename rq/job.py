@@ -204,22 +204,6 @@ class Job(object):
             job.refresh()
         return self._dependencies
 
-    def remove_dependency(self, dependency_id, pipeline=None):
-        """Removes a dependency from job. This is usually called when
-        dependency is successfully executed."""
-        connection = pipeline if pipeline is not None else self.connection
-        connection.srem(self.dependencies_key, dependency_id)
-
-    def remove_from_dependents(self, dependents_key, pipeline=None):
-        """Removes this job from anothers dependents key. This is usually called
-        when this job is cancelled."""
-        connection = pipeline if pipeline is not None else self.connection
-        connection.srem(dependents_key, self.id)
-
-    def has_unmet_dependencies(self):
-        """Checks whether job has dependencies that aren't yet finished."""
-        return bool(self.connection.scard(self.dependencies_key))
-
     @property
     def dependents(self):
         """Returns a list of jobs whose execution depends on this
@@ -227,6 +211,22 @@ class Job(object):
         dependents_ids = self.connection.smembers(self.dependents_key)
         return [Job.fetch(x, connection=self.connection)
                 for x in dependents_ids]
+
+    def remove_dependency(self, dependency_id, pipeline=None):
+        """Removes a dependency from job. This is usually called when
+        dependency is successfully executed."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.srem(self.dependencies_key, dependency_id)
+
+    def remove_dependent(self, dependent_id, pipeline=None):
+        """Removes this job from anothers dependents key. This is usually called
+        when this job is cancelled."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.srem(self.dependents_key, dependent_id)
+
+    def has_unmet_dependencies(self):
+        """Checks whether job has dependencies that aren't yet finished."""
+        return bool(self.connection.scard(self.dependencies_key))
 
     @property
     def func(self):
@@ -575,16 +575,22 @@ class Job(object):
             DeferredJobRegistry(
                 name=self.origin,
                 connection=self.connection).remove(self, pipeline=pipeline)
-        pipeline.execute()
 
+        # Cancel downstream and remove this job as their dependency
         if self.dependents is not None:
             for dependent in self.dependents:
+                dependent.remove_dependency(self.id, pipeline=pipeline)
                 if dependent.get_status() != JobStatus.CANCELED:
+                    # TODO: give pipeline back to cancel so all downstream
+                    # cancels happen at the same time ?
                     dependent.cancel()
 
+        # Remove this job as dependent from upstream
         if self.dependencies is not None:
             for dependency in self.dependencies:
-                self.remove_from_dependents(dependency.dependents_key)
+                dependency.remove_dependent(self.id, pipeline=pipeline)
+
+        pipeline.execute()
 
         # Delete all keys related to this job
         self.connection.expire(self.dependents_key, 2)
@@ -620,7 +626,7 @@ class Job(object):
 
         elif self.get_status() == JobStatus.CANCELED:
             # TODO: A job can be in any of the registries when receiving a
-            # cancel signal.
+            # cancel signal. Lots of DRY, think about that
             from .registry import StartedJobRegistry
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,

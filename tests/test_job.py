@@ -431,17 +431,54 @@ class TestJob(RQTestCase):
         self.assertEqual(self.testconn.smembers(
                          Job.dependents_key_for(job2.id)), set())
 
+    def test_cancel_dependent_job(self):
+        """If a dependent job is cancelled it should cancel all downstream jobs
+        and update the dependents list of upstream jobs"""
+        queue = Queue(connection=self.testconn)
+
+        job1 = queue.enqueue(fixtures.say_hello)
+
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job1)
+        job2.save()
+        job2.register_dependencies([job1])
+
+        job3 = Job.create(func=fixtures.say_hello, depends_on=job2)
+        job3.save()
+        job3.register_dependencies([job2])
+
+        # TODO: I am a bit confused here (working in python 3). If not using
+        # as_text I get problems wit b'x' != 'x' where does the byte string come
+        # from? cf HACK in job.py same problem I guess
+
+        # job2 should be in job1 dependents
+        self.assertEqual(set([as_text(x.id) for x in job1.dependents]), set([job2.id]))
+        # job2 should be in job3 dependencies
+        self.assertEqual(set([x.id for x in job3.dependencies]), set([job2.id]))
+
+        job2.cancel()
+
+        # NOTE: dependents and dependencies are cached in Job so fetch directly from redis
+        # job2 should no longer be in job1 dependents
+        self.assertEqual(self.testconn.smembers(job1.dependents_key_for), set([]))
+        # job2 should no longer be in job3 dependencies
+        self.assertEqual(self.testconn.smembers(job3.dependencies_key_for), set([]))
+        # job 3 should have been cancelled as well
+        self.assertEqual(job3.get_status(), JobStatus.CANCELED)
+
     def test_delete(self):
         """job.delete() deletes itself & dependents mapping from Redis."""
         queue = Queue(connection=self.testconn)
-        job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
-        job2.register_dependencies([job])
-        job.delete()
-        self.assertFalse(self.testconn.exists(job.key))
-        self.assertFalse(self.testconn.exists(job.dependents_key))
+        job1 = queue.enqueue(fixtures.say_hello)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job1)
+        job2.save()
+        job2.register_dependencies([job1])  # why register deopoendency, we told job2 about it during equeue
 
-        self.assertNotIn(job.id, queue.get_job_ids())
+        job1.delete()
+
+        self.assertFalse(self.testconn.exists(job1.key))
+        self.assertFalse(self.testconn.exists(job1.dependents_key))
+
+        self.assertNotIn(job1.id, queue.get_job_ids())
 
     def test_create_job_with_id(self):
         """test creating jobs with a custom ID"""
