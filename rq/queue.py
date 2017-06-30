@@ -351,6 +351,7 @@ class Queue(object):
                     dependent.remove_dependency(job.id)
                     # TODO: pipelining of removal not possible since next if
                     # expects an empty dependencies key. Is there a better way?
+                    # or is it ok if not everything is pipelined?
                     if dependent.has_unmet_dependencies() is False:
                         registry = DeferredJobRegistry(dependent.origin,
                                                        self.connection,
@@ -361,6 +362,16 @@ class Queue(object):
                         else:
                             queue = Queue(name=dependent.origin, connection=self.connection)
                             queue.enqueue_job(dependent, pipeline=pipe)
+
+                # This job is done and its dependents will never be checked
+                # again. If a dependent had multiple dependencies, another job
+                # will run it at a later time
+                # NOTE: on job cleanup, all keys will be removed, but cleanup
+                # happens only if job is actually enqueued. If a user uses
+                # q.enqueue_dependents manully without enqueuing the parent job,
+                # job.cleanup() is not run
+                # run as well
+                pipe.delete(job.dependents_key)
 
                 if pipeline is None:
                     pipe.execute()
