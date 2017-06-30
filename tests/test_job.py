@@ -446,10 +446,6 @@ class TestJob(RQTestCase):
         job3.save()
         job3.register_dependencies([job2])
 
-        # TODO: I am a bit confused here (working in python 3). If not using
-        # as_text I get problems wit b'x' != 'x' where does the byte string come
-        # from? cf HACK in job.py same problem I guess
-
         # job2 should be in job1 dependents
         self.assertEqual(set([as_text(x.id) for x in job1.dependents]), set([job2.id]))
         # job2 should be in job3 dependencies

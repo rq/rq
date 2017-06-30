@@ -208,7 +208,8 @@ class Job(object):
     def dependents(self):
         """Returns a list of jobs whose execution depends on this
         job's successful execution"""
-        dependents_ids = self.connection.smembers(self.dependents_key)
+        dependents_ids = map(as_text,
+                             self.connection.smembers(self.dependents_key))
         return [Job.fetch(x, connection=self.connection)
                 for x in dependents_ids]
 
@@ -388,11 +389,7 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        try:
-            return b'rq:job:' + job_id.encode('utf-8')
-        except:
-            # HACK TODO added during jlopex multi-dependencies merge
-            return b'rq:job:' + job_id
+        return b'rq:job:' + job_id.encode('utf-8')
 
     @classmethod
     def dependents_key_for(cls, job_id):
