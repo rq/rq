@@ -210,6 +210,12 @@ class Job(object):
         connection = pipeline if pipeline is not None else self.connection
         connection.srem(self.dependencies_key, dependency_id)
 
+    def remove_from_dependents(self, dependents_key, pipeline=None):
+        """Removes this job from anothers dependents key. This is usually called
+        when this job is cancelled."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.srem(dependents_key, self.id)
+
     def has_unmet_dependencies(self):
         """Checks whether job has dependencies that aren't yet finished."""
         return bool(self.connection.scard(self.dependencies_key))
@@ -551,8 +557,9 @@ class Job(object):
 
     def cancel(self):
         """Cancels the given job, which will prevent the job from ever being
-        ran (or inspected). Jobs that depend on the given job as well as its'
-        dependencies will be cancelled as well since they will never be run.
+        ran (or inspected). Downstream Jobs that depend on the given job will be
+        cancelled as well. Upstream Jobs that this job depends on will not be
+        changed but will have their dependencies updated.
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
@@ -576,10 +583,11 @@ class Job(object):
                     dependent.cancel()
 
         if self.dependencies is not None:
+            # TODO: write a test for this
             for dependency in self.dependencies:
-                if dependency.get_status() != JobStatus.CANCELED:
-                    dependency.cancel()
+                self.remove_from_dependents(dependency.dependents_key)
 
+        # Delete all keys related to this job
         self.connection.delete(self.dependents_key)
         self.connection.delete(self.dependencies_key)
         self.connection.expire(self.key, 2)
