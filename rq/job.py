@@ -193,6 +193,8 @@ class Job(object):
         Redis fetches, we cache job.dependencies
         """
         if self._dependency_ids is None:
+            # TODO: Remove this check
+            # Actually never NONE, because on create, I replace None with []
             return None
         if hasattr(self, '_dependencies'):
             return self._dependencies
@@ -599,6 +601,9 @@ class Job(object):
         if remove_from_queue:
             self.cancel()
         connection = pipeline if pipeline is not None else self.connection
+
+        # TODO: Check coverage report: All except JobStatus.CANCELED
+        # are not hit by current tests !?
 
         if self.get_status() == JobStatus.FINISHED:
             from .registry import FinishedJobRegistry
