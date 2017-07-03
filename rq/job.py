@@ -140,7 +140,10 @@ class Job(object):
         if depends_on is None:
             depends_on = []
         if isinstance(depends_on, list):
-            job._dependency_ids = [x.id for x in depends_on]
+            job._dependency_ids = []
+            for dep in depends_on:
+                job._dependency_ids.append(dep.id if isinstance(dep, Job)
+                                           else dep)
         else:
             job._dependency_ids = ([depends_on.id]
                                    if isinstance(depends_on, Job)
