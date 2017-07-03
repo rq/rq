@@ -206,6 +206,7 @@ class Job(object):
             for dependency_id in self._dependency_ids]
 
         for job in self._dependencies:
+            # TODO: why do a refresh here ?
             job.refresh()
         return self._dependencies
 
@@ -482,15 +483,8 @@ class Job(object):
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
-        self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
-
-        if obj.get('dependency_ids'):
-            self._dependency_ids = as_text(obj.get('dependency_ids', '')).split(' ')
-        else:
-            self._dependency_ids = []
-
         if obj.get('dependency_ids'):
             self._dependency_ids = as_text(obj.get('dependency_ids', '')).split(' ')
         else:
