@@ -508,6 +508,44 @@ class TestQueue(RQTestCase):
         self.assertEqual(q2.job_ids, [])
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
+    def test_enqueue_job_with_multiple_dependencies_different_q_by_id(self):
+        """Jobs can be enqueued on different queues. Dependency still works.
+        Enqueuing can be done using job ids as well"""
+        # Job with unfinished dependency is not immediately enqueued
+        parent_job1 = Job.create(func=say_hello)
+        parent_job1.save()
+        parent_job2 = Job.create(func=say_hello)
+        parent_job2.save()
+        q1 = Queue()
+        q2 = Queue()
+        job = q2.enqueue_call(say_hello, depends_on=[parent_job1.id, parent_job2.id])
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # run parent 1
+        q1.enqueue_job(parent_job1)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
+        # child should still be waiting
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # parent 2 has no state yet
+        self.assertEqual(parent_job2.get_status(), None)
+
+        # run parent 2
+        q1.enqueue_job(parent_job2)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
+        # child should be done
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
     def test_enqueue_job_with_dependency_by_id(self):
         """Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello)
