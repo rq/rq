@@ -212,10 +212,9 @@ class Queue(object):
 
                 dependencies = [depends_on]
             else:
-                dependencies = []
-                for dep in depends_on:
-                    dependencies.append(dep if isinstance(dep, self.job_class)
-                                        else Job(id=dep, connection=self.connection))
+                dependencies = [dep if isinstance(dep, self.job_class)
+                                else Job(id=dep, connection=self.connection)
+                                for dep in depends_on]
 
             remaining_dependencies = []
             with self.connection._pipeline() as pipe:
