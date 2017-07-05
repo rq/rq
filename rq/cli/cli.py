@@ -134,7 +134,7 @@ def requeue(cli_config, all, job_class, job_ids, **options):
 
 
 @main.command()
-@click.option('--path', '-P', default='.', help='Specify the import path.')
+@click.option('--path', '-P', default='.', help='Specify the import path.', multiple=True)
 @click.option('--interval', '-i', type=float, help='Updates stats every N seconds (default: don\'t poll)')
 @click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
 @click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')
@@ -142,12 +142,9 @@ def requeue(cli_config, all, job_class, job_ids, **options):
 @click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def info(cli_config, path, interval, raw, only_queues, only_workers, by_queue, queues,
+def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
          **options):
     """RQ command-line monitor."""
-
-    if path:
-        sys.path = path.split(':') + sys.path
 
     if only_queues:
         func = show_queues
@@ -171,7 +168,7 @@ def info(cli_config, path, interval, raw, only_queues, only_workers, by_queue, q
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--name', '-n', help='Specify a different name')
-@click.option('--path', '-P', default='.', help='Specify the import path.')
+@click.option('--path', '-P', default='.', help='Specify the import path.', multiple=True)
 @click.option('--results-ttl', type=int, help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
@@ -181,13 +178,10 @@ def info(cli_config, path, interval, raw, only_queues, only_workers, by_queue, q
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def worker(cli_config, burst, name, path, results_ttl,
+def worker(cli_config, burst, name, results_ttl,
            worker_ttl, verbose, quiet, sentry_dsn, exception_handler,
            pid, queues, **options):
     """Starts an RQ worker."""
-
-    if path:
-        sys.path = path.split(':') + sys.path
 
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
