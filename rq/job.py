@@ -562,15 +562,11 @@ class Job(object):
         cancellation.
         """
         from .queue import Queue
-        from.registry import DeferredJobRegistry
         self.set_status(JobStatus.CANCELED)
         pipeline = self.connection._pipeline()
         if self.origin:
             queue = Queue(name=self.origin, connection=self.connection)
             queue.remove(self, pipeline=pipeline)
-            DeferredJobRegistry(
-                name=self.origin,
-                connection=self.connection).remove(self, pipeline=pipeline)
 
         # Cancel downstream and remove this job as their dependency
         if self.dependents is not None:
@@ -579,6 +575,8 @@ class Job(object):
                 if dependent.get_status() != JobStatus.CANCELED:
                     # TODO: give pipeline back to cancel so all downstream
                     # cancels happen at the same time ?
+                    # TODO: they will stay in DeferredJobRegistry
+                    # Is that Okay? question of cancel vs delete
                     dependent.cancel()
 
         # Remove this job as dependent from upstream
@@ -589,18 +587,16 @@ class Job(object):
         pipeline.execute()
 
         # Delete all keys related to this job
+        # TODO: expire or delete. If called via delte
+        # they will be deleted anyway
         self.connection.expire(self.dependents_key, 2)
         self.connection.expire(self.dependencies_key, 2)
         self.connection.expire(self.key, 2)
 
     def delete(self, pipeline=None, remove_from_queue=True):
-        """Cancels the job and deletes the job hash from Redis."""
-        if remove_from_queue:
-            self.cancel()
+        """Removes the job from the registries and redis. It can also remove
+        the job from its queue via cancel()"""
         connection = pipeline if pipeline is not None else self.connection
-
-        # TODO: Check coverage report: All except JobStatus.CANCELED
-        # are not hit by current tests !?
 
         if self.get_status() == JobStatus.FINISHED:
             from .registry import FinishedJobRegistry
@@ -623,37 +619,18 @@ class Job(object):
                                           job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.CANCELED:
-            # TODO: A job can be in any of the registries when receiving a
-            # cancel signal. Lots of DRY, think about that
-            from .registry import StartedJobRegistry
-            registry = StartedJobRegistry(self.origin,
-                                          connection=self.connection,
-                                          job_class=self.__class__)
-            registry.remove(self, pipeline=pipeline)
-            from .registry import DeferredJobRegistry
-            registry = DeferredJobRegistry(self.origin,
-                                           connection=self.connection,
-                                           job_class=self.__class__)
-            registry.remove(self, pipeline=pipeline)
-            from .registry import FinishedJobRegistry
-            registry = FinishedJobRegistry(self.origin,
-                                           connection=self.connection,
-                                           job_class=self.__class__)
-            registry.remove(self, pipeline=pipeline)
-            from .queue import get_failed_queue
-            failed_queue = get_failed_queue(connection=self.connection,
-                                            job_class=self.__class__)
-            failed_queue.remove(self, pipeline=pipeline)
-
         elif self.get_status() == JobStatus.FAILED:
             from .queue import get_failed_queue
             failed_queue = get_failed_queue(connection=self.connection,
                                             job_class=self.__class__)
             failed_queue.remove(self, pipeline=pipeline)
 
+        if remove_from_queue:
+            self.cancel()
+
         connection.delete(self.key)
         connection.delete(self.dependents_key)
+        connection.delete(self.dependencies_key)
 
     # Job execution
     def perform(self):  # noqa
