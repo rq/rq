@@ -360,19 +360,19 @@ class Queue(object):
                                                        job_class=self.job_class)
                         registry.remove(dependent, pipeline=pipe)
                         if dependent.origin == self.name:
-                            self.enqueue_job(dependent, pipeline=pipe)
+                            queue = self
                         else:
                             queue = Queue(name=dependent.origin, connection=self.connection)
-                            queue.enqueue_job(dependent, pipeline=pipe)
+
+                        queue.enqueue_job(dependent, pipeline=pipe)
 
                 # This job is done and its dependents will never be checked
                 # again. If a dependent had multiple dependencies, another job
                 # will run it at a later time
                 # NOTE: on job cleanup, all keys will be removed, but cleanup
                 # happens only if job is actually enqueued. If a user uses
-                # q.enqueue_dependents manully without enqueuing the parent job,
-                # job.cleanup() is not run
-                # run as well
+                # q.enqueue_dependents manually without enqueuing the parent job,
+                # job.cleanup() is not run as well
                 pipe.delete(job.dependents_key)
 
                 if pipeline is None:
