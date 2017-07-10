@@ -2,9 +2,13 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from multiprocessing import Process
+import os
+import shutil
+
 from tests import RQTestCase
 from tests.fixtures import (div_by_zero, echo, Number, say_hello,
-                            some_calculation)
+                            some_calculation, random_file)
 
 from rq import get_failed_queue, Queue
 from rq.exceptions import InvalidJobDependency, InvalidJobOperationError
@@ -768,3 +772,50 @@ class TestFailedQueue(RQTestCase):
         failed_queue.quarantine(job, Exception('Some fake error'))
 
         self.assertEqual(self.testconn.ttl(job.key), -1)
+
+    def test_multi_deps_enqueued_only_once(self):
+        """A job with two dependencies should be run once only"""
+        SENTINEL_FOLDER = '/tmp/rq-tests'
+        TEST_COUNT = 100
+
+        q = Queue()
+
+        for _ in range(0, TEST_COUNT):
+            print('Starting pass # {}'.format(_))
+            try:
+                # Create an empty sentinel folder
+                if os.path.exists(SENTINEL_FOLDER):
+                    shutil.rmtree(SENTINEL_FOLDER)
+                os.mkdir(SENTINEL_FOLDER)
+            except OSError:
+                raise
+
+            # Create two independant jobs
+            job1 = Job.create(func=say_hello)
+            job1.save()
+            q.enqueue_job(job1)
+            job2 = Job.create(func=say_hello)
+            job2.save()
+            q.enqueue_job(job2)
+
+            # Create a third job depending on both job1 and job2
+            q.enqueue(random_file, SENTINEL_FOLDER, depends_on=[job1, job2])
+
+            # Start workers in parallel
+            def run_worker(q):
+                w = Worker([q])
+                w.work(burst=True)
+
+            procs = []
+            for x in range(0, 3):
+                p = Process(target=run_worker, args=(q,))
+                p.start()
+                procs.append(p)
+
+            for p in procs:
+                p.join()
+
+            # If the third job ran twice, the folder will contain 2 files
+            number_of_files = len([name for name in os.listdir(SENTINEL_FOLDER)])
+
+            self.assertEqual(number_of_files, 1)

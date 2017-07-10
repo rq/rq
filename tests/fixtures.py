@@ -7,6 +7,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import os
+from random import randint
 import time
 import sys
 
@@ -59,6 +60,12 @@ def create_file(path):
 def create_file_after_timeout(path, timeout):
     time.sleep(timeout)
     create_file(path)
+
+
+def random_file(root_folder):
+    file_path = os.path.join(root_folder, str(randint(0, 9)) + '.txt')
+    with open(file_path, 'w') as f:
+        f.write('Just a sentinel.')
 
 
 def access_self():
