@@ -328,6 +328,10 @@ class Queue(object):
     def enqueue_dependents(self, job, pipeline=None):
         """Enqueues all jobs in the given job's dependents set and clears it.
 
+        Usually this is called by the worker which watches the dependency key of
+        the job for changes. This prevents jobs being lost which are enqueued
+        during this function call
+
         When called without a pipeline, this method uses WATCH/MULTI/EXEC.
         If you pass a pipeline, only MULTI is called. The rest is up to the
         caller.
@@ -386,14 +390,16 @@ class Queue(object):
                     # handle it
                     raise
 
-        # Do actual enqueing of dependents while watching for
-        # enqueing by another worker
+        # Do actual enqueuing of dependents while watching for enqueuing of the
+        # same dependent by another worker
         for item in to_enqueue:
             try:
-                pipe.watch(item['job'].key)
+                if pipeline is None:
+                    pipe.watch(item['job'].key)
                 pipe.multi()
                 item['queue'].enqueue_job(item['job'], pipeline=pipe)
-                pipe.execute()
+                if pipeline is None:
+                    pipe.execute()
             except WatchError:
                 # Another worker enqueued this job which changed its status
                 pass
