@@ -672,7 +672,7 @@ class Worker(object):
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
                     # enqueue_dependents calls multi() on the pipeline!
-                    queue.enqueue_dependents(job, pipeline=pipeline)
+                    queue.enqueue_dependents(job)
 
                     self.set_current_job_id(None, pipeline=pipeline)
 

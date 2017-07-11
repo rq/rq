@@ -774,9 +774,10 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(self.testconn.ttl(job.key), -1)
 
     def test_multi_deps_enqueued_only_once(self):
-        """A job with two dependencies should be run once only"""
+        """A job with two dependencies should be enqueued once only, even if
+        there are multiple workers"""
         SENTINEL_FOLDER = '/tmp/rq-tests'
-        TEST_COUNT = 100
+        TEST_COUNT = 50
 
         q = Queue()
 

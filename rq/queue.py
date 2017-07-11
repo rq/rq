@@ -337,6 +337,7 @@ class Queue(object):
         pipe = pipeline if pipeline is not None else self.connection._pipeline()
         dependents_key = job.dependents_key
 
+        to_enqueue = []
         while True:
             try:
                 # if a pipeline is passed, the caller is responsible for calling WATCH
@@ -349,11 +350,9 @@ class Queue(object):
 
                 pipe.multi()
 
+                # Collect dependents to be enqueued
                 for dependent in dependent_jobs:
                     dependent.remove_dependency(job.id)
-                    # TODO: pipelining of removal not possible since next if
-                    # expects an empty dependencies key. Is there a better way?
-                    # or is it ok if not everything is pipelined?
                     if dependent.has_unmet_dependencies() is False:
                         registry = DeferredJobRegistry(dependent.origin,
                                                        self.connection,
@@ -364,15 +363,12 @@ class Queue(object):
                         else:
                             queue = Queue(name=dependent.origin, connection=self.connection)
 
-                        queue.enqueue_job(dependent, pipeline=pipe)
+                        to_enqueue.append({'queue': queue, 'job': dependent})
 
-                # This job is done and its dependents will never be checked
-                # again. If a dependent had multiple dependencies, another job
-                # will run it at a later time
-                # NOTE: on job cleanup, all keys will be removed, but cleanup
-                # happens only if job is actually enqueued. If a user uses
-                # q.enqueue_dependents manually without enqueuing the parent job,
-                # job.cleanup() is not run as well
+                # NOTE: On job cleanup, all keys will be removed, but cleanup
+                # happens only if parent job is actually enqueued.
+                # If a user uses q.enqueue_dependents manually without enqueuing
+                # the parent job, job.cleanup() is not run for the parent job
                 pipe.delete(job.dependents_key)
 
                 if pipeline is None:
@@ -380,13 +376,27 @@ class Queue(object):
 
                 break
             except WatchError:
+                # The dependents key of the finished job has changed
+                # Check dependents again
                 if pipeline is None:
                     continue
                 else:
-                    # if the pipeline comes from the caller, we re-raise the
+                    # If the pipeline comes from the caller, we re-raise the
                     # exception as it it the responsibility of the caller to
                     # handle it
                     raise
+
+        # Do actual enqueing of dependents while watching for
+        # enqueing by another worker
+        for item in to_enqueue:
+            try:
+                pipe.watch(item['job'].key)
+                pipe.multi()
+                item['queue'].enqueue_job(item['job'], pipeline=pipe)
+                pipe.execute()
+            except WatchError:
+                # Another worker enqueued this job which changed its status
+                pass
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
