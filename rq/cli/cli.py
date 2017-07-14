@@ -54,6 +54,10 @@ shared_options = [
                  envvar='RQ_CONNECTION_CLASS',
                  default=DEFAULT_CONNECTION_CLASS,
                  help='Redis client class to use'),
+    click.option('--path', '-P',
+                 default='.',
+                 help='Specify the import path.',
+                 multiple=True)
 ]
 
 
@@ -134,7 +138,6 @@ def requeue(cli_config, all, job_class, job_ids, **options):
 
 
 @main.command()
-@click.option('--path', '-P', default='.', help='Specify the import path.', multiple=True)
 @click.option('--interval', '-i', type=float, help='Updates stats every N seconds (default: don\'t poll)')
 @click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
 @click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')
@@ -168,7 +171,6 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--name', '-n', help='Specify a different name')
-@click.option('--path', '-P', default='.', help='Specify the import path.', multiple=True)
 @click.option('--results-ttl', type=int, help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
