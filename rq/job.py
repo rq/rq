@@ -160,13 +160,13 @@ class Job(object):
         self._status = status
 
     def __set_job_stats(self, status):
-        if status == JobStatus.QUEUED:
-            if not self.is_queued:
-                self.__set_stats(self.enqueued_stat_key)
-        else:
-            if self.is_queued:
-                self.connection.decr(self.enqueued_stat_key)
-                self.__set_stats(self.processed_stat_key)
+        # if status == JobStatus.QUEUED:
+        #     if not self.is_queued:
+        #         self.__set_stats(self.enqueued_stat_key)
+        # else:
+        if self.is_queued:
+            # self.connection.decr(self.enqueued_stat_key)
+            self.__set_stats(self.processed_stat_key)
 
     def __set_stats(self, queue_name):
         if self.connection.exists(queue_name):
