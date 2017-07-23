@@ -41,6 +41,16 @@ except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
 
+if sys.platform == 'win32':
+    try:
+        import win32api
+        import win32con
+        import win32file
+        import win32event
+        import win32process
+    except ImportError as ex:
+        raise ImportError("The WindowsWorker module relies on pywin32")
+
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
@@ -884,6 +894,158 @@ class SimpleWorker(Worker):
     def execute_job(self, *args, **kwargs):
         """Execute job in same thread/process, do not fork()"""
         return self.perform_job(*args, **kwargs)
+
+
+class WindowsWorker(Worker):
+    death_penalty_class = WindowsDeathPenalty
+    mute_child = False
+
+    def get_file_component_from_command_line(self, character_offset, command_line):
+        space_pad_finished = False
+        first_pass = True
+
+        for character_index in range(character_offset, len(command_line)):
+            if not space_pad_finished:
+                if command_line[character_index] != ' ':
+                    space_pad_finished = True
+                    character_offset = character_index
+                else:
+                    continue
+
+            if first_pass:
+                # if it's the first pass and the first character of the remainder is a double quote
+                # then assume it is to be treated as an escaped path and just retrieve the reminder
+                # quickly by looking for the next double quote
+
+                try:
+                    if command_line[character_offset] == '"':
+                        next_quote_offset = command_line[character_offset+1:].index('"')
+
+                        if next_quote_offset != -1:
+                            new_character_offset = character_offset + next_quote_offset + 2
+                            return new_character_offset, command_line[character_offset:character_offset + next_quote_offset + 2]
+
+                except ValueError as ex:
+                    pass
+
+                first_pass = False
+
+            # otherwise find the minimal set of contiguous characters that references a file
+
+            if os.path.isfile(command_line[character_offset: character_index]):
+                return character_index + 1, command_line[character_offset: character_index]
+
+        return 0, None
+
+    def get_proper_cmdline_and_binname(self):
+        command_line = win32api.GetCommandLine()
+        binary_name = None
+
+        character_offset = 0
+        new_offset, component = self.get_file_component_from_command_line(character_offset, command_line)
+        if component:
+            binary_name = component
+            command_line = command_line[character_offset:]
+
+            if component and component.lower().strip('"').endswith('python.exe'):
+                character_offset = new_offset
+                new_offset, component = self.get_file_component_from_command_line(character_offset, command_line)
+
+                if component and component.lower().strip('"').endswith('rq.exe'):
+                    command_line = command_line[character_offset:].strip()
+                    binary_name = component.strip()
+
+        if not binary_name:
+            binary_name = command_line.split()[0]
+
+        if binary_name:
+            binary_name = binary_name.replace('"', '')
+
+        return binary_name, command_line
+
+    def work(self, burst=False, logging_level="INFO"):
+        if 'RQ_WORKER_ID' in os.environ:
+            setup_loghandlers(logging_level)
+            self._install_signal_handlers()
+
+            did_perform_work = False
+            self.register_birth()
+            self.log.info("RQ worker {0!r} started, version {1}".format(self.key, VERSION))
+            self.set_state(WorkerStatus.STARTED)
+
+            job = os.environ['RQ_JOB_ID']
+            queue = os.environ['RQ_QUEUE_ID']
+
+            for queue_ in self.queues:
+                if queue_.key == queue:
+                    queue = queue_
+                    break
+
+            job = Job(job, self.connection)
+            job.refresh()
+
+            self.main_work_horse(job, queue)
+            self.exit(-1)
+        else:
+            super(WindowsWorker, self).work(burst, logging_level)
+
+    def fork_work_horse(self, job, queue):
+        os.environ[str('RQ_WORKER_ID')] = str(self.name)
+        os.environ[str('RQ_QUEUE_ID')] = str(queue.key)
+        os.environ[str('RQ_JOB_ID')] = str(job.id)
+
+        si = win32process.STARTUPINFO()
+        si.wShowWindow = False
+
+        handle_share_flags = win32file.FILE_SHARE_READ | win32file.FILE_SHARE_WRITE
+        handle_attributes = win32file.FILE_ATTRIBUTE_NORMAL
+
+        out_handle = win32file.CreateFile("NUL", win32file.GENERIC_WRITE, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
+        in_handle = win32file.CreateFile("NUL", win32file.GENERIC_READ, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
+
+        if self.mute_child:
+            si.hStdError = out_handle;
+            si.hStdOutput = out_handle;
+            si.hStdInput = in_handle;
+            si.dwFlags |= win32process.STARTF_USESTDHANDLES;
+
+        env = os.environ
+        pwd = os.getcwd()
+
+        binname, cmdline = self.get_proper_cmdline_and_binname()
+
+        child_data = win32process.CreateProcess(binname, cmdline, None, None, 1, 0, env, pwd, si)
+
+        child_process_handle, child_thread_handle, child_pid, child_tid = child_data
+
+        self._horse_pid = child_pid
+        self._horse_handle = child_process_handle
+        self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
+
+    def kill_horse(self, *args):
+        """
+        Kill the horse but catch "No such process" error has the horse could already be dead.
+        """
+        win32process.TerminateProcess(self._horse_handle, -1)
+
+    def _monitor_work_horse_tick(self, job):
+        ret_val = win32event.WaitForSingleObject(self._horse_handle, job.timeout * 1000)
+
+        if ret_val == win32event.WAIT_OBJECT_0:  # The process exited normally.
+            return
+
+        if ret_val == win32event.WAIT_TIMEOUT:  # The process exceeded its timeout.
+            self.kill_horse()
+
+        job_status = job.get_status()
+        if job_status is None:  # Job completed and its ttl has expired
+            return
+
+        self._handle_work_horse_tick(job)
+
+    def setup_work_horse_signals(self):
+        """There are no signals in windows"""
+        pass
 
 
 class HerokuWorker(Worker):
