@@ -64,3 +64,14 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         """
         signal.alarm(0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
+
+class WindowsDeathPenalty(BaseDeathPenalty):
+    def handle_death_penalty(self, signum, frame):
+        pass
+
+    def setup_death_penalty(self):
+        pass
+
+    def cancel_death_penalty(self):
+        pass
