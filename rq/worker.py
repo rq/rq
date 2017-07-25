@@ -1000,10 +1000,10 @@ class WindowsWorker(Worker):
         handle_share_flags = win32file.FILE_SHARE_READ | win32file.FILE_SHARE_WRITE
         handle_attributes = win32file.FILE_ATTRIBUTE_NORMAL
 
-        out_handle = win32file.CreateFile("NUL", win32file.GENERIC_WRITE, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
-        in_handle = win32file.CreateFile("NUL", win32file.GENERIC_READ, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
-
         if self.mute_child:
+            out_handle = win32file.CreateFile("NUL", win32file.GENERIC_WRITE, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
+            in_handle = win32file.CreateFile("NUL", win32file.GENERIC_READ, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
+
             si.hStdError = out_handle;
             si.hStdOutput = out_handle;
             si.hStdInput = in_handle;
@@ -1015,6 +1015,10 @@ class WindowsWorker(Worker):
         binname, cmdline = self.get_proper_cmdline_and_binname()
 
         child_data = win32process.CreateProcess(binname, cmdline, None, None, 1, 0, env, pwd, si)
+
+        if self.mute_child:
+            win32file.CloseHandle(out_handle)
+            win32file.CloseHandle(in_handle)
 
         child_process_handle, child_thread_handle, child_pid, child_tid = child_data
 
