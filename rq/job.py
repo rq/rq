@@ -441,7 +441,6 @@ class Job(object):
 
         You can exclude serializing the `meta` dictionary by setting
         `include_meta=False`.
-
         """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
@@ -458,7 +457,10 @@ class Job(object):
         if self.ended_at is not None:
             obj['ended_at'] = utcformat(self.ended_at)
         if self._result is not None:
-            obj['result'] = dumps(self._result)
+            try:
+                obj['result'] = dumps(self._result)
+            except:
+                obj['result'] = 'Unpickleable return value'
         if self.exc_info is not None:
             obj['exc_info'] = self.exc_info
         if self.timeout is not None:
