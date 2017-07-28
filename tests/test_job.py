@@ -5,6 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 from datetime import datetime
 import time
 
+from Queue import Queue
 from tests import fixtures, RQTestCase
 from tests.helpers import strip_microseconds
 
@@ -291,6 +292,13 @@ class TestJob(RQTestCase):
         serialized2 = job2.to_dict()
         serialized2.pop('meta')
         self.assertDictEqual(serialized, serialized2)
+
+    def test_unpickleable_result(self):
+        """Unpickleable job result doesn't crash job.to_dict()"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job._result = Queue()
+        data = job.to_dict()
+        self.assertEqual(data['result'], 'Unpickleable return value')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
