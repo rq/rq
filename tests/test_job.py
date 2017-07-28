@@ -5,11 +5,17 @@ from __future__ import (absolute_import, division, print_function,
 from datetime import datetime
 import time
 
-from Queue import Queue
+import sys
+is_py2 = sys.version[0] == '2'
+if is_py2:
+    import Queue as queue
+else:
+    import queue as queue
+
 from tests import fixtures, RQTestCase
 from tests.helpers import strip_microseconds
 
-from rq.compat import PY2, as_text
+from rq.compat import PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
 from rq.queue import Queue, get_failed_queue
@@ -296,7 +302,7 @@ class TestJob(RQTestCase):
     def test_unpickleable_result(self):
         """Unpickleable job result doesn't crash job.to_dict()"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
-        job._result = Queue()
+        job._result = queue.Queue()
         data = job.to_dict()
         self.assertEqual(data['result'], 'Unpickleable return value')
 
