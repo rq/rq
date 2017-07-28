@@ -1,3 +1,15 @@
+### 0.8.1
+
+- Replace `job.id` with `Job` instance in local `_job_stack `. Thanks @katichev!
+- `job.save()` no longer implicitly calls `job.cleanup()`. Thanks @katichev!
+- Properly catch `StopRequested` `worker.heartbeat()`. Thanks @fate0!
+- You can now pass in timeout in days. Thanks @yaniv-g!
+- The core logic of sending job to `FailedQueue` has been moved to `rq.handlers.move_to_failed_queue`. Thanks @yaniv-g!
+- RQ cli commands now accept `--path` parameter. Thanks @kirill and @sjtbham!
+- Make `job.dependency` slightly more efficient. Thanks @liangsijian!
+- `FailedQueue` now returns jobs with the correct class. Thanks @amjith!
+- Fixed an issue where `job.save()` may fail with unpickleable return value.
+
 ### 0.8.0
 
 - Refactored APIs to allow custom `Connection`, `Job`, `Worker` and `Queue` classes via CLI. Thanks @jezdez!
