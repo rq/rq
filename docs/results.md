@@ -19,14 +19,14 @@ enqueueing itself.  Such a `Job` object is a proxy object that is tied to the
 job's ID, to be able to poll for results.
 
 
-**On the return value's TTL**  
+**On the return value's TTL**
 Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
 From RQ >= 0.3.1, The TTL value of the job result can be specified using the
-`result_ttl` keyword argument to `enqueue_call()` calls.  It can also be used
-to disable the expiry altogether.  You then are responsible for cleaning up
-jobs yourself, though, so be careful to use that.
+`result_ttl` keyword argument to `enqueue()` and `enqueue_call()` calls.  It
+can also be used to disable the expiry altogether.  You then are responsible
+for cleaning up jobs yourself, though, so be careful to use that.
 
 You can do the following:
 
@@ -39,6 +39,10 @@ Additionally, you can use this for keeping around finished jobs without return
 values, which would be deleted immediately by default.
 
     q.enqueue_call(func=func_without_rv, result_ttl=500)  # job kept explicitly
+
+Also, you can do the same with `enqueue()`:
+
+    q.enqueue(mytask, args=(foo,), result_ttl=0)
 
 
 ## Dealing with exceptions
