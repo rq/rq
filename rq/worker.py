@@ -30,7 +30,7 @@ from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
 from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
 from .suspension import is_suspended
-from .timeouts import UnixSignalDeathPenalty
+from .timeouts import UnixSignalDeathPenalty, WindowsDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
