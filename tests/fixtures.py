@@ -146,3 +146,7 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
 
     w = TestHerokuWorker(Queue('dummy'))
     w.main_work_horse(None, None)
+
+
+class DummyQueue(object):
+    pass
