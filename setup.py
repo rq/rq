@@ -9,20 +9,22 @@ from setuptools import setup, find_packages
 
 def get_version():
     basedir = os.path.dirname(__file__)
-    with open(os.path.join(basedir, 'rq/version.py')) as f:
-        locals = {}
-        exec(f.read(), locals)
-        return locals['VERSION']
-    raise RuntimeError('No version info found.')
+    try:
+        with open(os.path.join(basedir, 'rq/version.py')) as f:
+            locals = {}
+            exec(f.read(), locals)
+            return locals['VERSION']
+    except FileNotFoundError:
+        raise RuntimeError('No version info found.')
 
 
 def get_dependencies():
     deps = ['redis >= 2.7.0', 'click >= 5.0']
     if sys.version_info < (2, 7) or \
-            (sys.version_info >= (3, 0) and sys.version_info < (3, 1)):
+            ((3, 0) <= sys.version_info < (3, 1)):
         deps += ['importlib']
     if sys.version_info < (2, 7) or \
-            (sys.version_info >= (3, 0) and sys.version_info < (3, 2)):
+            ((3, 0) <= sys.version_info < (3, 2)):
         deps += ['argparse']
     return deps
 
@@ -56,13 +58,13 @@ setup(
     },
     classifiers=[
         # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
-        #'Development Status :: 1 - Planning',
-        #'Development Status :: 2 - Pre-Alpha',
-        #'Development Status :: 3 - Alpha',
-        #'Development Status :: 4 - Beta',
+        # 'Development Status :: 1 - Planning',
+        # 'Development Status :: 2 - Pre-Alpha',
+        # 'Development Status :: 3 - Alpha',
+        # 'Development Status :: 4 - Beta',
         'Development Status :: 5 - Production/Stable',
-        #'Development Status :: 6 - Mature',
-        #'Development Status :: 7 - Inactive',
+        # 'Development Status :: 6 - Mature',
+        # 'Development Status :: 7 - Inactive',
         'Intended Audience :: Developers',
         'Intended Audience :: End Users/Desktop',
         'Intended Audience :: Information Technology',
