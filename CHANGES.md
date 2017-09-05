@@ -1,3 +1,6 @@
+### 0.8.2
+- Fixed an issue where `job.save()` may fail with unpickleable return value.
+
 ### 0.8.1
 
 - Replace `job.id` with `Job` instance in local `_job_stack `. Thanks @katichev!
@@ -8,7 +11,6 @@
 - RQ cli commands now accept `--path` parameter. Thanks @kirill and @sjtbham!
 - Make `job.dependency` slightly more efficient. Thanks @liangsijian!
 - `FailedQueue` now returns jobs with the correct class. Thanks @amjith!
-- Fixed an issue where `job.save()` may fail with unpickleable return value.
 
 ### 0.8.0
 
