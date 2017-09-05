@@ -11,6 +11,7 @@ import time
 from multiprocessing import Process
 import subprocess
 import sys
+from unittest import skipIf
 
 import pytest
 import mock
@@ -817,12 +818,9 @@ class TestWorkerSubprocess(RQTestCase):
         assert get_failed_queue().count == 0
         assert q.count == 0
 
-    # @skipIf('pypy' in sys.version.lower(), 'often times out with pypy')
+    @skipIf('pypy' in sys.version.lower(), 'often times out with pypy')
     def test_run_scheduled_access_self(self):
         """Schedule a job that schedules a job, then run the worker as subprocess"""
-        if 'pypy' in sys.version.lower():
-            # horrible bodge until we drop 2.6 support and can use skipIf
-            return
         q = Queue()
         q.enqueue(schedule_access_self)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
