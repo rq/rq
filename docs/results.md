@@ -30,19 +30,15 @@ for cleaning up jobs yourself, though, so be careful to use that.
 
 You can do the following:
 
-    q.enqueue_call(func=foo)  # result expires after 500 secs (the default)
-    q.enqueue_call(func=foo, result_ttl=86400)  # result expires after 1 day
-    q.enqueue_call(func=foo, result_ttl=0)  # result gets deleted immediately
-    q.enqueue_call(func=foo, result_ttl=-1)  # result never expires--you should delete jobs manually
+    q.enqueue(foo)  # result expires after 500 secs (the default)
+    q.enqueue(foo, result_ttl=86400)  # result expires after 1 day
+    q.enqueue(foo, result_ttl=0)  # result gets deleted immediately
+    q.enqueue(foo, result_ttl=-1)  # result never expires--you should delete jobs manually
 
 Additionally, you can use this for keeping around finished jobs without return
 values, which would be deleted immediately by default.
 
-    q.enqueue_call(func=func_without_rv, result_ttl=500)  # job kept explicitly
-
-Also, you can do the same with `enqueue()`:
-
-    q.enqueue(mytask, args=(foo,), result_ttl=0)
+    q.enqueue(func_without_rv, result_ttl=500)  # job kept explicitly
 
 
 ## Dealing with exceptions
