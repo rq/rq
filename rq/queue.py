@@ -111,6 +111,12 @@ class Queue(object):
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
+    def delete(self):
+        """Deletes the queue and all the associated messages on the queue."""
+        self.empty()
+        self.connection.srem(self.redis_queues_keys, self._key)
+        self.connection.delete(self._key)
+
     def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0

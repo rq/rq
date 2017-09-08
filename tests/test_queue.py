@@ -72,6 +72,20 @@ class TestQueue(RQTestCase):
         self.testconn.rpush('rq:queue:example', 'sentinel message')
         self.assertEqual(q.is_empty(), False)
 
+    def test_queue_delete(self):
+        """Test queue.delete properly removes queue"""
+        q = Queue('example')
+        self.testconn.rpush('rq:queue:example', 'foo')
+        self.testconn.rpush('rq:queue:example', 'bar')
+
+        self.assertEqual(2, len(q.get_job_ids()))
+
+        q.delete()
+
+        self.assertEqual(0, len(q.get_job_ids()))
+        self.assertEqual(0, len(self.testconn.smembers(Queue.redis_queues_keys)))
+        self.assertEqual(False, self.testconn.exists(q.key))
+
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
         q = Queue('example')
