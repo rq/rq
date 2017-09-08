@@ -6,6 +6,7 @@ from datetime import datetime
 import time
 
 import sys
+
 is_py2 = sys.version[0] == '2'
 if is_py2:
     import Queue as queue
@@ -19,7 +20,6 @@ from rq.compat import PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
 from rq.queue import Queue, get_failed_queue
-from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 from rq.worker import Worker
 

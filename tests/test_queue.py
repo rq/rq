@@ -655,11 +655,11 @@ class TestFailedQueue(RQTestCase):
         """Make sure failed job key does not expire"""
         q = Queue('foo')
         job = q.enqueue(div_by_zero, args=(1,), ttl=5)
-        self.assertEqual(self.testconn.ttl(job.key), 5) 
+        self.assertEqual(self.testconn.ttl(job.key), 5)
 
         self.assertRaises(ZeroDivisionError, job.perform)
         job.set_status(JobStatus.FAILED)
         failed_queue = get_failed_queue()
         failed_queue.quarantine(job, Exception('Some fake error'))
-        
-        self.assertEqual(self.testconn.ttl(job.key), -1) 
+
+        self.assertEqual(self.testconn.ttl(job.key), -1)
