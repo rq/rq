@@ -157,16 +157,19 @@ def utcnow():
     return datetime.datetime.utcnow()
 
 
+_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
+
+
 def utcformat(dt):
-    return dt.strftime(as_text('%Y-%m-%dT%H:%M:%SZ'))
+    return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
 def utcparse(string):
     try:
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+        return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
-        # This catches RQ < 0.4 datetime format
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+        # This catches any jobs remain with old datetime format
+        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
 def first(iterable, default=None, key=None):

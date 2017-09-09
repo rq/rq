@@ -51,11 +51,13 @@ class TestUtils(RQTestCase):
 
     def test_utcparse(self):
         """Ensure function utcparse works correctly"""
-        utc_formated_time = '2017-08-31T10:14:02Z'
-        utc_compat_formated_time = '2017-08-31T10:20:56.226733+00:00'
+        utc_formated_time = '2017-08-31T10:14:02.123456Z'
+        self.assertEqual(datetime.datetime(2017, 8, 31, 10, 14, 2, 123456), utcparse(utc_formated_time))
 
+    def test_utcparse_legacy(self):
+        """Ensure function utcparse works correctly"""
+        utc_formated_time = '2017-08-31T10:14:02Z'
         self.assertEqual(datetime.datetime(2017, 8, 31, 10, 14, 2), utcparse(utc_formated_time))
-        self.assertEqual(datetime.datetime(2017, 8, 31, 10, 20, 56, 226733), utcparse(utc_compat_formated_time))
 
     def test_backend_class(self):
         """Ensure function backend_class works correctly"""
