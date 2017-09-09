@@ -121,7 +121,8 @@ class Queue(object):
         except NoSuchJobError:
             self.remove(job_id)
         else:
-            if job.origin == self.name or (job.is_failed and self == get_failed_queue(connection=self.connection, job_class=self.job_class)):
+            if job.origin == self.name or \
+                    (job.is_failed and self == get_failed_queue(connection=self.connection, job_class=self.job_class)):
                 return job
 
     def get_job_ids(self, offset=0, length=-1):
@@ -168,7 +169,7 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
+        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())  # noqa
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:

@@ -259,10 +259,10 @@ class TestWorker(RQTestCase):
         job = Job.fetch(job.id)
         self.assertEqual(job.is_failed, True)
 
-    def test_cancelled_jobs_arent_executed(self):  # noqa
+    def test_cancelled_jobs_arent_executed(self):
         """Cancelling jobs."""
 
-        SENTINEL_FILE = '/tmp/rq-tests.txt'
+        SENTINEL_FILE = '/tmp/rq-tests.txt'  # noqa
 
         try:
             # Remove the sentinel if it is leftover from a previous test run
@@ -471,19 +471,19 @@ class TestWorker(RQTestCase):
         logging work properly"""
         q = Queue("foo")
         w = Worker([q])
-        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆',
-                        description='你好 世界!')
+        q.enqueue('tests.fixtures.say_hello', name='阿达姆',
+                  description='你好 世界!')
         self.assertEqual(w.work(burst=True), True,
                          'Expected at least some work done.')
-        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
-                        description='你好 世界!')
+        q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
+                  description='你好 世界!')
         self.assertEqual(w.work(burst=True), True,
                          'Expected at least some work done.')
 
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
 
-        SENTINEL_FILE = '/tmp/rq-tests.txt'
+        SENTINEL_FILE = '/tmp/rq-tests.txt'  # noqa
 
         try:
             # Remove the sentinel if it is leftover from a previous test run
@@ -919,7 +919,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo')
 
         w._horse_pid = 19999
-        w.handle_warm_shutdown_request()        
+        w.handle_warm_shutdown_request()
 
 
 class TestExceptionHandlerMessageEncoding(RQTestCase):
