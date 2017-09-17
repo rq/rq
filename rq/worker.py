@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import ctypes
 import errno
 import logging
 import os
@@ -42,14 +43,7 @@ except ImportError:
         pass
 
 if sys.platform == 'win32':
-    try:
-        import win32api
-        import win32con
-        import win32file
-        import win32event
-        import win32process
-    except ImportError as ex:
-        raise ImportError("The WindowsWorker module relies on pywin32")
+    os.EX_OK = 0
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -900,7 +894,9 @@ class WindowsWorker(Worker):
     death_penalty_class = WindowsDeathPenalty
     mute_child = False
 
-    def get_file_component_from_command_line(self, character_offset, command_line):
+    def get_file_component_from_command_line(self,
+                                             character_offset,
+                                             command_line):
         space_pad_finished = False
         first_pass = True
 
@@ -913,9 +909,10 @@ class WindowsWorker(Worker):
                     continue
 
             if first_pass:
-                # if it's the first pass and the first character of the remainder is a double quote
-                # then assume it is to be treated as an escaped path and just retrieve the reminder
-                # quickly by looking for the next double quote
+                # if it's the first pass and the first character of the
+                # remainder is a double quote then assume it is to be treated
+                # as an escaped path and just retrieve the reminder quickly by
+                # looking for the next double quote
 
                 try:
                     if command_line[character_offset] == '"':
@@ -930,15 +927,19 @@ class WindowsWorker(Worker):
 
                 first_pass = False
 
-            # otherwise find the minimal set of contiguous characters that references a file
+            # otherwise find the minimal set of contiguous characters
+            # that references a file
 
             if os.path.isfile(command_line[character_offset: character_index]):
-                return character_index + 1, command_line[character_offset: character_index]
+                return character_index + 1, command_line[character_offset:character_index]
 
         return 0, None
 
     def get_proper_cmdline_and_binname(self):
-        command_line = win32api.GetCommandLine()
+        GetCommandLineA = ctypes.windll.kernel32.GetCommandLineA
+        GetCommandLineA.restype = ctypes.c_char_p
+        
+        command_line = GetCommandLineA()
         binary_name = None
 
         character_offset = 0
@@ -966,11 +967,7 @@ class WindowsWorker(Worker):
     def work(self, burst=False, logging_level="INFO"):
         if 'RQ_WORKER_ID' in os.environ:
             setup_loghandlers(logging_level)
-            self._install_signal_handlers()
 
-            did_perform_work = False
-            self.register_birth()
-            self.log.info("RQ worker {0!r} started, version {1}".format(self.key, VERSION))
             self.set_state(WorkerStatus.STARTED)
 
             job = os.environ['RQ_JOB_ID']
@@ -990,62 +987,17 @@ class WindowsWorker(Worker):
             super(WindowsWorker, self).work(burst, logging_level)
 
     def fork_work_horse(self, job, queue):
-        os.environ[str('RQ_WORKER_ID')] = str(self.name)
-        os.environ[str('RQ_QUEUE_ID')] = str(queue.key)
-        os.environ[str('RQ_JOB_ID')] = str(job.id)
-
-        si = win32process.STARTUPINFO()
-        si.wShowWindow = False
-
-        handle_share_flags = win32file.FILE_SHARE_READ | win32file.FILE_SHARE_WRITE
-        handle_attributes = win32file.FILE_ATTRIBUTE_NORMAL
-
-        if self.mute_child:
-            out_handle = win32file.CreateFile("NUL", win32file.GENERIC_WRITE, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
-            in_handle = win32file.CreateFile("NUL", win32file.GENERIC_READ, handle_share_flags, None, win32file.OPEN_ALWAYS, handle_attributes, None)
-
-            si.hStdError = out_handle;
-            si.hStdOutput = out_handle;
-            si.hStdInput = in_handle;
-            si.dwFlags |= win32process.STARTF_USESTDHANDLES;
-
-        env = os.environ
-        pwd = os.getcwd()
+        child_environ = os.environ.copy()
+        child_environ[str('RQ_WORKER_ID')] = str(self.name)
+        child_environ[str('RQ_QUEUE_ID')] = str(queue.key)
+        child_environ[str('RQ_JOB_ID')] = str(job.id)
 
         binname, cmdline = self.get_proper_cmdline_and_binname()
 
-        child_data = win32process.CreateProcess(binname, cmdline, None, None, 1, 0, env, pwd, si)
-
-        if self.mute_child:
-            win32file.CloseHandle(out_handle)
-            win32file.CloseHandle(in_handle)
-
-        child_process_handle, child_thread_handle, child_pid, child_tid = child_data
+        child_pid = os.spawnve(os.P_NOWAIT, binname, sys.argv, child_environ)
 
         self._horse_pid = child_pid
-        self._horse_handle = child_process_handle
         self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
-
-    def kill_horse(self, *args):
-        """
-        Kill the horse but catch "No such process" error has the horse could already be dead.
-        """
-        win32process.TerminateProcess(self._horse_handle, -1)
-
-    def _monitor_work_horse_tick(self, job):
-        ret_val = win32event.WaitForSingleObject(self._horse_handle, job.timeout * 1000)
-
-        if ret_val == win32event.WAIT_OBJECT_0:  # The process exited normally.
-            return
-
-        if ret_val == win32event.WAIT_TIMEOUT:  # The process exceeded its timeout.
-            self.kill_horse()
-
-        job_status = job.get_status()
-        if job_status is None:  # Job completed and its ttl has expired
-            return
-
-        self._handle_work_horse_tick(job)
 
     def setup_work_horse_signals(self):
         """There are no signals in windows"""

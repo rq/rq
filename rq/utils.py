@@ -109,6 +109,13 @@ def make_colorizer(color):
     """
     def inner(text):
         return colorizer.colorize(color, text)
+
+    def dummy(text):
+        return text
+
+    if sys.platform == 'win32':
+        return dummy
+
     return inner
 
 
