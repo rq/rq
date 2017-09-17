@@ -457,7 +457,7 @@ class TestJob(RQTestCase):
         """test if a job created with ttl expires [issue502]"""
         queue = Queue(connection=self.testconn)
         queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
-        time.sleep(1)
+        time.sleep(2)
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_create_and_cancel_job(self):
