@@ -76,19 +76,22 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
 
 
 class WindowsDeathPenalty(BaseDeathPenalty):
-    ws2_32 = ctypes.windll.ws2_32
-    wsock32 = ctypes.windll.wsock32
-    kernel32 = ctypes.windll.kernel32
+    def __init__(self, timeout):
+        super(WindowsDeathPenalty, self).__init__(timeout)
 
-    WSAIsBlocking = wsock32.WSAIsBlocking
-    WSASetBlockingHook = ws2_32.WSASetBlockingHook
-    WSAUnhookBlockingHook = ws2_32.WSAUnhookBlockingHook
-    WSACancelBlockingCall = wsock32.WSACancelBlockingCall
+        self.ws2_32 = ctypes.windll.ws2_32
+        self.wsock32 = ctypes.windll.wsock32
+        self.kernel32 = ctypes.windll.kernel32
 
-    SetEvent = kernel32.SetEvent
-    CloseHandle = kernel32.CloseHandle
-    CreateEventW = kernel32.CreateEventW
-    WaitForSingleObject = kernel32.WaitForSingleObject
+        self.WSAIsBlocking = self.wsock32.WSAIsBlocking
+        self.WSASetBlockingHook = self.ws2_32.WSASetBlockingHook
+        self.WSAUnhookBlockingHook = self.ws2_32.WSAUnhookBlockingHook
+        self.WSACancelBlockingCall = self.wsock32.WSACancelBlockingCall
+
+        self.SetEvent = self.kernel32.SetEvent
+        self.CloseHandle = self.kernel32.CloseHandle
+        self.CreateEventW = self.kernel32.CreateEventW
+        self.WaitForSingleObject = self.kernel32.WaitForSingleObject
 
     def thread_timeout_watchdog(self):
         while self.wait_for_timeout:
