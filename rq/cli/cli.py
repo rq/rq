@@ -170,6 +170,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
+@click.option('--logging_level', type=str, default="INFO", help='Set logging level')
 @click.option('--name', '-n', help='Specify a different name')
 @click.option('--results-ttl', type=int, help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
@@ -180,7 +181,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def worker(cli_config, burst, name, results_ttl,
+def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, verbose, quiet, sentry_dsn, exception_handler,
            pid, queues, **options):
     """Starts an RQ worker."""
@@ -228,7 +229,7 @@ def worker(cli_config, burst, name, results_ttl,
             client = Client(sentry_dsn, transport=HTTPTransport)
             register_sentry(client, worker)
 
-        worker.work(burst=burst)
+        worker.work(burst=burst, logging_level=logging_level)
     except ConnectionError as e:
         print(e)
         sys.exit(1)
