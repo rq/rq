@@ -1,7 +1,6 @@
 baseurl: /
 exclude: design
 permalink: pretty
-pygments: true
 
 navigation:
 - text: Home
