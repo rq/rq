@@ -5,7 +5,7 @@ highlighter: rouge
 
 navigation:
 - text: Home
-  url: 
+  url: /
 - text: Docs
   url: /docs/
   subs:
