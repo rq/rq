@@ -1,7 +1,7 @@
 baseurl: /
 exclude: design
 permalink: pretty
-highlighter: rouge
+pygments: true
 
 navigation:
 - text: Home
