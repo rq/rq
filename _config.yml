@@ -1,8 +1,7 @@
 baseurl: /
 exclude: design
 permalink: pretty
-markdown: redcarpet
-pygments: true
+highlighter: rouge
 
 navigation:
 - text: Home
