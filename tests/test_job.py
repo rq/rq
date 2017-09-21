@@ -14,7 +14,6 @@ else:
     import queue as queue
 
 from tests import fixtures, RQTestCase
-from tests.helpers import strip_microseconds
 
 from rq.compat import PY2
 from rq.exceptions import NoSuchJobError, UnpickleError
@@ -170,7 +169,7 @@ class TestJob(RQTestCase):
         self.testconn.hset('rq:job:some_id', 'data',
                            "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
-                           '2012-02-07T22:13:24Z')
+                           '2012-02-07T22:13:24.123456Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -179,7 +178,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (3, 4))
         self.assertEqual(job.kwargs, dict(z=2))
-        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
+        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
 
     def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
@@ -192,11 +191,8 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
-        expected_date = strip_microseconds(job.created_at)
         stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
-        self.assertEqual(
-            stored_date,
-            utcformat(expected_date))
+        self.assertEqual(stored_date, utcformat(job.created_at))
 
         # ... and no other keys are stored
         self.assertEqual(

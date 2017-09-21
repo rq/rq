@@ -22,7 +22,6 @@ from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
                             run_dummy_heroku_worker, access_self,
                             modify_self, modify_self_and_error)
-from tests.helpers import strip_microseconds
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
                 get_current_connection)
@@ -212,7 +211,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 1)
 
         # keep for later
-        enqueued_at_date = strip_microseconds(job.enqueued_at)
+        enqueued_at_date = str(job.enqueued_at)
 
         w = Worker([q])
         w.work(burst=True)  # should silently pass
@@ -228,7 +227,7 @@ class TestWorker(RQTestCase):
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
-        self.assertEqual(job.enqueued_at, enqueued_at_date)
+        self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
     def test_custom_exc_handling(self):
