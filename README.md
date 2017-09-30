@@ -69,6 +69,32 @@ Job result = 818
 
 That's about it.
 
+---------------------
+
+By the way, if you want to use gevent, first please install gevent:
+
+```console
+$ pip install gevent
+```
+
+then use the worker in `worker.GeventWorker` in your custom code like:
+
+```python
+# remember to define your constants
+WORKER_BROKER="redis://127.0.0.1:6379/0"
+
+def gevent_worker(queues):
+    worker = GeventWorker(
+        queues=queues,
+        connection=StrictRedis.from_url(WORKER_BROKER)
+    )
+    worker.work()
+
+# and start your worker like:
+if __name__ == "__main__":
+    gevent_worker()
+```
+
 
 ## Installation
 

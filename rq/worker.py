@@ -41,6 +41,11 @@ except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
 
+try:
+    import gevent
+except ImportError:
+    gevent = None
+
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
@@ -50,6 +55,10 @@ logger = logging.getLogger(__name__)
 
 
 class StopRequested(Exception):
+    pass
+
+
+class GeventNotFound(Exception):
     pass
 
 
@@ -870,3 +879,15 @@ class HerokuWorker(Worker):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         self.log.warning('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
+
+
+class GeventWorker(Worker):
+    def execute_job(self, job, queue):
+        self.set_state(WorkerStatus.BUSY)
+        self.log.debug("gonna spawn a greenlet to execute the given job.")
+        if gevent is None:
+            self.log.error("Please install gevent first")
+            raise GeventNotFound("gevent not found")
+        gevent.spawn(self.perform_job, job, queue).join()
+        self.log.debug("greenlet executed.")
+        self.set_state(WorkerStatus.IDLE)
