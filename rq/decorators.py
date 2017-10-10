@@ -44,8 +44,9 @@ class job(object):  # noqa
             else:
                 queue = self.queue
             depends_on = kwargs.pop('depends_on', None)
+            at_front = kwargs.pop('at_front', False)
             return queue.enqueue_call(f, args=args, kwargs=kwargs,
                                       timeout=self.timeout, result_ttl=self.result_ttl,
-                                      ttl=self.ttl, depends_on=depends_on)
+                                      ttl=self.ttl, depends_on=depends_on, at_front=at_front)
         f.delay = delay
         return f
