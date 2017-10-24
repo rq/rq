@@ -111,6 +111,16 @@ class Queue(object):
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
+    def delete(self, delete_jobs=True):
+        """Deletes the queue. If delete_jobs is true it removes all the associated messages on the queue first."""
+        if delete_jobs:
+            self.empty()
+
+        with self.connection._pipeline() as pipeline:
+            pipeline.srem(self.redis_queues_keys, self._key)
+            pipeline.delete(self._key)
+            pipeline.execute()
+
     def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0
