@@ -416,7 +416,7 @@ class Worker(object):
         before_state = None
         notified = False
 
-        while not self._stop_requested and is_suspended(self.connection):
+        while not self._stop_requested and is_suspended(self.connection, self):
 
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
