@@ -779,7 +779,10 @@ class Worker(object):
     def _get_safe_exception_string(exc_strings):
         """Ensure list of exception strings is decoded on Python 2 and joined as one string safely."""
         if sys.version_info[0] < 3:
-            exc_strings = [exc.decode("utf-8") for exc in exc_strings]
+            try:
+                exc_strings = [exc.decode("utf-8") for exc in exc_strings]
+            except ValueError:
+                exc_strings = [exc.decode("latin-1") for exc in exc_strings]
         return ''.join(exc_strings)
 
     def push_exc_handler(self, handler_func):
