@@ -132,10 +132,15 @@ class Worker(object):
                      connection=connection,
                      job_class=job_class,
                      queue_class=queue_class)
-        queues, state, job_id = connection.hmget(worker.key, 'queues', 'state', 'current_job')
+        data = connection.hmget(worker.key, 'queues', 'state',
+                                'current_job', 'last_heartbeat', 'birth')
+        queues, state, job_id, last_heartbeat, birth = data
         queues = as_text(queues)
         worker._state = as_text(state or '?')
         worker._job_id = job_id or None
+        worker.last_heartbeat = utcparse(as_text(last_heartbeat))
+        worker.birth_date = utcparse(as_text(birth))
+
         if queues:
             worker.queues = [worker.queue_class(queue,
                                                 connection=connection,
@@ -179,6 +184,9 @@ class Worker(object):
         self.failed_queue = get_failed_queue(connection=self.connection,
                                              job_class=self.job_class)
         self.last_cleaned_at = None
+        self.successful_job_count = 0
+        self.failed_job_count = 0
+        self.birth_date = None
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -264,7 +272,11 @@ class Worker(object):
         queues = ','.join(self.queue_names())
         with self.connection._pipeline() as p:
             p.delete(key)
-            p.hset(key, 'birth', utcformat(utcnow()))
+            now = utcnow()
+            now_in_string = utcformat(utcnow())
+            self.birth_date = now
+            p.hset(key, 'birth', now_in_string)
+            p.hset(key, 'last_heartbeat', now_in_string)
             p.hset(key, 'queues', queues)
             p.sadd(self.redis_workers_keys, key)
             p.expire(key, self.default_worker_ttl)
@@ -285,12 +297,12 @@ class Worker(object):
         """Sets the date on which the worker received a (warm) shutdown request"""
         self.connection.hset(self.key, 'shutdown_requested_date', utcformat(utcnow()))
 
-    @property
-    def birth_date(self):
-        """Fetches birth date from Redis."""
-        birth_timestamp = self.connection.hget(self.key, 'birth')
-        if birth_timestamp is not None:
-            return utcparse(as_text(birth_timestamp))
+    # @property
+    # def birth_date(self):
+    #     """Fetches birth date from Redis."""
+    #     birth_timestamp = self.connection.hget(self.key, 'birth')
+    #     if birth_timestamp is not None:
+    #         return utcparse(as_text(birth_timestamp))
 
     @property
     def shutdown_requested_date(self):
@@ -525,8 +537,15 @@ class Worker(object):
         timeout = max(timeout, self.default_worker_ttl)
         connection = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
+        connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
+
+    def save(self, pipeline=None):
+        """Save properties in Redis so they can read externally."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'failed_job_count', self.failed_job_count)
+        connection.hset(self.key, 'successful_job_count', self.successful_job_count)
 
     def fork_work_horse(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -649,6 +668,8 @@ class Worker(object):
             3. Setting the workers current job to None
         """
 
+        self.failed_job_count += 1
+
         with self.connection._pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(job.origin,
@@ -665,6 +686,9 @@ class Worker(object):
                 pass
 
     def handle_job_success(self, job, queue, started_job_registry):
+        
+        self.successful_job_count += 1
+
         with self.connection._pipeline() as pipeline:
             while True:
                 try:

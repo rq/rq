@@ -4,7 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta
 from time import sleep
 import signal
 import time
@@ -196,6 +196,18 @@ class TestWorker(RQTestCase):
         w.work(burst=True)   # should silently pass
         self.assertEqual(q.count, 0)
         self.assertEqual(failed_q.count, 1)
+
+    def test_heartbeat(self):
+        """Heartbeat saves last_heartbeat"""
+        q = Queue()
+        w = Worker([q])
+        w.register_birth()
+        w.heartbeat()
+        last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
+
+        self.assertTrue(last_heartbeat is not None)
+        w = Worker.find_by_key(w.key)
+        self.assertIsInstance(w.last_heartbeat, datetime)        
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
@@ -559,7 +571,7 @@ class TestWorker(RQTestCase):
 
         death_date = w.death_date
         self.assertIsNotNone(death_date)
-        self.assertEqual(type(death_date).__name__, 'datetime')
+        self.assertIsInstance(death_date, datetime)
 
     def test_clean_queue_registries(self):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""
