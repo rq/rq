@@ -132,20 +132,9 @@ class Worker(object):
                      connection=connection,
                      job_class=job_class,
                      queue_class=queue_class)
-        data = connection.hmget(worker.key, 'queues', 'state',
-                                'current_job', 'last_heartbeat', 'birth')
-        queues, state, job_id, last_heartbeat, birth = data
-        queues = as_text(queues)
-        worker._state = as_text(state or '?')
-        worker._job_id = job_id or None
-        worker.last_heartbeat = utcparse(as_text(last_heartbeat))
-        worker.birth_date = utcparse(as_text(birth))
+        
+        worker.refresh()
 
-        if queues:
-            worker.queues = [worker.queue_class(queue,
-                                                connection=connection,
-                                                job_class=job_class)
-                             for queue in queues.split(',')]
         return worker
 
     def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
@@ -540,6 +529,23 @@ class Worker(object):
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within {0} seconds.'.format(timeout))
+
+    def refresh(self):
+        data = self.connection.hmget(self.key, 'queues', 'state',
+                                'current_job', 'last_heartbeat', 'birth')
+        queues, state, job_id, last_heartbeat, birth = data
+        queues = as_text(queues)
+        self._state = as_text(state or '?')
+        self._job_id = job_id or None
+        self.last_heartbeat = utcparse(as_text(last_heartbeat))
+        self.birth_date = utcparse(as_text(birth))
+
+        if queues:
+            self.queues = [self.queue_class(queue,
+                                            connection=self.connection,
+                                            job_class=self.job_class)
+                           for queue in queues.split(',')]
+        
 
     def save(self, pipeline=None):
         """Save properties in Redis so they can read externally."""
