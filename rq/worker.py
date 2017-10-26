@@ -531,27 +531,32 @@ class Worker(object):
                        'Next one should arrive within {0} seconds.'.format(timeout))
 
     def refresh(self):
-        data = self.connection.hmget(self.key, 'queues', 'state',
-                                'current_job', 'last_heartbeat', 'birth')
-        queues, state, job_id, last_heartbeat, birth = data
+        data = self.connection.hmget(
+            self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
+            'birth', 'failed_job_count', 'successful_job_count'
+        )
+        queues, state, job_id, last_heartbeat, birth, failed_job_count, successful_job_count = data
         queues = as_text(queues)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         self.last_heartbeat = utcparse(as_text(last_heartbeat))
         self.birth_date = utcparse(as_text(birth))
+        self.failed_job_count = int(as_text(failed_job_count)) if failed_job_count else 0
+        self.successful_job_count = int(as_text(successful_job_count)) if successful_job_count else 0
 
         if queues:
             self.queues = [self.queue_class(queue,
                                             connection=self.connection,
                                             job_class=self.job_class)
                            for queue in queues.split(',')]
-        
-
-    def save(self, pipeline=None):
-        """Save properties in Redis so they can read externally."""
+    
+    def increment_failed_job_count(self, pipeline=None):
         connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'failed_job_count', self.failed_job_count)
-        connection.hset(self.key, 'successful_job_count', self.successful_job_count)
+        connection.hincrby(self.key, 'failed_job_count', 1)
+
+    def increment_successful_job_count(self, pipeline=None):
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hincrby(self.key, 'successful_job_count', 1)
 
     def fork_work_horse(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -660,8 +665,7 @@ class Worker(object):
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
-            self.connection._hset(job.key, 'started_at',
-                                  utcformat(utcnow()), pipeline)
+            pipeline.hset(job.key, 'started_at', utcformat(utcnow()))
             pipeline.execute()
 
         msg = 'Processing {0} from {1} since {2}'
@@ -673,9 +677,6 @@ class Worker(object):
             2. Removing the job from the started_job_registry
             3. Setting the workers current job to None
         """
-
-        self.failed_job_count += 1
-
         with self.connection._pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(job.origin,
@@ -684,6 +685,8 @@ class Worker(object):
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
+            self.increment_failed_job_count(pipeline=pipeline)
+
             try:
                 pipeline.execute()
             except Exception:
@@ -692,8 +695,6 @@ class Worker(object):
                 pass
 
     def handle_job_success(self, job, queue, started_job_registry):
-        
-        self.successful_job_count += 1
 
         with self.connection._pipeline() as pipeline:
             while True:
@@ -705,6 +706,7 @@ class Worker(object):
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
                     self.set_current_job_id(None, pipeline=pipeline)
+                    self.increment_successful_job_count(pipeline=pipeline)
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
