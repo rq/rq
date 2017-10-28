@@ -510,7 +510,6 @@ class FailedQueue(Queue):
             # Add Queue key set
             self.connection.sadd(self.redis_queues_keys, self.key)
 
-            job.ended_at = utcnow()
             job.exc_info = exc_info
             job.save(pipeline=pipeline, include_meta=False)
             job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire
