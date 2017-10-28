@@ -606,6 +606,10 @@ class Worker(object):
         if job_status is None:  # Job completed and its ttl has expired
             return
         if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
+
+            if not job.ended_at:
+                job.ended_at = utcnow()
+
             self.handle_job_failure(job=job)
 
             # Unhandled failure: move the job to the failed queue
