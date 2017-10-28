@@ -175,6 +175,7 @@ class Worker(object):
         self.last_cleaned_at = None
         self.successful_job_count = 0
         self.failed_job_count = 0
+        self.total_working_time = 0
         self.birth_date = None
 
         # By default, push the "move-to-failed-queue" exception handler onto
@@ -533,16 +534,20 @@ class Worker(object):
     def refresh(self):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
-            'birth', 'failed_job_count', 'successful_job_count'
+            'birth', 'failed_job_count', 'successful_job_count', 'total_working_time'
         )
-        queues, state, job_id, last_heartbeat, birth, failed_job_count, successful_job_count = data
+        queues, state, job_id, last_heartbeat, birth, failed_job_count, successful_job_count, total_working_time = data
         queues = as_text(queues)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         self.last_heartbeat = utcparse(as_text(last_heartbeat))
         self.birth_date = utcparse(as_text(birth))
-        self.failed_job_count = int(as_text(failed_job_count)) if failed_job_count else 0
-        self.successful_job_count = int(as_text(successful_job_count)) if successful_job_count else 0
+        if failed_job_count:
+            self.failed_job_count = int(as_text(failed_job_count))
+        if successful_job_count:
+            self.successful_job_count = int(as_text(successful_job_count))
+        if total_working_time:
+            self.total_working_time = float(as_text(total_working_time))
 
         if queues:
             self.queues = [self.queue_class(queue,
@@ -557,6 +562,10 @@ class Worker(object):
     def increment_successful_job_count(self, pipeline=None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
+
+    def increment_total_working_time(self, job_execution_time, pipeline):
+        pipeline.hincrbyfloat(self.key, 'total_working_time',
+                              job_execution_time.microseconds)
 
     def fork_work_horse(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -685,7 +694,9 @@ class Worker(object):
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
-            self.increment_failed_job_count(pipeline=pipeline)
+            self.increment_failed_job_count(pipeline)
+            self.increment_total_working_time(job.ended_at - job.started_at,
+                                              pipeline)
 
             try:
                 pipeline.execute()
@@ -707,6 +718,9 @@ class Worker(object):
 
                     self.set_current_job_id(None, pipeline=pipeline)
                     self.increment_successful_job_count(pipeline=pipeline)
+                    self.increment_total_working_time(
+                        job.ended_at - job.started_at, pipeline
+                    )
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
@@ -740,7 +754,8 @@ class Worker(object):
                                                   self.connection,
                                                   job_class=self.job_class)
 
-        try:
+        try:            
+            job.started_at = utcnow()
             with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                 rv = job.perform()
 
@@ -754,6 +769,8 @@ class Worker(object):
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except Exception:
+
+            job.ended_at = utcnow()
             self.handle_job_failure(job=job,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *sys.exc_info())

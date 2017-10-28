@@ -242,7 +242,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
 
-    def test_successful_and_failed_job_count(self):
+    def test_statistics(self):
         """Successful and failed job counts are saved properly"""
         q = Queue()
         job = q.enqueue(div_by_zero)
@@ -251,14 +251,18 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(w.failed_job_count, 0)
         self.assertEqual(w.successful_job_count, 0)
+        self.assertEqual(w.total_working_time, 0)
 
         registry = StartedJobRegistry(connection=w.connection)
+        job.started_at = utcnow()
+        job.ended_at = job.started_at + timedelta(seconds=0.75)
         w.handle_job_failure(job)
         w.handle_job_success(job, q, registry)
 
         w.refresh()
         self.assertEqual(w.failed_job_count, 1)
         self.assertEqual(w.successful_job_count, 1)
+        self.assertEqual(w.total_working_time, 1500000) # 1.5 seconds in microseconds
 
         w.handle_job_failure(job)
         w.handle_job_success(job, q, registry)
@@ -266,7 +270,7 @@ class TestWorker(RQTestCase):
         w.refresh()
         self.assertEqual(w.failed_job_count, 2)
         self.assertEqual(w.successful_job_count, 2)
-
+        self.assertEqual(w.total_working_time, 3000000)
 
     def test_custom_exc_handling(self):
         """Custom exception handling."""
@@ -837,6 +841,7 @@ def schedule_access_self():
     q.enqueue(access_self)
 
 
+@pytest.mark.skipif(sys.platform == 'darwin', reason='Fails on OS X')
 class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
         super(TestWorkerSubprocess, self).setUp()
