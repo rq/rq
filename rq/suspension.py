@@ -1,8 +1,14 @@
 WORKERS_SUSPENDED = 'rq:suspended'
 
 
-def is_suspended(connection):
-    return connection.exists(WORKERS_SUSPENDED)
+def is_suspended(connection, worker=None):
+    with connection.pipeline() as pipeline:
+        if worker is not None:
+            worker.heartbeat(pipeline=pipeline)
+        pipeline.exists(WORKERS_SUSPENDED)
+        # pipeline returns a list of responses
+        # https://github.com/andymccurdy/redis-py#pipelines
+        return pipeline.execute()[-1]
 
 
 def suspend(connection, ttl=None):
