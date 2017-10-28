@@ -1,3 +1,12 @@
+### 0.9.0
+- `Worker` statistics! `Worker` now keeps track of `last_heartbeat`, `successful_job_count`, `failed_job_count` and `total_working_time`. Thanks @selwin!
+- `Worker` now sends heartbeat during suspension check. Thanks @theodesp!
+- Added `queue.delete()` method to delete `Queue` objects entirely from Redis. Thanks @theodesp!
+- More robust exception string decoding. Thanks @stylight!
+- Added `--logging-level` option to command line scripts. Thanks @jiajunhuang!
+- Added millisecond precision to job timestamps. Thanks @samuelcolvin!
+- Python 2.6 is no longer supported. Thanks @samuelcolvin!
+
 ### 0.8.2
 - Fixed an issue where `job.save()` may fail with unpickleable return value.
 
