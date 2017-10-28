@@ -699,8 +699,9 @@ class Worker(object):
             started_job_registry.remove(job, pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
-            self.increment_total_working_time(job.ended_at - job.started_at,
-                                              pipeline)
+            if job.started_at and job.ended_at:
+                self.increment_total_working_time(job.ended_at - job.started_at,
+                                                  pipeline)
 
             try:
                 pipeline.execute()
