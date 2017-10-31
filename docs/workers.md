@@ -116,7 +116,7 @@ By default, the name of a worker is equal to the concatenation of the current
 hostname and the current PID.  To override this default, specify the name when
 starting the worker, using the `--name` option.
 
-[m]: {{site.baseurl}}docs/monitoring/
+[m]: /docs/monitoring/
 
 
 ## Taking down workers
