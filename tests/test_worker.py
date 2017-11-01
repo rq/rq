@@ -4,7 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta
 from time import sleep
 import signal
 import time
@@ -197,6 +197,18 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 0)
         self.assertEqual(failed_q.count, 1)
 
+    def test_heartbeat(self):
+        """Heartbeat saves last_heartbeat"""
+        q = Queue()
+        w = Worker([q])
+        w.register_birth()
+        w.heartbeat()
+        last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
+
+        self.assertTrue(last_heartbeat is not None)
+        w = Worker.find_by_key(w.key)
+        self.assertIsInstance(w.last_heartbeat, datetime)        
+
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
         q = Queue()
@@ -229,6 +241,36 @@ class TestWorker(RQTestCase):
         # to the failed queue
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertIsNotNone(job.exc_info)  # should contain exc_info
+
+    def test_statistics(self):
+        """Successful and failed job counts are saved properly"""
+        q = Queue()
+        job = q.enqueue(div_by_zero)
+        w = Worker([q])
+        w.register_birth()
+
+        self.assertEqual(w.failed_job_count, 0)
+        self.assertEqual(w.successful_job_count, 0)
+        self.assertEqual(w.total_working_time, 0)
+
+        registry = StartedJobRegistry(connection=w.connection)
+        job.started_at = utcnow()
+        job.ended_at = job.started_at + timedelta(seconds=0.75)
+        w.handle_job_failure(job)
+        w.handle_job_success(job, q, registry)
+
+        w.refresh()
+        self.assertEqual(w.failed_job_count, 1)
+        self.assertEqual(w.successful_job_count, 1)
+        self.assertEqual(w.total_working_time, 1500000) # 1.5 seconds in microseconds
+
+        w.handle_job_failure(job)
+        w.handle_job_success(job, q, registry)
+
+        w.refresh()
+        self.assertEqual(w.failed_job_count, 2)
+        self.assertEqual(w.successful_job_count, 2)
+        self.assertEqual(w.total_working_time, 3000000)
 
     def test_custom_exc_handling(self):
         """Custom exception handling."""
@@ -559,7 +601,7 @@ class TestWorker(RQTestCase):
 
         death_date = w.death_date
         self.assertIsNotNone(death_date)
-        self.assertEqual(type(death_date).__name__, 'datetime')
+        self.assertIsInstance(death_date, datetime)
 
     def test_clean_queue_registries(self):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""
@@ -799,6 +841,7 @@ def schedule_access_self():
     q.enqueue(access_self)
 
 
+@pytest.mark.skipif(sys.platform == 'darwin', reason='Fails on OS X')
 class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
         super(TestWorkerSubprocess, self).setUp()
