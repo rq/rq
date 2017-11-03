@@ -1,3 +1,6 @@
+### 0.9.1
+- Fixed an issue where `worker.refresh()` may fail when upgrading from previous versions of RQ.
+
 ### 0.9.0
 - `Worker` statistics! `Worker` now keeps track of `last_heartbeat`, `successful_job_count`, `failed_job_count` and `total_working_time`. Thanks @selwin!
 - `Worker` now sends heartbeat during suspension check. Thanks @theodesp!
