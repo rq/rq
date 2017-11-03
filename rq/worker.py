@@ -540,7 +540,10 @@ class Worker(object):
         queues = as_text(queues)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
-        self.last_heartbeat = utcparse(as_text(last_heartbeat))
+        if last_heartbeat:
+            self.last_heartbeat = utcparse(as_text(last_heartbeat))
+        else:
+            self.last_heartbeat = None
         self.birth_date = utcparse(as_text(birth))
         if failed_job_count:
             self.failed_job_count = int(as_text(failed_job_count))
