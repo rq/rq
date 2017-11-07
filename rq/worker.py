@@ -544,7 +544,10 @@ class Worker(object):
             self.last_heartbeat = utcparse(as_text(last_heartbeat))
         else:
             self.last_heartbeat = None
-        self.birth_date = utcparse(as_text(birth))
+        if birth:
+            self.birth_date = utcparse(as_text(birth))
+        else:
+            self.birth_date = None
         if failed_job_count:
             self.failed_job_count = int(as_text(failed_job_count))
         if successful_job_count:
