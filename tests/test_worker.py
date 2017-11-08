@@ -202,16 +202,21 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q])
         w.register_birth()
+        birth = self.testconn.hget(w.key, 'birth')
         last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
-
+        self.assertTrue(birth is not None)
         self.assertTrue(last_heartbeat is not None)
         w = Worker.find_by_key(w.key)
-        self.assertIsInstance(w.last_heartbeat, datetime)   
+        self.assertIsInstance(w.last_heartbeat, datetime)
 
         # worker.refresh() shouldn't fail if last_heartbeat is None
         # for compatibility reasons
-        self.testconn.hdel(w.key, 'last_heartbeat')        
-        w.refresh()     
+        self.testconn.hdel(w.key, 'last_heartbeat')
+        w.refresh()
+        # worker.refresh() shouldn't fail if birth is None
+        # for compatibility reasons
+        self.testconn.hdel(w.key, 'birth')
+        w.refresh()
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
