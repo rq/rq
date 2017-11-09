@@ -9,6 +9,7 @@ RQ requires Redis >= 2.7.0.
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
 [![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
 [![Coverage Status](https://img.shields.io/coveralls/nvie/rq.svg)](https://coveralls.io/r/nvie/rq)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fnvie%2Frq.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fnvie%2Frq?ref=badge_shield)
 
 Full documentation can be found [here][d].
 
@@ -94,3 +95,7 @@ heaviness of Celery or other AMQP-based queueing implementations.
 [1]: http://www.celeryproject.org/
 [2]: https://github.com/resque/resque
 [3]: http://flask.pocoo.org/snippets/73/
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fnvie%2Frq.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fnvie%2Frq?ref=badge_large)
