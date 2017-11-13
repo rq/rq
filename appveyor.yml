@@ -10,7 +10,6 @@ install:
   - nuget install redis-64 -excludeversion
   - redis-64\tools\redis-server.exe --service-install
   - redis-64\tools\redis-server.exe --service-start
-  - if "%PYTHON% == "C:\\Python26" "%PYTHON%\\python.exe -m pip install -r py26-requirements.txt"
   - pip install -e .
   - pip install pytest-cov
   - pip install coveralls
