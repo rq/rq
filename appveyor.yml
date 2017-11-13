@@ -19,5 +19,5 @@ install:
 build: off
 
 test_script:
-  - py.test --cov rq --durations=5
+  - py.test --cov rq --durations=5 -s
 

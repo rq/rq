@@ -917,7 +917,10 @@ class WindowsWorker(Worker):
                     'cli_options': cli_options or {}
                 }
 
-        self.recreate_command_line = sys.argv[0].endswith('py.test')
+        print("ARGS : %s" % (' | '.join(sys.argv)))
+
+        # self.recreate_command_line = sys.argv[0].endswith('py.test')
+        self.recreate_command_line = True
 
         if self.recreate_command_line:
             cli_options = kwargs.get('cli_options', {})
@@ -1021,6 +1024,12 @@ class WindowsWorker(Worker):
                     current_dir = current_parts[0]
                     python_path = os.path.join(current_dir,
                                                'scripts\\python.exe')
+
+                    if os.path.exists(python_path):
+                        break
+
+                    python_path = os.path.join(current_dir,
+                                               'python.exe')
 
                     if os.path.exists(python_path):
                         break
