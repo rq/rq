@@ -19,6 +19,5 @@ install:
 build: off
 
 test_script:
-  set RUN_SLOW_TESTS_TOO=1 
   - py.test --cov rq --durations=5
 
