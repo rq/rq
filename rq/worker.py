@@ -919,8 +919,7 @@ class WindowsWorker(Worker):
 
         print("ARGS : %s" % (' | '.join(sys.argv)))
 
-        # self.recreate_command_line = sys.argv[0].endswith('py.test')
-        self.recreate_command_line = True
+        self.recreate_command_line = sys.argv[0].endswith('py.test')
 
         if self.recreate_command_line:
             cli_options = kwargs.get('cli_options', {})
