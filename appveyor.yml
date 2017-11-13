@@ -1,0 +1,25 @@
+environment:
+  matrix:
+    - PYTHON: "C:\\Python27"
+    - PYTHON: "C:\\Python33"
+    - PYTHON: "C:\\Python34"
+    - PYTHON: "C:\\Python35"
+    - PYTHON: "C:\\Python36"
+
+install:
+  - nuget install redis-64 -excludeversion
+  - redis-64\tools\redis-server.exe --service-install
+  - redis-64\tools\redis-server.exe --service-start
+  - if "%PYTHON% == "C:\\Python26" "%PYTHON%\\python.exe -m pip install -r py26-requirements.txt"
+  - pip install -e .
+  - pip install pytest-cov
+  - pip install coveralls
+  - pip install pytest
+  - pip install mock
+
+build: off
+
+test_script:
+  set RUN_SLOW_TESTS_TOO=1 
+  - py.test --cov rq --durations=5
+
