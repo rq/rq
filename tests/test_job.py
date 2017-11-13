@@ -22,6 +22,11 @@ from rq.queue import Queue, get_failed_queue
 from rq.utils import utcformat
 from rq.worker import Worker
 
+if sys.platform == 'win32':
+    from rq.worker import WindowsWorker as Worker
+else:
+    from rq.worker import Worker
+
 try:
     from cPickle import loads, dumps
 except ImportError:

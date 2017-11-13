@@ -2,10 +2,16 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from rq import get_failed_queue, Queue, Worker
+import sys
+from rq import get_failed_queue, Queue
 from rq.contrib.sentry import register_sentry
 
 from tests import RQTestCase
+
+if sys.platform == 'win32':
+    from rq.worker import WindowsWorker as Worker
+else:
+    from rq.worker import Worker
 
 
 class FakeSentry(object):

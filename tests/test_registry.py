@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import sys
+
 from rq.compat import as_text
 from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
-from rq.worker import Worker
 from rq.registry import (clean_registries, DeferredJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
+
+if sys.platform == 'win32':
+    from rq.worker import WindowsWorker as Worker
+else:
+    from rq.worker import Worker
 
 
 class CustomJob(Job):

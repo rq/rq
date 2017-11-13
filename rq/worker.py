@@ -143,7 +143,7 @@ class Worker(object):
 
     def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
                  exc_handler=None, exception_handlers=None, default_worker_ttl=None,
-                 job_class=None, queue_class=None):  # noqa
+                 job_class=None, queue_class=None, cli_options=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -894,75 +894,149 @@ class WindowsWorker(Worker):
     death_penalty_class = WindowsDeathPenalty
     mute_child = False
 
-    def get_file_component_from_command_line(self,
-                                             character_offset,
-                                             command_line):
-        space_pad_finished = False
-        first_pass = True
+    def _debug(self, *args):
+        args = list(args)
+        args.insert(0, '[%s]' % os.getpid())
 
-        for character_index in range(character_offset, len(command_line)):
-            if not space_pad_finished:
-                if command_line[character_index] != ' ':
-                    space_pad_finished = True
-                    character_offset = character_index
+        with open("debug.log", "a") as debug_handle:
+            print(*args, file=debug_handle)
+
+    def __init__(self, queues, name=None, default_result_ttl=None,
+                 connection=None, exc_handler=None, exception_handlers=None,
+                 default_worker_ttl=None, job_class=None, queue_class=None,
+                 cli_options=None):  # noqa
+        kwargs = {
+                    'name': name,
+                    'default_result_ttl': default_result_ttl,
+                    'connection': connection,
+                    'exc_handler': exc_handler,
+                    'exception_handlers': exception_handlers,
+                    'default_worker_ttl': default_worker_ttl,
+                    'job_class': job_class,
+                    'queue_class': queue_class,
+                    'cli_options': cli_options or {}
+                }
+
+        self.recreate_command_line = sys.argv[0].endswith('py.test')
+
+        if self.recreate_command_line:
+            cli_options = kwargs.get('cli_options', {})
+
+            arguments = []
+            import_path = []
+
+            if kwargs.get('name'):
+                arguments.append('--name')
+                arguments.append(kwargs.get('name'))
+
+            if kwargs.get('results_ttl'):
+                arguments.append('--results-ttl')
+                arguments.append(kwargs.get('results_ttl'))
+
+            if kwargs.get('worker_ttl'):
+                arguments.append('--worker-ttl')
+                arguments.append(kwargs.get('worker_ttl'))
+
+            if kwargs.get('verbose'):
+                arguments.append('--verbose')
+
+            if kwargs.get('quiet'):
+                arguments.append('--quiet')
+
+            if kwargs.get('sentry_dsn'):
+                arguments.append('--sentry-dsn')
+                arguments.append(kwargs.get('sentry_dsn'))
+
+            if kwargs.get('exception_handlers'):
+                exception_handlers = kwargs.get('exception_handlers')
+
+                if not isinstance(exception_handlers, list):
+                    exception_handlers = [exception_handlers]
+
+                for exception_handler in exception_handlers:
+                    exch = exception_handler
+                    exch_name = '.'.join([exch.__module__, exch.__name__])
+                    arguments.append('--exception-handler')
+                    arguments.append(exch_name)
+
+            if 'path' in cli_options:
+                import_path = cli_options.pop('path')
+
+            for path in import_path:
+                arguments.append('--path')
+                arguments.append(path)
+
+            for arg_name, arg_value in cli_options.iteritems():
+                if arg_value:
+                    arg_name = arg_name.replace('_', '-')
+                    arguments.append('--%s' % (arg_name))
+                    arguments.append(arg_value)
+
+            self.arguments = arguments
+
+            super(WindowsWorker, self).__init__(queues, **kwargs)
+
+            queues_ = [queue.name for queue in self.queues]
+
+            self.arguments.extend(queues_)
+
+            if '--url' not in self.arguments:
+                connection_pool = self.connection.connection_pool
+                connection_kwargs = connection_pool.connection_kwargs
+
+                if connection_kwargs['password']:
+                    redis_url = ['redis://',
+                                 ':%(password)s',
+                                 '@%(host)s', ':',
+                                 '%(port)d', '/',
+                                 '%(db)d']
                 else:
-                    continue
+                    redis_url = ['redis://',
+                                 '@%(host)s', ':',
+                                 '%(port)d', '/',
+                                 '%(db)d']
 
-            if first_pass:
-                # if it's the first pass and the first character of the
-                # remainder is a double quote then assume it is to be treated
-                # as an escaped path and just retrieve the reminder quickly by
-                # looking for the next double quote
+                redis_url = ''.join(redis_url)
 
-                try:
-                    if command_line[character_offset] == '"':
-                        next_quote_offset = command_line[character_offset+1:].index('"')
+                redis_url = redis_url % connection_kwargs
 
-                        if next_quote_offset != -1:
-                            new_character_offset = character_offset + next_quote_offset + 2
-                            return new_character_offset, command_line[character_offset:character_offset + next_quote_offset + 2]
+                self.arguments.insert(0, '--url')
+                self.arguments.insert(1, redis_url)
 
-                except ValueError as ex:
-                    pass
+            if sys.argv[0].endswith('py.test'):
+                python_path = None
 
-                first_pass = False
+                module_path = sys.modules[__name__].__file__
+                module_path = os.path.dirname(module_path)
+                entry_point = os.path.join(module_path, 'cli\\windows.py')
 
-            # otherwise find the minimal set of contiguous characters
-            # that references a file
+                current_path = os.__file__
 
-            if os.path.isfile(command_line[character_offset: character_index]):
-                return character_index + 1, command_line[character_offset:character_index]
+                while True:
+                    current_parts = os.path.split(current_path)
 
-        return 0, None
+                    if not current_parts[1]:
+                        break
 
-    def get_proper_cmdline_and_binname(self):
-        GetCommandLineA = ctypes.windll.kernel32.GetCommandLineA
-        GetCommandLineA.restype = ctypes.c_char_p
-        
-        command_line = GetCommandLineA()
-        binary_name = None
+                    current_dir = current_parts[0]
+                    python_path = os.path.join(current_dir,
+                                               'scripts\\python.exe')
 
-        character_offset = 0
-        new_offset, component = self.get_file_component_from_command_line(character_offset, command_line)
-        if component:
-            binary_name = component
-            command_line = command_line[character_offset:]
+                    if os.path.exists(python_path):
+                        break
 
-            if component and component.lower().strip('"').endswith('python.exe'):
-                character_offset = new_offset
-                new_offset, component = self.get_file_component_from_command_line(character_offset, command_line)
+                    python_path = None
+                    current_path = current_parts[0]
 
-                if component and component.lower().strip('"').endswith('rq.exe'):
-                    command_line = command_line[character_offset:].strip()
-                    binary_name = component.strip()
+                self.arguments.insert(0, python_path)
+                self.arguments.insert(1, entry_point)
 
-        if not binary_name:
-            binary_name = command_line.split()[0]
+            self.arguments = [str(arg) for arg in self.arguments]
 
-        if binary_name:
-            binary_name = binary_name.replace('"', '')
+        else:
+            self.arguments = sys.argv
 
-        return binary_name, command_line
+            super(WindowsWorker, self).__init__(queues, **kwargs)
 
     def work(self, burst=False, logging_level="INFO"):
         if 'RQ_WORKER_ID' in os.environ:
@@ -982,19 +1056,41 @@ class WindowsWorker(Worker):
             job.refresh()
 
             self.main_work_horse(job, queue)
-            self.exit(-1)
+            self.exit(0)
+
         else:
-            super(WindowsWorker, self).work(burst, logging_level)
+            if self.recreate_command_line:
+                if burst:
+                    # Insert the burst modifier before the last
+                    # option
+
+                    self.arguments = self.arguments[::-1]
+
+                    for arg_index in range(len(self.arguments)):
+                        if self.arguments[arg_index].startswith('-'):
+                            self.arguments.insert(arg_index + 1, '--burst')
+
+                            break
+
+                    self.arguments = self.arguments[::-1]
+
+            return super(WindowsWorker, self).work(burst, logging_level)
 
     def fork_work_horse(self, job, queue):
-        child_environ = os.environ.copy()
-        child_environ[str('RQ_WORKER_ID')] = str(self.name)
-        child_environ[str('RQ_QUEUE_ID')] = str(queue.key)
-        child_environ[str('RQ_JOB_ID')] = str(job.id)
+        child_environment = os.environ.copy()
+        child_environment[str('RQ_WORKER_ID')] = str(self.name)
+        child_environment[str('RQ_QUEUE_ID')] = str(queue.key)
+        child_environment[str('RQ_JOB_ID')] = str(job.id)
 
-        binname, cmdline = self.get_proper_cmdline_and_binname()
+        if ' ' in self.arguments[0]:
+            self.arguments[0] = '"%s"' % (self.arguments[0])
 
-        child_pid = os.spawnve(os.P_NOWAIT, binname, sys.argv, child_environ)
+        if self.arguments[1].endswith('.py'):
+            if ' ' in self.arguments[1]:
+                self.arguments[1] = '"%s"' % (self.arguments[1])
+
+        child_pid = os.spawnve(os.P_NOWAIT, self.arguments[0], self.arguments,
+                               child_environment)
 
         self._horse_pid = child_pid
         self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
@@ -1002,6 +1098,15 @@ class WindowsWorker(Worker):
     def setup_work_horse_signals(self):
         """There are no signals in windows"""
         pass
+
+
+class SimpleWindowsWorker(WindowsWorker):
+    def main_work_horse(self, *args, **kwargs):
+        raise NotImplementedError("Test worker does not implement this method")
+
+    def execute_job(self, *args, **kwargs):
+        """Execute job in same thread/process, do not fork()"""
+        return self.perform_job(*args, **kwargs)
 
 
 class HerokuWorker(Worker):

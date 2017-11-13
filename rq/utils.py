@@ -15,6 +15,7 @@ import logging
 import numbers
 import sys
 from collections import Iterable
+from datetime import timedelta
 
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
@@ -168,7 +169,9 @@ _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
 def utcformat(dt):
-    return dt.strftime(as_text(_TIMESTAMP_FORMAT))
+    dt_ = dt - timedelta(microseconds=dt.microsecond)
+
+    return dt_.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
 def utcparse(string):

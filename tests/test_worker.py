@@ -11,10 +11,18 @@ import time
 from multiprocessing import Process
 import subprocess
 import sys
+import tempfile
 from unittest import skipIf
 
 import pytest
 import mock
+
+try:
+    import _thread
+except ImportError as ex:
+    import thread as _thread
+
+
 from mock import Mock
 
 from tests import RQTestCase, slow
@@ -23,7 +31,7 @@ from tests.fixtures import (create_file, create_file_after_timeout,
                             run_dummy_heroku_worker, access_self,
                             modify_self, modify_self_and_error)
 
-from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
+from rq import (get_failed_queue, Queue,
                 get_current_connection)
 from rq.compat import as_text, PY2
 from rq.job import Job, JobStatus
@@ -31,6 +39,13 @@ from rq.registry import StartedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.worker import HerokuWorker, WorkerStatus
+
+if sys.platform == 'win32':
+    from rq.worker import WindowsWorker as Worker
+    from rq.worker import SimpleWindowsWorker as SimpleWorker
+else:
+    from rq.worker import Worker
+    from rq.worker import SimpleWorker
 
 
 class CustomJob(Job):
@@ -276,6 +291,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.successful_job_count, 2)
         self.assertEqual(w.total_working_time, 3000000)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason='requires fork')
     def test_custom_exc_handling(self):
         """Custom exception handling."""
         def black_hole(job, *exc_info):
@@ -307,7 +323,9 @@ class TestWorker(RQTestCase):
     def test_cancelled_jobs_arent_executed(self):
         """Cancelling jobs."""
 
-        SENTINEL_FILE = '/tmp/rq-tests.txt'  # noqa
+        tmp_path = tempfile.gettempdir()
+
+        SENTINEL_FILE = os.path.join(tmp_path, 'rq-tests.txt')
 
         try:
             # Remove the sentinel if it is leftover from a previous test run
@@ -332,7 +350,9 @@ class TestWorker(RQTestCase):
     @slow  # noqa
     def test_timeouts(self):
         """Worker kills jobs after timeout."""
-        sentinel_file = '/tmp/.rq_sentinel'
+        tmp_path = tempfile.gettempdir()
+
+        sentinel_file = os.path.join(tmp_path, '.rq_sentinel')
 
         q = Queue()
         w = Worker([q])
@@ -528,7 +548,9 @@ class TestWorker(RQTestCase):
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
 
-        SENTINEL_FILE = '/tmp/rq-tests.txt'  # noqa
+        tmp_path = tempfile.gettempdir()
+
+        SENTINEL_FILE = os.path.join(tmp_path, 'rq-tests.txt')
 
         try:
             # Remove the sentinel if it is leftover from a previous test run
@@ -647,6 +669,7 @@ class TestWorker(RQTestCase):
         worker.work(burst=True)
         self.assertEqual(self.testconn.zcard(registry.key), 0)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason='requires fork')
     def test_job_dependency_race_condition(self):
         """Dependencies added while the job gets finished shouldn't get lost."""
 
@@ -743,7 +766,7 @@ def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     os.kill(pid, signal.SIGKILL)
 
 
-class TimeoutTestCase:
+class UnixTimeoutTestCase:
     def setUp(self):
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
@@ -755,6 +778,42 @@ class TimeoutTestCase:
         raise AssertionError(
             "test still running after %i seconds, likely the worker wasn't shutdown correctly" % self.killtimeout
         )
+
+
+class WindowsTimeoutTestCase:
+    def setUp(self):
+        # we want tests to fail if signal are ignored and the work remain
+        # running, so set a signal to kill them after X seconds
+
+        self.defused = False
+        self.killtimeout = 15
+        self.watchdog_thread = _thread.start_new_thread(self._watchdog, ())
+
+    def _watchdog(self):
+        start_time = time.time()
+        current_time = start_time
+
+        while current_time - start_time < 15:
+            current_time = time.time()
+            time.sleep(0.1)
+
+        if not self.defused:
+            # _thread.interrupt_main() # this would be preferred but we cannot
+            # use it because it raises KeyboardInterrupt
+
+            raise AssertionError(
+                "test still running after %i seconds, likely the"
+                " worker wasn't shutdown correctly" % self.killtimeout
+            )
+
+        # there could be a bug here, i don't know who resets the alarm in the
+        # linux timeout test case but i should add a call in there
+
+
+if sys.platform == 'win32':
+    TimeoutTestCase = WindowsTimeoutTestCase
+else:
+    TimeoutTestCase = UnixTimeoutTestCase
 
 
 class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
@@ -798,7 +857,9 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         """worker with an ongoing job receiving double SIGTERM signal and shutting down immediately"""
         fooq = Queue('foo')
         w = Worker(fooq)
-        sentinel_file = '/tmp/.rq_sentinel_cold'
+        tmp_path = tempfile.gettempdir()
+
+        sentinel_file = os.path.join(tmp_path, '.rq_sentinel_cold')
         fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
         self.assertFalse(w._stop_requested)
         p = Process(target=kill_worker, args=(os.getpid(), True))
@@ -824,7 +885,9 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertEqual(failed_q.count, 0)
         self.assertEqual(fooq.count, 0)
         w = Worker(fooq)
-        sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
+        tmp_path = tempfile.gettempdir()
+
+        sentinel_file = os.path.join(tmp_path, '.rq_sentinel_work_horse_death')
         if os.path.exists(sentinel_file):
             os.remove(sentinel_file)
         fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
@@ -874,6 +937,7 @@ class TestWorkerSubprocess(RQTestCase):
         assert q.count == 0
 
 
+@pytest.mark.skipif(sys.platform == 'win32', reason='requires Linux signals')
 @pytest.mark.skipif(sys.platform == 'darwin', reason='requires Linux signals')
 class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def setUp(self):

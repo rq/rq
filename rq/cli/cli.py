@@ -187,6 +187,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
     """Starts an RQ worker."""
 
     settings = read_config_file(cli_config.config) if cli_config.config else {}
+
     # Worker specific default arguments
     queues = queues or settings.get('QUEUES', ['default'])
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
@@ -219,7 +220,8 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
                                          default_result_ttl=results_ttl,
                                          job_class=cli_config.job_class,
                                          queue_class=cli_config.queue_class,
-                                         exception_handlers=exception_handlers or None)
+                                         exception_handlers=exception_handlers or None,
+                                         cli_options=options)
 
         # Should we configure Sentry?
         if sentry_dsn:
