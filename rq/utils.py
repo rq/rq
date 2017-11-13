@@ -169,9 +169,7 @@ _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
 def utcformat(dt):
-    dt_ = dt - timedelta(microseconds=dt.microsecond)
-
-    return dt_.strftime(as_text(_TIMESTAMP_FORMAT))
+    return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
 def utcparse(string):

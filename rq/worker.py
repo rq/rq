@@ -917,8 +917,6 @@ class WindowsWorker(Worker):
                     'cli_options': cli_options or {}
                 }
 
-        print("ARGS : %s" % (' | '.join(sys.argv)))
-
         self.recreate_command_line = sys.argv[0].endswith('py.test')
 
         if self.recreate_command_line:
@@ -1097,11 +1095,8 @@ class WindowsWorker(Worker):
             if ' ' in self.arguments[1]:
                 self.arguments[1] = '"%s"' % (self.arguments[1])
 
-        try:
-            child_pid = os.spawnve(os.P_NOWAIT, self.arguments[0],
-                                   self.arguments, child_environment)
-        except OSError as ex:
-            raise Exception("FORK ARGS : %s" % (' | '.join(self.arguments[0])))
+        child_pid = os.spawnve(os.P_NOWAIT, self.arguments[0],
+                               self.arguments, child_environment)
 
         self._horse_pid = child_pid
         self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
