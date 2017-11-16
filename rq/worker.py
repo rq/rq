@@ -901,6 +901,33 @@ class WindowsWorker(Worker):
         with open("debug.log", "a") as debug_handle:
             print(*args, file=debug_handle)
 
+    def find_interpreter_binary(self):
+        current_path = os.__file__
+
+        while True:
+            current_parts = os.path.split(current_path)
+
+            if not current_parts[1]:
+                break
+
+            current_dir = current_parts[0]
+            python_path = os.path.join(current_dir,
+                                       'scripts\\python.exe')
+
+            if os.path.exists(python_path):
+                break
+
+            python_path = os.path.join(current_dir,
+                                       'python.exe')
+
+            if os.path.exists(python_path):
+                break
+
+            python_path = None
+            current_path = current_parts[0]
+
+        return python_path
+
     def __init__(self, queues, name=None, default_result_ttl=None,
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=None, job_class=None, queue_class=None,
@@ -1010,29 +1037,7 @@ class WindowsWorker(Worker):
                 module_path = os.path.dirname(module_path)
                 entry_point = os.path.join(module_path, 'cli\\windows.py')
 
-                current_path = os.__file__
-
-                while True:
-                    current_parts = os.path.split(current_path)
-
-                    if not current_parts[1]:
-                        break
-
-                    current_dir = current_parts[0]
-                    python_path = os.path.join(current_dir,
-                                               'scripts\\python.exe')
-
-                    if os.path.exists(python_path):
-                        break
-
-                    python_path = os.path.join(current_dir,
-                                               'python.exe')
-
-                    if os.path.exists(python_path):
-                        break
-
-                    python_path = None
-                    current_path = current_parts[0]
+                python_path = self.find_interpreter_binary()
 
                 self.arguments.insert(0, python_path)
                 self.arguments.insert(1, entry_point)
@@ -1091,9 +1096,14 @@ class WindowsWorker(Worker):
         if ' ' in self.arguments[0]:
             self.arguments[0] = '"%s"' % (self.arguments[0])
 
-        if self.arguments[1].endswith('.py'):
-            if ' ' in self.arguments[1]:
-                self.arguments[1] = '"%s"' % (self.arguments[1])
+        if self.arguments[0].endswith('.py'):
+            python_path = self.find_interpreter_binary()
+            self.arguments.insert(0, python_path)
+
+        if len(self.arguments) > 1:
+            if self.arguments[1].endswith('.py'):
+                if ' ' in self.arguments[1]:
+                    self.arguments[1] = '"%s"' % (self.arguments[1])
 
         child_pid = os.spawnve(os.P_NOWAIT, self.arguments[0],
                                self.arguments, child_environment)
