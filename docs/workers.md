@@ -119,6 +119,42 @@ starting the worker, using the `--name` option.
 [m]: /docs/monitoring/
 
 
+### Retrieving worker information
+
+`Worker` instances store their runtime information in Redis. Here's how to
+retrieve them:
+
+{% highlight python %}
+from rq.worker import Worker
+workers = Worker.all(redis_conn)
+{% endhighlight %}
+
+If you only want to retrieve a specific worker:
+
+{% highlight python %}
+from rq.worker import Worker
+worker = Worker.find_by_key('rq:worker:name')
+
+print(worker.birth_date) # date when worker was instantiated
+{% endhighlight %}
+
+### Worker statistics
+
+_New in version 0.9.0._
+
+If you want to check the utilization of your queues, `Worker` instances
+store a few useful information:
+
+{% highlight python %}
+from rq.worker import Worker
+worker = Worker.find_by_key('rq:worker:name')
+
+worker.successful_job_count  # Number of jobs finished successfully
+worker.failed_job_count. # Number of failed jobs processed by this worker
+worker.total_working_time  # Number of time spent executing jobs
+{% endhighlight %}
+
+
 ## Taking down workers
 
 If, at any time, the worker receives `SIGINT` (via Ctrl+C) or `SIGTERM` (via
