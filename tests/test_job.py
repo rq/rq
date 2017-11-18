@@ -3,9 +3,10 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from datetime import datetime
-import time
 
+import time
 import sys
+import zlib
 
 is_py2 = sys.version[0] == '2'
 if is_py2:
@@ -15,7 +16,7 @@ else:
 
 from tests import fixtures, RQTestCase
 
-from rq.compat import PY2
+from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
 from rq.queue import Queue, get_failed_queue
@@ -263,6 +264,31 @@ class TestJob(RQTestCase):
         with self.assertRaises(AttributeError):
             job.func  # accessing the func property should fail
 
+    def test_compressed_exc_info_handling(self):
+        """Jobs handle both compressed and uncompressed exc_info"""
+        exception_string = 'Some exception'
+
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))        
+        job.exc_info = exception_string
+        job.save()
+
+        # exc_info is stored in compressed format
+        exc_info = self.testconn.hget(job.key, 'exc_info')
+        self.assertEqual(
+            as_text(zlib.decompress(exc_info)),
+            exception_string
+        )
+
+        job.refresh()
+        self.assertEqual(job.exc_info, exception_string)
+
+        # Uncompressed exc_info is also handled
+        self.testconn.hset(job.key, 'exc_info', exception_string)
+
+        job.refresh()
+        self.assertEqual(job.exc_info, exception_string)
+
+
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
@@ -457,7 +483,7 @@ class TestJob(RQTestCase):
         """test if a job created with ttl expires [issue502]"""
         queue = Queue(connection=self.testconn)
         queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
-        time.sleep(1)
+        time.sleep(1.1)
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_create_and_cancel_job(self):
