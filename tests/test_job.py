@@ -161,7 +161,7 @@ class TestJob(RQTestCase):
         self.assertEqual(self.testconn.type(job.key), b'hash')
 
         # Saving writes pickled job data
-        unpickled_data = loads(self.testconn.hget(job.key, 'data'))
+        unpickled_data = loads(zlib.decompress(self.testconn.hget(job.key, 'data')))
         self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
@@ -237,7 +237,8 @@ class TestJob(RQTestCase):
     def test_fetching_unreadable_data(self):
         """Fetching succeeds on unreadable data, but lazy props fail."""
         # Set up
-        job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, args=(3, 4),
+                         kwargs=dict(z=2))
         job.save()
 
         # Just replace the data hkey with some random noise
@@ -256,9 +257,10 @@ class TestJob(RQTestCase):
         # Now slightly modify the job to make it unimportable (this is
         # equivalent to a worker not having the most up-to-date source code
         # and unable to import the function)
-        data = self.testconn.hget(job.key, 'data')
-        unimportable_data = data.replace(b'say_hello', b'nay_hello')
-        self.testconn.hset(job.key, 'data', unimportable_data)
+        job_data = job.data
+        unimportable_data = job_data.replace(b'say_hello', b'nay_hello')
+
+        self.testconn.hset(job.key, 'data', zlib.compress(unimportable_data))
 
         job.refresh()
         with self.assertRaises(AttributeError):
@@ -268,7 +270,7 @@ class TestJob(RQTestCase):
         """Jobs handle both compressed and uncompressed exc_info"""
         exception_string = 'Some exception'
 
-        job = Job.create(func=fixtures.say_hello, args=('Lionel',))        
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
         job.exc_info = exception_string
         job.save()
 
@@ -287,6 +289,23 @@ class TestJob(RQTestCase):
 
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
+
+    def test_compressed_job_data_handling(self):
+        """Jobs handle both compressed and uncompressed data"""
+
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.save()
+
+        # Job data is stored in compressed format
+        job_data = job.data
+        self.assertEqual(
+            zlib.compress(job_data),
+            self.testconn.hget(job.key, 'data')
+        )
+
+        self.testconn.hset(job.key, 'data', job_data)
+        job.refresh()
+        self.assertEqual(job.data, job_data)
 
 
     def test_custom_meta_is_persisted(self):

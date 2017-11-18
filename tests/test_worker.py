@@ -4,13 +4,16 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import shutil
-from datetime import datetime, timedelta
-from time import sleep
 import signal
-import time
-from multiprocessing import Process
 import subprocess
 import sys
+import time
+import zlib
+
+from datetime import datetime, timedelta
+from multiprocessing import Process
+from time import sleep
+
 from unittest import skipIf
 
 import pytest
@@ -180,10 +183,11 @@ class TestWorker(RQTestCase):
         # importable from the worker process.
         job = Job.create(func=div_by_zero, args=(3,))
         job.save()
-        data = self.testconn.hget(job.key, 'data')
-        invalid_data = data.replace(b'div_by_zero', b'nonexisting')
-        assert data != invalid_data
-        self.testconn.hset(job.key, 'data', invalid_data)
+        
+        job_data = job.data
+        invalid_data = job_data.replace(b'div_by_zero', b'nonexisting')
+        assert job_data != invalid_data
+        self.testconn.hset(job.key, 'data', zlib.compress(invalid_data))
 
         # We use the low-level internal function to enqueue any data (bypassing
         # validity checks)

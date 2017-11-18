@@ -417,9 +417,15 @@ class Job(object):
                 return utcparse(as_text(date_str))
 
         try:
-            self.data = obj['data']
+            raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+
+        try:
+            self.data = zlib.decompress(raw_data)
+        except zlib.error:
+            # Fallback to uncompressed string
+            self.data = raw_data
 
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
@@ -453,7 +459,7 @@ class Job(object):
         """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
-        obj['data'] = self.data
+        obj['data'] = zlib.compress(self.data)
 
         if self.origin is not None:
             obj['origin'] = self.origin
