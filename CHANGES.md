@@ -1,3 +1,6 @@
+### 0.9.2
+- Fixed an issue where `worker.refresh()` may fail when `birth_date` is not set. Thanks @vanife!
+
 ### 0.9.1
 - Fixed an issue where `worker.refresh()` may fail when upgrading from previous versions of RQ.
 
@@ -43,7 +46,7 @@
 - Fixes a bug that prevents fetching jobs from `FailedQueue` (#765). Thanks @jsurloppe!
 - Fixes race condition when enqueueing jobs with dependency (#742). Thanks @th3hamm0r!
 - Skip a test that requires Linux signals on MacOS (#763). Thanks @jezdez!
-- `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf! 
+- `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf!
 
 ### 0.7.0
 
