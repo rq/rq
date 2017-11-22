@@ -94,6 +94,8 @@ class Worker(object):
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
+    # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
+    # messages are logged after every job, by default they are.
     log_result_lifespan = True
 
     @classmethod

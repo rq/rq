@@ -727,6 +727,30 @@ class TestWorker(RQTestCase):
         self.assertEqual(job_check.meta['baz'], 10)
         self.assertEqual(job_check.meta['newinfo'], 'waka')
 
+    @mock.patch('rq.worker.logger.info')
+    def test_log_result_lifespan_true(self, mock_logger_info):
+        """Check that log_result_lifespan True causes job lifespan to be logged."""
+        q = Queue()
+
+        w = Worker([q])
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w.perform_job(job, q)
+        mock_logger_info.assert_called_with('Result is kept for 10 seconds')
+        self.assertIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
+
+    @mock.patch('rq.worker.logger.info')
+    def test_log_result_lifespan_false(self, mock_logger_info):
+        """Check that log_result_lifespan False causes job lifespan to not be logged."""
+        q = Queue()
+
+        class TestWorker(Worker):
+            log_result_lifespan = False
+
+        w = TestWorker([q])
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w.perform_job(job, q)
+        self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
+
 
 def kill_worker(pid, double_kill):
     # wait for the worker to be started over on the main process
