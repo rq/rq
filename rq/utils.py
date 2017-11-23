@@ -172,6 +172,13 @@ def utcparse(string):
         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
+def parse_if_present(value, parser=str):
+    if value:
+        return parser(as_text(value))
+    else:
+        return None
+
+
 def first(iterable, default=None, key=None):
     """
     Return first element of `iterable` that evaluates true, else return None

@@ -13,6 +13,7 @@ import time
 import traceback
 import warnings
 from datetime import timedelta
+from .utils import parse_if_present
 
 try:
     from signal import SIGKILL
@@ -287,26 +288,18 @@ class Worker(object):
         """Sets the date on which the worker received a (warm) shutdown request"""
         self.connection.hset(self.key, 'shutdown_requested_date', utcformat(utcnow()))
 
-    # @property
-    # def birth_date(self):
-    #     """Fetches birth date from Redis."""
-    #     birth_timestamp = self.connection.hget(self.key, 'birth')
-    #     if birth_timestamp is not None:
-    #         return utcparse(as_text(birth_timestamp))
 
     @property
     def shutdown_requested_date(self):
         """Fetches shutdown_requested_date from Redis."""
         shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
-        if shutdown_requested_timestamp is not None:
-            return utcparse(as_text(shutdown_requested_timestamp))
+        return parse_if_present(shutdown_requested_timestamp, parser=utcparse)
 
     @property
     def death_date(self):
         """Fetches death date from Redis."""
         death_timestamp = self.connection.hget(self.key, 'death')
-        if death_timestamp is not None:
-            return utcparse(as_text(death_timestamp))
+        return parse_if_present(death_timestamp, parser=utcparse)
 
     def set_state(self, state, pipeline=None):
         self._state = state
@@ -540,20 +533,11 @@ class Worker(object):
         queues = as_text(queues)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
-        if last_heartbeat:
-            self.last_heartbeat = utcparse(as_text(last_heartbeat))
-        else:
-            self.last_heartbeat = None
-        if birth:
-            self.birth_date = utcparse(as_text(birth))
-        else:
-            self.birth_date = None
-        if failed_job_count:
-            self.failed_job_count = int(as_text(failed_job_count))
-        if successful_job_count:
-            self.successful_job_count = int(as_text(successful_job_count))
-        if total_working_time:
-            self.total_working_time = float(as_text(total_working_time))
+        self.last_heartbeat = parse_if_present(last_heartbeat, parser=utcparse)
+        self.birth_date = parse_if_present(birth, parser=utcparse)
+        self.failed_job_count = parse_if_present(failed_job_count, parser=int)
+        self.successful_job_count = parse_if_present(successful_job_count, parser=int)
+        self.total_working_time = parse_if_present(total_working_time, parser=float)
 
         if queues:
             self.queues = [self.queue_class(queue,
