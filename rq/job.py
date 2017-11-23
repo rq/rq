@@ -12,7 +12,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import enum, import_attribute, utcformat, utcnow, utcparse
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse, parse_if_present
 
 try:
     import cPickle as pickle
@@ -409,23 +409,17 @@ class Job(object):
         if len(obj) == 0:
             raise NoSuchJobError('No such job: {0}'.format(key))
 
-        def to_date(date_str):
-            if date_str is None:
-                return
-            else:
-                return utcparse(as_text(date_str))
-
         try:
             self.data = obj['data']
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
-        self.created_at = to_date(as_text(obj.get('created_at')))
+        self.created_at = parse_if_present(obj.get('created_at'), parser=utcparse)
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
-        self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
-        self.started_at = to_date(as_text(obj.get('started_at')))
-        self.ended_at = to_date(as_text(obj.get('ended_at')))
+        self.enqueued_at = parse_if_present(obj.get('enqueued_at'), parser=utcparse)
+        self.started_at = parse_if_present(obj.get('started_at'), parser=utcparse)
+        self.ended_at = parse_if_present(obj.get('ended_at'), parser=utcparse)
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.exc_info = as_text(obj.get('exc_info'))
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None

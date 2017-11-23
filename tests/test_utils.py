@@ -4,7 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 import re
 import datetime
 from tests import RQTestCase, fixtures
-from rq.utils import parse_timeout, first, is_nonstring_iterable, ensure_list, utcparse, backend_class
+from rq.utils import parse_timeout, first, is_nonstring_iterable, ensure_list, utcparse, backend_class, parse_if_present
 from rq.exceptions import TimeoutFormatError
 
 
@@ -58,6 +58,21 @@ class TestUtils(RQTestCase):
         """Ensure function utcparse works correctly"""
         utc_formated_time = '2017-08-31T10:14:02Z'
         self.assertEqual(datetime.datetime(2017, 8, 31, 10, 14, 2), utcparse(utc_formated_time))
+
+    def test_parse_if_present_none(self):
+        """Ensure function parse_if_present returns None when passed None"""
+        self.assertIsNone(parse_if_present(None))
+        self.assertIsNone(parse_if_present(None, parser=float))
+
+    def test_parse_if_present_bytes(self):
+        """Ensure function parse_if_present decodes and parses bytes"""
+        self.assertEquals('1', parse_if_present(b'1'))
+        self.assertEquals(1, parse_if_present(b'1', parser=int))
+
+    def test_parse_if_present_string(self):
+        """Ensure function parse_if_present parses strings"""
+        self.assertEquals('1', parse_if_present('1'))
+        self.assertEquals(1, parse_if_present('1', parser=int))
 
     def test_backend_class(self):
         """Ensure function backend_class works correctly"""
