@@ -91,7 +91,7 @@ WorkerStatus = enum(
 
 class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
-    redis_workers_keys = 'rq:workers'
+    redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
@@ -126,7 +126,7 @@ class Worker(object):
         """
         prefix = cls.redis_worker_namespace_prefix
         if not worker_key.startswith(prefix):
-            raise ValueError('Not a valid RQ worker key: {0}'.format(worker_key))
+            raise ValueError('Not a valid RQ worker key: %s' % worker_key)
 
         if connection is None:
             connection = get_current_connection()
