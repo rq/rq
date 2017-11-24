@@ -119,7 +119,12 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.queues, queues)
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
         self.assertEqual(worker._job_id, None)
-        w.register_death()
+        self.assertTrue(worker.key in Worker.all_keys(worker.connection))
+
+        # If worker is gone, its keys should also be removed
+        worker.connection.delete(worker.key)
+        Worker.find_by_key(worker.key)
+        self.assertFalse(worker.key in Worker.all_keys(worker.connection))
 
     def test_worker_ttl(self):
         """Worker ttl."""
@@ -183,7 +188,7 @@ class TestWorker(RQTestCase):
         # importable from the worker process.
         job = Job.create(func=div_by_zero, args=(3,))
         job.save()
-        
+
         job_data = job.data
         invalid_data = job_data.replace(b'div_by_zero', b'nonexisting')
         assert job_data != invalid_data

@@ -21,6 +21,7 @@ except ImportError:
 
 from redis import WatchError
 
+from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
@@ -96,10 +97,12 @@ class Worker(object):
     job_class = Job
 
     @classmethod
-    def all(cls, connection=None, job_class=None, queue_class=None):
+    def all(cls, connection=None, job_class=None, queue_class=None, queue=None):
         """Returns an iterable of all Workers.
         """
-        if connection is None:
+        if queue:
+            connection = queue.connection
+        elif connection is None:
             connection = get_current_connection()
         reported_working = connection.smembers(cls.redis_workers_keys)
         workers = [cls.find_by_key(as_text(key),
@@ -108,6 +111,11 @@ class Worker(object):
                                    queue_class=queue_class)
                    for key in reported_working]
         return compact(workers)
+
+    @classmethod
+    def all_keys(cls, connection):
+        return [as_text(key)
+                for key in connection.smembers(cls.redis_workers_keys)]
 
     @classmethod
     def find_by_key(cls, worker_key, connection=None, job_class=None,
@@ -132,7 +140,7 @@ class Worker(object):
                      connection=connection,
                      job_class=job_class,
                      queue_class=queue_class)
-        
+
         worker.refresh()
 
         return worker
@@ -185,7 +193,7 @@ class Worker(object):
             if exc_handler is not None:
                 self.push_exc_handler(exc_handler)
                 warnings.warn(
-                    "use of exc_handler is deprecated, pass a list to exception_handlers instead.",
+                    "exc_handler is deprecated, pass a list to exception_handlers instead.",
                     DeprecationWarning
                 )
         elif isinstance(exception_handlers, list):
@@ -268,7 +276,7 @@ class Worker(object):
             p.hset(key, 'birth', now_in_string)
             p.hset(key, 'last_heartbeat', now_in_string)
             p.hset(key, 'queues', queues)
-            p.sadd(self.redis_workers_keys, key)
+            worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl)
             p.execute()
 
@@ -278,7 +286,7 @@ class Worker(object):
         with self.connection._pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
-            p.srem(self.redis_workers_keys, self.key)
+            worker_registration.unregister(self, p)
             p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
@@ -560,7 +568,7 @@ class Worker(object):
                                             connection=self.connection,
                                             job_class=self.job_class)
                            for queue in queues.split(',')]
-    
+
     def increment_failed_job_count(self, pipeline=None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
@@ -765,7 +773,7 @@ class Worker(object):
                                                   self.connection,
                                                   job_class=self.job_class)
 
-        try:            
+        try:
             job.started_at = utcnow()
             with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
                 rv = job.perform()
