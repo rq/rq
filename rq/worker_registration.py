@@ -31,7 +31,10 @@ def unregister(worker, pipeline=None):
 
 
 def get_keys(queue=None, connection=None):
-    """Returns a list of worker keys for a queue"""
+    """Returnes a list of worker keys for a queue"""
+    if queue is None and connection is None:
+        raise ValueError('"queue" or "connection" argument is required')
+
     if queue:
         redis = queue.connection
         redis_key = WORKERS_BY_QUEUE_KEY % queue.name

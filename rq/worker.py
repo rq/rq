@@ -35,6 +35,7 @@ from .timeouts import UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
+from .worker_registration import get_keys
 
 try:
     from procname import setprocname
@@ -104,18 +105,24 @@ class Worker(object):
             connection = queue.connection
         elif connection is None:
             connection = get_current_connection()
-        reported_working = connection.smembers(cls.redis_workers_keys)
+
+        worker_keys = get_keys(queue=queue, connection=connection)
         workers = [cls.find_by_key(as_text(key),
                                    connection=connection,
                                    job_class=job_class,
                                    queue_class=queue_class)
-                   for key in reported_working]
+                   for key in worker_keys]
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection):
+    def all_keys(cls, connection=None, queue=None):
         return [as_text(key)
-                for key in connection.smembers(cls.redis_workers_keys)]
+                for key in get_keys(queue=queue, connection=connection)]
+
+    @classmethod
+    def count(cls, connection=None, queue=None):
+        """Returns the number of workers by queue or connection"""
+        return len(get_keys(queue=queue, connection=connection))
 
     @classmethod
     def find_by_key(cls, worker_key, connection=None, job_class=None,

@@ -108,6 +108,35 @@ class TestWorker(RQTestCase):
             'Expected at least some work done.'
         )
 
+    def test_worker_all(self):
+        """Worker.all() works properly"""
+        foo_queue = Queue('foo')
+        bar_queue = Queue('bar')
+
+        w1 = Worker([foo_queue, bar_queue], name='w1')
+        w1.register_birth()
+        w2 = Worker([foo_queue], name='w2')
+        w2.register_birth()
+
+        self.assertEqual(
+            set(Worker.all(connection=foo_queue.connection)),
+            set([w1, w2])
+        )
+
+        self.assertEqual(
+            set(Worker.all(queue=foo_queue)),
+            set([w1, w2])
+        )
+
+        self.assertEqual(
+            set(Worker.all(queue=bar_queue)),
+            set([w1])
+        )
+
+        w1.register_death()
+        w2.register_death()
+
+
     def test_find_by_key(self):
         """Worker.find_by_key restores queues, state and job_id."""
         queues = [Queue('foo'), Queue('bar')]

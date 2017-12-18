@@ -62,6 +62,9 @@ class TestWorkerRegistry(RQTestCase):
             get_keys(connection=worker1.connection)
         )
 
+        # Calling get_keys without arguments raises an exception
+        self.assertRaises(ValueError, get_keys)
+
         unregister(worker1)
         unregister(worker2)
         unregister(worker3)
