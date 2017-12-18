@@ -108,6 +108,26 @@ class TestWorker(RQTestCase):
             'Expected at least some work done.'
         )
 
+    def test_worker_all(self):
+        """Worker.all() works properly"""
+        foo_queue = Queue('foo')
+        bar_queue = Queue('bar')
+
+        w1 = Worker([foo_queue, bar_queue], name='w1')
+        w1.register_birth()
+        w2 = Worker([foo_queue], name='w2')
+        w2.register_birth()
+
+        self.assertEqual(
+            set(Worker.all(connection=foo_queue.connection)),
+            set([w1, w2])
+        )
+        self.assertEqual(set(Worker.all(queue=foo_queue)), set([w1, w2]))
+        self.assertEqual(set(Worker.all(queue=bar_queue)), set([w1]))
+
+        w1.register_death()
+        w2.register_death()
+
     def test_find_by_key(self):
         """Worker.find_by_key restores queues, state and job_id."""
         queues = [Queue('foo'), Queue('bar')]
@@ -119,7 +139,12 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.queues, queues)
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
         self.assertEqual(worker._job_id, None)
-        w.register_death()
+        self.assertTrue(worker.key in Worker.all_keys(worker.connection))
+
+        # If worker is gone, its keys should also be removed
+        worker.connection.delete(worker.key)
+        Worker.find_by_key(worker.key)
+        self.assertFalse(worker.key in Worker.all_keys(worker.connection))
 
     def test_worker_ttl(self):
         """Worker ttl."""
@@ -183,7 +208,7 @@ class TestWorker(RQTestCase):
         # importable from the worker process.
         job = Job.create(func=div_by_zero, args=(3,))
         job.save()
-        
+
         job_data = job.data
         invalid_data = job_data.replace(b'div_by_zero', b'nonexisting')
         assert job_data != invalid_data
