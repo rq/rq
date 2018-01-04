@@ -1,3 +1,9 @@
+### 0.10.0
+- `@job` decorator now accepts `description`, `meta`, `at_front` and `depends_on` kwargs. Thanks @jlucas91 and @nlyubchich!
+- Added the capability to fetch workers by queue using `Worker.all(queue=queue)` and `Worker.count(queue=queue)`.
+- Improved RQ's default logging configuration. Thanks @samuelcolvin!
+- `job.data` and `job.exc_info` are now stored in compressed format in Redis.
+
 ### 0.9.2
 - Fixed an issue where `worker.refresh()` may fail when `birth_date` is not set. Thanks @vanife!
 
