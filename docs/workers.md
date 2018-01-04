@@ -125,18 +125,38 @@ starting the worker, using the `--name` option.
 retrieve them:
 
 {% highlight python %}
-from rq.worker import Worker
-workers = Worker.all(redis_conn)
+from redis import Redis
+from rq import Queue, Worker
+
+# Returns all workers registered in this connection
+redis = Redis()
+workers = Worker.all(connection=redis)
+
+# Returns all workers in this queue (new in version 0.10.0)
+queue = Queue('queue_name')
+workers = Worker.all(queue=queue)
 {% endhighlight %}
 
-If you only want to retrieve a specific worker:
+_New in version 0.10.0._
+
+If you only want to know the number of workers for monitoring purposes, using
+`Worker.count()` is much more performant.
 
 {% highlight python %}
-from rq.worker import Worker
-worker = Worker.find_by_key('rq:worker:name')
+from redis import Redis
+from rq import Worker
 
-print(worker.birth_date) # date when worker was instantiated
+redis = Redis()
+
+# Count the number of workers in this Redis connection
+workers = Worker.count(connection=redis)
+
+# Count the number of workers for a specific queue
+queue = Queue('queue_name', connection=redis)
+workers = Worker.all(queue=queue)
+
 {% endhighlight %}
+
 
 ### Worker statistics
 
