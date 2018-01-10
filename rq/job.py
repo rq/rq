@@ -32,8 +32,7 @@ JobStatus = enum(
     FINISHED='finished',
     FAILED='failed',
     STARTED='started',
-    DEFERRED='deferred',
-    CANCELED='canceled'
+    DEFERRED='deferred'
 )
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -532,7 +531,7 @@ class Job(object):
         # introduce a CANCELLED state to make the difference clearer for those
         # what has happened? Would we then also need a canceled registry?
         from .queue import Queue
-        pipeline = self.connection._pipeline()
+        pipeline = pipeline or self.connection._pipeline()
         if self.origin:
             q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)
@@ -544,7 +543,7 @@ class Job(object):
         on this job can optionally be deleted as well."""
 
         if remove_from_queue:
-            self.cancel(pipeline)
+            self.cancel(pipeline=pipeline)
         connection = pipeline if pipeline is not None else self.connection
 
         if self.get_status() == JobStatus.FINISHED:
