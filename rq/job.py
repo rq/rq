@@ -321,6 +321,7 @@ class Job(object):
         self.ttl = None
         self._status = None
         self._dependency_id = None
+        self._dependents_ids = []
         self.meta = {}
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -444,6 +445,7 @@ class Job(object):
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
+        self._dependents_ids = self.dependents_ids
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
@@ -492,6 +494,8 @@ class Job(object):
             obj['status'] = self._status
         if self._dependency_id is not None:
             obj['dependency_id'] = self._dependency_id
+        if self._dependency_id is not None:
+            obj['dependents_ids'] = self._dependents_ids
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
