@@ -586,6 +586,8 @@ class Job(object):
 
     def delete_dependents(self, pipeline=None, remove_from_queue=True):
         """Delete jobs depending on this job."""
+        # TODO: should we do connection.delete(self.dependents_key) in case
+        # this method is called on its own?
         for dependent_id in self.dependents_ids:
             try:
                 dependent = Job.fetch(dependent_id, connection=self.connection)
