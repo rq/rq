@@ -32,7 +32,8 @@ JobStatus = enum(
     FINISHED='finished',
     FAILED='failed',
     STARTED='started',
-    DEFERRED='deferred'
+    DEFERRED='deferred',
+    CANCELED='canceled'
 )
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -193,6 +194,12 @@ class Job(object):
         job = self.fetch(self._dependency_id, connection=self.connection)
         self._dependency = job
         return job
+
+    @property
+    def dependents_ids(self):
+        """Returns a list of ids of jobs whose execution depends on this
+        job's successful execution"""
+        return map(as_text, self.connection.smembers(self.dependents_key))
 
     @property
     def func(self):
@@ -358,7 +365,7 @@ class Job(object):
 
     @classmethod
     def dependents_key_for(cls, job_id):
-        """The Redis key that is used to store job hash under."""
+        """The Redis key that is used to store job dependents hash under."""
         return 'rq:job:{0}:dependents'.format(job_id)
 
     @property
@@ -368,7 +375,7 @@ class Job(object):
 
     @property
     def dependents_key(self):
-        """The Redis key that is used to store job hash under."""
+        """The Redis key that is used to store job dependents hash under."""
         return self.dependents_key_for(self.id)
 
     @property
@@ -513,7 +520,7 @@ class Job(object):
         meta = dumps(self.meta)
         self.connection.hset(self.key, 'meta', meta)
 
-    def cancel(self):
+    def cancel(self, pipeline=None):
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
 
@@ -521,6 +528,8 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.
         """
+        # self.set_status(JobStatus.CANCELED)
+        # TODO: cancelled job registry or forget about CANCELED ?
         from .queue import Queue
         pipeline = self.connection._pipeline()
         if self.origin:
@@ -528,10 +537,13 @@ class Job(object):
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
-    def delete(self, pipeline=None, remove_from_queue=True):
-        """Cancels the job and deletes the job hash from Redis."""
+    def delete(self, pipeline=None, remove_from_queue=True,
+               delete_dependents=False):
+        """Cancels the job and deletes the job hash from Redis. Jobs depending
+        on this job can optionally be deleted as well."""
+
         if remove_from_queue:
-            self.cancel()
+            self.cancel(pipeline)
         connection = pipeline if pipeline is not None else self.connection
 
         if self.get_status() == JobStatus.FINISHED:
@@ -561,7 +573,40 @@ class Job(object):
                                             job_class=self.__class__)
             failed_queue.remove(self, pipeline=pipeline)
 
+        if delete_dependents is True:
+            self.delete_dependents(pipeline=pipeline,
+                                   remove_from_queue=remove_from_queue)
+        else:
+            # The dependents will stay in the registries. Change their state
+            # to make it clear that they are no longer deferred
+            self.cancel_dependents(pipeline=pipeline)
+
         connection.delete(self.key)
+
+    def cancel_dependents(self, pipeline=None):
+        """Dependent jobs are by default in a DEFERRED state. Here we set their
+        state to CANCELLED to make it clear that they will never run.
+        """
+        for dependent_id in self.dependents_ids:
+            try:
+                dependent = Job.fetch(dependent_id, connection=self.connection)
+                dependent.cancel(pipeline=pipeline)
+            except NoSuchJobError:
+                # It could be that the dependent job was never saved to redis
+                pass
+
+    def delete_dependents(self, pipeline=None, remove_from_queue=True):
+        """Delete jobs depending on this job."""
+        connection = pipeline if pipeline is not None else self.connection
+        for dependent_id in self.dependents_ids:
+            try:
+                dependent = Job.fetch(dependent_id, connection=self.connection)
+                dependent.delete(pipeline=pipeline,
+                                 remove_from_queue=remove_from_queue)
+            except NoSuchJobError:
+                # It could be that the dependent job was never saved to redis
+                pass
+
         connection.delete(self.dependents_key)
 
     # Job execution
