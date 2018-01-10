@@ -579,6 +579,7 @@ class Job(object):
                                    remove_from_queue=remove_from_queue)
 
         connection.delete(self.key)
+        connection.delete(self.dependents_key)
 
     def delete_dependents(self, pipeline=None, remove_from_queue=True):
         """Delete jobs depending on this job."""
@@ -591,8 +592,6 @@ class Job(object):
             except NoSuchJobError:
                 # It could be that the dependent job was never saved to redis
                 pass
-
-        connection.delete(self.dependents_key)
 
     # Job execution
     def perform(self):  # noqa
