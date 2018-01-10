@@ -1,3 +1,38 @@
+### 0.10.0
+- `@job` decorator now accepts `description`, `meta`, `at_front` and `depends_on` kwargs. Thanks @jlucas91 and @nlyubchich!
+- Added the capability to fetch workers by queue using `Worker.all(queue=queue)` and `Worker.count(queue=queue)`.
+- Improved RQ's default logging configuration. Thanks @samuelcolvin!
+- `job.data` and `job.exc_info` are now stored in compressed format in Redis.
+
+### 0.9.2
+- Fixed an issue where `worker.refresh()` may fail when `birth_date` is not set. Thanks @vanife!
+
+### 0.9.1
+- Fixed an issue where `worker.refresh()` may fail when upgrading from previous versions of RQ.
+
+### 0.9.0
+- `Worker` statistics! `Worker` now keeps track of `last_heartbeat`, `successful_job_count`, `failed_job_count` and `total_working_time`. Thanks @selwin!
+- `Worker` now sends heartbeat during suspension check. Thanks @theodesp!
+- Added `queue.delete()` method to delete `Queue` objects entirely from Redis. Thanks @theodesp!
+- More robust exception string decoding. Thanks @stylight!
+- Added `--logging-level` option to command line scripts. Thanks @jiajunhuang!
+- Added millisecond precision to job timestamps. Thanks @samuelcolvin!
+- Python 2.6 is no longer supported. Thanks @samuelcolvin!
+
+### 0.8.2
+- Fixed an issue where `job.save()` may fail with unpickleable return value.
+
+### 0.8.1
+
+- Replace `job.id` with `Job` instance in local `_job_stack `. Thanks @katichev!
+- `job.save()` no longer implicitly calls `job.cleanup()`. Thanks @katichev!
+- Properly catch `StopRequested` `worker.heartbeat()`. Thanks @fate0!
+- You can now pass in timeout in days. Thanks @yaniv-g!
+- The core logic of sending job to `FailedQueue` has been moved to `rq.handlers.move_to_failed_queue`. Thanks @yaniv-g!
+- RQ cli commands now accept `--path` parameter. Thanks @kirill and @sjtbham!
+- Make `job.dependency` slightly more efficient. Thanks @liangsijian!
+- `FailedQueue` now returns jobs with the correct class. Thanks @amjith!
+
 ### 0.8.0
 
 - Refactored APIs to allow custom `Connection`, `Job`, `Worker` and `Queue` classes via CLI. Thanks @jezdez!
@@ -17,7 +52,7 @@
 - Fixes a bug that prevents fetching jobs from `FailedQueue` (#765). Thanks @jsurloppe!
 - Fixes race condition when enqueueing jobs with dependency (#742). Thanks @th3hamm0r!
 - Skip a test that requires Linux signals on MacOS (#763). Thanks @jezdez!
-- `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf! 
+- `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf!
 
 ### 0.7.0
 

@@ -75,6 +75,12 @@ class Queue(object):
     def __len__(self):
         return self.count
 
+    def __nonzero__(self):
+        return True
+
+    def __bool__(self):
+        return True
+
     def __iter__(self):
         yield self
 
@@ -105,6 +111,16 @@ class Queue(object):
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
+    def delete(self, delete_jobs=True):
+        """Deletes the queue. If delete_jobs is true it removes all the associated messages on the queue first."""
+        if delete_jobs:
+            self.empty()
+
+        with self.connection._pipeline() as pipeline:
+            pipeline.srem(self.redis_queues_keys, self._key)
+            pipeline.delete(self._key)
+            pipeline.execute()
+
     def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0
@@ -115,7 +131,8 @@ class Queue(object):
         except NoSuchJobError:
             self.remove(job_id)
         else:
-            if job.origin == self.name or (job.is_failed and self == get_failed_queue(connection=self.connection, job_class=self.job_class)):
+            if job.origin == self.name or \
+                    (job.is_failed and self == get_failed_queue(connection=self.connection, job_class=self.job_class)):
                 return job
 
     def get_job_ids(self, offset=0, length=-1):
@@ -162,7 +179,7 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())
+        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())  # noqa
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
@@ -535,7 +552,6 @@ class FailedQueue(Queue):
             # Add Queue key set
             self.connection.sadd(self.redis_queues_keys, self.key)
 
-            job.ended_at = utcnow()
             job.exc_info = exc_info
             job.save(pipeline=pipeline, include_meta=False)
             job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire

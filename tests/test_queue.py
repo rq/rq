@@ -76,6 +76,38 @@ class TestQueue(RQTestCase):
         self.testconn.rpush('rq:queue:example', 'sentinel message')
         self.assertEqual(q.is_empty(), False)
 
+    def test_queue_delete(self):
+        """Test queue.delete properly removes queue"""
+        q = Queue('example')
+        job = q.enqueue(say_hello)
+        job2 = q.enqueue(say_hello)
+
+        self.assertEqual(2, len(q.get_job_ids()))
+
+        q.delete()
+
+        self.assertEqual(0, len(q.get_job_ids()))
+        self.assertEqual(False, self.testconn.exists(job.key))
+        self.assertEqual(False, self.testconn.exists(job2.key))
+        self.assertEqual(0, len(self.testconn.smembers(Queue.redis_queues_keys)))
+        self.assertEqual(False, self.testconn.exists(q.key))
+
+    def test_queue_delete_but_keep_jobs(self):
+        """Test queue.delete properly removes queue but keeps the job keys in the redis store"""
+        q = Queue('example')
+        job = q.enqueue(say_hello)
+        job2 = q.enqueue(say_hello)
+
+        self.assertEqual(2, len(q.get_job_ids()))
+
+        q.delete(delete_jobs=False)
+
+        self.assertEqual(0, len(q.get_job_ids()))
+        self.assertEqual(True, self.testconn.exists(job.key))
+        self.assertEqual(True, self.testconn.exists(job2.key))
+        self.assertEqual(0, len(self.testconn.smembers(Queue.redis_queues_keys)))
+        self.assertEqual(False, self.testconn.exists(q.key))
+
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
         q = Queue('example')

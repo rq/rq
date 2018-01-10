@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import inspect
 import warnings
+import zlib
 from functools import partial
 from uuid import uuid4
 
@@ -468,9 +469,15 @@ class Job(object):
                 return utcparse(as_text(date_str))
 
         try:
-            self.data = obj['data']
+            raw_data = obj['data']
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+
+        try:
+            self.data = zlib.decompress(raw_data)
+        except zlib.error:
+            # Fallback to uncompressed string
+            self.data = raw_data
 
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
@@ -479,7 +486,6 @@ class Job(object):
         self.started_at = to_date(as_text(obj.get('started_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.exc_info = as_text(obj.get('exc_info'))
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
@@ -490,17 +496,25 @@ class Job(object):
         else:
             self._dependency_ids = []
 
+        raw_exc_info = obj.get('exc_info')
+        if raw_exc_info:
+            try:
+                self.exc_info = as_text(zlib.decompress(raw_exc_info))
+            except zlib.error:
+                # Fallback to uncompressed string
+                self.exc_info = as_text(raw_exc_info)
+
+
     def to_dict(self, include_meta=True):
         """
         Returns a serialization of the current job instance
 
         You can exclude serializing the `meta` dictionary by setting
         `include_meta=False`.
-
         """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
-        obj['data'] = self.data
+        obj['data'] = zlib.compress(self.data)
 
         if self.origin is not None:
             obj['origin'] = self.origin
@@ -513,9 +527,12 @@ class Job(object):
         if self.ended_at is not None:
             obj['ended_at'] = utcformat(self.ended_at)
         if self._result is not None:
-            obj['result'] = dumps(self._result)
+            try:
+                obj['result'] = dumps(self._result)
+            except:
+                obj['result'] = 'Unpickleable return value'
         if self.exc_info is not None:
-            obj['exc_info'] = self.exc_info
+            obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:

@@ -30,7 +30,7 @@ def say_hello(name=None):
 
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
-    return unicode(say_hello(name))
+    return unicode(say_hello(name))  # noqa
 
 
 def do_nothing():
@@ -87,7 +87,7 @@ def modify_self_and_error(meta):
 
 
 def echo(*args, **kwargs):
-    return (args, kwargs)
+    return args, kwargs
 
 
 class Number(object):
@@ -153,3 +153,7 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
 
     w = TestHerokuWorker(Queue('dummy'))
     w.main_work_horse(None, None)
+
+
+class DummyQueue(object):
+    pass

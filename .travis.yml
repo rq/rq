@@ -3,7 +3,6 @@ language: python
 services:
   - redis
 python:
-  - "2.6"
   - "2.7"
   - "3.3"
   - "3.4"
@@ -12,7 +11,6 @@ python:
   - "3.6-dev"
   - "pypy"
 install:
-  - if [[ $TRAVIS_PYTHON_VERSION == 2.6 ]]; then pip install -r py26-requirements.txt; fi
   - pip install -e .
   - pip install pytest-cov
   - pip install coveralls

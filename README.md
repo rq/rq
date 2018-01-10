@@ -6,8 +6,7 @@ easily.
 RQ requires Redis >= 2.7.0.
 
 [![Build status](https://travis-ci.org/nvie/rq.svg?branch=master)](https://secure.travis-ci.org/nvie/rq)
-[![Downloads](https://img.shields.io/pypi/dm/rq.svg)](https://pypi.python.org/pypi/rq)
-[![Can I Use Python 3?](https://caniusepython3.com/project/rq.svg)](https://caniusepython3.com/project/rq)
+[![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
 [![Coverage Status](https://img.shields.io/coveralls/nvie/rq.svg)](https://coveralls.io/r/nvie/rq)
 
 Full documentation can be found [here][d].
@@ -48,7 +47,7 @@ And enqueue the function call:
 
 ```python
 from my_module import count_words_at_url
-result = q.enqueue(count_words_at_url, 'http://nvie.com')
+job = q.enqueue(count_words_at_url, 'http://nvie.com')
 ```
 
 For a more complete example, refer to the [docs][d].  But this is the essence.

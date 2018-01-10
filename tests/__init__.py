@@ -70,7 +70,7 @@ class RQTestCase(unittest.TestCase):
 
     # Implement assertIsNotNone for Python runtimes < 2.7 or < 3.1
     if not hasattr(unittest.TestCase, 'assertIsNotNone'):
-        def assertIsNotNone(self, value, *args):
+        def assertIsNotNone(self, value, *args):  # noqa
             self.assertNotEqual(value, None, *args)
 
     @classmethod

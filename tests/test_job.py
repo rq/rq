@@ -3,16 +3,23 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from datetime import datetime
+
 import time
+import sys
+import zlib
+
+is_py2 = sys.version[0] == '2'
+if is_py2:
+    import Queue as queue
+else:
+    import queue as queue
 
 from tests import fixtures, RQTestCase
-from tests.helpers import strip_microseconds
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
 from rq.queue import Queue, get_failed_queue
-from rq.registry import DeferredJobRegistry
 from rq.utils import utcformat
 from rq.worker import Worker
 
@@ -154,7 +161,7 @@ class TestJob(RQTestCase):
         self.assertEqual(self.testconn.type(job.key), b'hash')
 
         # Saving writes pickled job data
-        unpickled_data = loads(self.testconn.hget(job.key, 'data'))
+        unpickled_data = loads(zlib.decompress(self.testconn.hget(job.key, 'data')))
         self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
@@ -163,7 +170,7 @@ class TestJob(RQTestCase):
         self.testconn.hset('rq:job:some_id', 'data',
                            "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
-                           '2012-02-07T22:13:24Z')
+                           '2012-02-07T22:13:24.123456Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -172,7 +179,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (3, 4))
         self.assertEqual(job.kwargs, dict(z=2))
-        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24))
+        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
 
     def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
@@ -185,11 +192,8 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
-        expected_date = strip_microseconds(job.created_at)
         stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
-        self.assertEqual(
-            stored_date,
-            utcformat(expected_date))
+        self.assertEqual(stored_date, utcformat(job.created_at))
 
         # ... and no other keys are stored
         self.assertEqual(
@@ -233,7 +237,8 @@ class TestJob(RQTestCase):
     def test_fetching_unreadable_data(self):
         """Fetching succeeds on unreadable data, but lazy props fail."""
         # Set up
-        job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, args=(3, 4),
+                         kwargs=dict(z=2))
         job.save()
 
         # Just replace the data hkey with some random noise
@@ -252,13 +257,56 @@ class TestJob(RQTestCase):
         # Now slightly modify the job to make it unimportable (this is
         # equivalent to a worker not having the most up-to-date source code
         # and unable to import the function)
-        data = self.testconn.hget(job.key, 'data')
-        unimportable_data = data.replace(b'say_hello', b'nay_hello')
-        self.testconn.hset(job.key, 'data', unimportable_data)
+        job_data = job.data
+        unimportable_data = job_data.replace(b'say_hello', b'nay_hello')
+
+        self.testconn.hset(job.key, 'data', zlib.compress(unimportable_data))
 
         job.refresh()
         with self.assertRaises(AttributeError):
             job.func  # accessing the func property should fail
+
+    def test_compressed_exc_info_handling(self):
+        """Jobs handle both compressed and uncompressed exc_info"""
+        exception_string = 'Some exception'
+
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.exc_info = exception_string
+        job.save()
+
+        # exc_info is stored in compressed format
+        exc_info = self.testconn.hget(job.key, 'exc_info')
+        self.assertEqual(
+            as_text(zlib.decompress(exc_info)),
+            exception_string
+        )
+
+        job.refresh()
+        self.assertEqual(job.exc_info, exception_string)
+
+        # Uncompressed exc_info is also handled
+        self.testconn.hset(job.key, 'exc_info', exception_string)
+
+        job.refresh()
+        self.assertEqual(job.exc_info, exception_string)
+
+    def test_compressed_job_data_handling(self):
+        """Jobs handle both compressed and uncompressed data"""
+
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.save()
+
+        # Job data is stored in compressed format
+        job_data = job.data
+        self.assertEqual(
+            zlib.compress(job_data),
+            self.testconn.hget(job.key, 'data')
+        )
+
+        self.testconn.hset(job.key, 'data', job_data)
+        job.refresh()
+        self.assertEqual(job.data, job_data)
+
 
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""
@@ -291,6 +339,13 @@ class TestJob(RQTestCase):
         serialized2 = job2.to_dict()
         serialized2.pop('meta')
         self.assertDictEqual(serialized, serialized2)
+
+    def test_unpickleable_result(self):
+        """Unpickleable job result doesn't crash job.to_dict()"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job._result = queue.Queue()
+        data = job.to_dict()
+        self.assertEqual(data['result'], 'Unpickleable return value')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
@@ -504,7 +559,7 @@ class TestJob(RQTestCase):
         """test if a job created with ttl expires [issue502]"""
         queue = Queue(connection=self.testconn)
         queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
-        time.sleep(1)
+        time.sleep(1.1)
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_create_and_cancel_job(self):

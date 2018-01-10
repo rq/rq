@@ -70,10 +70,60 @@ class TestDecorator(RQTestCase):
         result = hello.delay()
         self.assertEqual(result.ttl, 30)
 
+    def test_decorator_accepts_meta_as_argument(self):
+        """Ensure that passing in meta to the decorator sets the meta on the job
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.meta, {})
+
+        test_meta = {
+            'metaKey1': 1,
+            'metaKey2': 2,
+        }
+
+        @job('default', meta=test_meta)
+        def hello():
+            return 'Hello'
+        result = hello.delay()
+        self.assertEqual(result.meta, test_meta)
+
     def test_decorator_accepts_result_depends_on_as_argument(self):
         """Ensure that passing in depends_on to the decorator sets the
         correct dependency on the job
         """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.dependency, None)
+        self.assertEqual(result._dependency_id, None)
+
+        @job(queue='queue_name')
+        def foo():
+            return 'Firstly'
+
+        foo_job = foo.delay()
+
+        @job(queue='queue_name', depends_on=foo_job)
+        def bar():
+            return 'Secondly'
+
+        bar_job = bar.delay()
+
+        self.assertEqual(foo_job._dependency_ids, [])
+
+        self.assertEqual(bar_job.dependencies, [foo_job])
+
+        self.assertEqual(bar_job._dependency_ids, [foo_job.id])
+
+    def test_decorator_delay_accepts_depends_on_as_argument(self):
+        """Ensure that passing in depends_on to the delay method of
+        a decorated function overrides the depends_on set in the
+        constructor.
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.dependency, None)
+        self.assertEqual(result._dependency_id, None)
 
         @job(queue='queue_name')
         def foo():
@@ -81,16 +131,22 @@ class TestDecorator(RQTestCase):
 
         @job(queue='queue_name')
         def bar():
-            return 'Secondly'
+            return 'Firstly'
 
         foo_job = foo.delay()
-        bar_job = bar.delay(depends_on=foo_job)
+        bar_job = bar.delay()
 
-        self.assertEqual(foo_job._dependency_ids, [])
+        @job(queue='queue_name', depends_on=foo_job)
+        def baz():
+            return 'Secondly'
 
-        self.assertEqual(bar_job.dependencies, [foo_job])
+        baz_job = bar.delay(depends_on=bar_job)
 
-        self.assertEqual(bar_job._dependency_ids, [foo_job.id])
+        self.assertIsNone(foo_job._dependency_id)
+        self.assertIsNone(bar_job._dependency_id)
+
+        self.assertEqual(baz_job.dependency, bar_job)
+        self.assertEqual(baz_job._dependency_id, bar_job.id)
 
     @mock.patch('rq.queue.resolve_connection')
     def test_decorator_connection_laziness(self, resolve_connection):

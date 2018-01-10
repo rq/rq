@@ -11,7 +11,7 @@ from tests import RQTestCase
 class FakeSentry(object):
     servers = []
 
-    def captureException(self, *args, **kwds):
+    def captureException(self, *args, **kwds):  # noqa
         pass  # we cannot check this, because worker forks
 
 

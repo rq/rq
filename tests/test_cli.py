@@ -62,6 +62,48 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, ['info', '--config', cli_config.config])
         self.assertEqual(result.exit_code, 1)
 
+    def test_config_file_default_options(self):
+        """"""
+        cli_config = CliConfig(config='tests.dummy_settings')
+
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['host'],
+            'testhost.example.com',
+        )
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['port'],
+            6379
+        )
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['db'],
+            0
+        )
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['password'],
+            None
+        )
+
+    def test_config_file_default_options_override(self):
+        """"""
+        cli_config = CliConfig(config='tests.dummy_settings_override')
+
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['host'],
+            'testhost.example.com',
+        )
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['port'],
+            6378
+        )
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['db'],
+            2
+        )
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['password'],
+            '123'
+        )
+
     def test_empty_nothing(self):
         """rq empty -u <url>"""
         runner = CliRunner()
