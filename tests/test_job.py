@@ -462,13 +462,67 @@ class TestJob(RQTestCase):
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
-    def test_delete(self):
+    def test_job_with_dependents_delete_parent(self):
+        """job.delete() deletes itself from Redis but not dependents.
+        Wthout a save, the deèendent job is never saved into redis. The delete
+        method will get a NoSuchJobError.
+        """
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2.register_dependency()
+
+        job.delete()
+        self.assertFalse(self.testconn.exists(job.key))
+
+        # By default, dependents are not deleted
+        # The job is in redis only if it was saved!
+        self.assertTrue(self.testconn.exists(job.dependents_key))
+
+        self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_job_with_dependents_delete_parent_with_saved(self):
+        """job.delete() deletes itself from Redis but not dependents."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2.register_dependency()
+        job2.save()
+
+        job.delete()
+        self.assertFalse(self.testconn.exists(job.key))
+
+        # By default, dependents are not deleted
+        # The job is in redis only if it was saved!
+        self.assertTrue(self.testconn.exists(job.dependents_key))
+
+        self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_job_with_dependents_delete_all(self):
         """job.delete() deletes itself & dependents mapping from Redis."""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(func=fixtures.say_hello, depends_on=job)
         job2.register_dependency()
-        job.delete()
+
+        job.delete(delete_dependents=True)
+        self.assertFalse(self.testconn.exists(job.key))
+        self.assertFalse(self.testconn.exists(job.dependents_key))
+
+        self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_job_with_dependents_delete_all_with_saved(self):
+        """job.delete() deletes itself & dependents mapping from Redis.
+        Wthout a save, the deèendent job is never saved into redis. The delete
+        method will get a NoSuchJobError.
+        """
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2.register_dependency()
+        job2.save()
+
+        job.delete(delete_dependents=True)
         self.assertFalse(self.testconn.exists(job.key))
         self.assertFalse(self.testconn.exists(job.dependents_key))
 
