@@ -198,7 +198,7 @@ class Job(object):
     @property
     def dependents_ids(self):
         """Returns a list of ids of jobs whose execution depends on this
-        job's successful execution"""
+        job's successful execution."""
         return map(as_text, self.connection.smembers(self.dependents_key))
 
     @property
@@ -528,8 +528,9 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.
         """
-        # self.set_status(JobStatus.CANCELED)
-        # TODO: cancelled job registry or forget about CANCELED ?
+        # TODO: Dependent jobs are by default in a DEFERRED state. Should we
+        # introduce a CANCELLED state to make the difference clearer for those
+        # what has happened? Would we then also need a canceled registry?
         from .queue import Queue
         pipeline = self.connection._pipeline()
         if self.origin:
@@ -576,24 +577,8 @@ class Job(object):
         if delete_dependents is True:
             self.delete_dependents(pipeline=pipeline,
                                    remove_from_queue=remove_from_queue)
-        else:
-            # The dependents will stay in the registries. Change their state
-            # to make it clear that they are no longer deferred
-            self.cancel_dependents(pipeline=pipeline)
 
         connection.delete(self.key)
-
-    def cancel_dependents(self, pipeline=None):
-        """Dependent jobs are by default in a DEFERRED state. Here we set their
-        state to CANCELLED to make it clear that they will never run.
-        """
-        for dependent_id in self.dependents_ids:
-            try:
-                dependent = Job.fetch(dependent_id, connection=self.connection)
-                dependent.cancel(pipeline=pipeline)
-            except NoSuchJobError:
-                # It could be that the dependent job was never saved to redis
-                pass
 
     def delete_dependents(self, pipeline=None, remove_from_queue=True):
         """Delete jobs depending on this job."""
