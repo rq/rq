@@ -195,7 +195,7 @@ class Job(object):
         return job
 
     @property
-    def dependents_ids(self):
+    def dependent_ids(self):
         """Returns a list of ids of jobs whose execution depends on this
         job's successful execution."""
         return map(as_text, self.connection.smembers(self.dependents_key))
@@ -321,7 +321,6 @@ class Job(object):
         self.ttl = None
         self._status = None
         self._dependency_id = None
-        self._dependents_ids = []
         self.meta = {}
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -445,7 +444,6 @@ class Job(object):
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
-        self._dependents_ids = self.dependents_ids
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
@@ -494,8 +492,9 @@ class Job(object):
             obj['status'] = self._status
         if self._dependency_id is not None:
             obj['dependency_id'] = self._dependency_id
-        if self._dependency_id is not None:
-            obj['dependents_ids'] = self._dependents_ids
+        _dependents_ids = list(self.dependent_ids)
+        if len(_dependents_ids) > 0:
+            obj['dependent_ids'] = _dependents_ids
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
@@ -577,7 +576,7 @@ class Job(object):
                                             job_class=self.__class__)
             failed_queue.remove(self, pipeline=pipeline)
 
-        if delete_dependents is True:
+        if delete_dependents:
             self.delete_dependents(pipeline=pipeline,
                                    remove_from_queue=remove_from_queue)
 
@@ -588,11 +587,11 @@ class Job(object):
         """Delete jobs depending on this job."""
         # TODO: should we do connection.delete(self.dependents_key) in case
         # this method is called on its own?
-        for dependent_id in self.dependents_ids:
+        for dependent_id in self.dependent_ids:
             try:
-                dependent = Job.fetch(dependent_id, connection=self.connection)
-                dependent.delete(pipeline=pipeline,
-                                 remove_from_queue=remove_from_queue)
+                job = Job.fetch(dependent_id, connection=self.connection)
+                job.delete(pipeline=pipeline,
+                           remove_from_queue=remove_from_queue)
             except NoSuchJobError:
                 # It could be that the dependent job was never saved to redis
                 pass
