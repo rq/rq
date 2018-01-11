@@ -10,12 +10,18 @@ python:
   - "3.6"
   - "3.6-dev"
   - "pypy"
+before_install:
+  - mkdir -p $HOME/bin
+  - curl -fsSL https://testspace-client.s3.amazonaws.com/testspace-linux.tgz | tar -zxvf- -C $HOME/bin
+  - testspace config url $TS_ORG.testspace.com
 install:
   - pip install -e .
   - pip install pytest-cov
   - pip install coveralls
   #- pip install pytest  # installed by Travis by default already
 script:
-  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5
+  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5 --junit-xml=testresults.xml
+after_script:
+  - testspace [py-${TRAVIS_PYTHON_VERSION}]testresults.xml{tests}
 after_success:
   - coveralls
