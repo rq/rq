@@ -585,8 +585,7 @@ class Job(object):
 
     def delete_dependents(self, pipeline=None, remove_from_queue=True):
         """Delete jobs depending on this job."""
-        # TODO: should we do connection.delete(self.dependents_key) in case
-        # this method is called on its own?
+        connection = pipeline if pipeline is not None else self.connection
         for dependent_id in self.dependent_ids:
             try:
                 job = Job.fetch(dependent_id, connection=self.connection)
@@ -595,6 +594,7 @@ class Job(object):
             except NoSuchJobError:
                 # It could be that the dependent job was never saved to redis
                 pass
+        connection.delete(self.dependents_key)
 
     # Job execution
     def perform(self):  # noqa
