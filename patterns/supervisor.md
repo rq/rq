@@ -21,7 +21,40 @@ use the following supervisor settings:
 ; Also, you probably want to include a settings module to configure this
 ; worker.  For more info on that, see http://python-rq.org/docs/workers/
 command=/path/to/rq worker -c mysettings high normal low
-process_name=%(program_name)s
+; process_num is required if you specify >1 numprocs
+process_name=%(program_name)s-%(process_num)s
+
+; If you want to run more than one worker instance, increase this
+numprocs=1
+
+; This is the directory from which RQ is ran. Be sure to point this to the
+; directory where your source code is importable from
+directory=/path/to
+
+; RQ requires the TERM signal to perform a warm shutdown. If RQ does not die
+; within 10 seconds, supervisor will forcefully kill it
+stopsignal=TERM
+
+; These are up to you
+autostart=true
+autorestart=true
+{% endhighlight %}
+
+### Conda environments
+
+[Conda][2] virtualenvs can be used for RQ jobs which require non-Python
+dependencies. You can use a similar approach as with regular virtualenvs.
+
+{% highlight ini %}
+[program:myworker]
+; Point the command to the specific rq command you want to run.
+; For conda virtual environments, install RQ into your env.
+; Also, you probably want to include a settings module to configure this
+; worker.  For more info on that, see http://python-rq.org/docs/workers/
+environment=PATH='/opt/conda/envs/myenv/bin'
+command=/opt/conda/envs/myenv/bin/rq worker -c mysettings high normal low
+; process_num is required if you specify >1 numprocs
+process_name=%(program_name)s-%(process_num)s
 
 ; If you want to run more than one worker instance, increase this
 numprocs=1
@@ -40,3 +73,4 @@ autorestart=true
 {% endhighlight %}
 
 [1]: http://supervisord.org/
+[2]: https://conda.io/docs/
