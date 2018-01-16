@@ -198,7 +198,7 @@ class Job(object):
     def dependent_ids(self):
         """Returns a list of ids of jobs whose execution depends on this
         job's successful execution."""
-        return map(as_text, self.connection.smembers(self.dependents_key))
+        return list(map(as_text, self.connection.smembers(self.dependents_key)))
 
     @property
     def func(self):
@@ -492,8 +492,8 @@ class Job(object):
             obj['status'] = self._status
         if self._dependency_id is not None:
             obj['dependency_id'] = self._dependency_id
-        _dependents_ids = list(self.dependent_ids)
-        if len(_dependents_ids) > 0:
+        _dependents_ids = self.dependent_ids
+        if _dependents_ids:
             obj['dependent_ids'] = _dependents_ids
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
