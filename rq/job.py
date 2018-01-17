@@ -530,9 +530,6 @@ class Job(object):
         without worrying about the internals required to implement job
         cancellation.
         """
-        # TODO: Dependent jobs are by default in a DEFERRED state. Should we
-        # introduce a CANCELLED state to make the difference clearer?
-        # Would we then also need a canceled registry?
         from .queue import Queue
         pipeline = pipeline or self.connection._pipeline()
         if self.origin:
