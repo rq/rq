@@ -492,9 +492,6 @@ class Job(object):
             obj['status'] = self._status
         if self._dependency_id is not None:
             obj['dependency_id'] = self._dependency_id
-        _dependents_ids = self.dependent_ids
-        if _dependents_ids:
-            obj['dependent_ids'] = _dependents_ids
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
