@@ -13,9 +13,10 @@ python:
 install:
   - pip install -e .
   - pip install pytest-cov
-  - pip install coveralls
+  # - pip install coveralls
+  - pip install codecov
   #- pip install pytest  # installed by Travis by default already
 script:
   - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5
 after_success:
-  - coveralls
+  - codecov
