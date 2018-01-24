@@ -197,7 +197,7 @@ its dependency finishes *successfully*.
 
 To learn about workers, see the [workers][w] documentation.
 
-[w]: {{site.baseurl}}docs/workers/
+[w]: {{site.baseurl}}workers/
 
 
 ## Considerations for jobs
