@@ -29,7 +29,8 @@ from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue, get_failed_queue
-from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
+from .registry import (FailedJobRegistry, FinishedJobRegistry,
+                       StartedJobRegistry, clean_registries)
 from .suspension import is_suspended
 from .timeouts import UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
@@ -711,16 +712,23 @@ class Worker(object):
     def handle_job_failure(self, job, started_job_registry=None):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
-            2. Removing the job from the started_job_registry
+            2. Removing the job from StartedJobRegistry
             3. Setting the workers current job to None
+            4. Add the job to FailedJobRegistry
         """
         with self.connection._pipeline() as pipeline:
             if started_job_registry is None:
-                started_job_registry = StartedJobRegistry(job.origin,
-                                                          self.connection,
-                                                          job_class=self.job_class)
+                started_job_registry = StartedJobRegistry(
+                    job.origin,
+                    self.connection,
+                    job_class=self.job_class
+                )
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
+            failed_job_registry = FailedJobRegistry(job.origin, self.connection,
+                                                    job_class=self.job_class)
+            failed_job_registry.add(job, ttl=3600 * 24 * 365,
+                                    pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:

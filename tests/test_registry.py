@@ -7,7 +7,8 @@ from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
 from rq.registry import (clean_registries, DeferredJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry)
+                         FailedJobRegistry, FinishedJobRegistry,
+                         StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -147,9 +148,13 @@ class TestRegistry(RQTestCase):
         started_job_registry = StartedJobRegistry(connection=self.testconn)
         self.testconn.zadd(started_job_registry.key, 1, 'foo')
 
+        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(failed_job_registry.key, 1, 'foo')
+
         clean_registries(queue)
         self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(failed_job_registry.key), 0)
 
 
 class TestFinishedJobRegistry(RQTestCase):
@@ -214,7 +219,7 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(job_ids, [job.id])
 
     def test_register_dependency(self):
-        """Ensure job creation and deletion works properly with DeferredJobRegistry."""
+        """Ensure job creation and deletion works with DeferredJobRegistry."""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(say_hello)
         job2 = queue.enqueue(say_hello, depends_on=job)
@@ -225,3 +230,16 @@ class TestDeferredRegistry(RQTestCase):
         # When deleted, job removes itself from DeferredJobRegistry
         job2.delete()
         self.assertEqual(registry.get_job_ids(), [])
+
+
+class TestFailedJobRegistry(RQTestCase):
+
+    def test_worker_handle_job_failure(self):
+        """Failed jobs are added to FailedJobRegistry"""
+        q = Queue()
+        job = q.enqueue(div_by_zero)
+        w = Worker([q])
+        registry = FailedJobRegistry(connection=w.connection)
+        w.handle_job_failure(job)
+
+        self.assertIn(job.id, registry.get_job_ids())

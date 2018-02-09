@@ -122,6 +122,23 @@ class FinishedJobRegistry(BaseRegistry):
         self.connection.zremrangebyscore(self.key, 0, score)
 
 
+class FailedJobRegistry(BaseRegistry):
+    """
+    Registry of containing failed jobs.
+    """
+    key_template = 'rq:failed:{0}'
+
+    def cleanup(self, timestamp=None):
+        """Remove expired jobs from registry.
+
+        Removes jobs with an expiry time earlier than timestamp, specified as
+        seconds since the Unix epoch. timestamp defaults to call time if
+        unspecified.
+        """
+        score = timestamp if timestamp is not None else current_timestamp()
+        self.connection.zremrangebyscore(self.key, 0, score)
+
+
 class DeferredJobRegistry(BaseRegistry):
     """
     Registry of deferred jobs (waiting for another job to finish).
@@ -144,4 +161,9 @@ def clean_registries(queue):
     registry = StartedJobRegistry(name=queue.name,
                                   connection=queue.connection,
                                   job_class=queue.job_class)
+    registry.cleanup()
+
+    registry = FailedJobRegistry(name=queue.name,
+                                 connection=queue.connection,
+                                 job_class=queue.job_class)
     registry.cleanup()
