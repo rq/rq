@@ -359,6 +359,18 @@ class TestJob(RQTestCase):
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, None)
 
+    def test_failure_ttl_is_persisted(self):
+        """Ensure job.failure_ttl is set and restored properly"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',), failure_ttl=15)
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.failure_ttl, 15)
+
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.failure_ttl, None)
+
     def test_description_is_persisted(self):
         """Ensure that job's custom description is set properly"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',), description='Say hello!')

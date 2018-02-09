@@ -90,7 +90,8 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None,
+               failure_ttl=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -131,6 +132,7 @@ class Job(object):
         # Extra meta data
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
+        job.failure_ttl = failure_ttl
         job.ttl = ttl
         job.timeout = timeout
         job._status = status
@@ -318,6 +320,7 @@ class Job(object):
         self.exc_info = None
         self.timeout = None
         self.result_ttl = None
+        self.failure_ttl = None
         self.ttl = None
         self._status = None
         self._dependency_id = None
@@ -442,6 +445,7 @@ class Job(object):
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
+        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
@@ -488,6 +492,8 @@ class Job(object):
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
+        if self.failure_ttl is not None:
+            obj['failure_ttl'] = self.failure_ttl
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_id is not None:
