@@ -319,6 +319,13 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.meta['foo'], 'bar')
         self.assertEqual(job.meta['baz'], 42)
 
+    def test_enqueue_with_failure_ttl(self):
+        """enqueue() properly sets job.failure_ttl"""
+        q = Queue()
+        job = q.enqueue(say_hello, failure_ttl=10)
+        job.refresh()
+        self.assertEqual(job.failure_ttl, 10)
+
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
         q = Queue()

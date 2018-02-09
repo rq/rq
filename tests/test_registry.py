@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 from rq.compat import as_text
+from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
@@ -237,9 +238,21 @@ class TestFailedJobRegistry(RQTestCase):
     def test_worker_handle_job_failure(self):
         """Failed jobs are added to FailedJobRegistry"""
         q = Queue()
-        job = q.enqueue(div_by_zero)
+
         w = Worker([q])
         registry = FailedJobRegistry(connection=w.connection)
-        w.handle_job_failure(job)
 
+        timestamp = current_timestamp()
+
+        job = q.enqueue(div_by_zero, failure_ttl=5)
+        w.handle_job_failure(job)
+        # job is added to FailedJobRegistry with default failure ttl
         self.assertIn(job.id, registry.get_job_ids())
+        self.assertLess(self.testconn.zscore(registry.key, job.id),
+                        timestamp + DEFAULT_FAILURE_TTL + 5)
+
+        # job is added to FailedJobRegistry with specified ttl
+        job = q.enqueue(div_by_zero, failure_ttl=5)
+        w.handle_job_failure(job)
+        self.assertLess(self.testconn.zscore(registry.key, job.id),
+                        timestamp + 7)

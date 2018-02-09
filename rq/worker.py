@@ -24,7 +24,8 @@ from redis import WatchError
 from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
-from .defaults import DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL
+from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_RESULT_TTL,
+                       DEFAULT_WORKER_TTL)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
@@ -709,7 +710,7 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_failure(self, job, started_job_registry=None):
+    def handle_job_failure(self, job, started_job_registry=None, queue=None):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
             2. Removing the job from StartedJobRegistry
@@ -727,8 +728,11 @@ class Worker(object):
             started_job_registry.remove(job, pipeline=pipeline)
             failed_job_registry = FailedJobRegistry(job.origin, self.connection,
                                                     job_class=self.job_class)
-            failed_job_registry.add(job, ttl=job.failure_ttl or 31536000,
-                                    pipeline=pipeline)
+            failed_job_registry.add(
+                job,
+                ttl=job.failure_ttl or DEFAULT_FAILURE_TTL,
+                pipeline=pipeline
+            )
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
