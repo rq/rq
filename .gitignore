@@ -1,6 +1,8 @@
 *.pyc
 *.egg-info
 
+.DS_Store
+
 /dump.rdb
 /.direnv
 /.envrc

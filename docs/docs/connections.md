@@ -12,7 +12,7 @@ pass in Redis connection references to queues directly.
 ## Single Redis connection (easy)
 
 <div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
     <strong>Note:</strong>
     <p>
         The use of <code>use_connection</code> is deprecated.
