@@ -5,8 +5,8 @@ Some dummy tasks that are well-suited for generating load for testing purposes.
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import gevent
 import random
-import time
 
 
 def do_nothing():
@@ -14,12 +14,12 @@ def do_nothing():
 
 
 def sleep(secs):
-    time.sleep(secs)
+    gevent.sleep(secs)
 
 
 def endless_loop():
     while True:
-        time.sleep(1)
+        gevent.sleep(1)
 
 
 def div_by_zero():

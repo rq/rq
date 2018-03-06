@@ -4,9 +4,9 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 from datetime import timedelta
-from time import sleep
+from gevent import sleep
+import gevent
 import signal
-import time
 from multiprocessing import Process
 
 from tests import RQTestCase, slow
@@ -475,11 +475,11 @@ class TestWorker(RQTestCase):
 
 def kill_worker(pid, double_kill):
     # wait for the worker to be started over on the main process
-    time.sleep(0.5)
+    gevent.sleep(0.5)
     os.kill(pid, signal.SIGTERM)
     if double_kill:
         # give the worker time to switch signal handler
-        time.sleep(0.5)
+        gevent.sleep(0.5)
         os.kill(pid, signal.SIGTERM)
 
 
