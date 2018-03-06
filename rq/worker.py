@@ -2,7 +2,6 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import gevent
 import errno
 import logging
 import os
@@ -156,7 +155,7 @@ class Worker(object):
         self.failed_queue = get_failed_queue(connection=self.connection)
         self.last_cleaned_at = None
 
-        self.finish_handlers = []
+        self.finish_handlers = []        
         if finish_handlers is not None:
             if isinstance(finish_handlers, list):
                 for f in finish_handlers:
@@ -407,7 +406,7 @@ class Worker(object):
                 before_state = self.get_state()
                 self.set_state(WorkerStatus.SUSPENDED)
                 notified = True
-            gevent.sleep(1)
+            time.sleep(1)
 
         if before_state:
             self.set_state(before_state)
