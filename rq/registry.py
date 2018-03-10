@@ -26,6 +26,16 @@ class BaseRegistry(object):
         """Returns the number of jobs in this registry"""
         return self.count
 
+    def __contains__(self, item):
+        """
+        Returns a boolean indicating registry contains the given
+        job instance or job id.
+        """
+        job_id = item
+        if isinstance(item, self.job_class):
+            job_id = item.id
+        return self.connection.zscore(self.key, job_id) is not None
+
     @property
     def count(self):
         """Returns the number of jobs in this registry"""
@@ -88,6 +98,7 @@ class StartedJobRegistry(BaseRegistry):
         job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
+            failed_job_registry = FailedJobRegistry(self.name, self.connection)
             failed_queue = FailedQueue(connection=self.connection,
                                        job_class=self.job_class)
 
@@ -99,6 +110,7 @@ class StartedJobRegistry(BaseRegistry):
                         job.set_status(JobStatus.FAILED)
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
+                        failed_job_registry.add(job, job.failure_ttl)
                         failed_queue.push_job_id(job_id, pipeline=pipeline)
                     except NoSuchJobError:
                         pass

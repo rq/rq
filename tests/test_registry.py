@@ -32,6 +32,19 @@ class TestRegistry(RQTestCase):
         registry = StartedJobRegistry(job_class=CustomJob)
         self.assertFalse(registry.job_class == self.registry.job_class)
 
+    def test_contains(self):
+        registry = StartedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        self.assertFalse(job in registry)
+        self.assertFalse(job.id in registry)
+
+        registry.add(job, 5)
+
+        self.assertTrue(job in registry)
+        self.assertTrue(job.id in registry)
+
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
         timestamp = current_timestamp()
@@ -86,6 +99,28 @@ class TestRegistry(RQTestCase):
         self.registry.cleanup()
         self.assertIn(job.id, failed_queue.job_ids)
         self.assertEqual(self.testconn.zscore(self.registry.key, job.id), None)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+
+    def test_cleanup_moves_jobs_to_failed_job_registry(self):
+        """Moving expired jobs to FailedQueue."""
+        failed_queue = FailedQueue(connection=self.testconn)
+        self.assertTrue(failed_queue.is_empty())
+
+        queue = Queue(connection=self.testconn)
+        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        self.testconn.zadd(self.registry.key, 2, job.id)
+
+        # Job has not been moved to FailedJobRegistry
+        self.registry.cleanup(1)
+        self.assertNotIn(job, failed_job_registry)
+        self.assertIn(job, self.registry)
+
+        self.registry.cleanup()
+        self.assertIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
 
