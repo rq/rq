@@ -728,11 +728,7 @@ class Worker(object):
             started_job_registry.remove(job, pipeline=pipeline)
             failed_job_registry = FailedJobRegistry(job.origin, self.connection,
                                                     job_class=self.job_class)
-            failed_job_registry.add(
-                job,
-                ttl=job.failure_ttl or DEFAULT_FAILURE_TTL,
-                pipeline=pipeline
-            )
+            failed_job_registry.add(job, ttl=job.failure_ttl, pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:

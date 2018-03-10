@@ -244,6 +244,38 @@ class TestDeferredRegistry(RQTestCase):
 
 class TestFailedJobRegistry(RQTestCase):
 
+    def test_default_failure_ttl(self):
+        """Job TTL defaults to DEFAULT_FAILURE_TTL"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        registry = FailedJobRegistry(connection=self.testconn)
+        key = registry.key
+
+        timestamp = current_timestamp()
+        registry.add(job)
+        self.assertLess(
+            self.testconn.zscore(key, job.id),
+            timestamp + DEFAULT_FAILURE_TTL + 2
+        )
+        self.assertGreater(
+            self.testconn.zscore(key, job.id),
+            timestamp + DEFAULT_FAILURE_TTL - 2
+        )
+
+        timestamp = current_timestamp()
+        ttl = 5
+        registry.add(job, ttl=5)
+        self.assertLess(
+            self.testconn.zscore(key, job.id),
+            timestamp + ttl + 2
+        )
+        self.assertGreater(
+            self.testconn.zscore(key, job.id),
+            timestamp + ttl - 2
+        )
+
+
     def test_worker_handle_job_failure(self):
         """Failed jobs are added to FailedJobRegistry"""
         q = Queue()

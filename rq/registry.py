@@ -1,5 +1,6 @@
 from .compat import as_text
 from .connections import resolve_connection
+from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import NoSuchJobError
 from .job import Job, JobStatus
 from .queue import FailedQueue, Queue
@@ -141,6 +142,19 @@ class FailedJobRegistry(BaseRegistry):
         """
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
+
+    def add(self, job, ttl=None, pipeline=None):
+        """
+        Adds a job to a registry with expiry time of now + ttl.
+        `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
+        """
+        if ttl is None:
+            ttl = DEFAULT_FAILURE_TTL
+        score = ttl if ttl < 0 else current_timestamp() + ttl
+        if pipeline is not None:
+            return pipeline.zadd(self.key, score, job.id)
+
+        return self.connection._zadd(self.key, score, job.id)
 
 
 class DeferredJobRegistry(BaseRegistry):
