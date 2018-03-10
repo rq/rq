@@ -157,6 +157,15 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(failed_job_registry.key), 0)
 
+    def test_get_queue(self):
+        """registry.get_queue() returns the right Queue object."""
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_queue(), Queue(connection=self.testconn))
+
+        registry = StartedJobRegistry('foo', connection=self.testconn)
+        self.assertEqual(registry.get_queue(),
+                         Queue('foo', connection=self.testconn))
+
 
 class TestFinishedJobRegistry(RQTestCase):
 

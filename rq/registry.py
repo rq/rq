@@ -2,7 +2,7 @@ from .compat import as_text
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .job import Job, JobStatus
-from .queue import FailedQueue
+from .queue import FailedQueue, Queue
 from .utils import backend_class, current_timestamp
 
 
@@ -59,6 +59,10 @@ class BaseRegistry(object):
         self.cleanup()
         return [as_text(job_id) for job_id in
                 self.connection.zrange(self.key, start, end)]
+
+    def get_queue(self):
+        """Returns Queue object associated with this registry."""
+        return Queue(self.name, connection=self.connection)
 
 
 class StartedJobRegistry(BaseRegistry):
