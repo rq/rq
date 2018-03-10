@@ -1,0 +1,50 @@
+baseurl: /
+exclude: design
+permalink: pretty
+
+navigation:
+- text: Home
+  url: /
+- text: Docs
+  url: /docs/
+  subs:
+  - text: Queues
+    url: /docs/
+  - text: Workers
+    url: /docs/workers/
+  - text: Results
+    url: /docs/results/
+  - text: Jobs
+    url: /docs/jobs/
+  - text: Monitoring
+    url: /docs/monitoring/
+  - text: Connections
+    url: /docs/connections/
+  - text: Exceptions
+    url: /docs/exceptions/
+  - text: Testing
+    url: /docs/testing/
+- text: Patterns
+  url: /patterns/
+  subs:
+  - text: Heroku
+    url: /patterns/
+  - text: Django
+    url: /patterns/django/
+  - text: Sentry
+    url: /patterns/sentry/
+  - text: Supervisor
+    url: /patterns/supervisor/
+- text: Contributing
+  url: /contrib/
+  subs:
+  - text: Internals
+    url: /contrib/
+  - text: GitHub
+    url: /contrib/github/
+  - text: Documentation
+    url: /contrib/docs/
+  - text: Testing
+    url: /contrib/testing/
+  - text: Vagrant
+    url: /contrib/vagrant/

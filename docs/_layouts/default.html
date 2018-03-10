@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<base href="{{ site.baseurl }}" />
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ page.title }}</title>
+    <meta content="width=600" name="viewport">
+    <meta content="all" name="robots">
+    <link href="http://fonts.googleapis.com/css?family=Lato:light,regular,regularitalic,lightitalic,bold&amp;v1" media="all" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Droid+Sans+Mono' media="all" rel='stylesheet' type='text/css'>
+    <link href="/css/screen.css" media="screen" rel="stylesheet" type="text/css">
+    <link href="/css/syntax.css" media="screen" rel="stylesheet" type="text/css">
+    <link href="/favicon.png" rel="icon" type="image/png">
+  </head>
+  <body>
+    <header>
+        <a href="http://git.io/rq"><img class="nomargin" style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_ff7600.png" alt="Fork me on GitHub"></a>
+
+        <ul class="inline">
+        {% for link in site.navigation %}
+            <li><a href="{{ link.url }}">{{ link.text }}</a></li>
+        {% endfor %}
+        </ul>
+    </header>
+
+    <section class="container">
+      {{ content }}
+    </section>
+
+    <footer>
+        <p>RQ is written by <a href="http://nvie.com/about">Vincent Driessen</a>.</p>
+        <p>It is open sourced under the terms of the <a href="https://raw.github.com/nvie/rq/master/LICENSE">BSD license</a>.</p>
+    </footer>
+
+    {% include forward.html %}
+    {% include ga_tracking.html %}
+  </body>
+</html>
