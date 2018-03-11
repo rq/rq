@@ -27,7 +27,7 @@ class HorseMonitorTimeoutException(BaseTimeoutException):
 class BaseDeathPenalty(object):
     """Base class to setup job timeouts."""
 
-    def __init__(self, timeout, exception=JobTimeoutException):
+    def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
         self._timeout = timeout
         self._exception = exception
 

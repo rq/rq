@@ -290,6 +290,16 @@ queue.enqueue(some_func)
 {% endhighlight %}
 
 
+## Custom DeathPenalty classes
+
+When a Job times-out, the worker will try to kill it using the supplied
+`death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
+if you wish to attempt to kill jobs in an application specific or 'cleaner' manner. 
+
+DeathPenalty classes are constructed with the following arguments
+`BaseDeathPenalty(timeout, JobTimeoutException, job_id=job.id)`
+
+
 ## Custom exception handlers
 
 _New in version 0.5.5._
