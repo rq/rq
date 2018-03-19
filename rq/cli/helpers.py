@@ -3,7 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import importlib
-import time
+import gevent
 from functools import partial
 
 import click
@@ -181,7 +181,7 @@ def refresh(interval, func, *args):
             click.clear()
         func(*args)
         if interval:
-            time.sleep(interval)
+            gevent.sleep(interval)
         else:
             break
 

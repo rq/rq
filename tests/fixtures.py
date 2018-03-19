@@ -6,8 +6,8 @@ fixtures has a slighty different characteristics.
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import gevent
 import os
-import time
 
 from rq import Connection, get_current_job
 from rq.decorators import job
@@ -50,7 +50,7 @@ def create_file(path):
 
 
 def create_file_after_timeout(path, timeout):
-    time.sleep(timeout)
+    gevent.sleep(timeout)
     create_file(path)
 
 
@@ -99,5 +99,5 @@ def black_hole(job, *exc_info):
 
 
 def long_running_job(timeout=10):
-    time.sleep(timeout)
+    gevent.sleep(timeout)
     return 'Done sleeping...'
