@@ -12,6 +12,8 @@ from rq.job import Job, JobStatus
 from rq.registry import DeferredJobRegistry
 from rq.worker import Worker
 
+import logging
+logger = logging.getLogger(__name__)
 
 class CustomJob(Job):
     pass
@@ -305,6 +307,20 @@ class TestQueue(RQTestCase):
             None
         )
         self.assertEqual(q.count, 0)
+
+    def test_redis_mode(self):
+        q = Queue()
+        ret = q.redis_mode(self.testconn)
+        logger.info('wqlu redis mode is {}'.format(ret))
+        self.assertIsNotNone(ret)
+        self.assertEqual(ret, 'standalone')
+
+    def test_is_redis_cluster(self):
+        q = Queue()
+        ret = q.is_redis_cluster(self.testconn)
+        logger.info('wqlu is redis cluster {}'.format(ret))
+        self.assertIsNone(ret)
+        self.assertEqual(ret, False)
 
     def test_enqueue_sets_status(self):
         """Enqueueing a job sets its status to "queued"."""
