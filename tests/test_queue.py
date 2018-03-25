@@ -319,7 +319,7 @@ class TestQueue(RQTestCase):
         q = Queue()
         ret = q.is_redis_cluster(self.testconn)
         logger.info('wqlu is redis cluster {}'.format(ret))
-        self.assertIsNone(ret)
+        self.assertIsNotNone(ret)
         self.assertEqual(ret, False)
 
     def test_enqueue_sets_status(self):
