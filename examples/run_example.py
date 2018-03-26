@@ -2,7 +2,6 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import gevent
 import os
 import time
 
@@ -36,7 +35,7 @@ def main():
         print('')
         print('To start the actual in the background, run a worker:')
         print('    python examples/run_worker.py')
-        gevent.sleep(0.2)
+        time.sleep(0.2)
 
     print('Done')
 
