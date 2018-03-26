@@ -2,8 +2,8 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import gevent
 from datetime import datetime
+import time
 
 from tests import fixtures, RQTestCase
 from tests.helpers import strip_microseconds
@@ -418,5 +418,5 @@ class TestJob(RQTestCase):
         """test if a job created with ttl expires [issue502]"""
         queue = Queue(connection=self.testconn)
         queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
-        gevent.sleep(1)
+        time.sleep(1)
         self.assertEqual(0, len(queue.get_jobs()))
