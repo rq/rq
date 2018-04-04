@@ -5,6 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 import logging
 
 from redis import StrictRedis
+from rediscluster import StrictRedisCluster
 from rq import pop_connection, push_connection
 from rq.compat import is_python_version
 
@@ -25,6 +26,18 @@ def find_empty_redis_database():
             return testconn
     assert False, 'No empty Redis database found to run tests in.'
 
+def find_empty_redis_cluster_database():
+    """Tries to connect to a random Redis cluster database (starting from 4), and
+    will use/connect it when no keys are in there.
+    """
+    testconn_cluster = StrictRedisCluster.from_url(
+        'redis://127.0.0.1:7000', db=0
+    )
+    keys = testconn_cluster.keys('*')
+    for key in keys:
+        testconn_cluster.delete(key)
+    
+    return testconn_cluster
 
 def slow(f):
     import os
@@ -52,6 +65,50 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
+        push_connection(testconn)
+
+        # Store the connection (for sanity checking)
+        cls.testconn = testconn
+
+        # Shut up logging
+        logging.disable(logging.ERROR)
+
+    def setUp(self):
+        # Flush beforewards (we like our hygiene)
+        self.testconn.flushdb()
+
+    def tearDown(self):
+        # Flush afterwards
+        self.testconn.flushdb()
+
+    # Implement assertIsNotNone for Python runtimes < 2.7 or < 3.1
+    if not hasattr(unittest.TestCase, 'assertIsNotNone'):
+        def assertIsNotNone(self, value, *args):  # noqa
+            self.assertNotEqual(value, None, *args)
+
+    @classmethod
+    def tearDownClass(cls):
+        logging.disable(logging.NOTSET)
+
+        # Pop the connection to Redis
+        testconn = pop_connection()
+        assert testconn == cls.testconn, \
+            'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
+
+class RQTestClusterCase(unittest.TestCase):
+    """Base class to inherit test cluster cases from for RQ.
+
+    It sets up the Redis cluster connection (available via self.testconn_cluster), turns off
+    logging to the terminal and flushes the Redis database before and after
+    running each test.
+
+    Also offers assertQueueContains(queue, that_func) assertion method.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Set up connection to Redis
+        testconn = find_empty_redis_cluster_database()
         push_connection(testconn)
 
         # Store the connection (for sanity checking)
