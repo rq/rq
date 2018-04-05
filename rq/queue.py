@@ -179,7 +179,7 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = '{0}_compact:{0}'.format(
+        COMPACT_QUEUE = '{0}_compact:{1}'.format(
             self.redis_queue_namespace_prefix, uuid.uuid4())  # noqa
 
         self.connection.rename(self.key, COMPACT_QUEUE)

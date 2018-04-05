@@ -366,7 +366,7 @@ class Job(object):
     @classmethod
     def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job dependents hash under."""
-        return '{0}{0}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
+        return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
 
     @property
     def key(self):
