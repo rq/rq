@@ -50,6 +50,19 @@ This can be useful for batch work that needs to be processed periodically, or
 just to scale up your workers temporarily during peak periods.
 
 
+### Worker arguments
+
+In addition to `--burst`, `rq worker` also accepts these arguments:
+
+* `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9`)
+* `--path` or `-P`: multiple import paths are supported (e.g `rq worker --path foo --path bar`)
+* `--config` or `-c`: path to module containing RQ settings.
+* `--worker-class` or `-w`: RQ Worker class to use (e.g `rq worker --worker-class 'foo.bar.MyWorker'`)
+* `--job-class` or `-j`: RQ Job class to use.
+* `--queue-class`: RQ Queue class to use.
+* `--connection-class`: Redis connection class to use, defaults to `redis.StrictRedis`.
+
+
 ## Inside the worker
 
 ### The worker life-cycle
