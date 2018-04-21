@@ -23,6 +23,17 @@ class TestRegistry(RQTestCase):
         super(TestRegistry, self).setUp()
         self.registry = StartedJobRegistry(connection=self.testconn)
 
+    def test_init(self):
+        """Registry can be instantiated with queue or name/Redis connection"""
+        queue = Queue('foo', connection=self.testconn)
+        registry = StartedJobRegistry(queue=queue)
+        self.assertEqual(registry.name, queue.name)
+        self.assertEqual(registry.connection, queue.connection)
+
+        registry = StartedJobRegistry('bar', self.testconn)
+        self.assertEqual(registry.name, 'bar')
+        self.assertEqual(registry.connection, self.testconn)
+
     def test_key(self):
         self.assertEqual(self.registry.key, 'rq:wip:default')
 

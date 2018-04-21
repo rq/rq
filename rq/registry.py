@@ -15,11 +15,18 @@ class BaseRegistry(object):
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection=None, job_class=None):
-        self.name = name
-        self.key = self.key_template.format(name)
-        self.connection = resolve_connection(connection)
+    def __init__(self, name='default', connection=None, job_class=None,
+                 queue=None):
+        if queue:
+            self.name = queue.name
+            self.connection = resolve_connection(queue.connection)
+        else:
+            self.name = name
+            self.connection = resolve_connection(connection)
+
+        self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
+
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
