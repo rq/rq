@@ -85,6 +85,7 @@ def get_current_job(connection=None, job_class=None):
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+    redis_job_namespace_prefix = 'rq:job:'
 
     # Job construction
     @classmethod
@@ -363,12 +364,12 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('utf-8')
+        return (cls.redis_job_namespace_prefix + job_id).encode('utf-8')
 
     @classmethod
     def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job dependents hash under."""
-        return 'rq:job:{0}:dependents'.format(job_id)
+        return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
 
     @property
     def key(self):

@@ -91,8 +91,8 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        script = b"""
-            local prefix = "rq:job:"
+        script = """
+            local prefix = "{0}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -107,7 +107,7 @@ class Queue(object):
                 count = count + 1
             end
             return count
-        """
+        """.format(self.job_class.redis_job_namespace_prefix).encode("utf-8")
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
@@ -179,7 +179,8 @@ class Queue(object):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())  # noqa
+        COMPACT_QUEUE = '{0}_compact:{1}'.format(
+            self.redis_queue_namespace_prefix, uuid.uuid4())  # noqa
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:

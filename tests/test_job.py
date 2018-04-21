@@ -609,3 +609,17 @@ class TestJob(RQTestCase):
         self.assertEqual(get_failed_queue().count, 0)
         self.assertEqual(Queue('fake').count, 1)
         self.assertEqual(requeued_job.origin, job.origin)
+
+    def test_dependents_key_for_should_return_prefixed_job_id(self):
+        """test redis key to store job dependents hash under"""
+        job_id = 'random'
+        key = Job.dependents_key_for(job_id=job_id)
+
+        assert key == Job.redis_job_namespace_prefix + job_id + ':dependents'
+
+    def test_key_for_should_return_prefixed_job_id(self):
+        """test redis key to store job hash under"""
+        job_id = 'random'
+        key = Job.key_for(job_id=job_id)
+
+        assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
