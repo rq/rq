@@ -252,7 +252,7 @@ class TestWorker(RQTestCase):
     def test_heartbeat_busy(self):
         """Periodic heartbeats while horse is busy with long jobs"""
         q = Queue()
-        w = Worker([q], default_job_monitoring_interval=5)
+        w = Worker([q], job_monitoring_interval=5)
 
         for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
             job = q.enqueue(long_running_job,

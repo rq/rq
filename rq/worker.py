@@ -155,9 +155,11 @@ class Worker(object):
 
         return worker
 
-    def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
-                 exc_handler=None, exception_handlers=None, default_worker_ttl=None,
-                 job_class=None, queue_class=None, default_job_monitoring_interval=None):  # noqa
+    def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
+                 connection=None, exc_handler=None, exception_handlers=None,
+                 default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
+                 queue_class=None,
+                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -175,17 +177,9 @@ class Worker(object):
         self.validate_queues()
         self._exc_handlers = []
 
-        if default_result_ttl is None:
-            default_result_ttl = DEFAULT_RESULT_TTL
         self.default_result_ttl = default_result_ttl
-
-        if default_worker_ttl is None:
-            default_worker_ttl = DEFAULT_WORKER_TTL
         self.default_worker_ttl = default_worker_ttl
-
-        if default_job_monitoring_interval is None:
-            default_job_monitoring_interval = DEFAULT_JOB_MONITORING_INTERVAL
-        self.default_job_monitoring_interval = default_job_monitoring_interval
+        self.job_monitoring_interval = job_monitoring_interval
 
         self._state = 'starting'
         self._is_horse = False
@@ -614,13 +608,13 @@ class Worker(object):
         """
         while True:
             try:
-                with UnixSignalDeathPenalty(self.default_job_monitoring_interval, HorseMonitorTimeoutException):
+                with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
                     retpid, ret_val = os.waitpid(self._horse_pid, 0)
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
-                self.heartbeat(self.default_job_monitoring_interval + 5)
+                self.heartbeat(self.job_monitoring_interval + 5)
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
                 # caused by a SIGINT or SIGTERM signal during
@@ -705,7 +699,7 @@ class Worker(object):
         with self.connection._pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
-            self.heartbeat(self.default_job_monitoring_interval + 5, pipeline=pipeline)
+            self.heartbeat(self.job_monitoring_interval + 5, pipeline=pipeline)
             registry = StartedJobRegistry(job.origin,
                                           self.connection,
                                           job_class=self.job_class)
