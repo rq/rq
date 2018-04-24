@@ -112,7 +112,12 @@ print len(q)
 queued_job_ids = q.job_ids # Gets a list of job IDs from the queue
 queued_jobs = q.jobs # Gets a list of enqueued job instances
 job = q.fetch_job('my_id') # Returns job having ID "my_id"
+
+# Deleting the queue
+q.delete(delete_jobs=True) # Passing true here additionally removes all the associated messages on the queue
+# queue is unusable now unless re-instantiated
 {% endhighlight %}
+
 
 ### On the Design
 
