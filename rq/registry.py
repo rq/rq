@@ -4,6 +4,7 @@ from .exceptions import NoSuchJobError
 from .job import Job, JobStatus
 from .queue import FailedQueue
 from .utils import backend_class, current_timestamp
+from .defaults import INFINITE_TTL
 
 
 class BaseRegistry(object):
@@ -39,8 +40,10 @@ class BaseRegistry(object):
         return self.connection.zcard(self.key)
 
     def add(self, job, ttl=0, pipeline=None):
-        """Adds a job to a registry with expiry time of now + ttl."""
+        """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf"""
         score = ttl if ttl < 0 else current_timestamp() + ttl
+        if score == INFINITE_TTL:
+            score = '+inf'
         if pipeline is not None:
             return pipeline.zadd(self.key, score, job.id)
 
