@@ -20,7 +20,7 @@ def find_empty_redis_database():
     """
     for dbnum in range(4, 17):
         testconn = StrictRedis(db=dbnum)
-        empty = len(testconn.keys('*')) == 0
+        empty = testconn.dbsize() == 0
         if empty:
             return testconn
     assert False, 'No empty Redis database found to run tests in.'

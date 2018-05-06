@@ -18,7 +18,9 @@ from rq.cli.helpers import (read_config_file, refresh,
                             show_both, show_queues, show_workers, CliConfig)
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
-                         DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
+                         DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
+                         DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL,
+                         DEFAULT_JOB_MONITORING_INTERVAL)
 from rq.exceptions import InvalidJobOperationError
 from rq.utils import import_attribute
 from rq.suspension import (suspend as connection_suspend,
@@ -172,8 +174,9 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--logging_level', type=str, default="INFO", help='Set logging level')
 @click.option('--name', '-n', help='Specify a different name')
-@click.option('--results-ttl', type=int, help='Default results timeout to be used')
-@click.option('--worker-ttl', type=int, help='Default worker timeout to be used')
+@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL , help='Default results timeout to be used')
+@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL , help='Default worker timeout to be used')
+@click.option('--job-monitoring-interval', type=int, default=DEFAULT_JOB_MONITORING_INTERVAL , help='Default job monitoring interval to be used')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
@@ -182,8 +185,8 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
-           worker_ttl, verbose, quiet, sentry_dsn, exception_handler,
-           pid, queues, **options):
+           worker_ttl, job_monitoring_interval, verbose, quiet, sentry_dsn,
+           exception_handler, pid, queues, **options):
     """Starts an RQ worker."""
 
     settings = read_config_file(cli_config.config) if cli_config.config else {}
@@ -217,6 +220,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
                                          connection=cli_config.connection,
                                          default_worker_ttl=worker_ttl,
                                          default_result_ttl=results_ttl,
+                                         job_monitoring_interval=job_monitoring_interval,
                                          job_class=cli_config.job_class,
                                          queue_class=cli_config.queue_class,
                                          exception_handlers=exception_handlers or None)

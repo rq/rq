@@ -24,8 +24,8 @@ from redis import WatchError
 from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
-from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_RESULT_TTL,
-                       DEFAULT_WORKER_TTL)
+from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
+                       DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
@@ -33,7 +33,7 @@ from .queue import Queue, get_failed_queue
 from .registry import (FailedJobRegistry, FinishedJobRegistry,
                        StartedJobRegistry, clean_registries)
 from .suspension import is_suspended
-from .timeouts import UnixSignalDeathPenalty
+from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
@@ -157,9 +157,11 @@ class Worker(object):
 
         return worker
 
-    def __init__(self, queues, name=None, default_result_ttl=None, connection=None,
-                 exc_handler=None, exception_handlers=None, default_worker_ttl=None,
-                 job_class=None, queue_class=None):  # noqa
+    def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
+                 connection=None, exc_handler=None, exception_handlers=None,
+                 default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
+                 queue_class=None,
+                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -177,13 +179,9 @@ class Worker(object):
         self.validate_queues()
         self._exc_handlers = []
 
-        if default_result_ttl is None:
-            default_result_ttl = DEFAULT_RESULT_TTL
         self.default_result_ttl = default_result_ttl
-
-        if default_worker_ttl is None:
-            default_worker_ttl = DEFAULT_WORKER_TTL
         self.default_worker_ttl = default_worker_ttl
+        self.job_monitoring_interval = job_monitoring_interval
 
         self._state = 'starting'
         self._is_horse = False
@@ -484,7 +482,7 @@ class Worker(object):
                         self.log.info('Stopping on request')
                         break
 
-                    timeout = None if burst else max(1, self.default_worker_ttl - 60)
+                    timeout = None if burst else max(1, self.default_worker_ttl - 15)
 
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
@@ -532,7 +530,7 @@ class Worker(object):
         self.heartbeat()
         return result
 
-    def heartbeat(self, timeout=0, pipeline=None):
+    def heartbeat(self, timeout=None, pipeline=None):
         """Specifies a new worker timeout, typically by extending the
         expiration time of the worker, effectively making this a "heartbeat"
         to not expire the worker until the timeout passes.
@@ -540,10 +538,10 @@ class Worker(object):
         The next heartbeat should come before this time, or the worker will
         die (at least from the monitoring dashboards).
 
-        The effective timeout can never be shorter than default_worker_ttl,
-        only larger.
+        If no timeout is given, the default_worker_ttl will be used to update
+        the expiration time of the worker.
         """
-        timeout = max(timeout, self.default_worker_ttl)
+        timeout = timeout or self.default_worker_ttl
         connection = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
@@ -611,8 +609,13 @@ class Worker(object):
         """
         while True:
             try:
-                self._monitor_work_horse_tick(job)
+                with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
+                    retpid, ret_val = os.waitpid(self._horse_pid, 0)
                 break
+            except HorseMonitorTimeoutException:
+                # Horse has not exited yet and is still running.
+                # Send a heartbeat to keep the worker alive.
+                self.heartbeat(self.job_monitoring_interval + 5)
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
                 # caused by a SIGINT or SIGTERM signal during
@@ -622,9 +625,9 @@ class Worker(object):
                 # which we don't want to catch, so we re-raise those ones.
                 if e.errno != errno.EINTR:
                     raise
+                # Send a heartbeat to keep the worker alive.
+                self.heartbeat()
 
-    def _monitor_work_horse_tick(self, job):
-        _, ret_val = os.waitpid(self._horse_pid, 0)
         if ret_val == os.EX_OK:  # The process exited normally.
             return
         job_status = job.get_status()
@@ -701,7 +704,7 @@ class Worker(object):
         with self.connection._pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
-            self.heartbeat(timeout, pipeline=pipeline)
+            self.heartbeat(self.job_monitoring_interval + 5, pipeline=pipeline)
             registry = StartedJobRegistry(job.origin,
                                           self.connection,
                                           job_class=self.job_class)
@@ -800,7 +803,8 @@ class Worker(object):
 
         try:
             job.started_at = utcnow()
-            with self.death_penalty_class(job.timeout or self.queue_class.DEFAULT_TIMEOUT):
+            timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
+            with self.death_penalty_class(timeout, JobTimeoutException):
                 rv = job.perform()
 
             job.ended_at = utcnow()
