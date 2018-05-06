@@ -1,7 +1,7 @@
 from .compat import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
-from .exceptions import NoSuchJobError
+from .exceptions import InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import FailedQueue, Queue
 from .utils import backend_class, current_timestamp
@@ -183,6 +183,23 @@ class FailedJobRegistry(BaseRegistry):
 
         if not pipeline:
             p.execute()
+
+    def requeue(self, job_or_id):
+        """Requeues the job with the given job ID."""
+        if isinstance(job_or_id, self.job_class):
+            job = job_or_id
+        else:
+            job = self.job_class.fetch(job_or_id, connection=self.connection)
+
+        result = self.connection.zrem(self.key, job.id)
+        if not result:
+            raise InvalidJobOperation
+
+        job.set_status(JobStatus.QUEUED)
+        queue = Queue(job.origin, connection=self.connection,
+                      job_class=self.job_class)
+
+        return queue.enqueue_job(job)
 
 
 class DeferredJobRegistry(BaseRegistry):

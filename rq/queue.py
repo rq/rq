@@ -525,23 +525,3 @@ class FailedQueue(Queue):
             pipeline.execute()
 
         return job
-
-    def requeue(self, job_id):
-        """Requeues the job with the given job ID."""
-        try:
-            job = self.job_class.fetch(job_id, connection=self.connection)
-        except NoSuchJobError:
-            # Silently ignore/remove this job and return (i.e. do nothing)
-            self.remove(job_id)
-            return
-
-        # Delete it from the failed queue (raise an error if that failed)
-        if self.remove(job) == 0:
-            raise InvalidJobOperationError('Cannot requeue non-failed jobs')
-
-        job.set_status(JobStatus.QUEUED)
-        job.exc_info = None
-        queue = Queue(job.origin,
-                      connection=self.connection,
-                      job_class=self.job_class)
-        return queue.enqueue_job(job)

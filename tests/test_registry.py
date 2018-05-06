@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
+from rq.exceptions import InvalidJobOperation
 from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
@@ -321,10 +322,47 @@ class TestFailedJobRegistry(RQTestCase):
             timestamp + ttl - 2
         )
 
+    def test_requeue(self):
+        """FailedJobRegistry.requeue works properly"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(div_by_zero, failure_ttl=5)
+
+        worker = Worker([queue])
+        worker.work(burst=True)
+
+        registry = FailedJobRegistry(connection=worker.connection)
+        self.assertTrue(job in registry)
+
+        registry.requeue(job.id)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # Should also work with job instance
+        registry.requeue(job)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+    def test_invalid_job(self):
+        """Requeuing a job that's not in FailedJobRegistry raises an error."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        registry = FailedJobRegistry(connection=self.testconn)
+        with self.assertRaises(InvalidJobOperation):
+            registry.requeue(job)
 
     def test_worker_handle_job_failure(self):
         """Failed jobs are added to FailedJobRegistry"""
-        q = Queue()
+        q = Queue(connection=self.testconn)
 
         w = Worker([q])
         registry = FailedJobRegistry(connection=w.connection)

@@ -18,8 +18,10 @@ from tests import fixtures, RQTestCase
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
+from rq.job import Job, get_current_job, JobStatus, cancel_job
 from rq.queue import Queue, get_failed_queue
+from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+                         FinishedJobRegistry, StartedJobRegistry)
 from rq.utils import utcformat
 from rq.worker import Worker
 
@@ -494,6 +496,48 @@ class TestJob(RQTestCase):
 
         self.assertNotIn(job.id, queue.get_job_ids())
 
+    def test_job_delete_removes_itself_from_registries(self):
+        """job.delete() should remove itself from job registries"""
+        connection = self.testconn
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.FAILED,
+                         connection=self.testconn, origin='default')
+        job.save()
+        registry = FailedJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.FINISHED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = FinishedJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.STARTED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = StartedJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.DEFERRED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = DeferredJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
     def test_job_with_dependents_delete_parent_with_saved(self):
         """job.delete() deletes itself from Redis but not dependents. If the
         dependent job was saved, it will remain in redis."""
@@ -593,22 +637,6 @@ class TestJob(RQTestCase):
         self.assertEqual(1, len(failed_queue.get_jobs()))
         cancel_job(job.id)
         self.assertEqual(0, len(failed_queue.get_jobs()))
-
-    def test_create_and_requeue_job(self):
-        """Requeueing existing jobs."""
-        job = Job.create(func=fixtures.div_by_zero, args=(1, 2, 3))
-        job.origin = 'fake'
-        job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
-
-        self.assertEqual(Queue.all(), [get_failed_queue()])  # noqa
-        self.assertEqual(get_failed_queue().count, 1)
-
-        requeued_job = requeue_job(job.id)
-
-        self.assertEqual(get_failed_queue().count, 0)
-        self.assertEqual(Queue('fake').count, 1)
-        self.assertEqual(requeued_job.origin, job.origin)
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""

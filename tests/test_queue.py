@@ -565,22 +565,6 @@ class TestFailedQueue(RQTestCase):
         failed_queue = get_failed_queue(job_class='rq.job.Job')
         self.assertIsNot(failed_queue.job_class, CustomJob)
 
-    def test_requeue_job(self):
-        """Requeueing existing jobs."""
-        job = Job.create(func=div_by_zero, args=(1, 2, 3))
-        job.origin = 'fake'
-        job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
-
-        self.assertEqual(Queue.all(), [get_failed_queue()])  # noqa
-        self.assertEqual(get_failed_queue().count, 1)
-
-        requeued_job = get_failed_queue().requeue(job.id)
-
-        self.assertEqual(get_failed_queue().count, 0)
-        self.assertEqual(Queue('fake').count, 1)
-        self.assertEqual(requeued_job.origin, job.origin)
-
     def test_get_job_on_failed_queue(self):
         default_queue = Queue()
         failed_queue = get_failed_queue()
@@ -602,15 +586,6 @@ class TestFailedQueue(RQTestCase):
         self.assertIsNotNone(job_on_failed_queue)
         self.assertTrue(job_on_default_queue.is_failed)
 
-    def test_requeue_nonfailed_job_fails(self):
-        """Requeueing non-failed jobs raises error."""
-        q = Queue()
-        job = q.enqueue(say_hello, 'Nick', foo='bar')
-
-        # Assert that we cannot requeue a job that's not on the failed queue
-        with self.assertRaises(InvalidJobOperationError):
-            get_failed_queue().requeue(job.id)
-
     def test_quarantine_preserves_timeout(self):
         """Quarantine preserves job timeout."""
         job = Job.create(func=div_by_zero, args=(1, 2, 3))
@@ -620,36 +595,6 @@ class TestFailedQueue(RQTestCase):
         get_failed_queue().quarantine(job, Exception('Some fake error'))
 
         self.assertEqual(job.timeout, 200)
-
-    def test_requeueing_preserves_timeout(self):
-        """Requeueing preserves job timeout."""
-        job = Job.create(func=div_by_zero, args=(1, 2, 3))
-        job.origin = 'fake'
-        job.timeout = 200
-        job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))
-        get_failed_queue().requeue(job.id)
-
-        job = Job.fetch(job.id)
-        self.assertEqual(job.timeout, 200)
-
-    def test_requeue_sets_status_to_queued(self):
-        """Requeueing a job should set its status back to QUEUED."""
-        job = Job.create(func=div_by_zero, args=(1, 2, 3))
-        job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))
-        get_failed_queue().requeue(job.id)
-
-        job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), JobStatus.QUEUED)
-
-    def test_enqueue_preserves_result_ttl(self):
-        """Enqueueing persists result_ttl."""
-        q = Queue()
-        job = q.enqueue(div_by_zero, args=(1, 2, 3), result_ttl=10)
-        self.assertEqual(job.result_ttl, 10)
-        job_from_queue = Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(int(job_from_queue.result_ttl), 10)
 
     def test_async_false(self):
         """Job executes and cleaned up immediately if async=False."""
@@ -672,23 +617,6 @@ class TestFailedQueue(RQTestCase):
         skip_job = q.enqueue(say_hello, at_front=True)
         assert q.dequeue() == skip_job
         assert q.dequeue() == job2
-
-    def test_job_deletion(self):
-        """Ensure job.delete() removes itself from FailedQueue."""
-        job = Job.create(func=div_by_zero, args=(1, 2, 3))
-        job.origin = 'fake'
-        job.timeout = 200
-        job.save()
-
-        job.set_status(JobStatus.FAILED)
-
-        failed_queue = get_failed_queue()
-        failed_queue.quarantine(job, Exception('Some fake error'))
-
-        self.assertTrue(job.id in failed_queue.get_job_ids())
-
-        job.delete()
-        self.assertFalse(job.id in failed_queue.get_job_ids())
 
     def test_job_in_failed_queue_persists(self):
         """Make sure failed job key does not expire"""

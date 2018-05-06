@@ -545,7 +545,6 @@ class Job(object):
                delete_dependents=False):
         """Cancels the job and deletes the job hash from Redis. Jobs depending
         on this job can optionally be deleted as well."""
-
         if remove_from_queue:
             self.cancel(pipeline=pipeline)
         connection = pipeline if pipeline is not None else self.connection
@@ -572,10 +571,11 @@ class Job(object):
             registry.remove(self, pipeline=pipeline)
 
         elif self.get_status() == JobStatus.FAILED:
-            from .queue import get_failed_queue
-            failed_queue = get_failed_queue(connection=self.connection,
-                                            job_class=self.__class__)
-            failed_queue.remove(self, pipeline=pipeline)
+            from .registry import FailedJobRegistry
+            registry = FailedJobRegistry(self.origin,
+                                         connection=self.connection,
+                                         job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
