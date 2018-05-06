@@ -61,8 +61,8 @@ In addition, you can add a few options to modify the behaviour of the queued
 job. By default, these are popped out of the kwargs that will be passed to the
 job function.
 
-* `timeout` specifies the maximum runtime of the job before it'll be considered
-    'lost'. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
+* `timeout` specifies the maximum runtime of the job before it's interrupted
+    and marked as `failed`. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
 * `result_ttl` specifies the expiry time of the key where the job result will
   be stored
 * `ttl` specifies the maximum queued time of the job before it'll be cancelled
