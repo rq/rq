@@ -24,7 +24,8 @@ from tests import RQTestCase, slow
 from tests.fixtures import (create_file, create_file_after_timeout,
                             div_by_zero, do_nothing, say_hello, say_pid,
                             run_dummy_heroku_worker, access_self,
-                            modify_self, modify_self_and_error)
+                            modify_self, modify_self_and_error,
+                            long_running_job)
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
                 get_current_connection)
@@ -246,6 +247,23 @@ class TestWorker(RQTestCase):
         # for compatibility reasons
         self.testconn.hdel(w.key, 'birth')
         w.refresh()
+
+    @slow
+    def test_heartbeat_busy(self):
+        """Periodic heartbeats while horse is busy with long jobs"""
+        q = Queue()
+        w = Worker([q], job_monitoring_interval=5)
+
+        for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
+            job = q.enqueue(long_running_job,
+                            args=(timeout,),
+                            timeout=30,
+                            result_ttl=-1)
+            with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
+                w.execute_job(job, q)
+                self.assertEqual(mocked.call_count, expected_heartbeats)
+            job = Job.fetch(job.id)
+            self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
