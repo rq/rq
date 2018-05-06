@@ -162,7 +162,7 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job, ttl=None, pipeline=None):
+    def add(self, job, ttl=None, exc_string='', pipeline=None):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
@@ -170,10 +170,19 @@ class FailedJobRegistry(BaseRegistry):
         if ttl is None:
             ttl = DEFAULT_FAILURE_TTL
         score = ttl if ttl < 0 else current_timestamp() + ttl
-        if pipeline is not None:
-            return pipeline.zadd(self.key, score, job.id)
 
-        return self.connection._zadd(self.key, score, job.id)
+        if pipeline:
+            p = pipeline
+        else:
+            p = self.connection._pipeline()
+
+        job.exc_info = exc_string
+        job.save(pipeline=p, include_meta=False)
+        job.cleanup(ttl=-1, pipeline=p)  # failed job won't expire
+        p.zadd(self.key, score, job.id)
+
+        if not pipeline:
+            p.execute()
 
 
 class DeferredJobRegistry(BaseRegistry):

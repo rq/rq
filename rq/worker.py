@@ -201,7 +201,6 @@ class Worker(object):
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
         if exception_handlers is None:
-            self.push_exc_handler(self.move_to_failed_queue)
             if exc_handler is not None:
                 self.push_exc_handler(exc_handler)
                 warnings.warn(
@@ -636,20 +635,25 @@ class Worker(object):
             if not job.ended_at:
                 job.ended_at = utcnow()
 
-            self.handle_job_failure(job=job)
-
             # Unhandled failure: move the job to the failed queue
             self.log.warning((
                 'Moving job to {0!r} queue '
                 '(work-horse terminated unexpectedly; waitpid returned {1})'
             ).format(self.failed_queue.name, ret_val))
-            self.failed_queue.quarantine(
+
+            exc_string = "Work-horse process was terminated unexpectedly " + "(waitpid returned %s)" % ret_val
+            self.handle_job_failure(
                 job,
-                exc_info=(
-                    "Work-horse process was terminated unexpectedly "
-                    "(waitpid returned {0})"
-                ).format(ret_val)
+                exc_string="Work-horse process was terminated unexpectedly "
+                           "(waitpid returned %s)" % ret_val
             )
+            # self.failed_queue.quarantine(
+            #     job,
+            #     exc_info=(
+            #         "Work-horse process was terminated unexpectedly "
+            #         "(waitpid returned {0})"
+            #     ).format(ret_val)
+            # )
 
     def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -672,7 +676,6 @@ class Worker(object):
 
         self._is_horse = True
         self.log = logger
-
         success = self.perform_job(job, queue)
 
         # os._exit() is the way to exit from childs after a fork(), in
@@ -710,7 +713,8 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_failure(self, job, started_job_registry=None, queue=None):
+    def handle_job_failure(self, job, started_job_registry=None,
+                           exc_string=''):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
             2. Removing the job from StartedJobRegistry
@@ -726,9 +730,11 @@ class Worker(object):
                 )
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
-            failed_job_registry = FailedJobRegistry(job.origin, self.connection,
+            failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                     job_class=self.job_class)
-            failed_job_registry.add(job, ttl=job.failure_ttl, pipeline=pipeline)
+            # exc_string = self._get_safe_exception_string(traceback.format_exception(*exc_info))
+            failed_job_registry.add(job, ttl=job.failure_ttl,
+                                    exc_string=exc_string, pipeline=pipeline)
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
@@ -786,7 +792,6 @@ class Worker(object):
         inside the work horse's process.
         """
         self.prepare_job_execution(job)
-
         push_connection(self.connection)
 
         started_job_registry = StartedJobRegistry(job.origin,
@@ -803,16 +808,18 @@ class Worker(object):
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
-
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except Exception:
-
             job.ended_at = utcnow()
-            self.handle_job_failure(job=job,
+            exc_info = sys.exc_info()
+            exc_string = self._get_safe_exception_string(
+                traceback.format_exception(*exc_info)
+            )
+            self.handle_job_failure(job=job, exc_string=exc_string,
                                     started_job_registry=started_job_registry)
-            self.handle_exception(job, *sys.exc_info())
+            self.handle_exception(job, *exc_info)
             return False
 
         finally:
@@ -857,12 +864,6 @@ class Worker(object):
 
             if not fallthrough:
                 break
-
-    def move_to_failed_queue(self, job, *exc_info):
-        """Default exception handler: move the job to the failed queue."""
-        self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
-        from .handlers import move_to_failed_queue
-        move_to_failed_queue(job, *exc_info)
 
     @staticmethod
     def _get_safe_exception_string(exc_strings):

@@ -30,7 +30,7 @@ from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
                 get_current_connection)
 from rq.compat import as_text, PY2
 from rq.job import Job, JobStatus
-from rq.registry import StartedJobRegistry
+from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.worker import HerokuWorker, WorkerStatus
@@ -206,7 +206,7 @@ class TestWorker(RQTestCase):
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.create(func=div_by_zero, args=(3,))
+        job = Job.create(func=div_by_zero, args=(3,), origin=q.name)
         job.save()
 
         job_data = job.data
@@ -224,7 +224,9 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         w.work(burst=True)   # should silently pass
         self.assertEqual(q.count, 0)
-        self.assertEqual(failed_q.count, 1)
+
+        failed_job_registry = FailedJobRegistry(queue=q)
+        self.assertTrue(job in failed_job_registry)
 
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""
@@ -268,7 +270,8 @@ class TestWorker(RQTestCase):
 
         # Postconditions
         self.assertEqual(q.count, 0)
-        self.assertEqual(failed_q.count, 1)
+        failed_job_registry = FailedJobRegistry(queue=q)
+        self.assertTrue(job in failed_job_registry)
         self.assertEqual(w.get_current_job_id(), None)
 
         # Check the job
@@ -278,7 +281,7 @@ class TestWorker(RQTestCase):
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
-        self.assertIsNotNone(job.exc_info)  # should contain exc_info
+        self.assertTrue(job.exc_info)  # should contain exc_info
 
     def test_statistics(self):
         """Successful and failed job counts are saved properly"""
@@ -740,7 +743,6 @@ class TestWorker(RQTestCase):
         the job itself persists completely through the
         queue/worker/job stack -- even if the job errored"""
         q = Queue()
-        failed_q = get_failed_queue()
         # Also make sure that previously existing metadata
         # persists properly
         job = q.enqueue(modify_self_and_error, meta={'foo': 'bar', 'baz': 42},
@@ -751,7 +753,8 @@ class TestWorker(RQTestCase):
 
         # Postconditions
         self.assertEqual(q.count, 0)
-        self.assertEqual(failed_q.count, 1)
+        failed_job_registry = FailedJobRegistry(queue=q)
+        self.assertTrue(job in failed_job_registry)
         self.assertEqual(w.get_current_job_id(), None)
 
         job_check = Job.fetch(job.id)
@@ -878,8 +881,6 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         completing the job) should set the job's status to FAILED
         """
         fooq = Queue('foo')
-        failed_q = get_failed_queue()
-        self.assertEqual(failed_q.count, 0)
         self.assertEqual(fooq.count, 0)
         w = Worker(fooq)
         sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
@@ -894,7 +895,8 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         job_status = job.get_status()
         p.join(1)
         self.assertEqual(job_status, JobStatus.FAILED)
-        self.assertEqual(failed_q.count, 1)
+        failed_job_registry = FailedJobRegistry(queue=fooq)
+        self.assertTrue(job in failed_job_registry)
         self.assertEqual(fooq.count, 0)
 
 
@@ -917,18 +919,20 @@ class TestWorkerSubprocess(RQTestCase):
     def test_run_access_self(self):
         """Schedule a job, then run the worker as subprocess"""
         q = Queue()
-        q.enqueue(access_self)
+        job = q.enqueue(access_self)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
-        assert get_failed_queue().count == 0
+        registry = FinishedJobRegistry(queue=q)
+        self.assertTrue(job in registry)
         assert q.count == 0
 
     @skipIf('pypy' in sys.version.lower(), 'often times out with pypy')
     def test_run_scheduled_access_self(self):
         """Schedule a job that schedules a job, then run the worker as subprocess"""
         q = Queue()
-        q.enqueue(schedule_access_self)
+        job = q.enqueue(schedule_access_self)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
-        assert get_failed_queue().count == 0
+        registry = FinishedJobRegistry(queue=q)
+        self.assertTrue(job in registry)
         assert q.count == 0
 
 
@@ -1030,10 +1034,6 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
     def test_handle_exception_handles_non_ascii_in_exception_message(self):
         """Test that handle_exception doesn't crash on non-ascii in exception message."""
         self.worker.handle_exception(Mock(), *self.exc_info)
-
-    def test_move_to_failed_queue_handles_non_ascii_in_exception_message(self):
-        """Test that move_to_failed_queue doesn't crash on non-ascii in exception message."""
-        self.worker.move_to_failed_queue(Mock(), *self.exc_info)
 
     def setUp(self):
         super(TestExceptionHandlerMessageEncoding, self).setUp()
