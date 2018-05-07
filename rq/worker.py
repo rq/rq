@@ -678,7 +678,7 @@ class Worker(object):
 
         # os._exit() is the way to exit from childs after a fork(), in
         # constrast to the regular sys.exit()
-        os._exit(int(not success))
+        os._exit(0)
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse."""
@@ -801,8 +801,7 @@ class Worker(object):
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
-        except Exception:
-
+        except:
             job.ended_at = utcnow()
             self.handle_job_failure(job=job,
                                     started_job_registry=started_job_registry)
