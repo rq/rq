@@ -238,8 +238,6 @@ $ rq worker -c settings
 
 ## Custom worker classes
 
-_New in version 0.4.0._
-
 There are times when you want to customize the worker's behavior. Some of the
 more common requests so far are:
 
@@ -256,8 +254,6 @@ $ rq worker -w 'path.to.GeventWorker'
 
 
 ## Custom Job and Queue classes
-
-_Will be available in next release._
 
 You can tell the worker to use a custom class for jobs and queues using
 `--job-class` and/or `--queue-class`.
@@ -285,9 +281,7 @@ queue.enqueue(some_func)
 {% endhighlight %}
 
 
-## Custom exception handlers
-
-_New in version 0.5.5._
+## Custom Exception Handlers
 
 If you need to handle errors differently for different types of jobs, or simply want to customize
 RQ's default error handling behavior, run `rq worker` using the `--exception-handler` option:
@@ -297,4 +291,10 @@ $ rq worker --exception-handler 'path.to.my.ErrorHandler'
 
 # Multiple exception handlers is also supported
 $ rq worker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
+{% endhighlight %}
+
+If you want to disable RQ's default exception handler, use the `--disable-default-exception-handler` option:
+
+{% highlight console %}
+$ rq worker --exception-handler 'path.to.my.ErrorHandler' --disable-default-exception-handler
 {% endhighlight %}

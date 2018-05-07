@@ -16,7 +16,7 @@ from rq.queue import Queue
 import pytest
 
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, say_hello
+from tests.fixtures import add_meta, div_by_zero, say_hello
 
 if is_python_version((2, 7), (3, 2)):
     from unittest import TestCase
@@ -185,14 +185,41 @@ class TestRQCli(RQTestCase):
 
     def test_exception_handlers(self):
         """rq worker -u <url> -b --exception-handler <handler>"""
-        q = Queue()
+        connection = Redis.from_url(self.redis_url)
+        q = Queue('default', connection=connection)
         runner = CliRunner()
 
-        # If exception handler is not given, failed job goes to FailedQueue
+        # If exception handler is not given, no custom exception handler is run
         job = q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
         registry = FailedJobRegistry(queue=q)
         self.assertTrue(job in registry)
+
+        # If disable-default-exception-handler is given, job is not moved to FailedJobRegistry
+        job = q.enqueue(div_by_zero)
+        runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
+                             '--disable-default-exception-handler'])
+        registry = FailedJobRegistry(queue=q)
+        self.assertFalse(job in registry)
+
+        # Both default and custom exception handler is run
+        job = q.enqueue(div_by_zero)
+        runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
+                             '--exception-handler', 'tests.fixtures.add_meta'])
+        registry = FailedJobRegistry(queue=q)
+        self.assertTrue(job in registry)
+        job.refresh()
+        self.assertEqual(job.meta, {'foo': 1})
+
+        # Only custom exception handler is run
+        job = q.enqueue(div_by_zero)
+        runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
+                             '--exception-handler', 'tests.fixtures.add_meta',
+                             '--disable-default-exception-handler'])
+        registry = FailedJobRegistry(queue=q)
+        self.assertFalse(job in registry)
+        job.refresh()
+        self.assertEqual(job.meta, {'foo': 1})
 
     def test_suspend_and_resume(self):
         """rq suspend -u <url>
