@@ -331,6 +331,27 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.successful_job_count, 2)
         self.assertEqual(w.total_working_time, 3000000)
 
+    def test_disable_default_exception_handler(self):
+        """
+        Job is not moved to FailedJobRegistry when default custom exception
+        handler is disabled.
+        """
+        queue = Queue(name='default', connection=self.testconn)
+
+        job = queue.enqueue(div_by_zero)
+        worker = Worker([queue], disable_default_exception_handler=False)
+        worker.work(burst=True)
+
+        registry = FailedJobRegistry(queue=queue)
+        self.assertTrue(job in registry)
+
+        # Job is not added to FailedJobRegistry if
+        # disable_default_exception_handler is True
+        job = queue.enqueue(div_by_zero)
+        worker = Worker([queue], disable_default_exception_handler=True)
+        worker.work(burst=True)
+        self.assertFalse(job in registry)
+
     def test_custom_exc_handling(self):
         """Custom exception handling."""
         def black_hole(job, *exc_info):

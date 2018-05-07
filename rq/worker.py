@@ -160,7 +160,7 @@ class Worker(object):
     def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
-                 queue_class=None,
+                 queue_class=None, disable_default_exception_handler=False,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
         if connection is None:
             connection = get_current_connection()
@@ -196,18 +196,11 @@ class Worker(object):
         self.total_working_time = 0
         self.birth_date = None
 
-        # By default, push the "move-to-failed-queue" exception handler onto
-        # the stack
-        if exception_handlers is None:
-            if exc_handler is not None:
-                self.push_exc_handler(exc_handler)
-                warnings.warn(
-                    "exc_handler is deprecated, pass a list to exception_handlers instead.",
-                    DeprecationWarning
-                )
-        elif isinstance(exception_handlers, list):
-            for h in exception_handlers:
-                self.push_exc_handler(h)
+        self.disable_default_exception_handler = disable_default_exception_handler
+
+        if isinstance(exception_handlers, list):
+            for handler in exception_handlers:
+                self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
@@ -650,13 +643,6 @@ class Worker(object):
                 exc_string="Work-horse process was terminated unexpectedly "
                            "(waitpid returned %s)" % ret_val
             )
-            # self.failed_queue.quarantine(
-            #     job,
-            #     exc_info=(
-            #         "Work-horse process was terminated unexpectedly "
-            #         "(waitpid returned {0})"
-            #     ).format(ret_val)
-            # )
 
     def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -733,11 +719,13 @@ class Worker(object):
                 )
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
-            failed_job_registry = FailedJobRegistry(job.origin, job.connection,
-                                                    job_class=self.job_class)
-            # exc_string = self._get_safe_exception_string(traceback.format_exception(*exc_info))
-            failed_job_registry.add(job, ttl=job.failure_ttl,
-                                    exc_string=exc_string, pipeline=pipeline)
+
+            if not self.disable_default_exception_handler:
+                failed_job_registry = FailedJobRegistry(job.origin, job.connection,
+                                                        job_class=self.job_class)
+                failed_job_registry.add(job, ttl=job.failure_ttl,
+                                        exc_string=exc_string, pipeline=pipeline)
+
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
