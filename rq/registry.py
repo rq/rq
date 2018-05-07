@@ -195,7 +195,6 @@ class FailedJobRegistry(BaseRegistry):
         if not result:
             raise InvalidJobOperation
 
-        job.set_status(JobStatus.QUEUED)
         queue = Queue(job.origin, connection=self.connection,
                       job_class=self.job_class)
 

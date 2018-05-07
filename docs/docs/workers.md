@@ -84,7 +84,7 @@ The life-cycle of a worker consists of a few phases:
 7. _Cleanup job execution_. The worker sets its status to `idle` and sets both
    the job and its result to expire based on `result_ttl`. Job is also removed
    from `StartedJobRegistry` and added to to `FinishedJobRegistry` in the case
-   of successful execution, or `FailedQueue` in the case of failure.
+   of successful execution, or `FailedJobRegistry` in the case of failure.
 8. _Loop_.  Repeat from step 3.
 
 
