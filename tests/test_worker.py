@@ -895,7 +895,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
     @slow
     def test_working_worker_cold_shutdown(self):
-        """worker with an ongoing job receiving double SIGTERM signal and shutting down immediately"""
+        """Busy worker shuts down immediately on double SIGTERM signal"""
         fooq = Queue('foo')
         w = Worker(fooq)
         sentinel_file = '/tmp/.rq_sentinel_cold'
@@ -1070,9 +1070,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
 
 class TestExceptionHandlerMessageEncoding(RQTestCase):
-    def test_handle_exception_handles_non_ascii_in_exception_message(self):
-        """Test that handle_exception doesn't crash on non-ascii in exception message."""
-        self.worker.handle_exception(Mock(), *self.exc_info)
 
     def setUp(self):
         super(TestExceptionHandlerMessageEncoding, self).setUp()
@@ -1084,3 +1081,7 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
             raise Exception(u"💪")
         except:
             self.exc_info = sys.exc_info()
+
+    def test_handle_exception_handles_non_ascii_in_exception_message(self):
+        """worker.handle_exception doesn't crash on non-ascii in exception message."""
+        self.worker.handle_exception(Mock(), *self.exc_info)
