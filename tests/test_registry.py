@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 
 from rq.compat import as_text
-from rq.defaults import INFINITE_TTL
 from rq.job import Job, JobStatus
 from rq.queue import FailedQueue, Queue
 from rq.utils import current_timestamp
@@ -53,7 +52,7 @@ class TestRegistry(RQTestCase):
                         timestamp + 1002)
 
         # Ensure that a timeout of -1 results in a score of inf
-        self.registry.add(job, INFINITE_TTL)
+        self.registry.add(job, -1)
         self.assertEqual(self.testconn.zscore(self.registry.key, job.id), float('inf'))
 
         # Ensure that job is properly removed from sorted set
