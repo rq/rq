@@ -218,13 +218,14 @@ class TestJob(RQTestCase):
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job.func, job2.func)
         self.assertEqual(job.args, job2.args)
         self.assertEqual(job.kwargs, job2.kwargs)
+        self.assertEqual(job.timeout, job2.timeout)
 
         # Mathematical equation
         self.assertEqual(job, job2)
