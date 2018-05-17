@@ -196,7 +196,8 @@ class Worker(object):
         self.failed_job_count = 0
         self.total_working_time = 0
         self.birth_date = None
-
+        
+        # nuglab custom handlers
         self.finish_handlers = []
         if finish_handlers is not None:
             if isinstance(finish_handlers, list):
@@ -797,7 +798,6 @@ class Worker(object):
                     logger.info('Call %d handlers on successful finish of job %s', len(self.finish_handlers), job.id)
                     for f in self.finish_handlers:
                         f(job, self.connection)
-
                     break
                 except WatchError:
                     continue
@@ -840,7 +840,6 @@ class Worker(object):
             logger.info('Call %d handlers on finishing job, success or failure, %s', len(self.finish_handlers), job.id)
             for f in self.final_handlers:
                 f(job, self.connection)
-            pop_connection()
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv is not None:
