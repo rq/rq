@@ -155,7 +155,11 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        self.connection._hset(self.key, 'status', self._status, pipeline)
+        connection = pipeline if pipeline is not None else self.connection
+        if status == JobStatus.STARTED:
+            self.started_at = utcnow()
+            connection.hset(self.key, 'started_at', utcformat(self.started_at))
+        connection.hset(self.key, 'status', self._status)
 
     def _set_status(self, status):
         warnings.warn(

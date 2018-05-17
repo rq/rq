@@ -151,15 +151,17 @@ class Worker(object):
                      job_class=job_class,
                      queue_class=queue_class)
 
+        sja = connection.hget(worker.key, 'started_job_at')
+        worker.started_job_at = None if sja is None else utcparse(sja)
         worker.refresh()
-
         return worker
 
     def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
                  queue_class=None,
-                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
+                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL, # noqa
+                 finish_handlers=None, final_handlers=None):
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -182,6 +184,7 @@ class Worker(object):
         self.job_monitoring_interval = job_monitoring_interval
 
         self._state = 'starting'
+        self.started_job_at = None
         self._is_horse = False
         self._horse_pid = 0
         self._stop_requested = False
@@ -193,6 +196,23 @@ class Worker(object):
         self.failed_job_count = 0
         self.total_working_time = 0
         self.birth_date = None
+        
+        # nuglab custom handlers
+        self.finish_handlers = []
+        if finish_handlers is not None:
+            if isinstance(finish_handlers, list):
+                for f in finish_handlers:
+                    self.push_finish_handlers(f)
+            else:
+                self.push_finish_handlers(finish_handlers)
+
+        self.final_handlers = []
+        if final_handlers is not None:
+            if isinstance(final_handlers, list):
+                for f in final_handlers:
+                    self.push_final_handlers(f)
+            else:
+                self.push_final_handlers(final_handlers)
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -327,6 +347,9 @@ class Worker(object):
     def set_state(self, state, pipeline=None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
+        if state == WorkerStatus.BUSY:
+            self.started_job_at = utcnow()
+            connection.hset(self.key, 'started_job_at', utcformat(self.started_job_at))
         connection.hset(self.key, 'state', state)
 
     def _set_state(self, state):
@@ -770,6 +793,11 @@ class Worker(object):
                     started_job_registry.remove(job, pipeline=pipeline)
 
                     pipeline.execute()
+
+                    # nuglab custom finish handler
+                    logger.info('Call %d handlers on successful finish of job %s', len(self.finish_handlers), job.id)
+                    for f in self.finish_handlers:
+                        f(job, self.connection)
                     break
                 except WatchError:
                     continue
@@ -785,7 +813,6 @@ class Worker(object):
         started_job_registry = StartedJobRegistry(job.origin,
                                                   self.connection,
                                                   job_class=self.job_class)
-
         try:
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
@@ -809,7 +836,10 @@ class Worker(object):
             return False
 
         finally:
-            pop_connection()
+            # nuglab custom finish handler
+            logger.info('Call %d handlers on finishing job, success or failure, %s', len(self.finish_handlers), job.id)
+            for f in self.final_handlers:
+                f(job, self.connection)
 
         self.log.info('{0}: {1} ({2})'.format(green(job.origin), blue('Job OK'), job.id))
         if rv is not None:
@@ -866,6 +896,12 @@ class Worker(object):
             except ValueError:
                 exc_strings = [exc.decode("latin-1") for exc in exc_strings]
         return ''.join(exc_strings)
+
+    def push_finish_handlers(self, finish_handler):
+        self.finish_handlers.append(finish_handler)
+
+    def push_final_handlers(self, final_handler):
+        self.final_handlers.append(final_handler)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
