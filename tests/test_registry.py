@@ -67,9 +67,9 @@ class TestRegistry(RQTestCase):
         self.assertLess(self.testconn.zscore(self.registry.key, job.id),
                         timestamp + 1002)
 
-        # Ensure that a timeout of -1 results in a score of -1
+        # Ensure that a timeout of -1 results in a score of inf
         self.registry.add(job, -1)
-        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), -1)
+        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), float('inf'))
 
         # Ensure that job is properly removed from sorted set
         self.registry.remove(job)

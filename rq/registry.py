@@ -50,8 +50,10 @@ class BaseRegistry(object):
         return self.connection.zcard(self.key)
 
     def add(self, job, ttl=0, pipeline=None):
-        """Adds a job to a registry with expiry time of now + ttl."""
+        """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf"""
         score = ttl if ttl < 0 else current_timestamp() + ttl
+        if score == -1:
+            score = '+inf'
         if pipeline is not None:
             return pipeline.zadd(self.key, score, job.id)
 
