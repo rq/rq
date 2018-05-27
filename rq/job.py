@@ -20,6 +20,7 @@ try:
 except ImportError:  # noqa  # pragma: no cover
     import pickle
 
+
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)

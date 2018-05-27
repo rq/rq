@@ -29,7 +29,7 @@ from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
-from .queue import Queue, get_failed_queue
+from .queue import Queue
 from .registry import (FailedJobRegistry, FinishedJobRegistry,
                        StartedJobRegistry, clean_registries)
 from .suspension import is_suspended
@@ -188,8 +188,6 @@ class Worker(object):
         self._horse_pid = 0
         self._stop_requested = False
         self.log = logger
-        self.failed_queue = get_failed_queue(connection=self.connection,
-                                             job_class=self.job_class)
         self.last_cleaned_at = None
         self.successful_job_count = 0
         self.failed_job_count = 0
@@ -633,9 +631,9 @@ class Worker(object):
 
             # Unhandled failure: move the job to the failed queue
             self.log.warning((
-                'Moving job to {0!r} queue '
+                'Moving job to FailedJobRegistry '
                 '(work-horse terminated unexpectedly; waitpid returned {1})'
-            ).format(self.failed_queue.name, ret_val))
+            ).format(ret_val))
 
             exc_string = "Work-horse process was terminated unexpectedly " + "(waitpid returned %s)" % ret_val
             self.handle_job_failure(
