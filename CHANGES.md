@@ -1,3 +1,10 @@
+### 0.11.0
+- `Worker` now periodically sends heartbeats and checks whether child process is still alive while performing long running jobs. Thanks @Kriechi!
+- `Job.create` now accepts `timeout` in string format (e.g `1h`). Thanks @theodesp!
+- `worker.main_work_horse()` should exit with return code `0` even if job execution fails. Thanks @selwin!
+- `job.delete(delete_dependents=True)` will delete job along with its dependents. Thanks @olingerc!
+- Other minor fixes and documentation updates.
+
 ### 0.10.0
 - `@job` decorator now accepts `description`, `meta`, `at_front` and `depends_on` kwargs. Thanks @jlucas91 and @nlyubchich!
 - Added the capability to fetch workers by queue using `Worker.all(queue=queue)` and `Worker.count(queue=queue)`.
