@@ -27,7 +27,7 @@ your typically lengthy or blocking function:
 import requests
 
 def count_words_at_url(url):
-    """Just an example function that's called async."""
+    """Just an example function that's called asynchronously."""
     resp = requests.get(url)
     return len(resp.text.split())
 ```

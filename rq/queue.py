@@ -58,13 +58,13 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 sync=False, job_class=None):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        self._async = async
+        self._sync = sync
 
         # override class attribute job_class if one was passed
         if job_class is not None:
@@ -303,7 +303,7 @@ class Queue(object):
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
 
-        If Queue is instantiated with async=False, job is executed immediately.
+        If Queue is instantiated with sync=True, job is executed immediately.
         """
         pipe = pipeline if pipeline is not None else self.connection._pipeline()
 
@@ -319,13 +319,13 @@ class Queue(object):
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
 
-        if self._async:
+        if not self._sync:
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
         if pipeline is None:
             pipe.execute()
 
-        if not self._async:
+        if self._sync:
             job = self.run_job(job)
 
         return job
