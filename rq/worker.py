@@ -193,6 +193,7 @@ class Worker(object):
         self.failed_job_count = 0
         self.total_working_time = 0
         self.birth_date = None
+        self._job_success_handlers = []
 
         # By default, push the "move-to-failed-queue" exception handler onto
         # the stack
@@ -801,6 +802,8 @@ class Worker(object):
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
+
+            self.success_job_callback(job,*sys.exc_info())
         except:
             job.ended_at = utcnow()
             self.handle_job_failure(job=job,
@@ -851,6 +854,18 @@ class Worker(object):
             if not fallthrough:
                 break
 
+    def success_job_callback(self,job,*exc_info):
+        """Runs when job is completed."""
+        for handler in reversed(self._job_success_handlers):
+            self.log.debug('Invoking Success handler %s', handler)
+            fallthrough = handler(job, *exc_info)
+
+            if fallthrough is None:
+                fallthrough = True
+
+            if not fallthrough:
+                break
+
     def move_to_failed_queue(self, job, *exc_info):
         """Default exception handler: move the job to the failed queue."""
         self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
@@ -866,6 +881,10 @@ class Worker(object):
             except ValueError:
                 exc_strings = [exc.decode("latin-1") for exc in exc_strings]
         return ''.join(exc_strings)
+
+    def push_job_success_handler(self,handle_func):
+        """pushes success job in success handler stack."""
+        self._job_success_handlers.append(handle_func)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
