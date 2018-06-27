@@ -228,7 +228,7 @@ on a queue:
 ## Limitations
 
 RQ workers will only run on systems that implement `fork()`.  Most notably,
-this means it is not possible to run the workers on Windows.
+this means it is not possible to run the workers on Windows without using the [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/about) and running in a bash shell.
 
 
 [m]: http://pypi.python.org/pypi/mailer
