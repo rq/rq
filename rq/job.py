@@ -461,7 +461,6 @@ class Job(object):
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
 
-
     def to_dict(self, include_meta=True):
         """
         Returns a serialization of the current job instance
