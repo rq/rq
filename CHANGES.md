@@ -1,3 +1,7 @@
+### Unreleased
+
+- `async` is now a reserved keyword in Python 3.7. Because of this, the keyword argument `async` used in the constructor of `Queue` was renamed to `asynk`. Whether you are using Python 3.7 or not, you will need to change calling code to use `asynk` instead of `async`.
+
 ### 0.11.0
 - `Worker` now periodically sends heartbeats and checks whether child process is still alive while performing long running jobs. Thanks @Kriechi!
 - `Job.create` now accepts `timeout` in string format (e.g `1h`). Thanks @theodesp!

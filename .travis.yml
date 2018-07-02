@@ -8,7 +8,7 @@ python:
   - "3.4"
   - "3.5"
   - "3.6"
-  - "3.6-dev"
+  - "3.7-dev" # Unfortunately, as of writing, Travis CI does not support released Python 3.7
   - "pypy"
 install:
   - pip install -e .
