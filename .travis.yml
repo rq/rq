@@ -1,15 +1,23 @@
-sudo: false
+sudo: true
 language: python
 services:
   - redis
-python:
-  - "2.7"
-  - "3.3"
-  - "3.4"
-  - "3.5"
-  - "3.6"
-  - "3.7-dev" # Unfortunately, as of writing, Travis CI does not support released Python 3.7
-  - "pypy"
+matrix:
+  include:
+    - python: "2.7"
+      dist: xenial
+    - python: "3.3"
+      dist: trusty
+    - python: "3.4"
+      dist: trusty
+    - python: "3.5"
+      dist: xenial
+    - python: "3.6"
+      dist: xenial
+    - python: "3.7"
+      dist: xenial
+    - python: "pypy"
+      dist: trusty
 install:
   - pip install -e .
   - pip install pytest-cov
