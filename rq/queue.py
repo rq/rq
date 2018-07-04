@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import warnings
 
 from redis import WatchError
 
@@ -66,6 +67,7 @@ class Queue(object):
         self._default_timeout = parse_timeout(default_timeout)
         if 'async' in kwargs:
             self._async = kwargs['async']
+            warnings.warn('`async` keyword is deprecated. Use sync', DeprecationWarning)
         else:
             self._async = not sync
 
