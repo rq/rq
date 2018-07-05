@@ -23,7 +23,7 @@ worker.work(burst=True)  # Runs enqueued job
 
 ## Running Jobs in unit tests
 
-Another solution for testing purposes is to use the `async=False` queue
+Another solution for testing purposes is to use the `async_=False` queue
 parameter, that instructs it to instantly perform the job in the same
 thread instead of dispatching it to the workers. Workers are not required 
 anymore.
@@ -35,7 +35,7 @@ be directly passed as the connection argument to the queue:
 from fakeredis import FakeStrictRedis
 from rq import Queue
 
-queue = Queue(async=False, connection=FakeStrictRedis())
+queue = Queue(async_=False, connection=FakeStrictRedis())
 job = queue.enqueue(my_long_running_job)
 assert job.is_finished
 {% endhighlight %}
