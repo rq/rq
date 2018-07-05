@@ -645,8 +645,8 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(int(job_from_queue.result_ttl), 10)
 
     def test_async_false(self):
-        """Job executes and cleaned up immediately if async=False."""
-        q = Queue(async=False)
+        """Job executes and cleaned up immediately if async_=False."""
+        q = Queue(async_=False)
         job = q.enqueue(some_calculation, args=(2, 3))
         self.assertEqual(job.return_value, 6)
         self.assertNotEqual(self.testconn.ttl(job.key), -1)

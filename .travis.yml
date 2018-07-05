@@ -1,15 +1,14 @@
-sudo: false
+sudo: true
 language: python
+dist: xenial
 services:
   - redis
 python:
   - "2.7"
-  - "3.3"
-  - "3.4"
   - "3.5"
   - "3.6"
-  - "3.6-dev"
-  - "pypy"
+  - "3.7"
+  - "pypy3.5"
 install:
   - pip install -e .
   - pip install pytest-cov

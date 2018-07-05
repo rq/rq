@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import warnings
 
 from redis import WatchError
 
@@ -58,13 +59,18 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 job_class=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        self._async = async
+        # Use both async_ and async: async is now a reserved keywords in
+        # Python 3.7, so provide an alternative and a backward compatibility.
+        if 'async' in kwargs:
+            warnings.warn('`async` keyword is deprecated. Use async_.',
+                          DeprecationWarning)
+        self._async = kwargs.get('async', kwargs.get('async_', True))
 
         # override class attribute job_class if one was passed
         if job_class is not None:
@@ -303,7 +309,7 @@ class Queue(object):
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
 
-        If Queue is instantiated with async=False, job is executed immediately.
+        If Queue is instantiated with async_=False, job is executed immediately.
         """
         pipe = pipeline if pipeline is not None else self.connection._pipeline()
 

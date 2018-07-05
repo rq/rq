@@ -168,10 +168,10 @@ print job.result
 
 For testing purposes, you can enqueue jobs without delegating the actual
 execution to a worker (available since version 0.3.1). To do this, pass the
-`async=False` argument into the Queue constructor:
+`async_=False` argument into the Queue constructor:
 
 {% highlight pycon %}
->>> q = Queue('low', async=False, connection=my_redis_conn)
+>>> q = Queue('low', async_=False, connection=my_redis_conn)
 >>> job = q.enqueue(fib, 8)
 >>> job.result
 21
