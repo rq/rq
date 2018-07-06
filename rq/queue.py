@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import warnings
 
 from redis import WatchError
 
@@ -58,13 +59,24 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 asynchronous=None, job_class=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        self._async = async
+
+        if 'async' not in kwargs:
+            if asynchronous is None:
+                self._async = True
+            else:
+                self._async = asynchronous
+        else:
+            if asynchronous is not None:
+                raise ValueError('Both of the async(deprecated) and asynchronous keyword is specified and their value is inconsistent.')
+            if asynchronous is None:
+                self._async = kwargs['async']
+                warnings.warn('`async` keyword is deprecated. Use asynchronous', DeprecationWarning)
 
         # override class attribute job_class if one was passed
         if job_class is not None:
