@@ -5,6 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 from tests import RQTestCase
 from tests.fixtures import (div_by_zero, echo, Number, say_hello,
                             some_calculation)
+import warnings
 
 from rq import get_failed_queue, Queue
 from rq.exceptions import InvalidJobDependency, InvalidJobOperationError
@@ -645,8 +646,8 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(int(job_from_queue.result_ttl), 10)
 
     def test_async_false(self):
-        """Job executes and cleaned up immediately if sync=True."""
-        q = Queue(sync=True)
+        """Job executes and cleaned up immediately if async=False."""
+        q = Queue(asynchronous=False)
         job = q.enqueue(some_calculation, args=(2, 3))
         self.assertEqual(job.return_value, 6)
         self.assertNotEqual(self.testconn.ttl(job.key), -1)
@@ -695,3 +696,35 @@ class TestFailedQueue(RQTestCase):
         failed_queue.quarantine(job, Exception('Some fake error'))
 
         self.assertEqual(self.testconn.ttl(job.key), -1)
+
+    def test_arguments_for_backward_compatibility(self):
+        # test when arguments not specified
+        self.assertEqual(Queue()._async, True)
+        # test async/asynchronous as non keyword argument usage
+        self.assertEqual(Queue('default', None, None, True)._async, True)
+        self.assertEqual(Queue('default', None, None, False)._async, False)
+        # test asynchronous for backward compapatibility
+        self.assertEqual(Queue(asynchronous=True)._async, True)
+        self.assertEqual(Queue(asynchronous=False)._async, False)
+        # test async for backward compapatibility and it raises DeprecationWarning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            self.assertEqual(Queue(**{'async': True})._async, True)
+            assert len(w) == 1
+            assert issubclass(w[-1].category, DeprecationWarning)
+            warnings.resetwarnings()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            self.assertEqual(Queue(**{'async': False})._async, False)
+            assert len(w) == 1
+            assert issubclass(w[-1].category, DeprecationWarning)
+            warnings.resetwarnings()
+        # nasty edge cases that specified both
+        with self.assertRaises(ValueError) as context:
+            Queue(asynchronous=True, **{'async': True})
+        with self.assertRaises(ValueError) as context:
+            Queue(asynchronous=True, **{'async': False})
+        with self.assertRaises(ValueError) as context:
+            Queue(asynchronous=False, **{'async': True})
+        with self.assertRaises(ValueError) as context:
+            Queue(asynchronous=False, **{'async': False})

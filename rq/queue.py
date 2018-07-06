@@ -59,17 +59,24 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 sync=False, job_class=None, **kwargs):
+                 asynchronous=None, job_class=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        if 'async' in kwargs:
-            self._async = kwargs['async']
-            warnings.warn('`async` keyword is deprecated. Use sync', DeprecationWarning)
+
+        if 'async' not in kwargs:
+            if asynchronous is None:
+                self._async = True
+            else:
+                self._async = asynchronous
         else:
-            self._async = not sync
+            if asynchronous is not None:
+                raise ValueError('Both of the async(deprecated) and asynchronous keyword is specified and their value is inconsistent.')
+            if asynchronous is None:
+                self._async = kwargs['async']
+                warnings.warn('`async` keyword is deprecated. Use asynchronous', DeprecationWarning)
 
         # override class attribute job_class if one was passed
         if job_class is not None:
