@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import warnings
 
 from redis import WatchError
 
@@ -58,13 +59,17 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 is_async=True, job_class=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        self._async = async
+        self._is_async = is_async
+
+        if 'async' in kwargs:
+            self._is_async = kwargs['async']
+            warnings.warn('The `async` keyword is deprecated. Use `is_async` instead', DeprecationWarning)
 
         # override class attribute job_class if one was passed
         if job_class is not None:
@@ -303,7 +308,7 @@ class Queue(object):
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
 
-        If Queue is instantiated with async=False, job is executed immediately.
+        If Queue is instantiated with is_async=False, job is executed immediately.
         """
         pipe = pipeline if pipeline is not None else self.connection._pipeline()
 
@@ -319,13 +324,13 @@ class Queue(object):
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
 
-        if self._async:
+        if self._is_async:
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
         if pipeline is None:
             pipe.execute()
 
-        if not self._async:
+        if not self._is_async:
             job = self.run_job(job)
 
         return job

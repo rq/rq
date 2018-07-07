@@ -65,7 +65,7 @@ job function.
     and marked as `failed`. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
 * `result_ttl` specifies the expiry time of the key where the job result will
   be stored
-* `ttl` specifies the maximum queued time of the job before it'll be cancelled. 
+* `ttl` specifies the maximum queued time of the job before it'll be cancelled.
   If you specify a value of `-1` you indicate an infinite job ttl and it will run indefinitely
 * `depends_on` specifies another job (or job id) that must complete before this
   job will be queued
@@ -104,7 +104,7 @@ from rq import Queue
 from redis import Redis
 
 redis_conn = Redis()
-q = Queue(connection=redis_conn) 
+q = Queue(connection=redis_conn)
 
 # Getting the number of jobs in the queue
 print len(q)
@@ -168,10 +168,10 @@ print job.result
 
 For testing purposes, you can enqueue jobs without delegating the actual
 execution to a worker (available since version 0.3.1). To do this, pass the
-`async=False` argument into the Queue constructor:
+`is_async=False` argument into the Queue constructor:
 
 {% highlight pycon %}
->>> q = Queue('low', async=False, connection=my_redis_conn)
+>>> q = Queue('low', is_async=False, connection=my_redis_conn)
 >>> job = q.enqueue(fib, 8)
 >>> job.result
 21
