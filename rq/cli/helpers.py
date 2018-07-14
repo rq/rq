@@ -203,7 +203,7 @@ def refresh(interval, func, *args):
             break
 
 
-def setup_loghandlers_from_args(verbose, quiet):
+def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     if verbose and quiet:
         raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
 
@@ -213,7 +213,7 @@ def setup_loghandlers_from_args(verbose, quiet):
         level = 'WARNING'
     else:
         level = 'INFO'
-    setup_loghandlers(level)
+    setup_loghandlers(level, datefmt=date_format, logfmt=log_format)
 
 
 class CliConfig(object):
