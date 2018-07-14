@@ -1,4 +1,9 @@
-### 0.11.0
+### 0.12.0 (2018-07-14)
+- Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
+`Queue(async=False)` has been changed to `Queue(is_async=False)`. The `async`
+keyword argument will still work, but raises a `DeprecationWarning`. Thanks @dchevell!
+
+### 0.11.0 (2018-06-01)
 - `Worker` now periodically sends heartbeats and checks whether child process is still alive while performing long running jobs. Thanks @Kriechi!
 - `Job.create` now accepts `timeout` in string format (e.g `1h`). Thanks @theodesp!
 - `worker.main_work_horse()` should exit with return code `0` even if job execution fails. Thanks @selwin!
