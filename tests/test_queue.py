@@ -651,6 +651,13 @@ class TestFailedQueue(RQTestCase):
         self.assertEqual(job.return_value, 6)
         self.assertNotEqual(self.testconn.ttl(job.key), -1)
 
+    def test_is_async(self):
+        """Queue exposes is_async as a property."""
+        inline_queue = Queue(is_async=False)
+        self.assertFalse(inline_queue.is_async)
+        async_queue = Queue(is_async=True)
+        self.assertTrue(async_queue.is_async)
+
     def test_custom_job_class(self):
         """Ensure custom job class assignment works as expected."""
         q = Queue(job_class=CustomJob)
