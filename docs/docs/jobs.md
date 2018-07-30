@@ -20,7 +20,7 @@ from rq import get_current_job
 
 def add(x, y):
     job = get_current_job()
-    print 'Current job: %s' % (job.id,)
+    print('Current job: %s' % (job.id,))
     return x + y
 {% endhighlight %}
 
@@ -40,7 +40,7 @@ def add(x, y):
     job = get_current_job()
     job.meta['handled_by'] = socket.gethostname()
     job.save_meta()
-    
+
     # do more work
     time.sleep(1)
     return x + y
@@ -65,8 +65,8 @@ job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
 
 ## Failed Jobs
 
-If a job fails and raises an exception, the worker will put the job in a failed job queue. 
-On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan 
+If a job fails and raises an exception, the worker will put the job in a failed job queue.
+On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan
 through the `get_failed_queue()` queue.
 
 {% highlight python %}
