@@ -632,7 +632,7 @@ class Worker(object):
             # Unhandled failure: move the job to the failed queue
             self.log.warning((
                 'Moving job to FailedJobRegistry '
-                '(work-horse terminated unexpectedly; waitpid returned {1})'
+                '(work-horse terminated unexpectedly; waitpid returned {})'
             ).format(ret_val))
 
             exc_string = "Work-horse process was terminated unexpectedly " + "(waitpid returned %s)" % ret_val
