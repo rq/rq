@@ -5,7 +5,7 @@ from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job, JobStatus
-from rq.queue import FailedQueue, Queue
+from rq.queue import Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
 from rq.registry import (clean_registries, DeferredJobRegistry,
@@ -94,31 +94,8 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
                          ['foo', 'bar'])
 
-    def test_cleanup(self):
-        """Moving expired jobs to FailedQueue."""
-        failed_queue = FailedQueue(connection=self.testconn)
-        self.assertTrue(failed_queue.is_empty())
-
-        queue = Queue(connection=self.testconn)
-        job = queue.enqueue(say_hello)
-
-        self.testconn.zadd(self.registry.key, 2, job.id)
-
-        self.registry.cleanup(1)
-        self.assertNotIn(job.id, failed_queue.job_ids)
-        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), 2)
-
-        self.registry.cleanup()
-        self.assertIn(job.id, failed_queue.job_ids)
-        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), None)
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-
     def test_cleanup_moves_jobs_to_failed_job_registry(self):
-        """Moving expired jobs to FailedQueue."""
-        failed_queue = FailedQueue(connection=self.testconn)
-        self.assertTrue(failed_queue.is_empty())
-
+        """Moving expired jobs to FailedJobRegistry."""
         queue = Queue(connection=self.testconn)
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
         job = queue.enqueue(say_hello)

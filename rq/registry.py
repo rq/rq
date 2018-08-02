@@ -3,7 +3,7 @@ from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
-from .queue import FailedQueue, Queue
+from .queue import Queue
 from .utils import backend_class, current_timestamp
 
 
@@ -97,7 +97,7 @@ class StartedJobRegistry(BaseRegistry):
     key_template = 'rq:wip:{0}'
 
     def cleanup(self, timestamp=None):
-        """Remove expired jobs from registry and add them to FailedQueue.
+        """Remove expired jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
@@ -108,8 +108,6 @@ class StartedJobRegistry(BaseRegistry):
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
-            failed_queue = FailedQueue(connection=self.connection,
-                                       job_class=self.job_class)
 
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
@@ -120,7 +118,6 @@ class StartedJobRegistry(BaseRegistry):
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
-                        failed_queue.push_job_id(job_id, pipeline=pipeline)
                     except NoSuchJobError:
                         pass
 
