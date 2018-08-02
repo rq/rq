@@ -220,13 +220,14 @@ class TestJob(RQTestCase):
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job.func, job2.func)
         self.assertEqual(job.args, job2.args)
         self.assertEqual(job.kwargs, job2.kwargs)
+        self.assertEqual(job.timeout, job2.timeout)
 
         # Mathematical equation
         self.assertEqual(job, job2)
@@ -402,17 +403,17 @@ class TestJob(RQTestCase):
         assert get_failed_queue(self.testconn).count == 0
 
     def test_job_access_within_synchronous_job_function(self):
-        queue = Queue(async=False)
+        queue = Queue(is_async=False)
         queue.enqueue(fixtures.access_self)
 
     def test_job_async_status_finished(self):
-        queue = Queue(async=False)
+        queue = Queue(is_async=False)
         job = queue.enqueue(fixtures.say_hello)
         self.assertEqual(job.result, 'Hi there, Stranger!')
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_enqueue_job_async_status_finished(self):
-        queue = Queue(async=False)
+        queue = Queue(is_async=False)
         job = Job.create(func=fixtures.say_hello)
         job = queue.enqueue_job(job)
         self.assertEqual(job.result, 'Hi there, Stranger!')

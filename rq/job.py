@@ -13,7 +13,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import enum, import_attribute, utcformat, utcnow, utcparse
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse, parse_timeout
 
 try:
     import cPickle as pickle
@@ -126,7 +126,7 @@ class Job(object):
         job.result_ttl = result_ttl
         job.failure_ttl = failure_ttl
         job.ttl = ttl
-        job.timeout = timeout
+        job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
 
@@ -435,7 +435,7 @@ class Job(object):
         self.started_at = to_date(as_text(obj.get('started_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
+        self.timeout = parse_timeout(as_text(obj.get('timeout'))) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
