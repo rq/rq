@@ -12,7 +12,7 @@ import sys
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, get_failed_queue, __version__ as version
+from rq import Connection, __version__ as version
 from rq.cli.helpers import (read_config_file, refresh,
                             setup_loghandlers_from_args,
                             show_both, show_queues, show_workers, CliConfig)
@@ -22,6 +22,7 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL,
                          DEFAULT_JOB_MONITORING_INTERVAL)
 from rq.exceptions import InvalidJobOperationError
+from rq.registry import FailedJobRegistry
 from rq.utils import import_attribute
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
@@ -111,16 +112,16 @@ def empty(cli_config, all, queues, **options):
 
 @main.command()
 @click.option('--all', '-a', is_flag=True, help='Requeue all failed jobs')
+@click.option('--queue', required=True, type=str)
 @click.argument('job_ids', nargs=-1)
 @pass_cli_config
-def requeue(cli_config, all, job_class, job_ids, **options):
+def requeue(cli_config, queue, all, job_class, job_ids,  **options):
     """Requeue failed jobs."""
 
-    failed_queue = get_failed_queue(connection=cli_config.connection,
-                                    job_class=cli_config.job_class)
-
+    failed_job_registry = FailedJobRegistry(queue,
+                                            connection=cli_config.connection)
     if all:
-        job_ids = failed_queue.job_ids
+        job_ids = failed_job_registry.get_job_ids()
 
     if not job_ids:
         click.echo('Nothing to do')
@@ -131,12 +132,12 @@ def requeue(cli_config, all, job_class, job_ids, **options):
     with click.progressbar(job_ids) as job_ids:
         for job_id in job_ids:
             try:
-                failed_queue.requeue(job_id)
+                failed_job_registry.requeue(job_id)
             except InvalidJobOperationError:
                 fail_count += 1
 
     if fail_count > 0:
-        click.secho('Unable to requeue {0} jobs from failed queue'.format(fail_count), fg='red')
+        click.secho('Unable to requeue {0} jobs from failed job registry'.format(fail_count), fg='red')
 
 
 @main.command()

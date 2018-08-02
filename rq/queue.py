@@ -164,6 +164,12 @@ class Queue(object):
         """Returns a count of all messages in the queue."""
         return self.connection.llen(self.key)
 
+    @property
+    def failed_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import FailedJobRegistry
+        return FailedJobRegistry(queue=self)
+
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
