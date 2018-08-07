@@ -38,11 +38,11 @@ q = Queue(connection=redis_conn)  # no args implies the default queue
 
 # Delay execution of count_words_at_url('http://nvie.com')
 job = q.enqueue(count_words_at_url, 'http://nvie.com')
-print job.result   # => None
+print(job.result)   # => None
 
 # Now, wait a while, until the worker is finished
 time.sleep(2)
-print job.result   # => 889
+print(job.result)   # => 889
 {% endhighlight %}
 
 If you want to put the work on a specific queue, simply specify its name:
@@ -107,7 +107,7 @@ redis_conn = Redis()
 q = Queue(connection=redis_conn)
 
 # Getting the number of jobs in the queue
-print len(q)
+print(len(q))
 
 # Retrieving jobs
 queued_job_ids = q.job_ids # Gets a list of job IDs from the queue
@@ -160,7 +160,7 @@ def add(x, y):
 
 job = add.delay(3, 4)
 time.sleep(1)
-print job.result
+print(job.result)
 {% endhighlight %}
 
 
