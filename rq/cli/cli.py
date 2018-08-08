@@ -20,7 +20,8 @@ from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
                          DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL,
-                         DEFAULT_JOB_MONITORING_INTERVAL)
+                         DEFAULT_JOB_MONITORING_INTERVAL,
+                         DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from rq.exceptions import InvalidJobOperationError
 from rq.utils import import_attribute
 from rq.suspension import (suspend as connection_suspend,
@@ -173,6 +174,8 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--logging_level', type=str, default="INFO", help='Set logging level')
+@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
+@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
 @click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL , help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL , help='Default worker timeout to be used')
@@ -186,7 +189,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, job_monitoring_interval, verbose, quiet, sentry_dsn,
-           exception_handler, pid, queues, **options):
+           exception_handler, pid, queues, log_format, date_format, **options):
     """Starts an RQ worker."""
 
     settings = read_config_file(cli_config.config) if cli_config.config else {}
@@ -198,7 +201,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
 
-    setup_loghandlers_from_args(verbose, quiet)
+    setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     try:
 
@@ -233,7 +236,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             client = Client(sentry_dsn, transport=HTTPTransport)
             register_sentry(client, worker)
 
-        worker.work(burst=burst, logging_level=logging_level)
+        worker.work(burst=burst, logging_level=logging_level, date_format=date_format, log_format=log_format)
     except ConnectionError as e:
         print(e)
         sys.exit(1)
