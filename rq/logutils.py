@@ -9,12 +9,12 @@ from rq.defaults import (DEFAULT_LOGGING_FORMAT,
                          DEFAULT_LOGGING_DATE_FORMAT)
 
 
-def setup_loghandlers(level, datefmt=DEFAULT_LOGGING_DATE_FORMAT,
-                      logfmt=DEFAULT_LOGGING_FORMAT):
+def setup_loghandlers(level, date_format=DEFAULT_LOGGING_DATE_FORMAT,
+                      log_format=DEFAULT_LOGGING_FORMAT):
     logger = logging.getLogger('rq.worker')
     if not _has_effective_handler(logger):
         logger.setLevel(level)
-        formatter = logging.Formatter(fmt=logfmt, datefmt=datefmt)
+        formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
         handler = ColorizingStreamHandler()
         handler.setFormatter(formatter)
         logger.addHandler(handler)
