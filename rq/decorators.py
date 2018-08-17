@@ -51,6 +51,7 @@ class job(object):  # noqa
 
             depends_on = kwargs.pop('depends_on', None)
             at_front = kwargs.pop('at_front', False)
+            meta = kwargs.pop('meta', {})
 
             if not depends_on:
                 depends_on = self.depends_on
@@ -58,9 +59,12 @@ class job(object):  # noqa
             if not at_front:
                 at_front = self.at_front
 
+            if not meta:
+                meta = self.meta
+
             return queue.enqueue_call(f, args=args, kwargs=kwargs,
                                       timeout=self.timeout, result_ttl=self.result_ttl,
                                       ttl=self.ttl, depends_on=depends_on, at_front=at_front,
-                                      meta=self.meta, description=self.description)
+                                      meta=meta, description=self.description)
         f.delay = delay
         return f
