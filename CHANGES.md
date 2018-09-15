@@ -1,3 +1,7 @@
+### 1.0 ()
+Backwards incompatible:
+- The order of custom exception handlers are no longer reversed when handling job exceptions
+
 ### 0.12.0 (2018-07-14)
 - Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
 `Queue(async=False)` has been changed to `Queue(is_async=False)`. The `async`

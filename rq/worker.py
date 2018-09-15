@@ -846,7 +846,7 @@ class Worker(object):
             'queue': job.origin,
         })
 
-        for handler in reversed(self._exc_handlers):
+        for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
             fallthrough = handler(job, *exc_info)
 

@@ -27,8 +27,7 @@ from tests.fixtures import (create_file, create_file_after_timeout,
                             modify_self, modify_self_and_error,
                             long_running_job)
 
-from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
-                get_current_connection)
+from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
 from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
@@ -197,11 +196,8 @@ class TestWorker(RQTestCase):
         )
 
     def test_work_is_unreadable(self):
-        """Unreadable jobs are put on the failed queue."""
+        """Unreadable jobs are put on the failed job registry."""
         q = Queue()
-        failed_q = get_failed_queue()
-
-        self.assertEqual(failed_q.count, 0)
         self.assertEqual(q.count, 0)
 
         # NOTE: We have to fake this enqueueing for this test case.
@@ -270,10 +266,6 @@ class TestWorker(RQTestCase):
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
         q = Queue()
-        failed_q = get_failed_queue()
-
-        # Preconditions
-        self.assertEqual(failed_q.count, 0)
         self.assertEqual(q.count, 0)
 
         # Action
@@ -354,31 +346,52 @@ class TestWorker(RQTestCase):
 
     def test_custom_exc_handling(self):
         """Custom exception handling."""
+
+        def first_handler(job, *exc_info):
+            job.meta = {'first_handler': True}
+            job.save_meta()
+            return True
+
+        def second_handler(job, *exc_info):
+            job.meta.update({'second_handler': True})
+            job.save_meta()
+
         def black_hole(job, *exc_info):
             # Don't fall through to default behaviour (moving to failed queue)
             return False
 
         q = Queue()
-        failed_q = get_failed_queue()
-
-        # Preconditions
-        self.assertEqual(failed_q.count, 0)
         self.assertEqual(q.count, 0)
-
-        # Action
         job = q.enqueue(div_by_zero)
-        self.assertEqual(q.count, 1)
 
-        w = Worker([q], exception_handlers=black_hole)
-        w.work(burst=True)  # should silently pass
-
-        # Postconditions
-        self.assertEqual(q.count, 0)
-        self.assertEqual(failed_q.count, 0)
+        w = Worker([q], exception_handlers=first_handler)
+        w.work(burst=True)
 
         # Check the job
-        job = Job.fetch(job.id)
+        job.refresh()
         self.assertEqual(job.is_failed, True)
+        self.assertTrue(job.meta['first_handler'])
+
+        job = q.enqueue(div_by_zero)
+        w = Worker([q], exception_handlers=[first_handler, second_handler])
+        w.work(burst=True)
+
+        # Both custom exception handlers are run
+        job.refresh()
+        self.assertEqual(job.is_failed, True)
+        self.assertTrue(job.meta['first_handler'])
+        self.assertTrue(job.meta['second_handler'])
+
+        job = q.enqueue(div_by_zero)
+        w = Worker([q], exception_handlers=[first_handler, black_hole,
+                                            second_handler])
+        w.work(burst=True)
+
+        # second_handler is not run since it's interrupted by black_hole
+        job.refresh()
+        self.assertEqual(job.is_failed, True)
+        self.assertTrue(job.meta['first_handler'])
+        self.assertEqual(job.meta.get('second_handler'), None)
 
     def test_cancelled_jobs_arent_executed(self):
         """Cancelling jobs."""
@@ -1075,7 +1088,6 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
         super(TestExceptionHandlerMessageEncoding, self).setUp()
         self.worker = Worker("foo")
         self.worker._exc_handlers = []
-        self.worker.failed_queue = Mock()
         # Mimic how exception info is actually passed forwards
         try:
             raise Exception(u"💪")

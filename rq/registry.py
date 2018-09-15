@@ -28,7 +28,6 @@ class BaseRegistry(object):
         self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
 
-
     def __len__(self):
         """Returns the number of jobs in this registry"""
         return self.count
