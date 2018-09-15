@@ -24,8 +24,10 @@ from redis import WatchError
 from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
-from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
-                       DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL)
+
+from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_RESULT_TTL,
+                       DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
+                       DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
@@ -442,7 +444,8 @@ class Worker(object):
         if before_state:
             self.set_state(before_state)
 
-    def work(self, burst=False, logging_level="INFO"):
+    def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
+             log_format=DEFAULT_LOGGING_FORMAT):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -451,7 +454,7 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers(logging_level)
+        setup_loghandlers(logging_level, date_format, log_format)
         self._install_signal_handlers()
 
         did_perform_work = False

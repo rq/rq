@@ -130,6 +130,11 @@ class Queue(object):
         """Returns whether the current queue is empty."""
         return self.count == 0
 
+    @property
+    def is_async(self):
+        """Returns whether the current queue is async."""
+        return bool(self._is_async)
+
     def fetch_job(self, job_id):
         try:
             job = self.job_class.fetch(job_id, connection=self.connection)

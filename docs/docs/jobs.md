@@ -20,7 +20,7 @@ from rq import get_current_job
 
 def add(x, y):
     job = get_current_job()
-    print 'Current job: %s' % (job.id,)
+    print('Current job: %s' % (job.id,))
     return x + y
 {% endhighlight %}
 
