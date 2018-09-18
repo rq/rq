@@ -803,6 +803,28 @@ class TestWorker(RQTestCase):
         w.perform_job(job, q)
         self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
 
+    @mock.patch('rq.worker.logger.info')
+    def test_log_job_description_true(self, mock_logger_info):
+        """Check that log_job_description True causes job lifespan to be logged."""
+        q = Queue()
+        w = Worker([q])
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w.dequeue_job_and_maintain_ttl(10)
+        self.assertIn("Frank",  mock_logger_info.call_args[0][0])
+
+    @mock.patch('rq.worker.logger.info')
+    def test_log_job_description_false(self, mock_logger_info):
+        """Check that log_job_description False causes job lifespan to not be logged."""
+        q = Queue()
+
+        class TestWorker(Worker):
+            log_job_description = False
+
+        w = TestWorker([q])
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w.dequeue_job_and_maintain_ttl(10)
+        self.assertNotIn("Frank", mock_logger_info.call_args[0][0])
+
 
 def kill_worker(pid, double_kill):
     # wait for the worker to be started over on the main process

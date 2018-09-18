@@ -100,6 +100,8 @@ class Worker(object):
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
     # messages are logged after every job, by default they are.
     log_result_lifespan = True
+    # `log_job_description` is used to toggle logging an entire jobs description.
+    log_job_description = True
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None):
@@ -520,9 +522,14 @@ class Worker(object):
                                                       connection=self.connection,
                                                       job_class=self.job_class)
                 if result is not None:
+
                     job, queue = result
-                    self.log.info('{0}: {1} ({2})'.format(green(queue.name),
-                                                          blue(job.description), job.id))
+                    if self.log_job_description:
+                        self.log.info('{0}: {1} ({2})'.format(green(queue.name),
+                                                              blue(job.description), job.id))
+                    else:
+                        self.log.info('{0}:{1}'.format(green(queue.name),
+                                                       job.id))
 
                 break
             except DequeueTimeout:
