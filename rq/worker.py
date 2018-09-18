@@ -526,7 +526,8 @@ class Worker(object):
                     job, queue = result
                     if self.log_job_description:
                         self.log.info('{0}: {1} ({2})'.format(green(queue.name),
-                                                              blue(job.description), job.id))
+                                                              blue(job.description),
+                                                              job.id))
                     else:
                         self.log.info('{0}:{1}'.format(green(queue.name),
                                                        job.id))
