@@ -162,7 +162,8 @@ class Worker(object):
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
                  queue_class=None,
-                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
+                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
+                 log_job_description=True):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -189,6 +190,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stop_requested = False
         self.log = logger
+        self.log_job_description = log_job_description
         self.failed_queue = get_failed_queue(connection=self.connection,
                                              job_class=self.job_class)
         self.last_cleaned_at = None

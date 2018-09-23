@@ -816,11 +816,7 @@ class TestWorker(RQTestCase):
     def test_log_job_description_false(self, mock_logger_info):
         """Check that log_job_description False causes job lifespan to not be logged."""
         q = Queue()
-
-        class TestWorker(Worker):
-            log_job_description = False
-
-        w = TestWorker([q])
+        w = Worker([q], log_job_description=False)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][0])
