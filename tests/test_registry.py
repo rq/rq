@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import InvalidJobOperation
-from rq.job import Job, JobStatus
+from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
@@ -322,6 +322,28 @@ class TestFailedJobRegistry(RQTestCase):
 
         # Should also work with job instance
         registry.requeue(job)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # requeue_job should work the same way
+        requeue_job(job.id, connection=self.testconn)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # And so does job.requeue()
+        job.requeue()
         self.assertFalse(job in registry)
         self.assertIn(job.id, queue.get_job_ids())
 

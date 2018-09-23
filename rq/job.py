@@ -73,6 +73,11 @@ def get_current_job(connection=None, job_class=None):
     return _job_stack.top
 
 
+def requeue_job(job_id, connection):
+    job = Job.fetch(job_id, connection=connection)
+    return job.requeue()
+
+
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
@@ -531,6 +536,10 @@ class Job(object):
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
+    def requeue(self):
+        """Requeues job."""
+        self.failed_job_registry.requeue(self)
+
     def delete(self, pipeline=None, remove_from_queue=True,
                delete_dependents=False):
         """Cancels the job and deletes the job hash from Redis. Jobs depending
@@ -561,11 +570,7 @@ class Job(object):
             registry.remove(self, pipeline=pipeline)
 
         elif self.get_status() == JobStatus.FAILED:
-            from .registry import FailedJobRegistry
-            registry = FailedJobRegistry(self.origin,
-                                         connection=self.connection,
-                                         job_class=self.__class__)
-            registry.remove(self, pipeline=pipeline)
+            self.failed_job_registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
@@ -647,6 +652,12 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+
+    @property
+    def failed_job_registry(self):
+        from .registry import FailedJobRegistry
+        return FailedJobRegistry(self.origin, connection=self.connection,
+                                 job_class=self.__class__)
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
