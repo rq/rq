@@ -1000,7 +1000,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
     @slow
     @mock.patch('rq.worker.logger.warning')
-    def test_shutdown_double_sigrtmin(self):
+    def test_shutdown_double_sigrtmin(self, mock_logger_info):
         """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
         p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10))
         p.start()
