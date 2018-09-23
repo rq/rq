@@ -463,7 +463,6 @@ class Worker(object):
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self._install_signal_handlers()
-
         did_perform_work = False
         self.register_birth()
         self.log.info("RQ worker {0!r} started, version {1}".format(self.key, VERSION))
@@ -671,16 +670,15 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
-        self.setup_work_horse_signals()
-
-        self._is_horse = True
-        self.log = logger
-
-        success = self.perform_job(job, queue)
-
-        # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
-        os._exit(0)
+        try:
+            self.setup_work_horse_signals()
+            self._is_horse = True
+            self.log = logger
+            self.perform_job(job, queue)
+        finally:
+            # os._exit() is the way to exit from childs after a fork(), in
+            # constrast to the regular sys.exit()
+            os._exit(0)
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse."""
