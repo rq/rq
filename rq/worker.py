@@ -675,8 +675,9 @@ class Worker(object):
             self._is_horse = True
             self.log = logger
             self.perform_job(job, queue)
-        except:  # noqa
+        except Exception as e:  # noqa
             # Horse does not terminate properly
+            raise e
             os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in

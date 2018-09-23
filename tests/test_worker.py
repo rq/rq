@@ -999,8 +999,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
-    @mock.patch('rq.worker.logger.warning')
-    def test_shutdown_double_sigrtmin(self, mock_logger_info):
+    def test_shutdown_double_sigrtmin(self):
         """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
         p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10))
         p.start()
@@ -1015,12 +1014,10 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        calls = [c for c in mock_logger_info.call_args_list]
-        self.assertEqual('raising ShutDownImminentException to cancel job...', calls)
-        # with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-        #     stderr = f.read().strip('\n')
-        #     err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
-        #     self.assertTrue(stderr.endswith(err), stderr)
+        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
+            stderr = f.read().strip('\n')
+            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
+            self.assertTrue(stderr.endswith(err), stderr)
 
     def test_handle_shutdown_request(self):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process
