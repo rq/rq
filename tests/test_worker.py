@@ -1015,8 +1015,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        c = in mock_logger_info.call_args_list[-1]
-        self.assertEqual('raising ShutDownImminentException to cancel job...', c)
+        calls = [c[0][0] for c in mock_logger_info.call_args_list]
+        self.assertEqual('raising ShutDownImminentException to cancel job...', calls)
         # with open(os.path.join(self.sandbox, 'stderr.log')) as f:
         #     stderr = f.read().strip('\n')
         #     err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
