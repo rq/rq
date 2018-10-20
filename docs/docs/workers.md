@@ -224,7 +224,7 @@ QUEUES = ['high', 'normal', 'low']
 # The 'sync+' prefix is required for raven: https://github.com/nvie/rq/issues/350#issuecomment-43592410
 SENTRY_DSN = 'sync+http://public:secret@example.com/1'
 
-# You can custom worker name
+# If you want custom worker name
 # NAME = 'worker-1024'
 {% endhighlight %}
 
