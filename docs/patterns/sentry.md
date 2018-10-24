@@ -9,6 +9,14 @@ layout: patterns
 that RQ supports integrating with since version 0.3.1, through its custom
 exception handlers.
 
+<div class="warning" style="margin-top: 20px">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="{{site.baseurl}}img/warning.png" />
+    <strong>Note:</strong>
+    <p>
+      This feature is deprecated. You are encouraged to use <a href="https://docs.sentry.io/platforms/python/rq/">Sentry's own RQ integration</a> in their new SDK.
+    </p>
+</div>
+
 RQ includes a convenience function that registers your existing Sentry client
 to send all exceptions to.
 
