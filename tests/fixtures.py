@@ -12,7 +12,7 @@ import sys
 
 from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
-from rq.compat import PY2
+from rq.compat import PY2, text_type
 from rq.worker import HerokuWorker
 
 
@@ -29,7 +29,7 @@ def say_hello(name=None):
 
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
-    return unicode(say_hello(name))  # noqa
+    return text_type(say_hello(name))  # noqa
 
 
 def do_nothing():
