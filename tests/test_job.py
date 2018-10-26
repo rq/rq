@@ -19,7 +19,7 @@ from tests import fixtures, RQTestCase
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, get_current_job, JobStatus, cancel_job
-from rq.queue import Queue, get_failed_queue
+from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry)
 from rq.utils import utcformat
@@ -397,10 +397,11 @@ class TestJob(RQTestCase):
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""
         q = Queue()
-        q.enqueue(fixtures.access_self)  # access_self calls get_current_job() and asserts
+        job = q.enqueue(fixtures.access_self)
         w = Worker([q])
         w.work(burst=True)
-        assert get_failed_queue(self.testconn).count == 0
+        # access_self calls get_current_job() and executes successfully
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_job_access_within_synchronous_job_function(self):
         queue = Queue(is_async=False)
@@ -629,15 +630,6 @@ class TestJob(RQTestCase):
         self.assertEqual(1, len(queue.get_jobs()))
         cancel_job(job.id)
         self.assertEqual(0, len(queue.get_jobs()))
-
-    def test_create_failed_and_cancel_job(self):
-        """test creating and using cancel_job deletes job properly"""
-        failed_queue = get_failed_queue(connection=self.testconn)
-        job = failed_queue.enqueue(fixtures.say_hello)
-        job.set_status(JobStatus.FAILED)
-        self.assertEqual(1, len(failed_queue.get_jobs()))
-        cancel_job(job.id)
-        self.assertEqual(0, len(failed_queue.get_jobs()))
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""

@@ -16,11 +16,6 @@ from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, utcnow, parse_timeout
 
 
-def get_failed_queue(connection=None, job_class=None):
-    """Returns a handle to the special failed queue."""
-    return FailedQueue(connection=connection, job_class=job_class)
-
-
 def compact(lst):
     return [item for item in lst if item is not None]
 
