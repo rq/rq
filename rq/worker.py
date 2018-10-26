@@ -685,18 +685,20 @@ class Worker(object):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job):
+    def prepare_job_execution(self, job, heartbeat_ttl=None):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
         timeout = (job.timeout or 180) + 60
 
+        if heartbeat_ttl is None:
+            heartbeat_ttl = self.job_monitoring_interval + 5
+
         with self.connection._pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
-            self.heartbeat(self.job_monitoring_interval + 5, pipeline=pipeline)
-            registry = StartedJobRegistry(job.origin,
-                                          self.connection,
+            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
@@ -782,11 +784,11 @@ class Worker(object):
                 except WatchError:
                     continue
 
-    def perform_job(self, job, queue):
+    def perform_job(self, job, queue, heartbeat_ttl=None):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.prepare_job_execution(job)
+        self.prepare_job_execution(job, heartbeat_ttl)
         push_connection(self.connection)
 
         started_job_registry = StartedJobRegistry(job.origin,
@@ -910,9 +912,10 @@ class SimpleWorker(Worker):
     def main_work_horse(self, *args, **kwargs):
         raise NotImplementedError("Test worker does not implement this method")
 
-    def execute_job(self, *args, **kwargs):
+    def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
-        return self.perform_job(*args, **kwargs)
+        timeout = (job.timeout or DEFAULT_WORKER_TTL) + 5
+        return self.perform_job(job, queue, heartbeat_ttl=timeout)
 
 
 class HerokuWorker(Worker):

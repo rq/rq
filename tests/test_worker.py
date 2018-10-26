@@ -21,11 +21,11 @@ import mock
 from mock import Mock
 
 from tests import RQTestCase, slow
-from tests.fixtures import (create_file, create_file_after_timeout,
-                            div_by_zero, do_nothing, say_hello, say_pid,
-                            run_dummy_heroku_worker, access_self,
-                            modify_self, modify_self_and_error,
-                            long_running_job)
+from tests.fixtures import (
+    create_file, create_file_after_timeout, div_by_zero, do_nothing, say_hello,
+    say_pid, run_dummy_heroku_worker, access_self, modify_self,
+    modify_self_and_error, long_running_job, save_key_ttl
+)
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
@@ -573,6 +573,17 @@ class TestWorker(RQTestCase):
                          'Expected at least some work done.')
         self.assertEqual(job.result, os.getpid(),
                          'PID mismatch, fork() is not supposed to happen here')
+
+    def test_simpleworker_heartbeat_ttl(self):
+        """SimpleWorker's key must last longer than job.timeout when working"""
+        queue = Queue('foo')
+
+        worker = SimpleWorker([queue])
+        job_timeout = 300
+        job = queue.enqueue(save_key_ttl, worker.key, timeout=job_timeout)
+        worker.work(burst=True)
+        job.refresh()
+        self.assertGreater(job.meta['ttl'], job_timeout)
 
     def test_prepare_job_execution(self):
         """Prepare job execution does the necessary bookkeeping."""

@@ -198,6 +198,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
     # Worker specific default arguments
     queues = queues or settings.get('QUEUES', ['default'])
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
+    name = name or settings.get('NAME')
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:

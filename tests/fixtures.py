@@ -125,6 +125,14 @@ def add_meta(job, *exc_info):
     return True
 
 
+def save_key_ttl(key):
+    # Stores key ttl in meta
+    job = get_current_job()
+    ttl = job.connection.ttl(key)
+    job.meta = {'ttl': ttl}
+    job.save_meta()
+
+
 def long_running_job(timeout=10):
     time.sleep(timeout)
     return 'Done sleeping...'
