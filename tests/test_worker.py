@@ -616,14 +616,16 @@ class TestWorker(RQTestCase):
         logging work properly"""
         q = Queue("foo")
         w = Worker([q])
-        q.enqueue('tests.fixtures.say_hello', name='阿达姆',
-                  description='你好 世界!')
-        self.assertEqual(w.work(burst=True), True,
-                         'Expected at least some work done.')
-        q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
-                  description='你好 世界!')
-        self.assertEqual(w.work(burst=True), True,
-                         'Expected at least some work done.')
+
+        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆',
+                        description='你好 世界!')
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
+                        description='你好 世界!')
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
