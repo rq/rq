@@ -510,28 +510,3 @@ class Queue(object):
 
     def __str__(self):
         return '<{0} {1}>'.format(self.__class__.__name__, self.name)
-
-
-class FailedQueue(Queue):
-    def __init__(self, connection=None, job_class=None):
-        super(FailedQueue, self).__init__(JobStatus.FAILED,
-                                          connection=connection,
-                                          job_class=job_class)
-
-    def quarantine(self, job, exc_info):
-        """Puts the given Job in quarantine (i.e. put it on the failed
-        queue).
-        """
-
-        with self.connection._pipeline() as pipeline:
-            # Add Queue key set
-            self.connection.sadd(self.redis_queues_keys, self.key)
-
-            job.exc_info = exc_info
-            job.save(pipeline=pipeline, include_meta=False)
-            job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire
-
-            self.push_job_id(job.id, pipeline=pipeline)
-            pipeline.execute()
-
-        return job
