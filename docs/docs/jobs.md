@@ -8,9 +8,32 @@ instance from within the job function itself.  Or to store arbitrary data on
 jobs.
 
 
-## Accessing the "current" job
+## Retrieving Job from Redis
 
-_New in version 0.3.3._
+All job information is stored in Redis. You can inspect a job and its attributes
+by using `Job.fetch()`.
+
+{% highlight python %}
+from redis import Redis
+from rq.job import Job
+
+connection = Redis()
+job = Job.fetch('my_job_id', connection=redis)
+print('Status: %s' $ job.get_status())
+{% endhighlight %}
+
+Some interesting job attributes include:
+* `job.status`
+* `job.func_name`
+* `job.args`
+* `job.kwargs`
+* `job.result`
+* `job.enqueued_at`
+* `job.started_at`
+* `job.ended_at`
+* `job.exc_info`
+
+## Accessing the "current" job
 
 Since job functions are regular Python functions, you have to ask RQ for the
 current job ID, if any.  To do this, you can use:

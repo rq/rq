@@ -798,7 +798,7 @@ class Worker(object):
         try:
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
-            with self.death_penalty_class(timeout, JobTimeoutException):
+            with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 rv = job.perform()
 
             job.ended_at = utcnow()
