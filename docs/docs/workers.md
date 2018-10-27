@@ -8,7 +8,7 @@ solely as a work horse to perform lengthy or blocking tasks that you don't want
 to perform inside web processes.
 
 
-## Starting workers
+## Starting Workers
 
 To start crunching work, simply start a worker from the root of your project
 directory:
@@ -30,7 +30,7 @@ concurrent processing going on.  If you want to perform jobs concurrently,
 simply start more workers.
 
 
-### Burst mode
+### Burst Mode
 
 By default, workers will start working immediately and will block and wait for
 new work when they run out of work.  Workers can also be started in _burst
@@ -50,7 +50,7 @@ This can be useful for batch work that needs to be processed periodically, or
 just to scale up your workers temporarily during peak periods.
 
 
-### Worker arguments
+### Worker Arguments
 
 In addition to `--burst`, `rq worker` also accepts these arguments:
 
@@ -67,7 +67,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 
 ## Inside the worker
 
-### The worker life-cycle
+### The Worker Lifecycle
 
 The life-cycle of a worker consists of a few phases:
 
@@ -90,7 +90,7 @@ The life-cycle of a worker consists of a few phases:
 8. _Loop_.  Repeat from step 3.
 
 
-## Performance notes
+## Performance Notes
 
 Basically the `rq worker` shell script is a simple fetch-fork-execute loop.
 When a lot of your jobs do lengthy setups, or they all depend on the same set
@@ -124,7 +124,7 @@ with Connection():
 {% endhighlight %}
 
 
-### Worker names
+### Worker Names
 
 Workers are registered to the system under their names, see [monitoring][m].
 By default, the name of a worker is equal to the concatenation of the current
@@ -134,7 +134,7 @@ starting the worker, using the `--name` option.
 [m]: /docs/monitoring/
 
 
-### Retrieving worker information
+### Retrieving Worker Information
 
 `Worker` instances store their runtime information in Redis. Here's how to
 retrieve them:
@@ -173,7 +173,7 @@ workers = Worker.all(queue=queue)
 {% endhighlight %}
 
 
-### Worker statistics
+### Worker Statistics
 
 _New in version 0.9.0._
 
@@ -185,12 +185,12 @@ from rq.worker import Worker
 worker = Worker.find_by_key('rq:worker:name')
 
 worker.successful_job_count  # Number of jobs finished successfully
-worker.failed_job_count. # Number of failed jobs processed by this worker
+worker.failed_job_count # Number of failed jobs processed by this worker
 worker.total_working_time  # Number of time spent executing jobs
 {% endhighlight %}
 
 
-## Taking down workers
+## Taking Down Workers
 
 If, at any time, the worker receives `SIGINT` (via Ctrl+C) or `SIGTERM` (via
 `kill`), the worker wait until the currently running task is finished, stop
@@ -201,9 +201,7 @@ worker will forcefully terminate the child process (sending it `SIGKILL`), but
 will still try to register its own death.
 
 
-## Using a config file
-
-_New in version 0.3.2._
+## Using a Config File
 
 If you'd like to configure `rq worker` via a configuration file instead of
 through command line arguments, you can do this by creating a Python file like
@@ -241,7 +239,7 @@ $ rq worker -c settings
 {% endhighlight %}
 
 
-## Custom worker classes
+## Custom Worker Classes
 
 There are times when you want to customize the worker's behavior. Some of the
 more common requests so far are:
@@ -258,7 +256,7 @@ $ rq worker -w 'path.to.GeventWorker'
 {% endhighlight %}
 
 
-## Custom Job and Queue classes
+## Custom Job and Queue Classes
 
 You can tell the worker to use a custom class for jobs and queues using
 `--job-class` and/or `--queue-class`.
@@ -286,7 +284,7 @@ queue.enqueue(some_func)
 {% endhighlight %}
 
 
-## Custom DeathPenalty classes
+## Custom DeathPenalty Classes
 
 When a Job times-out, the worker will try to kill it using the supplied
 `death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
@@ -297,7 +295,6 @@ DeathPenalty classes are constructed with the following arguments
 
 
 ## Custom Exception Handlers
-
 
 If you need to handle errors differently for different types of jobs, or simply want to customize
 RQ's default error handling behavior, run `rq worker` using the `--exception-handler` option:
