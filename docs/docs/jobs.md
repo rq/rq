@@ -96,6 +96,13 @@ assert len(registry) == 0
 assert queue.count == 1
 {% endhighlight %}
 
+By default, failed jobs are kept for 1 year. You can change this by specifying
+`failure_ttl` (in seconds) when enqueueing jobs.
+
+{% highlight python %}
+job = queue.enqueue(foo_job, failure_ttl=300)  # 5 minutes in seconds
+{% endhighlight %}
+
 ## Requeueing Failed Jobs
 
 RQ also provides a CLI tool that makes requeueing failed jobs easy.
