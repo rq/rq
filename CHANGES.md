@@ -1,6 +1,14 @@
-### 1.0 ()
-Backwards incompatible:
-- The order of custom exception handlers are no longer reversed when handling job exceptions
+### 1.0 (Not Yet Released)
+Backward incompatible changes:
+
+- `FailedQueue` has been replaced with `FailedJobRegistry`:
+  * `get_failed_queue()` function has been removed. Please use `FailedJobRegistry(queue=queue)` instead.
+  * `move_to_failed_queue()` has been removed.
+  * RQ now provides a mechanism to automatically cleanup failed jobs. By default, failed jobs are kept for 1 year.
+
+- RQ's custom job exception handling mechanism has also changed slightly:
+  * RQ's default exception handling mechanism (moving jobs to `FailedQueueRegistry`) can be disabled by doing `Worker(disable_default_exception_handler=True)`.
+  * Custom exception handlers are no longer executed in reverse order.
 
 ### 0.12.0 (2018-07-14)
 - Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
