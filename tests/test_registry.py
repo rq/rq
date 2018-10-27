@@ -2,12 +2,15 @@
 from __future__ import absolute_import
 
 from rq.compat import as_text
-from rq.job import Job, JobStatus
-from rq.queue import FailedQueue, Queue
+from rq.defaults import DEFAULT_FAILURE_TTL
+from rq.exceptions import InvalidJobOperation
+from rq.job import Job, JobStatus, requeue_job
+from rq.queue import Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
 from rq.registry import (clean_registries, DeferredJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry)
+                         FailedJobRegistry, FinishedJobRegistry,
+                         StartedJobRegistry)
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -40,6 +43,19 @@ class TestRegistry(RQTestCase):
     def test_custom_job_class(self):
         registry = StartedJobRegistry(job_class=CustomJob)
         self.assertFalse(registry.job_class == self.registry.job_class)
+
+    def test_contains(self):
+        registry = StartedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        self.assertFalse(job in registry)
+        self.assertFalse(job.id in registry)
+
+        registry.add(job, 5)
+
+        self.assertTrue(job in registry)
+        self.assertTrue(job.id in registry)
 
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
@@ -78,23 +94,22 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
                          ['foo', 'bar'])
 
-    def test_cleanup(self):
-        """Moving expired jobs to FailedQueue."""
-        failed_queue = FailedQueue(connection=self.testconn)
-        self.assertTrue(failed_queue.is_empty())
-
+    def test_cleanup_moves_jobs_to_failed_job_registry(self):
+        """Moving expired jobs to FailedJobRegistry."""
         queue = Queue(connection=self.testconn)
+        failed_job_registry = FailedJobRegistry(connection=self.testconn)
         job = queue.enqueue(say_hello)
 
         self.testconn.zadd(self.registry.key, 2, job.id)
 
+        # Job has not been moved to FailedJobRegistry
         self.registry.cleanup(1)
-        self.assertNotIn(job.id, failed_queue.job_ids)
-        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), 2)
+        self.assertNotIn(job, failed_job_registry)
+        self.assertIn(job, self.registry)
 
         self.registry.cleanup()
-        self.assertIn(job.id, failed_queue.job_ids)
-        self.assertEqual(self.testconn.zscore(self.registry.key, job.id), None)
+        self.assertIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
 
@@ -158,9 +173,22 @@ class TestRegistry(RQTestCase):
         started_job_registry = StartedJobRegistry(connection=self.testconn)
         self.testconn.zadd(started_job_registry.key, 1, 'foo')
 
+        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        self.testconn.zadd(failed_job_registry.key, 1, 'foo')
+
         clean_registries(queue)
         self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(failed_job_registry.key), 0)
+
+    def test_get_queue(self):
+        """registry.get_queue() returns the right Queue object."""
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_queue(), Queue(connection=self.testconn))
+
+        registry = StartedJobRegistry('foo', connection=self.testconn)
+        self.assertEqual(registry.get_queue(),
+                         Queue('foo', connection=self.testconn))
 
 
 class TestFinishedJobRegistry(RQTestCase):
@@ -225,7 +253,7 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(job_ids, [job.id])
 
     def test_register_dependency(self):
-        """Ensure job creation and deletion works properly with DeferredJobRegistry."""
+        """Ensure job creation and deletion works with DeferredJobRegistry."""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(say_hello)
         job2 = queue.enqueue(say_hello, depends_on=job)
@@ -236,3 +264,119 @@ class TestDeferredRegistry(RQTestCase):
         # When deleted, job removes itself from DeferredJobRegistry
         job2.delete()
         self.assertEqual(registry.get_job_ids(), [])
+
+
+class TestFailedJobRegistry(RQTestCase):
+
+    def test_default_failure_ttl(self):
+        """Job TTL defaults to DEFAULT_FAILURE_TTL"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        registry = FailedJobRegistry(connection=self.testconn)
+        key = registry.key
+
+        timestamp = current_timestamp()
+        registry.add(job)
+        self.assertLess(
+            self.testconn.zscore(key, job.id),
+            timestamp + DEFAULT_FAILURE_TTL + 2
+        )
+        self.assertGreater(
+            self.testconn.zscore(key, job.id),
+            timestamp + DEFAULT_FAILURE_TTL - 2
+        )
+
+        timestamp = current_timestamp()
+        ttl = 5
+        registry.add(job, ttl=5)
+        self.assertLess(
+            self.testconn.zscore(key, job.id),
+            timestamp + ttl + 2
+        )
+        self.assertGreater(
+            self.testconn.zscore(key, job.id),
+            timestamp + ttl - 2
+        )
+
+    def test_requeue(self):
+        """FailedJobRegistry.requeue works properly"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(div_by_zero, failure_ttl=5)
+
+        worker = Worker([queue])
+        worker.work(burst=True)
+
+        registry = FailedJobRegistry(connection=worker.connection)
+        self.assertTrue(job in registry)
+
+        registry.requeue(job.id)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # Should also work with job instance
+        registry.requeue(job)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # requeue_job should work the same way
+        requeue_job(job.id, connection=self.testconn)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # And so does job.requeue()
+        job.requeue()
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.status, JobStatus.QUEUED)
+
+    def test_invalid_job(self):
+        """Requeuing a job that's not in FailedJobRegistry raises an error."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        registry = FailedJobRegistry(connection=self.testconn)
+        with self.assertRaises(InvalidJobOperation):
+            registry.requeue(job)
+
+    def test_worker_handle_job_failure(self):
+        """Failed jobs are added to FailedJobRegistry"""
+        q = Queue(connection=self.testconn)
+
+        w = Worker([q])
+        registry = FailedJobRegistry(connection=w.connection)
+
+        timestamp = current_timestamp()
+
+        job = q.enqueue(div_by_zero, failure_ttl=5)
+        w.handle_job_failure(job)
+        # job is added to FailedJobRegistry with default failure ttl
+        self.assertIn(job.id, registry.get_job_ids())
+        self.assertLess(self.testconn.zscore(registry.key, job.id),
+                        timestamp + DEFAULT_FAILURE_TTL + 5)
+
+        # job is added to FailedJobRegistry with specified ttl
+        job = q.enqueue(div_by_zero, failure_ttl=5)
+        w.handle_job_failure(job)
+        self.assertLess(self.testconn.zscore(registry.key, job.id),
+                        timestamp + 7)

@@ -10,10 +10,10 @@
 /dist
 /build
 .tox
+.pytest_cache/
 .vagrant
 Vagrantfile
 .idea/
 .coverage*
 /.cache
 
-.pytest_cache/

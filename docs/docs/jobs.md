@@ -65,31 +65,52 @@ job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
 
 ## Failed Jobs
 
-If a job fails and raises an exception, the worker will put the job in a failed job queue.
-On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan
-through the `get_failed_queue()` queue.
+If a job fails during execution, the worker will put the job in a FailedJobRegistry.
+On the Job instance, the `is_failed` property will be true. FailedJobRegistry
+can be accessed through `queue.failed_job_registry`.
 
 {% highlight python %}
 from redis import StrictRedis
-from rq import push_connection, get_failed_queue, Queue
+from rq import Queue
 from rq.job import Job
 
-
-con = StrictRedis()
-push_connection(con)
 
 def div_by_zero(x):
     return x / 0
 
-job = Job.create(func=div_by_zero, args=(1, 2, 3))
-job.origin = 'fake'
-job.save()
-fq = get_failed_queue()
-fq.quarantine(job, Exception('Some fake error'))
-assert fq.count == 1
 
-fq.requeue(job.id)
+connection = StrictRedis()
+queue = Queue(connection=connection)
+job = queue.enqueue(div_by_zero, 1)
+registry = queue.failed_job_registry
 
-assert fq.count == 0
-assert Queue('fake').count == 1
+worker = Worker([queue])
+worker.work(burst=True)
+
+assert len(registry) == 1  # Failed jobs are kept in FailedJobRegistry
+
+registry.requeue(job)  # Puts job back in its original queue
+
+assert len(registry) == 0
+
+assert queue.count == 1
+{% endhighlight %}
+
+By default, failed jobs are kept for 1 year. You can change this by specifying
+`failure_ttl` (in seconds) when enqueueing jobs.
+
+{% highlight python %}
+job = queue.enqueue(foo_job, failure_ttl=300)  # 5 minutes in seconds
+{% endhighlight %}
+
+## Requeueing Failed Jobs
+
+RQ also provides a CLI tool that makes requeueing failed jobs easy.
+
+{% highlight console %}
+# This will requeue foo_job_id and bar_job_id from myqueue's failed job registry
+rq requeue --queue myqueue -u redis://localhost:6379 foo_job_id bar_job_id
+
+# This command will requeue all jobs in myqueue's failed job registry
+rq requeue --queue myqueue -u redis://localhost:6379 --all
 {% endhighlight %}

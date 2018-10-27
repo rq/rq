@@ -16,11 +16,6 @@ from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, utcnow, parse_timeout
 
 
-def get_failed_queue(connection=None, job_class=None):
-    """Returns a handle to the special failed queue."""
-    return FailedQueue(connection=connection, job_class=job_class)
-
-
 def compact(lst):
     return [item for item in lst if item is not None]
 
@@ -141,8 +136,7 @@ class Queue(object):
         except NoSuchJobError:
             self.remove(job_id)
         else:
-            if job.origin == self.name or \
-                    (job.is_failed and self == get_failed_queue(connection=self.connection, job_class=self.job_class)):
+            if job.origin == self.name:
                 return job
 
     def get_job_ids(self, offset=0, length=-1):
@@ -174,6 +168,12 @@ class Queue(object):
     def count(self):
         """Returns a count of all messages in the queue."""
         return self.connection.llen(self.key)
+
+    @property
+    def failed_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import FailedJobRegistry
+        return FailedJobRegistry(queue=self)
 
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
@@ -210,8 +210,9 @@ class Queue(object):
             connection.rpush(self.key, job_id)
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, ttl=None, description=None,
-                     depends_on=None, job_id=None, at_front=False, meta=None):
+                     result_ttl=None, ttl=None, failure_ttl=None,
+                     description=None, depends_on=None, job_id=None,
+                     at_front=False, meta=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -221,13 +222,15 @@ class Queue(object):
         """
         timeout = parse_timeout(timeout) or self._default_timeout
         result_ttl = parse_timeout(result_ttl)
+        failure_ttl = parse_timeout(failure_ttl)
         ttl = parse_timeout(ttl)
 
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
-            result_ttl=result_ttl, ttl=ttl, status=JobStatus.QUEUED,
-            description=description, depends_on=depends_on,
-            timeout=timeout, id=job_id, origin=self.name, meta=meta)
+            result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
+            status=JobStatus.QUEUED, description=description,
+            depends_on=depends_on, timeout=timeout, id=job_id,
+            origin=self.name, meta=meta)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -295,6 +298,7 @@ class Queue(object):
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)
+        failure_ttl = kwargs.pop('failure_ttl', None)
         depends_on = kwargs.pop('depends_on', None)
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
@@ -305,10 +309,12 @@ class Queue(object):
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 
-        return self.enqueue_call(func=f, args=args, kwargs=kwargs,
-                                 timeout=timeout, result_ttl=result_ttl, ttl=ttl,
-                                 description=description, depends_on=depends_on,
-                                 job_id=job_id, at_front=at_front, meta=meta)
+        return self.enqueue_call(
+            func=f, args=args, kwargs=kwargs, timeout=timeout,
+            result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
+            description=description, depends_on=depends_on, job_id=job_id,
+            at_front=at_front, meta=meta
+        )
 
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
@@ -504,48 +510,3 @@ class Queue(object):
 
     def __str__(self):
         return '<{0} {1}>'.format(self.__class__.__name__, self.name)
-
-
-class FailedQueue(Queue):
-    def __init__(self, connection=None, job_class=None):
-        super(FailedQueue, self).__init__(JobStatus.FAILED,
-                                          connection=connection,
-                                          job_class=job_class)
-
-    def quarantine(self, job, exc_info):
-        """Puts the given Job in quarantine (i.e. put it on the failed
-        queue).
-        """
-
-        with self.connection._pipeline() as pipeline:
-            # Add Queue key set
-            self.connection.sadd(self.redis_queues_keys, self.key)
-
-            job.exc_info = exc_info
-            job.save(pipeline=pipeline, include_meta=False)
-            job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire
-
-            self.push_job_id(job.id, pipeline=pipeline)
-            pipeline.execute()
-
-        return job
-
-    def requeue(self, job_id):
-        """Requeues the job with the given job ID."""
-        try:
-            job = self.job_class.fetch(job_id, connection=self.connection)
-        except NoSuchJobError:
-            # Silently ignore/remove this job and return (i.e. do nothing)
-            self.remove(job_id)
-            return
-
-        # Delete it from the failed queue (raise an error if that failed)
-        if self.remove(job) == 0:
-            raise InvalidJobOperationError('Cannot requeue non-failed jobs')
-
-        job.set_status(JobStatus.QUEUED)
-        job.exc_info = None
-        queue = Queue(job.origin,
-                      connection=self.connection,
-                      job_class=self.job_class)
-        return queue.enqueue_job(job)

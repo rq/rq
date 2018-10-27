@@ -86,7 +86,7 @@ The life-cycle of a worker consists of a few phases:
 7. _Cleanup job execution_. The worker sets its status to `idle` and sets both
    the job and its result to expire based on `result_ttl`. Job is also removed
    from `StartedJobRegistry` and added to to `FinishedJobRegistry` in the case
-   of successful execution, or `FailedQueue` in the case of failure.
+   of successful execution, or `FailedJobRegistry` in the case of failure.
 8. _Loop_.  Repeat from step 3.
 
 
@@ -243,8 +243,6 @@ $ rq worker -c settings
 
 ## Custom worker classes
 
-_New in version 0.4.0._
-
 There are times when you want to customize the worker's behavior. Some of the
 more common requests so far are:
 
@@ -261,8 +259,6 @@ $ rq worker -w 'path.to.GeventWorker'
 
 
 ## Custom Job and Queue classes
-
-_Will be available in next release._
 
 You can tell the worker to use a custom class for jobs and queues using
 `--job-class` and/or `--queue-class`.
@@ -294,15 +290,14 @@ queue.enqueue(some_func)
 
 When a Job times-out, the worker will try to kill it using the supplied
 `death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
-if you wish to attempt to kill jobs in an application specific or 'cleaner' manner. 
+if you wish to attempt to kill jobs in an application specific or 'cleaner' manner.
 
 DeathPenalty classes are constructed with the following arguments
 `BaseDeathPenalty(timeout, JobTimeoutException, job_id=job.id)`
 
 
-## Custom exception handlers
+## Custom Exception Handlers
 
-_New in version 0.5.5._
 
 If you need to handle errors differently for different types of jobs, or simply want to customize
 RQ's default error handling behavior, run `rq worker` using the `--exception-handler` option:
@@ -312,4 +307,10 @@ $ rq worker --exception-handler 'path.to.my.ErrorHandler'
 
 # Multiple exception handlers is also supported
 $ rq worker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
+{% endhighlight %}
+
+If you want to disable RQ's default exception handler, use the `--disable-default-exception-handler` option:
+
+{% highlight console %}
+$ rq worker --exception-handler 'path.to.my.ErrorHandler' --disable-default-exception-handler
 {% endhighlight %}

@@ -20,6 +20,7 @@ try:
 except ImportError:  # noqa  # pragma: no cover
     import pickle
 
+
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
@@ -62,16 +63,6 @@ def cancel_job(job_id, connection=None):
     Job.fetch(job_id, connection=connection).cancel()
 
 
-def requeue_job(job_id, connection=None, job_class=None):
-    """Requeues the job with the given job ID.  If no such job exists, just
-    remove the job ID from the failed queue, otherwise the job ID should refer
-    to a failed job (i.e. it should be on the failed queue).
-    """
-    from .queue import get_failed_queue
-    failed_queue = get_failed_queue(connection=connection, job_class=job_class)
-    return failed_queue.requeue(job_id)
-
-
 def get_current_job(connection=None, job_class=None):
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
@@ -80,6 +71,11 @@ def get_current_job(connection=None, job_class=None):
         warnings.warn("job_class argument for get_current_job is deprecated.",
                       DeprecationWarning)
     return _job_stack.top
+
+
+def requeue_job(job_id, connection):
+    job = Job.fetch(job_id, connection=connection)
+    return job.requeue()
 
 
 class Job(object):
@@ -91,7 +87,8 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None,
+               failure_ttl=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -132,6 +129,7 @@ class Job(object):
         # Extra meta data
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
+        job.failure_ttl = failure_ttl
         job.ttl = ttl
         job.timeout = parse_timeout(timeout)
         job._status = status
@@ -319,6 +317,7 @@ class Job(object):
         self.exc_info = None
         self.timeout = None
         self.result_ttl = None
+        self.failure_ttl = None
         self.ttl = None
         self._status = None
         self._dependency_id = None
@@ -443,6 +442,7 @@ class Job(object):
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
         self.timeout = parse_timeout(as_text(obj.get('timeout'))) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
+        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
@@ -455,7 +455,6 @@ class Job(object):
             except zlib.error:
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
-
 
     def to_dict(self, include_meta=True):
         """
@@ -489,6 +488,8 @@ class Job(object):
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
+        if self.failure_ttl is not None:
+            obj['failure_ttl'] = self.failure_ttl
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_id is not None:
@@ -535,11 +536,14 @@ class Job(object):
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
+    def requeue(self):
+        """Requeues job."""
+        self.failed_job_registry.requeue(self)
+
     def delete(self, pipeline=None, remove_from_queue=True,
                delete_dependents=False):
         """Cancels the job and deletes the job hash from Redis. Jobs depending
         on this job can optionally be deleted as well."""
-
         if remove_from_queue:
             self.cancel(pipeline=pipeline)
         connection = pipeline if pipeline is not None else self.connection
@@ -566,10 +570,7 @@ class Job(object):
             registry.remove(self, pipeline=pipeline)
 
         elif self.get_status() == JobStatus.FAILED:
-            from .queue import get_failed_queue
-            failed_queue = get_failed_queue(connection=self.connection,
-                                            job_class=self.__class__)
-            failed_queue.remove(self, pipeline=pipeline)
+            self.failed_job_registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
@@ -651,6 +652,12 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+
+    @property
+    def failed_job_registry(self):
+        from .registry import FailedJobRegistry
+        return FailedJobRegistry(self.origin, connection=self.connection,
+                                 job_class=self.__class__)
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they

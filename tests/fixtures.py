@@ -119,6 +119,12 @@ def black_hole(job, *exc_info):
     return False
 
 
+def add_meta(job, *exc_info):
+    job.meta = {'foo': 1}
+    job.save()
+    return True
+
+
 def save_key_ttl(key):
     # Stores key ttl in meta
     job = get_current_job()

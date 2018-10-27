@@ -24,13 +24,16 @@ from redis import WatchError
 from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
-from .defaults import (DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
+
+from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_RESULT_TTL,
+                       DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
-from .queue import Queue, get_failed_queue
-from .registry import FinishedJobRegistry, StartedJobRegistry, clean_registries
+from .queue import Queue
+from .registry import (FailedJobRegistry, FinishedJobRegistry,
+                       StartedJobRegistry, clean_registries)
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
@@ -159,7 +162,7 @@ class Worker(object):
     def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
-                 queue_class=None,
+                 queue_class=None, disable_default_exception_handler=False,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
         if connection is None:
             connection = get_current_connection()
@@ -187,27 +190,17 @@ class Worker(object):
         self._horse_pid = 0
         self._stop_requested = False
         self.log = logger
-        self.failed_queue = get_failed_queue(connection=self.connection,
-                                             job_class=self.job_class)
         self.last_cleaned_at = None
         self.successful_job_count = 0
         self.failed_job_count = 0
         self.total_working_time = 0
         self.birth_date = None
 
-        # By default, push the "move-to-failed-queue" exception handler onto
-        # the stack
-        if exception_handlers is None:
-            self.push_exc_handler(self.move_to_failed_queue)
-            if exc_handler is not None:
-                self.push_exc_handler(exc_handler)
-                warnings.warn(
-                    "exc_handler is deprecated, pass a list to exception_handlers instead.",
-                    DeprecationWarning
-                )
-        elif isinstance(exception_handlers, list):
-            for h in exception_handlers:
-                self.push_exc_handler(h)
+        self.disable_default_exception_handler = disable_default_exception_handler
+
+        if isinstance(exception_handlers, list):
+            for handler in exception_handlers:
+                self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
@@ -638,19 +631,17 @@ class Worker(object):
             if not job.ended_at:
                 job.ended_at = utcnow()
 
-            self.handle_job_failure(job=job)
-
             # Unhandled failure: move the job to the failed queue
             self.log.warning((
-                'Moving job to {0!r} queue '
-                '(work-horse terminated unexpectedly; waitpid returned {1})'
-            ).format(self.failed_queue.name, ret_val))
-            self.failed_queue.quarantine(
+                'Moving job to FailedJobRegistry '
+                '(work-horse terminated unexpectedly; waitpid returned {})'
+            ).format(ret_val))
+
+            exc_string = "Work-horse process was terminated unexpectedly " + "(waitpid returned %s)" % ret_val
+            self.handle_job_failure(
                 job,
-                exc_info=(
-                    "Work-horse process was terminated unexpectedly "
-                    "(waitpid returned {0})"
-                ).format(ret_val)
+                exc_string="Work-horse process was terminated unexpectedly "
+                           "(waitpid returned %s)" % ret_val
             )
 
     def execute_job(self, job, queue):
@@ -717,24 +708,37 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_failure(self, job, started_job_registry=None):
+    def handle_job_failure(self, job, started_job_registry=None,
+                           exc_string=''):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
-            2. Removing the job from the started_job_registry
+            2. Removing the job from StartedJobRegistry
             3. Setting the workers current job to None
+            4. Add the job to FailedJobRegistry
         """
         with self.connection._pipeline() as pipeline:
             if started_job_registry is None:
-                started_job_registry = StartedJobRegistry(job.origin,
-                                                          self.connection,
-                                                          job_class=self.job_class)
+                started_job_registry = StartedJobRegistry(
+                    job.origin,
+                    self.connection,
+                    job_class=self.job_class
+                )
             job.set_status(JobStatus.FAILED, pipeline=pipeline)
             started_job_registry.remove(job, pipeline=pipeline)
+
+            if not self.disable_default_exception_handler:
+                failed_job_registry = FailedJobRegistry(job.origin, job.connection,
+                                                        job_class=self.job_class)
+                failed_job_registry.add(job, ttl=job.failure_ttl,
+                                        exc_string=exc_string, pipeline=pipeline)
+
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
-                self.increment_total_working_time(job.ended_at - job.started_at,
-                                                  pipeline)
+                self.increment_total_working_time(
+                    job.ended_at - job.started_at,
+                    pipeline
+                )
 
             try:
                 pipeline.execute()
@@ -785,7 +789,6 @@ class Worker(object):
         inside the work horse's process.
         """
         self.prepare_job_execution(job, heartbeat_ttl)
-
         push_connection(self.connection)
 
         started_job_registry = StartedJobRegistry(job.origin,
@@ -803,15 +806,18 @@ class Worker(object):
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
-
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except:
             job.ended_at = utcnow()
-            self.handle_job_failure(job=job,
+            exc_info = sys.exc_info()
+            exc_string = self._get_safe_exception_string(
+                traceback.format_exception(*exc_info)
+            )
+            self.handle_job_failure(job=job, exc_string=exc_string,
                                     started_job_registry=started_job_registry)
-            self.handle_exception(job, *sys.exc_info())
+            self.handle_exception(job, *exc_info)
             return False
 
         finally:
@@ -845,7 +851,7 @@ class Worker(object):
             'queue': job.origin,
         })
 
-        for handler in reversed(self._exc_handlers):
+        for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
             fallthrough = handler(job, *exc_info)
 
@@ -856,12 +862,6 @@ class Worker(object):
 
             if not fallthrough:
                 break
-
-    def move_to_failed_queue(self, job, *exc_info):
-        """Default exception handler: move the job to the failed queue."""
-        self.log.warning('Moving job to {0!r} queue'.format(self.failed_queue.name))
-        from .handlers import move_to_failed_queue
-        move_to_failed_queue(job, *exc_info)
 
     @staticmethod
     def _get_safe_exception_string(exc_strings):
