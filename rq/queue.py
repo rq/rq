@@ -291,7 +291,12 @@ class Queue(object):
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
-        timeout = kwargs.pop('timeout', None)
+        timeout = kwargs.pop('job_timeout', None)
+        if timeout is None:
+            timeout = kwargs.pop('timeout', None)
+            if timeout:
+                warnings.warn('The `timeout` keyword is deprecated. Use `job_timeout` instead', DeprecationWarning)
+
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)

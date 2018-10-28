@@ -257,7 +257,7 @@ class TestWorker(RQTestCase):
         for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
             job = q.enqueue(long_running_job,
                             args=(timeout,),
-                            timeout=30,
+                            job_timeout=30,
                             result_ttl=-1)
             with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
                 w.execute_job(job, q)
@@ -392,7 +392,7 @@ class TestWorker(RQTestCase):
         # Put it on the queue with a timeout value
         res = q.enqueue(create_file_after_timeout,
                         args=(sentinel_file, 4),
-                        timeout=1)
+                        job_timeout=1)
 
         try:
             os.unlink(sentinel_file)
@@ -543,7 +543,7 @@ class TestWorker(RQTestCase):
 
         worker = SimpleWorker([queue])
         job_timeout = 300
-        job = queue.enqueue(save_key_ttl, worker.key, timeout=job_timeout)
+        job = queue.enqueue(save_key_ttl, worker.key, job_timeout=job_timeout)
         worker.work(burst=True)
         job.refresh()
         self.assertGreater(job.meta['ttl'], job_timeout)
