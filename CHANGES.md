@@ -1,6 +1,8 @@
 ### 1.0 (Not Yet Released)
 Backward incompatible changes:
 
+- `job.status` has been removed. Use `job.get_status()` and `job.set_status()` instead.
+
 - `FailedQueue` has been replaced with `FailedJobRegistry`:
   * `get_failed_queue()` function has been removed. Please use `FailedJobRegistry(queue=queue)` instead.
   * `move_to_failed_queue()` has been removed.

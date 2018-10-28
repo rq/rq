@@ -144,25 +144,9 @@ class Job(object):
         self._status = as_text(self.connection.hget(self.key, 'status'))
         return self._status
 
-    def _get_status(self):
-        warnings.warn(
-            "job.status is deprecated. Use job.get_status() instead",
-            DeprecationWarning
-        )
-        return self.get_status()
-
     def set_status(self, status, pipeline=None):
         self._status = status
         self.connection._hset(self.key, 'status', self._status, pipeline)
-
-    def _set_status(self, status):
-        warnings.warn(
-            "job.status is deprecated. Use job.set_status() instead",
-            DeprecationWarning
-        )
-        self.set_status(status)
-
-    status = property(_get_status, _set_status)
 
     @property
     def is_finished(self):

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
 from rq.compat import as_text
@@ -315,7 +315,7 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
-        self.assertEqual(job.status, JobStatus.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
         self.assertTrue(job in registry)
@@ -326,7 +326,7 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
-        self.assertEqual(job.status, JobStatus.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
         self.assertTrue(job in registry)
@@ -337,7 +337,7 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
-        self.assertEqual(job.status, JobStatus.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
         self.assertTrue(job in registry)
@@ -348,7 +348,7 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
-        self.assertEqual(job.status, JobStatus.QUEUED)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_invalid_job(self):
         """Requeuing a job that's not in FailedJobRegistry raises an error."""
