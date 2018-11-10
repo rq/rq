@@ -484,7 +484,10 @@ class Job(object):
             except:
                 obj['result'] = 'Unpickleable return value'
         if self.exc_info is not None:
-            obj['exc_info'] = zlib.compress(str(unicode(self.exc_info).encode('utf-8')))
+            try:
+                obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
+            except:
+                obj['exc_info'] = zlib.compress(unicode(self.exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
