@@ -73,7 +73,7 @@ possibly resubmit the job.
 When workers get killed in the polite way (Ctrl+C or `kill`), RQ tries hard not
 to lose any work.  The current work is finished after which the worker will
 stop further processing of jobs.  This ensures that jobs always get a fair
-change to finish themselves.
+chance to finish themselves.
 
 However, workers can be killed forcefully by `kill -9`, which will not give the
 workers a chance to finish the job gracefully or to put the job on the `failed`
