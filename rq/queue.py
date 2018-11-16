@@ -525,7 +525,7 @@ class FailedQueue(Queue):
             job.save(pipeline=pipeline, include_meta=False)
             job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire
 
-            self.push_job_id(job.id, pipeline=pipeline)
+            self.push_job_id(str(job.id), pipeline=pipeline)
             pipeline.execute()
 
         return job
