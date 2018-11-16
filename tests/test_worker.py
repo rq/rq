@@ -676,12 +676,12 @@ class TestWorker(RQTestCase):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""
         foo_queue = Queue('foo', connection=self.testconn)
         foo_registry = StartedJobRegistry('foo', connection=self.testconn)
-        self.testconn.zadd(foo_registry.key, 1, 'foo')
+        self.testconn.zadd(foo_registry.key, {'foo': 1})
         self.assertEqual(self.testconn.zcard(foo_registry.key), 1)
 
         bar_queue = Queue('bar', connection=self.testconn)
         bar_registry = StartedJobRegistry('bar', connection=self.testconn)
-        self.testconn.zadd(bar_registry.key, 1, 'bar')
+        self.testconn.zadd(bar_registry.key, {'bar': 1})
         self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
 
         worker = Worker([foo_queue, bar_queue])
@@ -706,7 +706,7 @@ class TestWorker(RQTestCase):
         """Worker calls clean_registries when run."""
         queue = Queue(connection=self.testconn)
         registry = StartedJobRegistry(connection=self.testconn)
-        self.testconn.zadd(registry.key, 1, 'foo')
+        self.testconn.zadd(registry.key, {'foo': 1})
 
         worker = Worker(queue, connection=self.testconn)
         worker.work(burst=True)

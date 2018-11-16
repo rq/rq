@@ -3,7 +3,7 @@ them in the background with workers.  It is backed by Redis and it is designed
 to have a low barrier to entry.  It should be integrated in your web stack
 easily.
 
-RQ requires Redis >= 2.7.0.
+RQ requires Redis >= 3.0.0.
 
 [![Build status](https://travis-ci.org/rq/rq.svg?branch=master)](https://secure.travis-ci.org/rq/rq)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
