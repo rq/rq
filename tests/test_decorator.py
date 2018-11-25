@@ -3,7 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import mock
-from redis import StrictRedis
+from redis import Redis
 from rq.decorators import job
 from rq.job import Job
 from rq.worker import DEFAULT_RESULT_TTL
@@ -152,7 +152,7 @@ class TestDecorator(RQTestCase):
     def test_decorator_connection_laziness(self, resolve_connection):
         """Ensure that job decorator resolve connection in `lazy` way """
 
-        resolve_connection.return_value = StrictRedis()
+        resolve_connection.return_value = Redis()
 
         @job(queue='queue_name')
         def foo():

@@ -46,7 +46,7 @@ class BaseRegistry(object):
         if pipeline is not None:
             return pipeline.zadd(self.key, {job.id: score})
 
-        return self.connection._zadd(self.key, {job.id: score})
+        return self.connection.zadd(self.key, {job.id: score})
 
     def remove(self, job, pipeline=None):
         connection = pipeline if pipeline is not None else self.connection
