@@ -32,7 +32,7 @@ setup(
     zip_safe=False,
     platforms='any',
     install_requires=[
-        'redis >= 2.7.0',
+        'redis >= 3.0.0',
         'click >= 5.0'
     ],
     python_requires='>=2.7',
