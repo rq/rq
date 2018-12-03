@@ -964,6 +964,7 @@ class TestWorkerSubprocess(RQTestCase):
 
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='requires Linux signals')
+@skipIf('pypy' in sys.version.lower(), 'these tests often fail on pypy')
 class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def setUp(self):
         super(HerokuWorkerShutdownTestCase, self).setUp()
