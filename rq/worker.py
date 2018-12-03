@@ -270,7 +270,7 @@ class Worker(object):
             raise ValueError(msg.format(self.name))
         key = self.key
         queues = ','.join(self.queue_names())
-        with self.connection._pipeline() as p:
+        with self.connection.pipeline() as p:
             p.delete(key)
             now = utcnow()
             now_in_string = utcformat(utcnow())
@@ -285,7 +285,7 @@ class Worker(object):
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with self.connection._pipeline() as p:
+        with self.connection.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             worker_registration.unregister(self, p)
@@ -694,7 +694,7 @@ class Worker(object):
         if heartbeat_ttl is None:
             heartbeat_ttl = self.job_monitoring_interval + 5
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
@@ -716,7 +716,7 @@ class Worker(object):
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
         """
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
                     job.origin,
@@ -749,7 +749,7 @@ class Worker(object):
 
     def handle_job_success(self, job, queue, started_job_registry):
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             while True:
                 try:
                     # if dependencies are inserted after enqueue_dependents

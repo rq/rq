@@ -146,7 +146,8 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        self.connection._hset(self.key, 'status', self._status, pipeline)
+        connection = pipeline or self.connection
+        connection.hset(self.key, 'status', self._status)
 
     @property
     def is_finished(self):
@@ -514,7 +515,7 @@ class Job(object):
         cancellation.
         """
         from .queue import Queue
-        pipeline = pipeline or self.connection._pipeline()
+        pipeline = pipeline or self.connection.pipeline()
         if self.origin:
             q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)

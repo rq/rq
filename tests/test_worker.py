@@ -255,7 +255,7 @@ class TestWorker(RQTestCase):
         for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
             job = q.enqueue(long_running_job,
                             args=(timeout,),
-                            timeout=30,
+                            job_timeout=30,
                             result_ttl=-1)
             with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
                 w.execute_job(job, q)
@@ -429,7 +429,7 @@ class TestWorker(RQTestCase):
         # Put it on the queue with a timeout value
         res = q.enqueue(create_file_after_timeout,
                         args=(sentinel_file, 4),
-                        timeout=1)
+                        job_timeout=1)
 
         try:
             os.unlink(sentinel_file)
@@ -452,7 +452,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertNotEqual(self.testconn._ttl(job.key), 0)
+        self.assertNotEqual(self.testconn.ttl(job.key), 0)
         self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
 
         # Job with -1 result_ttl don't expire
@@ -460,7 +460,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertEqual(self.testconn._ttl(job.key), -1)
+        self.assertEqual(self.testconn.ttl(job.key), -1)
         self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
 
         # Job with result_ttl = 0 gets deleted immediately
@@ -580,7 +580,7 @@ class TestWorker(RQTestCase):
 
         worker = SimpleWorker([queue])
         job_timeout = 300
-        job = queue.enqueue(save_key_ttl, worker.key, timeout=job_timeout)
+        job = queue.enqueue(save_key_ttl, worker.key, job_timeout=job_timeout)
         worker.work(burst=True)
         job.refresh()
         self.assertGreater(job.meta['ttl'], job_timeout)
@@ -713,12 +713,12 @@ class TestWorker(RQTestCase):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""
         foo_queue = Queue('foo', connection=self.testconn)
         foo_registry = StartedJobRegistry('foo', connection=self.testconn)
-        self.testconn.zadd(foo_registry.key, 1, 'foo')
+        self.testconn.zadd(foo_registry.key, {'foo': 1})
         self.assertEqual(self.testconn.zcard(foo_registry.key), 1)
 
         bar_queue = Queue('bar', connection=self.testconn)
         bar_registry = StartedJobRegistry('bar', connection=self.testconn)
-        self.testconn.zadd(bar_registry.key, 1, 'bar')
+        self.testconn.zadd(bar_registry.key, {'bar': 1})
         self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
 
         worker = Worker([foo_queue, bar_queue])
@@ -743,7 +743,7 @@ class TestWorker(RQTestCase):
         """Worker calls clean_registries when run."""
         queue = Queue(connection=self.testconn)
         registry = StartedJobRegistry(connection=self.testconn)
-        self.testconn.zadd(registry.key, 1, 'foo')
+        self.testconn.zadd(registry.key, {'foo': 1})
 
         worker = Worker(queue, connection=self.testconn)
         worker.work(burst=True)

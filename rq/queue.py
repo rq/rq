@@ -116,7 +116,7 @@ class Queue(object):
         if delete_jobs:
             self.empty()
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             pipeline.srem(self.redis_queues_keys, self._key)
             pipeline.delete(self._key)
             pipeline.execute()
@@ -183,7 +183,7 @@ class Queue(object):
             pipeline.lrem(self.key, 1, job_id)
             return
 
-        return self.connection._lrem(self.key, 1, job_id)
+        return self.connection.lrem(self.key, 1, job_id)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
@@ -240,7 +240,7 @@ class Queue(object):
             if not isinstance(depends_on, self.job_class):
                 depends_on = self.job_class(id=depends_on,
                                             connection=self.connection)
-            with self.connection._pipeline() as pipe:
+            with self.connection.pipeline() as pipe:
                 while True:
                     try:
                         pipe.watch(depends_on.key)
@@ -294,7 +294,12 @@ class Queue(object):
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
-        timeout = kwargs.pop('timeout', None)
+        timeout = kwargs.pop('job_timeout', None)
+        if timeout is None:
+            timeout = kwargs.pop('timeout', None)
+            if timeout:
+                warnings.warn('The `timeout` keyword is deprecated. Use `job_timeout` instead', DeprecationWarning)
+
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)
@@ -321,7 +326,7 @@ class Queue(object):
 
         If Queue is instantiated with is_async=False, job is executed immediately.
         """
-        pipe = pipeline if pipeline is not None else self.connection._pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -355,7 +360,7 @@ class Queue(object):
         """
         from .registry import DeferredJobRegistry
 
-        pipe = pipeline if pipeline is not None else self.connection._pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
         dependents_key = job.dependents_key
 
         while True:
