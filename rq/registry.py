@@ -172,7 +172,7 @@ class FailedJobRegistry(BaseRegistry):
         if pipeline:
             p = pipeline
         else:
-            p = self.connection._pipeline()
+            p = self.connection.pipeline()
 
         job.exc_info = exc_string
         job.save(pipeline=p, include_meta=False)
