@@ -185,11 +185,12 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
+@click.option('--logging-config', help='load logging config from file')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, job_monitoring_interval, verbose, quiet, sentry_dsn,
-           exception_handler, pid, queues, log_format, date_format, **options):
+           exception_handler, pid, queues, log_format, date_format, logging_config, **options):
     """Starts an RQ worker."""
 
     settings = read_config_file(cli_config.config) if cli_config.config else {}
@@ -202,7 +203,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
 
-    setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
+    setup_loghandlers_from_args(verbose, quiet, date_format, log_format, logging_config)
 
     try:
 

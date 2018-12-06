@@ -13,7 +13,7 @@ from redis import StrictRedis
 from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
-from rq.logutils import setup_loghandlers
+from rq.logutils import setup_loghandlers, logging_fileconfig
 from rq.utils import import_attribute
 from rq.worker import WorkerStatus
 
@@ -24,10 +24,21 @@ yellow = partial(click.style, fg='yellow')
 
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
-    settings = importlib.import_module(module)
-    return dict([(k, v)
-                 for k, v in settings.__dict__.items()
-                 if k.upper() == k])
+    try:
+        settings = importlib.import_module(module)
+        return dict([(k, v)
+                     for k, v in settings.__dict__.items()
+                     if k.upper() == k])
+    except ImportError as e:
+        pass
+    # Try to load a pu file directly
+    try:
+        locs = locals()
+        execfile (module, globals(), locs)
+        return dict([(k, v) for k, v in locs.items() if k.upper() == k])
+    except IOError:
+        pass
+
 
 
 def get_redis_from_config(settings, connection_class=StrictRedis):
@@ -203,9 +214,12 @@ def refresh(interval, func, *args):
             break
 
 
-def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
+def setup_loghandlers_from_args(verbose, quiet, date_format, log_format, logging_config):
     if verbose and quiet:
         raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
+
+    if logging_config:
+        logging_fileconfig(logging_config)
 
     if verbose:
         level = 'DEBUG'

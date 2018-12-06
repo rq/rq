@@ -2,7 +2,9 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import os
 import logging
+import logging.config
 
 from rq.utils import ColorizingStreamHandler
 from rq.defaults import (DEFAULT_LOGGING_FORMAT,
@@ -33,3 +35,7 @@ def _has_effective_handler(logger):
         if not logger.parent:
             return False
         logger = logger.parent
+
+def logging_fileconfig (fileconfig):
+    conffile = os.path.expanduser(fileconfig)
+    logging.config.fileConfig(conffile)
