@@ -9,7 +9,7 @@ from functools import partial
 
 import click
 import redis
-from redis import StrictRedis
+from redis import Redis
 from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
@@ -41,7 +41,7 @@ def read_config_file(module):
 
 
 
-def get_redis_from_config(settings, connection_class=StrictRedis):
+def get_redis_from_config(settings, connection_class=Redis):
     """Returns a StrictRedis instance from a dictionary of settings.
        To use redis sentinel, you must specify a dictionary in the configuration file.
        Example of a dictionary with keys without values:
