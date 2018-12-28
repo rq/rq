@@ -13,7 +13,7 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import enum, import_attribute, utcformat, utcnow, utcparse
+from .utils import enum, import_attribute, utcformat, utcnow, utcparse, parse_timeout
 
 try:
     import cPickle as pickle
@@ -85,6 +85,7 @@ def get_current_job(connection=None, job_class=None):
 class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
+    redis_job_namespace_prefix = 'rq:job:'
 
     # Job construction
     @classmethod
@@ -132,7 +133,7 @@ class Job(object):
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
         job.ttl = ttl
-        job.timeout = timeout
+        job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
 
@@ -154,7 +155,8 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        self.connection._hset(self.key, 'status', self._status, pipeline)
+        connection = pipeline or self.connection
+        connection.hset(self.key, 'status', self._status)
 
     def _set_status(self, status):
         warnings.warn(
@@ -360,12 +362,12 @@ class Job(object):
     @classmethod
     def key_for(cls, job_id):
         """The Redis key that is used to store job hash under."""
-        return b'rq:job:' + job_id.encode('utf-8')
+        return (cls.redis_job_namespace_prefix + job_id).encode('utf-8')
 
     @classmethod
     def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job dependents hash under."""
-        return 'rq:job:{0}:dependents'.format(job_id)
+        return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
 
     @property
     def key(self):
@@ -440,7 +442,7 @@ class Job(object):
         self.started_at = to_date(as_text(obj.get('started_at')))
         self.ended_at = to_date(as_text(obj.get('ended_at')))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.timeout = int(obj.get('timeout')) if obj.get('timeout') else None
+        self.timeout = parse_timeout(as_text(obj.get('timeout'))) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self._status = as_text(obj.get('status') if obj.get('status') else None)
         self._dependency_id = as_text(obj.get('dependency_id', None))
@@ -528,7 +530,7 @@ class Job(object):
         cancellation.
         """
         from .queue import Queue
-        pipeline = pipeline or self.connection._pipeline()
+        pipeline = pipeline or self.connection.pipeline()
         if self.origin:
             q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)

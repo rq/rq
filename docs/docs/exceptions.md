@@ -8,37 +8,26 @@ background, how do you get notified of these exceptions?
 
 ## Default: the `failed` queue
 
-The default safety net for RQ is the `failed` queue.  Every job that fails
+The default safety net for RQ is the `failed` queue. Every job that fails
 execution is stored in here, along with its exception information (type,
-value, traceback).  While this makes sure no failing jobs "get lost", this is
+value, traceback). While this makes sure no failing jobs "get lost", this is
 of no use to get notified pro-actively about job failure.
 
 
 ## Custom exception handlers
 
 Starting from version 0.3.1, RQ supports registering custom exception
-handlers.  This makes it possible to replace the default behaviour (sending
+handlers. This makes it possible to replace the default behaviour (sending
 the job to the `failed` queue) altogether, or to take additional steps when an
 exception occurs.
 
-To do this, register your custom exception handler to an RQ worker as follows:
+This is how you register custom exception handler(s) to an RQ worker:
 
 {% highlight python %}
-with Connection():
-    q = Queue()
-    w = Worker([q])
-    w.push_exc_handler(my_handler)
-    w.work()
-{% endhighlight %}
+from rq.handlers import move_to_failed_queue  # RQ's default exception handler
 
-While the exception handlers are a FILO stack, most times you only want to
-register a single handler. Therefore, for convenience, you can pass it to the
-constructor directly, too:
-
-{% highlight python %}
-with Connection():
-    w = Worker([q], exception_handlers=[my_handler, self.move_to_failed_queue])
-    ...
+w = Worker([q], exception_handlers=[my_handler, move_to_failed_queue])
+...
 {% endhighlight %}
 
 The handler itself is a function that takes the following parameters: `job`,

@@ -218,13 +218,14 @@ class TestJob(RQTestCase):
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job.func, job2.func)
         self.assertEqual(job.args, job2.args)
         self.assertEqual(job.kwargs, job2.kwargs)
+        self.assertEqual(job.timeout, job2.timeout)
 
         # Mathematical equation
         self.assertEqual(job, job2)
@@ -388,17 +389,17 @@ class TestJob(RQTestCase):
         assert get_failed_queue(self.testconn).count == 0
 
     def test_job_access_within_synchronous_job_function(self):
-        queue = Queue(async=False)
+        queue = Queue(is_async=False)
         queue.enqueue(fixtures.access_self)
 
     def test_job_async_status_finished(self):
-        queue = Queue(async=False)
+        queue = Queue(is_async=False)
         job = queue.enqueue(fixtures.say_hello)
         self.assertEqual(job.result, 'Hi there, Stranger!')
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_enqueue_job_async_status_finished(self):
-        queue = Queue(async=False)
+        queue = Queue(is_async=False)
         job = Job.create(func=fixtures.say_hello)
         job = queue.enqueue_job(job)
         self.assertEqual(job.result, 'Hi there, Stranger!')
@@ -597,3 +598,17 @@ class TestJob(RQTestCase):
         self.assertEqual(get_failed_queue().count, 0)
         self.assertEqual(Queue('fake').count, 1)
         self.assertEqual(requeued_job.origin, job.origin)
+
+    def test_dependents_key_for_should_return_prefixed_job_id(self):
+        """test redis key to store job dependents hash under"""
+        job_id = 'random'
+        key = Job.dependents_key_for(job_id=job_id)
+
+        assert key == Job.redis_job_namespace_prefix + job_id + ':dependents'
+
+    def test_key_for_should_return_prefixed_job_id(self):
+        """test redis key to store job hash under"""
+        job_id = 'random'
+        key = Job.key_for(job_id=job_id)
+
+        assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')

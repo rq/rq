@@ -12,7 +12,7 @@ import sys
 
 from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
-from rq.compat import PY2
+from rq.compat import PY2, text_type
 from rq.worker import HerokuWorker
 
 
@@ -29,7 +29,7 @@ def say_hello(name=None):
 
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
-    return unicode(say_hello(name))  # noqa
+    return text_type(say_hello(name))  # noqa
 
 
 def do_nothing():
@@ -117,6 +117,14 @@ with Connection():
 def black_hole(job, *exc_info):
     # Don't fall through to default behaviour (moving to failed queue)
     return False
+
+
+def save_key_ttl(key):
+    # Stores key ttl in meta
+    job = get_current_job()
+    ttl = job.connection.ttl(key)
+    job.meta = {'ttl': ttl}
+    job.save_meta()
 
 
 def long_running_job(timeout=10):

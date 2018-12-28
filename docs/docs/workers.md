@@ -50,6 +50,21 @@ This can be useful for batch work that needs to be processed periodically, or
 just to scale up your workers temporarily during peak periods.
 
 
+### Worker arguments
+
+In addition to `--burst`, `rq worker` also accepts these arguments:
+
+* `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9`)
+* `--path` or `-P`: multiple import paths are supported (e.g `rq worker --path foo --path bar`)
+* `--config` or `-c`: path to module containing RQ settings.
+* `--worker-class` or `-w`: RQ Worker class to use (e.g `rq worker --worker-class 'foo.bar.MyWorker'`)
+* `--job-class` or `-j`: RQ Job class to use.
+* `--queue-class`: RQ Queue class to use.
+* `--connection-class`: Redis connection class to use, defaults to `redis.StrictRedis`.
+* `--log-format`: Format for the worker logs, defaults to `'%(asctime)s %(message)s'`
+* `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
+
+
 ## Inside the worker
 
 ### The worker life-cycle
@@ -210,6 +225,9 @@ QUEUES = ['high', 'normal', 'low']
 # to configure RQ for it in a single step
 # The 'sync+' prefix is required for raven: https://github.com/nvie/rq/issues/350#issuecomment-43592410
 SENTRY_DSN = 'sync+http://public:secret@example.com/1'
+
+# If you want custom worker name
+# NAME = 'worker-1024'
 {% endhighlight %}
 
 The example above shows all the options that are currently supported.
@@ -270,6 +288,16 @@ class CustomQueue(Queue):
 queue = CustomQueue('default', connection=redis_conn)
 queue.enqueue(some_func)
 {% endhighlight %}
+
+
+## Custom DeathPenalty classes
+
+When a Job times-out, the worker will try to kill it using the supplied
+`death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
+if you wish to attempt to kill jobs in an application specific or 'cleaner' manner. 
+
+DeathPenalty classes are constructed with the following arguments
+`BaseDeathPenalty(timeout, JobTimeoutException, job_id=job.id)`
 
 
 ## Custom exception handlers

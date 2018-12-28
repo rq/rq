@@ -38,11 +38,11 @@ q = Queue(connection=redis_conn)  # no args implies the default queue
 
 # Delay execution of count_words_at_url('http://nvie.com')
 job = q.enqueue(count_words_at_url, 'http://nvie.com')
-print job.result   # => None
+print(job.result)   # => None
 
 # Now, wait a while, until the worker is finished
 time.sleep(2)
-print job.result   # => 889
+print(job.result)   # => 889
 {% endhighlight %}
 
 If you want to put the work on a specific queue, simply specify its name:
@@ -61,11 +61,12 @@ In addition, you can add a few options to modify the behaviour of the queued
 job. By default, these are popped out of the kwargs that will be passed to the
 job function.
 
-* `timeout` specifies the maximum runtime of the job before it'll be considered
-    'lost'. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
+* `timeout` specifies the maximum runtime of the job before it's interrupted
+    and marked as `failed`. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
 * `result_ttl` specifies the expiry time of the key where the job result will
   be stored
-* `ttl` specifies the maximum queued time of the job before it'll be cancelled
+* `ttl` specifies the maximum queued time of the job before it'll be cancelled.
+  If you specify a value of `-1` you indicate an infinite job ttl and it will run indefinitely
 * `depends_on` specifies another job (or job id) that must complete before this
   job will be queued
 * `job_id` allows you to manually specify this job's `job_id`
@@ -103,16 +104,21 @@ from rq import Queue
 from redis import Redis
 
 redis_conn = Redis()
-q = Queue(connection=redis_conn) 
+q = Queue(connection=redis_conn)
 
 # Getting the number of jobs in the queue
-print len(q)
+print(len(q))
 
 # Retrieving jobs
 queued_job_ids = q.job_ids # Gets a list of job IDs from the queue
 queued_jobs = q.jobs # Gets a list of enqueued job instances
 job = q.fetch_job('my_id') # Returns job having ID "my_id"
+
+# Deleting the queue
+q.delete(delete_jobs=True) # Passing in `True` will remove all jobs in the queue
+# queue is unusable now unless re-instantiated
 {% endhighlight %}
+
 
 ### On the Design
 
@@ -154,7 +160,7 @@ def add(x, y):
 
 job = add.delay(3, 4)
 time.sleep(1)
-print job.result
+print(job.result)
 {% endhighlight %}
 
 
@@ -162,10 +168,10 @@ print job.result
 
 For testing purposes, you can enqueue jobs without delegating the actual
 execution to a worker (available since version 0.3.1). To do this, pass the
-`async=False` argument into the Queue constructor:
+`is_async=False` argument into the Queue constructor:
 
 {% highlight pycon %}
->>> q = Queue('low', async=False, connection=my_redis_conn)
+>>> q = Queue('low', is_async=False, connection=my_redis_conn)
 >>> job = q.enqueue(fib, 8)
 >>> job.result
 21
@@ -222,7 +228,7 @@ on a queue:
 ## Limitations
 
 RQ workers will only run on systems that implement `fork()`.  Most notably,
-this means it is not possible to run the workers on Windows.
+this means it is not possible to run the workers on Windows without using the [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/about) and running in a bash shell.
 
 
 [m]: http://pypi.python.org/pypi/mailer

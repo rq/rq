@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import warnings
 
 from redis import WatchError
 
@@ -58,13 +59,17 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 is_async=True, job_class=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        self._async = async
+        self._is_async = is_async
+
+        if 'async' in kwargs:
+            self._is_async = kwargs['async']
+            warnings.warn('The `async` keyword is deprecated. Use `is_async` instead', DeprecationWarning)
 
         # override class attribute job_class if one was passed
         if job_class is not None:
@@ -91,8 +96,8 @@ class Queue(object):
 
     def empty(self):
         """Removes all messages on the queue."""
-        script = b"""
-            local prefix = "rq:job:"
+        script = """
+            local prefix = "{0}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -107,7 +112,7 @@ class Queue(object):
                 count = count + 1
             end
             return count
-        """
+        """.format(self.job_class.redis_job_namespace_prefix).encode("utf-8")
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
@@ -116,7 +121,7 @@ class Queue(object):
         if delete_jobs:
             self.empty()
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             pipeline.srem(self.redis_queues_keys, self._key)
             pipeline.delete(self._key)
             pipeline.execute()
@@ -124,6 +129,11 @@ class Queue(object):
     def is_empty(self):
         """Returns whether the current queue is empty."""
         return self.count == 0
+
+    @property
+    def is_async(self):
+        """Returns whether the current queue is async."""
+        return bool(self._is_async)
 
     def fetch_job(self, job_id):
         try:
@@ -173,13 +183,14 @@ class Queue(object):
             pipeline.lrem(self.key, 1, job_id)
             return
 
-        return self.connection._lrem(self.key, 1, job_id)
+        return self.connection.lrem(self.key, 1, job_id)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
         guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = 'rq:queue:_compact:{0}'.format(uuid.uuid4())  # noqa
+        COMPACT_QUEUE = '{0}_compact:{1}'.format(
+            self.redis_queue_namespace_prefix, uuid.uuid4())  # noqa
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
@@ -226,7 +237,7 @@ class Queue(object):
             if not isinstance(depends_on, self.job_class):
                 depends_on = self.job_class(id=depends_on,
                                             connection=self.connection)
-            with self.connection._pipeline() as pipe:
+            with self.connection.pipeline() as pipe:
                 while True:
                     try:
                         pipe.watch(depends_on.key)
@@ -280,7 +291,12 @@ class Queue(object):
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
-        timeout = kwargs.pop('timeout', None)
+        timeout = kwargs.pop('job_timeout', None)
+        if timeout is None:
+            timeout = kwargs.pop('timeout', None)
+            if timeout:
+                warnings.warn('The `timeout` keyword is deprecated. Use `job_timeout` instead', DeprecationWarning)
+
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)
@@ -302,9 +318,9 @@ class Queue(object):
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
 
-        If Queue is instantiated with async=False, job is executed immediately.
+        If Queue is instantiated with is_async=False, job is executed immediately.
         """
-        pipe = pipeline if pipeline is not None else self.connection._pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -318,13 +334,13 @@ class Queue(object):
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
 
-        if self._async:
+        if self._is_async:
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
         if pipeline is None:
             pipe.execute()
 
-        if not self._async:
+        if not self._is_async:
             job = self.run_job(job)
 
         return job
@@ -338,7 +354,7 @@ class Queue(object):
         """
         from .registry import DeferredJobRegistry
 
-        pipe = pipeline if pipeline is not None else self.connection._pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
         dependents_key = job.dependents_key
 
         while True:
@@ -506,7 +522,7 @@ class FailedQueue(Queue):
         queue).
         """
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             # Add Queue key set
             self.connection.sadd(self.redis_queues_keys, self.key)
 
@@ -514,7 +530,7 @@ class FailedQueue(Queue):
             job.save(pipeline=pipeline, include_meta=False)
             job.cleanup(ttl=-1, pipeline=pipeline)  # failed job won't expire
 
-            self.push_job_id(job.id, pipeline=pipeline)
+            self.push_job_id(str(job.id), pipeline=pipeline)
             pipeline.execute()
 
         return job

@@ -15,11 +15,18 @@ class BaseRegistry(object):
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection=None, job_class=None):
-        self.name = name
-        self.key = self.key_template.format(name)
-        self.connection = resolve_connection(connection)
+    def __init__(self, name='default', connection=None, job_class=None,
+                 queue=None):
+        if queue:
+            self.name = queue.name
+            self.connection = resolve_connection(queue.connection)
+        else:
+            self.name = name
+            self.connection = resolve_connection(connection)
+
+        self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
+
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -32,12 +39,14 @@ class BaseRegistry(object):
         return self.connection.zcard(self.key)
 
     def add(self, job, ttl=0, pipeline=None):
-        """Adds a job to a registry with expiry time of now + ttl."""
+        """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf"""
         score = ttl if ttl < 0 else current_timestamp() + ttl
+        if score == -1:
+            score = '+inf'
         if pipeline is not None:
-            return pipeline.zadd(self.key, score, job.id)
+            return pipeline.zadd(self.key, {job.id: score})
 
-        return self.connection._zadd(self.key, score, job.id)
+        return self.connection.zadd(self.key, {job.id: score})
 
     def remove(self, job, pipeline=None):
         connection = pipeline if pipeline is not None else self.connection

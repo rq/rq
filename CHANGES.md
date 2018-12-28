@@ -1,14 +1,41 @@
+### 0.13.0 (2018-12-11)
+- Compatibility with Redis 3.0. Thanks @dash-rai!
+- Added `job_timeout` argument to `queue.enqueue()`. This argument will eventually replace `timeout` argument. Thanks @selwin!
+- Added `job_id` argument to `BaseDeathPenalty` class. Thanks @loopbio!
+- Fixed a bug which causes long running jobs to timeout under `SimpleWorker`. Thanks @selwin!
+- You can now override worker's name from config file. Thanks @houqp!
+- Horses will now return exit code 1 if they don't terminate properly (e.g when Redis connection is lost). Thanks @selwin!
+- Added `date_format` and `log_format` arguments to `Worker` and `rq worker` CLI. Thanks @shikharsg!
+
+
+### 0.12.0 (2018-07-14)
+- Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
+`Queue(async=False)` has been changed to `Queue(is_async=False)`. The `async`
+keyword argument will still work, but raises a `DeprecationWarning`. Thanks @dchevell!
+
+
+### 0.11.0 (2018-06-01)
+- `Worker` now periodically sends heartbeats and checks whether child process is still alive while performing long running jobs. Thanks @Kriechi!
+- `Job.create` now accepts `timeout` in string format (e.g `1h`). Thanks @theodesp!
+- `worker.main_work_horse()` should exit with return code `0` even if job execution fails. Thanks @selwin!
+- `job.delete(delete_dependents=True)` will delete job along with its dependents. Thanks @olingerc!
+- Other minor fixes and documentation updates.
+
+
 ### 0.10.0
 - `@job` decorator now accepts `description`, `meta`, `at_front` and `depends_on` kwargs. Thanks @jlucas91 and @nlyubchich!
 - Added the capability to fetch workers by queue using `Worker.all(queue=queue)` and `Worker.count(queue=queue)`.
 - Improved RQ's default logging configuration. Thanks @samuelcolvin!
 - `job.data` and `job.exc_info` are now stored in compressed format in Redis.
 
+
 ### 0.9.2
 - Fixed an issue where `worker.refresh()` may fail when `birth_date` is not set. Thanks @vanife!
 
+
 ### 0.9.1
 - Fixed an issue where `worker.refresh()` may fail when upgrading from previous versions of RQ.
+
 
 ### 0.9.0
 - `Worker` statistics! `Worker` now keeps track of `last_heartbeat`, `successful_job_count`, `failed_job_count` and `total_working_time`. Thanks @selwin!
@@ -19,11 +46,12 @@
 - Added millisecond precision to job timestamps. Thanks @samuelcolvin!
 - Python 2.6 is no longer supported. Thanks @samuelcolvin!
 
+
 ### 0.8.2
 - Fixed an issue where `job.save()` may fail with unpickleable return value.
 
-### 0.8.1
 
+### 0.8.1
 - Replace `job.id` with `Job` instance in local `_job_stack `. Thanks @katichev!
 - `job.save()` no longer implicitly calls `job.cleanup()`. Thanks @katichev!
 - Properly catch `StopRequested` `worker.heartbeat()`. Thanks @fate0!
@@ -33,8 +61,8 @@
 - Make `job.dependency` slightly more efficient. Thanks @liangsijian!
 - `FailedQueue` now returns jobs with the correct class. Thanks @amjith!
 
-### 0.8.0
 
+### 0.8.0
 - Refactored APIs to allow custom `Connection`, `Job`, `Worker` and `Queue` classes via CLI. Thanks @jezdez!
 - `job.delete()` now properly cleans itself from job registries. Thanks @selwin!
 - `Worker` should no longer overwrite `job.meta`. Thanks @WeatherGod!
@@ -48,14 +76,13 @@
 
 
 ### 0.7.1
-
 - Fixes a bug that prevents fetching jobs from `FailedQueue` (#765). Thanks @jsurloppe!
 - Fixes race condition when enqueueing jobs with dependency (#742). Thanks @th3hamm0r!
 - Skip a test that requires Linux signals on MacOS (#763). Thanks @jezdez!
 - `enqueue_job` should use Redis pipeline when available (#761). Thanks mtdewulf!
 
-### 0.7.0
 
+### 0.7.0
 - Better support for Heroku workers (#584, #715)
 - Support for connecting using a custom connection class (#741)
 - Fix: connection stack in default worker (#479, #641)
@@ -70,7 +97,6 @@
 
 
 ### 0.6.0
-
 - Jobs that depend on job with result_ttl == 0 are now properly enqueued.
 - `cancel_job` now works properly. Thanks @jlopex!
 - Jobs that execute successfully now no longer tries to remove itself from queue. Thanks @amyangfei!
@@ -99,9 +125,8 @@
 - Customer exception handlers are now called if Redis connection is lost. Thanks @jlopex!
 - Jobs can now depend on jobs in a different queue. Thanks @jlopex!
 
-### 0.5.5
 
-(August 25th, 2015)
+### 0.5.5 (2015-08-25)
 
 - Add support for `--exception-handler` command line flag
 - Fix compatibility with click>=5.0

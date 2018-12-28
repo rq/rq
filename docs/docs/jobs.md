@@ -8,9 +8,32 @@ instance from within the job function itself.  Or to store arbitrary data on
 jobs.
 
 
-## Accessing the "current" job
+## Retrieving Job from Redis
 
-_New in version 0.3.3._
+All job information is stored in Redis. You can inspect a job and its attributes
+by using `Job.fetch()`.
+
+{% highlight python %}
+from redis import Redis
+from rq.job import Job
+
+connection = Redis()
+job = Job.fetch('my_job_id', connection=redis)
+print('Status: %s' $ job.get_status())
+{% endhighlight %}
+
+Some interesting job attributes include:
+* `job.status`
+* `job.func_name`
+* `job.args`
+* `job.kwargs`
+* `job.result`
+* `job.enqueued_at`
+* `job.started_at`
+* `job.ended_at`
+* `job.exc_info`
+
+## Accessing the "current" job
 
 Since job functions are regular Python functions, you have to ask RQ for the
 current job ID, if any.  To do this, you can use:
@@ -20,7 +43,7 @@ from rq import get_current_job
 
 def add(x, y):
     job = get_current_job()
-    print 'Current job: %s' % (job.id,)
+    print('Current job: %s' % (job.id,))
     return x + y
 {% endhighlight %}
 
@@ -40,7 +63,7 @@ def add(x, y):
     job = get_current_job()
     job.meta['handled_by'] = socket.gethostname()
     job.save_meta()
-    
+
     # do more work
     time.sleep(1)
     return x + y
@@ -65,8 +88,8 @@ job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
 
 ## Failed Jobs
 
-If a job fails and raises an exception, the worker will put the job in a failed job queue. 
-On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan 
+If a job fails and raises an exception, the worker will put the job in a failed job queue.
+On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan
 through the `get_failed_queue()` queue.
 
 {% highlight python %}

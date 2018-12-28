@@ -9,7 +9,7 @@ from functools import partial
 
 import click
 import redis
-from redis import StrictRedis
+from redis import Redis
 from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
@@ -30,7 +30,7 @@ def read_config_file(module):
                  if k.upper() == k])
 
 
-def get_redis_from_config(settings, connection_class=StrictRedis):
+def get_redis_from_config(settings, connection_class=Redis):
     """Returns a StrictRedis instance from a dictionary of settings.
        To use redis sentinel, you must specify a dictionary in the configuration file.
        Example of a dictionary with keys without values:
@@ -203,7 +203,7 @@ def refresh(interval, func, *args):
             break
 
 
-def setup_loghandlers_from_args(verbose, quiet):
+def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     if verbose and quiet:
         raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
 
@@ -213,7 +213,7 @@ def setup_loghandlers_from_args(verbose, quiet):
         level = 'WARNING'
     else:
         level = 'INFO'
-    setup_loghandlers(level)
+    setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
 class CliConfig(object):
