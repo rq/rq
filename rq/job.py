@@ -91,7 +91,8 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None,
+               raw=False):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -105,6 +106,10 @@ class Job(object):
         if not isinstance(kwargs, dict):
             raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
 
+        if raw:
+            assert len(args) == 1
+            assert len(kwargs) == 0
+        
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
@@ -136,6 +141,7 @@ class Job(object):
         job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
+        job.raw = raw
 
         # dependency could be job instance or id
         if depends_on is not None:
@@ -214,7 +220,18 @@ class Job(object):
         return import_attribute(self.func_name)
 
     def _unpickle_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
+        # import logging
+        # logging.basicConfig(level=logging.DEBUG)
+        # logger = logging.getLogger(__name__)
+        # logger.info(f"raw: {self.raw}")
+        if self.raw:
+            un_encoded_data = self.data.split(b' ')
+            self._func_name = un_encoded_data[0].decode()
+            self._instance = None
+            self._args = (un_encoded_data[1],)
+            self._kwargs = {}
+        else:
+            self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
 
     @property
     def data(self):
@@ -231,8 +248,17 @@ class Job(object):
             if self._kwargs is UNEVALUATED:
                 self._kwargs = {}
 
-            job_tuple = self._func_name, self._instance, self._args, self._kwargs
-            self._data = dumps(job_tuple)
+            if self.raw:
+                # import logging
+                # logging.basicConfig(level=logging.DEBUG)
+                # logger = logging.getLogger(__name__)
+                # logger.info(f"func_name: {type(self.func_name.encode('utf-8'))}")
+                # logger.info(f"args: {type(self._args[0])}")
+                job_tuple = (self._func_name.encode('utf-8'))+b' '+self._args[0]
+                self._data = job_tuple
+            else:
+                job_tuple = self._func_name, self._instance, self._args, self._kwargs
+                self._data = dumps(job_tuple)
         return self._data
 
     @data.setter
@@ -324,6 +350,7 @@ class Job(object):
         self._status = None
         self._dependency_id = None
         self.meta = {}
+        self.raw = False
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -429,11 +456,7 @@ class Job(object):
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
-        try:
-            self.data = zlib.decompress(raw_data)
-        except zlib.error:
-            # Fallback to uncompressed string
-            self.data = raw_data
+        self.data = raw_data
 
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
@@ -448,14 +471,11 @@ class Job(object):
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
+        self.raw = obj.get('raw', False)
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
-            try:
-                self.exc_info = as_text(zlib.decompress(raw_exc_info))
-            except zlib.error:
-                # Fallback to uncompressed string
-                self.exc_info = as_text(raw_exc_info)
+            self.exc_info = as_text(raw_exc_info)
 
 
     def to_dict(self, include_meta=True):
@@ -467,7 +487,7 @@ class Job(object):
         """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
-        obj['data'] = zlib.compress(self.data)
+        obj['data'] = self.data
 
         if self.origin is not None:
             obj['origin'] = self.origin
@@ -485,7 +505,8 @@ class Job(object):
             except:
                 obj['result'] = 'Unpickleable return value'
         if self.exc_info is not None:
-            obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
+            # obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
+            obj['exc_info'] = str(self.exc_info).encode('utf-8')
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
@@ -498,6 +519,8 @@ class Job(object):
             obj['meta'] = dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
+        if self.raw:
+            obj['raw'] = self.raw
 
         return obj
 

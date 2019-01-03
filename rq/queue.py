@@ -211,7 +211,7 @@ class Queue(object):
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, description=None,
-                     depends_on=None, job_id=None, at_front=False, meta=None):
+                     depends_on=None, job_id=None, at_front=False, meta=None, raw=False):
         """Creates a job to represent the delayed function call and enqueues
         it.
 
@@ -227,7 +227,7 @@ class Queue(object):
             func, args=args, kwargs=kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, status=JobStatus.QUEUED,
             description=description, depends_on=depends_on,
-            timeout=timeout, id=job_id, origin=self.name, meta=meta)
+            timeout=timeout, id=job_id, origin=self.name, meta=meta, raw=raw)
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -304,16 +304,24 @@ class Queue(object):
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
+        raw = kwargs.pop('raw', False)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
+        
+        if raw:
+            # If raw flag is true we leave the pickling up to the end user
+            # we ensure there is only one arg. 
+            assert len(args) == 1
+            assert len(kwargs) == 0
+            assert type(args[0]) == bytes
 
         return self.enqueue_call(func=f, args=args, kwargs=kwargs,
                                  timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                                  description=description, depends_on=depends_on,
-                                 job_id=job_id, at_front=at_front, meta=meta)
+                                 job_id=job_id, at_front=at_front, meta=meta, raw=raw)
 
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
