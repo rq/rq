@@ -588,7 +588,7 @@ class Worker(object):
 
     def increment_total_working_time(self, job_execution_time, pipeline):
         pipeline.hincrbyfloat(self.key, 'total_working_time',
-                              job_execution_time.microseconds)
+                              job_execution_time.total_seconds() * 1000)
 
     def fork_work_horse(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
