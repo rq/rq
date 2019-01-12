@@ -639,7 +639,10 @@ class Job(object):
         return self._result
 
     def _execute(self):
-        return self.func(*self.args, **self.kwargs)
+        if self.raw:
+            return self.func(*self.args, raw=self.raw)
+        else:
+            return self.func(*self.args, **self.kwargs)
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job will be
