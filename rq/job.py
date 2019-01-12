@@ -456,7 +456,11 @@ class Job(object):
         except KeyError:
             raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
-        self.data = raw_data
+        try:
+            self.data = zlib.decompress(raw_data)
+        except zlib.error:
+            # Fallback to uncompressed string
+            self.data = raw_data
 
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
@@ -475,7 +479,11 @@ class Job(object):
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
-            self.exc_info = as_text(raw_exc_info)
+            try:
+                self.exc_info = as_text(zlib.decompress(raw_exc_info))
+            except zlib.error:
+                # Fallback to uncompressed string
+                self.exc_info = as_text(raw_exc_info)
 
 
     def to_dict(self, include_meta=True):
@@ -487,7 +495,10 @@ class Job(object):
         """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
-        obj['data'] = self.data
+        if self.raw:
+            obj['data'] = self.data
+        else:
+            obj['data'] = zlib.compress(self.data)
 
         if self.origin is not None:
             obj['origin'] = self.origin
@@ -505,7 +516,10 @@ class Job(object):
             except:
                 obj['result'] = 'Unpickleable return value'
         if self.exc_info is not None:
-            obj['exc_info'] = str(self.exc_info).encode('utf-8')
+            if self.raw:
+                obj['exc_info'] = str(self.exc_info).encode('utf-8')
+            else:
+                obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
