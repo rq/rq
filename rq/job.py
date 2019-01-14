@@ -225,7 +225,7 @@ class Job(object):
         # logger = logging.getLogger(__name__)
         # logger.info(f"raw: {self.raw}")
         if self.raw:
-            un_encoded_data = self.data.split(b' ')
+            un_encoded_data = self.data.split(b' ', maxsplit=1)
             self._func_name = un_encoded_data[0].decode()
             self._instance = None
             self._args = (un_encoded_data[1],)
