@@ -224,14 +224,7 @@ class Job(object):
         # logging.basicConfig(level=logging.DEBUG)
         # logger = logging.getLogger(__name__)
         # logger.info(f"raw: {self.raw}")
-        if self.raw:
-            un_encoded_data = self.data.split(b' ', maxsplit=1)
-            self._func_name = un_encoded_data[0].decode()
-            self._instance = None
-            self._args = (un_encoded_data[1],)
-            self._kwargs = {}
-        else:
-            self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
+        self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
 
     @property
     def data(self):
@@ -248,17 +241,8 @@ class Job(object):
             if self._kwargs is UNEVALUATED:
                 self._kwargs = {}
 
-            if self.raw:
-                # import logging
-                # logging.basicConfig(level=logging.DEBUG)
-                # logger = logging.getLogger(__name__)
-                # logger.info(f"func_name: {type(self.func_name.encode('utf-8'))}")
-                # logger.info(f"args: {type(self._args[0])}")
-                job_tuple = (self._func_name.encode('utf-8'))+b' '+self._args[0]
-                self._data = job_tuple
-            else:
-                job_tuple = self._func_name, self._instance, self._args, self._kwargs
-                self._data = dumps(job_tuple)
+            job_tuple = self._func_name, self._instance, self._args, self._kwargs
+            self._data = dumps(job_tuple)
         return self._data
 
     @data.setter
@@ -451,16 +435,28 @@ class Job(object):
             else:
                 return utcparse(as_text(date_str))
 
-        try:
-            raw_data = obj['data']
-        except KeyError:
-            raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+        self.raw = obj.get('raw', False)
+        self.raw = bool(self.raw)
+        if self.raw:
+            # import logging; logging.basicConfig(level=logging.DEBUG)
+            # logger = logging.getLogger(__name__)
+            # logger.info(type(self.raw))
+            # logger.info(self.raw)
+            self._func_name = obj.get('func_name').decode()
+            self._args = (obj.get('arg'),)
+            self._kwargs = {}
+            self._instance = None
+        else:
+            try:
+                raw_data = obj['data']
+            except KeyError:
+                raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
 
-        try:
-            self.data = zlib.decompress(raw_data)
-        except zlib.error:
-            # Fallback to uncompressed string
-            self.data = raw_data
+            try:
+                self.data = zlib.decompress(raw_data)
+            except zlib.error:
+                # Fallback to uncompressed string
+                self.data = raw_data
 
         self.created_at = to_date(as_text(obj.get('created_at')))
         self.origin = as_text(obj.get('origin'))
@@ -475,7 +471,6 @@ class Job(object):
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
-        self.raw = obj.get('raw', False)
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
@@ -495,9 +490,7 @@ class Job(object):
         """
         obj = {}
         obj['created_at'] = utcformat(self.created_at or utcnow())
-        if self.raw:
-            obj['data'] = self.data
-        else:
+        if not self.raw:
             obj['data'] = zlib.compress(self.data)
 
         if self.origin is not None:
@@ -534,6 +527,8 @@ class Job(object):
             obj['ttl'] = self.ttl
         if self.raw:
             obj['raw'] = self.raw
+            obj['func_name'] = self._func_name
+            obj['arg'] = self._args[0]
 
         return obj
 
@@ -640,6 +635,11 @@ class Job(object):
 
     def _execute(self):
         if self.raw:
+            # import logging; logging.basicConfig(level=logging.DEBUG)
+            # logging.info(type(self.raw))
+            # logging.info(self.args)
+            # logging.info(self.kwargs)
+            # logging.info(self.args)
             return self.func(*self.args, raw=self.raw)
         else:
             return self.func(*self.args, **self.kwargs)
