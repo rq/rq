@@ -174,7 +174,7 @@ class TestRegistry(RQTestCase):
         self.testconn.zadd(started_job_registry.key, {'foo': 1})
 
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
-        self.testconn.zadd(failed_job_registry.key, 1, 'foo')
+        self.testconn.zadd(failed_job_registry.key, {'foo': 1})
 
         clean_registries(queue)
         self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
