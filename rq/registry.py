@@ -177,7 +177,7 @@ class FailedJobRegistry(BaseRegistry):
         job.exc_info = exc_string
         job.save(pipeline=p, include_meta=False)
         job.cleanup(ttl=-1, pipeline=p)  # failed job won't expire
-        p.zadd(self.key, score, job.id)
+        p.zadd(self.key, {job.id: score})
 
         if not pipeline:
             p.execute()
