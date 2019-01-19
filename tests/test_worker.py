@@ -800,8 +800,8 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.perform_job(job, q)
-        mock_logger_info.assert_called_with('Result is kept for 10 seconds')
-        self.assertIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
+        mock_logger_info.assert_called_with('Result is kept for %s seconds', 10)
+        self.assertIn('Result is kept for %s seconds', [c[0][0] for c in mock_logger_info.call_args_list])
 
     @mock.patch('rq.worker.logger.info')
     def test_log_result_lifespan_false(self, mock_logger_info):
