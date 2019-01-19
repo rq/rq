@@ -230,9 +230,12 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q])
         w.register_birth()
-        birth = self.testconn.hget(w.key, 'birth')
+
+        self.assertEqual(str(w.pid), as_text(self.testconn.hget(w.key, 'pid')))
+        self.assertEqual(w.hostname,
+                         as_text(self.testconn.hget(w.key, 'hostname')))
         last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
-        self.assertTrue(birth is not None)
+        self.assertIsNotNone(self.testconn.hget(w.key, 'birth'))
         self.assertTrue(last_heartbeat is not None)
         w = Worker.find_by_key(w.key)
         self.assertIsInstance(w.last_heartbeat, datetime)

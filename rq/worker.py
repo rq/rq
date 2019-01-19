@@ -13,6 +13,7 @@ import time
 import traceback
 import warnings
 from datetime import timedelta
+from uuid import uuid4
 
 try:
     from signal import SIGKILL
@@ -25,7 +26,7 @@ from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
-from .defaults import (DEFAULT_FAILURE_TTL, DEFAULT_RESULT_TTL,
+from .defaults import (DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from .exceptions import DequeueTimeout, ShutDownImminentException
@@ -167,6 +168,8 @@ class Worker(object):
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
+        self.hostname = socket.gethostname()
+        self.pid = os.getpid()
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
@@ -176,7 +179,8 @@ class Worker(object):
                                    job_class=self.job_class)
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
-        self._name = name
+
+        self.name = name or uuid4().hex
         self.queues = queues
         self.validate_queues()
         self._exc_handlers = []
@@ -219,28 +223,9 @@ class Worker(object):
         return list(map(lambda q: q.key, self.queues))
 
     @property
-    def name(self):
-        """Returns the name of the worker, under which it is registered to the
-        monitoring system.
-
-        By default, the name of the worker is constructed from the current
-        (short) host name and the current PID.
-        """
-        if self._name is None:
-            hostname = socket.gethostname()
-            shortname, _, _ = hostname.partition('.')
-            self._name = '{0}.{1}'.format(shortname, self.pid)
-        return self._name
-
-    @property
     def key(self):
         """Returns the worker's Redis hash key."""
         return self.redis_worker_namespace_prefix + self.name
-
-    @property
-    def pid(self):
-        """The current process ID."""
-        return os.getpid()
 
     @property
     def horse_pid(self):
@@ -278,6 +263,8 @@ class Worker(object):
             p.hset(key, 'birth', now_in_string)
             p.hset(key, 'last_heartbeat', now_in_string)
             p.hset(key, 'queues', queues)
+            p.hset(key, 'pid', self.pid)
+            p.hset(key, 'hostname', self.hostname)
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl)
             p.execute()
@@ -544,10 +531,14 @@ class Worker(object):
     def refresh(self):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
-            'birth', 'failed_job_count', 'successful_job_count', 'total_working_time'
+            'birth', 'failed_job_count', 'successful_job_count',
+            'total_working_time', 'hostname', 'pid'
         )
-        queues, state, job_id, last_heartbeat, birth, failed_job_count, successful_job_count, total_working_time = data
+        (queues, state, job_id, last_heartbeat, birth, failed_job_count,
+         successful_job_count, total_working_time, hostname, pid) = data
         queues = as_text(queues)
+        self.hostname = hostname
+        self.pid = int(pid) if pid else None
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         if last_heartbeat:

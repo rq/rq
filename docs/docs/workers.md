@@ -126,15 +126,27 @@ with Connection():
 
 ### Worker Names
 
-Workers are registered to the system under their names, see [monitoring][m].
-By default, the name of a worker is equal to the concatenation of the current
-hostname and the current PID.  To override this default, specify the name when
-starting the worker, using the `--name` option.
+Workers are registered to the system under their names, which are generated
+randomly during instantiation (see [monitoring][m]). To override this default,
+specify the name when starting the worker, or use the `--name` cli option.
+
+{% highlight python %}
+from redis import Redis
+from rq import Queue, Worker
+
+redis = Redis()
+queue = Queue('queue_name')
+
+# Start a worker with a custom name
+worker = Worker([queue], connection=redis, name='foo')
+{% endhighlight %}
 
 [m]: /docs/monitoring/
 
 
 ### Retrieving Worker Information
+
+_Updated in version 0.10.0._
 
 `Worker` instances store their runtime information in Redis. Here's how to
 retrieve them:
@@ -150,11 +162,25 @@ workers = Worker.all(connection=redis)
 # Returns all workers in this queue (new in version 0.10.0)
 queue = Queue('queue_name')
 workers = Worker.all(queue=queue)
+worker = workers[0]
+print(worker.name)
 {% endhighlight %}
+
+Aside from `worker.name`, worker also have the following properties:
+* `hostname` - the host where this worker is run
+* `pid` - worker's process ID
+* `queues` - queues on which this worker is listening for jobs
+* `state` - possible states are `suspended`, `started`, `busy` and `idle`
+* `current_job` - the job it's currently executing (if any)
+* `last_heartbeat` - the last time this worker was seen
+* `birth_date` - time of worker's instantiation
+* `successful_job_count` - number of jobs finished successfully
+* `failed_job_count` - number of failed jobs processed
+* `total_working_time` - number of time spent executing jobs
 
 _New in version 0.10.0._
 
-If you only want to know the number of workers for monitoring purposes, using
+If you only want to know the number of workers for monitoring purposes,
 `Worker.count()` is much more performant.
 
 {% highlight python %}
