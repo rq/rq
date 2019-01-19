@@ -9,8 +9,8 @@ layout: patterns
 To setup RQ on [Heroku][1], first add it to your
 `requirements.txt` file:
 
-    redis==2.10.5
-    rq==0.7.0
+    redis>=3
+    rq>=0.13
 
 Create a file called `run-worker.py` with the following content (assuming you
 are using [Redis To Go][2] with Heroku):
