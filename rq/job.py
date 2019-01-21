@@ -436,7 +436,6 @@ class Job(object):
                 return utcparse(as_text(date_str))
 
         self.raw = obj.get('raw', False)
-        self.raw = bool(self.raw)
         if self.raw:
             # import logging; logging.basicConfig(level=logging.DEBUG)
             # logger = logging.getLogger(__name__)
