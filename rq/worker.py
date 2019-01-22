@@ -104,6 +104,8 @@ class Worker(object):
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
     # messages are logged after every job, by default they are.
     log_result_lifespan = True
+    # `log_job_description` is used to toggle logging an entire jobs description.
+    log_job_description = True
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None):
@@ -163,8 +165,9 @@ class Worker(object):
     def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
                  connection=None, exc_handler=None, exception_handlers=None,
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
-                 queue_class=None, disable_default_exception_handler=False,
-                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL):  # noqa
+                 queue_class=None, log_job_description=True,
+                 job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
+                 disable_default_exception_handler=False):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -194,6 +197,7 @@ class Worker(object):
         self._horse_pid = 0
         self._stop_requested = False
         self.log = logger
+        self.log_job_description = log_job_description
         self.last_cleaned_at = None
         self.successful_job_count = 0
         self.failed_job_count = 0
@@ -499,9 +503,15 @@ class Worker(object):
                                                       connection=self.connection,
                                                       job_class=self.job_class)
                 if result is not None:
+
                     job, queue = result
-                    self.log.info('{0}: {1} ({2})'.format(green(queue.name),
-                                                          blue(job.description), job.id))
+                    if self.log_job_description:
+                        self.log.info('{0}: {1} ({2})'.format(green(queue.name),
+                                                              blue(job.description),
+                                                              job.id))
+                    else:
+                        self.log.info('{0}:{1}'.format(green(queue.name),
+                                                       job.id))
 
                 break
             except DequeueTimeout:

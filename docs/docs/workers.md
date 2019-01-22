@@ -63,7 +63,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--connection-class`: Redis connection class to use, defaults to `redis.StrictRedis`.
 * `--log-format`: Format for the worker logs, defaults to `'%(asctime)s %(message)s'`
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
-
+* `--disable-job-desc-logging`: Turn off job description logging.
 
 ## Inside the worker
 
