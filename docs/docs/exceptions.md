@@ -21,35 +21,28 @@ inject your own error handling logic to your workers.
 
 This is how you register custom exception handler(s) to an RQ worker:
 
-{% highlight python %}
+```python
 from exception_handlers import foo_handler, bar_handler
 
 w = Worker([q], exception_handlers=[foo_handler, bar_handler])
-...
-{% endhighlight %}
+```
 
 The handler itself is a function that takes the following parameters: `job`,
 `exc_type`, `exc_value` and `traceback`:
 
-{% highlight python %}
+```python
 def my_handler(job, exc_type, exc_value, traceback):
     # do custom things here
     # for example, write the exception info to a DB
-    ...
-{% endhighlight %}
+
+```
 
 You might also see the three exception arguments encoded as:
 
-{% highlight python %}
+```python
 def my_handler(job, *exc_info):
     # do custom things here
-    ...
-{% endhighlight %}
-
-Note that the custom exception handlers are executed in addition of RQ's default
-error handling mechanism (i.e. moving failed jobs to `FailedJobRegistry`). If
-you want to disable RQ's default error handling mechanism, instantiate RQ with
-`disable_default_exception_handler=True`:
+```
 
 {% highlight python %}
 from exception_handlers import foo_handler
@@ -74,7 +67,7 @@ as `True` (i.e.  continue with the next handler).
 To prevent the next exception handler in the handler chain from executing,
 use a custom exception handler that doesn't fall through, for example:
 
-{% highlight python %}
+```python
 def black_hole(job, *exc_info):
     return False
-{% endhighlight %}
+```

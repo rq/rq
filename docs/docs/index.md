@@ -13,13 +13,13 @@ arguments onto a queue.  This is called _enqueueing_.
 
 To put jobs on queues, first declare a function:
 
-{% highlight python %}
+```python
 import requests
 
 def count_words_at_url(url):
     resp = requests.get(url)
     return len(resp.text.split())
-{% endhighlight %}
+```
 
 Noticed anything?  There's nothing special about this function!  Any Python
 function call can be put on an RQ queue.
@@ -27,7 +27,7 @@ function call can be put on an RQ queue.
 To put this potentially expensive word count for a given URL in the background,
 simply do this:
 
-{% highlight python %}
+```python
 from rq import Queue
 from redis import Redis
 from somewhere import count_words_at_url
@@ -43,14 +43,14 @@ print(job.result)   # => None
 # Now, wait a while, until the worker is finished
 time.sleep(2)
 print(job.result)   # => 889
-{% endhighlight %}
+```
 
 If you want to put the work on a specific queue, simply specify its name:
 
-{% highlight python %}
+```python
 q = Queue('low', connection=redis_conn)
 q.enqueue(count_words_at_url, 'http://nvie.com')
-{% endhighlight %}
+```
 
 Notice the `Queue('low')` in the example above?  You can use any queue name, so
 you can quite flexibly distribute work to your own desire.  A common naming
@@ -78,28 +78,28 @@ job function.
 In the last case, it may be advantageous to instead use the explicit version of
 `.enqueue()`, `.enqueue_call()`:
 
-{% highlight python %}
+```python
 q = Queue('low', connection=redis_conn)
 q.enqueue_call(func=count_words_at_url,
                args=('http://nvie.com',),
                timeout=30)
-{% endhighlight %}
+```
 
 For cases where the web process doesn't have access to the source code running
 in the worker (i.e. code base X invokes a delayed function from code base Y),
 you can pass the function as a string reference, too.
 
-{% highlight python %}
+```python
 q = Queue('low', connection=redis_conn)
 q.enqueue('my_package.my_module.my_func', 3, 4)
-{% endhighlight %}
+```
 
 
 ## Working with Queues
 
 Besides enqueuing jobs, Queues have a few useful methods:
 
-{% highlight python %}
+```python
 from rq import Queue
 from redis import Redis
 
@@ -117,7 +117,7 @@ job = q.fetch_job('my_id') # Returns job having ID "my_id"
 # Deleting the queue
 q.delete(delete_jobs=True) # Passing in `True` will remove all jobs in the queue
 # queue is unusable now unless re-instantiated
-{% endhighlight %}
+```
 
 
 ### On the Design
@@ -151,7 +151,7 @@ of course).
 If you're familiar with Celery, you might be used to its `@task` decorator.
 Starting from RQ >= 0.3, there exists a similar decorator:
 
-{% highlight python %}
+```python
 from rq.decorators import job
 
 @job('low', connection=my_redis_conn, timeout=5)
@@ -161,7 +161,7 @@ def add(x, y):
 job = add.delay(3, 4)
 time.sleep(1)
 print(job.result)
-{% endhighlight %}
+```
 
 
 ## Bypassing workers
@@ -170,12 +170,12 @@ For testing purposes, you can enqueue jobs without delegating the actual
 execution to a worker (available since version 0.3.1). To do this, pass the
 `is_async=False` argument into the Queue constructor:
 
-{% highlight pycon %}
+```python
 >>> q = Queue('low', is_async=False, connection=my_redis_conn)
 >>> job = q.enqueue(fib, 8)
 >>> job.result
 21
-{% endhighlight %}
+```
 
 The above code runs without an active worker and executes `fib(8)`
 synchronously within the same process. You may know this behaviour from Celery
@@ -188,11 +188,11 @@ a redis instance for storing states related to job execution and completion.
 New in RQ 0.4.0 is the ability to chain the execution of multiple jobs.
 To execute a job that depends on another job, use the `depends_on` argument:
 
-{% highlight python %}
+```python
 q = Queue('low', connection=my_redis_conn)
 report_job = q.enqueue(generate_report)
 q.enqueue(send_report, depends_on=report_job)
-{% endhighlight %}
+```
 
 The ability to handle job dependencies allows you to split a big job into
 several smaller ones. A job that is dependent on another is enqueued only when
