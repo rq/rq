@@ -482,6 +482,17 @@ class Worker(object):
 
                 except StopRequested:
                     break
+
+                except:  # noqa
+                    self.log.error(
+                        """
+                        Worker %s encountered an unhandled exception.\n
+                        Stacktrace:\n %s\n\n.
+                        Worker %s quitting...
+                        """,
+                        self.name, traceback.format_exc(), self.name
+                    )
+                    break
         finally:
             if not self.is_horse:
                 self.register_death()
