@@ -112,7 +112,7 @@ footer a
     font-weight: 400;
 }
 
-pre
+pre, pre.highlight
 {
     margin: 0 0 1em 1em;
     padding: 1em 1.8em;
