@@ -11,7 +11,8 @@ Backward incompatible changes:
 - RQ's custom job exception handling mechanism has also changed slightly:
   * RQ's default exception handling mechanism (moving jobs to `FailedQueueRegistry`) can be disabled by doing `Worker(disable_default_exception_handler=True)`.
   * Custom exception handlers are no longer executed in reverse order.
-=======
+
+- `Worker` names are now randomized by default.
 
 ### 0.12.0 (2018-07-14)
 - Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
