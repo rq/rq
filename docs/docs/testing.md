@@ -9,7 +9,7 @@ You may wish to include your RQ tasks inside unit tests. However many frameworks
 
 Therefore, you must use the SimpleWorker class to avoid fork();
 
-{% highlight python %}
+```python
 from redis import Redis
 from rq import SimpleWorker, Queue
 
@@ -18,7 +18,7 @@ queue.enqueue(my_long_running_job)
 worker = SimpleWorker([queue], connection=queue.connection)
 worker.work(burst=True)  # Runs enqueued job
 # Check for result...
-{% endhighlight %}
+```
 
 
 ## Running Jobs in unit tests
@@ -31,11 +31,11 @@ Additionally, we can use fakeredis to mock a redis instance, so we don't have to
 run a redis server separately. The instance of the fake redis server can
 be directly passed as the connection argument to the queue:
 
-{% highlight python %}
+```python
 from fakeredis import FakeStrictRedis
 from rq import Queue
 
 queue = Queue(is_async=False, connection=FakeStrictRedis())
 job = queue.enqueue(my_long_running_job)
 assert job.is_finished
-{% endhighlight %}
+```

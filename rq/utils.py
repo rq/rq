@@ -14,7 +14,10 @@ import importlib
 import logging
 import numbers
 import sys
-from collections import Iterable
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError

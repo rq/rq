@@ -26,7 +26,7 @@ fi
 # For use on build server, we need exit code to be representative of success/failure
 if [ "$1" = '-x' ]; then
     shift 1
-    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1
+    /usr/bin/env python -m pytest -v tests $@ 2>&1
 else
-    /usr/bin/env python -m unittest discover -v -s tests $@ 2>&1 | egrep -v '^test_' | $safe_rg
+    /usr/bin/env python -m pytest -v tests $@ 2>&1 | egrep -v '^test_' | $safe_rg
 fi

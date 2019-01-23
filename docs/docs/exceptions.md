@@ -23,31 +23,28 @@ exception occurs.
 
 This is how you register custom exception handler(s) to an RQ worker:
 
-{% highlight python %}
+```python
 from rq.handlers import move_to_failed_queue  # RQ's default exception handler
 
 w = Worker([q], exception_handlers=[my_handler, move_to_failed_queue])
-...
-{% endhighlight %}
+```
 
 The handler itself is a function that takes the following parameters: `job`,
 `exc_type`, `exc_value` and `traceback`:
 
-{% highlight python %}
+```python
 def my_handler(job, exc_type, exc_value, traceback):
     # do custom things here
     # for example, write the exception info to a DB
-    ...
-{% endhighlight %}
+
+```
 
 You might also see the three exception arguments encoded as:
 
-{% highlight python %}
+```python
 def my_handler(job, *exc_info):
     # do custom things here
-    ...
-{% endhighlight %}
-
+```
 
 ## Chaining exception handlers
 
@@ -64,7 +61,7 @@ as `True` (i.e.  continue with the next handler).
 To replace the default behaviour (i.e. moving the job to the `failed` queue),
 use a custom exception handler that doesn't fall through, for example:
 
-{% highlight python %}
+```python
 def black_hole(job, *exc_info):
     return False
-{% endhighlight %}
+```
