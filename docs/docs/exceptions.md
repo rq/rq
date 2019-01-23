@@ -42,12 +42,11 @@ def my_handler(job, exc_type, exc_value, traceback):
 
 You might also see the three exception arguments encoded as:
 
-{% highlight python %}
+```python
 def my_handler(job, *exc_info):
     # do custom things here
     ...
-{% endhighlight %}
-
+```
 
 ## Chaining exception handlers
 
