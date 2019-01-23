@@ -483,6 +483,10 @@ class Worker(object):
                 except StopRequested:
                     break
 
+                except SystemExit:
+                    # Cold shutdown detected
+                    raise
+
                 except:  # noqa
                     self.log.error(
                         """
