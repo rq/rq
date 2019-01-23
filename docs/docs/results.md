@@ -93,15 +93,15 @@ If a job requires more (or less) time to complete, the default timeout period
 can be loosened (or tightened), by specifying it as a keyword argument to the
 `enqueue()` call, like so:
 
-{% highlight python %}
+```python
 q = Queue()
 q.enqueue(mytask, args=(foo,), kwargs={'bar': qux}, timeout=600)  # 10 mins
-{% endhighlight %}
+```
 
 You can also change the default timeout for jobs that are enqueued via specific
 queue instances at once, which can be useful for patterns like this:
 
-{% highlight python %}
+```python
 # High prio jobs should end in 8 secs, while low prio
 # work may take up to 10 mins
 high = Queue('high', default_timeout=8)  # 8 secs
@@ -109,7 +109,7 @@ low = Queue('low', default_timeout=600)  # 10 mins
 
 # Individual jobs can still override these defaults
 low.enqueue(really_really_slow, timeout=3600)  # 1 hr
-{% endhighlight %}
+```
 
 Individual jobs can still specify an alternative timeout, as workers will
 respect these.

@@ -13,14 +13,14 @@ jobs.
 All job information is stored in Redis. You can inspect a job and its attributes
 by using `Job.fetch()`.
 
-{% highlight python %}
+```python
 from redis import Redis
 from rq.job import Job
 
 connection = Redis()
 job = Job.fetch('my_job_id', connection=redis)
 print('Status: %s' $ job.get_status())
-{% endhighlight %}
+```
 
 Some interesting job attributes include:
 * `job.status`
@@ -38,14 +38,14 @@ Some interesting job attributes include:
 Since job functions are regular Python functions, you have to ask RQ for the
 current job ID, if any.  To do this, you can use:
 
-{% highlight python %}
+```python
 from rq import get_current_job
 
 def add(x, y):
     job = get_current_job()
     print('Current job: %s' % (job.id,))
     return x + y
-{% endhighlight %}
+```
 
 
 ## Storing arbitrary data on jobs
@@ -56,7 +56,7 @@ To add/update custom status information on this job, you have access to the
 `meta` property, which allows you to store arbitrary pickleable data on the job
 itself:
 
-{% highlight python %}
+```python
 import socket
 
 def add(x, y):
@@ -67,7 +67,7 @@ def add(x, y):
     # do more work
     time.sleep(1)
     return x + y
-{% endhighlight %}
+```
 
 
 ## Time to live for job in queue
@@ -77,13 +77,13 @@ _New in version 0.4.7._
 A job has two TTLs, one for the job result and one for the job itself. This means that if you have
 job that shouldn't be executed after a certain amount of time, you can define a TTL as such:
 
-{% highlight python %}
+```python
 # When creating the job:
 job = Job.create(func=say_hello, ttl=43)
 
 # or when queueing a new job:
 job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
-{% endhighlight %}
+```
 
 
 ## Failed Jobs
@@ -92,7 +92,7 @@ If a job fails and raises an exception, the worker will put the job in a failed 
 On the Job instance, the `is_failed` property will be true. To fetch all failed jobs, scan
 through the `get_failed_queue()` queue.
 
-{% highlight python %}
+```python
 from redis import StrictRedis
 from rq import push_connection, get_failed_queue, Queue
 from rq.job import Job
@@ -115,4 +115,4 @@ fq.requeue(job.id)
 
 assert fq.count == 0
 assert Queue('fake').count == 1
-{% endhighlight %}
+```

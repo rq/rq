@@ -13,10 +13,10 @@ which looks like this:
 
 To install, just do:
 
-{% highlight console %}
+```console
 $ pip install rq-dashboard
 $ rq-dashboard
-{% endhighlight %}
+```
 
 It can also be integrated easily in your Flask app.
 
@@ -25,7 +25,7 @@ It can also be integrated easily in your Flask app.
 
 To see what queues exist and what workers are active, just type `rq info`:
 
-{% highlight console %}
+```console
 $ rq info
 high       |██████████████████████████ 20
 low        |██████████████ 12
@@ -36,14 +36,14 @@ Bricktop.19233 idle: low
 Bricktop.19232 idle: high, default, low
 Bricktop.18349 idle: default
 3 workers, 3 queues
-{% endhighlight %}
+```
 
 
 ## Querying by queue names
 
 You can also query for a subset of queues, if you're looking for specific ones:
 
-{% highlight console %}
+```console
 $ rq info high default
 high       |██████████████████████████ 20
 default    |█████████ 8
@@ -52,7 +52,7 @@ default    |█████████ 8
 Bricktop.19232 idle: high, default
 Bricktop.18349 idle: default
 2 workers, 2 queues
-{% endhighlight %}
+```
 
 
 ## Organising workers by queue
@@ -60,7 +60,7 @@ Bricktop.18349 idle: default
 By default, `rq info` prints the workers that are currently active, and the
 queues that they are listening on, like this:
 
-{% highlight console %}
+```console
 $ rq info
 ...
 
@@ -68,12 +68,12 @@ Mickey.26421 idle: high, default
 Bricktop.25458 busy: high, default, low
 Turkish.25812 busy: high, default
 3 workers, 3 queues
-{% endhighlight %}
+```
 
 To see the same data, but organised by queue, use the `-R` (or `--by-queue`)
 flag:
 
-{% highlight console %}
+```console
 $ rq info -R
 ...
 
@@ -82,7 +82,7 @@ low:     Bricktop.25458 (busy)
 default: Bricktop.25458 (busy), Mickey.26421 (idle), Turkish.25812 (busy)
 failed:  –
 3 workers, 4 queues
-{% endhighlight %}
+```
 
 
 ## Interval polling
@@ -90,16 +90,16 @@ failed:  –
 By default, `rq info` will print stats and exit.
 You can specify a poll interval, by using the `--interval` flag.
 
-{% highlight console %}
+```console
 $ rq info --interval 1
-{% endhighlight %}
+```
 
 `rq info` will now update the screen every second.  You may specify a float
 value to indicate fractions of seconds.  Be aware that low interval values will
 increase the load on Redis, of course.
 
-{% highlight console %}
+```console
 $ rq info --interval 0.5
-{% endhighlight %}
+```
 
 [dashboard]: https://github.com/nvie/rq-dashboard

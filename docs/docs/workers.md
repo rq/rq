@@ -13,14 +13,14 @@ to perform inside web processes.
 To start crunching work, simply start a worker from the root of your project
 directory:
 
-{% highlight console %}
+```console
 $ rq worker high normal low
 *** Listening for work on high, normal, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
 *** Listening for work on high, normal, low
 ...
-{% endhighlight %}
+```
 
 Workers will read jobs from the given queues (the order is important) in an
 endless loop, waiting for new work to arrive when all jobs are done.
@@ -37,14 +37,14 @@ new work when they run out of work.  Workers can also be started in _burst
 mode_ to finish all currently available work and quit as soon as all given
 queues are emptied.
 
-{% highlight console %}
+```console
 $ rq worker --burst high normal low
 *** Listening for work on high, normal, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
 No more work, burst finished.
 Registering death.
-{% endhighlight %}
+```
 
 This can be useful for batch work that needs to be processed periodically, or
 just to scale up your workers temporarily during peak periods.
@@ -106,7 +106,7 @@ yourself before starting the work loop.
 To do this, provide your own worker script (instead of using `rq worker`).
 A simple implementation example:
 
-{% highlight python %}
+```python
 #!/usr/bin/env python
 import sys
 from rq import Connection, Worker
@@ -121,7 +121,7 @@ with Connection():
 
     w = Worker(qs)
     w.work()
-{% endhighlight %}
+```
 
 
 ### Worker names
@@ -139,7 +139,7 @@ starting the worker, using the `--name` option.
 `Worker` instances store their runtime information in Redis. Here's how to
 retrieve them:
 
-{% highlight python %}
+```python
 from redis import Redis
 from rq import Queue, Worker
 
@@ -150,14 +150,14 @@ workers = Worker.all(connection=redis)
 # Returns all workers in this queue (new in version 0.10.0)
 queue = Queue('queue_name')
 workers = Worker.all(queue=queue)
-{% endhighlight %}
+```
 
 _New in version 0.10.0._
 
 If you only want to know the number of workers for monitoring purposes, using
 `Worker.count()` is much more performant.
 
-{% highlight python %}
+```python
 from redis import Redis
 from rq import Worker
 
@@ -169,8 +169,7 @@ workers = Worker.count(connection=redis)
 # Count the number of workers for a specific queue
 queue = Queue('queue_name', connection=redis)
 workers = Worker.all(queue=queue)
-
-{% endhighlight %}
+```
 
 
 ### Worker statistics
@@ -180,14 +179,14 @@ _New in version 0.9.0._
 If you want to check the utilization of your queues, `Worker` instances
 store a few useful information:
 
-{% highlight python %}
+```python
 from rq.worker import Worker
 worker = Worker.find_by_key('rq:worker:name')
 
 worker.successful_job_count  # Number of jobs finished successfully
 worker.failed_job_count. # Number of failed jobs processed by this worker
 worker.total_working_time  # Number of time spent executing jobs
-{% endhighlight %}
+```
 
 
 ## Taking down workers
@@ -209,7 +208,7 @@ If you'd like to configure `rq worker` via a configuration file instead of
 through command line arguments, you can do this by creating a Python file like
 `settings.py`:
 
-{% highlight python %}
+```python
 REDIS_URL = 'redis://localhost:6379/1'
 
 # You can also specify the Redis DB to use
@@ -228,7 +227,7 @@ SENTRY_DSN = 'sync+http://public:secret@example.com/1'
 
 # If you want custom worker name
 # NAME = 'worker-1024'
-{% endhighlight %}
+```
 
 The example above shows all the options that are currently supported.
 
@@ -236,9 +235,9 @@ _Note: The_ `QUEUES` _and_ `REDIS_PASSWORD` _settings are new since 0.3.3._
 
 To specify which module to read settings from, use the `-c` option:
 
-{% highlight console %}
+```console
 $ rq worker -c settings
-{% endhighlight %}
+```
 
 
 ## Custom worker classes
@@ -255,9 +254,9 @@ more common requests so far are:
 
 You can use the `-w` option to specify a different worker class to use:
 
-{% highlight console %}
+```console
 $ rq worker -w 'path.to.GeventWorker'
-{% endhighlight %}
+```
 
 
 ## Custom Job and Queue classes
@@ -267,15 +266,15 @@ _Will be available in next release._
 You can tell the worker to use a custom class for jobs and queues using
 `--job-class` and/or `--queue-class`.
 
-{% highlight console %}
+```console
 $ rq worker --job-class 'custom.JobClass' --queue-class 'custom.QueueClass'
-{% endhighlight %}
+```
 
 Don't forget to use those same classes when enqueueing the jobs.
 
 For example:
 
-{% highlight python %}
+```python
 from rq import Queue
 from rq.job import Job
 
@@ -287,14 +286,14 @@ class CustomQueue(Queue):
 
 queue = CustomQueue('default', connection=redis_conn)
 queue.enqueue(some_func)
-{% endhighlight %}
+```
 
 
 ## Custom DeathPenalty classes
 
 When a Job times-out, the worker will try to kill it using the supplied
 `death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
-if you wish to attempt to kill jobs in an application specific or 'cleaner' manner. 
+if you wish to attempt to kill jobs in an application specific or 'cleaner' manner.
 
 DeathPenalty classes are constructed with the following arguments
 `BaseDeathPenalty(timeout, JobTimeoutException, job_id=job.id)`
@@ -307,9 +306,9 @@ _New in version 0.5.5._
 If you need to handle errors differently for different types of jobs, or simply want to customize
 RQ's default error handling behavior, run `rq worker` using the `--exception-handler` option:
 
-{% highlight console %}
+```console
 $ rq worker --exception-handler 'path.to.my.ErrorHandler'
 
 # Multiple exception handlers is also supported
 $ rq worker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
-{% endhighlight %}
+```
