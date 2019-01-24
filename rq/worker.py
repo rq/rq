@@ -11,6 +11,7 @@ import socket
 import sys
 import time
 import traceback
+import uuid
 import warnings
 from datetime import timedelta
 
@@ -236,7 +237,7 @@ class Worker(object):
         if self._name is None:
             hostname = socket.gethostname()
             shortname, _, _ = hostname.partition('.')
-            self._name = '{0}.{1}'.format(shortname, self.pid)
+            self._name = '{0}.{1}.{2}'.format(shortname, self.pid, text_type(uuid.uuid4()))
         return self._name
 
     @property
