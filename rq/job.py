@@ -25,7 +25,6 @@ except ImportError:  # noqa  # pragma: no cover
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
-
 JobStatus = enum(
     'JobStatus',
     QUEUED='queued',
@@ -182,6 +181,10 @@ class Job(object):
     @property
     def is_started(self):
         return self.get_status() == JobStatus.STARTED
+
+    @property
+    def is_deferred(self):
+        return self.get_status() == JobStatus.DEFERRED
 
     @property
     def dependency(self):
@@ -457,7 +460,6 @@ class Job(object):
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
 
-
     def to_dict(self, include_meta=True):
         """
         Returns a serialization of the current job instance
@@ -545,28 +547,28 @@ class Job(object):
             self.cancel(pipeline=pipeline)
         connection = pipeline if pipeline is not None else self.connection
 
-        if self.get_status() == JobStatus.FINISHED:
+        if self.is_finished:
             from .registry import FinishedJobRegistry
             registry = FinishedJobRegistry(self.origin,
                                            connection=self.connection,
                                            job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.DEFERRED:
+        elif self.is_deferred:
             from .registry import DeferredJobRegistry
             registry = DeferredJobRegistry(self.origin,
                                            connection=self.connection,
                                            job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.STARTED:
+        elif self.is_started:
             from .registry import StartedJobRegistry
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,
                                           job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.FAILED:
+        elif self.is_failed:
             from .queue import get_failed_queue
             failed_queue = get_failed_queue(connection=self.connection,
                                             job_class=self.__class__)
