@@ -4,7 +4,6 @@ from __future__ import (absolute_import, division, print_function,
 
 from click.testing import CliRunner
 from rq import get_failed_queue, Queue
-from rq.compat import is_python_version
 from rq.job import Job
 from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig
@@ -13,9 +12,9 @@ import pytest
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
 
-if is_python_version((2, 7), (3, 2)):
+try:
     from unittest import TestCase
-else:
+except ImportError:
     from unittest2 import TestCase  # noqa
 
 
