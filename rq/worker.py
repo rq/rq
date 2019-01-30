@@ -680,19 +680,20 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
+        raised = True
         try:
             self.setup_work_horse_signals()
             self._is_horse = True
             self.log = logger
             self.perform_job(job, queue)
+            raised = False
         except Exception as e:  # noqa
             # Horse does not terminate properly
             raise e
-            os._exit(1)
-
-        # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
-        os._exit(0)
+        finally:
+            # os._exit() is the way to exit from childs after a fork(), in
+            # constrast to the regular sys.exit()
+            os._exit(1 if raised else 0)
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse."""
