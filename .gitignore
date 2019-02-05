@@ -16,4 +16,10 @@ Vagrantfile
 .coverage*
 /.cache
 
+<<<<<<< HEAD
 .pytest_cache/
+=======
+Gemfile
+Gemfile.lock
+_site/
+>>>>>>> 600be0a... Added anchor.js to docs
