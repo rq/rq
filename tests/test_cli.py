@@ -19,9 +19,9 @@ import pytest
 from tests import RQTestCase
 from tests.fixtures import add_meta, div_by_zero, say_hello
 
-if is_python_version((2, 7), (3, 2)):
+try:
     from unittest import TestCase
-else:
+except ImportError:
     from unittest2 import TestCase  # noqa
 
 
