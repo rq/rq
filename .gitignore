@@ -17,3 +17,6 @@ Vagrantfile
 .coverage*
 /.cache
 
+Gemfile
+Gemfile.lock
+_site/
