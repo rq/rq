@@ -6,11 +6,10 @@ import logging
 
 from redis import Redis
 from rq import pop_connection, push_connection
-from rq.compat import is_python_version
 
-if is_python_version((2, 7), (3, 2)):
+try:
     import unittest
-else:
+except ImportError:
     import unittest2 as unittest  # noqa
 
 
