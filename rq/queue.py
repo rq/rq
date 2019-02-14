@@ -310,10 +310,10 @@ class Queue(object):
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
-        
+
         if raw:
             # If raw flag is true we leave the pickling up to the end user
-            # we ensure there is only one arg. 
+            # we ensure there is only one arg.
             assert len(args) == 1
             assert len(kwargs) == 0
             assert type(args[0]) == bytes

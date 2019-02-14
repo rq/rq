@@ -109,7 +109,7 @@ class Job(object):
         if raw:
             assert len(args) == 1
             assert len(kwargs) == 0
-        
+
         job = cls(connection=connection)
         if id is not None:
             job.set_id(id)
