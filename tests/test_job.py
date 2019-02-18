@@ -82,6 +82,10 @@ class TestJob(RQTestCase):
         self.assertRaises(TypeError, Job.create, fixtures.say_hello, args="string")
         self.assertRaises(TypeError, Job.create, fixtures.say_hello, kwargs="string")
         self.assertRaises(TypeError, Job.create, func=42)
+        self.assertRaises(AssertionError, Job.create, 
+            'tests.fixtures.some_calculation', args=(1,2), raw=True)
+        self.assertRaises(AssertionError, Job.create, 
+            'tests.fixtures.some_calculation', kwargs=dict(x=1,y=2), raw=True)
 
     def test_create_typical_job(self):
         """Creation of jobs for function calls."""
@@ -103,6 +107,29 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.result)
 
+    def test_create_typical_raw_job(self):
+        """Creation of jobs for function calls."""
+        job = Job.create('tests.fixtures.say_hello', args=(3,), raw=True)
+
+        # Jobs have a random UUID
+        self.assertIsNotNone(job.id)
+        self.assertIsNotNone(job.created_at)
+        self.assertIsNotNone(job.description)
+        self.assertIsNone(job.instance)
+
+        # Job data is set...
+        self.assertEqual(job.func, fixtures.say_hello)
+        self.assertEqual(job.args, (3,))
+        self.assertEqual(job.kwargs, {})
+
+        # ...but metadata is not
+        self.assertIsNone(job.origin)
+        self.assertIsNone(job.enqueued_at)
+        self.assertIsNone(job.result)
+    
+        # ... raw flag is present
+        self.assertIsNotNone(job.raw)
+
     def test_create_instance_method_job(self):
         """Creation of jobs for instance methods."""
         n = fixtures.Number(2)
@@ -121,6 +148,16 @@ class TestJob(RQTestCase):
         self.assertEqual(job.func, fixtures.say_hello)
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, ('World',))
+
+    def test_create_raw_job_from_string_function(self):
+        """Creation of jobs using string specifier."""
+        job = Job.create(func='tests.fixtures.say_hello', args=(b'World',), raw=True)
+
+        # Job data is set
+        self.assertEqual(job.func, fixtures.say_hello)
+        self.assertIsNone(job.instance)
+        self.assertEqual(job.args, (b'World',))
+        self.assertEqual(job.raw, True)
 
     def test_create_job_from_callable_class(self):
         """Creation of jobs using a callable class specifier."""
@@ -164,6 +201,23 @@ class TestJob(RQTestCase):
         unpickled_data = loads(zlib.decompress(self.testconn.hget(job.key, 'data')))
         self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
 
+    def test_raw_save(self):  # noqa
+        """Storing jobs."""
+        job = Job.create(func='tests.fixtures.say_hello', args=(b'Ahmad',), raw='yes')
+
+        # Saving creates a Redis hash
+        self.assertEqual(self.testconn.exists(job.key), False)
+        job.save()
+        self.assertEqual(self.testconn.type(job.key), b'hash')
+
+        func_name = self.testconn.hget(job.key, 'func_name')
+        arg = self.testconn.hget(job.key, 'arg')
+        raw = self.testconn.hget(job.key, 'raw')
+        
+        self.assertEqual(func_name, b'tests.fixtures.say_hello')
+        self.assertEqual(arg, b'Ahmad')
+        self.assertIsNotNone(raw)
+
     def test_fetch(self):
         """Fetching jobs."""
         # Prepare test
@@ -179,6 +233,26 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (3, 4))
         self.assertEqual(job.kwargs, dict(z=2))
+        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
+
+    def test_raw_fetch(self):
+        """Fetching jobs."""
+        # Prepare test
+        self.testconn.hset('rq:job:some_id', 'func_name',
+                           b'tests.fixtures.say_hello')
+        self.testconn.hset('rq:job:some_id', 'arg',
+                           b'Ahmad')
+        self.testconn.hset('rq:job:some_id', 'raw', 'yes')
+        self.testconn.hset('rq:job:some_id', 'created_at',
+                           '2012-02-07T22:13:24.123456Z')
+
+        # Fetch returns a job
+        job = Job.fetch('some_id')
+        self.assertEqual(job.id, 'some_id')
+        self.assertEqual(job.func_name, 'tests.fixtures.say_hello')
+        self.assertIsNone(job.instance)
+        self.assertEqual(job._args, (b'Ahmad',))
+        self.assertEqual(job.kwargs, dict())
         self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
 
     def test_persistence_of_empty_jobs(self):  # noqa
@@ -199,6 +273,19 @@ class TestJob(RQTestCase):
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
             [b'created_at', b'data', b'description'])
+
+    def test_persistence_of_typical_raw_jobs(self):
+        """Storing typical raw jobs."""
+        job = Job.create(func='tests.fixtures.say_hello', args=(b'Ahmad',), raw='yes')
+        job.save()
+
+        stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
+        self.assertEqual(stored_date, utcformat(job.created_at))
+
+        # ... and no other keys are stored
+        self.assertEqual(
+            sorted(self.testconn.hkeys(job.key)),
+            [b'arg', b'created_at', b'description', b'func_name', b'raw'])
 
     def test_persistence_of_parent_job(self):
         """Storing jobs with parent job, either instance or key."""
@@ -226,6 +313,22 @@ class TestJob(RQTestCase):
         self.assertEqual(job.args, job2.args)
         self.assertEqual(job.kwargs, job2.kwargs)
         self.assertEqual(job.timeout, job2.timeout)
+
+        # Mathematical equation
+        self.assertEqual(job, job2)
+
+    def test_store_raw_then_fetch(self):
+        """Store, then fetch."""
+        job = Job.create(func="tests.fixtures.some_calculation", timeout='1h', args=(b'3, 4',), raw='yes')
+        job.save()
+
+        job2 = Job.fetch(job.id)
+        self.assertEqual(job.func, job2.func)
+        self.assertEqual(job.arg, job2.arg)
+        self.assertEqual(job.args, job2.args)
+        self.assertEqual(job.kwargs, job2.kwargs)
+        self.assertEqual(job.timeout, job2.timeout)
+        self.assertEqual(job.raw, job2.raw)
 
         # Mathematical equation
         self.assertEqual(job, job2)
@@ -449,6 +552,23 @@ class TestJob(RQTestCase):
     def test_cleanup(self):
         """Test that jobs and results are expired properly."""
         job = Job.create(func=fixtures.say_hello)
+        job.save()
+
+        # Jobs with negative TTLs don't expire
+        job.cleanup(ttl=-1)
+        self.assertEqual(self.testconn.ttl(job.key), -1)
+
+        # Jobs with positive TTLs are eventually deleted
+        job.cleanup(ttl=100)
+        self.assertEqual(self.testconn.ttl(job.key), 100)
+
+        # Jobs with 0 TTL are immediately deleted
+        job.cleanup(ttl=0)
+        self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
+
+    def test_raw_cleanup(self):
+        """Test that jobs and results are expired properly."""
+        job = Job.create(func='tests.fixtures.say_hello', raw='yes')
         job.save()
 
         # Jobs with negative TTLs don't expire
