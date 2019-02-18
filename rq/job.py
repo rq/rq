@@ -335,6 +335,7 @@ class Job(object):
         self._dependency_id = None
         self.meta = {}
         self.raw = False
+        self.arg = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
