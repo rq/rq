@@ -109,7 +109,7 @@ class TestJob(RQTestCase):
 
     def test_create_typical_raw_job(self):
         """Creation of jobs for function calls."""
-        job = Job.create('tests.fixtures.say_hello', args=(3,), raw=True)
+        job = Job.create('tests.fixtures.say_raw_hello', args=(3,), raw='yes')
 
         # Jobs have a random UUID
         self.assertIsNotNone(job.id)
@@ -118,7 +118,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
 
         # Job data is set...
-        self.assertEqual(job.func, fixtures.say_hello)
+        self.assertEqual(job.func, fixtures.say_raw_hello)
         self.assertEqual(job.args, (3,))
         self.assertEqual(job.kwargs, {})
 
@@ -151,10 +151,10 @@ class TestJob(RQTestCase):
 
     def test_create_raw_job_from_string_function(self):
         """Creation of jobs using string specifier."""
-        job = Job.create(func='tests.fixtures.say_hello', args=(b'World',), raw=True)
+        job = Job.create(func='tests.fixtures.say_raw_hello', args=(b'World',), raw=True)
 
         # Job data is set
-        self.assertEqual(job.func, fixtures.say_hello)
+        self.assertEqual(job.func, fixtures.say_raw_hello)
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (b'World',))
         self.assertEqual(job.raw, True)
@@ -203,7 +203,7 @@ class TestJob(RQTestCase):
 
     def test_raw_save(self):  # noqa
         """Storing jobs."""
-        job = Job.create(func='tests.fixtures.say_hello', args=(b'Ahmad',), raw='yes')
+        job = Job.create(func='tests.fixtures.say_raw_hello', args=(b'Ahmad',), raw='yes')
 
         # Saving creates a Redis hash
         self.assertEqual(self.testconn.exists(job.key), False)
@@ -214,7 +214,7 @@ class TestJob(RQTestCase):
         arg = self.testconn.hget(job.key, 'arg')
         raw = self.testconn.hget(job.key, 'raw')
         
-        self.assertEqual(func_name, b'tests.fixtures.say_hello')
+        self.assertEqual(func_name, b'tests.fixtures.say_raw_hello')
         self.assertEqual(arg, b'Ahmad')
         self.assertIsNotNone(raw)
 
@@ -239,7 +239,7 @@ class TestJob(RQTestCase):
         """Fetching jobs."""
         # Prepare test
         self.testconn.hset('rq:job:some_id', 'func_name',
-                           b'tests.fixtures.say_hello')
+                           b'tests.fixtures.say_raw_hello')
         self.testconn.hset('rq:job:some_id', 'arg',
                            b'Ahmad')
         self.testconn.hset('rq:job:some_id', 'raw', 'yes')
@@ -249,7 +249,7 @@ class TestJob(RQTestCase):
         # Fetch returns a job
         job = Job.fetch('some_id')
         self.assertEqual(job.id, 'some_id')
-        self.assertEqual(job.func_name, 'tests.fixtures.say_hello')
+        self.assertEqual(job.func_name, 'tests.fixtures.say_raw_hello')
         self.assertIsNone(job.instance)
         self.assertEqual(job._args, (b'Ahmad',))
         self.assertEqual(job.kwargs, dict())
@@ -276,7 +276,7 @@ class TestJob(RQTestCase):
 
     def test_persistence_of_typical_raw_jobs(self):
         """Storing typical raw jobs."""
-        job = Job.create(func='tests.fixtures.say_hello', args=(b'Ahmad',), raw='yes')
+        job = Job.create(func='tests.fixtures.say_raw_hello', args=(b'Ahmad',), raw='yes')
         job.save()
 
         stored_date = self.testconn.hget(job.key, 'created_at').decode('utf-8')
@@ -568,7 +568,7 @@ class TestJob(RQTestCase):
 
     def test_raw_cleanup(self):
         """Test that jobs and results are expired properly."""
-        job = Job.create(func='tests.fixtures.say_hello', raw='yes')
+        job = Job.create(func='tests.fixtures.say_hello', args=(b'Ahmad',) ,raw='yes')
         job.save()
 
         # Jobs with negative TTLs don't expire
