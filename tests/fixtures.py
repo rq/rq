@@ -26,6 +26,15 @@ def say_hello(name=None):
         name = 'Stranger'
     return 'Hi there, %s!' % (name,)
 
+def say_raw_hello(name=None, raw=False):
+    """A job with a single argument and a return value."""
+    if not raw:
+        if name is None:
+            name = 'Stranger'
+    else:
+        name = name.decode('utf-8')
+    return 'Hi there, %s!' % (name,)
+
 
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
