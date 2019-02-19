@@ -184,7 +184,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
-@click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
+@click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
@@ -233,11 +233,8 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
 
         # Should we configure Sentry?
         if sentry_dsn:
-            from raven import Client
-            from raven.transport.http import HTTPTransport
             from rq.contrib.sentry import register_sentry
-            client = Client(sentry_dsn, transport=HTTPTransport)
-            register_sentry(client, worker)
+            register_sentry(sentry_dsn)
 
         worker.work(burst=burst, logging_level=logging_level, date_format=date_format, log_format=log_format)
     except ConnectionError as e:

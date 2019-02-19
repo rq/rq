@@ -6,23 +6,16 @@ from click.testing import CliRunner
 from redis import Redis
 
 from rq import Queue
-from rq.compat import is_python_version
 from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig
 from rq.job import Job
-from rq.queue import Queue
 from rq.registry import FailedJobRegistry
 from rq.worker import Worker
 
 import pytest
 
 from tests import RQTestCase
-from tests.fixtures import add_meta, div_by_zero, say_hello
-
-try:
-    from unittest import TestCase
-except ImportError:
-    from unittest2 import TestCase  # noqa
+from tests.fixtures import div_by_zero, say_hello
 
 
 class TestRQCli(RQTestCase):
@@ -53,13 +46,13 @@ class TestRQCli(RQTestCase):
         job.save()
 
     def test_config_file(self):
-        settings = read_config_file('tests.dummy_settings')
+        settings = read_config_file('tests.config_files.dummy')
         self.assertIn('REDIS_HOST', settings)
         self.assertEqual(settings['REDIS_HOST'], 'testhost.example.com')
 
     def test_config_file_option(self):
         """"""
-        cli_config = CliConfig(config='tests.dummy_settings')
+        cli_config = CliConfig(config='tests.config_files.dummy')
         self.assertEqual(
             cli_config.connection.connection_pool.connection_kwargs['host'],
             'testhost.example.com',
@@ -70,7 +63,7 @@ class TestRQCli(RQTestCase):
 
     def test_config_file_default_options(self):
         """"""
-        cli_config = CliConfig(config='tests.dummy_settings')
+        cli_config = CliConfig(config='tests.config_files.dummy')
 
         self.assertEqual(
             cli_config.connection.connection_pool.connection_kwargs['host'],
@@ -91,7 +84,7 @@ class TestRQCli(RQTestCase):
 
     def test_config_file_default_options_override(self):
         """"""
-        cli_config = CliConfig(config='tests.dummy_settings_override')
+        cli_config = CliConfig(config='tests.config_files.dummy_override')
 
         self.assertEqual(
             cli_config.connection.connection_pool.connection_kwargs['host'],
