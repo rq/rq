@@ -444,6 +444,26 @@ class TestJob(RQTestCase):
         serialized2.pop('meta')
         self.assertDictEqual(serialized, serialized2)
 
+    def test_custom_raw_meta_is_rewriten_by_save_meta(self):
+        """New meta data can be stored by save_meta."""
+        job = Job.create(func='tests.fixtures.say_raw_hello', args=(b'Lionel',), raw='yes')
+        job.save()
+        serialized = job.to_dict()
+
+        job.meta['foo'] = 'bar'
+        job.save_meta()
+
+        raw_meta = self.testconn.hget(job.key, 'meta')
+        self.assertEqual(loads(raw_meta)['foo'], 'bar')
+
+        job2 = Job.fetch(job.id)
+        self.assertEqual(job2.meta['foo'], 'bar')
+
+        # nothing else was changed
+        serialized2 = job2.to_dict()
+        serialized2.pop('meta')
+        self.assertDictEqual(serialized, serialized2)
+
     def test_unpickleable_result(self):
         """Unpickleable job result doesn't crash job.to_dict()"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
@@ -663,6 +683,15 @@ class TestJob(RQTestCase):
         job.perform()
 
         self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
+
+    def test_create_raw_job_with_id(self):
+        """test creating jobs with a custom ID"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue('tests.fixtures.say_raw_hello',b'Ahmad',job_id="1234", raw='yes')
+        self.assertEqual(job.id, "1234")
+        job.perform()
+
+        self.assertRaises(TypeError, queue.enqueue, fixtures.say_raw_hello, job_id=1234)
 
     def test_get_call_string_unicode(self):
         """test call string with unicode keyword arguments"""
