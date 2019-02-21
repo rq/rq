@@ -434,11 +434,7 @@ class Job(object):
                 return utcparse(as_text(date_str))
 
         self.raw = obj.get('raw', None)
-        if self.raw:
-            # import logging; logging.basicConfig(level=logging.DEBUG)
-            # logger = logging.getLogger(__name__)
-            # logger.info(type(self.raw))
-            # logger.info(self.raw)
+        if self.raw is not None:
             self.raw = as_text(self.raw)
             self._func_name = obj.get('func_name').decode()
             self._args = (obj.get('arg'),)
