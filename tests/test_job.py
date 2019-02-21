@@ -85,6 +85,8 @@ class TestJob(RQTestCase):
         self.assertRaises(AssertionError, Job.create, 
             'tests.fixtures.some_calculation', args=(1,2), raw=True)
         self.assertRaises(AssertionError, Job.create, 
+            'tests.fixtures.some_calculation', args=(1,), raw=True)
+        self.assertRaises(AssertionError, Job.create, 
             'tests.fixtures.some_calculation', kwargs=dict(x=1,y=2), raw=True)
 
     def test_create_typical_job(self):
@@ -128,7 +130,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.result)
     
         # ... raw flag is present
-        self.assertIsNotNone(job.raw)
+        self.assertEquals(job.raw, 'yes')
 
     def test_create_instance_method_job(self):
         """Creation of jobs for instance methods."""
