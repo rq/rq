@@ -109,7 +109,7 @@ class TestJob(RQTestCase):
 
     def test_create_typical_raw_job(self):
         """Creation of jobs for function calls."""
-        job = Job.create('tests.fixtures.say_raw_hello', args=(3,), raw='yes')
+        job = Job.create('tests.fixtures.say_raw_hello', args=(b"Ahmad",), raw='yes')
 
         # Jobs have a random UUID
         self.assertIsNotNone(job.id)
@@ -119,7 +119,7 @@ class TestJob(RQTestCase):
 
         # Job data is set...
         self.assertEqual(job.func, fixtures.say_raw_hello)
-        self.assertEqual(job.args, (3,))
+        self.assertEqual(job.args, (b"Ahmad",))
         self.assertEqual(job.kwargs, {})
 
         # ...but metadata is not
