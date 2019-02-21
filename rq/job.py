@@ -629,11 +629,6 @@ class Job(object):
 
     def _execute(self):
         if self.raw:
-            # import logging; logging.basicConfig(level=logging.DEBUG)
-            # logging.info(type(self.raw))
-            # logging.info(self.args)
-            # logging.info(self.kwargs)
-            # logging.info(self.args)
             return self.func(*self.args, raw=self.raw)
         else:
             return self.func(*self.args, **self.kwargs)
