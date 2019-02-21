@@ -109,6 +109,7 @@ class Job(object):
         if raw:
             assert len(args) == 1
             assert len(kwargs) == 0
+            assert type(args[0]) == bytes
 
         job = cls(connection=connection)
         if id is not None:
@@ -220,10 +221,6 @@ class Job(object):
         return import_attribute(self.func_name)
 
     def _unpickle_data(self):
-        # import logging
-        # logging.basicConfig(level=logging.DEBUG)
-        # logger = logging.getLogger(__name__)
-        # logger.info(f"raw: {self.raw}")
         self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
 
     @property
