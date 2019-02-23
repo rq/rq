@@ -156,7 +156,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
     else:
         # Display workers by queue
         queue_dict = {}
-        for queue in queue_dict.keys():
+        for queue in qs:
             queue_dict[queue] = worker_class.all(queue=queue)
 
         if queue_dict:

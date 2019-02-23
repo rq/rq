@@ -213,6 +213,9 @@ class TestRQCli(RQTestCase):
                                       '-u', self.redis_url, '--only-workers'])
 
         self.assert_normal_execution(result)
+        # Ensure both queues' workers are shown
+        self.assertIn('foo:', result.output)
+        self.assertIn('bar:', result.output)
         self.assertIn('2 workers, 2 queues', result.output)
 
     def test_worker(self):
