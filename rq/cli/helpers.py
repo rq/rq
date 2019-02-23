@@ -137,48 +137,46 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
     if queues:
         qs = list(map(queue_class, queues))
 
-        def any_matching_queue(worker):
-            def queue_matches(q):
-                return q in qs
-            return any(map(queue_matches, worker.queues))
-
-        # Filter out workers that don't match the queue filter
-        ws = [w for w in worker_class.all() if any_matching_queue(w)]
-
-        def filter_queues(queue_names):
-            return [qname for qname in queue_names if queue_class(qname) in qs]
+        workers = set()
+        for queue in qs:
+            for worker in worker_class.all(queue=queue):
+                workers.add(worker)
 
     else:
         qs = queue_class.all()
-        ws = worker_class.all()
-        filter_queues = (lambda x: x)
+        workers = worker_class.all()
 
     if not by_queue:
-        for w in ws:
-            worker_queues = filter_queues(w.queue_names())
+        for worker in workers:
+            queue_names = ', '.join(worker.queue_names())
             if not raw:
-                click.echo('%s %s: %s' % (w.name, state_symbol(w.get_state()), ', '.join(worker_queues)))
+                click.echo('%s %s: %s' % (worker.name, state_symbol(worker.get_state()), queue_names))
             else:
-                click.echo('worker %s %s %s' % (w.name, w.get_state(), ','.join(worker_queues)))
+                click.echo('worker %s %s %s' % (worker.name, worker.get_state(), queue_names))
     else:
-        # Create reverse lookup table
-        queues = dict([(q, []) for q in qs])
-        for w in ws:
-            for q in w.queues:
-                if q not in queues:
-                    continue
-                queues[q].append(w)
+        # Display workers by queue
+        queue_dict = {}
+        for queue in qs:
+            queue_dict[queue] = worker_class.all(queue=queue)
 
-        max_qname = max(map(lambda q: len(q.name), queues.keys())) if queues else 0
-        for q in queues:
-            if queues[q]:
-                queues_str = ", ".join(sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queues[q])))  # noqa
+        if queue_dict:
+            max_length = max([len(q.name) for q, in queue_dict.keys()])
+        else:
+            max_length = 0
+
+        for queue in queue_dict:
+            if queue_dict[queue]:
+                queues_str = ", ".join(
+                    sorted(
+                        map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queue_dict[queue])
+                    )
+                )
             else:
                 queues_str = '–'
-            click.echo('%s %s' % (pad(q.name + ':', max_qname + 1), queues_str))
+            click.echo('%s %s' % (pad(queue.name + ':', max_length + 1), queues_str))
 
     if not raw:
-        click.echo('%d workers, %d queues' % (len(ws), len(qs)))
+        click.echo('%d workers, %d queues' % (len(workers), len(qs)))
 
 
 def show_both(queues, raw, by_queue, queue_class, worker_class):
