@@ -14,6 +14,10 @@ Backward incompatible changes:
 
 - `Worker` names are now randomized by default.
 
+- Sentry integration has been reworked:
+  * RQ now uses the new [sentry-sdk](https://pypi.org/project/sentry-sdk/) in place of the deprecated [Raven](https://pypi.org/project/raven/) library
+  * RQ will look for the more explicit `RQ_SENTRY_DSN` environment variable instead of `SENTRY_DSN` before instantiating Sentry integration
+
 ### 0.12.0 (2018-07-14)
 - Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
 `Queue(async=False)` has been changed to `Queue(is_async=False)`. The `async`
