@@ -10,7 +10,7 @@ from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig
 from rq.job import Job
 from rq.registry import FailedJobRegistry
-from rq.worker import Worker
+from rq.worker import Worker, WorkerStatus
 
 import pytest
 
@@ -189,6 +189,31 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 1 queues', result.output)
+
+        foo_queue = Queue(name='foo', connection=self.connection)
+        foo_queue.enqueue(say_hello)
+
+        bar_queue = Queue(name='bar', connection=self.connection)
+        bar_queue.enqueue(say_hello)
+
+        worker = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker.register_birth()
+
+        worker_2 = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker_2.register_birth()
+        worker_2.set_state(WorkerStatus.BUSY)
+
+        result = runner.invoke(main, ['info', 'foo', 'bar',
+                                      '-u', self.redis_url, '--only-workers'])
+
+        self.assert_normal_execution(result)
+        self.assertIn('2 workers, 2 queues', result.output)
+
+        result = runner.invoke(main, ['info', 'foo', 'bar', '--by-queue',
+                                      '-u', self.redis_url, '--only-workers'])
+
+        self.assert_normal_execution(result)
+        self.assertIn('2 workers, 2 queues', result.output)
 
     def test_worker(self):
         """rq worker -u <url> -b"""
