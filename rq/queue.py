@@ -59,7 +59,7 @@ class Queue(object):
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
-        self._default_timeout = parse_timeout(default_timeout)
+        self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
 
         if 'async' in kwargs:
@@ -336,7 +336,7 @@ class Queue(object):
         job.enqueued_at = utcnow()
 
         if job.timeout is None:
-            job.timeout = self.DEFAULT_TIMEOUT
+            job.timeout = self._default_timeout
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
 
