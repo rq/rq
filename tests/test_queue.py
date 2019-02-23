@@ -333,6 +333,24 @@ class TestQueue(RQTestCase):
 
         job = queue.enqueue(echo, 1, job_timeout=15)
         self.assertEqual(job.timeout, 15)
+    
+    def test_default_timeout(self):
+        """Timeout can be passed via job_timeout argument"""
+        queue = Queue()
+        job = queue.enqueue(echo, 1)
+        self.assertEqual(job.timeout, queue.DEFAULT_TIMEOUT)
+        
+        job = Job.create(func=echo) 
+        job = queue.enqueue_job(job)
+        self.assertEqual(job.timeout, queue.DEFAULT_TIMEOUT)
+
+        queue = Queue(default_timeout=15)
+        job = queue.enqueue(echo, 1)
+        self.assertEqual(job.timeout, 15)
+
+        job = Job.create(func=echo) 
+        job = queue.enqueue_job(job)
+        self.assertEqual(job.timeout, 15)
 
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
