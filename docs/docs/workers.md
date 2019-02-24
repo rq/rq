@@ -176,7 +176,7 @@ Aside from `worker.name`, worker also have the following properties:
 * `birth_date` - time of worker's instantiation
 * `successful_job_count` - number of jobs finished successfully
 * `failed_job_count` - number of failed jobs processed
-* `total_working_time` - number of time spent executing jobs
+* `total_working_time` - amount of time spent executing jobs, in seconds
 
 _New in version 0.10.0._
 
@@ -211,7 +211,7 @@ worker = Worker.find_by_key('rq:worker:name')
 
 worker.successful_job_count  # Number of jobs finished successfully
 worker.failed_job_count # Number of failed jobs processed by this worker
-worker.total_working_time  # Number of time spent executing jobs
+worker.total_working_time  # Amount of time spent executing jobs (in seconds)
 ```
 
 

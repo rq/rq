@@ -298,33 +298,45 @@ class TestWorker(RQTestCase):
 
     def test_statistics(self):
         """Successful and failed job counts are saved properly"""
-        q = Queue()
-        job = q.enqueue(div_by_zero)
-        w = Worker([q])
-        w.register_birth()
+        queue = Queue()
+        job = queue.enqueue(div_by_zero)
+        worker = Worker([queue])
+        worker.register_birth()
 
-        self.assertEqual(w.failed_job_count, 0)
-        self.assertEqual(w.successful_job_count, 0)
-        self.assertEqual(w.total_working_time, 0)
+        self.assertEqual(worker.failed_job_count, 0)
+        self.assertEqual(worker.successful_job_count, 0)
+        self.assertEqual(worker.total_working_time, 0)
 
-        registry = StartedJobRegistry(connection=w.connection)
+        registry = StartedJobRegistry(connection=worker.connection)
         job.started_at = utcnow()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
-        w.handle_job_failure(job)
-        w.handle_job_success(job, q, registry)
+        worker.handle_job_failure(job)
+        worker.handle_job_success(job, queue, registry)
 
-        w.refresh()
-        self.assertEqual(w.failed_job_count, 1)
-        self.assertEqual(w.successful_job_count, 1)
-        self.assertEqual(w.total_working_time, 1500000) # 1.5 seconds in microseconds
+        worker.refresh()
+        self.assertEqual(worker.failed_job_count, 1)
+        self.assertEqual(worker.successful_job_count, 1)
+        self.assertEqual(worker.total_working_time, 1.5) # 1.5 seconds
 
-        w.handle_job_failure(job)
-        w.handle_job_success(job, q, registry)
+        worker.handle_job_failure(job)
+        worker.handle_job_success(job, queue, registry)
 
-        w.refresh()
-        self.assertEqual(w.failed_job_count, 2)
-        self.assertEqual(w.successful_job_count, 2)
-        self.assertEqual(w.total_working_time, 3000000)
+        worker.refresh()
+        self.assertEqual(worker.failed_job_count, 2)
+        self.assertEqual(worker.successful_job_count, 2)
+        self.assertEqual(worker.total_working_time, 3.0)
+
+    def test_total_working_time(self):
+        """worker.total_working_time is stored properly"""
+        queue = Queue()
+        job = queue.enqueue(long_running_job, 0.05)
+        worker = Worker([queue])
+        worker.register_birth()
+
+        worker.perform_job(job, queue)
+        worker.refresh()
+        # total_working_time should be around 0.05 seconds
+        self.assertTrue(0.05 <= worker.total_working_time < 0.06)
 
     def test_disable_default_exception_handler(self):
         """

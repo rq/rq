@@ -521,12 +521,11 @@ class Worker(object):
 
                     job, queue = result
                     if self.log_job_description:
-                        self.log.info('%s: %s (%s)', green(queue.name),
-                                                     blue(job.description),
-                                                     job.id)
+                        self.log.info(
+                            '%s: %s (%s)', green(queue.name),
+                            blue(job.description), job.id)
                     else:
-                        self.log.info('%s:%s', green(queue.name),
-                                                       job.id)
+                        self.log.info('%s:%s', green(queue.name), job.id)
 
                 break
             except DequeueTimeout:
@@ -597,7 +596,7 @@ class Worker(object):
 
     def increment_total_working_time(self, job_execution_time, pipeline):
         pipeline.hincrbyfloat(self.key, 'total_working_time',
-                              job_execution_time.microseconds)
+                              job_execution_time.total_seconds())
 
     def fork_work_horse(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.

@@ -1,22 +1,38 @@
 ### 1.0 (Not Yet Released)
 Backward incompatible changes:
 
-- `job.status` has been removed. Use `job.get_status()` and `job.set_status()` instead.
+- `job.status` has been removed. Use `job.get_status()` and `job.set_status()` instead. Thanks @selwin!
 
 - `FailedQueue` has been replaced with `FailedJobRegistry`:
   * `get_failed_queue()` function has been removed. Please use `FailedJobRegistry(queue=queue)` instead.
   * `move_to_failed_queue()` has been removed.
   * RQ now provides a mechanism to automatically cleanup failed jobs. By default, failed jobs are kept for 1 year.
+  * Thanks @selwin!
 
 - RQ's custom job exception handling mechanism has also changed slightly:
   * RQ's default exception handling mechanism (moving jobs to `FailedQueueRegistry`) can be disabled by doing `Worker(disable_default_exception_handler=True)`.
   * Custom exception handlers are no longer executed in reverse order.
+  * Thanks @selwin!
 
-- `Worker` names are now randomized by default.
+- `Worker` names are now randomized. Thanks @selwin!
 
 - Sentry integration has been reworked:
   * RQ now uses the new [sentry-sdk](https://pypi.org/project/sentry-sdk/) in place of the deprecated [Raven](https://pypi.org/project/raven/) library
   * RQ will look for the more explicit `RQ_SENTRY_DSN` environment variable instead of `SENTRY_DSN` before instantiating Sentry integration
+  * Thanks @selwin!
+
+- Fixed `Worker.total_working_time` accounting bug. Thanks @selwin!
+
+
+### 0.13.0 (2018-12-11)
+- Compatibility with Redis 3.0. Thanks @dash-rai!
+- Added `job_timeout` argument to `queue.enqueue()`. This argument will eventually replace `timeout` argument. Thanks @selwin!
+- Added `job_id` argument to `BaseDeathPenalty` class. Thanks @loopbio!
+- Fixed a bug which causes long running jobs to timeout under `SimpleWorker`. Thanks @selwin!
+- You can now override worker's name from config file. Thanks @houqp!
+- Horses will now return exit code 1 if they don't terminate properly (e.g when Redis connection is lost). Thanks @selwin!
+- Added `date_format` and `log_format` arguments to `Worker` and `rq worker` CLI. Thanks @shikharsg!
+
 
 ### 0.12.0 (2018-07-14)
 - Added support for Python 3.7. Since `async` is a keyword in Python 3.7,
