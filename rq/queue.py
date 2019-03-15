@@ -10,8 +10,8 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import (DequeueTimeout, InvalidJobDependency,
-                         InvalidJobOperationError, NoSuchJobError, UnpickleError)
+from .exceptions import (DequeueTimeout, InvalidJobDependency, NoSuchJobError,
+                         UnpickleError)
 from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, utcnow, parse_timeout
 
@@ -293,13 +293,8 @@ class Queue(object):
                              'by workers')
 
         # Detect explicit invocations, i.e. of the form:
-        #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, timeout=30)
+        #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, job_timeout=30)
         timeout = kwargs.pop('job_timeout', None)
-        if timeout is None:
-            timeout = kwargs.pop('timeout', None)
-            if timeout:
-                warnings.warn('The `timeout` keyword is deprecated. Use `job_timeout` instead', DeprecationWarning)
-
         description = kwargs.pop('description', None)
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)
