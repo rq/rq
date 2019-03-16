@@ -743,6 +743,12 @@ class TestWorker(RQTestCase):
         self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
         self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
 
+        # worker.clean_registries() only runs once every 15 minutes
+        # If we add another key, calling clean_registries() should do nothing
+        self.testconn.zadd(bar_registry.key, {'bar': 1})
+        worker.clean_registries()
+        self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
+
     def test_should_run_maintenance_tasks(self):
         """Workers should run maintenance tasks on startup and every hour."""
         queue = Queue(connection=self.testconn)

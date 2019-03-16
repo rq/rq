@@ -40,7 +40,7 @@ from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSig
 from .utils import (backend_class, ensure_list, enum,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
-from .worker_registration import get_keys
+from .worker_registration import clean_worker_registry, get_keys
 
 try:
     from procname import setprocname
@@ -909,16 +909,20 @@ class Worker(object):
     def clean_registries(self):
         """Runs maintenance jobs on each Queue's registries."""
         for queue in self.queues:
-            self.log.info('Cleaning registries for queue: %s', queue.name)
-            clean_registries(queue)
+            # If there are multiple workers running, we only want 1 worker
+            # to run clean_registries().
+            if queue.acquire_cleaning_lock():
+                self.log.info('Cleaning registries for queue: %s', queue.name)
+                clean_registries(queue)
+                clean_worker_registry(queue)
         self.last_cleaned_at = utcnow()
 
     @property
     def should_run_maintenance_tasks(self):
-        """Maintenance tasks should run on first startup or every hour."""
+        """Maintenance tasks should run on first startup or 15 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(hours=1):
+        if (utcnow() - self.last_cleaned_at) > timedelta(minutes=15):
             return True
         return False
 
