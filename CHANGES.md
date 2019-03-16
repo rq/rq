@@ -16,6 +16,8 @@ Backward incompatible changes:
 
 - `Worker` names are now randomized. Thanks @selwin!
 
+- `timeout` argument on `queue.enqueue()` has been deprecated in favor of `job_timeout`. Thanks @selwin!
+
 - Sentry integration has been reworked:
   * RQ now uses the new [sentry-sdk](https://pypi.org/project/sentry-sdk/) in place of the deprecated [Raven](https://pypi.org/project/raven/) library
   * RQ will look for the more explicit `RQ_SENTRY_DSN` environment variable instead of `SENTRY_DSN` before instantiating Sentry integration
