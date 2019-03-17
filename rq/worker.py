@@ -152,11 +152,8 @@ class Worker(object):
             return None
 
         name = worker_key[len(prefix):]
-        worker = cls([],
-                     name,
-                     connection=connection,
-                     job_class=job_class,
-                     queue_class=queue_class)
+        worker = cls([], name, connection=connection, job_class=job_class,
+                     queue_class=queue_class, prepare_for_work=False)
 
         worker.refresh()
 
@@ -167,12 +164,18 @@ class Worker(object):
                  default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
                  queue_class=None, log_job_description=True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
-                 disable_default_exception_handler=False):  # noqa
+                 disable_default_exception_handler=False,
+                 prepare_for_work=True):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
-        self.hostname = socket.gethostname()
-        self.pid = os.getpid()
+
+        if prepare_for_work:
+            self.hostname = socket.gethostname()
+            self.pid = os.getpid()
+        else:
+            self.hostname = None
+            self.pid = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)

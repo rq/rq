@@ -147,12 +147,15 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
         workers = worker_class.all()
 
     if not by_queue:
+
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
+            name = '%s (%s %s)' % (worker.name, worker.hostname, worker.pid)
             if not raw:
-                click.echo('%s %s: %s' % (worker.name, state_symbol(worker.get_state()), queue_names))
+                click.echo('%s: %s %s' % (name, state_symbol(worker.get_state()), queue_names))
             else:
-                click.echo('worker %s %s %s' % (worker.name, worker.get_state(), queue_names))
+                click.echo('worker %s %s %s' % (name, worker.get_state(), queue_names))
+
     else:
         # Display workers by queue
         queue_dict = {}
