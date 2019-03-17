@@ -89,6 +89,17 @@ class Queue(object):
         """Returns the Redis key for this Queue."""
         return self._key
 
+    @property
+    def registry_cleaning_key(self):
+        """Redis key used to indicate this queue has been cleaned."""
+        return 'rq:clean_registries:%s' % self.name
+
+    def acquire_cleaning_lock(self):
+        """Returns a boolean indicating whether a lock to clean this queue
+        is acquired. A lock expires in 899 seconds (15 minutes - 1 second)
+        """
+        return self.connection.set(self.registry_cleaning_key, 1, nx=1, ex=899)
+
     def empty(self):
         """Removes all messages on the queue."""
         script = """
