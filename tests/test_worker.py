@@ -146,6 +146,8 @@ class TestWorker(RQTestCase):
         Worker.find_by_key(worker.key)
         self.assertFalse(worker.key in Worker.all_keys(worker.connection))
 
+        self.assertRaises(ValueError, Worker.find_by_key, 'foo')
+
     def test_worker_ttl(self):
         """Worker ttl."""
         w = Worker([])

@@ -60,10 +60,6 @@ class StopRequested(Exception):
     pass
 
 
-def iterable(x):
-    return hasattr(x, '__iter__')
-
-
 def compact(l):
     return [x for x in l if x is not None]
 
