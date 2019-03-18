@@ -53,22 +53,9 @@ def get_redis_from_config(settings, connection_class=Redis):
         'port': settings.get('REDIS_PORT', 6379),
         'db': settings.get('REDIS_DB', 0),
         'password': settings.get('REDIS_PASSWORD', None),
+        'ssl': settings.get('REDIS_SSL', False),
     }
 
-    use_ssl = settings.get('REDIS_SSL', False)
-    if use_ssl:
-        # If SSL is required, we need to depend on redis-py being 2.10 at
-        # least
-        def safeint(x):
-            try:
-                return int(x)
-            except ValueError:
-                return 0
-
-        version_info = tuple(safeint(x) for x in redis.__version__.split('.'))
-        if not version_info >= (2, 10):
-            raise RuntimeError('Using SSL requires a redis-py version >= 2.10')
-        kwargs['ssl'] = use_ssl
     return connection_class(**kwargs)
 
 
