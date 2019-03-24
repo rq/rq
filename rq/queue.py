@@ -441,28 +441,6 @@ class Queue(object):
                     return queue_key, blob
             return None
 
-    def dequeue(self):
-        """Dequeues the front-most job from this queue.
-
-        Returns a job_class instance, which can be executed or inspected.
-        """
-        while True:
-            job_id = self.pop_job_id()
-            if job_id is None:
-                return None
-            try:
-                job = self.job_class.fetch(job_id, connection=self.connection)
-            except NoSuchJobError as e:
-                # Silently pass on jobs that don't exist (anymore),
-                continue
-            except UnpickleError as e:
-                # Attach queue information on the exception for improved error
-                # reporting
-                e.job_id = job_id
-                e.queue = self
-                raise e
-            return job
-
     @classmethod
     def dequeue_any(cls, queues, timeout, connection=None, job_class=None):
         """Class method returning the job_class instance at the front of the given
