@@ -10,7 +10,7 @@ Backward incompatible changes:
   * Thanks @selwin!
 
 - RQ's custom job exception handling mechanism has also changed slightly:
-  * RQ's default exception handling mechanism (moving jobs to `FailedQueueRegistry`) can be disabled by doing `Worker(disable_default_exception_handler=True)`.
+  * RQ's default exception handling mechanism (moving jobs to `FailedJobRegistry`) can be disabled by doing `Worker(disable_default_exception_handler=True)`.
   * Custom exception handlers are no longer executed in reverse order.
   * Thanks @selwin!
 
