@@ -10,16 +10,13 @@
 /dist
 /build
 .tox
+.pytest_cache/
 .vagrant
 Vagrantfile
 .idea/
 .coverage*
 /.cache
 
-<<<<<<< HEAD
-.pytest_cache/
-=======
 Gemfile
 Gemfile.lock
 _site/
->>>>>>> 600be0a... Added anchor.js to docs

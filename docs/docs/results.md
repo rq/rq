@@ -68,7 +68,7 @@ This makes it possible to inspect and interpret the problem manually and
 possibly resubmit the job.
 
 
-## Dealing with interruption
+## Dealing With Interruptions
 
 When workers get killed in the polite way (Ctrl+C or `kill`), RQ tries hard not
 to lose any work.  The current work is finished after which the worker will
@@ -83,7 +83,7 @@ damage.
 Just sayin'.
 
 
-## Dealing with job timeouts
+## Dealing With Job Timeouts
 
 By default, jobs should execute within 180 seconds.  After that, the worker
 kills the work horse and puts the job onto the `failed` queue, indicating the
@@ -95,7 +95,7 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 
 ```python
 q = Queue()
-q.enqueue(mytask, args=(foo,), kwargs={'bar': qux}, timeout=600)  # 10 mins
+q.enqueue(mytask, args=(foo,), kwargs={'bar': qux}, job_timeout=600)  # 10 mins
 ```
 
 You can also change the default timeout for jobs that are enqueued via specific
@@ -108,7 +108,7 @@ high = Queue('high', default_timeout=8)  # 8 secs
 low = Queue('low', default_timeout=600)  # 10 mins
 
 # Individual jobs can still override these defaults
-low.enqueue(really_really_slow, timeout=3600)  # 1 hr
+low.enqueue(really_really_slow, job_timeout=3600)  # 1 hr
 ```
 
 Individual jobs can still specify an alternative timeout, as workers will

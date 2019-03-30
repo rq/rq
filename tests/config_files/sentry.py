@@ -2,4 +2,5 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-VERSION = '1.0'
+REDIS_HOST = "testhost.example.com"
+SENTRY_DSN = 'https://123@sentry.io/123'

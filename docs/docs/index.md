@@ -61,7 +61,7 @@ In addition, you can add a few options to modify the behaviour of the queued
 job. By default, these are popped out of the kwargs that will be passed to the
 job function.
 
-* `timeout` specifies the maximum runtime of the job before it's interrupted
+* `job_timeout` specifies the maximum runtime of the job before it's interrupted
     and marked as `failed`. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
 * `result_ttl` specifies the expiry time of the key where the job result will
   be stored
@@ -72,8 +72,9 @@ job function.
 * `job_id` allows you to manually specify this job's `job_id`
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
+* `description` to add additional description to enqueued jobs.
 * `kwargs` and `args` lets you bypass the auto-pop of these arguments, ie:
-  specify a `timeout` argument for the underlying job function.
+  specify a `description` argument for the underlying job function.
 
 In the last case, it may be advantageous to instead use the explicit version of
 `.enqueue()`, `.enqueue_call()`:
@@ -82,7 +83,7 @@ In the last case, it may be advantageous to instead use the explicit version of
 q = Queue('low', connection=redis_conn)
 q.enqueue_call(func=count_words_at_url,
                args=('http://nvie.com',),
-               timeout=30)
+               job_timeout=30)
 ```
 
 For cases where the web process doesn't have access to the source code running

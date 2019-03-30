@@ -18,8 +18,10 @@ from tests import fixtures, RQTestCase
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import Job, get_current_job, JobStatus, cancel_job, requeue_job
-from rq.queue import Queue, get_failed_queue
+from rq.job import Job, get_current_job, JobStatus, cancel_job
+from rq.queue import Queue
+from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+                         FinishedJobRegistry, StartedJobRegistry)
 from rq.utils import utcformat
 from rq.worker import Worker
 
@@ -360,6 +362,18 @@ class TestJob(RQTestCase):
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.result_ttl, None)
 
+    def test_failure_ttl_is_persisted(self):
+        """Ensure job.failure_ttl is set and restored properly"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',), failure_ttl=15)
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.failure_ttl, 15)
+
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.failure_ttl, None)
+
     def test_description_is_persisted(self):
         """Ensure that job's custom description is set properly"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',), description='Say hello!')
@@ -383,10 +397,11 @@ class TestJob(RQTestCase):
     def test_job_access_within_job_function(self):
         """The current job is accessible within the job function."""
         q = Queue()
-        q.enqueue(fixtures.access_self)  # access_self calls get_current_job() and asserts
+        job = q.enqueue(fixtures.access_self)
         w = Worker([q])
         w.work(burst=True)
-        assert get_failed_queue(self.testconn).count == 0
+        # access_self calls get_current_job() and executes successfully
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_job_access_within_synchronous_job_function(self):
         queue = Queue(is_async=False)
@@ -483,6 +498,48 @@ class TestJob(RQTestCase):
 
         self.assertNotIn(job.id, queue.get_job_ids())
 
+    def test_job_delete_removes_itself_from_registries(self):
+        """job.delete() should remove itself from job registries"""
+        connection = self.testconn
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.FAILED,
+                         connection=self.testconn, origin='default')
+        job.save()
+        registry = FailedJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.FINISHED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = FinishedJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.STARTED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = StartedJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.DEFERRED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = DeferredJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
     def test_job_with_dependents_delete_parent_with_saved(self):
         """job.delete() deletes itself from Redis but not dependents. If the
         dependent job was saved, it will remain in redis."""
@@ -573,31 +630,6 @@ class TestJob(RQTestCase):
         self.assertEqual(1, len(queue.get_jobs()))
         cancel_job(job.id)
         self.assertEqual(0, len(queue.get_jobs()))
-
-    def test_create_failed_and_cancel_job(self):
-        """test creating and using cancel_job deletes job properly"""
-        failed_queue = get_failed_queue(connection=self.testconn)
-        job = failed_queue.enqueue(fixtures.say_hello)
-        job.set_status(JobStatus.FAILED)
-        self.assertEqual(1, len(failed_queue.get_jobs()))
-        cancel_job(job.id)
-        self.assertEqual(0, len(failed_queue.get_jobs()))
-
-    def test_create_and_requeue_job(self):
-        """Requeueing existing jobs."""
-        job = Job.create(func=fixtures.div_by_zero, args=(1, 2, 3))
-        job.origin = 'fake'
-        job.save()
-        get_failed_queue().quarantine(job, Exception('Some fake error'))  # noqa
-
-        self.assertEqual(Queue.all(), [get_failed_queue()])  # noqa
-        self.assertEqual(get_failed_queue().count, 1)
-
-        requeued_job = requeue_job(job.id)
-
-        self.assertEqual(get_failed_queue().count, 0)
-        self.assertEqual(Queue('fake').count, 1)
-        self.assertEqual(requeued_job.origin, job.origin)
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""

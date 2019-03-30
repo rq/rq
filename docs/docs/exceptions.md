@@ -6,27 +6,25 @@ layout: docs
 Jobs can fail due to exceptions occurring.  When your RQ workers run in the
 background, how do you get notified of these exceptions?
 
-## Default: the `failed` queue
+## Default: the `FailedJobRegistry`
 
-The default safety net for RQ is the `failed` queue. Every job that fails
-execution is stored in here, along with its exception information (type,
+The default safety net for RQ is the `FailedJobRegistry`. Every job that doesn't
+execute successfully is stored here, along with its exception information (type,
 value, traceback). While this makes sure no failing jobs "get lost", this is
 of no use to get notified pro-actively about job failure.
 
 
-## Custom exception handlers
+## Custom Exception Handlers
 
-Starting from version 0.3.1, RQ supports registering custom exception
-handlers. This makes it possible to replace the default behaviour (sending
-the job to the `failed` queue) altogether, or to take additional steps when an
-exception occurs.
+RQ supports registering custom exception handlers. This makes it possible to
+inject your own error handling logic to your workers.
 
 This is how you register custom exception handler(s) to an RQ worker:
 
 ```python
-from rq.handlers import move_to_failed_queue  # RQ's default exception handler
+from exception_handlers import foo_handler, bar_handler
 
-w = Worker([q], exception_handlers=[my_handler, move_to_failed_queue])
+w = Worker([q], exception_handlers=[foo_handler, bar_handler])
 ```
 
 The handler itself is a function that takes the following parameters: `job`,
@@ -46,11 +44,19 @@ def my_handler(job, *exc_info):
     # do custom things here
 ```
 
-## Chaining exception handlers
+{% highlight python %}
+from exception_handlers import foo_handler
+
+w = Worker([q], exception_handlers=[foo_handler],
+           disable_default_exception_handler=True)
+{% endhighlight %}
+
+
+## Chaining Exception Handlers
 
 The handler itself is responsible for deciding whether or not the exception
 handling is done, or should fall through to the next handler on the stack.
-The handler can indicate this by returning a boolean.  `False` means stop
+The handler can indicate this by returning a boolean. `False` means stop
 processing exceptions, `True` means continue and fall through to the next
 exception handler on the stack.
 
@@ -58,7 +64,7 @@ It's important to know for implementors that, by default, when the handler
 doesn't have an explicit return value (thus `None`), this will be interpreted
 as `True` (i.e.  continue with the next handler).
 
-To replace the default behaviour (i.e. moving the job to the `failed` queue),
+To prevent the next exception handler in the handler chain from executing,
 use a custom exception handler that doesn't fall through, for example:
 
 ```python

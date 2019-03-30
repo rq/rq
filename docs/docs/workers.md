@@ -8,7 +8,7 @@ solely as a work horse to perform lengthy or blocking tasks that you don't want
 to perform inside web processes.
 
 
-## Starting workers
+## Starting Workers
 
 To start crunching work, simply start a worker from the root of your project
 directory:
@@ -30,7 +30,7 @@ concurrent processing going on.  If you want to perform jobs concurrently,
 simply start more workers.
 
 
-### Burst mode
+### Burst Mode
 
 By default, workers will start working immediately and will block and wait for
 new work when they run out of work.  Workers can also be started in _burst
@@ -50,7 +50,7 @@ This can be useful for batch work that needs to be processed periodically, or
 just to scale up your workers temporarily during peak periods.
 
 
-### Worker arguments
+### Worker Arguments
 
 In addition to `--burst`, `rq worker` also accepts these arguments:
 
@@ -67,7 +67,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 
 ## Inside the worker
 
-### The worker life-cycle
+### The Worker Lifecycle
 
 The life-cycle of a worker consists of a few phases:
 
@@ -86,11 +86,11 @@ The life-cycle of a worker consists of a few phases:
 7. _Cleanup job execution_. The worker sets its status to `idle` and sets both
    the job and its result to expire based on `result_ttl`. Job is also removed
    from `StartedJobRegistry` and added to to `FinishedJobRegistry` in the case
-   of successful execution, or `FailedQueue` in the case of failure.
+   of successful execution, or `FailedJobRegistry` in the case of failure.
 8. _Loop_.  Repeat from step 3.
 
 
-## Performance notes
+## Performance Notes
 
 Basically the `rq worker` shell script is a simple fetch-fork-execute loop.
 When a lot of your jobs do lengthy setups, or they all depend on the same set
@@ -124,17 +124,29 @@ with Connection():
 ```
 
 
-### Worker names
+### Worker Names
 
-Workers are registered to the system under their names, see [monitoring][m].
-By default, the name of a worker is equal to the concatenation of the current
-hostname and the current PID.  To override this default, specify the name when
-starting the worker, using the `--name` option.
+Workers are registered to the system under their names, which are generated
+randomly during instantiation (see [monitoring][m]). To override this default,
+specify the name when starting the worker, or use the `--name` cli option.
+
+{% highlight python %}
+from redis import Redis
+from rq import Queue, Worker
+
+redis = Redis()
+queue = Queue('queue_name')
+
+# Start a worker with a custom name
+worker = Worker([queue], connection=redis, name='foo')
+{% endhighlight %}
 
 [m]: /docs/monitoring/
 
 
-### Retrieving worker information
+### Retrieving Worker Information
+
+_Updated in version 0.10.0._
 
 `Worker` instances store their runtime information in Redis. Here's how to
 retrieve them:
@@ -150,11 +162,25 @@ workers = Worker.all(connection=redis)
 # Returns all workers in this queue (new in version 0.10.0)
 queue = Queue('queue_name')
 workers = Worker.all(queue=queue)
+worker = workers[0]
+print(worker.name)
 ```
+
+Aside from `worker.name`, worker also have the following properties:
+* `hostname` - the host where this worker is run
+* `pid` - worker's process ID
+* `queues` - queues on which this worker is listening for jobs
+* `state` - possible states are `suspended`, `started`, `busy` and `idle`
+* `current_job` - the job it's currently executing (if any)
+* `last_heartbeat` - the last time this worker was seen
+* `birth_date` - time of worker's instantiation
+* `successful_job_count` - number of jobs finished successfully
+* `failed_job_count` - number of failed jobs processed
+* `total_working_time` - amount of time spent executing jobs, in seconds
 
 _New in version 0.10.0._
 
-If you only want to know the number of workers for monitoring purposes, using
+If you only want to know the number of workers for monitoring purposes,
 `Worker.count()` is much more performant.
 
 ```python
@@ -172,7 +198,7 @@ workers = Worker.all(queue=queue)
 ```
 
 
-### Worker statistics
+### Worker Statistics
 
 _New in version 0.9.0._
 
@@ -184,12 +210,12 @@ from rq.worker import Worker
 worker = Worker.find_by_key('rq:worker:name')
 
 worker.successful_job_count  # Number of jobs finished successfully
-worker.failed_job_count. # Number of failed jobs processed by this worker
-worker.total_working_time  # Number of time spent executing jobs
+worker.failed_job_count # Number of failed jobs processed by this worker
+worker.total_working_time  # Amount of time spent executing jobs (in seconds)
 ```
 
 
-## Taking down workers
+## Taking Down Workers
 
 If, at any time, the worker receives `SIGINT` (via Ctrl+C) or `SIGTERM` (via
 `kill`), the worker wait until the currently running task is finished, stop
@@ -200,9 +226,7 @@ worker will forcefully terminate the child process (sending it `SIGKILL`), but
 will still try to register its own death.
 
 
-## Using a config file
-
-_New in version 0.3.2._
+## Using a Config File
 
 If you'd like to configure `rq worker` via a configuration file instead of
 through command line arguments, you can do this by creating a Python file like
@@ -240,9 +264,7 @@ $ rq worker -c settings
 ```
 
 
-## Custom worker classes
-
-_New in version 0.4.0._
+## Custom Worker Classes
 
 There are times when you want to customize the worker's behavior. Some of the
 more common requests so far are:
@@ -259,9 +281,7 @@ $ rq worker -w 'path.to.GeventWorker'
 ```
 
 
-## Custom Job and Queue classes
-
-_Will be available in next release._
+## Custom Job and Queue Classes
 
 You can tell the worker to use a custom class for jobs and queues using
 `--job-class` and/or `--queue-class`.
@@ -289,7 +309,7 @@ queue.enqueue(some_func)
 ```
 
 
-## Custom DeathPenalty classes
+## Custom DeathPenalty Classes
 
 When a Job times-out, the worker will try to kill it using the supplied
 `death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
@@ -299,9 +319,7 @@ DeathPenalty classes are constructed with the following arguments
 `BaseDeathPenalty(timeout, JobTimeoutException, job_id=job.id)`
 
 
-## Custom exception handlers
-
-_New in version 0.5.5._
+## Custom Exception Handlers
 
 If you need to handle errors differently for different types of jobs, or simply want to customize
 RQ's default error handling behavior, run `rq worker` using the `--exception-handler` option:
@@ -311,4 +329,10 @@ $ rq worker --exception-handler 'path.to.my.ErrorHandler'
 
 # Multiple exception handlers is also supported
 $ rq worker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'
+```
+
+If you want to disable RQ's default exception handler, use the `--disable-default-exception-handler` option:
+
+```console
+$ rq worker --exception-handler 'path.to.my.ErrorHandler' --disable-default-exception-handler
 ```

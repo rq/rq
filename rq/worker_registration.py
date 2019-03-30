@@ -43,3 +43,25 @@ def get_keys(queue=None, connection=None):
         redis_key = REDIS_WORKER_KEYS
 
     return {as_text(key) for key in redis.smembers(redis_key)}
+
+
+def clean_worker_registry(queue):
+    """Delete invalid worker keys in registry"""
+    keys = list(get_keys(queue))
+
+    with queue.connection.pipeline() as pipeline:
+
+        for key in keys:
+            pipeline.exists(key)
+        results = pipeline.execute()
+
+        invalid_keys = []
+
+        for i, key_exists in enumerate(results):
+            if not key_exists:
+                invalid_keys.append(keys[i])
+
+        if invalid_keys:
+            pipeline.srem(WORKERS_BY_QUEUE_KEY % queue.name, *invalid_keys)
+            pipeline.srem(REDIS_WORKER_KEYS, *invalid_keys)
+            pipeline.execute()

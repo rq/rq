@@ -1,7 +1,8 @@
 from tests import RQTestCase
 
 from rq import Queue, Worker
-from rq.worker_registration import (get_keys, register, unregister,
+from rq.worker_registration import (clean_worker_registry, get_keys, register,
+                                    unregister, REDIS_WORKER_KEYS,
                                     WORKERS_BY_QUEUE_KEY)
 
 
@@ -17,12 +18,15 @@ class TestWorkerRegistry(RQTestCase):
         redis = worker.connection
 
         self.assertTrue(redis.sismember(worker.redis_workers_keys, worker.key))
+        self.assertEqual(Worker.count(connection=redis), 1)
         self.assertTrue(
             redis.sismember(WORKERS_BY_QUEUE_KEY % foo_queue.name, worker.key)
         )
+        self.assertEqual(Worker.count(queue=foo_queue), 1)
         self.assertTrue(
             redis.sismember(WORKERS_BY_QUEUE_KEY % bar_queue.name, worker.key)
         )
+        self.assertEqual(Worker.count(queue=bar_queue), 1)
 
         unregister(worker)
         self.assertFalse(redis.sismember(worker.redis_workers_keys, worker.key))
@@ -68,3 +72,18 @@ class TestWorkerRegistry(RQTestCase):
         unregister(worker1)
         unregister(worker2)
         unregister(worker3)
+
+    def test_clean_registry(self):
+        """clean_registry removes worker keys that don't exist in Redis"""
+        queue = Queue(name='foo')
+        worker = Worker([queue])
+
+        register(worker)
+        redis = worker.connection
+
+        self.assertTrue(redis.sismember(worker.redis_workers_keys, worker.key))
+        self.assertTrue(redis.sismember(REDIS_WORKER_KEYS, worker.key))
+
+        clean_worker_registry(queue)
+        self.assertFalse(redis.sismember(worker.redis_workers_keys, worker.key))
+        self.assertFalse(redis.sismember(REDIS_WORKER_KEYS, worker.key))
