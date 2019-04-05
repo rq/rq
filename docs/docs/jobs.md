@@ -17,7 +17,7 @@ by using `Job.fetch()`.
 from redis import Redis
 from rq.job import Job
 
-connection = Redis()
+redis = Redis()
 job = Job.fetch('my_job_id', connection=redis)
 print('Status: %s' $ job.get_status())
 ```
