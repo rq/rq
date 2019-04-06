@@ -9,7 +9,7 @@ invoked asynchronously, by simply pushing a reference to the function and its
 arguments onto a queue.  This is called _enqueueing_.
 
 
-## Enqueueing jobs
+## Enqueueing Jobs
 
 To put jobs on queues, first declare a function:
 
@@ -63,12 +63,13 @@ job function.
 
 * `job_timeout` specifies the maximum runtime of the job before it's interrupted
     and marked as `failed`. Its default unit is second and it can be an integer or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can be a string with specify unit including hour, minute, second(e.g. `'1h'`, `'3m'`, `'5s'`).
-* `result_ttl` specifies the expiry time of the key where the job result will
-  be stored
-* `ttl` specifies the maximum queued time of the job before it'll be cancelled.
+* `result_ttl` specifies how long (in seconds) successful jobs and their
+results are kept. Expired jobs will be automatically deleted. Defaults to 500 seconds.
+* `ttl` specifies the maximum queued time of the job before it's discarded.
   If you specify a value of `-1` you indicate an infinite job ttl and it will run indefinitely
+* `failure_ttl` specifies how long failed jobs are kept (defaults to 1 year)
 * `depends_on` specifies another job (or job id) that must complete before this
-  job will be queued
+  job will be queued.
 * `job_id` allows you to manually specify this job's `job_id`
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
@@ -115,9 +116,12 @@ queued_job_ids = q.job_ids # Gets a list of job IDs from the queue
 queued_jobs = q.jobs # Gets a list of enqueued job instances
 job = q.fetch_job('my_id') # Returns job having ID "my_id"
 
-# Deleting the queue
+# Emptying a queue, this will delete all jobs in this queue
+q.empty()
+
+# Deleting a queue
 q.delete(delete_jobs=True) # Passing in `True` will remove all jobs in the queue
-# queue is unusable now unless re-instantiated
+# queue is now unusable. It can be recreated by enqueueing jobs to it.
 ```
 
 
