@@ -1,4 +1,4 @@
-### 1.0 (Not Yet Released)
+### 1.0 (2019-04-06)
 Backward incompatible changes:
 
 - `job.status` has been removed. Use `job.get_status()` and `job.set_status()` instead. Thanks @selwin!
