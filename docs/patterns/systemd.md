@@ -5,11 +5,12 @@ layout: patterns
 
 ## Running RQ Workers Under systemd
 
-[systemd][1] is process manager that's built into many popular Linux distributions.
+Systemd is process manager that's built into many popular Linux distributions.
 
 To run multiple workers under systemd, you'll first need to create a unit file.
+
 We can name this file `rqworker@.service`, put this file in `/etc/systemd/system`
-on Ubuntu. Where you put this file may differ by what OS you run.
+directory (location may differ by what distributions you run).
 
 {% highlight ini %}
 [Unit]
@@ -33,7 +34,9 @@ WantedBy=multi-user.target
 {% endhighlight %}
 
 If your unit file is properly installed, you should be able to start workers by
-invoking `systemctl start rqworker@1.service`, `systemctl start rqworker@2.service`.
+invoking `systemctl start rqworker@1.service`, `systemctl start rqworker@2.service`
+from the terminal.
+
 You can also reload all the workers by invoking `systemctl reload rqworker@*`.
 
 You can read more about systemd and unit files [here](https://www.digitalocean.com/community/tutorials/understanding-systemd-units-and-unit-files).
