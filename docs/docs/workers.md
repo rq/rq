@@ -30,7 +30,7 @@ concurrent processing going on.  If you want to perform jobs concurrently,
 simply start more workers.
 
 You should use process managers like [Supervisor](/patterns/supervisor/) or
-(systemd)[https://www.freedesktop.org/wiki/Software/systemd/] to run RQ workers in production.
+[systemd](/patterns/systemd/) to run RQ workers in production.
 
 
 ### Burst Mode

@@ -35,6 +35,8 @@ navigation:
     url: /patterns/sentry/
   - text: Supervisor
     url: /patterns/supervisor/
+  - text: Systemd
+    url: /patterns/systemd/
 - text: Contributing
   url: /contrib/
   subs:
