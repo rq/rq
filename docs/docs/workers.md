@@ -1,5 +1,5 @@
 ---
-title: "RQ: Simple job queues for Python"
+title: "RQ: Workers"
 layout: docs
 ---
 
