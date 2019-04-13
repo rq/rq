@@ -252,6 +252,13 @@ def backend_class(holder, default_name, override=None):
         return override
 
 
+def str_to_date(date_str):
+    if date_str is None:
+        return
+    else:
+        return utcparse(as_text(date_str))
+
+
 def parse_timeout(timeout):
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
