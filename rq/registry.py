@@ -212,6 +212,43 @@ class DeferredJobRegistry(BaseRegistry):
         pass
 
 
+class ScheduledJobRegistry(BaseRegistry):
+    """
+    Registry of scheduled jobs.
+    """
+    key_template = 'rq:scheduled:{0}'
+
+    def __init__(self, *args, **kwargs):
+        super(ScheduledJobRegistry, self).__init__(*args, **kwargs)
+        # The underlying implementation of get_jobs_to_enqueue() is
+        # the same as get_expired_job_ids, but get_expired_job_ids() doesn't
+        # make sense in this context
+        self.get_jobs_to_enqueue = self.get_expired_job_ids
+
+    def cleanup(self):
+        """This method is only here to prevent errors because this method is
+        automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry."""
+        pass
+
+    def remove_jobs(self, timestamp=None, pipeline=None):
+        """Remove jobs whose timestamp is in the past from registry."""
+        connection = pipeline if pipeline is not None else self.connection
+        score = timestamp if timestamp is not None else current_timestamp()
+        return connection.zremrangebyscore(self.key, 0, score)
+
+    def get_jobs_to_schedule(self, timestamp=None):
+        """Remove jobs whose timestamp is in the past from registry."""
+        score = timestamp if timestamp is not None else current_timestamp()
+        return [as_text(job_id) for job_id in
+                self.connection.zrangebyscore(self.key, 0, score)]
+
+    def acquire_lock(self):
+        """Returns True if lock is successfully acquired"""
+        key = '%s:lock' % self.key
+        return self.connection.set(key, 1, ex=10, nx=True)
+
+
 def clean_registries(queue):
     """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name,
