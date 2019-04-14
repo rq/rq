@@ -20,7 +20,7 @@ use the following supervisor settings:
 ; /path/to/virtualenv/bin/rq
 ; Also, you probably want to include a settings module to configure this
 ; worker.  For more info on that, see http://python-rq.org/docs/workers/
-command=/path/to/rq worker -c mysettings high normal low
+command=/path/to/rq worker -c mysettings high default low
 ; process_num is required if you specify >1 numprocs
 process_name=%(program_name)s-%(process_num)s
 
@@ -52,7 +52,7 @@ dependencies. You can use a similar approach as with regular virtualenvs.
 ; Also, you probably want to include a settings module to configure this
 ; worker.  For more info on that, see http://python-rq.org/docs/workers/
 environment=PATH='/opt/conda/envs/myenv/bin'
-command=/opt/conda/envs/myenv/bin/rq worker -c mysettings high normal low
+command=/opt/conda/envs/myenv/bin/rq worker -c mysettings high default low
 ; process_num is required if you specify >1 numprocs
 process_name=%(program_name)s-%(process_num)s
 
