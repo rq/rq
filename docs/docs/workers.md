@@ -14,11 +14,11 @@ To start crunching work, simply start a worker from the root of your project
 directory:
 
 ```console
-$ rq worker high normal low
-*** Listening for work on high, normal, low
+$ rq worker high default low
+*** Listening for work on high, default, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
-*** Listening for work on high, normal, low
+*** Listening for work on high, default, low
 ...
 ```
 
@@ -41,8 +41,8 @@ mode_ to finish all currently available work and quit as soon as all given
 queues are emptied.
 
 ```console
-$ rq worker --burst high normal low
-*** Listening for work on high, normal, low
+$ rq worker --burst high default low
+*** Listening for work on high, default, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
 No more work, burst finished.
@@ -246,7 +246,7 @@ REDIS_URL = 'redis://localhost:6379/1'
 # REDIS_PASSWORD = 'very secret'
 
 # Queues to listen on
-QUEUES = ['high', 'normal', 'low']
+QUEUES = ['high', 'default', 'low']
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step
