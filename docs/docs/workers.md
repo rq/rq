@@ -60,6 +60,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9`)
 * `--path` or `-P`: multiple import paths are supported (e.g `rq worker --path foo --path bar`)
 * `--config` or `-c`: path to module containing RQ settings.
+* `--results-ttl`: job results will be kept for this number of seconds (defaults to 500).
 * `--worker-class` or `-w`: RQ Worker class to use (e.g `rq worker --worker-class 'foo.bar.MyWorker'`)
 * `--job-class` or `-j`: RQ Job class to use.
 * `--queue-class`: RQ Queue class to use.

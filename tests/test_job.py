@@ -183,6 +183,23 @@ class TestJob(RQTestCase):
         self.assertEqual(job.kwargs, dict(z=2))
         self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
 
+    def test_fetch_many(self):
+        """Fetching many jobs at once."""
+        data = {
+            'func': fixtures.some_calculation,
+            'args': (3, 4),
+            'kwargs': dict(z=2),
+            'connection': self.testconn,
+        }
+        job = Job.create(**data)
+        job.save()
+
+        job2 = Job.create(**data)
+        job2.save()
+
+        jobs = Job.fetch_many([job.id, job2.id, 'invalid_id'], self.testconn)
+        self.assertEqual(jobs, [job, job2, None])
+
     def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
         job = Job()

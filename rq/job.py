@@ -13,7 +13,8 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import enum, import_attribute, utcformat, utcnow, utcparse, parse_timeout
+from .utils import (enum, import_attribute, parse_timeout, str_to_date,
+                    utcformat, utcnow)
 
 try:
     import cPickle as pickle
@@ -287,6 +288,25 @@ class Job(object):
         job.refresh()
         return job
 
+    @classmethod
+    def fetch_many(cls, job_ids, connection=None):
+        """Bulk version of Job.fetch"""
+        with connection.pipeline() as pipeline:
+            for job_id in job_ids:
+                pipeline.hgetall(cls.key_for(job_id))
+            results = pipeline.execute()
+
+        jobs = []
+        for i, job_id in enumerate(job_ids):
+            if results[i]:
+                job = cls(job_id, connection=connection)
+                job.restore(results[i])
+                jobs.append(job)
+            else:
+                jobs.append(None)
+
+        return jobs
+
     def __init__(self, id=None, connection=None):
         self.connection = resolve_connection(connection)
         self._id = id
@@ -392,24 +412,9 @@ class Job(object):
     """Backwards-compatibility accessor property `return_value`."""
     return_value = result
 
-    # Persistence
-    def refresh(self):  # noqa
-        """Overwrite the current instance's properties with the values in the
-        corresponding Redis key.
-
-        Will raise a NoSuchJobError if no corresponding Redis key exists.
-        """
-        key = self.key
-        obj = decode_redis_hash(self.connection.hgetall(key))
-        if len(obj) == 0:
-            raise NoSuchJobError('No such job: {0}'.format(key))
-
-        def to_date(date_str):
-            if date_str is None:
-                return
-            else:
-                return utcparse(as_text(date_str))
-
+    def restore(self, raw_data):
+        """Overwrite properties with the provided values stored in Redis"""
+        obj = decode_redis_hash(raw_data)
         try:
             raw_data = obj['data']
         except KeyError:
@@ -421,17 +426,17 @@ class Job(object):
             # Fallback to uncompressed string
             self.data = raw_data
 
-        self.created_at = to_date(as_text(obj.get('created_at')))
+        self.created_at = str_to_date(obj.get('created_at'))
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
-        self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
-        self.started_at = to_date(as_text(obj.get('started_at')))
-        self.ended_at = to_date(as_text(obj.get('ended_at')))
+        self.enqueued_at = str_to_date(obj.get('enqueued_at'))
+        self.started_at = str_to_date(obj.get('started_at'))
+        self.ended_at = str_to_date(obj.get('ended_at'))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.timeout = parse_timeout(as_text(obj.get('timeout'))) if obj.get('timeout') else None
+        self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
-        self._status = as_text(obj.get('status') if obj.get('status') else None)
+        self._status = obj.get('status') if obj.get('status') else None
         self._dependency_id = as_text(obj.get('dependency_id', None))
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
@@ -443,6 +448,18 @@ class Job(object):
             except zlib.error:
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
+
+    # Persistence
+    def refresh(self):  # noqa
+        """Overwrite the current instance's properties with the values in the
+        corresponding Redis key.
+
+        Will raise a NoSuchJobError if no corresponding Redis key exists.
+        """
+        data = self.connection.hgetall(self.key)
+        if not data:
+            raise NoSuchJobError('No such job: {0}'.format(self.key))
+        self.restore(data)
 
     def to_dict(self, include_meta=True):
         """
