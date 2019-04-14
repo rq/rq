@@ -74,17 +74,22 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
 * `description` to add additional description to enqueued jobs.
-* `kwargs` and `args` lets you bypass the auto-pop of these arguments, ie:
-  specify a `description` argument for the underlying job function.
+* `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
+  underlying job function. This is useful if your function happens to have
+  conflicting argument names with RQ, for example `description` or `ttl`.
 
-In the last case, it may be advantageous to instead use the explicit version of
-`.enqueue()`, `.enqueue_call()`:
+In the last case, if you want to pass `description` and `ttl` keyword arguments
+to your job and not to RQ's enqueue function, this is what you do:
 
 ```python
 q = Queue('low', connection=redis_conn)
-q.enqueue_call(func=count_words_at_url,
-               args=('http://nvie.com',),
-               job_timeout=30)
+q.enqueue(func=count_words_at_url,
+          ttl=30,  # This ttl will be used by RQ
+          args=('http://nvie.com',),
+          kwargs={
+              'description': 'Function description', # This is passed on to count_words_at_url
+              'ttl': 15  # This is passed on to count_words_at_url function
+          })
 ```
 
 For cases where the web process doesn't have access to the source code running
