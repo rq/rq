@@ -1,5 +1,5 @@
 ---
-title: "RQ: Documentation"
+title: "RQ: Jobs"
 layout: docs
 ---
 
@@ -33,7 +33,15 @@ Some interesting job attributes include:
 * `job.ended_at`
 * `job.exc_info`
 
-## Accessing the "current" job
+If you want to efficiently fetch a large number of jobs, use `Job.fetch_many()`.
+
+```python
+jobs = Job.fetch_many(['foo_id', 'bar_id'], connection=redis)
+for job in jobs:
+    print('Job %s: %s' % (job.id, job.func_name))
+```
+
+## Accessing The "current" Job
 
 Since job functions are regular Python functions, you have to ask RQ for the
 current job ID, if any.  To do this, you can use:

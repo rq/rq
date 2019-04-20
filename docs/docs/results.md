@@ -1,5 +1,5 @@
 ---
-title: "RQ: Documentation"
+title: "RQ: Results"
 layout: docs
 ---
 

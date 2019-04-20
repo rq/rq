@@ -1,5 +1,5 @@
 ---
-title: "RQ: Simple job queues for Python"
+title: "RQ: Workers"
 layout: docs
 ---
 
@@ -14,11 +14,11 @@ To start crunching work, simply start a worker from the root of your project
 directory:
 
 ```console
-$ rq worker high normal low
-*** Listening for work on high, normal, low
+$ rq worker high default low
+*** Listening for work on high, default, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
-*** Listening for work on high, normal, low
+*** Listening for work on high, default, low
 ...
 ```
 
@@ -41,8 +41,8 @@ mode_ to finish all currently available work and quit as soon as all given
 queues are emptied.
 
 ```console
-$ rq worker --burst high normal low
-*** Listening for work on high, normal, low
+$ rq worker --burst high default low
+*** Listening for work on high, default, low
 Got send_newsletter('me@nvie.com') from default
 Job ended normally without result
 No more work, burst finished.
@@ -60,6 +60,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9`)
 * `--path` or `-P`: multiple import paths are supported (e.g `rq worker --path foo --path bar`)
 * `--config` or `-c`: path to module containing RQ settings.
+* `--results-ttl`: job results will be kept for this number of seconds (defaults to 500).
 * `--worker-class` or `-w`: RQ Worker class to use (e.g `rq worker --worker-class 'foo.bar.MyWorker'`)
 * `--job-class` or `-j`: RQ Job class to use.
 * `--queue-class`: RQ Queue class to use.
@@ -245,7 +246,7 @@ REDIS_URL = 'redis://localhost:6379/1'
 # REDIS_PASSWORD = 'very secret'
 
 # Queues to listen on
-QUEUES = ['high', 'normal', 'low']
+QUEUES = ['high', 'default', 'low']
 
 # If you're using Sentry to collect your runtime exceptions, you can use this
 # to configure RQ for it in a single step
