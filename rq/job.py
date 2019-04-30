@@ -438,7 +438,7 @@ class Job(object):
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = obj.get('status') if obj.get('status') else None
         self._dependency_id = as_text(obj.get('dependency_id', None))
-        self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
+        self.ttl = int(obj.get('ttl')) if obj.get('ttl') is not None else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
         raw_exc_info = obj.get('exc_info')
