@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from rq import Queue
 from rq.job import Job
@@ -72,13 +72,18 @@ class TestScheduledJobRegistry(RQTestCase):
         self.assertEqual(self.testconn.zscore(registry.key, job.id),
                          1546300800)  # 2019-01-01 UTC in Unix timestamp
 
-        # Score is always stored in UTC even if datetime is in a different tz
-        tz = timezone(timedelta(hours=7))
-        job = Job.create('myfunc', connection=self.testconn)
-        job.save()
-        registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
-        self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                         1546300800)  # 2019-01-01 UTC in Unix timestamp
+        # Only run this test if `timezone` is available (Python 3.2+)
+        try:
+            from datetime import timezone
+            # Score is always stored in UTC even if datetime is in a different tz
+            tz = timezone(timedelta(hours=7))
+            job = Job.create('myfunc', connection=self.testconn)
+            job.save()
+            registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
+            self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                             1546300800)  # 2019-01-01 UTC in Unix timestamp
+        except ImportError:
+            pass
 
 
 class TestQueue(RQTestCase):
