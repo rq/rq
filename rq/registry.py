@@ -1,3 +1,6 @@
+import calendar
+from datetime import datetime
+
 from .compat import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
@@ -82,6 +85,11 @@ class BaseRegistry(object):
     def get_queue(self):
         """Returns Queue object associated with this registry."""
         return Queue(self.name, connection=self.connection)
+
+    def get_expiration_time(self, job):
+        """Returns job's expiration time."""
+        score = self.connection.zscore(self.key, job.id)
+        return datetime.utcfromtimestamp(score)
 
 
 class StartedJobRegistry(BaseRegistry):
@@ -224,6 +232,11 @@ class ScheduledJobRegistry(BaseRegistry):
         # the same as get_expired_job_ids, but get_expired_job_ids() doesn't
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
+
+    def schedule(self, job, datetime, pipeline=None):
+        """Adds job to registry, scored by its execution time (in UTC)"""
+        timestamp = calendar.timegm(datetime.utctimetuple())
+        return self.connection.zadd(self.key, {job.id: timestamp})
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is

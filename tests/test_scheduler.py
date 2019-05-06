@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from rq import Queue
 from rq.job import Job
 from rq.registry import ScheduledJobRegistry
@@ -8,7 +10,7 @@ from .fixtures import say_hello
 from tests import RQTestCase
 
 
-class TestScheduler(RQTestCase):
+class TestScheduledJobRegistry(RQTestCase):
 
     def test_init(self):
         """Scheduler can be instantiated with queues or queue names"""
@@ -42,20 +44,58 @@ class TestScheduler(RQTestCase):
         self.assertTrue(RQScheduler.acquire_lock(name, self.testconn))
 
     def test_enqueue_scheduled_jobs(self):
+        """Scheduler can enqueue scheduled jobs"""
         queue = Queue(connection=self.testconn)
         registry = ScheduledJobRegistry(queue=queue)
-        job = Job.create(
-            'myfunc',
-            args=[12, "☃"],
-            kwargs=dict(snowman="☃", null=None),
-            connection=self.testconn,
-        )
+        job = Job.create('myfunc', connection=self.testconn)
         job.save()
-        registry.add(job, 0)
-        print('JOB_IDS', registry.get_expired_job_ids())
+        registry.schedule(job, datetime(2019, 1, 1))
         scheduler = RQScheduler([queue], connection=self.testconn)
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
 
         # After job is scheduled, registry should be empty
+        self.assertEqual(len(registry), 0)
+
+        # Jobs scheduled in the far future should not be affected
+        registry.schedule(job, datetime(2100, 1, 1))
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(queue), 1)
+
+    def test_schedule(self):
+        """Adding job with the correct score to ScheduledJobRegistry"""
+        queue = Queue(connection=self.testconn)
+        job = Job.create('myfunc', connection=self.testconn)
+        job.save()
+        registry = ScheduledJobRegistry(queue=queue)
+        registry.schedule(job, datetime(2019, 1, 1))
+        self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                         1546300800)  # 2019-01-01 UTC in Unix timestamp
+
+        # Score is always stored in UTC even if datetime is in a different tz
+        tz = timezone(timedelta(hours=7))
+        job = Job.create('myfunc', connection=self.testconn)
+        job.save()
+        registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
+        self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                         1546300800)  # 2019-01-01 UTC in Unix timestamp
+
+
+class TestQueue(RQTestCase):
+
+    def test_enqueue_at(self):
+        """queue.enqueue_at() puts job in the scheduled"""
+        queue = Queue(connection=self.testconn)
+        registry = ScheduledJobRegistry(queue=queue)
+        scheduler = RQScheduler([queue], connection=self.testconn)
+
+        # Jobs created using enqueue_at is put in the ScheduledJobRegistry
+        queue.enqueue_at(datetime(2019, 1, 1), say_hello)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 1)
+
+        # After enqueue_scheduled_jobs() is called, the registry is empty
+        # and job is enqueued
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(queue), 1)
         self.assertEqual(len(registry), 0)

@@ -2,14 +2,17 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from datetime import datetime, timedelta
+
 from tests import RQTestCase
 from tests.fixtures import echo, Number, say_hello
 
 from rq import Queue
 from rq.exceptions import InvalidJobDependency
 from rq.job import Job, JobStatus
-from rq.registry import DeferredJobRegistry
+from rq.registry import DeferredJobRegistry, ScheduledJobRegistry
 from rq.worker import Worker
+from rq.utils import current_timestamp
 
 
 class CustomJob(Job):
@@ -508,3 +511,14 @@ class TestQueue(RQTestCase):
 
         job_fetch = q1.fetch_job(job_orig.id)
         self.assertIsNotNone(job_fetch)
+
+
+class TestJobScheduling(RQTestCase):
+    def test_enqueue_at(self):
+        """enqueue_at() creates a job in ScheduledJobRegistry"""
+        queue = Queue(connection=self.testconn)
+        scheduled_time = datetime.now() + timedelta(seconds=10)
+        job = queue.enqueue_at(scheduled_time, say_hello)
+        registry = ScheduledJobRegistry(queue=queue)
+        self.assertIn(job, registry)
+        self.assertTrue(registry.get_expiration_time(job), scheduled_time)

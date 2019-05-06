@@ -33,7 +33,8 @@ JobStatus = enum(
     FINISHED='finished',
     FAILED='failed',
     STARTED='started',
-    DEFERRED='deferred'
+    DEFERRED='deferred',
+    SCHEDULED='scheduled',
 )
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -128,9 +129,9 @@ class Job(object):
 
         # Extra meta data
         job.description = description or job.get_call_string()
-        job.result_ttl = result_ttl
-        job.failure_ttl = failure_ttl
-        job.ttl = ttl
+        job.result_ttl = parse_timeout(result_ttl)
+        job.failure_ttl = parse_timeout(failure_ttl)
+        job.ttl = parse_timeout(ttl)
         job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}

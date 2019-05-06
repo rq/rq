@@ -220,6 +220,23 @@ class Queue(object):
         else:
             connection.rpush(self.key, job_id)
 
+    def create_job(self, func, args=None, kwargs=None, timeout=None,
+                   result_ttl=None, ttl=None, failure_ttl=None,
+                   description=None, depends_on=None, job_id=None,
+                   meta=None):
+        """Creates a job based on parameters given."""
+        timeout = parse_timeout(timeout) or self._default_timeout
+
+        job = self.job_class.create(
+            func, args=args, kwargs=kwargs, connection=self.connection,
+            result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
+            status=JobStatus.QUEUED, description=description,
+            depends_on=depends_on, timeout=timeout, id=job_id,
+            origin=self.name, meta=meta
+        )
+
+        return job
+
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, failure_ttl=None,
                      description=None, depends_on=None, job_id=None,
@@ -231,17 +248,12 @@ class Queue(object):
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
         """
-        timeout = parse_timeout(timeout) or self._default_timeout
-        result_ttl = parse_timeout(result_ttl)
-        failure_ttl = parse_timeout(failure_ttl)
-        ttl = parse_timeout(ttl)
-
-        job = self.job_class.create(
-            func, args=args, kwargs=kwargs, connection=self.connection,
+        job = self.create_job(
+            func=func, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
-            status=JobStatus.QUEUED, description=description,
-            depends_on=depends_on, timeout=timeout, id=job_id,
-            origin=self.name, meta=meta)
+            description=description, depends_on=depends_on,
+            job_id=job_id, meta=meta
+        )
 
         # If job depends on an unfinished job, register itself on it's
         # parent's dependents instead of enqueueing it.
@@ -326,6 +338,19 @@ class Queue(object):
             description=description, depends_on=depends_on, job_id=job_id,
             at_front=at_front, meta=meta
         )
+
+    def enqueue_at(self, datetime, func, *args, **kwargs):
+        """Schedules a job to be enqueued at specified time"""
+        from .registry import ScheduledJobRegistry
+
+        job = self.create_job(func, *args, **kwargs)
+        registry = ScheduledJobRegistry(queue=self)
+        with self.connection.pipeline() as pipeline:
+            job.save(pipeline=pipeline)
+            registry.schedule(job, datetime, pipeline=pipeline)
+            pipeline.execute()
+
+        return job
 
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.
