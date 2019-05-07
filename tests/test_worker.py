@@ -616,6 +616,23 @@ class TestWorker(RQTestCase):
         # Updates worker statuses
         self.assertEqual(worker.get_state(), 'busy')
         self.assertEqual(worker.get_current_job_id(), job.id)
+    
+    def test_prepare_job_execution_inf_timeout(self):
+        """Prepare job execution handles infinite job timeout"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(long_running_job,
+                            args=(1,),
+                            job_timeout=-1)
+        worker = Worker([queue])
+        worker.prepare_job_execution(job)
+
+        # Updates working queue
+        registry = StartedJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+
+        # Score in queue is +inf
+        self.assertEqual(self.testconn.zscore(registry.key, job.id), float('Inf'))
+        
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
