@@ -699,8 +699,10 @@ class Worker(object):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-        base_timeout = job.timeout or 180
-        timeout = base_timeout + 60 if base_timeout > 0 else base_timeout
+        if job.timeout == -1:
+            timeout = -1
+        else:
+            timeout = job.timeout or 180
 
         if heartbeat_ttl is None:
             heartbeat_ttl = self.job_monitoring_interval + 5
