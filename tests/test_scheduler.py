@@ -62,6 +62,19 @@ class TestScheduledJobRegistry(RQTestCase):
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
 
+    def test_get_scheduled_time(self):
+        """get_scheduled_time() returns job's scheduled datetime"""
+        queue = Queue(connection=self.testconn)
+        registry = ScheduledJobRegistry(queue=queue)
+
+        job = Job.create('myfunc', connection=self.testconn)
+        job.save()
+        dt = datetime(2019, 1, 1)
+        registry.schedule(job, datetime(2019, 1, 1))
+        self.assertEqual(registry.get_scheduled_time(job), dt)
+        # get_scheduled_time() should also work with job ID
+        self.assertEqual(registry.get_scheduled_time(job.id), dt)
+
     def test_schedule(self):
         """Adding job with the correct score to ScheduledJobRegistry"""
         queue = Queue(connection=self.testconn)

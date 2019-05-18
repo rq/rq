@@ -261,6 +261,16 @@ class ScheduledJobRegistry(BaseRegistry):
         key = '%s:lock' % self.key
         return self.connection.set(key, 1, ex=10, nx=True)
 
+    def get_scheduled_time(self, job_or_id):
+        """Returns datetime (UTC) at which job is scheduled to be enqueued"""
+        if isinstance(job_or_id, self.job_class):
+            job_id = job_or_id.id
+        else:
+            job_id = job_or_id
+        return datetime.utcfromtimestamp(
+            self.connection.zscore(self.key, job_id)
+        )
+
 
 def clean_registries(queue):
     """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""

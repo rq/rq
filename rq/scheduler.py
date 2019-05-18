@@ -42,6 +42,9 @@ class RQScheduler(object):
         """Enqueue jobs whose timestamp is in the past"""
         for registry in self._scheduled_job_registries:
             timestamp = current_timestamp()
+
+            # TODO: try to use Lua script to make get_jobs_to_schedule()
+            # and remove_jobs() atomic
             job_ids = registry.get_jobs_to_schedule(timestamp)
 
             if not job_ids:
