@@ -1,4 +1,13 @@
+import logging
 import os
+import signal
+import time
+
+try:
+    from signal import SIGKILL
+except ImportError:
+    from signal import SIGTERM as SIGKILL
+
 
 from .job import Job
 from .queue import Queue
@@ -8,6 +17,9 @@ from .utils import current_timestamp
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
+
+format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 
 class RQScheduler(object):
@@ -21,6 +33,7 @@ class RQScheduler(object):
             )
         self.connection = connection
         self.interval = 1
+        self._stop_requested = False
 
     @classmethod
     def acquire_lock(cls, name, connection):
@@ -60,15 +73,48 @@ class RQScheduler(object):
                 registry.remove_jobs(timestamp)
                 pipeline.execute()
 
-    def heartbeart(self):
+    def _install_signal_handlers(self):
+        """Installs signal handlers for handling SIGINT and SIGTERM
+        gracefully.
+        """
+        signal.signal(signal.SIGINT, self.request_stop)
+        signal.signal(signal.SIGTERM, self.request_stop)
+
+    def request_stop(self, signum, frame):
+        """Toggle self._stop_requested that's checked on every loop"""
+        self._stop_requested = True
+
+    def heartbeat(self):
         """Updates the TTL on scheduler keys"""
+        logging.info("Sheduler sending heartbeat")
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
-                    pipeline.expire(self.interval + 5)
+                    key = self.get_key(name)
+                    pipeline.expire(key, self.interval + 5)
                 pipeline.execute()
         else:
-            self.connection.expire(self.interval + 5)
+            key = self.get_key(self._queue_names[0])
+            self.connection.expire(key, self.interval + 5)
+
+    def stop(self):
+        logging.info("Sheduler stopping...")
+        keys = [self.get_key(name) for name in self._queue_names]
+        self.connection.delete(*keys)
+
+    def work(self):
+        logging.info("Sheduler started")
+        while True:
+            if self._stop_requested:
+                self.stop()
+                break
+            self.heartbeat()
+            time.sleep(self.interval)
+
+
+def run(scheduler):
+    logging.info("Sheduler started")
+    scheduler.work()
 
 
 def parse_names(queues_or_names):
