@@ -31,6 +31,7 @@ simply do this:
 from rq import Queue
 from redis import Redis
 from somewhere import count_words_at_url
+import time
 
 # Tell RQ what Redis connection to use
 redis_conn = Redis()
