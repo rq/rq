@@ -7,7 +7,7 @@ Enqueueing jobs is delayed execution of function calls.  This means we're
 solving a problem, but are getting back a few in return.
 
 
-## Dealing with results
+## Dealing with Results
 
 Python functions may have return values, so jobs can have them, too.  If a job
 returns a non-`None` return value, the worker will write that return value back
@@ -41,20 +41,20 @@ values, which would be deleted immediately by default.
     q.enqueue(func_without_rv, result_ttl=500)  # job kept explicitly
 
 
-## Dealing with exceptions
+## Dealing with Exceptions
 
-Jobs can fail and throw exceptions.  This is a fact of life.  RQ deals with
+Jobs can fail and throw exceptions. This is a fact of life. RQ deals with
 this in the following way.
 
-Job failure is too important not to be noticed and therefore the job's return
-value should never expire.  Furthermore, it should be possible to retry failed
-jobs.  Typically, this is something that needs manual interpretation, since
+Furthermore, it should be possible to retry failed
+jobs. Typically, this is something that needs manual interpretation, since
 there is no automatic or reliable way of letting RQ judge whether it is safe
 for certain tasks to be retried or not.
 
 When an exception is thrown inside a job, it is caught by the worker,
-serialized and stored under the job's Redis hash's `exc_info` key.  A reference
-to the job is put on the `failed` queue.
+serialized and stored under the job's Redis hash's `exc_info` key. A reference
+to the job is put in the `FailedJobRegistry`. By default, failed jobs will be
+kept for 1 year.
 
 The job itself has some useful properties that can be used to aid inspection:
 
@@ -68,7 +68,7 @@ This makes it possible to inspect and interpret the problem manually and
 possibly resubmit the job.
 
 
-## Dealing With Interruptions
+## Dealing with Interruptions
 
 When workers get killed in the polite way (Ctrl+C or `kill`), RQ tries hard not
 to lose any work.  The current work is finished after which the worker will
@@ -83,7 +83,7 @@ damage.
 Just sayin'.
 
 
-## Dealing With Job Timeouts
+## Dealing with Job Timeouts
 
 By default, jobs should execute within 180 seconds.  After that, the worker
 kills the work horse and puts the job onto the `failed` queue, indicating the

@@ -31,6 +31,7 @@ simply do this:
 from rq import Queue
 from redis import Redis
 from somewhere import count_words_at_url
+import time
 
 # Tell RQ what Redis connection to use
 redis_conn = Redis()
@@ -83,7 +84,7 @@ to your job and not to RQ's enqueue function, this is what you do:
 
 ```python
 q = Queue('low', connection=redis_conn)
-q.enqueue(func=count_words_at_url,
+q.enqueue(count_words_at_url,
           ttl=30,  # This ttl will be used by RQ
           args=('http://nvie.com',),
           kwargs={

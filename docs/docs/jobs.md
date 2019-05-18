@@ -23,7 +23,7 @@ print('Status: %s' $ job.get_status())
 ```
 
 Some interesting job attributes include:
-* `job.status`
+* `job.get_status()`
 * `job.func_name`
 * `job.args`
 * `job.kwargs`
