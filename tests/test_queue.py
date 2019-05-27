@@ -2,8 +2,13 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from multiprocessing import Process
+import os
+import shutil
+
 from tests import RQTestCase
-from tests.fixtures import echo, Number, say_hello
+from tests.fixtures import (div_by_zero, echo, Number, say_hello,
+                          some_calculation, random_file)
 
 from rq import Queue
 from rq.exceptions import InvalidJobDependency
@@ -418,6 +423,111 @@ class TestQueue(RQTestCase):
         self.assertEqual(registry_1.get_job_ids(), [])
         self.assertEqual(registry_2.get_job_ids(), [])
 
+    def test_enqueue_job_with_multiple_dependencies_same_q(self):
+        """Jobs are enqueued only when all their dependencies are finished."""
+        # Job with unfinished dependency is not immediately enqueued
+        parent_job1 = Job.create(func=say_hello)
+        parent_job1.save()
+        parent_job2 = Job.create(func=say_hello)
+        parent_job2.save()
+        q = Queue()
+        job = q.enqueue_call(say_hello, depends_on=[parent_job1, parent_job2])
+        self.assertEqual(q.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # run parent 1
+        q.enqueue_job(parent_job1)
+        w = Worker([q])
+        w.work(burst=True)
+
+        # child should still be waiting
+        self.assertEqual(q.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # run parent 2
+        q.enqueue_job(parent_job2)
+        w = Worker([q])
+        w.work(burst=True)
+
+        # child should be done
+        self.assertEqual(q.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_enqueue_job_with_multiple_dependencies_different_q(self):
+        """Jobs can be enqueued on different queues. Dependency still works"""
+        # Job with unfinished dependency is not immediately enqueued
+        parent_job1 = Job.create(func=say_hello)
+        parent_job1.save()
+        parent_job2 = Job.create(func=say_hello)
+        parent_job2.save()
+        q1 = Queue()
+        q2 = Queue()
+        job = q2.enqueue_call(say_hello, depends_on=[parent_job1, parent_job2])
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # run parent 1
+        q1.enqueue_job(parent_job1)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
+        # child should still be waiting
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # parent 2 has no state yet
+        self.assertEqual(parent_job2.get_status(), None)
+
+        # run parent 2
+        q1.enqueue_job(parent_job2)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
+        # child should be done
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_enqueue_job_with_multiple_dependencies_different_q_by_id(self):
+        """Jobs can be enqueued on different queues. Dependency still works.
+        Enqueuing can be done using job ids as well"""
+        # Job with unfinished dependency is not immediately enqueued
+        parent_job1 = Job.create(func=say_hello)
+        parent_job1.save()
+        parent_job2 = Job.create(func=say_hello)
+        parent_job2.save()
+        q1 = Queue()
+        q2 = Queue()
+        job = q2.enqueue_call(say_hello, depends_on=[parent_job1.id, parent_job2.id])
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # run parent 1
+        q1.enqueue_job(parent_job1)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
+        # child should still be waiting
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+
+        # parent 2 has no state yet
+        self.assertEqual(parent_job2.get_status(), None)
+
+        # run parent 2
+        q1.enqueue_job(parent_job2)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
+        # child should be done
+        self.assertEqual(q1.job_ids, [])
+        self.assertEqual(q2.job_ids, [])
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
     def test_enqueue_job_with_dependency(self):
         """Jobs are enqueued only when their dependencies are finished."""
         # Job with unfinished dependency is not immediately enqueued
@@ -508,3 +618,51 @@ class TestQueue(RQTestCase):
 
         job_fetch = q1.fetch_job(job_orig.id)
         self.assertIsNotNone(job_fetch)
+
+    def test_multi_deps_enqueued_only_once(self):
+        """A job with two dependencies should be enqueued once only, even if
+        there are multiple workers"""
+        SENTINEL_FOLDER = '/tmp/rq-tests'
+        TEST_COUNT = 50
+
+        q = Queue()
+
+        for _ in range(0, TEST_COUNT):
+            print('Starting pass # {}'.format(_))
+            try:
+                # Create an empty sentinel folder
+                if os.path.exists(SENTINEL_FOLDER):
+                    shutil.rmtree(SENTINEL_FOLDER)
+                os.mkdir(SENTINEL_FOLDER)
+            except OSError:
+                raise
+
+            # Create two independant jobs
+            job1 = Job.create(func=say_hello)
+            job1.save()
+            q.enqueue_job(job1)
+            job2 = Job.create(func=say_hello)
+            job2.save()
+            q.enqueue_job(job2)
+
+            # Create a third job depending on both job1 and job2
+            q.enqueue(random_file, SENTINEL_FOLDER, depends_on=[job1, job2])
+
+            # Start workers in parallel
+            def run_worker(q):
+                w = Worker([q])
+                w.work(burst=True)
+
+            procs = []
+            for x in range(0, 3):
+                p = Process(target=run_worker, args=(q,))
+                p.start()
+                procs.append(p)
+
+            for p in procs:
+                p.join()
+
+            # If the third job ran twice, the folder will contain 2 files
+            number_of_files = len([name for name in os.listdir(SENTINEL_FOLDER)])
+
+            self.assertEqual(number_of_files, 1)

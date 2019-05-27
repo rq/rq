@@ -217,7 +217,7 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description'])
+            [b'created_at', b'data', b'dependency_ids', b'description'])
 
     def test_persistence_of_parent_job(self):
         """Storing jobs with parent job, either instance or key."""
@@ -226,14 +226,14 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.some_calculation, depends_on=parent_job)
         job.save()
         stored_job = Job.fetch(job.id)
-        self.assertEqual(stored_job._dependency_id, parent_job.id)
-        self.assertEqual(stored_job.dependency, parent_job)
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
+        self.assertEqual(stored_job.dependencies, [parent_job])
 
         job = Job.create(func=fixtures.some_calculation, depends_on=parent_job.id)
         job.save()
         stored_job = Job.fetch(job.id)
-        self.assertEqual(stored_job._dependency_id, parent_job.id)
-        self.assertEqual(stored_job.dependency, parent_job)
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
+        self.assertEqual(stored_job.dependencies, [parent_job])
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
@@ -495,6 +495,60 @@ class TestJob(RQTestCase):
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
+    def test_register_dependency(self):
+        """Ensure dependency registration works properly."""
+
+        finished_job = Job.create(func=fixtures.say_hello, status='finished')
+        finished_job.save()
+
+        job1 = Job.create(func=fixtures.say_hello)
+        job1.save()
+
+        job2 = Job.create(func=fixtures.say_hello,
+                          depends_on=[job1, finished_job])
+        job2.register_dependencies([job1])
+
+        self.assertEqual(
+            list(map(as_text,
+                     self.testconn.smembers(Job.dependents_key_for(job1.id)))),
+            [job2.id])
+
+        # Should not register itself as being dependent on a finished job
+        self.assertEqual(self.testconn.smembers(
+                         Job.dependents_key_for(finished_job.id)), set())
+        self.assertEqual(self.testconn.smembers(
+                         Job.dependents_key_for(job2.id)), set())
+
+    def test_cancel_dependent_job(self):
+        """If a dependent job is cancelled it should cancel all downstream jobs
+        and update the dependents list of upstream jobs"""
+        queue = Queue(connection=self.testconn)
+
+        job1 = queue.enqueue(fixtures.say_hello)
+
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job1)
+        job2.save()
+        job2.register_dependencies([job1])
+
+        job3 = Job.create(func=fixtures.say_hello, depends_on=job2)
+        job3.save()
+        job3.register_dependencies([job2])
+
+        # job2 should be in job1 dependents
+        self.assertEqual(set([as_text(x.id) for x in job1.dependents]), set([job2.id]))
+        # job2 should be in job3 dependencies
+        self.assertEqual(set([x.id for x in job3.dependencies]), set([job2.id]))
+
+        job2.cancel()
+
+        # NOTE: dependents and dependencies are cached in Job so fetch directly from redis
+        # job2 should no longer be in job1 dependents
+        self.assertEqual(self.testconn.smembers(job1.dependents_key_for), set([]))
+        # job2 should no longer be in job3 dependencies
+        self.assertEqual(self.testconn.smembers(job3.dependencies_key_for), set([]))
+        # job 3 should have been cancelled as well
+        self.assertEqual(job3.get_status(), JobStatus.CANCELED)
+
     def test_job_with_dependents_delete_parent(self):
         """job.delete() deletes itself from Redis but not dependents.
         Wthout a save, the dependent job is never saved into redis. The delete
@@ -503,7 +557,7 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(func=fixtures.say_hello, depends_on=job)
-        job2.register_dependency()
+        job2.register_dependencies()
 
         job.delete()
         self.assertFalse(self.testconn.exists(job.key))
@@ -563,7 +617,7 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(func=fixtures.say_hello, depends_on=job)
-        job2.register_dependency()
+        job2.register_dependencies()
         job2.save()
 
         job.delete()
@@ -582,7 +636,7 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(func=fixtures.say_hello, depends_on=job)
-        job2.register_dependency()
+        job2.register_dependencies()
 
         job.delete(delete_dependents=True)
         self.assertFalse(self.testconn.exists(job.key))
@@ -599,7 +653,7 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(func=fixtures.say_hello, depends_on=job)
-        job2.register_dependency()
+        job2.register_dependencies()
         job2.save()
 
         job.delete(delete_dependents=True)
@@ -608,6 +662,22 @@ class TestJob(RQTestCase):
         self.assertFalse(self.testconn.exists(job2.key))
 
         self.assertNotIn(job.id, queue.get_job_ids())
+
+
+    def test_delete(self):
+        """job.delete() deletes itself & dependents mapping from Redis."""
+        queue = Queue(connection=self.testconn)
+        job1 = queue.enqueue(fixtures.say_hello)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job1)
+        job2.save()
+        job2.register_dependencies([job1])  # why register deopoendency, we told job2 about it during equeue
+
+        job1.delete()
+
+        self.assertFalse(self.testconn.exists(job1.key))
+        self.assertFalse(self.testconn.exists(job1.dependents_key))
+
+        self.assertNotIn(job1.id, queue.get_job_ids())
 
     def test_create_job_with_id(self):
         """test creating jobs with a custom ID"""

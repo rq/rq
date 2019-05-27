@@ -109,11 +109,11 @@ class TestDecorator(RQTestCase):
 
         bar_job = bar.delay()
 
-        self.assertIsNone(foo_job._dependency_id)
+        self.assertEqual(foo_job._dependency_ids, [])
 
-        self.assertEqual(bar_job.dependency, foo_job)
+        self.assertEqual(bar_job.dependencies, [foo_job])
 
-        self.assertEqual(bar_job._dependency_id, foo_job.id)
+        self.assertEqual(bar_job._dependency_ids, [foo_job.id])
 
     def test_decorator_delay_accepts_depends_on_as_argument(self):
         """Ensure that passing in depends_on to the delay method of
