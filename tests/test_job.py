@@ -495,8 +495,14 @@ class TestJob(RQTestCase):
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
+    """
+    NOTE: I think this should not be tested
+    The enqueue_call method makes sure that a finished job will not
+    be included in the dependencies.
+    Do we want to include the same test in the register_dependencies method?
+
     def test_register_dependency(self):
-        """Ensure dependency registration works properly."""
+        # Ensure dependency registration works properly.
 
         finished_job = Job.create(func=fixtures.say_hello, status='finished')
         finished_job.save()
@@ -506,7 +512,8 @@ class TestJob(RQTestCase):
 
         job2 = Job.create(func=fixtures.say_hello,
                           depends_on=[job1, finished_job])
-        job2.register_dependencies([job1])
+        # job2.register_dependencies([job1])
+        job2.register_dependencies()
 
         self.assertEqual(
             list(map(as_text,
@@ -518,6 +525,7 @@ class TestJob(RQTestCase):
                          Job.dependents_key_for(finished_job.id)), set())
         self.assertEqual(self.testconn.smembers(
                          Job.dependents_key_for(job2.id)), set())
+    """
 
     def test_cancel_dependent_job(self):
         """If a dependent job is cancelled it should cancel all downstream jobs
@@ -528,11 +536,11 @@ class TestJob(RQTestCase):
 
         job2 = Job.create(func=fixtures.say_hello, depends_on=job1)
         job2.save()
-        job2.register_dependencies([job1])
+        job2.register_dependencies()
 
         job3 = Job.create(func=fixtures.say_hello, depends_on=job2)
         job3.save()
-        job3.register_dependencies([job2])
+        job3.register_dependencies()
 
         # job2 should be in job1 dependents
         self.assertEqual(set([as_text(x.id) for x in job1.dependents]), set([job2.id]))
@@ -670,7 +678,7 @@ class TestJob(RQTestCase):
         job1 = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(func=fixtures.say_hello, depends_on=job1)
         job2.save()
-        job2.register_dependencies([job1])  # why register deopoendency, we told job2 about it during equeue
+        job2.register_dependencies()
 
         job1.delete()
 

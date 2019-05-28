@@ -243,10 +243,6 @@ class Queue(object):
             depends_on=depends_on, timeout=timeout, id=job_id,
             origin=self.name, meta=meta)
 
-        # If job depends on an unfinished job, register itself on it's
-        # parent's dependents instead of enqueueing it.
-        # If WatchError is raised in the process, that means something else is
-        # modifying the dependency. In this case we simply retry
         if depends_on is not None:
             if not isinstance(depends_on, list):
                 if not isinstance(depends_on, self.job_class):
@@ -258,8 +254,11 @@ class Queue(object):
                                 else self.job_class(id=dep, connection=self.connection)
                                 for dep in depends_on]
 
+            # If job depends on an unfinished job, register itself on it's
+            # parent's dependents instead of enqueueing it.
+            # If WatchError is raised in the process, that means something else is
+            # modifying the dependency. In this case we simply retry
             remaining_dependencies = []
-
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
@@ -268,7 +267,6 @@ class Queue(object):
                         for dependency in dependencies:
                             if dependency.get_status() != JobStatus.FINISHED:
                                 remaining_dependencies.append(dependency)
-
 
                             # If the dependency does not exist, raise an
                             # exception to avoid creating an orphaned job.
@@ -279,8 +277,9 @@ class Queue(object):
                         if remaining_dependencies:
                             pipe.multi()
                             job.set_status(JobStatus.DEFERRED)
-                            job.register_dependencies(remaining_dependencies,
-                                                      pipeline=pipe)
+                            # NOTE: do we prefer this as argument to register_dependencies?
+                            job._dependency_ids = [job.id for job in remaining_dependencies]
+                            job.register_dependencies(pipeline=pipe)
                             job.save(pipeline=pipe)
                             job.cleanup(ttl=job.ttl, pipeline=pipe)
                             pipe.execute()

@@ -751,7 +751,7 @@ class Job(object):
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
 
-    def register_dependencies(self, dependencies=None, pipeline=None):
+    def register_dependencies(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
         depend on is successfully performed. We record this relation as
         a reverse dependency (a Redis set), with a key that looks something
@@ -762,17 +762,6 @@ class Job(object):
         This method adds the job in its dependency's dependents set
         and adds the job to DeferredJobRegistry.
         """
-
-        # HACK, compare with previous. usually _dependency_ids is set during create
-        if dependencies is None:
-            dependencies = self._dependency_ids
-        if dependencies is None:
-            dependencies = []
-        # TODO we want a list of ids! Who wins? create or register
-        dependency_ids = []
-        for dep in dependencies:
-            dependency_ids.append(dep.id if isinstance(dep, Job)
-                                        else dep)
         from .registry import DeferredJobRegistry
 
         registry = DeferredJobRegistry(self.origin,
@@ -781,7 +770,7 @@ class Job(object):
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
-        for dependency_id in dependency_ids:
+        for dependency_id in self._dependency_ids:
             connection.sadd(Job.dependencies_key_for(self.id), dependency_id)
             connection.sadd(Job.dependents_key_for(dependency_id), self.id)
 
