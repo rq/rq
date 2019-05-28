@@ -618,19 +618,19 @@ class Job(object):
             queue.remove(self, pipeline=pipeline)
 
         # Cancel downstream and remove this job as their dependency
-        # Chris HACK: this fails as soos as frst one fails. How can I fail for one and continue for others
+        # Chris HACK: this fails as soos as frst one fails. 
+        # How can I fail for one and continue for others in self.dependants
         try:
             if self.dependents is not None:
                 for dependent in self.dependents:
                     dependent.remove_dependency(self.id, pipeline=pipeline)
                     if dependent.get_status() != JobStatus.CANCELED:
-                        # TODO: give pipeline back to cancel so all downstream
-                        # cancels happen at the same time ?
                         # TODO: they will stay in DeferredJobRegistry
                         # Is that Okay? question of cancel vs delete
-                        dependent.cancel()
+                        dependent.cancel(pipeline=pipeline)
         except NoSuchJobError:
-            # otherwise fail if job was deleted with delete_dependants is True
+            # Catch exceptions if job was deleted with delete_dependants is True
+            # Deletion of dependants happens before cancellation
             pass
 
         # Remove this job as dependent from upstream
