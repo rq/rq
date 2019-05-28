@@ -203,10 +203,6 @@ class Job(object):
         """Returns a list of job's dependencies. To avoid repeated
         Redis fetches, we cache job.dependencies
         """
-        if self._dependency_ids is None:
-            # TODO: Remove this check
-            # Actually never NONE, because on create, I replace None with []
-            return None
         if hasattr(self, '_dependencies'):
             return self._dependencies
         self._dependencies = [Job.fetch(
