@@ -596,8 +596,8 @@ class Job(object):
             queue.remove(self, pipeline=pipeline)
 
         # Cancel downstream and remove this job as their dependency
-        # Chris HACK: this fails as soos as frst one fails. 
-        # How can I fail for one and continue for others in self.dependants
+        # HACK: This fails as soos as frst one fails. 
+        #       How can I fail for one and continue for others in self.dependants
         try:
             if self.dependents is not None:
                 for dependent in self.dependents:
