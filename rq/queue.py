@@ -444,12 +444,13 @@ class Queue(object):
             try:
                 if pipeline is None:
                     pipe.watch(item['job'].key)
-                # pipe.multi() # HACK: this causes mutli-dependency tests to fail
+                    pipe.multi() # HACK: this causes mutli-dependency tests to fail
                 item['queue'].enqueue_job(item['job'], pipeline=pipe)
                 if pipeline is None:
                     pipe.execute()
             except WatchError:
                 # Another worker enqueued this job which changed its status
+                # Usually the worker does this watch itself
                 pass
 
     def pop_job_id(self):
