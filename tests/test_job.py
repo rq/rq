@@ -543,9 +543,9 @@ class TestJob(RQTestCase):
 
         # NOTE: dependents and dependencies are cached in Job so fetch directly from redis
         # job2 should no longer be in job1 dependents
-        self.assertEqual(self.testconn.smembers(job1.dependents_key_for), set([]))
+        self.assertEqual(self.testconn.smembers(job1.dependents_key), set([]))
         # job2 should no longer be in job3 dependencies
-        self.assertEqual(self.testconn.smembers(job3.dependencies_key_for), set([]))
+        self.assertEqual(self.testconn.smembers(job3.dependencies_key), set([]))
         # job 3 should have been cancelled as well
         self.assertEqual(job3.get_status(), JobStatus.CANCELED)
 

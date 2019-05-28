@@ -422,6 +422,7 @@ class Queue(object):
 
                         to_enqueue.append({'queue': queue, 'job': dependent})
 
+
                 # NOTE: On job cleanup, all keys will be removed, but cleanup
                 # happens only if parent job is actually enqueued.
                 # If a user uses q.enqueue_dependents manually without enqueuing
@@ -449,7 +450,7 @@ class Queue(object):
             try:
                 if pipeline is None:
                     pipe.watch(item['job'].key)
-                pipe.multi()
+                # pipe.multi() # HACK: this causes mutli tests to fail
                 item['queue'].enqueue_job(item['job'], pipeline=pipe)
                 if pipeline is None:
                     pipe.execute()

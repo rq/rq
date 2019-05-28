@@ -430,6 +430,7 @@ class TestQueue(RQTestCase):
         parent_job1.save()
         parent_job2 = Job.create(func=say_hello)
         parent_job2.save()
+
         q = Queue()
         job = q.enqueue_call(say_hello, depends_on=[parent_job1, parent_job2])
         self.assertEqual(q.job_ids, [])
@@ -460,9 +461,11 @@ class TestQueue(RQTestCase):
         parent_job1.save()
         parent_job2 = Job.create(func=say_hello)
         parent_job2.save()
+
         q1 = Queue()
         q2 = Queue()
         job = q2.enqueue_call(say_hello, depends_on=[parent_job1, parent_job2])
+
         self.assertEqual(q1.job_ids, [])
         self.assertEqual(q2.job_ids, [])
         self.assertEqual(job.get_status(), JobStatus.DEFERRED)
@@ -477,11 +480,15 @@ class TestQueue(RQTestCase):
         self.assertEqual(q2.job_ids, [])
         self.assertEqual(job.get_status(), JobStatus.DEFERRED)
 
+
         # parent 2 has no state yet
         self.assertEqual(parent_job2.get_status(), None)
 
         # run parent 2
         q1.enqueue_job(parent_job2)
+        w = Worker([q1, q2])
+        w.work(burst=True)
+
         w = Worker([q1, q2])
         w.work(burst=True)
 

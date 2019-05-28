@@ -621,15 +621,20 @@ class Job(object):
             queue.remove(self, pipeline=pipeline)
 
         # Cancel downstream and remove this job as their dependency
-        if self.dependents is not None:
-            for dependent in self.dependents:
-                dependent.remove_dependency(self.id, pipeline=pipeline)
-                if dependent.get_status() != JobStatus.CANCELED:
-                    # TODO: give pipeline back to cancel so all downstream
-                    # cancels happen at the same time ?
-                    # TODO: they will stay in DeferredJobRegistry
-                    # Is that Okay? question of cancel vs delete
-                    dependent.cancel()
+        # Chris HACK: this fails as soos as frst one fails. How can I fail for one and continue for others
+        try:
+            if self.dependents is not None:
+                for dependent in self.dependents:
+                    dependent.remove_dependency(self.id, pipeline=pipeline)
+                    if dependent.get_status() != JobStatus.CANCELED:
+                        # TODO: give pipeline back to cancel so all downstream
+                        # cancels happen at the same time ?
+                        # TODO: they will stay in DeferredJobRegistry
+                        # Is that Okay? question of cancel vs delete
+                        dependent.cancel()
+        except NoSuchJobError:
+            # otherwise fail if job was deleted with delete_dependants is True
+            pass
 
         # Remove this job as dependent from upstream
         if self.dependencies is not None:
@@ -781,8 +786,17 @@ class Job(object):
         This method adds the job in its dependency's dependents set
         and adds the job to DeferredJobRegistry.
         """
+
+        # HACK, compare with previous. usually _dependency_ids is set during create
+        if dependencies is None:
+            dependencies = self._dependency_ids
         if dependencies is None:
             dependencies = []
+        # TODO we want a list of ids! Who wins? create or register
+        dependency_ids = []
+        for dep in dependencies:
+            dependency_ids.append(dep.id if isinstance(dep, Job)
+                                        else dep)
         from .registry import DeferredJobRegistry
 
         registry = DeferredJobRegistry(self.origin,
@@ -791,9 +805,9 @@ class Job(object):
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
-        for dependency in dependencies:
-            connection.sadd(Job.dependencies_key_for(self.id), dependency.id)
-            connection.sadd(Job.dependents_key_for(dependency.id), self.id)
+        for dependency_id in dependency_ids:
+            connection.sadd(Job.dependencies_key_for(self.id), dependency_id)
+            connection.sadd(Job.dependents_key_for(dependency_id), self.id)
 
 
 _job_stack = LocalStack()
