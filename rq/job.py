@@ -213,9 +213,6 @@ class Job(object):
             dependency_id, connection=self.connection)
             for dependency_id in self._dependency_ids]
 
-        for job in self._dependencies:
-            # TODO: why do a refresh here ?
-            job.refresh()
         return self._dependencies
 
     @property
