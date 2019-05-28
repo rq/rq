@@ -248,11 +248,6 @@ class Queue(object):
         # If WatchError is raised in the process, that means something else is
         # modifying the dependency. In this case we simply retry
         if depends_on is not None:
-            """
-            if not isinstance(depends_on, self.job_class):
-                depends_on = self.job_class(id=depends_on,
-                                            connection=self.connection)
-            """
             if not isinstance(depends_on, list):
                 if not isinstance(depends_on, self.job_class):
                     depends_on = self.job_class(id=depends_on, connection=self.connection)
@@ -440,7 +435,7 @@ class Queue(object):
                     continue
                 else:
                     # If the pipeline comes from the caller, we re-raise the
-                    # exception as it it the responsibility of the caller to
+                    # exception as it is the responsibility of the caller to
                     # handle it
                     raise
 
@@ -450,7 +445,7 @@ class Queue(object):
             try:
                 if pipeline is None:
                     pipe.watch(item['job'].key)
-                # pipe.multi() # HACK: this causes mutli tests to fail
+                # pipe.multi() # HACK: this causes mutli-dependency tests to fail
                 item['queue'].enqueue_job(item['job'], pipeline=pipe)
                 if pipeline is None:
                     pipe.execute()

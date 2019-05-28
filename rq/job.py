@@ -136,14 +136,10 @@ class Job(object):
         job._status = status
         job.meta = meta or {}
 
-        """
-        # dependency could be job instance or id
-        if depends_on is not None:
-            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
-        """
-        # dependencies could be a single job or a list of jobs
         if depends_on is None:
             depends_on = []
+
+        # Dependencies could be a single job or a list of jobs
         if isinstance(depends_on, list):
             job._dependency_ids = []
             for dep in depends_on:
@@ -183,20 +179,6 @@ class Job(object):
     @property
     def is_deferred(self):
         return self.get_status() == JobStatus.DEFERRED
-
-    """
-    @property
-    def dependency(self):
-        # Returns a job's dependency. To avoid repeated Redis fetches, we cache
-        # job.dependency as job._dependency.
-        if self._dependency_id is None:
-            return None
-        if hasattr(self, '_dependency'):
-            return self._dependency
-        job = self.fetch(self._dependency_id, connection=self.connection)
-        self._dependency = job
-        return job
-    """
 
     @property
     def dependencies(self):
@@ -599,7 +581,7 @@ class Job(object):
 
     def cancel(self, pipeline=None):
         """Cancels the given job, which will prevent the job from ever being
-        ran (or inspected). Downstream Jobs that depend on the given job will be
+        run (or inspected). Downstream Jobs that depend on the given job will be
         cancelled as well. Upstream Jobs that this job depends on will not be
         changed but will have their dependencies updated.
         This method merely exists as a high-level API call to cancel jobs
@@ -623,6 +605,7 @@ class Job(object):
                     if dependent.get_status() != JobStatus.CANCELED:
                         # TODO: they will stay in DeferredJobRegistry
                         # Is that Okay? question of cancel vs delete
+                        # Implement a CancelledJobRegistry ?
                         dependent.cancel(pipeline=pipeline)
         except NoSuchJobError:
             # Catch exceptions if job was deleted with delete_dependants is True
@@ -637,8 +620,8 @@ class Job(object):
         pipeline.execute()
 
         # Delete all keys related to this job
-        # TODO: expire or delete. If called via delte
-        # they will be deleted anyway
+        # TODO: expire or delete? If called via delete
+        #       they will be deleted anyway
         self.connection.expire(self.dependents_key, 2)
         self.connection.expire(self.dependencies_key, 2)
         self.connection.expire(self.key, 2)
