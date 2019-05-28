@@ -243,7 +243,7 @@ class Queue(object):
             depends_on=depends_on, timeout=timeout, id=job_id,
             origin=self.name, meta=meta)
 
-        if depends_on is not None:
+        if depends_on:
             if not isinstance(depends_on, list):
                 if not isinstance(depends_on, self.job_class):
                     depends_on = self.job_class(id=depends_on, connection=self.connection)
