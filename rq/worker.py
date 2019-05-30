@@ -647,7 +647,6 @@ class Worker(object):
                 '(work-horse terminated unexpectedly; waitpid returned {})'
             ).format(ret_val))
 
-            exc_string = "Work-horse process was terminated unexpectedly " + "(waitpid returned %s)" % ret_val
             self.handle_job_failure(
                 job,
                 exc_string="Work-horse process was terminated unexpectedly "
