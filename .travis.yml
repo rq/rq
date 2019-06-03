@@ -2,14 +2,17 @@ sudo: false
 language: python
 services:
   - redis
-python:
-  - "2.7"
-  - "3.4"
-  - "3.5"
-  - "3.6"
-  - "3.7"
-  - "3.8-dev"
-  - "pypy"
+matrix:
+  include:
+  - python: "2.7"
+  - python: "3.4"
+  - python: "3.5"
+  - python: "3.6"
+  - python: "3.7"
+    dist: xenial
+  - python: 3.8-dev
+    dist: xenial
+  - python: "pypy"
 install:
   - pip install -e .
   - pip install pytest-cov sentry-sdk codecov
