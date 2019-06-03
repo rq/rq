@@ -435,7 +435,7 @@ class Worker(object):
             self.set_state(before_state)
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT):
+             log_format=DEFAULT_LOGGING_FORMAT, job_limit=None):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -446,7 +446,7 @@ class Worker(object):
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self._install_signal_handlers()
-        did_perform_work = False
+        completed_jobs = 0
         self.register_birth()
         self.log.info("RQ worker %r started, version %s", self.key, VERSION)
         self.set_state(WorkerStatus.STARTED)
@@ -477,7 +477,11 @@ class Worker(object):
                     self.execute_job(job, queue)
                     self.heartbeat()
 
-                    did_perform_work = True
+                    completed_jobs += 1
+                    if job_limit is not None:
+                        if completed_jobs >= job_limit:
+                            self.log.info("RQ worker %r done, quitting", self.key)
+                            break
 
                 except StopRequested:
                     break
@@ -495,7 +499,7 @@ class Worker(object):
         finally:
             if not self.is_horse:
                 self.register_death()
-        return did_perform_work
+        return bool(completed_jobs)
 
     def dequeue_job_and_maintain_ttl(self, timeout):
         result = None

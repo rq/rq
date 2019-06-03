@@ -340,6 +340,17 @@ class TestWorker(RQTestCase):
         # total_working_time should be around 0.05 seconds
         self.assertTrue(0.05 <= worker.total_working_time < 0.06)
 
+    def test_job_limit(self):
+        """Worker exits after number of jobs complete."""
+        queue = Queue()
+        job1 = queue.enqueue(do_nothing)
+        job2 = queue.enqueue(do_nothing)
+        worker = Worker([queue])
+        worker.work(job_limit=1)
+
+        self.assertEqual(JobStatus.FINISHED, job1.get_status())
+        self.assertEqual(JobStatus.QUEUED, job2.get_status())
+
     def test_disable_default_exception_handler(self):
         """
         Job is not moved to FailedJobRegistry when default custom exception
@@ -616,7 +627,7 @@ class TestWorker(RQTestCase):
         # Updates worker statuses
         self.assertEqual(worker.get_state(), 'busy')
         self.assertEqual(worker.get_current_job_id(), job.id)
-    
+
     def test_prepare_job_execution_inf_timeout(self):
         """Prepare job execution handles infinite job timeout"""
         queue = Queue(connection=self.testconn)
@@ -632,7 +643,7 @@ class TestWorker(RQTestCase):
 
         # Score in queue is +inf
         self.assertEqual(self.testconn.zscore(registry.key, job.id), float('Inf'))
-        
+
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""

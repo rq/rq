@@ -188,12 +188,13 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
+@click.option('--job-limit', type=int, default=None, help='Maximum number of jobs to execute')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, job_monitoring_interval, verbose, quiet, sentry_dsn,
-           exception_handler, pid, disable_default_exception_handler, queues,
-           log_format, date_format, **options):
+           exception_handler, pid, disable_default_exception_handler,
+           job_limit, queues, log_format, date_format, **options):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
@@ -236,7 +237,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             from rq.contrib.sentry import register_sentry
             register_sentry(sentry_dsn)
 
-        worker.work(burst=burst, logging_level=logging_level, date_format=date_format, log_format=log_format)
+        worker.work(burst=burst, logging_level=logging_level, date_format=date_format, log_format=log_format, job_limit=job_limit)
     except ConnectionError as e:
         print(e)
         sys.exit(1)
