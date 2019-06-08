@@ -192,9 +192,9 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
-           worker_ttl, job_monitoring_interval, verbose, quiet, sentry_dsn,
-           exception_handler, pid, disable_default_exception_handler,
-           job_limit, queues, log_format, date_format, **options):
+           worker_ttl, job_monitoring_interval, disable_job_desc_logging, verbose, quiet, sentry_dsn,
+           exception_handler, pid, disable_default_exception_handler, job_limit, queues,
+           log_format, date_format, **options):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
@@ -229,7 +229,8 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             job_monitoring_interval=job_monitoring_interval,
             job_class=cli_config.job_class, queue_class=cli_config.queue_class,
             exception_handlers=exception_handlers or None,
-            disable_default_exception_handler=disable_default_exception_handler
+            disable_default_exception_handler=disable_default_exception_handler,
+            log_job_description=not disable_job_desc_logging
         )
 
         # Should we configure Sentry?

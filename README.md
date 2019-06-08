@@ -12,6 +12,11 @@ RQ requires Redis >= 3.0.0.
 Full documentation can be found [here][d].
 
 
+## Support RQ
+
+If you find RQ useful, please consider supporting this project via [Tidelift](https://tidelift.com/subscription/pkg/pypi-rq?utm_source=pypi-rq&utm_medium=referral&utm_campaign=readme).
+
+
 ## Getting started
 
 First, run a Redis server, of course:
@@ -86,9 +91,6 @@ This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
-## Support RQ
-
-If you find RQ useful, please consider supporting this project via [Tidelift](https://tidelift.com/subscription/pkg/pypi-rq?utm_source=pypi-rq&utm_medium=referral&utm_campaign=readme).
 
 [r]: http://python-requests.org
 [d]: http://python-rq.org/
