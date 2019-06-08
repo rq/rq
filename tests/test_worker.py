@@ -340,13 +340,13 @@ class TestWorker(RQTestCase):
         # total_working_time should be around 0.05 seconds
         self.assertTrue(0.05 <= worker.total_working_time < 0.06)
 
-    def test_job_limit(self):
+    def test_max_jobs(self):
         """Worker exits after number of jobs complete."""
         queue = Queue()
         job1 = queue.enqueue(do_nothing)
         job2 = queue.enqueue(do_nothing)
         worker = Worker([queue])
-        worker.work(job_limit=1)
+        worker.work(max_jobs=1)
 
         self.assertEqual(JobStatus.FINISHED, job1.get_status())
         self.assertEqual(JobStatus.QUEUED, job2.get_status())

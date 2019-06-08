@@ -435,7 +435,7 @@ class Worker(object):
             self.set_state(before_state)
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT, job_limit=None):
+             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -478,8 +478,8 @@ class Worker(object):
                     self.heartbeat()
 
                     completed_jobs += 1
-                    if job_limit is not None:
-                        if completed_jobs >= job_limit:
+                    if max_jobs is not None:
+                        if completed_jobs >= max_jobs:
                             self.log.info("RQ worker %r done, quitting", self.key)
                             break
 
