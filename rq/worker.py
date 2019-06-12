@@ -448,7 +448,7 @@ class Worker(object):
         self._install_signal_handlers()
         completed_jobs = 0
         self.register_birth()
-        self.log.info("RQ worker %r started, version %s", self.key, VERSION)
+        self.log.info("Worker %s: started, version %s", self.key, VERSION)
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
@@ -462,7 +462,7 @@ class Worker(object):
                         self.clean_registries()
 
                     if self._stop_requested:
-                        self.log.info('Stopping on request')
+                        self.log.info('Worker %s: stopping on request', self.key)
                         break
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
@@ -470,7 +470,7 @@ class Worker(object):
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
-                            self.log.info("RQ worker %r done, quitting", self.key)
+                            self.log.info("Worker %s: done, quitting", self.key)
                         break
 
                     job, queue = result
@@ -481,7 +481,7 @@ class Worker(object):
                     if max_jobs is not None:
                         if completed_jobs >= max_jobs:
                             self.log.info(
-                                "RQ Worker %r finished executing %d jobs, quitting",
+                                "Worker %s: finished executing %d jobs, quitting",
                                 self.key, completed_jobs
                             )
                             break
@@ -495,7 +495,7 @@ class Worker(object):
 
                 except:  # noqa
                     self.log.error(
-                        'RQ Worker %r: found an unhandled exception, quitting...',
+                        'Worker %s: found an unhandled exception, quitting...',
                         self.key, exc_info=True
                     )
                     break
@@ -527,7 +527,7 @@ class Worker(object):
                             '%s: %s (%s)', green(queue.name),
                             blue(job.description), job.id)
                     else:
-                        self.log.info('%s:%s', green(queue.name), job.id)
+                        self.log.info('%s: %s', green(queue.name), job.id)
 
                 break
             except DequeueTimeout:
@@ -965,7 +965,10 @@ class HerokuWorker(Worker):
     def handle_warm_shutdown_request(self):
         """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
-            self.log.info('Warm shut down requested, sending horse SIGRTMIN signal')
+            self.log.info(
+                'Worker %s: warm shut down requested, sending horse SIGRTMIN signal',
+                self.key
+            )
             self.kill_horse(sig=signal.SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')
