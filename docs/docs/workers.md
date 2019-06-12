@@ -68,6 +68,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--log-format`: Format for the worker logs, defaults to `'%(asctime)s %(message)s'`
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
+* `--max-jobs`: Maximum number of jobs to execute.
 
 ## Inside the worker
 

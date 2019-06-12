@@ -1,3 +1,7 @@
+### Unreleased
+
+- Added `max_jobs` to `Worker.work` and `--max-jobs` to `rq worker` CLI.
+
 ### 1.0 (2019-04-06)
 Backward incompatible changes:
 
