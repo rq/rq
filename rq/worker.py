@@ -480,7 +480,10 @@ class Worker(object):
                     completed_jobs += 1
                     if max_jobs is not None:
                         if completed_jobs >= max_jobs:
-                            self.log.info("RQ worker %r done, quitting", self.key)
+                            self.log.info(
+                                "RQ Worker %r finished executing %d jobs, quitting",
+                                self.key, completed_jobs
+                            )
                             break
 
                 except StopRequested:
@@ -492,8 +495,8 @@ class Worker(object):
 
                 except:  # noqa
                     self.log.error(
-                        'Worker %s: found an unhandled exception, quitting...',
-                        self.name, exc_info=True
+                        'RQ Worker %r: found an unhandled exception, quitting...',
+                        self.key, exc_info=True
                     )
                     break
         finally:
