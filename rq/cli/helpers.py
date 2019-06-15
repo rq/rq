@@ -117,7 +117,6 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
 
 
 def show_workers(queues, raw, by_queue, queue_class, worker_class):
-    print(queues)
     workers = set()
     for queue in queues:
         for worker in worker_class.all(queue=queue):
