@@ -86,10 +86,6 @@ def state_symbol(state):
 
 
 def show_queues(queues, raw, by_queue, queue_class, worker_class):
-    if queues:
-        qs = list(map(queue_class, queues))
-    else:
-        qs = queue_class.all()
 
     num_jobs = 0
     termwidth, _ = click.get_terminal_size()
@@ -97,14 +93,14 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
 
     max_count = 0
     counts = dict()
-    for q in qs:
+    for q in queues:
         count = q.count
         counts[q] = count
         max_count = max(max_count, count)
     scale = get_scale(max_count)
     ratio = chartwidth * 1.0 / scale
 
-    for q in qs:
+    for q in queues:
         count = counts[q]
         if not raw:
             chart = green('|' + '█' * int(ratio * count))
@@ -117,21 +113,14 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
 
     # print summary when not in raw mode
     if not raw:
-        click.echo('%d queues, %d jobs total' % (len(qs), num_jobs))
+        click.echo('%d queues, %d jobs total' % (len(queues), num_jobs))
 
 
 def show_workers(queues, raw, by_queue, queue_class, worker_class):
-    if queues:
-        qs = list(map(queue_class, queues))
-
-        workers = set()
-        for queue in qs:
-            for worker in worker_class.all(queue=queue):
-                workers.add(worker)
-
-    else:
-        qs = queue_class.all()
-        workers = worker_class.all()
+    workers = set()
+    for queue in queues:
+        for worker in worker_class.all(queue=queue):
+            workers.add(worker)
 
     if not by_queue:
 
@@ -146,7 +135,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
     else:
         # Display workers by queue
         queue_dict = {}
-        for queue in qs:
+        for queue in queues:
             queue_dict[queue] = worker_class.all(queue=queue)
 
         if queue_dict:
@@ -166,7 +155,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             click.echo('%s %s' % (pad(queue.name + ':', max_length + 1), queues_str))
 
     if not raw:
-        click.echo('%d workers, %d queues' % (len(workers), len(qs)))
+        click.echo('%d workers, %d queues' % (len(workers), len(queues)))
 
 
 def show_both(queues, raw, by_queue, queue_class, worker_class):
