@@ -248,7 +248,7 @@ class TestRQCli(RQTestCase):
 
         # --quiet and --verbose are mutually exclusive
         result = runner.invoke(main, args + ['--quiet', '--verbose'])
-        self.assertEqual(result.exit_code, -1)
+        self.assertNotEqual(result.exit_code, 0)
     
     def test_exception_handlers(self):
         """rq worker -u <url> -b --exception-handler <handler>"""
