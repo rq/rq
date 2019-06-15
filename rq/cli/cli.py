@@ -23,10 +23,11 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_JOB_MONITORING_INTERVAL,
                          DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from rq.exceptions import InvalidJobOperationError
-from rq.registry import FailedJobRegistry
+from rq.registry import FailedJobRegistry, clean_registries
 from rq.utils import import_attribute
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
+from rq.worker_registration import clean_worker_registry
 
 
 # Disable the warning that Click displays (as of Click version 5.0) when users
@@ -162,7 +163,17 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
     try:
         with Connection(cli_config.connection):
-            refresh(interval, func, queues, raw, by_queue,
+
+            if queues:
+                qs = list(map(cli_config.queue_class, queues))
+            else:
+                qs = cli_config.queue_class.all()
+            
+            for queue in qs:
+                clean_registries(queue)
+                clean_worker_registry(queue)
+
+            refresh(interval, func, qs, raw, by_queue,
                     cli_config.queue_class, cli_config.worker_class)
     except ConnectionError as e:
         click.echo(e)
@@ -178,9 +189,9 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
-@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL , help='Default results timeout to be used')
-@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL , help='Default worker timeout to be used')
-@click.option('--job-monitoring-interval', type=int, default=DEFAULT_JOB_MONITORING_INTERVAL , help='Default job monitoring interval to be used')
+@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
+@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Default worker timeout to be used')
+@click.option('--job-monitoring-interval', type=int, default=DEFAULT_JOB_MONITORING_INTERVAL, help='Default job monitoring interval to be used')
 @click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
