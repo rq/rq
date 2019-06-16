@@ -43,7 +43,7 @@ from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
 
 try:
-    from procname import setprocname
+    from setproctitle import setproctitle as setprocname
 except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
