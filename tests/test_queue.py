@@ -237,6 +237,12 @@ class TestQueue(RQTestCase):
             None
         )
         self.assertEqual(q.count, 0)
+    
+    def test_enqueue_with_ttl(self):
+        """Negative TTL value is not allowed"""
+        queue = Queue()
+        self.assertRaises(ValueError, queue.enqueue, echo, 1, ttl=0)
+        self.assertRaises(ValueError, queue.enqueue, echo, 1, ttl=-1)
 
     def test_enqueue_sets_status(self):
         """Enqueueing a job sets its status to "queued"."""
@@ -263,6 +269,13 @@ class TestQueue(RQTestCase):
         queue = Queue()
         job = queue.enqueue(echo, 1, job_timeout=15)
         self.assertEqual(job.timeout, 15)
+
+        # Not passing job_timeout will use queue._default_timeout
+        job = queue.enqueue(echo, 1)
+        self.assertEqual(job.timeout, queue._default_timeout)
+
+        # job_timeout = 0 is not allowed
+        self.assertRaises(ValueError, queue.enqueue, echo, 1, job_timeout=0)
 
     def test_default_timeout(self):
         """Timeout can be passed via job_timeout argument"""
