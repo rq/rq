@@ -221,7 +221,7 @@ worker.total_working_time  # Amount of time spent executing jobs (in seconds)
 
 ## Better worker process title
 Worker process will have a better title (as displayed by system tools such as ps and top) 
-after you installed a thrid-party package `setproctitle`:
+after you installed a third-party package `setproctitle`:
 ```sh
 pip install setproctitle
 ```
