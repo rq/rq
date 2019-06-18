@@ -18,6 +18,8 @@ class InvalidJobOperationError(Exception):
 class InvalidJobOperation(Exception):
     pass
 
+class OrphanedWorkerError(Exception):
+    pass
 
 class UnpickleError(Exception):
     def __init__(self, message, raw_data, inner_exception=None):

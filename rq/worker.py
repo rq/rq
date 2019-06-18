@@ -29,7 +29,7 @@ from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import (DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
-from .exceptions import DequeueTimeout, ShutDownImminentException
+from .exceptions import DequeueTimeout, ShutDownImminentException, OrphanedWorkerError
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -493,6 +493,13 @@ class Worker(object):
                     # Cold shutdown detected
                     raise
 
+                except OrphanedWorkerError:
+                    # Worker key was expired in redis. This worker should now die.
+                    self.log.warning('Worker key \'%s\' disappeared from redis. ' % self.key +
+                                     'Worker must not have been able to send ' +
+                                     'heartbeat in time. Shutting down...')
+                    break
+
                 except:  # noqa
                     self.log.error(
                         'Worker %s: found an unhandled exception, quitting...',
@@ -550,7 +557,9 @@ class Worker(object):
         timeout = timeout or self.default_worker_ttl
         connection = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
-        connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
+        result = connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
+        if result == 1:
+            raise OrphanedWorkerError()
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within %s seconds.', timeout)
 
