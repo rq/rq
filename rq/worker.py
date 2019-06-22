@@ -735,6 +735,7 @@ class Worker(object):
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
         """
+        self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
@@ -767,7 +768,7 @@ class Worker(object):
                 pass
 
     def handle_job_success(self, job, queue, started_job_registry):
-
+        self.log.debug('Handling successful execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
             while True:
                 try:

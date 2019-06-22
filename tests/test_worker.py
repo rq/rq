@@ -318,7 +318,7 @@ class TestWorker(RQTestCase):
         worker.refresh()
         self.assertEqual(worker.failed_job_count, 1)
         self.assertEqual(worker.successful_job_count, 1)
-        self.assertEqual(worker.total_working_time, 1.5) # 1.5 seconds
+        self.assertEqual(worker.total_working_time, 1.5)  # 1.5 seconds
 
         worker.handle_job_failure(job)
         worker.handle_job_success(job, queue, registry)
@@ -644,7 +644,6 @@ class TestWorker(RQTestCase):
         # Score in queue is +inf
         self.assertEqual(self.testconn.zscore(registry.key, job.id), float('Inf'))
 
-
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
         q = Queue('foo')
@@ -909,16 +908,16 @@ class TestWorker(RQTestCase):
         """Check that log_job_description True causes job lifespan to be logged."""
         q = Queue()
         w = Worker([q])
-        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
-        self.assertIn("Frank",  mock_logger_info.call_args[0][2])
+        self.assertIn("Frank", mock_logger_info.call_args[0][2])
 
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_false(self, mock_logger_info):
         """Check that log_job_description False causes job lifespan to not be logged."""
         q = Queue()
         w = Worker([q], log_job_description=False)
-        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
 

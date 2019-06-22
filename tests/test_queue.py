@@ -3,7 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from tests import RQTestCase
-from tests.fixtures import echo, Number, say_hello
+from tests.fixtures import echo, say_hello
 
 from rq import Queue
 from rq.exceptions import InvalidJobDependency
