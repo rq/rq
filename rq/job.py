@@ -15,6 +15,7 @@ from .exceptions import NoSuchJobError, UnpickleError
 from .local import LocalStack
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
+from .worker import Worker
 
 try:
     import cPickle as pickle
@@ -148,6 +149,12 @@ class Job(object):
         self._status = status
         connection = pipeline or self.connection
         connection.hset(self.key, 'status', self._status)
+
+    def worker(self):
+        """Return the worker currently assigned to this job."""
+        for worker in Worker.all():
+            if worker.get_current_job_id() == self.get_id():
+                return worker
 
     @property
     def is_finished(self):
