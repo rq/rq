@@ -261,7 +261,7 @@ class Worker(object):
         with self.connection.pipeline() as p:
             p.delete(key)
             now = utcnow()
-            now_in_string = utcformat(utcnow())
+            now_in_string = utcformat(now)
             self.birth_date = now
             p.hset(key, 'birth', now_in_string)
             p.hset(key, 'last_heartbeat', now_in_string)
