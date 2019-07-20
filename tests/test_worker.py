@@ -318,7 +318,7 @@ class TestWorker(RQTestCase):
         worker.refresh()
         self.assertEqual(worker.failed_job_count, 1)
         self.assertEqual(worker.successful_job_count, 1)
-        self.assertEqual(worker.total_working_time, 1.5) # 1.5 seconds
+        self.assertEqual(worker.total_working_time, 1.5)  # 1.5 seconds
 
         worker.handle_job_failure(job)
         worker.handle_job_success(job, queue, registry)
@@ -339,6 +339,17 @@ class TestWorker(RQTestCase):
         worker.refresh()
         # total_working_time should be around 0.05 seconds
         self.assertTrue(0.05 <= worker.total_working_time < 0.06)
+
+    def test_max_jobs(self):
+        """Worker exits after number of jobs complete."""
+        queue = Queue()
+        job1 = queue.enqueue(do_nothing)
+        job2 = queue.enqueue(do_nothing)
+        worker = Worker([queue])
+        worker.work(max_jobs=1)
+
+        self.assertEqual(JobStatus.FINISHED, job1.get_status())
+        self.assertEqual(JobStatus.QUEUED, job2.get_status())
 
     def test_disable_default_exception_handler(self):
         """
@@ -616,7 +627,7 @@ class TestWorker(RQTestCase):
         # Updates worker statuses
         self.assertEqual(worker.get_state(), 'busy')
         self.assertEqual(worker.get_current_job_id(), job.id)
-    
+
     def test_prepare_job_execution_inf_timeout(self):
         """Prepare job execution handles infinite job timeout"""
         queue = Queue(connection=self.testconn)
@@ -632,7 +643,6 @@ class TestWorker(RQTestCase):
 
         # Score in queue is +inf
         self.assertEqual(self.testconn.zscore(registry.key, job.id), float('Inf'))
-        
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
@@ -837,8 +847,6 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
 
         job_check = Job.fetch(job.id)
-        self.assertEqual(set(job_check.meta.keys()),
-                         set(['foo', 'baz', 'newinfo']))
         self.assertEqual(job_check.meta['foo'], 'bar')
         self.assertEqual(job_check.meta['baz'], 10)
         self.assertEqual(job_check.meta['newinfo'], 'waka')
@@ -863,8 +871,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.get_current_job_id(), None)
 
         job_check = Job.fetch(job.id)
-        self.assertEqual(set(job_check.meta.keys()),
-                         set(['foo', 'baz', 'newinfo']))
         self.assertEqual(job_check.meta['foo'], 'bar')
         self.assertEqual(job_check.meta['baz'], 10)
         self.assertEqual(job_check.meta['newinfo'], 'waka')
@@ -898,16 +904,16 @@ class TestWorker(RQTestCase):
         """Check that log_job_description True causes job lifespan to be logged."""
         q = Queue()
         w = Worker([q])
-        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
-        self.assertIn("Frank",  mock_logger_info.call_args[0][2])
+        self.assertIn("Frank", mock_logger_info.call_args[0][2])
 
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_false(self, mock_logger_info):
         """Check that log_job_description False causes job lifespan to not be logged."""
         q = Queue()
         w = Worker([q], log_job_description=False)
-        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
 

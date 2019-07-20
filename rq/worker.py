@@ -43,7 +43,7 @@ from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
 
 try:
-    from procname import setprocname
+    from setproctitle import setproctitle as setprocname
 except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
@@ -261,7 +261,7 @@ class Worker(object):
         with self.connection.pipeline() as p:
             p.delete(key)
             now = utcnow()
-            now_in_string = utcformat(utcnow())
+            now_in_string = utcformat(now)
             self.birth_date = now
             p.hset(key, 'birth', now_in_string)
             p.hset(key, 'last_heartbeat', now_in_string)
@@ -435,7 +435,7 @@ class Worker(object):
             self.set_state(before_state)
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT):
+             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -446,9 +446,9 @@ class Worker(object):
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self._install_signal_handlers()
-        did_perform_work = False
+        completed_jobs = 0
         self.register_birth()
-        self.log.info("RQ worker %r started, version %s", self.key, VERSION)
+        self.log.info("Worker %s: started, version %s", self.key, VERSION)
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
@@ -462,7 +462,7 @@ class Worker(object):
                         self.clean_registries()
 
                     if self._stop_requested:
-                        self.log.info('Stopping on request')
+                        self.log.info('Worker %s: stopping on request', self.key)
                         break
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
@@ -470,14 +470,21 @@ class Worker(object):
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
-                            self.log.info("RQ worker %r done, quitting", self.key)
+                            self.log.info("Worker %s: done, quitting", self.key)
                         break
 
                     job, queue = result
                     self.execute_job(job, queue)
                     self.heartbeat()
 
-                    did_perform_work = True
+                    completed_jobs += 1
+                    if max_jobs is not None:
+                        if completed_jobs >= max_jobs:
+                            self.log.info(
+                                "Worker %s: finished executing %d jobs, quitting",
+                                self.key, completed_jobs
+                            )
+                            break
 
                 except StopRequested:
                     break
@@ -489,13 +496,13 @@ class Worker(object):
                 except:  # noqa
                     self.log.error(
                         'Worker %s: found an unhandled exception, quitting...',
-                        self.name, exc_info=True
+                        self.key, exc_info=True
                     )
                     break
         finally:
             if not self.is_horse:
                 self.register_death()
-        return did_perform_work
+        return bool(completed_jobs)
 
     def dequeue_job_and_maintain_ttl(self, timeout):
         result = None
@@ -520,7 +527,7 @@ class Worker(object):
                             '%s: %s (%s)', green(queue.name),
                             blue(job.description), job.id)
                     else:
-                        self.log.info('%s:%s', green(queue.name), job.id)
+                        self.log.info('%s: %s', green(queue.name), job.id)
 
                 break
             except DequeueTimeout:
@@ -647,7 +654,6 @@ class Worker(object):
                 '(work-horse terminated unexpectedly; waitpid returned {})'
             ).format(ret_val))
 
-            exc_string = "Work-horse process was terminated unexpectedly " + "(waitpid returned %s)" % ret_val
             self.handle_job_failure(
                 job,
                 exc_string="Work-horse process was terminated unexpectedly "
@@ -729,6 +735,7 @@ class Worker(object):
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
         """
+        self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
@@ -761,7 +768,7 @@ class Worker(object):
                 pass
 
     def handle_job_success(self, job, queue, started_job_registry):
-
+        self.log.debug('Handling successful execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
             while True:
                 try:
@@ -959,7 +966,10 @@ class HerokuWorker(Worker):
     def handle_warm_shutdown_request(self):
         """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
-            self.log.info('Warm shut down requested, sending horse SIGRTMIN signal')
+            self.log.info(
+                'Worker %s: warm shut down requested, sending horse SIGRTMIN signal',
+                self.key
+            )
             self.kill_horse(sig=signal.SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')

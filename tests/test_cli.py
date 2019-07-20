@@ -184,6 +184,11 @@ class TestRQCli(RQTestCase):
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 0 queue', result.output)
 
+        result = runner.invoke(main, ['info', '--by-queue',
+                                      '-u', self.redis_url, '--only-workers'])
+        self.assert_normal_execution(result)
+        self.assertIn('0 workers, 0 queue', result.output)
+
         queue = Queue(connection=self.connection)
         queue.enqueue(say_hello)
         result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
@@ -232,6 +237,19 @@ class TestRQCli(RQTestCase):
         self.assertTrue(len(pid.read()) > 0)
         self.assert_normal_execution(result)
 
+    def test_worker_logging_options(self):
+        """--quiet and --verbose logging options are supported"""
+        runner = CliRunner()
+        args = ['worker', '-u', self.redis_url, '-b']
+        result = runner.invoke(main, args + ['--verbose'])
+        self.assert_normal_execution(result)
+        result = runner.invoke(main, args + ['--quiet'])
+        self.assert_normal_execution(result)
+
+        # --quiet and --verbose are mutually exclusive
+        result = runner.invoke(main, args + ['--quiet', '--verbose'])
+        self.assertNotEqual(result.exit_code, 0)
+    
     def test_exception_handlers(self):
         """rq worker -u <url> -b --exception-handler <handler>"""
         connection = Redis.from_url(self.redis_url)

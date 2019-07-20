@@ -68,6 +68,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--log-format`: Format for the worker logs, defaults to `'%(asctime)s %(message)s'`
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
+* `--max-jobs`: Maximum number of jobs to execute.
 
 ## Inside the worker
 
@@ -94,7 +95,7 @@ The life-cycle of a worker consists of a few phases:
 8. _Loop_.  Repeat from step 3.
 
 
-## Performance Notes
+### Performance Notes
 
 Basically the `rq worker` shell script is a simple fetch-fork-execute loop.
 When a lot of your jobs do lengthy setups, or they all depend on the same set
@@ -218,6 +219,12 @@ worker.failed_job_count # Number of failed jobs processed by this worker
 worker.total_working_time  # Amount of time spent executing jobs (in seconds)
 ```
 
+## Better worker process title
+Worker process will have a better title (as displayed by system tools such as ps and top) 
+after you installed a third-party package `setproctitle`:
+```sh
+pip install setproctitle
+```
 
 ## Taking Down Workers
 

@@ -248,8 +248,22 @@ class Queue(object):
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
         """
-        job = self.create_job(
-            func=func, args=args, kwargs=kwargs, timeout=timeout,
+        timeout = parse_timeout(timeout)
+
+        if timeout is None:
+            timeout = self._default_timeout
+        elif timeout == 0:
+            raise ValueError('0 timeout is not allowed. Use -1 for infinite timeout')
+
+        result_ttl = parse_timeout(result_ttl)
+        failure_ttl = parse_timeout(failure_ttl)
+
+        ttl = parse_timeout(ttl)
+        if ttl is not None and ttl <= 0:
+            raise ValueError('Job ttl must be greater than 0')
+
+        job = self.job_class.create(
+            func, args=args, kwargs=kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             description=description, depends_on=depends_on,
             job_id=job_id, meta=meta
