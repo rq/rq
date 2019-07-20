@@ -265,8 +265,8 @@ class Queue(object):
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
-            description=description, depends_on=depends_on,
-            job_id=job_id, meta=meta
+            description=description, depends_on=depends_on, origin=self.name,
+            id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
         )
 
         # If job depends on an unfinished job, register itself on it's

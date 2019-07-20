@@ -17,7 +17,7 @@ class TestScheduledJobRegistry(RQTestCase):
         foo_queue = Queue('foo', connection=self.testconn)
         # bar_queue = Queue('bar', connection=self.testconn)
         scheduler = RQScheduler([foo_queue, 'bar'], connection=self.testconn)
-        self.assertEqual(scheduler._queue_names, ['foo', 'bar'])
+        self.assertEqual(scheduler._queue_names, {'foo', 'bar'})
 
     def test_get_jobs_to_enqueue(self):
         """Getting job ids to enqueue from ScheduledJobRegistry."""
@@ -35,13 +35,23 @@ class TestScheduledJobRegistry(RQTestCase):
 
     def test_lock_acquisition(self):
         """Test lock acquisition"""
-        name = 'lock-test'
-        self.assertTrue(RQScheduler.acquire_lock(name, self.testconn))
-        self.assertFalse(RQScheduler.acquire_lock(name, self.testconn))
+        name_1 = 'lock-test-1'
+        name_2 = 'lock-test-2'
 
-        # If key is manually deleted, lock acquisition should be successful again
-        self.testconn.delete(RQScheduler.get_locking_key(name))
-        self.assertTrue(RQScheduler.acquire_lock(name, self.testconn))
+        self.assertEqual(
+            RQScheduler.acquire_locks([name_1], self.testconn),
+            [name_1]
+        )
+        self.assertEqual(
+            RQScheduler.acquire_locks([name_1], self.testconn),
+            []
+        )
+
+        # Only name_2 is returned since name_1 is already locked
+        self.assertEqual(
+            RQScheduler.acquire_locks([name_1, name_2], self.testconn),
+            [name_2]
+        )
 
     def test_enqueue_scheduled_jobs(self):
         """Scheduler can enqueue scheduled jobs"""

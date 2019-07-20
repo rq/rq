@@ -1169,7 +1169,7 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
         # Mimic how exception info is actually passed forwards
         try:
             raise Exception(u"💪")
-        except:
+        except Exception:
             self.exc_info = sys.exc_info()
 
     def test_handle_exception_handles_non_ascii_in_exception_message(self):

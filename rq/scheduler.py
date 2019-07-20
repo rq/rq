@@ -1,6 +1,7 @@
 import logging
 import os
 import signal
+import threading
 import time
 
 try:
@@ -25,7 +26,7 @@ logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 class RQScheduler(object):
 
     def __init__(self, queues, connection, interval=1):
-        self._queue_names = parse_names(queues)
+        self._queue_names = set(parse_names(queues))
         self._scheduled_job_registries = []
         for name in self._queue_names:
             self._scheduled_job_registries.append(
@@ -36,11 +37,14 @@ class RQScheduler(object):
         self._stop_requested = False
 
     @classmethod
-    def acquire_lock(cls, name, connection):
-        """Returns True if lock is successfully acquired"""
-        return connection.set(
-            cls.get_locking_key(name), os.getpid(), nx=True, ex=5
-        )
+    def acquire_locks(cls, names, connection):
+        """Returns names of queue it successfully acquires lock on"""
+        successful_locks = []
+        pid = os.getpid()
+        for name in names:
+            if connection.set(cls.get_locking_key(name), pid, nx=True, ex=5):
+                successful_locks.append(name)
+        return successful_locks
 
     @classmethod
     def get_locking_key(self, name):
@@ -86,7 +90,7 @@ class RQScheduler(object):
 
     def heartbeat(self):
         """Updates the TTL on scheduler keys"""
-        logging.info("Sheduler sending heartbeat")
+        logging.info("Scheduler sending heartbeat to %s", ", ".join(self._queue_names))
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
@@ -98,12 +102,17 @@ class RQScheduler(object):
             self.connection.expire(key, self.interval + 5)
 
     def stop(self):
-        logging.info("Sheduler stopping...")
+        logging.info("Scheduler stopping...")
         keys = [self.get_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
+    
+    def start(self):
+        self._install_signal_handlers()
+        thread = threading.Thread(target=run, args=(self,), daemon=True)
+        thread.start()
 
     def work(self):
-        logging.info("Sheduler started")
+        logging.info("Scheduler started")
         while True:
             if self._stop_requested:
                 self.stop()
