@@ -1,6 +1,11 @@
-### Unreleased
+### RQ 1.1.0 (2019-07-20)
 
-- Added `max_jobs` to `Worker.work` and `--max-jobs` to `rq worker` CLI.
+- Added `max_jobs` to `Worker.work` and `--max-jobs` to `rq worker` CLI. Thanks @perobertson!
+- Passing `--disable-job-desc-logging` to `rq worker` now does what it's supposed to do. Thanks @janierdavila!
+- `StartedJobRegistry` now properly handles jobs with infinite timeout. Thanks @macintoshpie!
+- `rq info` CLI command now cleans up registries when it first runs. Thanks @selwin!
+- Replaced the use of `procname` with `setproctitle`. Thanks @j178! 
+
 
 ### 1.0 (2019-04-06)
 Backward incompatible changes:
