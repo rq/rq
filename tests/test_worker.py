@@ -847,8 +847,6 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
 
         job_check = Job.fetch(job.id)
-        self.assertEqual(set(job_check.meta.keys()),
-                         set(['foo', 'baz', 'newinfo']))
         self.assertEqual(job_check.meta['foo'], 'bar')
         self.assertEqual(job_check.meta['baz'], 10)
         self.assertEqual(job_check.meta['newinfo'], 'waka')
@@ -873,8 +871,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.get_current_job_id(), None)
 
         job_check = Job.fetch(job.id)
-        self.assertEqual(set(job_check.meta.keys()),
-                         set(['foo', 'baz', 'newinfo']))
         self.assertEqual(job_check.meta['foo'], 'bar')
         self.assertEqual(job_check.meta['baz'], 10)
         self.assertEqual(job_check.meta['newinfo'], 'waka')
