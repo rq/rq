@@ -27,6 +27,7 @@ class RQScheduler(object):
 
     def __init__(self, queues, connection, interval=1):
         self._queue_names = set(parse_names(queues))
+        self._acquired_locks = set([])
         self._scheduled_job_registries = []
         for name in self._queue_names:
             self._scheduled_job_registries.append(
@@ -36,14 +37,14 @@ class RQScheduler(object):
         self.interval = 1
         self._stop_requested = False
 
-    @classmethod
-    def acquire_locks(cls, names, connection):
+    def acquire_locks(self):
         """Returns names of queue it successfully acquires lock on"""
-        successful_locks = []
+        successful_locks = set([])
         pid = os.getpid()
-        for name in names:
-            if connection.set(cls.get_locking_key(name), pid, nx=True, ex=5):
-                successful_locks.append(name)
+        for name in self._queue_names:
+            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
+                successful_locks.add(name)
+        self._acquired_locks = self._acquired_locks.union(successful_locks)
         return successful_locks
 
     @classmethod

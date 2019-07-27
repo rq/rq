@@ -37,21 +37,22 @@ class TestScheduledJobRegistry(RQTestCase):
         """Test lock acquisition"""
         name_1 = 'lock-test-1'
         name_2 = 'lock-test-2'
+        name_3 = 'lock-test-3'
+        scheduler = RQScheduler([name_1], self.testconn)
 
-        self.assertEqual(
-            RQScheduler.acquire_locks([name_1], self.testconn),
-            [name_1]
-        )
-        self.assertEqual(
-            RQScheduler.acquire_locks([name_1], self.testconn),
-            []
-        )
+        self.assertEqual(scheduler.acquire_locks(), {name_1})
+        self.assertEqual(scheduler._acquired_locks, {name_1})
+        self.assertEqual(scheduler.acquire_locks(), set([]))
 
         # Only name_2 is returned since name_1 is already locked
-        self.assertEqual(
-            RQScheduler.acquire_locks([name_1, name_2], self.testconn),
-            [name_2]
-        )
+        scheduler = RQScheduler([name_1, name_2], self.testconn)
+        self.assertEqual(scheduler.acquire_locks(), {name_2})
+        self.assertEqual(scheduler._acquired_locks, {name_2})
+
+        # When a new lock is successfully acquired, _acquired_locks is added
+        scheduler._queue_names.add(name_3)
+        self.assertEqual(scheduler.acquire_locks(), {name_3})
+        self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
 
     def test_enqueue_scheduled_jobs(self):
         """Scheduler can enqueue scheduled jobs"""
