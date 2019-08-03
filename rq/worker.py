@@ -35,6 +35,7 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import (FailedJobRegistry, FinishedJobRegistry,
                        StartedJobRegistry, clean_registries)
+from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
@@ -202,6 +203,7 @@ class Worker(object):
         self.failed_job_count = 0
         self.total_working_time = 0
         self.birth_date = None
+        self.scheduler = None
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -397,6 +399,8 @@ class Worker(object):
         signal.signal(signal.SIGTERM, self.request_force_stop)
 
         self.handle_warm_shutdown_request()
+        if self.scheduler:
+            self.scheduler.request_stop(signum, frame)
 
         # If shutdown is requested in the middle of a job, wait until
         # finish before shutting down and save the request in redis
@@ -435,7 +439,7 @@ class Worker(object):
             self.set_state(before_state)
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None):
+             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -453,6 +457,12 @@ class Worker(object):
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
 
+        if with_scheduler:
+            self.log.info('Starting scheduler for %s...', green(', '.join(qnames)))
+            self.scheduler = RQScheduler(self.queues, connection=self.connection)
+            self.scheduler.acquire_locks()
+            self.scheduler.start()
+
         try:
             while True:
                 try:
@@ -460,6 +470,8 @@ class Worker(object):
 
                     if self.should_run_maintenance_tasks:
                         self.clean_registries()
+                        if self.scheduler:
+                            self.scheduler.acquire_locks()
 
                     if self._stop_requested:
                         self.log.info('Worker %s: stopping on request', self.key)

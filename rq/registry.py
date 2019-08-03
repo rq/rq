@@ -34,6 +34,9 @@ class BaseRegistry(object):
     def __len__(self):
         """Returns the number of jobs in this registry"""
         return self.count
+    
+    def __eq__(self, other):
+        return (self.name == other.name and self.connection == other.connection)
 
     def __contains__(self, item):
         """

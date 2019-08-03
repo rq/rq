@@ -28,11 +28,7 @@ class RQScheduler(object):
     def __init__(self, queues, connection, interval=1):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set([])
-        self._scheduled_job_registries = []
-        for name in self._queue_names:
-            self._scheduled_job_registries.append(
-                ScheduledJobRegistry(name, connection=connection)
-            )
+        self._scheduled_job_registries = []        
         self.connection = connection
         self.interval = 1
         self._stop_requested = False
@@ -45,7 +41,17 @@ class RQScheduler(object):
             if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
                 successful_locks.add(name)
         self._acquired_locks = self._acquired_locks.union(successful_locks)
+        if self._acquired_locks:
+            self.prepare_registries(self._acquired_locks)
         return successful_locks
+
+    def prepare_registries(self, queue_names):
+        """Prepare scheduled job registries for use"""
+        self._scheduled_job_registries = []
+        for name in queue_names:
+            self._scheduled_job_registries.append(
+                ScheduledJobRegistry(name, connection=self.connection)
+            )
 
     @classmethod
     def get_locking_key(self, name):
@@ -99,7 +105,7 @@ class RQScheduler(object):
                     pipeline.expire(key, self.interval + 5)
                 pipeline.execute()
         else:
-            key = self.get_key(self._queue_names[0])
+            key = self.get_key(next(iter(self._queue_names)))
             self.connection.expire(key, self.interval + 5)
 
     def stop(self):
@@ -108,7 +114,7 @@ class RQScheduler(object):
         self.connection.delete(*keys)
     
     def start(self):
-        self._install_signal_handlers()
+        # self._install_signal_handlers()
         thread = threading.Thread(target=run, args=(self,), daemon=True)
         thread.start()
 
