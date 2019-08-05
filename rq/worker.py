@@ -176,6 +176,7 @@ class Worker(object):
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
         self.version = version
+        self.python_version = sys.version
 
         queues = [self.queue_class(name=q,
                                    connection=connection,
@@ -270,6 +271,7 @@ class Worker(object):
             p.hset(key, 'pid', self.pid)
             p.hset(key, 'hostname', self.hostname)
             p.hset(key, 'version', self.version)
+            p.hset(key, 'python_version', self.python_version)
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl)
             p.execute()
@@ -560,14 +562,15 @@ class Worker(object):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
             'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'hostname', 'pid', 'version',
+            'total_working_time', 'hostname', 'pid', 'version', 'python_version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
-         successful_job_count, total_working_time, hostname, pid, version) = data
+         successful_job_count, total_working_time, hostname, pid, version, python_version) = data
         queues = as_text(queues)
         self.hostname = hostname
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
+        self.python_version = as_text(python_version)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         if last_heartbeat:

@@ -926,9 +926,26 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.version, '0.0.0')
         w.refresh()
         self.assertEqual(w.version, '0.0.0')
-        # making sure that version is preserved when retrieved by key
+        # making sure that version is preserved when worker is retrieved by key
         worker = Worker.find_by_key(w.key)
         self.assertEqual(worker.version, '0.0.0')
+
+    def test_python_version(self):
+        python_version = sys.version
+        q = Queue()
+        w = Worker([q])
+        w.register_birth()
+        self.assertEqual(w.python_version, python_version)
+        # now patching version
+        python_version = 'X.Y.Z.final'  # dummy version
+        self.assertNotEqual(python_version, sys.version)  # otherwise tests are pointless
+        w2 = Worker([q])
+        w2.python_version = python_version
+        w2.register_birth()
+        self.assertEqual(w2.python_version, python_version)
+        # making sure that version is preserved when worker is retrieved by key
+        worker = Worker.find_by_key(w2.key)
+        self.assertEqual(worker.python_version, python_version)
 
 
 def kill_worker(pid, double_kill):
