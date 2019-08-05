@@ -161,7 +161,7 @@ class Worker(object):
                  queue_class=None, log_job_description=True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler=False,
-                 prepare_for_work=True):  # noqa
+                 prepare_for_work=True, version=VERSION):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -175,6 +175,7 @@ class Worker(object):
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
+        self.version = version
 
         queues = [self.queue_class(name=q,
                                    connection=connection,
@@ -268,6 +269,7 @@ class Worker(object):
             p.hset(key, 'queues', queues)
             p.hset(key, 'pid', self.pid)
             p.hset(key, 'hostname', self.hostname)
+            p.hset(key, 'version', self.version)
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl)
             p.execute()
@@ -558,13 +560,14 @@ class Worker(object):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
             'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'hostname', 'pid'
+            'total_working_time', 'hostname', 'pid', 'version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
-         successful_job_count, total_working_time, hostname, pid) = data
+         successful_job_count, total_working_time, hostname, pid, version) = data
         queues = as_text(queues)
         self.hostname = hostname
         self.pid = int(pid) if pid else None
+        self.version = as_text(version)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         if last_heartbeat:
