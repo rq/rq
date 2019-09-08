@@ -278,6 +278,6 @@ def suspend(cli_config, duration, **options):
 @main.command()
 @pass_cli_config
 def resume(cli_config, **options):
-    """Resumes processing of queues, that where suspended with `rq suspend`"""
+    """Resumes processing of queues, that were suspended with `rq suspend`"""
     connection_resume(cli_config.connection)
     click.echo("Resuming workers.")
