@@ -19,7 +19,7 @@ from rq.job import Job
 
 redis = Redis()
 job = Job.fetch('my_job_id', connection=redis)
-print('Status: %s' $ job.get_status())
+print('Status: %s' % job.get_status())
 ```
 
 Some interesting job attributes include:
