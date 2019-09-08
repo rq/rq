@@ -337,8 +337,11 @@ class TestWorker(RQTestCase):
 
         worker.perform_job(job, queue)
         worker.refresh()
-        # total_working_time should be around 0.05 seconds
-        self.assertTrue(0.05 <= worker.total_working_time < 0.06)
+        # total_working_time should be a little bit more than 0.05 seconds
+        self.assertGreaterEqual(worker.total_working_time, 0.05)
+        # in multi-user environments delays might be unpredictable,
+        # please adjust this magic limit accordingly in case if It takes even longer to run
+        self.assertLess(worker.total_working_time, 1)
 
     def test_max_jobs(self):
         """Worker exits after number of jobs complete."""
