@@ -203,3 +203,17 @@ class TestDecorator(RQTestCase):
 
         custom_queue_job.delay(1, 2)
         self.assertEqual(queue.enqueue_call.call_count, 1)
+
+    def test_decorator_custom_failure_ttl(self):
+        """Ensure that passing in failure_ttl to the decorator sets the
+        failure_ttl on the job
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.failure_ttl, None)
+
+        @job('default', failure_ttl=10)
+        def hello():
+            return 'Why hello'
+        result = hello.delay()
+        self.assertEqual(result.failure_ttl, 10)
