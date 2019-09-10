@@ -1,23 +1,20 @@
+import os
+
 from datetime import datetime, timedelta
+from multiprocessing import Process
 
 from rq import Queue
 from rq.job import Job
-from rq.registry import ScheduledJobRegistry
+from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.utils import current_timestamp
+from rq.worker import Worker
 
-from .fixtures import say_hello
+from .fixtures import kill_worker, say_hello
 from tests import RQTestCase
 
 
 class TestScheduledJobRegistry(RQTestCase):
-
-    def test_init(self):
-        """Scheduler can be instantiated with queues or queue names"""
-        foo_queue = Queue('foo', connection=self.testconn)
-        # bar_queue = Queue('bar', connection=self.testconn)
-        scheduler = RQScheduler([foo_queue, 'bar'], connection=self.testconn)
-        self.assertEqual(scheduler._queue_names, {'foo', 'bar'})
 
     def test_get_jobs_to_enqueue(self):
         """Getting job ids to enqueue from ScheduledJobRegistry."""
@@ -32,61 +29,6 @@ class TestScheduledJobRegistry(RQTestCase):
         self.assertEqual(registry.get_jobs_to_enqueue(), ['foo'])
         self.assertEqual(registry.get_jobs_to_enqueue(timestamp + 20),
                          ['foo', 'bar'])
-
-    def test_lock_acquisition(self):
-        """Test lock acquisition"""
-        name_1 = 'lock-test-1'
-        name_2 = 'lock-test-2'
-        name_3 = 'lock-test-3'
-        scheduler = RQScheduler([name_1], self.testconn)
-
-        self.assertEqual(scheduler.acquire_locks(), {name_1})
-        self.assertEqual(scheduler._acquired_locks, {name_1})
-        self.assertEqual(scheduler.acquire_locks(), set([]))
-
-        # Only name_2 is returned since name_1 is already locked
-        scheduler = RQScheduler([name_1, name_2], self.testconn)
-        self.assertEqual(scheduler.acquire_locks(), {name_2})
-        self.assertEqual(scheduler._acquired_locks, {name_2})
-
-        # When a new lock is successfully acquired, _acquired_locks is added
-        scheduler._queue_names.add(name_3)
-        self.assertEqual(scheduler.acquire_locks(), {name_3})
-        self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
-
-    def test_enqueue_scheduled_jobs(self):
-        """Scheduler can enqueue scheduled jobs"""
-        queue = Queue(connection=self.testconn)
-        registry = ScheduledJobRegistry(queue=queue)
-        job = Job.create('myfunc', connection=self.testconn)
-        job.save()
-        registry.schedule(job, datetime(2019, 1, 1))
-        scheduler = RQScheduler([queue], connection=self.testconn)
-        scheduler.acquire_locks()
-        scheduler.enqueue_scheduled_jobs()
-        self.assertEqual(len(queue), 1)
-
-        # After job is scheduled, registry should be empty
-        self.assertEqual(len(registry), 0)
-
-        # Jobs scheduled in the far future should not be affected
-        registry.schedule(job, datetime(2100, 1, 1))
-        scheduler.enqueue_scheduled_jobs()
-        self.assertEqual(len(queue), 1)
-    
-    def test_prepare_registries(self):
-        """prepare_registries() creates self._scheduled_job_registries"""
-        foo_queue = Queue('foo', connection=self.testconn)
-        bar_queue = Queue('bar', connection=self.testconn)
-        scheduler = RQScheduler([foo_queue, bar_queue], connection=self.testconn)
-        self.assertEqual(scheduler._scheduled_job_registries, [])
-        scheduler.prepare_registries([foo_queue.name])
-        self.assertEqual(scheduler._scheduled_job_registries, [ScheduledJobRegistry(queue=foo_queue)])
-        scheduler.prepare_registries([foo_queue.name, bar_queue.name])
-        self.assertEqual(
-            scheduler._scheduled_job_registries,
-            [ScheduledJobRegistry(queue=foo_queue), ScheduledJobRegistry(queue=bar_queue)]
-        )        
 
     def test_get_scheduled_time(self):
         """get_scheduled_time() returns job's scheduled datetime"""
@@ -123,6 +65,126 @@ class TestScheduledJobRegistry(RQTestCase):
                              1546300800)  # 2019-01-01 UTC in Unix timestamp
         except ImportError:
             pass
+
+
+class TestScheduler(RQTestCase):
+
+    def test_init(self):
+        """Scheduler can be instantiated with queues or queue names"""
+        foo_queue = Queue('foo', connection=self.testconn)
+        # bar_queue = Queue('bar', connection=self.testconn)
+        scheduler = RQScheduler([foo_queue, 'bar'], connection=self.testconn)
+        self.assertEqual(scheduler._queue_names, {'foo', 'bar'})
+        self.assertEqual(scheduler.status, RQScheduler.Status.STOPPED)
+
+    def test_lock_acquisition(self):
+        """Test lock acquisition"""
+        name_1 = 'lock-test-1'
+        name_2 = 'lock-test-2'
+        name_3 = 'lock-test-3'
+        scheduler = RQScheduler([name_1], self.testconn)
+
+        self.assertEqual(scheduler.acquire_locks(), {name_1})
+        self.assertEqual(scheduler._acquired_locks, {name_1})
+        self.assertEqual(scheduler.acquire_locks(), set([]))
+
+        # Only name_2 is returned since name_1 is already locked
+        scheduler = RQScheduler([name_1, name_2], self.testconn)
+        self.assertEqual(scheduler.acquire_locks(), {name_2})
+        self.assertEqual(scheduler._acquired_locks, {name_2})
+
+        # When a new lock is successfully acquired, _acquired_locks is added
+        scheduler._queue_names.add(name_3)
+        self.assertEqual(scheduler.acquire_locks(), {name_3})
+        self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
+    
+    def test_heartbeat(self):
+        """Test that heartbeat updates locking keys TTL"""
+        name_1 = 'lock-test-1'
+        name_2 = 'lock-test-2'
+        scheduler = RQScheduler([name_1, name_2], self.testconn)
+        scheduler.acquire_locks()
+
+        locking_key_1 = RQScheduler.get_locking_key(name_1)
+        locking_key_2 = RQScheduler.get_locking_key(name_2)
+
+        with self.testconn.pipeline() as pipeline:
+            pipeline.expire(locking_key_1, 1000)
+            pipeline.expire(locking_key_2, 1000)
+
+        scheduler.heartbeat()
+        self.assertEqual(self.testconn.ttl(locking_key_1), 6)
+        self.assertEqual(self.testconn.ttl(locking_key_1), 6)
+
+        # scheduler.stop() releases locks and sets status to STOPPED
+        scheduler._status = scheduler.Status.WORKING
+        scheduler.stop()
+        self.assertFalse(self.testconn.exists(locking_key_1))
+        self.assertFalse(self.testconn.exists(locking_key_2))
+        self.assertEqual(scheduler.status, scheduler.Status.STOPPED)
+
+        # Heartbeat also works properly for schedulers with a single queue
+        scheduler = RQScheduler([name_1], self.testconn)
+        scheduler.acquire_locks()
+        self.testconn.expire(locking_key_1, 1000)
+        scheduler.heartbeat()
+        self.assertEqual(self.testconn.ttl(locking_key_1), 6)
+
+    def test_enqueue_scheduled_jobs(self):
+        """Scheduler can enqueue scheduled jobs"""
+        queue = Queue(connection=self.testconn)
+        registry = ScheduledJobRegistry(queue=queue)
+        job = Job.create('myfunc', connection=self.testconn)
+        job.save()
+        registry.schedule(job, datetime(2019, 1, 1))
+        scheduler = RQScheduler([queue], connection=self.testconn)
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(queue), 1)
+
+        # After job is scheduled, registry should be empty
+        self.assertEqual(len(registry), 0)
+
+        # Jobs scheduled in the far future should not be affected
+        registry.schedule(job, datetime(2100, 1, 1))
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(queue), 1)
+    
+    def test_prepare_registries(self):
+        """prepare_registries() creates self._scheduled_job_registries"""
+        foo_queue = Queue('foo', connection=self.testconn)
+        bar_queue = Queue('bar', connection=self.testconn)
+        scheduler = RQScheduler([foo_queue, bar_queue], connection=self.testconn)
+        self.assertEqual(scheduler._scheduled_job_registries, [])
+        scheduler.prepare_registries([foo_queue.name])
+        self.assertEqual(scheduler._scheduled_job_registries, [ScheduledJobRegistry(queue=foo_queue)])
+        scheduler.prepare_registries([foo_queue.name, bar_queue.name])
+        self.assertEqual(
+            scheduler._scheduled_job_registries,
+            [ScheduledJobRegistry(queue=foo_queue), ScheduledJobRegistry(queue=bar_queue)]
+        )
+
+
+class TestWorker(RQTestCase):
+
+    def test_work_burst(self):
+        """worker.work() with scheduler enabled works properly"""
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queues=[queue], connection=self.testconn)
+        worker.work(burst=True, with_scheduler=True)
+
+    def test_work(self):
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queues=[queue], connection=self.testconn)
+        p = Process(target=kill_worker, args=(os.getpid(), False, 5))
+
+        p.start()
+        queue.enqueue_at(datetime(2019, 1, 1), say_hello)
+        worker.work(burst=False, with_scheduler=True)        
+        p.join(1)
+        self.assertIsNotNone(worker.scheduler)
+        registry = FinishedJobRegistry(queue=queue)
+        self.assertEqual(len(registry), 1)
 
 
 class TestQueue(RQTestCase):

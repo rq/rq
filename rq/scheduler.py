@@ -1,8 +1,9 @@
 import logging
 import os
 import signal
-import threading
 import time
+
+from multiprocessing import Process
 
 try:
     from signal import SIGKILL
@@ -13,7 +14,7 @@ except ImportError:
 from .job import Job
 from .queue import Queue
 from .registry import ScheduledJobRegistry
-from .utils import current_timestamp
+from .utils import current_timestamp, enum
 
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
@@ -25,13 +26,34 @@ logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 class RQScheduler(object):
 
+    # STARTED: scheduler has been started but sleeping
+    # WORKING: scheduler is in the midst of scheduling jobs
+    # STOPPED: scheduler is in stopped condition
+
+    Status = enum(
+        'SchedulerStatus',
+        STARTED='started',
+        WORKING='working',
+        STOPPED='stopped'
+    )
+
     def __init__(self, queues, connection, interval=1):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set([])
         self._scheduled_job_registries = []        
         self.connection = connection
-        self.interval = 1
+        self.interval = interval
         self._stop_requested = False
+        self._status = self.Status.STOPPED
+        self._process = None
+    
+    @property
+    def acquired_locks(self):
+        return self._acquired_locks
+    
+    @property
+    def status(self):
+        return self._status
 
     def acquire_locks(self):
         """Returns names of queue it successfully acquires lock on"""
@@ -64,6 +86,7 @@ class RQScheduler(object):
 
     def enqueue_scheduled_jobs(self):
         """Enqueue jobs whose timestamp is in the past"""
+        self._status = self.Status.WORKING
         for registry in self._scheduled_job_registries:
             timestamp = current_timestamp()
 
@@ -83,6 +106,7 @@ class RQScheduler(object):
                     queue.enqueue_job(job, pipeline=pipeline)
                 registry.remove_jobs(timestamp)
                 pipeline.execute()
+        self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
@@ -91,46 +115,52 @@ class RQScheduler(object):
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
-    def request_stop(self, signum, frame):
+    def request_stop(self, signum=None, frame=None):
         """Toggle self._stop_requested that's checked on every loop"""
         self._stop_requested = True
 
     def heartbeat(self):
-        """Updates the TTL on scheduler keys"""
+        """Updates the TTL on scheduler keys and the locks"""
         logging.info("Scheduler sending heartbeat to %s", ", ".join(self._queue_names))
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
-                    key = self.get_key(name)
+                    key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 5)
                 pipeline.execute()
         else:
-            key = self.get_key(next(iter(self._queue_names)))
+            key = self.get_locking_key(next(iter(self._queue_names)))
             self.connection.expire(key, self.interval + 5)
 
     def stop(self):
-        logging.info("Scheduler stopping...")
-        keys = [self.get_key(name) for name in self._queue_names]
+        logging.info("Scheduler stopping, releasing locks for %s...",
+                     ','.join(self._queue_names))
+        keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
+        self._status = self.Status.STOPPED
     
     def start(self):
-        # self._install_signal_handlers()
-        thread = threading.Thread(target=run, args=(self,), daemon=True)
-        thread.start()
+        self._status = self.Status.STARTED
+        self._process = Process(target=run, args=(self,), name='Scheduler')
+        self._process.start()
+        return self._process
 
     def work(self):
-        logging.info("Scheduler started")
+        self._install_signal_handlers()
         while True:
             if self._stop_requested:
                 self.stop()
                 break
+            self.enqueue_scheduled_jobs()
             self.heartbeat()
             time.sleep(self.interval)
 
 
 def run(scheduler):
-    logging.info("Sheduler started")
+    logging.info("Scheduler for %s started with PID %s",
+                 ','.join(scheduler._queue_names), os.getpid())
     scheduler.work()
+    logging.info("Scheduler with PID %s has stopped", os.getpid())
 
 
 def parse_names(queues_or_names):

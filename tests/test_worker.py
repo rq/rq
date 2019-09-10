@@ -22,9 +22,9 @@ from mock import Mock
 
 from tests import RQTestCase, slow
 from tests.fixtures import (
-    create_file, create_file_after_timeout, div_by_zero, do_nothing, say_hello,
-    say_pid, run_dummy_heroku_worker, access_self, modify_self,
-    modify_self_and_error, long_running_job, save_key_ttl
+    access_self, create_file, create_file_after_timeout, div_by_zero, do_nothing,
+    kill_worker, long_running_job, modify_self, modify_self_and_error,
+    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid,
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
@@ -919,16 +919,6 @@ class TestWorker(RQTestCase):
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
-
-
-def kill_worker(pid, double_kill):
-    # wait for the worker to be started over on the main process
-    time.sleep(0.5)
-    os.kill(pid, signal.SIGTERM)
-    if double_kill:
-        # give the worker time to switch signal handler
-        time.sleep(0.5)
-        os.kill(pid, signal.SIGTERM)
 
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):

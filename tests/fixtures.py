@@ -8,6 +8,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import os
 import time
+import signal
 import sys
 
 from rq import Connection, get_current_job, get_current_connection, Queue
@@ -164,3 +165,13 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
 
 class DummyQueue(object):
     pass
+
+
+def kill_worker(pid, double_kill, interval=0.5):
+    # wait for the worker to be started over on the main process
+    time.sleep(interval)
+    os.kill(pid, signal.SIGTERM)
+    if double_kill:
+        # give the worker time to switch signal handler
+        time.sleep(interval)
+        os.kill(pid, signal.SIGTERM)

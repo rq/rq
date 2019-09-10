@@ -399,8 +399,6 @@ class Worker(object):
         signal.signal(signal.SIGTERM, self.request_force_stop)
 
         self.handle_warm_shutdown_request()
-        if self.scheduler:
-            self.scheduler.request_stop(signum, frame)
 
         # If shutdown is requested in the middle of a job, wait until
         # finish before shutting down and save the request in redis
@@ -409,7 +407,9 @@ class Worker(object):
             self.set_shutdown_requested_date()
             self.log.debug('Stopping after current horse is finished. '
                            'Press Ctrl+C again for a cold shutdown.')
+            self.stop_scheduler()
         else:
+            self.stop_scheduler()
             raise StopRequested()
 
     def handle_warm_shutdown_request(self):
@@ -448,8 +448,7 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers(logging_level, date_format, log_format)
-        self._install_signal_handlers()
+        setup_loghandlers(logging_level, date_format, log_format)        
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
@@ -458,10 +457,12 @@ class Worker(object):
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
 
         if with_scheduler:
-            self.log.info('Starting scheduler for %s...', green(', '.join(qnames)))
             self.scheduler = RQScheduler(self.queues, connection=self.connection)
             self.scheduler.acquire_locks()
-            self.scheduler.start()
+            if self.scheduler.acquired_locks:
+                self.scheduler.start()
+
+        self._install_signal_handlers()
 
         try:
             while True:
@@ -513,8 +514,22 @@ class Worker(object):
                     break
         finally:
             if not self.is_horse:
+
+                if self.scheduler:
+                    self.stop_scheduler()
+
                 self.register_death()
         return bool(completed_jobs)
+    
+    def stop_scheduler(self):
+        """Ensure scheduler process is stopped"""
+        if self.scheduler._process:
+            # Send the kill signal to scheduler process
+            try:
+                os.kill(self.scheduler._process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            self.scheduler._process.join()
 
     def dequeue_job_and_maintain_ttl(self, timeout):
         result = None
