@@ -529,7 +529,7 @@ class Worker(object):
             # Send the kill signal to scheduler process
             try:
                 os.kill(self.scheduler._process.pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except OSError:
                 pass
             self.scheduler._process.join()
 
