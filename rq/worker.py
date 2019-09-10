@@ -407,9 +407,11 @@ class Worker(object):
             self.set_shutdown_requested_date()
             self.log.debug('Stopping after current horse is finished. '
                            'Press Ctrl+C again for a cold shutdown.')
-            self.stop_scheduler()
+            if self.scheduler:
+                self.stop_scheduler()
         else:
-            self.stop_scheduler()
+            if self.scheduler:
+                self.stop_scheduler()
             raise StopRequested()
 
     def handle_warm_shutdown_request(self):
