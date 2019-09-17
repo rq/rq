@@ -17,7 +17,7 @@ def register(worker, pipeline=None):
 def unregister(worker, pipeline=None):
     """Remove worker key from Redis."""
     if pipeline is None:
-        connection = worker.connection._pipeline()
+        connection = worker.connection.pipeline()
     else:
         connection = pipeline
 

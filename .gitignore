@@ -15,3 +15,5 @@ Vagrantfile
 .idea/
 .coverage*
 /.cache
+
+.pytest_cache/

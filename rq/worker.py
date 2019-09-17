@@ -278,7 +278,7 @@ class Worker(object):
             raise ValueError(msg.format(self.name))
         key = self.key
         queues = ','.join(self.queue_names())
-        with self.connection._pipeline() as p:
+        with self.connection.pipeline() as p:
             p.delete(key)
             now = utcnow()
             now_in_string = utcformat(utcnow())
@@ -293,7 +293,7 @@ class Worker(object):
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with self.connection._pipeline() as p:
+        with self.connection.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             worker_registration.unregister(self, p)
@@ -464,7 +464,6 @@ class Worker(object):
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self._install_signal_handlers()
-
         did_perform_work = False
         self.register_birth()
         self.log.info("RQ worker {0!r} started, version {1}".format(self.key, VERSION))
@@ -672,12 +671,15 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
-        self.setup_work_horse_signals()
-
-        self._is_horse = True
-        self.log = logger
-
-        success = self.perform_job(job, queue)
+        try:
+            self.setup_work_horse_signals()
+            self._is_horse = True
+            self.log = logger
+            self.perform_job(job, queue)
+        except Exception as e:  # noqa
+            # Horse does not terminate properly
+            raise e
+            os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
         # constrast to the regular sys.exit()
@@ -693,18 +695,20 @@ class Worker(object):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job):
+    def prepare_job_execution(self, job, heartbeat_ttl=None):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
         timeout = (job.timeout or 180) + 60
 
-        with self.connection._pipeline() as pipeline:
+        if heartbeat_ttl is None:
+            heartbeat_ttl = self.job_monitoring_interval + 5
+
+        with self.connection.pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
-            self.heartbeat(self.job_monitoring_interval + 5, pipeline=pipeline)
-            registry = StartedJobRegistry(job.origin,
-                                          self.connection,
+            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
@@ -720,7 +724,7 @@ class Worker(object):
             2. Removing the job from the started_job_registry
             3. Setting the workers current job to None
         """
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(job.origin,
                                                           self.connection,
@@ -742,7 +746,7 @@ class Worker(object):
 
     def handle_job_success(self, job, queue, started_job_registry):
 
-        with self.connection._pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             while True:
                 try:
                     # if dependencies are inserted after enqueue_dependents
@@ -777,11 +781,11 @@ class Worker(object):
                 except WatchError:
                     continue
 
-    def perform_job(self, job, queue):
+    def perform_job(self, job, queue, heartbeat_ttl=None):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.prepare_job_execution(job)
+        self.prepare_job_execution(job, heartbeat_ttl)
 
         push_connection(self.connection)
 
@@ -792,7 +796,7 @@ class Worker(object):
         try:
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
-            with self.death_penalty_class(timeout, JobTimeoutException):
+            with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 rv = job.perform()
 
             job.ended_at = utcnow()
@@ -909,9 +913,10 @@ class SimpleWorker(Worker):
     def main_work_horse(self, *args, **kwargs):
         raise NotImplementedError("Test worker does not implement this method")
 
-    def execute_job(self, *args, **kwargs):
+    def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
-        return self.perform_job(*args, **kwargs)
+        timeout = (job.timeout or DEFAULT_WORKER_TTL) + 5
+        return self.perform_job(job, queue, heartbeat_ttl=timeout)
 
 
 class HerokuWorker(Worker):

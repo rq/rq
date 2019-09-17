@@ -21,11 +21,11 @@ import mock
 from mock import Mock
 
 from tests import RQTestCase, slow
-from tests.fixtures import (create_file, create_file_after_timeout,
-                            div_by_zero, do_nothing, say_hello, say_pid,
-                            run_dummy_heroku_worker, access_self,
-                            modify_self, modify_self_and_error,
-                            long_running_job)
+from tests.fixtures import (
+    create_file, create_file_after_timeout, div_by_zero, do_nothing, say_hello,
+    say_pid, run_dummy_heroku_worker, access_self, modify_self,
+    modify_self_and_error, long_running_job, save_key_ttl
+)
 
 from rq import (get_failed_queue, Queue, SimpleWorker, Worker,
                 get_current_connection)
@@ -257,7 +257,7 @@ class TestWorker(RQTestCase):
         for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
             job = q.enqueue(long_running_job,
                             args=(timeout,),
-                            timeout=30,
+                            job_timeout=30,
                             result_ttl=-1)
             with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
                 w.execute_job(job, q)
@@ -392,7 +392,7 @@ class TestWorker(RQTestCase):
         # Put it on the queue with a timeout value
         res = q.enqueue(create_file_after_timeout,
                         args=(sentinel_file, 4),
-                        timeout=1)
+                        job_timeout=1)
 
         try:
             os.unlink(sentinel_file)
@@ -415,7 +415,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertNotEqual(self.testconn._ttl(job.key), 0)
+        self.assertNotEqual(self.testconn.ttl(job.key), 0)
         self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
 
         # Job with -1 result_ttl don't expire
@@ -423,7 +423,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertEqual(self.testconn._ttl(job.key), -1)
+        self.assertEqual(self.testconn.ttl(job.key), -1)
         self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
 
         # Job with result_ttl = 0 gets deleted immediately
@@ -537,6 +537,17 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.result, os.getpid(),
                          'PID mismatch, fork() is not supposed to happen here')
 
+    def test_simpleworker_heartbeat_ttl(self):
+        """SimpleWorker's key must last longer than job.timeout when working"""
+        queue = Queue('foo')
+
+        worker = SimpleWorker([queue])
+        job_timeout = 300
+        job = queue.enqueue(save_key_ttl, worker.key, job_timeout=job_timeout)
+        worker.work(burst=True)
+        job.refresh()
+        self.assertGreater(job.meta['ttl'], job_timeout)
+
     def test_prepare_job_execution(self):
         """Prepare job execution does the necessary bookkeeping."""
         queue = Queue(connection=self.testconn)
@@ -568,14 +579,16 @@ class TestWorker(RQTestCase):
         logging work properly"""
         q = Queue("foo")
         w = Worker([q])
-        q.enqueue('tests.fixtures.say_hello', name='阿达姆',
-                  description='你好 世界!')
-        self.assertEqual(w.work(burst=True), True,
-                         'Expected at least some work done.')
-        q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
-                  description='你好 世界!')
-        self.assertEqual(w.work(burst=True), True,
-                         'Expected at least some work done.')
+
+        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆',
+                        description='你好 世界!')
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
+                        description='你好 世界!')
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_suspend_worker_execution(self):
         """Test Pause Worker Execution"""
@@ -663,12 +676,12 @@ class TestWorker(RQTestCase):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""
         foo_queue = Queue('foo', connection=self.testconn)
         foo_registry = StartedJobRegistry('foo', connection=self.testconn)
-        self.testconn.zadd(foo_registry.key, 1, 'foo')
+        self.testconn.zadd(foo_registry.key, {'foo': 1})
         self.assertEqual(self.testconn.zcard(foo_registry.key), 1)
 
         bar_queue = Queue('bar', connection=self.testconn)
         bar_registry = StartedJobRegistry('bar', connection=self.testconn)
-        self.testconn.zadd(bar_registry.key, 1, 'bar')
+        self.testconn.zadd(bar_registry.key, {'bar': 1})
         self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
 
         worker = Worker([foo_queue, bar_queue])
@@ -693,7 +706,7 @@ class TestWorker(RQTestCase):
         """Worker calls clean_registries when run."""
         queue = Queue(connection=self.testconn)
         registry = StartedJobRegistry(connection=self.testconn)
-        self.testconn.zadd(registry.key, 1, 'foo')
+        self.testconn.zadd(registry.key, {'foo': 1})
 
         worker = Worker(queue, connection=self.testconn)
         worker.work(burst=True)
@@ -951,6 +964,7 @@ class TestWorkerSubprocess(RQTestCase):
 
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='requires Linux signals')
+@skipIf('pypy' in sys.version.lower(), 'these tests often fail on pypy')
 class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def setUp(self):
         super(HerokuWorkerShutdownTestCase, self).setUp()

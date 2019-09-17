@@ -225,6 +225,9 @@ QUEUES = ['high', 'normal', 'low']
 # to configure RQ for it in a single step
 # The 'sync+' prefix is required for raven: https://github.com/nvie/rq/issues/350#issuecomment-43592410
 SENTRY_DSN = 'sync+http://public:secret@example.com/1'
+
+# If you want custom worker name
+# NAME = 'worker-1024'
 {% endhighlight %}
 
 The example above shows all the options that are currently supported.
@@ -285,6 +288,16 @@ class CustomQueue(Queue):
 queue = CustomQueue('default', connection=redis_conn)
 queue.enqueue(some_func)
 {% endhighlight %}
+
+
+## Custom DeathPenalty classes
+
+When a Job times-out, the worker will try to kill it using the supplied
+`death_penalty_class` (default: `UnixSignalDeathPenalty`). This can be overridden
+if you wish to attempt to kill jobs in an application specific or 'cleaner' manner. 
+
+DeathPenalty classes are constructed with the following arguments
+`BaseDeathPenalty(timeout, JobTimeoutException, job_id=job.id)`
 
 
 ## Custom exception handlers

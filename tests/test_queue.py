@@ -319,12 +319,21 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.meta['foo'], 'bar')
         self.assertEqual(job.meta['baz'], 42)
 
+    def test_job_timeout(self):
+        """Timeout can be passed via job_timeout argument"""
+        queue = Queue()
+        job = queue.enqueue(echo, 1, timeout=15)
+        self.assertEqual(job.timeout, 15)
+
+        job = queue.enqueue(echo, 1, job_timeout=15)
+        self.assertEqual(job.timeout, 15)
+
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
         q = Queue()
 
         # Implicit args/kwargs mode
-        job = q.enqueue(echo, 1, timeout=1, result_ttl=1, bar='baz')
+        job = q.enqueue(echo, 1, job_timeout=1, result_ttl=1, bar='baz')
         self.assertEqual(job.timeout, 1)
         self.assertEqual(job.result_ttl, 1)
         self.assertEqual(
@@ -337,7 +346,7 @@ class TestQueue(RQTestCase):
             'timeout': 1,
             'result_ttl': 1,
         }
-        job = q.enqueue(echo, timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
+        job = q.enqueue(echo, job_timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
         self.assertEqual(job.timeout, 2)
         self.assertEqual(job.result_ttl, 2)
         self.assertEqual(
