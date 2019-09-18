@@ -97,11 +97,15 @@ print('Status: %s' % job.get_status())
 ```
 
 Some interesting job attributes include:
-* `job.get_status()`
+* `job.get_status()` Possible values are `queued`, `started`, `deferred`, `finished`, and `failed`
 * `job.func_name`
-* `job.args`
-* `job.kwargs`
-* `job.result`
+* `job.args` arguments passed to the underlying job function
+* `job.kwargs` key word arguments passed to the underlying job function
+* `job.result` The return value of the function. Initially, right after enqueueing 
+a job, the return value will be None.  But when the job has been executed, and had 
+a return value or exception, this will return that value or exception.
+Return values written back to Redis will expire according to the `result_ttl` parameter 
+of the job (500 seconds by default).
 * `job.enqueued_at`
 * `job.started_at`
 * `job.ended_at`
@@ -115,10 +119,11 @@ for job in jobs:
     print('Job %s: %s' % (job.id, job.func_name))
 ```
 
-## Accessing The "current" Job
-
-Since job functions are regular Python functions, you have to ask RQ for the
-current job ID, if any.  To do this, you can use:
+## Accessing The "current" Job from within the job function
+ 
+Since job functions are regular Python functions, you must retrieve the 
+job in order to inspect or update the job's attributes.  To do this from within
+the function, you can use:
 
 ```python
 from rq import get_current_job
@@ -128,6 +133,8 @@ def add(x, y):
     print('Current job: %s' % (job.id,))
     return x + y
 ```
+
+Note that calling get_current_job() outside of the context of a job function will return `None`.
 
 
 ## Storing arbitrary data on jobs
@@ -156,15 +163,22 @@ def add(x, y):
 
 _New in version 0.4.7._
 
-A job has two TTLs, one for the job result and one for the job itself. This means that if you have
-job that shouldn't be executed after a certain amount of time, you can define a TTL as such:
+A job has two TTLs, one for the job result, `result_ttl`, and one for the job itself, `ttl`.  
+The latter is used if you have a job that shouldn't be executed after a certain amount of time.
 
 ```python
 # When creating the job:
-job = Job.create(func=say_hello, ttl=43)
+job = Job.create(func=say_hello, 
+                 result_ttl=600,  # how long (in seconds) to keep the job (if successful) and its results
+                 ttl=43,  # maximum queued time (in seconds) of the job before it's discarded.
+                )
 
 # or when queueing a new job:
-job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
+job = q.enqueue(count_words_at_url, 
+                'http://nvie.com', 
+                result_ttl=600,  # how long to keep the job (if successful) and its results
+                ttl=43  # maximum queued time
+               )
 ```
 
 
