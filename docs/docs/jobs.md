@@ -8,7 +8,81 @@ instance from within the job function itself.  Or to store arbitrary data on
 jobs.
 
 
-## Retrieving Job from Redis
+## Job Creation
+
+When you enqueue a function, the job will be returned.  You may then access the 
+id property, which can later be used to retrieve the job.
+
+```python
+from rq import Queue
+from redis import Redis
+from somewhere import count_words_at_url
+
+redis_conn = Redis()
+q = Queue(connection=redis_conn)  # no args implies the default queue
+
+# Delay execution of count_words_at_url('http://nvie.com')
+job = q.enqueue(count_words_at_url, 'http://nvie.com')
+print('Job id: %s' % job.id)
+```
+
+Or if you want a predetermined job id, you may specify it when creating the job.
+
+```python
+job = q.enqueue(count_words_at_url, 'http://nvie.com', job_id='my_job_id')
+```
+
+A job can also be created directly with `Job.create()`.
+
+```python
+from rq.job import Job
+
+job = Job.create(count_words_at_url, 'http://nvie.com')
+print('Job id: %s' % job.id)
+q.enqueue_job(job)
+
+# create a job with a predetermined id
+job = Job.create(count_words_at url, 'http://nvie.com', id='my_job_id')
+```
+
+The keyword arguments accepted by `create()` are:
+
+* `timeout` specifies the maximum runtime of the job before it's interrupted
+  and marked as `failed`. Its default unit is seconds and it can be an integer 
+  or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can 
+  be a string with specify unit including hour, minute, second
+  (e.g. `'1h'`, `'3m'`, `'5s'`).
+* `result_ttl` specifies how long (in seconds) successful jobs and their
+  results are kept. Expired jobs will be automatically deleted. Defaults to 500 seconds.
+* `ttl` specifies the maximum queued time (in seconds) of the job before it's discarded.
+  This argument defaults to `None` (infinite TTL).
+* `failure_ttl` specifies how long (in seconds) failed jobs are kept (defaults to 1 year)
+* `depends_on` specifies another job (or job id) that must complete before this
+  job will be queued.
+* `id` allows you to manually specify this job's id
+* `description` to add additional description to the job
+* `connection`
+* `status`
+* `origin`
+* `meta` a dictionary holding custom status information on this job
+* `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
+  underlying job function. This is useful if your function happens to have
+  conflicting argument names with RQ, for example `description` or `ttl`.
+  
+In the last case, if you want to pass `description` and `ttl` keyword arguments
+to your job and not to RQ's enqueue function, this is what you do:
+
+```python
+job = Job.create(count_words_at_url,
+          ttl=30,  # This ttl will be used by RQ
+          args=('http://nvie.com',),
+          kwargs={
+              'description': 'Function description', # This is passed on to count_words_at_url
+              'ttl': 15  # This is passed on to count_words_at_url function
+          })
+```
+
+## Retrieving a Job from Redis
 
 All job information is stored in Redis. You can inspect a job and its attributes
 by using `Job.fetch()`.
@@ -23,11 +97,15 @@ print('Status: %s' % job.get_status())
 ```
 
 Some interesting job attributes include:
-* `job.get_status()`
+* `job.get_status()` Possible values are `queued`, `started`, `deferred`, `finished`, and `failed`
 * `job.func_name`
-* `job.args`
-* `job.kwargs`
-* `job.result`
+* `job.args` arguments passed to the underlying job function
+* `job.kwargs` key word arguments passed to the underlying job function
+* `job.result` The return value of the function. Initially, right after enqueueing 
+a job, the return value will be None.  But when the job has been executed, and had 
+a return value or exception, this will return that value or exception.
+Return values written back to Redis will expire according to the `result_ttl` parameter 
+of the job (500 seconds by default).
 * `job.enqueued_at`
 * `job.started_at`
 * `job.ended_at`
@@ -41,10 +119,11 @@ for job in jobs:
     print('Job %s: %s' % (job.id, job.func_name))
 ```
 
-## Accessing The "current" Job
-
-Since job functions are regular Python functions, you have to ask RQ for the
-current job ID, if any.  To do this, you can use:
+## Accessing The "current" Job from within the job function
+ 
+Since job functions are regular Python functions, you must retrieve the 
+job in order to inspect or update the job's attributes.  To do this from within
+the function, you can use:
 
 ```python
 from rq import get_current_job
@@ -54,6 +133,8 @@ def add(x, y):
     print('Current job: %s' % (job.id,))
     return x + y
 ```
+
+Note that calling get_current_job() outside of the context of a job function will return `None`.
 
 
 ## Storing arbitrary data on jobs
@@ -82,15 +163,22 @@ def add(x, y):
 
 _New in version 0.4.7._
 
-A job has two TTLs, one for the job result and one for the job itself. This means that if you have
-job that shouldn't be executed after a certain amount of time, you can define a TTL as such:
+A job has two TTLs, one for the job result, `result_ttl`, and one for the job itself, `ttl`.  
+The latter is used if you have a job that shouldn't be executed after a certain amount of time.
 
 ```python
 # When creating the job:
-job = Job.create(func=say_hello, ttl=43)
+job = Job.create(func=say_hello, 
+                 result_ttl=600,  # how long (in seconds) to keep the job (if successful) and its results
+                 ttl=43,  # maximum queued time (in seconds) of the job before it's discarded.
+                )
 
 # or when queueing a new job:
-job = q.enqueue(count_words_at_url, 'http://nvie.com', ttl=43)
+job = q.enqueue(count_words_at_url, 
+                'http://nvie.com', 
+                result_ttl=600,  # how long to keep the job (if successful) and its results
+                ttl=43  # maximum queued time
+               )
 ```
 
 
