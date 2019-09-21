@@ -55,7 +55,7 @@ class RQScheduler(object):
     def status(self):
         return self._status
 
-    def acquire_locks(self):
+    def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set([])
         pid = os.getpid()
@@ -65,6 +65,13 @@ class RQScheduler(object):
         self._acquired_locks = self._acquired_locks.union(successful_locks)
         if self._acquired_locks:
             self.prepare_registries(self._acquired_locks)
+        
+        # If auto_start is requested and scheduler is not started,
+        # run self.start()
+        if self._acquired_locks and auto_start: 
+            if not self._process:
+                self.start()
+        
         return successful_locks
 
     def prepare_registries(self, queue_names):

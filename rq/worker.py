@@ -460,9 +460,7 @@ class Worker(object):
 
         if with_scheduler:
             self.scheduler = RQScheduler(self.queues, connection=self.connection)
-            self.scheduler.acquire_locks()
-            if self.scheduler.acquired_locks:
-                self.scheduler.start()
+            self.scheduler.acquire_locks(auto_start=True)
 
         self._install_signal_handlers()
 
@@ -474,7 +472,7 @@ class Worker(object):
                     if self.should_run_maintenance_tasks:
                         self.clean_registries()
                         if self.scheduler:
-                            self.scheduler.acquire_locks()
+                            self.scheduler.acquire_locks(auto_start=True)
 
                     if self._stop_requested:
                         self.log.info('Worker %s: stopping on request', self.key)

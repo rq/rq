@@ -13,6 +13,8 @@ from rq.worker import Worker
 from .fixtures import kill_worker, say_hello
 from tests import RQTestCase
 
+import mock
+
 
 class TestScheduledJobRegistry(RQTestCase):
 
@@ -97,6 +99,20 @@ class TestScheduler(RQTestCase):
         scheduler._queue_names.add(name_3)
         self.assertEqual(scheduler.acquire_locks(), {name_3})
         self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
+    
+    def test_lock_acquisition_with_auto_start(self):
+        """Test lock acquisition with auto_start=True"""
+        scheduler = RQScheduler(['auto-start'], self.testconn)
+        with mock.patch.object(scheduler, 'start') as mocked:
+            scheduler.acquire_locks(auto_start=True)
+            self.assertEqual(mocked.call_count, 1)
+
+        # If process has started, scheduler.start() won't be called
+        scheduler = RQScheduler(['auto-start2'], self.testconn)
+        scheduler._process = 1
+        with mock.patch.object(scheduler, 'start') as mocked:
+            scheduler.acquire_locks(auto_start=True)
+            self.assertEqual(mocked.call_count, 0)
     
     def test_heartbeat(self):
         """Test that heartbeat updates locking keys TTL"""
