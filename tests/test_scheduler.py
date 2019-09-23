@@ -64,8 +64,8 @@ class TestScheduledJobRegistry(RQTestCase):
         # assumes local timezone so depending on your local timezone,
         # the timestamp maybe different
         registry.schedule(job, datetime(2019, 1, 1))
-        self.assertNotEqual(self.testconn.zscore(registry.key, job.id),
-                            1546300800)  # 2019-01-01 UTC in Unix timestamp
+        self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                         1546300800 + time.timezone)  # 2019-01-01 UTC in Unix timestamp
 
         # Only run this test if `timezone` is available (Python 3.2+)
         try:
