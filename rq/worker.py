@@ -531,7 +531,7 @@ class Worker(object):
     
     def stop_scheduler(self):
         """Ensure scheduler process is stopped"""
-        if self.scheduler._process:
+        if self.scheduler._process and self.scheduler._process.pid:
             # Send the kill signal to scheduler process
             try:
                 os.kill(self.scheduler._process.pid, signal.SIGTERM)
