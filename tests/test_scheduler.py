@@ -176,7 +176,7 @@ class TestScheduler(RQTestCase):
         self.assertEqual(len(registry), 0)
 
         # Jobs scheduled in the far future should not be affected
-        registry.schedule(job, datetime(2100, 1, 1))
+        registry.schedule(job, datetime(2100, 1, 1, tzinfo=utc))
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
 
