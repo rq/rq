@@ -440,6 +440,20 @@ class Worker(object):
         if before_state:
             self.set_state(before_state)
 
+    def run_maintenance_tasks(self):
+        """
+        Runs periodic maintenance tasks, these include:
+        1. Check if scheduler should be started. This check should not be run
+           on first run since worker.work() already calls
+           `scheduler.enqueue_scheduled_jobs()` on startup.
+        2. Cleaning registries
+        """
+        # No need to try to start scheduler on first run
+        if self.last_cleaned_at:
+            if self.scheduler:
+                self.scheduler.acquire_locks(auto_start=True)
+        self.clean_registries()
+
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
              log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
         """Starts the work loop.
@@ -476,11 +490,7 @@ class Worker(object):
                     self.check_for_suspension(burst)
 
                     if self.should_run_maintenance_tasks:
-                        # No need to try to start scheduler on first run
-                        if self.last_cleaned_at:
-                            if self.scheduler:
-                                self.scheduler.acquire_locks(auto_start=True)
-                        self.clean_registries()
+                        self.run_maintenance_tasks()
 
                     if self._stop_requested:
                         self.log.info('Worker %s: stopping on request', self.key)
@@ -549,6 +559,9 @@ class Worker(object):
 
         while True:
             self.heartbeat()
+
+            if self.should_run_maintenance_tasks:
+                self.run_maintenance_tasks()
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
