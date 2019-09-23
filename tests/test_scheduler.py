@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from multiprocessing import Process
 
 from rq import Queue
-from rq.compat import utc
+from rq.compat import utc, PY2
 from rq.exceptions import NoSuchJobError
 from rq.job import Job
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
@@ -59,16 +59,21 @@ class TestScheduledJobRegistry(RQTestCase):
         job.save()
         registry = ScheduledJobRegistry(queue=queue)
 
-        # If we pass in a datetime with no timezone, `schedule()`
-        # assumes local timezone so depending on your local timezone,
-        # the timestamp maybe different
-        registry.schedule(job, datetime(2019, 1, 1))
-        self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                         1546300800 + time.timezone)  # 2019-01-01 UTC in Unix timestamp
-
-        # Only run this test if `timezone` is available (Python 3.2+)
-        try:
+        if PY2:
+            # On Python 2, datetime needs to have timezone
+            self.assertRaises(ValueError, registry.schedule, job, datetime(2019, 1, 1))
+            registry.schedule(job, datetime(2019, 1, 1, tzinfo=utc))
+            self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                             1546300800)  # 2019-01-01 UTC in Unix timestamp
+        else:
             from datetime import timezone
+            # If we pass in a datetime with no timezone, `schedule()`
+            # assumes local timezone so depending on your local timezone,
+            # the timestamp maybe different
+            registry.schedule(job, datetime(2019, 1, 1))
+            self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                             1546300800 + time.timezone)  # 2019-01-01 UTC in Unix timestamp
+
             # Score is always stored in UTC even if datetime is in a different tz
             tz = timezone(timedelta(hours=7))
             job = Job.create('myfunc', connection=self.testconn)
@@ -76,8 +81,6 @@ class TestScheduledJobRegistry(RQTestCase):
             registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
             self.assertEqual(self.testconn.zscore(registry.key, job.id),
                              1546300800)  # 2019-01-01 UTC in Unix timestamp
-        except ImportError:
-            pass
 
 
 class TestScheduler(RQTestCase):
@@ -163,7 +166,7 @@ class TestScheduler(RQTestCase):
         registry = ScheduledJobRegistry(queue=queue)
         job = Job.create('myfunc', connection=self.testconn)
         job.save()
-        registry.schedule(job, datetime(2019, 1, 1))
+        registry.schedule(job, datetime(2019, 1, 1, tzinfo=utc))
         scheduler = RQScheduler([queue], connection=self.testconn)
         scheduler.acquire_locks()
         scheduler.enqueue_scheduled_jobs()
@@ -211,7 +214,7 @@ class TestWorker(RQTestCase):
         p = Process(target=kill_worker, args=(os.getpid(), False, 5))
 
         p.start()
-        queue.enqueue_at(datetime(2019, 1, 1), say_hello)
+        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=utc), say_hello)
         worker.work(burst=False, with_scheduler=True)        
         p.join(1)
         self.assertIsNotNone(worker.scheduler)
@@ -229,7 +232,7 @@ class TestQueue(RQTestCase):
         scheduler.acquire_locks()
 
         # Jobs created using enqueue_at is put in the ScheduledJobRegistry
-        queue.enqueue_at(datetime(2019, 1, 1), say_hello)
+        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=utc), say_hello)
         self.assertEqual(len(queue), 0)
         self.assertEqual(len(registry), 1)
 

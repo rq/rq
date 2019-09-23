@@ -8,6 +8,7 @@ from tests import RQTestCase
 from tests.fixtures import echo, say_hello
 
 from rq import Queue
+from rq.compat import utc
 from rq.exceptions import InvalidJobDependency
 from rq.job import Job, JobStatus
 from rq.registry import DeferredJobRegistry, ScheduledJobRegistry
@@ -530,7 +531,7 @@ class TestJobScheduling(RQTestCase):
     def test_enqueue_at(self):
         """enqueue_at() creates a job in ScheduledJobRegistry"""
         queue = Queue(connection=self.testconn)
-        scheduled_time = datetime.now() + timedelta(seconds=10)
+        scheduled_time = datetime.now(utc) + timedelta(seconds=10)
         job = queue.enqueue_at(scheduled_time, say_hello)
         registry = ScheduledJobRegistry(queue=queue)
         self.assertIn(job, registry)
