@@ -1,9 +1,12 @@
 import os
+import time
 
 from datetime import datetime, timedelta
 from multiprocessing import Process
 
 from rq import Queue
+from rq.compat import utc
+from rq.exceptions import NoSuchJobError
 from rq.job import Job
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
@@ -39,11 +42,16 @@ class TestScheduledJobRegistry(RQTestCase):
 
         job = Job.create('myfunc', connection=self.testconn)
         job.save()
-        dt = datetime(2019, 1, 1)
-        registry.schedule(job, datetime(2019, 1, 1))
+        dt = datetime(2019, 1, 1, tzinfo=utc)
+        registry.schedule(job, datetime(2019, 1, 1, tzinfo=utc))
         self.assertEqual(registry.get_scheduled_time(job), dt)
         # get_scheduled_time() should also work with job ID
         self.assertEqual(registry.get_scheduled_time(job.id), dt)
+
+        # registry.get_scheduled_time() raises NoSuchJobError if
+        # job.id is not found
+        self.assertRaises(NoSuchJobError, registry.get_scheduled_time, '123')
+        
 
     def test_schedule(self):
         """Adding job with the correct score to ScheduledJobRegistry"""
@@ -51,9 +59,13 @@ class TestScheduledJobRegistry(RQTestCase):
         job = Job.create('myfunc', connection=self.testconn)
         job.save()
         registry = ScheduledJobRegistry(queue=queue)
+
+        # If we pass in a datetime with no timezone, `schedule()`
+        # assumes local timezone so depending on your local timezone,
+        # the timestamp maybe different
         registry.schedule(job, datetime(2019, 1, 1))
-        self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                         1546300800)  # 2019-01-01 UTC in Unix timestamp
+        self.assertNotEqual(self.testconn.zscore(registry.key, job.id),
+                            1546300800)  # 2019-01-01 UTC in Unix timestamp
 
         # Only run this test if `timezone` is available (Python 3.2+)
         try:

@@ -84,3 +84,23 @@ else:
 
     def decode_redis_hash(h):
         return h
+
+
+try:
+    from datetime import timezone
+    utc = timezone.utc
+except ImportError:
+    # Python 2.x workaround
+    from datetime import timedelta, tzinfo
+
+    class UTC(tzinfo):
+        def utcoffset(self, dt):
+            return timedelta(0)
+
+        def tzname(self, dt):
+            return "UTC"
+
+        def dst(self, dt):
+            return timedelta(0)
+
+    utc = UTC()

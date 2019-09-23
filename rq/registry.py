@@ -1,7 +1,8 @@
 import calendar
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
-from .compat import as_text
+from .compat import as_text, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError
@@ -236,9 +237,23 @@ class ScheduledJobRegistry(BaseRegistry):
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
 
-    def schedule(self, job, datetime, pipeline=None):
-        """Adds job to registry, scored by its execution time (in UTC)"""
-        timestamp = calendar.timegm(datetime.utctimetuple())
+    def schedule(self, job, scheduled_datetime, pipeline=None):
+        """
+        Adds job to registry, scored by its execution time (in UTC).
+        If datetime has no tzinfo, it will assume localtimezone.
+        """
+        # If datetime has no timezone, assume server's local timezone
+        # if we're on Python 3. If we're on Python 2.7, raise an
+        # exception since Python < 3.2 has no builtin `timezone` class
+        if not scheduled_datetime.tzinfo:
+            try:
+                from datetime import timezone
+            except ImportError:
+                raise ValueError('datetime object with no timezone')
+            tz = timezone(timedelta(seconds=-time.timezone))
+            scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
+
+        timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         return self.connection.zadd(self.key, {job.id: timestamp})
 
     def cleanup(self):
@@ -270,9 +285,12 @@ class ScheduledJobRegistry(BaseRegistry):
             job_id = job_or_id.id
         else:
             job_id = job_or_id
-        return datetime.utcfromtimestamp(
-            self.connection.zscore(self.key, job_id)
-        )
+
+        score = self.connection.zscore(self.key, job_id)
+        if not score:
+            raise NoSuchJobError
+
+        return datetime.fromtimestamp(score, tz=utc)
 
 
 def clean_registries(queue):
