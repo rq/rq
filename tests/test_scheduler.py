@@ -51,7 +51,6 @@ class TestScheduledJobRegistry(RQTestCase):
         # registry.get_scheduled_time() raises NoSuchJobError if
         # job.id is not found
         self.assertRaises(NoSuchJobError, registry.get_scheduled_time, '123')
-        
 
     def test_schedule(self):
         """Adding job with the correct score to ScheduledJobRegistry"""
@@ -111,7 +110,7 @@ class TestScheduler(RQTestCase):
         scheduler._queue_names.add(name_3)
         self.assertEqual(scheduler.acquire_locks(), {name_3})
         self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
-    
+
     def test_lock_acquisition_with_auto_start(self):
         """Test lock acquisition with auto_start=True"""
         scheduler = RQScheduler(['auto-start'], self.testconn)
@@ -125,7 +124,7 @@ class TestScheduler(RQTestCase):
         with mock.patch.object(scheduler, 'start') as mocked:
             scheduler.acquire_locks(auto_start=True)
             self.assertEqual(mocked.call_count, 0)
-    
+
     def test_heartbeat(self):
         """Test that heartbeat updates locking keys TTL"""
         name_1 = 'lock-test-1'
@@ -177,7 +176,7 @@ class TestScheduler(RQTestCase):
         registry.schedule(job, datetime(2100, 1, 1))
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
-    
+
     def test_prepare_registries(self):
         """prepare_registries() creates self._scheduled_job_registries"""
         foo_queue = Queue('foo', connection=self.testconn)
@@ -199,7 +198,12 @@ class TestWorker(RQTestCase):
         """worker.work() with scheduler enabled works properly"""
         queue = Queue(connection=self.testconn)
         worker = Worker(queues=[queue], connection=self.testconn)
+        worker.work(burst=True, with_scheduler=False)
+        self.assertIsNone(worker.scheduler)
+
+        worker = Worker(queues=[queue], connection=self.testconn)
         worker.work(burst=True, with_scheduler=True)
+        self.assertIsNotNone(worker.scheduler)
 
     def test_work(self):
         queue = Queue(connection=self.testconn)

@@ -2,6 +2,8 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from datetime import datetime
+
 from click.testing import CliRunner
 from redis import Redis
 
@@ -9,7 +11,7 @@ from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig
 from rq.job import Job
-from rq.registry import FailedJobRegistry
+from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.worker import Worker, WorkerStatus
 
 import pytest
@@ -237,6 +239,21 @@ class TestRQCli(RQTestCase):
         self.assertTrue(len(pid.read()) > 0)
         self.assert_normal_execution(result)
 
+    def test_worker_with_scheduler(self):
+        """rq worker -u <url> --with-scheduler"""
+        queue = Queue(connection=self.connection)
+        queue.enqueue_at(datetime(2019, 1, 1), say_hello)
+        registry = ScheduledJobRegistry(queue=queue)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        self.assert_normal_execution(result)
+        self.assertEqual(len(registry), 1)  # 1 job still scheduled
+
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--with-scheduler'])
+        self.assert_normal_execution(result)
+        self.assertEqual(len(registry), 0)  # Job has been enqueued
+
     def test_worker_logging_options(self):
         """--quiet and --verbose logging options are supported"""
         runner = CliRunner()
@@ -249,7 +266,7 @@ class TestRQCli(RQTestCase):
         # --quiet and --verbose are mutually exclusive
         result = runner.invoke(main, args + ['--quiet', '--verbose'])
         self.assertNotEqual(result.exit_code, 0)
-    
+
     def test_exception_handlers(self):
         """rq worker -u <url> -b --exception-handler <handler>"""
         connection = Redis.from_url(self.redis_url)

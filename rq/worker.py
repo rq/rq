@@ -460,7 +460,11 @@ class Worker(object):
 
         if with_scheduler:
             self.scheduler = RQScheduler(self.queues, connection=self.connection)
-            self.scheduler.acquire_locks(auto_start=True)
+            self.scheduler.acquire_locks()
+            # If lock is acquired, start scheduler
+            if self.scheduler.acquired_locks:
+                self.scheduler.enqueue_scheduled_jobs()
+                self.scheduler.start()
 
         self._install_signal_handlers()
 
