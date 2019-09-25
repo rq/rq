@@ -128,7 +128,7 @@ class RQScheduler(object):
 
     def heartbeat(self):
         """Updates the TTL on scheduler keys and the locks"""
-        logging.info("Scheduler sending heartbeat to %s", ", ".join(self._queue_names))
+        logging.info("Scheduler sending heartbeat to %s", ", ".join(self.acquired_locks))
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
