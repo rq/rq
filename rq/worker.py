@@ -450,7 +450,7 @@ class Worker(object):
         """
         # No need to try to start scheduler on first run
         if self.last_cleaned_at:
-            if self.scheduler:
+            if self.scheduler and not self.scheduler._process:
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
 

@@ -4,6 +4,7 @@ import signal
 import time
 import traceback
 
+from datetime import datetime
 from multiprocessing import Process
 
 try:
@@ -41,25 +42,36 @@ class RQScheduler(object):
     def __init__(self, queues, connection, interval=1):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set([])
-        self._scheduled_job_registries = []        
+        self._scheduled_job_registries = []
+        self.lock_acquisition_time = None
         self.connection = connection
         self.interval = interval
         self._stop_requested = False
         self._status = self.Status.STOPPED
         self._process = None
-    
+
     @property
     def acquired_locks(self):
         return self._acquired_locks
-    
+
     @property
     def status(self):
         return self._status
+
+    @property
+    def should_reacquire_locks(self):
+        """Returns True if lock_acquisition_time is longer than 15 minutes ago"""
+        if self._queue_names == self.acquired_locks:
+            return False
+        if not self.lock_acquisition_time:
+            return True
+        return (datetime.now() - self.lock_acquisition_time).total_seconds() > 900
 
     def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set([])
         pid = os.getpid()
+        logging.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
             if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
                 successful_locks.add(name)
@@ -67,12 +79,14 @@ class RQScheduler(object):
         if self._acquired_locks:
             self.prepare_registries(self._acquired_locks)
         
+        self.lock_acquisition_time = datetime.now()
+
         # If auto_start is requested and scheduler is not started,
         # run self.start()
-        if self._acquired_locks and auto_start: 
+        if self._acquired_locks and auto_start:
             if not self._process:
                 self.start()
-        
+
         return successful_locks
 
     def prepare_registries(self, queue_names):
@@ -159,6 +173,10 @@ class RQScheduler(object):
             if self._stop_requested:
                 self.stop()
                 break
+
+            if self.should_reacquire_locks:
+                self.acquire_locks()
+
             self.enqueue_scheduled_jobs()
             self.heartbeat()
             time.sleep(self.interval)
