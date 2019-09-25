@@ -2,6 +2,7 @@ import logging
 import os
 import signal
 import time
+import traceback
 
 from multiprocessing import Process
 
@@ -166,7 +167,10 @@ class RQScheduler(object):
 def run(scheduler):
     logging.info("Scheduler for %s started with PID %s",
                  ','.join(scheduler._queue_names), os.getpid())
-    scheduler.work()
+    try:
+        scheduler.work()
+    except:  # noqa
+        logging.error(traceback.format_exc())
     logging.info("Scheduler with PID %s has stopped", os.getpid())
 
 
