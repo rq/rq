@@ -155,6 +155,9 @@ class RQScheduler(object):
 
     def work(self):
         self._install_signal_handlers()
+        import time
+        time.sleep(2)
+        raise ValueError
         while True:
             if self._stop_requested:
                 self.stop()
@@ -170,7 +173,11 @@ def run(scheduler):
     try:
         scheduler.work()
     except:  # noqa
-        logging.error(traceback.format_exc())
+        logging.error(
+            'Scheduler [PID %s] raised an exception.\n%s',
+            os.getpid(), traceback.format_exc()
+        )
+        raise
     logging.info("Scheduler with PID %s has stopped", os.getpid())
 
 
