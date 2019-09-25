@@ -155,9 +155,6 @@ class RQScheduler(object):
 
     def work(self):
         self._install_signal_handlers()
-        import time
-        time.sleep(2)
-        raise ValueError
         while True:
             if self._stop_requested:
                 self.stop()
