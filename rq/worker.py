@@ -477,9 +477,11 @@ class Worker(object):
             self.scheduler.acquire_locks()
             # If lock is acquired, start scheduler
             if self.scheduler.acquired_locks:
-                self.scheduler.enqueue_scheduled_jobs()
-                # Start scheduler in a separate process if not in burst mode
-                if not burst:
+                # If worker is run on burst mode, enqueue_scheduled_jobs()
+                # before working. Otherwise, start scheduler in a separate process
+                if burst:
+                    self.scheduler.enqueue_scheduled_jobs()
+                else:
                     self.scheduler.start()
 
         self._install_signal_handlers()
