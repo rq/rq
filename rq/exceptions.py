@@ -19,10 +19,13 @@ class InvalidJobOperation(Exception):
     pass
 
 
-class UnpickleError(Exception):
+class DeserializationError(Exception):
     def __init__(self, message, raw_data, inner_exception=None):
-        super(UnpickleError, self).__init__(message, inner_exception)
+        super(DeserializationError, self).__init__(message, inner_exception)
         self.raw_data = raw_data
+
+
+UnpickleError = DeserializationError
 
 
 class DequeueTimeout(Exception):

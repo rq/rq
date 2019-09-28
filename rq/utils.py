@@ -10,6 +10,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import calendar
 import datetime
+from functools import partial
 import importlib
 import logging
 import numbers
@@ -18,6 +19,10 @@ try:
     from collections.abc import Iterable
 except ImportError:
     from collections import Iterable
+try:
+    import cPickle as pickle
+except ImportError:  # noqa  # pragma: no cover
+    import pickle
 
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
@@ -147,6 +152,22 @@ class ColorizingStreamHandler(logging.StreamHandler):
             message = '\n'.join(parts)
 
         return message
+
+
+class _DefaultSerializer(object):
+    def __init__(self):
+        # Serialize pickle dumps using the highest pickle protocol (binary, default
+        # uses ascii)
+        self.dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
+        self.loads = pickle.loads
+
+
+serializer = _DefaultSerializer()
+
+
+def configure_serializer(mod):
+    global serializer
+    serializer = mod
 
 
 def import_attribute(name):
