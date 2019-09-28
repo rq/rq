@@ -395,7 +395,7 @@ class Job(object):
             rv = self.connection.hget(self.key, 'result')
             if rv is not None:
                 # cache the result
-                self._result = loads(rv)
+                self._result = serializer.loads(rv)
         return self._result
 
     """Backwards-compatibility accessor property `return_value`."""
