@@ -365,7 +365,7 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
         job._result = queue.Queue()
         data = job.to_dict()
-        self.assertEqual(data['result'], 'Unpickleable return value')
+        self.assertEqual(data['result'], 'Unserializable return value')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
