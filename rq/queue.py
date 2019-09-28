@@ -10,7 +10,7 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import (DequeueTimeout, DeserializatonError, InvalidJobDependency,
+from .exceptions import (DequeueTimeout, DeserializationError, InvalidJobDependency,
                          NoSuchJobError)
 from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, utcnow, parse_timeout
@@ -479,7 +479,7 @@ class Queue(object):
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look
                 continue
-            except DeserializatonError as e:
+            except DeserializationError as e:
                 # Attach queue information on the exception for improved error
                 # reporting
                 e.job_id = job_id
