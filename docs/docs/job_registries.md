@@ -6,9 +6,9 @@ layout: docs
 Each queue maintains a set of Job Registries:
 * `StartedJobRegistry` Holds currently executing jobs. Jobs are added right before they are 
 executed and removed right after completion (success or failure).
-* `FinishedJobRegistry` Jobs are added to this registry after they have been successfully completed.
-* `FailedJobRegistry` Jobs that have failed.
-* `DeferredJobRegistry` Deferred jobs (jobs that depend on another job and are waiting for that 
+* `FinishedJobRegistry` Holds successfully completed jobs.
+* `FailedJobRegistry` Holds jobs that have failed.
+* `DeferredJobRegistry` Holds deferred jobs (jobs that depend on another job and are waiting for that 
 job to finish).
 
 You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
