@@ -27,8 +27,8 @@ job = queue.enqueue(count_words_at_url, 'http://nvie.com')
 # get StartedJobRegistry by queue
 registry = StartedJobRegistry(queue=queue)
 
-# or get StartedJobRegistry by connection
-registry = StartedJobRegistry(connection=conn)
+# or get StartedJobRegistry by queue name and connection
+registry2 = StartedJobRegistry(name='my_queue', connection=conn)
 
 # sleep for a moment while job is taken off the queue
 time.sleep(0.1)
