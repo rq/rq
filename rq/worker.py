@@ -161,7 +161,7 @@ class Worker(object):
                  queue_class=None, log_job_description=True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler=False,
-                 prepare_for_work=True, version=VERSION):  # noqa
+                 prepare_for_work=True):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -175,7 +175,7 @@ class Worker(object):
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
-        self.version = version
+        self.version = VERSION
         self.python_version = sys.version
 
         queues = [self.queue_class(name=q,

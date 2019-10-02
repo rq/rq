@@ -921,7 +921,8 @@ class TestWorker(RQTestCase):
 
     def test_worker_version(self):
         q = Queue()
-        w = Worker([q], version='0.0.0')
+        w = Worker([q])
+        w.version = '0.0.0'
         w.register_birth()
         self.assertEqual(w.version, '0.0.0')
         w.refresh()
