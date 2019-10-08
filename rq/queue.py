@@ -9,7 +9,7 @@ from datetime import datetime
 
 from redis import WatchError
 
-from .compat import as_text, string_types, total_ordering
+from .compat import as_text, string_types, total_ordering, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import (DequeueTimeout, InvalidJobDependency, NoSuchJobError,
@@ -370,7 +370,7 @@ class Queue(object):
 
     def enqueue_in(self, time_delta, func, *args, **kwargs):
         """Schedules a job to be executed in a given `timedelta` object"""
-        return self.enqueue_at(datetime.now() + time_delta,
+        return self.enqueue_at(datetime.now(utc) + time_delta,
                                func, *args, **kwargs)
 
     def enqueue_job(self, job, pipeline=None, at_front=False):
