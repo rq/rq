@@ -33,6 +33,7 @@ from rq.job import Job, JobStatus
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
+from rq.version import VERSION
 from rq.worker import HerokuWorker, WorkerStatus
 
 
@@ -140,6 +141,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
         self.assertEqual(worker._job_id, None)
         self.assertTrue(worker.key in Worker.all_keys(worker.connection))
+        self.assertEqual(worker.version, VERSION)
 
         # If worker is gone, its keys should also be removed
         worker.connection.delete(worker.key)
@@ -919,6 +921,35 @@ class TestWorker(RQTestCase):
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
+
+    def test_worker_version(self):
+        q = Queue()
+        w = Worker([q])
+        w.version = '0.0.0'
+        w.register_birth()
+        self.assertEqual(w.version, '0.0.0')
+        w.refresh()
+        self.assertEqual(w.version, '0.0.0')
+        # making sure that version is preserved when worker is retrieved by key
+        worker = Worker.find_by_key(w.key)
+        self.assertEqual(worker.version, '0.0.0')
+
+    def test_python_version(self):
+        python_version = sys.version
+        q = Queue()
+        w = Worker([q])
+        w.register_birth()
+        self.assertEqual(w.python_version, python_version)
+        # now patching version
+        python_version = 'X.Y.Z.final'  # dummy version
+        self.assertNotEqual(python_version, sys.version)  # otherwise tests are pointless
+        w2 = Worker([q])
+        w2.python_version = python_version
+        w2.register_birth()
+        self.assertEqual(w2.python_version, python_version)
+        # making sure that version is preserved when worker is retrieved by key
+        worker = Worker.find_by_key(w2.key)
+        self.assertEqual(worker.python_version, python_version)
 
 
 def kill_worker(pid, double_kill):
