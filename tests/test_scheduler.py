@@ -88,10 +88,28 @@ class TestScheduler(RQTestCase):
     def test_init(self):
         """Scheduler can be instantiated with queues or queue names"""
         foo_queue = Queue('foo', connection=self.testconn)
-        # bar_queue = Queue('bar', connection=self.testconn)
         scheduler = RQScheduler([foo_queue, 'bar'], connection=self.testconn)
         self.assertEqual(scheduler._queue_names, {'foo', 'bar'})
         self.assertEqual(scheduler.status, RQScheduler.Status.STOPPED)
+
+    def test_should_reacquire_locks(self):
+        """scheduler.should_reacquire_locks works properly"""
+        queue = Queue(connection=self.testconn)
+        scheduler = RQScheduler([queue], connection=self.testconn)
+        self.assertTrue(scheduler.should_reacquire_locks)
+        scheduler.acquire_locks()
+        self.assertIsNotNone(scheduler.lock_acquisition_time)
+        
+        # scheduler.should_reacquire_locks always returns False if 
+        # scheduler.acquired_locks and scheduler._queue_names are the same
+        self.assertFalse(scheduler.should_reacquire_locks)
+        scheduler.lock_acquisition_time = datetime.now() - timedelta(minutes=16)
+        self.assertFalse(scheduler.should_reacquire_locks)
+
+        scheduler._queue_names = set(['default', 'foo'])
+        self.assertTrue(scheduler.should_reacquire_locks)
+        scheduler.acquire_locks()
+        self.assertFalse(scheduler.should_reacquire_locks)
 
     def test_lock_acquisition(self):
         """Test lock acquisition"""
