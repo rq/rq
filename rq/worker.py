@@ -265,13 +265,15 @@ class Worker(object):
             now = utcnow()
             now_in_string = utcformat(now)
             self.birth_date = now
-            p.hset(key, 'birth', now_in_string)
-            p.hset(key, 'last_heartbeat', now_in_string)
-            p.hset(key, 'queues', queues)
-            p.hset(key, 'pid', self.pid)
-            p.hset(key, 'hostname', self.hostname)
-            p.hset(key, 'version', self.version)
-            p.hset(key, 'python_version', self.python_version)
+            p.hmset(key, {
+                'birth': now_in_string,
+                'last_heartbeat': now_in_string,
+                'queues': queues,
+                'pid': self.pid,
+                'hostname': self.hostname,
+                'version': self.version,
+                'python_version': self.python_version,
+            })
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl)
             p.execute()
