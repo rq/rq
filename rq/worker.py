@@ -176,6 +176,8 @@ class Worker(object):
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
+        self.version = VERSION
+        self.python_version = sys.version
 
         queues = [self.queue_class(name=q,
                                    connection=connection,
@@ -265,11 +267,15 @@ class Worker(object):
             now = utcnow()
             now_in_string = utcformat(now)
             self.birth_date = now
-            p.hset(key, 'birth', now_in_string)
-            p.hset(key, 'last_heartbeat', now_in_string)
-            p.hset(key, 'queues', queues)
-            p.hset(key, 'pid', self.pid)
-            p.hset(key, 'hostname', self.hostname)
+            p.hmset(key, {
+                'birth': now_in_string,
+                'last_heartbeat': now_in_string,
+                'queues': queues,
+                'pid': self.pid,
+                'hostname': self.hostname,
+                'version': self.version,
+                'python_version': self.python_version,
+            })
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl)
             p.execute()
@@ -608,13 +614,15 @@ class Worker(object):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
             'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'hostname', 'pid'
+            'total_working_time', 'hostname', 'pid', 'version', 'python_version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
-         successful_job_count, total_working_time, hostname, pid) = data
+         successful_job_count, total_working_time, hostname, pid, version, python_version) = data
         queues = as_text(queues)
         self.hostname = hostname
         self.pid = int(pid) if pid else None
+        self.version = as_text(version)
+        self.python_version = as_text(python_version)
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         if last_heartbeat:
