@@ -398,7 +398,7 @@ class Queue(object):
                     if dependent.origin == self.name:
                         self.enqueue_job(dependent, pipeline=pipe)
                     else:
-                        queue = Queue(name=dependent.origin, connection=self.connection)
+                        queue = self.__class__(name=dependent.origin, connection=self.connection)
                         queue.enqueue_job(dependent, pipeline=pipe)
 
                 pipe.delete(dependents_key)
