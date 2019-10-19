@@ -6,9 +6,8 @@ import mock
 from redis import Redis
 from rq.decorators import job
 from rq.job import Job
-from rq.worker import DEFAULT_RESULT_TTL
 from rq.queue import Queue
-
+from rq.worker import DEFAULT_RESULT_TTL
 from tests import RQTestCase
 from tests.fixtures import decorated_job
 
@@ -95,7 +94,7 @@ class TestDecorator(RQTestCase):
         # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.dependency, None)
-        self.assertEqual(result._dependency_id, None)
+        self.assertEqual(result.dependency.id, None)
 
         @job(queue='queue_name')
         def foo():
@@ -109,11 +108,11 @@ class TestDecorator(RQTestCase):
 
         bar_job = bar.delay()
 
-        self.assertIsNone(foo_job._dependency_id)
+        self.assertIsNone(foo_job.dependency.id)
 
         self.assertEqual(bar_job.dependency, foo_job)
 
-        self.assertEqual(bar_job._dependency_id, foo_job.id)
+        self.assertEqual(bar_job.dependency.id, foo_job.id)
 
     def test_decorator_delay_accepts_depends_on_as_argument(self):
         """Ensure that passing in depends_on to the delay method of
@@ -123,7 +122,7 @@ class TestDecorator(RQTestCase):
         # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.dependency, None)
-        self.assertEqual(result._dependency_id, None)
+        self.assertEqual(result.dependency.id, None)
 
         @job(queue='queue_name')
         def foo():
