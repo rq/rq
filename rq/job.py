@@ -183,10 +183,6 @@ class Job(object):
         return job
 
     @property
-    def _dependency_id(self):
-        return self._dependency_ids and self._dependency_ids[0]
-
-    @property
     def dependent_ids(self):
         """Returns a list of ids of jobs whose execution depends on this
         job's successful execution."""
@@ -332,7 +328,7 @@ class Job(object):
         self.failure_ttl = None
         self.ttl = None
         self._status = None
-        self._dependency_ids = None
+        self._dependency_ids = []
         self.meta = {}
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -691,7 +687,8 @@ class Job(object):
 
         connection = pipeline if pipeline is not None else self.connection
 
-        dependents_key = self.dependents_key_for(self._dependency_ids[0])
-        connection.sadd(dependents_key, self.id)
+        for dependency_id in self._dependency_ids:
+            dependents_key = self.dependents_key_for(dependency_id)
+            connection.sadd(dependents_key, self.id)
 
 _job_stack = LocalStack()
