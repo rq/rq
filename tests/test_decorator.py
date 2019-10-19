@@ -6,9 +6,8 @@ import mock
 from redis import Redis
 from rq.decorators import job
 from rq.job import Job
-from rq.worker import DEFAULT_RESULT_TTL
 from rq.queue import Queue
-
+from rq.worker import DEFAULT_RESULT_TTL
 from tests import RQTestCase
 from tests.fixtures import decorated_job
 
@@ -95,7 +94,7 @@ class TestDecorator(RQTestCase):
         # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.dependency, None)
-        self.assertEqual(result._dependency_id, None)
+        self.assertEqual(result.dependency.id, None)
 
         @job(queue='queue_name')
         def foo():

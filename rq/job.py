@@ -137,7 +137,7 @@ class Job(object):
 
         # dependency could be job instance or id
         if depends_on is not None:
-            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
+            job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
         return job
 
     def get_status(self):
@@ -174,13 +174,17 @@ class Job(object):
         """Returns a job's dependency. To avoid repeated Redis fetches, we cache
         job.dependency as job._dependency.
         """
-        if self._dependency_id is None:
+        if not self._dependency_ids:
             return None
         if hasattr(self, '_dependency'):
             return self._dependency
-        job = self.fetch(self._dependency_id, connection=self.connection)
+        job = self.fetch(self._dependency_ids[0], connection=self.connection)
         self._dependency = job
         return job
+
+    @property
+    def _dependency_id(self):
+        return self._dependency_ids and self._dependency_ids[0]
 
     @property
     def dependent_ids(self):
@@ -328,7 +332,7 @@ class Job(object):
         self.failure_ttl = None
         self.ttl = None
         self._status = None
-        self._dependency_id = None
+        self._dependency_ids = None
         self.meta = {}
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -437,7 +441,10 @@ class Job(object):
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = obj.get('status') if obj.get('status') else None
-        self._dependency_id = as_text(obj.get('dependency_id', None))
+
+        dependency_id = obj.get('dependency_id', None)
+        self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
+
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
@@ -497,8 +504,8 @@ class Job(object):
             obj['failure_ttl'] = self.failure_ttl
         if self._status is not None:
             obj['status'] = self._status
-        if self._dependency_id is not None:
-            obj['dependency_id'] = self._dependency_id
+        if self._dependency_ids:
+            obj['dependency_id'] = self._dependency_ids[0]
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
@@ -683,7 +690,8 @@ class Job(object):
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
-        connection.sadd(self.dependents_key_for(self._dependency_id), self.id)
 
+        dependents_key = self.dependents_key_for(self._dependency_ids[0])
+        connection.sadd(dependents_key, self.id)
 
 _job_stack = LocalStack()
