@@ -226,12 +226,16 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.some_calculation, depends_on=parent_job)
         job.save()
         stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
         self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 
         job = Job.create(func=fixtures.some_calculation, depends_on=parent_job.id)
         job.save()
         stored_job = Job.fetch(job.id)
+        self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
         self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 

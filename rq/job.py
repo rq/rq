@@ -170,6 +170,14 @@ class Job(object):
         return self.get_status() == JobStatus.DEFERRED
 
     @property
+    def _dependency_id(self):
+        """Returns the first item in self._dependency_ids. Present
+        preserve compatibility with third party packages..
+        """
+        if self._dependency_ids:
+            return self._dependency_ids[0]
+
+    @property
     def dependency(self):
         """Returns a job's dependency. To avoid repeated Redis fetches, we cache
         job.dependency as job._dependency.
