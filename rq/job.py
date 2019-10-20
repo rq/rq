@@ -201,7 +201,7 @@ class Job(object):
 
     def _unpickle_data(self):
         self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
-
+        
     @property
     def data(self):
         if self._data is UNEVALUATED:
@@ -667,6 +667,18 @@ class Job(object):
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
 
+    @property
+    def dependencies_key(self):
+        if not hasattr(self, '_dependencies_key'):
+            setattr(
+                self,
+                '_dependencies_key',
+                '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, self.id)
+            )
+
+        return self._dependencies_key
+
+
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
         depend on is successfully performed. We record this relation as
@@ -685,10 +697,11 @@ class Job(object):
                                        job_class=self.__class__)
         registry.add(self, pipeline=pipeline)
 
-        connection = pipeline if pipeline is not None else self.connection
+        pipe = pipeline if pipeline is not None else self.pipe
 
         for dependency_id in self._dependency_ids:
             dependents_key = self.dependents_key_for(dependency_id)
-            connection.sadd(dependents_key, self.id)
+            pipe.sadd(dependents_key, self.id)
+            pipe.sadd(self.dependencies_key, dependency_id)
 
 _job_stack = LocalStack()
