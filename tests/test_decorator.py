@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import mock
+
 from redis import Redis
 from rq.decorators import job
 from rq.job import Job
@@ -107,6 +108,9 @@ class TestDecorator(RQTestCase):
 
         bar_job = bar.delay()
 
+        self.assertEqual(foo_job._dependency_ids,[])
+        self.assertEqual(foo_job.dependency, None)
+
         self.assertEqual(bar_job.dependency, foo_job)
         self.assertEqual(bar_job.dependency.id, foo_job.id)
 
@@ -135,6 +139,9 @@ class TestDecorator(RQTestCase):
             return 'Secondly'
 
         baz_job = bar.delay(depends_on=bar_job)
+
+        self.assertEqual(foo_job._dependency_ids,[])
+        self.assertEqual(bar_job._dependency_ids,[])
 
         self.assertEqual(baz_job.dependency, bar_job)
         self.assertEqual(baz_job.dependency.id, bar_job.id)
