@@ -3,8 +3,8 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import mock
-
 from redis import Redis
+
 from rq.decorators import job
 from rq.job import Job
 from rq.queue import Queue
@@ -95,6 +95,7 @@ class TestDecorator(RQTestCase):
         # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.dependency, None)
+        self.assertEqual(result._dependency_id, None)
 
         @job(queue='queue_name')
         def foo():
@@ -109,8 +110,9 @@ class TestDecorator(RQTestCase):
         bar_job = bar.delay()
 
         self.assertEqual(foo_job._dependency_ids,[])
-        self.assertEqual(foo_job.dependency, None)
+        self.assertIsNone(foo_job._dependency_id)
 
+        self.assertEqual(foo_job.dependency, None)
         self.assertEqual(bar_job.dependency, foo_job)
         self.assertEqual(bar_job.dependency.id, foo_job.id)
 
@@ -122,6 +124,7 @@ class TestDecorator(RQTestCase):
         # Ensure default
         result = decorated_job.delay(1, 2)
         self.assertEqual(result.dependency, None)
+        self.assertEqual(result._dependency_id, None)
 
         @job(queue='queue_name')
         def foo():
@@ -140,9 +143,12 @@ class TestDecorator(RQTestCase):
 
         baz_job = bar.delay(depends_on=bar_job)
 
+        self.assertIsNone(foo_job._dependency_id)
+        self.assertIsNone(bar_job._dependency_id)
+
         self.assertEqual(foo_job._dependency_ids,[])
         self.assertEqual(bar_job._dependency_ids,[])
-
+        self.assertEqual(baz_job._dependency_id, bar_job.id)
         self.assertEqual(baz_job.dependency, bar_job)
         self.assertEqual(baz_job.dependency.id, bar_job.id)
 
