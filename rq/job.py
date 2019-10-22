@@ -201,7 +201,7 @@ class Job(object):
 
     def _unpickle_data(self):
         self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
-
+        
     @property
     def data(self):
         if self._data is UNEVALUATED:
