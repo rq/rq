@@ -2,11 +2,20 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import sys
+import time
+import zlib
 from datetime import datetime
 
-import time
-import sys
-import zlib
+from rq.compat import PY2, as_text
+from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.job import Job, JobStatus, cancel_job, get_current_job
+from rq.queue import Queue
+from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+                         FinishedJobRegistry, StartedJobRegistry)
+from rq.utils import utcformat
+from rq.worker import Worker
+from tests import RQTestCase, fixtures
 
 is_py2 = sys.version[0] == '2'
 if is_py2:
@@ -14,16 +23,7 @@ if is_py2:
 else:
     import queue as queue
 
-from tests import fixtures, RQTestCase
 
-from rq.compat import PY2, as_text
-from rq.exceptions import NoSuchJobError, UnpickleError
-from rq.job import Job, get_current_job, JobStatus, cancel_job
-from rq.queue import Queue
-from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry)
-from rq.utils import utcformat
-from rq.worker import Worker
 
 try:
     from cPickle import loads, dumps
@@ -227,12 +227,16 @@ class TestJob(RQTestCase):
         job.save()
         stored_job = Job.fetch(job.id)
         self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
+        self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 
         job = Job.create(func=fixtures.some_calculation, depends_on=parent_job.id)
         job.save()
         stored_job = Job.fetch(job.id)
         self.assertEqual(stored_job._dependency_id, parent_job.id)
+        self.assertEqual(stored_job._dependency_ids, [parent_job.id])
+        self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 
     def test_store_then_fetch(self):
