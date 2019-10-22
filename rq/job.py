@@ -201,7 +201,7 @@ class Job(object):
 
     def _unpickle_data(self):
         self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
-        
+
     @property
     def data(self):
         if self._data is UNEVALUATED:
@@ -673,7 +673,7 @@ class Job(object):
             setattr(
                 self,
                 '_dependencies_key',
-                '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, self.id)
+                '{0}{1}:dependents'.format(self.redis_job_namespace_prefix, self.id)
             )
 
         return self._dependencies_key
@@ -697,11 +697,11 @@ class Job(object):
                                        job_class=self.__class__)
         registry.add(self, pipeline=pipeline)
 
-        pipe = pipeline if pipeline is not None else self.pipe
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
         for dependency_id in self._dependency_ids:
             dependents_key = self.dependents_key_for(dependency_id)
             pipe.sadd(dependents_key, self.id)
-            pipe.sadd(self.dependencies_key, dependency_id)
+            # pipe.sadd(self.dependencies_key, dependency_id)
 
 _job_stack = LocalStack()

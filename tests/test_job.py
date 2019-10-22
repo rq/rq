@@ -663,3 +663,16 @@ class TestJob(RQTestCase):
         key = Job.key_for(job_id=job_id)
 
         assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
+
+    def test_dependencies_key_should_have_prefixed_job_id(self):
+        job_id = 'random'
+        key = Job.key_for(job_id=job_id)
+
+        assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
+
+
+    def test_dependencies_should_be_set(self):
+        pass
+
+    def test_delete_job_with_dependencies_should_remove_them(self):
+        pass
