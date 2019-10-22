@@ -7,8 +7,10 @@ import time
 import zlib
 from datetime import datetime
 
+from redis import WatchError
+
 from rq.compat import PY2, as_text
-from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
@@ -613,6 +615,33 @@ class TestJob(RQTestCase):
 
         self.assertNotIn(job.id, queue.get_job_ids())
 
+    def test_dependent_job_creates_dependencies_key(self):
+
+        queue = Queue(connection=self.testconn)
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        self.assertTrue(self.testconn.exists(dependent_job.dependencies_key))
+
+    def test_dependent_job_deletes_dependencies_key(self):
+        """
+        job.delete() deletes itself from Redis.
+        """
+        queue = Queue(connection=self.testconn)
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+        dependent_job.delete()
+
+        self.assertTrue(self.testconn.exists(dependency_job.key))
+        self.assertFalse(self.testconn.exists(dependent_job.dependencies_key))
+        self.assertFalse(self.testconn.exists(dependent_job.key))
+
     def test_create_job_with_id(self):
         """test creating jobs with a custom ID"""
         queue = Queue(connection=self.testconn)
@@ -665,3 +694,82 @@ class TestJob(RQTestCase):
         key = Job.key_for(job_id=job_id)
 
         assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
+
+
+    def test_dependencies_key_should_have_prefixed_job_id(self):
+        job_id = 'random'
+        job = Job(id=job_id)
+        expected_key = Job.redis_job_namespace_prefix + job_id + ':dependencies'
+
+        assert job.dependencies_key == expected_key
+
+    def test_fetch_dependencies_returns_dependency_jobs(self):
+        queue = Queue(connection=self.testconn)
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        dependencies = dependent_job.fetch_dependencies(pipeline=self.testconn)
+
+        self.assertListEqual(dependencies, [dependency_job])
+
+    def test_fetch_dependencies_returns_empty_if_not_dependent_job(self):
+        queue = Queue(connection=self.testconn)
+        dependent_job = Job.create(func=fixtures.say_hello)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        dependencies = dependent_job.fetch_dependencies(pipeline=self.testconn)
+
+        self.assertListEqual(dependencies, [])
+
+    def test_fetch_dependencies_raises_if_dependency_deleted(self):
+        queue = Queue(connection=self.testconn)
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        dependency_job.delete()
+
+        with self.assertRaises(InvalidJobDependency):
+            dependent_job.fetch_dependencies(pipeline=self.testconn)
+
+    def test_fetch_dependencies_raises_if_dependency_deleted(self):
+        queue = Queue(connection=self.testconn)
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        dependency_job.delete()
+
+        with self.assertRaises(InvalidJobDependency):
+            dependent_job.fetch_dependencies(pipeline=self.testconn)
+
+    def test_fetch_dependencies_watches(self):
+        queue = Queue(connection=self.testconn)
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        with self.testconn.pipeline() as pipeline:
+
+            dependent_job.fetch_dependencies(
+                watch=True,
+                pipeline=pipeline
+            )
+
+            pipeline.multi()
+
+            with self.assertRaises(WatchError):
+                self.testconn.set(dependency_job.id, 'somethingelsehappened')
+                pipeline.touch(dependency_job.id)
+                pipeline.execute()

@@ -11,7 +11,7 @@ from uuid import uuid4
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
 from .connections import resolve_connection
-from .exceptions import NoSuchJobError, UnpickleError
+from .exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError
 from .local import LocalStack
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
@@ -394,6 +394,41 @@ class Job(object):
         return self.dependents_key_for(self.id)
 
     @property
+    def dependencies_key(self):
+        return '{0}{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+
+    def fetch_dependencies(self, watch=False, pipeline=None):
+        """
+        Fetch all of a job's dependencies. If a pipeline is supplied, and
+        watch is true, the set WATCH on all the keys of all dependencies.
+
+        Returned jobs will NOT use the pipeline supplied.
+        """
+        if pipeline is None:
+            pipeline = pipeline or self.connection
+
+        if watch and self._dependency_ids:
+            pipeline.watch(*self._dependency_ids)
+
+        results = [
+            pipeline.hgetall(self.key_for(job_id))
+            for job_id in self._dependency_ids
+        ]
+
+        jobs = []
+        for i, job_id in enumerate(self._dependency_ids):
+            if results[i]:
+                job = self.__class__(job_id)
+                job.restore(results[i])
+                jobs.append(job)
+            else:
+                # If the dependency does not exist, raise an
+                # exception to avoid creating an orphaned job.
+                raise InvalidJobDependency('Job {0} does not exist'.format(job_id))
+        return jobs
+
+
+    @property
     def result(self):
         """Returns the return value of the job.
 
@@ -593,6 +628,7 @@ class Job(object):
 
         connection.delete(self.key)
         connection.delete(self.dependents_key)
+        connection.delete(self.dependencies_key)
 
     def delete_dependents(self, pipeline=None):
         """Delete jobs depending on this job."""
@@ -698,5 +734,6 @@ class Job(object):
         for dependency_id in self._dependency_ids:
             dependents_key = self.dependents_key_for(dependency_id)
             connection.sadd(dependents_key, self.id)
+            connection.sadd(self.dependencies_key, dependency_id)
 
 _job_stack = LocalStack()
