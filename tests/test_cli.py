@@ -189,6 +189,13 @@ class TestRQCli(RQTestCase):
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 0 queue', result.output)
 
+        worker = Worker(['default'], connection=self.connection)
+        worker.register_birth()
+        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
+        self.assert_normal_execution(result)
+        self.assertIn('1 workers, 0 queues', result.output)
+        worker.register_death()
+
         queue = Queue(connection=self.connection)
         queue.enqueue(say_hello)
         result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
@@ -201,8 +208,8 @@ class TestRQCli(RQTestCase):
         bar_queue = Queue(name='bar', connection=self.connection)
         bar_queue.enqueue(say_hello)
 
-        worker = Worker([foo_queue, bar_queue], connection=self.connection)
-        worker.register_birth()
+        worker_1 = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker_1.register_birth()
 
         worker_2 = Worker([foo_queue, bar_queue], connection=self.connection)
         worker_2.register_birth()
