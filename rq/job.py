@@ -298,7 +298,12 @@ class Job(object):
 
     @classmethod
     def fetch_many(cls, job_ids, connection=None):
-        """Bulk version of Job.fetch"""
+        """
+        Bulk version of Job.fetch
+
+        For any job_ids which a job does not exist, the corresponding item in
+        the returned list will be None.
+        """
         with connection.pipeline() as pipeline:
             for job_id in job_ids:
                 pipeline.hgetall(cls.key_for(job_id))
@@ -400,9 +405,9 @@ class Job(object):
     def fetch_dependencies(self, watch=False, pipeline=None):
         """
         Fetch all of a job's dependencies. If a pipeline is supplied, and
-        watch is true, the set WATCH on all the keys of all dependencies.
+        watch is true, then set WATCH on all the keys of all dependencies.
 
-        Returned jobs will NOT use the pipeline supplied.
+        Returned jobs will use self's connection, not the pipeline supplied.
         """
         if pipeline is None:
             pipeline = pipeline or self.connection
@@ -410,21 +415,15 @@ class Job(object):
         if watch and self._dependency_ids:
             pipeline.watch(*self._dependency_ids)
 
-        results = [
-            pipeline.hgetall(self.key_for(job_id))
-            for job_id in self._dependency_ids
-        ]
+        jobs = self.fetch_many(
+            self._dependency_ids,
+            connection=self.connection
+        )
 
-        jobs = []
-        for i, job_id in enumerate(self._dependency_ids):
-            if results[i]:
-                job = self.__class__(job_id)
-                job.restore(results[i])
-                jobs.append(job)
-            else:
-                # If the dependency does not exist, raise an
-                # exception to avoid creating an orphaned job.
-                raise InvalidJobDependency('Job {0} does not exist'.format(job_id))
+        for i, job in enumerate(jobs):
+            if not job:
+                raise InvalidJobDependency('Job {0} does not exist'.format(self._dependency_ids[i]))
+
         return jobs
 
 
