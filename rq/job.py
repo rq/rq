@@ -297,7 +297,7 @@ class Job(object):
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids, connection=None):
+    def fetch_many(cls, job_ids, connection):
         """
         Bulk version of Job.fetch
 
