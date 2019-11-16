@@ -400,7 +400,7 @@ class Job(object):
 
     @property
     def dependencies_key(self):
-        return '{0}{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
 
     def fetch_dependencies(self, watch=False, pipeline=None):
         """
@@ -415,10 +415,7 @@ class Job(object):
         if watch and self._dependency_ids:
             pipeline.watch(*self._dependency_ids)
 
-        jobs = self.fetch_many(
-            self._dependency_ids,
-            connection=self.connection
-        )
+        jobs = self.fetch_many(self._dependency_ids, connection=self.connection)
 
         for i, job in enumerate(jobs):
             if not job:
@@ -625,9 +622,7 @@ class Job(object):
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
 
-        connection.delete(self.key)
-        connection.delete(self.dependents_key)
-        connection.delete(self.dependencies_key)
+        connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline=None):
         """Delete jobs depending on this job."""

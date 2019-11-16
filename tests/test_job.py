@@ -699,7 +699,7 @@ class TestJob(RQTestCase):
     def test_dependencies_key_should_have_prefixed_job_id(self):
         job_id = 'random'
         job = Job(id=job_id)
-        expected_key = Job.redis_job_namespace_prefix + job_id + ':dependencies'
+        expected_key = Job.redis_job_namespace_prefix + ":" + job_id + ':dependencies'
 
         assert job.dependencies_key == expected_key
 
@@ -725,19 +725,6 @@ class TestJob(RQTestCase):
         dependencies = dependent_job.fetch_dependencies(pipeline=self.testconn)
 
         self.assertListEqual(dependencies, [])
-
-    def test_fetch_dependencies_raises_if_dependency_deleted(self):
-        queue = Queue(connection=self.testconn)
-        dependency_job = queue.enqueue(fixtures.say_hello)
-        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
-
-        dependent_job.register_dependency()
-        dependent_job.save()
-
-        dependency_job.delete()
-
-        with self.assertRaises(InvalidJobDependency):
-            dependent_job.fetch_dependencies(pipeline=self.testconn)
 
     def test_fetch_dependencies_raises_if_dependency_deleted(self):
         queue = Queue(connection=self.testconn)
