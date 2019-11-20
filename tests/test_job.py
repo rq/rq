@@ -736,7 +736,7 @@ class TestJob(RQTestCase):
 
         dependency_job.delete()
 
-        with self.assertRaises(InvalidJobDependency):
+        with self.assertRaises(NoSuchJobError):
             dependent_job.fetch_dependencies(pipeline=self.testconn)
 
     def test_fetch_dependencies_watches(self):

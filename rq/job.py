@@ -419,7 +419,7 @@ class Job(object):
 
         for i, job in enumerate(jobs):
             if not job:
-                raise InvalidJobDependency('Job {0} does not exist'.format(self._dependency_ids[i]))
+                raise NoSuchJobError('Dependency {0} does not exist'.format(self._dependency_ids[i]))
 
         return jobs
 
