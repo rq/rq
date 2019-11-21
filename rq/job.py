@@ -140,8 +140,10 @@ class Job(object):
             job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
         return job
 
-    def get_status(self):
-        self._status = as_text(self.connection.hget(self.key, 'status'))
+    def get_status(self, refresh=True):
+        if refresh:
+            self._status = as_text(self.connection.hget(self.key, 'status'))
+
         return self._status
 
     def set_status(self, status, pipeline=None):

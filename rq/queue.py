@@ -274,7 +274,7 @@ class Queue(object):
                         pipe.multi()
 
                         for dependency in dependencies:
-                            if dependency._status != JobStatus.FINISHED:
+                            if dependency.get_status(refresh=False) != JobStatus.FINISHED:
                                 job.set_status(JobStatus.DEFERRED, pipeline=pipe)
                                 job.register_dependency(pipeline=pipe)
                                 job.save(pipeline=pipe)
