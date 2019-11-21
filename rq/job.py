@@ -475,7 +475,7 @@ class Job(object):
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
-        self._status = obj.get('status') if obj.get('status') else None
+        self._status = as_text(obj.get('status')) if obj.get('status') else None
 
         dependency_id = obj.get('dependency_id', None)
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []

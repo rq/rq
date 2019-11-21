@@ -263,12 +263,13 @@ class Queue(object):
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
+
+                        pipe.watch(job.dependencies_key)
+
                         dependencies = job.fetch_dependencies(
                             watch=True,
                             pipeline=pipe
                         )
-
-                        pipe.watch(job.dependencies_key)
 
                         pipe.multi()
 
@@ -286,7 +287,6 @@ class Queue(object):
                         continue
 
         job = self.enqueue_job(job, at_front=at_front)
-
         return job
 
     def run_job(self, job):
