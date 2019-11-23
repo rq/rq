@@ -65,9 +65,18 @@ class BaseRegistry(object):
 
         return self.connection.zadd(self.key, {job.id: score})
 
-    def remove(self, job, pipeline=None):
+    def remove(self, job, pipeline=None, delete_job=False):
+        """Removes job from registry and deletes it if `delete_job == True`"""
         connection = pipeline if pipeline is not None else self.connection
-        return connection.zrem(self.key, job.id)
+        job_id = job.id if isinstance(job, self.job_class) else job
+        result = connection.zrem(self.key, job_id)
+        if delete_job:
+            if isinstance(job, self.job_class):
+                job_instance = job
+            else:
+                job_instance = Job.fetch(job_id, connection=connection)
+            job_instance.delete()
+        return result
 
     def get_expired_job_ids(self, timestamp=None):
         """Returns job ids whose score are less than current timestamp.

@@ -74,7 +74,9 @@ class TestRegistry(RQTestCase):
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
         timestamp = current_timestamp()
-        job = Job()
+
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
 
         # Test that job is added with the right score
         self.registry.add(job, 1000)
@@ -85,9 +87,33 @@ class TestRegistry(RQTestCase):
         self.registry.add(job, -1)
         self.assertEqual(self.testconn.zscore(self.registry.key, job.id), float('inf'))
 
-        # Ensure that job is properly removed from sorted set
+        # Ensure that job is removed from sorted set, but job key is not deleted
         self.registry.remove(job)
         self.assertIsNone(self.testconn.zscore(self.registry.key, job.id))
+        self.assertTrue(self.testconn.exists(job.key))
+
+        self.registry.add(job, -1)
+
+        # registry.remove() also accepts job.id
+        self.registry.remove(job.id)
+        self.assertIsNone(self.testconn.zscore(self.registry.key, job.id))
+
+        self.registry.add(job, -1)
+
+        # delete_job = True deletes job key
+        self.registry.remove(job, delete_job=True)
+        self.assertIsNone(self.testconn.zscore(self.registry.key, job.id))
+        self.assertFalse(self.testconn.exists(job.key))
+
+        job = queue.enqueue(say_hello)
+
+        self.registry.add(job, -1)
+
+        # delete_job = True also works with job.id
+        self.registry.remove(job.id, delete_job=True)
+        self.assertIsNone(self.testconn.zscore(self.registry.key, job.id))
+        self.assertFalse(self.testconn.exists(job.key))
+
 
     def test_get_job_ids(self):
         """Getting job ids from StartedJobRegistry."""
