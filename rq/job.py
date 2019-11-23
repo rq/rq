@@ -411,11 +411,10 @@ class Job(object):
 
         Returned jobs will use self's connection, not the pipeline supplied.
         """
-        if pipeline is None:
-            pipeline = pipeline or self.connection
+        connection = pipeline if pipeline is not None else self.connection
 
         if watch and self._dependency_ids:
-            pipeline.watch(*self._dependency_ids)
+            connection.watch(*self._dependency_ids)
 
         jobs = self.fetch_many(self._dependency_ids, connection=self.connection)
 
@@ -700,6 +699,8 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+            connection.expire(self.dependents_key, ttl)
+            connection.expire(self.dependencies_key, ttl)
 
     @property
     def failed_job_registry(self):

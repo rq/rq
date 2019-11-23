@@ -10,7 +10,7 @@ from datetime import datetime
 from redis import WatchError
 
 from rq.compat import PY2, as_text
-from rq.exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError
+from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
@@ -24,8 +24,6 @@ if is_py2:
     import Queue as queue
 else:
     import queue as queue
-
-
 
 try:
     from cPickle import loads, dumps
@@ -47,7 +45,8 @@ class TestJob(RQTestCase):
             expected_string = "myfunc(12, '☃', null=None, snowman='☃')"
         else:
             # Python 2
-            expected_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode('utf-8')
+            expected_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode(
+                'utf-8')
 
         self.assertEqual(
             job.description,
@@ -243,7 +242,8 @@ class TestJob(RQTestCase):
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4), kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4),
+                         kwargs=dict(z=2))
         job.save()
 
         job2 = Job.fetch(job.id)
@@ -333,7 +333,6 @@ class TestJob(RQTestCase):
         job.refresh()
         self.assertEqual(job.data, job_data)
 
-
     def test_custom_meta_is_persisted(self):
         """Additional meta data on jobs are stored persisted correctly."""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
@@ -399,7 +398,8 @@ class TestJob(RQTestCase):
 
     def test_description_is_persisted(self):
         """Ensure that job's custom description is set properly"""
-        job = Job.create(func=fixtures.say_hello, args=('Lionel',), description='Say hello!')
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',),
+                         description='Say hello!')
         job.save()
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.description, 'Say hello!')
@@ -500,6 +500,22 @@ class TestJob(RQTestCase):
         # Jobs with 0 TTL are immediately deleted
         job.cleanup(ttl=0)
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
+
+    def test_cleanup_expires_dependency_keys(self):
+
+        dependency_job = Job.create(func=fixtures.say_hello)
+        dependency_job.save()
+
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+
+        dependent_job.register_dependency()
+        dependent_job.save()
+
+        dependent_job.cleanup(ttl=100)
+        dependency_job.cleanup(ttl=100)
+
+        self.assertEqual(self.testconn.ttl(dependent_job.dependencies_key), 100)
+        self.assertEqual(self.testconn.ttl(dependency_job.dependents_key), 100)
 
     def test_job_with_dependents_delete_parent(self):
         """job.delete() deletes itself from Redis but not dependents.
@@ -655,7 +671,8 @@ class TestJob(RQTestCase):
         """test call string with unicode keyword arguments"""
         queue = Queue(connection=self.testconn)
 
-        job = queue.enqueue(fixtures.echo, arg_with_unicode=fixtures.UnicodeStringObject())
+        job = queue.enqueue(fixtures.echo,
+                            arg_with_unicode=fixtures.UnicodeStringObject())
         self.assertIsNotNone(job.get_call_string())
         job.perform()
 
@@ -694,7 +711,6 @@ class TestJob(RQTestCase):
         key = Job.key_for(job_id=job_id)
 
         assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
-
 
     def test_dependencies_key_should_have_prefixed_job_id(self):
         job_id = 'random'
@@ -748,7 +764,6 @@ class TestJob(RQTestCase):
         dependent_job.save()
 
         with self.testconn.pipeline() as pipeline:
-
             dependent_job.fetch_dependencies(
                 watch=True,
                 pipeline=pipeline
