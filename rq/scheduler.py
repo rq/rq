@@ -102,10 +102,6 @@ class RQScheduler(object):
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
 
-    def get_key(self, name):
-        """Returns scheduler key for a given queue name"""
-        return SCHEDULER_KEY_TEMPLATE % name
-
     def enqueue_scheduled_jobs(self):
         """Enqueue jobs whose timestamp is in the past"""
         self._status = self.Status.WORKING

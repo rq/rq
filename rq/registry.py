@@ -283,11 +283,6 @@ class ScheduledJobRegistry(BaseRegistry):
         return [as_text(job_id) for job_id in
                 self.connection.zrangebyscore(self.key, 0, score)]
 
-    def acquire_lock(self):
-        """Returns True if lock is successfully acquired"""
-        key = '%s:lock' % self.key
-        return self.connection.set(key, 1, ex=10, nx=True)
-
     def get_scheduled_time(self, job_or_id):
         """Returns datetime (UTC) at which job is scheduled to be enqueued"""
         if isinstance(job_or_id, self.job_class):
