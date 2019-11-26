@@ -11,7 +11,7 @@ from uuid import uuid4
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
 from .connections import resolve_connection
-from .exceptions import NoSuchJobError, UnpickleError
+from .exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError
 from .local import LocalStack
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
@@ -141,8 +141,10 @@ class Job(object):
             job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
         return job
 
-    def get_status(self):
-        self._status = as_text(self.connection.hget(self.key, 'status'))
+    def get_status(self, refresh=True):
+        if refresh:
+            self._status = as_text(self.connection.hget(self.key, 'status'))
+
         return self._status
 
     def set_status(self, status, pipeline=None):
@@ -298,8 +300,13 @@ class Job(object):
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids, connection=None):
-        """Bulk version of Job.fetch"""
+    def fetch_many(cls, job_ids, connection):
+        """
+        Bulk version of Job.fetch
+
+        For any job_ids which a job does not exist, the corresponding item in
+        the returned list will be None.
+        """
         with connection.pipeline() as pipeline:
             for job_id in job_ids:
                 pipeline.hgetall(cls.key_for(job_id))
@@ -395,6 +402,31 @@ class Job(object):
         return self.dependents_key_for(self.id)
 
     @property
+    def dependencies_key(self):
+        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+
+    def fetch_dependencies(self, watch=False, pipeline=None):
+        """
+        Fetch all of a job's dependencies. If a pipeline is supplied, and
+        watch is true, then set WATCH on all the keys of all dependencies.
+
+        Returned jobs will use self's connection, not the pipeline supplied.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+
+        if watch and self._dependency_ids:
+            connection.watch(*self._dependency_ids)
+
+        jobs = self.fetch_many(self._dependency_ids, connection=self.connection)
+
+        for i, job in enumerate(jobs):
+            if not job:
+                raise NoSuchJobError('Dependency {0} does not exist'.format(self._dependency_ids[i]))
+
+        return jobs
+
+
+    @property
     def result(self):
         """Returns the return value of the job.
 
@@ -445,7 +477,7 @@ class Job(object):
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
-        self._status = obj.get('status') if obj.get('status') else None
+        self._status = as_text(obj.get('status')) if obj.get('status') else None
 
         dependency_id = obj.get('dependency_id', None)
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
@@ -592,8 +624,7 @@ class Job(object):
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
 
-        connection.delete(self.key)
-        connection.delete(self.dependents_key)
+        connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline=None):
         """Delete jobs depending on this job."""
@@ -669,6 +700,8 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+            connection.expire(self.dependents_key, ttl)
+            connection.expire(self.dependencies_key, ttl)
 
     @property
     def failed_job_registry(self):
@@ -699,5 +732,6 @@ class Job(object):
         for dependency_id in self._dependency_ids:
             dependents_key = self.dependents_key_for(dependency_id)
             connection.sadd(dependents_key, self.id)
+            connection.sadd(self.dependencies_key, dependency_id)
 
 _job_stack = LocalStack()
