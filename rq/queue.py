@@ -13,7 +13,7 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import (DequeueTimeout, InvalidJobDependency, NoSuchJobError,
                          UnpickleError)
 from .job import Job, JobStatus
-from .utils import backend_class, import_attribute, utcnow, parse_timeout
+from .utils import backend_class, import_attribute, parse_timeout, utcnow
 
 
 def compact(lst):
@@ -252,39 +252,41 @@ class Queue(object):
             depends_on=depends_on, timeout=timeout, id=job_id,
             origin=self.name, meta=meta)
 
-        # If job depends on an unfinished job, register itself on it's
-        # parent's dependents instead of enqueueing it.
-        # If WatchError is raised in the process, that means something else is
-        # modifying the dependency. In this case we simply retry
+        # If a _dependent_ job depends on any unfinished job, register all the
+        #_dependent_ job's dependencies instead of enqueueing it.
+        #
+        # `Job#fetch_dependencies` sets WATCH on all dependencies. If
+        # WatchError is raised in the when the pipeline is executed, that means
+        # something else has modified either the set of dependencies or the
+        # status of one of them. In this case, we simply retry.
         if depends_on is not None:
-            if not isinstance(depends_on, self.job_class):
-                depends_on = self.job_class(id=depends_on,
-                                            connection=self.connection)
             with self.connection.pipeline() as pipe:
                 while True:
                     try:
-                        pipe.watch(depends_on.key)
 
-                        # If the dependency does not exist, raise an
-                        # exception to avoid creating an orphaned job.
-                        if not self.job_class.exists(depends_on.id,
-                                                     self.connection):
-                            raise InvalidJobDependency('Job {0} does not exist'.format(depends_on.id))
+                        pipe.watch(job.dependencies_key)
 
-                        if depends_on.get_status() != JobStatus.FINISHED:
-                            pipe.multi()
-                            job.set_status(JobStatus.DEFERRED)
-                            job.register_dependency(pipeline=pipe)
-                            job.save(pipeline=pipe)
-                            job.cleanup(ttl=job.ttl, pipeline=pipe)
-                            pipe.execute()
-                            return job
+                        dependencies = job.fetch_dependencies(
+                            watch=True,
+                            pipeline=pipe
+                        )
+
+                        pipe.multi()
+
+                        for dependency in dependencies:
+                            if dependency.get_status(refresh=False) != JobStatus.FINISHED:
+                                job.set_status(JobStatus.DEFERRED, pipeline=pipe)
+                                job.register_dependency(pipeline=pipe)
+                                job.save(pipeline=pipe)
+                                job.cleanup(ttl=job.ttl, pipeline=pipe)
+                                pipe.execute()
+                                return job
+
                         break
                     except WatchError:
                         continue
 
         job = self.enqueue_job(job, at_front=at_front)
-
         return job
 
     def run_job(self, job):

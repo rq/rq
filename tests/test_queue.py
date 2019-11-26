@@ -2,14 +2,13 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from tests import RQTestCase
-from tests.fixtures import echo, say_hello
-
 from rq import Queue
-from rq.exceptions import InvalidJobDependency
+from rq.exceptions import InvalidJobDependency, NoSuchJobError
 from rq.job import Job, JobStatus
 from rq.registry import DeferredJobRegistry
 from rq.worker import Worker
+from tests import RQTestCase
+from tests.fixtures import echo, say_hello
 
 
 class CustomJob(Job):
@@ -488,10 +487,10 @@ class TestQueue(RQTestCase):
         # without save() the job is not visible to others
 
         q = Queue()
-        with self.assertRaises(InvalidJobDependency):
+        with self.assertRaises(NoSuchJobError):
             q.enqueue_call(say_hello, depends_on=parent_job)
 
-        with self.assertRaises(InvalidJobDependency):
+        with self.assertRaises(NoSuchJobError):
             q.enqueue_call(say_hello, depends_on=parent_job.id)
 
         self.assertEqual(q.job_ids, [])
