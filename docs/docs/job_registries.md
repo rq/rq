@@ -46,6 +46,8 @@ print('Job in registry %s' % (job.id in registry))
 
 ## Removing Jobs
 
+_New in version 1.2.0_
+
 To remove a job from a job registry, use `registry.remove()`. This is useful
 when you want to manually remove jobs from a registry, such as deleting failed
 jobs before they expire from `FailedJobRegistry`.
