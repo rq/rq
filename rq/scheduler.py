@@ -7,12 +7,6 @@ import traceback
 from datetime import datetime
 from multiprocessing import Process
 
-try:
-    from signal import SIGKILL
-except ImportError:
-    from signal import SIGTERM as SIGKILL
-
-
 from .job import Job
 from .queue import Queue
 from .registry import ScheduledJobRegistry
