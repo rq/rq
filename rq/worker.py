@@ -222,11 +222,11 @@ class Worker(object):
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""
-        return list(map(lambda q: q.name, self.queues))
+        return [queue.name for queue in self.queues]
 
     def queue_keys(self):
         """Returns the Redis keys representing this worker's queues."""
-        return list(map(lambda q: q.key, self.queues))
+        return [queue.key for queue in self.queues]
 
     @property
     def key(self):

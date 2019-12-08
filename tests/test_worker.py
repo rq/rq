@@ -59,6 +59,9 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
 
+        self.assertEqual(w.queue_keys(), [w.queues[0].key, w.queues[1].key])
+        self.assertEqual(w.queue_names(), ['foo', 'bar'])
+
         # With iterable of strings
         w = Worker(iter(['foo', 'bar']))
         self.assertEqual(w.queues[0].name, 'foo')
