@@ -72,7 +72,7 @@ class RQScheduler(object):
         self._acquired_locks = self._acquired_locks.union(successful_locks)
         if self._acquired_locks:
             self.prepare_registries(self._acquired_locks)
-        
+
         self.lock_acquisition_time = datetime.now()
 
         # If auto_start is requested and scheduler is not started,

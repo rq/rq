@@ -226,6 +226,24 @@ class TestWorker(RQTestCase):
         worker.work(burst=True, with_scheduler=True)
         self.assertIsNotNone(worker.scheduler)
 
+    @mock.patch.object(RQScheduler, 'acquire_locks')
+    def test_run_maintenance_tasks(self, mocked):
+        """scheduler.acquire_locks() is called only when scheduled is enabled"""
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queues=[queue], connection=self.testconn)
+
+        worker.run_maintenance_tasks()
+        self.assertEqual(mocked.call_count, 0)
+
+        worker.last_cleaned_at = None
+        worker.scheduler = RQScheduler([queue], connection=self.testconn)
+        worker.run_maintenance_tasks()
+        self.assertEqual(mocked.call_count, 0)
+
+        worker.last_cleaned_at = datetime.now()
+        worker.run_maintenance_tasks()
+        self.assertEqual(mocked.call_count, 1)
+
     def test_work(self):
         queue = Queue(connection=self.testconn)
         worker = Worker(queues=[queue], connection=self.testconn)
