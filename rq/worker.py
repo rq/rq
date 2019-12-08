@@ -33,8 +33,7 @@ from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .registry import (FailedJobRegistry, FinishedJobRegistry,
-                       StartedJobRegistry, clean_registries)
+from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
@@ -546,7 +545,7 @@ class Worker(object):
 
                 self.register_death()
         return bool(completed_jobs)
-    
+
     def stop_scheduler(self):
         """Ensure scheduler process is stopped"""
         if self.scheduler._process and self.scheduler._process.pid:
@@ -848,9 +847,7 @@ class Worker(object):
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 
-                        finished_job_registry = FinishedJobRegistry(job.origin,
-                                                                    self.connection,
-                                                                    job_class=self.job_class)
+                        finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline,
@@ -869,9 +866,7 @@ class Worker(object):
         self.prepare_job_execution(job, heartbeat_ttl)
         push_connection(self.connection)
 
-        started_job_registry = StartedJobRegistry(job.origin,
-                                                  self.connection,
-                                                  job_class=self.job_class)
+        started_job_registry = queue.started_job_registry
 
         try:
             job.started_at = utcnow()
@@ -887,7 +882,7 @@ class Worker(object):
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
-        except:
+        except:  # NOQA
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = self._get_safe_exception_string(

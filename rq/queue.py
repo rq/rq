@@ -12,8 +12,7 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import (DequeueTimeout, InvalidJobDependency, NoSuchJobError,
-                         UnpickleError)
+from .exceptions import DequeueTimeout, NoSuchJobError, UnpickleError
 from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, parse_timeout, utcnow
 
@@ -186,7 +185,31 @@ class Queue(object):
     def failed_job_registry(self):
         """Returns this queue's FailedJobRegistry."""
         from rq.registry import FailedJobRegistry
-        return FailedJobRegistry(queue=self)
+        return FailedJobRegistry(queue=self, job_class=self.job_class)
+
+    @property
+    def started_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import StartedJobRegistry
+        return StartedJobRegistry(queue=self, job_class=self.job_class)
+
+    @property
+    def finished_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import FinishedJobRegistry
+        return FinishedJobRegistry(queue=self)
+
+    @property
+    def deferred_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import DeferredJobRegistry
+        return DeferredJobRegistry(queue=self, job_class=self.job_class)
+
+    @property
+    def scheduled_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import ScheduledJobRegistry
+        return ScheduledJobRegistry(queue=self, job_class=self.job_class)
 
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
@@ -272,7 +295,7 @@ class Queue(object):
         )
 
         # If a _dependent_ job depends on any unfinished job, register all the
-        #_dependent_ job's dependencies instead of enqueueing it.
+        # _dependent_ job's dependencies instead of enqueueing it.
         #
         # `Job#fetch_dependencies` sets WATCH on all dependencies. If
         # WatchError is raised in the when the pipeline is executed, that means
