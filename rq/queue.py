@@ -466,7 +466,8 @@ class Queue(object):
 
                 pipe.multi()
 
-                for dependent in dependent_jobs:
+                for dependent, dependents_dependencies in dependent_jobs:
+
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,
                                                    job_class=self.job_class)

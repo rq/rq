@@ -124,7 +124,7 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        connection = pipeline or self.connection
+        connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
     @property
@@ -404,7 +404,6 @@ class Job(object):
                 raise NoSuchJobError('Dependency {0} does not exist'.format(self._dependency_ids[i]))
 
         return jobs
-
 
     @property
     def result(self):
@@ -724,5 +723,44 @@ class Job(object):
             dependents_key = self.dependents_key_for(dependency_id)
             connection.sadd(dependents_key, self.id)
             connection.sadd(self.dependencies_key, dependency_id)
+
+    def get_dependencies_statuses(
+            self,
+            watch=False,
+            pipeline=None
+    ):
+        """Returns a list of tuples containing the job ids and status of all
+        dependencies; e.g:
+
+           [('14462606-09c4-41c2-8bf1-fbd109092318', 'started'),
+            ('e207328f-d5bc-4ea9-8d61-b449891e3230', 'finished'),  ...]
+
+        As a minor optimization allowing callers to more quickly tell if all
+        dependencies are _FINISHED_, the returned list is sorted by the
+        `ended_at` timestamp, so those jobs which are not yet finished are at
+        the start of the list.
+        """
+
+        pipe = pipeline if pipeline is not None else self.connection
+
+        if watch:
+            pipe.watch(self.dependencies_key)
+            pipe.watch(*[self.redis_job_namespace_prefix + as_text(_id)
+                        for _id in pipe.smembers(self.dependencies_key)])
+
+        sort_by = self.redis_job_namespace_prefix + '*->ended_at'
+        get_field = self.redis_job_namespace_prefix + '*->status'
+
+        # Sorting here lexographically works because these dates are stored in
+        # an ISO 8601 format, so lexographic order is the same as
+        # chronological order.
+        dependencies_statuses = [
+            (as_text(_id), as_text(status))
+            for _id, status in pipe.sort(name=self.dependencies_key, by=sort_by,
+                                         get=['#', get_field], alpha=True, groups=True, )
+        ]
+
+        return dependencies_statuses
+
 
 _job_stack = LocalStack()
