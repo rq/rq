@@ -5,8 +5,9 @@ from __future__ import (absolute_import, division, print_function,
 import sys
 import time
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
+import pytest
 from redis import WatchError
 
 from rq.compat import PY2, as_text
@@ -16,7 +17,7 @@ from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
                          ScheduledJobRegistry)
-from rq.utils import utcformat
+from rq.utils import utcformat, utcnow
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
@@ -791,4 +792,138 @@ class TestJob(RQTestCase):
             with self.assertRaises(WatchError):
                 self.testconn.set(dependency_job.id, 'somethingelsehappened')
                 pipeline.touch(dependency_job.id)
+                pipeline.execute()
+
+    def test_get_dependencies_statuses_returns_ids_and_statuses(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job_ids = [
+            queue.enqueue(fixtures.say_hello).id
+            for _ in range(5)
+        ]
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = dependency_job_ids
+        dependent_job.register_dependency()
+
+        dependencies_statuses = dependent_job.get_dependencies_statuses()
+
+        self.assertSetEqual(
+            set(dependencies_statuses),
+            {(_id, JobStatus.QUEUED) for _id in dependency_job_ids}
+        )
+
+    def test_get_dependencies_statuses_returns_empty_list_if_no_dependencies(self):
+        queue = Queue(connection=self.testconn)
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job.register_dependency()
+
+        dependencies_statuses = dependent_job.get_dependencies_statuses()
+
+        self.assertListEqual(
+            dependencies_statuses,
+            []
+        )
+
+    def test_get_dependencies_statuses_returns_ordered_by_end_time(self):
+        dependency_jobs = [
+            Job.create(fixtures.say_hello)
+            for _ in range(5)
+        ]
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [job.id for job in dependency_jobs]
+        dependent_job.register_dependency()
+
+        now = utcnow()
+
+        for i, job in enumerate(dependency_jobs):
+            job._status = JobStatus.FINISHED
+            job.ended_at = now - timedelta(seconds=i)
+            job.save()
+
+        dependencies_statuses = dependent_job.get_dependencies_statuses()
+
+        self.assertListEqual(
+            dependencies_statuses,
+            [(job.id, JobStatus.FINISHED) for job in reversed(dependency_jobs)]
+        )
+
+    def test_get_dependencies_statuses_returns_not_finished_job_ordered_first(self):
+        dependency_jobs = [Job.create(fixtures.say_hello) for _ in range(2)]
+
+        dependency_jobs[0]._status = JobStatus.FINISHED
+        dependency_jobs[0].ended_at = utcnow()
+        dependency_jobs[0].save()
+
+        dependency_jobs[1]._status = JobStatus.STARTED
+        dependency_jobs[1].ended_at = None
+        dependency_jobs[1].save()
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [job.id for job in dependency_jobs]
+        dependent_job.register_dependency()
+
+        now = utcnow()
+
+        dependencies_statuses = dependent_job.get_dependencies_statuses()
+
+        self.assertEqual(
+            dependencies_statuses[0],
+            (dependency_jobs[1].id, JobStatus.STARTED)
+        )
+
+        self.assertEqual(
+            dependencies_statuses[1],
+            (dependency_jobs[0].id, JobStatus.FINISHED)
+        )
+
+    def test_get_dependencies_statuses_watches_job(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello)
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [dependency_job.id]
+        dependent_job.register_dependency()
+
+        with self.testconn.pipeline() as pipeline:
+
+            dependent_job.get_dependencies_statuses(
+                pipeline=pipeline,
+                watch=True
+            )
+
+            dependency_job.set_status(JobStatus.FAILED, pipeline=self.testconn)
+            pipeline.multi()
+
+            with self.assertRaises(WatchError):
+                pipeline.touch(Job.key_for(dependent_job.id))
+                pipeline.execute()
+
+    def test_get_dependencies_statuses_watches_dependency_set(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello)
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [dependency_job.id]
+        dependent_job.register_dependency()
+
+        with self.testconn.pipeline() as pipeline:
+
+            dependent_job.get_dependencies_statuses(
+                pipeline=pipeline,
+                watch=True
+            )
+
+            self.testconn.sadd(
+                dependent_job.dependencies_key,
+                queue.enqueue(fixtures.say_hello).id,
+            )
+
+            pipeline.multi()
+
+            with self.assertRaises(WatchError):
+                pipeline.touch(Job.key_for(dependent_job.id))
                 pipeline.execute()
