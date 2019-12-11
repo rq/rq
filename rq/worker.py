@@ -627,6 +627,7 @@ class Worker(object):
         """
         while True:
             try:
+                job.started_at = job.started_at or utcnow()
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
                     retpid, ret_val = os.waitpid(self._horse_pid, 0)
                 break
@@ -634,6 +635,12 @@ class Worker(object):
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat(self.job_monitoring_interval + 5)
+
+                # Kill the job from this side if something is really wrong (interpreter lock/etc).
+                if (utcnow() - job.started_at).total_seconds() > (job.timeout * 1.1):
+                    self.kill_horse()
+                    break
+
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
                 # caused by a SIGINT or SIGTERM signal during
