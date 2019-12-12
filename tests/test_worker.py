@@ -1062,6 +1062,34 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertTrue(job in failed_job_registry)
         self.assertEqual(fooq.count, 0)
 
+    @slow
+    def test_work_horse_force_death(self):
+        """Simulate a frozen worker that doesn't observe the timeout properly.
+        Fake it by artificially setting the timeout of the parent process to
+        something much smaller after the process is already forked.
+        """
+        fooq = Queue('foo')
+        self.assertEqual(fooq.count, 0)
+        w = Worker(fooq)
+        sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
+        if os.path.exists(sentinel_file):
+            os.remove(sentinel_file)
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
+        job, queue = w.dequeue_job_and_maintain_ttl(5)
+        w.fork_work_horse(job, queue)
+        job.timeout = 5
+        w.job_monitoring_interval = 1
+        now = utcnow()
+        w.monitor_work_horse(job)
+        job_status = job.get_status()
+        fudge_factor = 1
+        total_time = w.job_monitoring_interval + 5 + fudge_factor
+        self.assertTrue((utcnow() - now).total_seconds() < total_time)
+        self.assertEqual(job_status, JobStatus.FAILED)
+        failed_job_registry = FailedJobRegistry(queue=fooq)
+        self.assertTrue(job in failed_job_registry)
+        self.assertEqual(fooq.count, 0)
+
 
 def schedule_access_self():
     q = Queue('default', connection=get_current_connection())

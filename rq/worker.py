@@ -625,6 +625,8 @@ class Worker(object):
         either executes successfully or the status of the job is set to
         failed
         """
+
+        ret_val = None
         while True:
             try:
                 job.started_at = job.started_at or utcnow()
