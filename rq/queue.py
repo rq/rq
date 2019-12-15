@@ -464,9 +464,25 @@ class Queue(object):
                 dependent_jobs = [self.job_class.fetch(as_text(job_id), connection=self.connection)
                                   for job_id in pipe.smembers(dependents_key)]
 
+                dependencies_statuses = [
+                    dependent.get_dependencies_statuses(watch=True, pipeline=pipe)
+                    for dependent in dependent_jobs
+                ]
+
                 pipe.multi()
 
-                for dependent, dependents_dependencies in dependent_jobs:
+                for dependent, dependents_dependencies in zip(dependent_jobs,
+                                                              dependencies_statuses):
+
+                    # Enqueue this dependent job only if all of it's _other_
+                    # dependencies are FINISHED.
+                    if not all(
+                        status == JobStatus.FINISHED
+                        for job_id, status
+                        in dependents_dependencies
+                        if job_id != job.id
+                    ):
+                        continue
 
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,

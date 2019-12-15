@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 from datetime import datetime, timedelta
+from mock.mock import patch
 
 from rq import Queue
 from rq.compat import utc
@@ -522,6 +523,102 @@ class TestQueue(RQTestCase):
         with self.assertRaises(NoSuchJobError):
             q.enqueue_call(say_hello, depends_on=parent_job.id)
 
+        self.assertEqual(q.job_ids, [])
+
+    def test_enqueue_job_with_multiple_queued_dependencies(self):
+
+        parent_jobs = [Job.create(func=say_hello) for _ in range(2)]
+
+        for job in parent_jobs:
+            job._status = JobStatus.QUEUED
+            job.save()
+
+        job_create = Job.create
+
+        def create_job_patch(*args, **kwargs):
+            # patch Job#create to set parent jobs as dependencies.
+            job = job_create(*args, **kwargs)
+            job._dependency_ids = [job.id for job in parent_jobs]
+            return job
+
+        q = Queue()
+        with patch.object(Job, 'create', create_job_patch) as patch_create_job:
+            job = q.enqueue(say_hello, depends_on=parent_jobs[0])
+            self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+            self.assertEqual(q.job_ids, [])
+            self.assertEqual(job.fetch_dependencies(), parent_jobs)
+
+    def test_enqueue_job_with_multiple_finished_dependencies(self):
+
+        parent_jobs = [Job.create(func=say_hello) for _ in range(2)]
+
+        for job in parent_jobs:
+            job._status = JobStatus.FINISHED
+            job.save()
+
+        job_create = Job.create
+
+        def create_job_patch(*args, **kwargs):
+            # patch Job#create to set parent jobs as dependencies.
+            job = job_create(*args, **kwargs)
+            job._dependency_ids = [job.id for job in parent_jobs]
+            return job
+
+        q = Queue()
+        with patch.object(Job, 'create', create_job_patch) as patch_create_job:
+            job = q.enqueue(say_hello, depends_on=parent_jobs[0])
+            self.assertEqual(job.get_status(), JobStatus.QUEUED)
+            self.assertEqual(q.job_ids, [job.id])
+            self.assertEqual(job.fetch_dependencies(), parent_jobs)
+
+    def test_enqueues_dependent_if_other_dependencies_finished(self):
+
+        started_dependency = Job.create(func=say_hello, status=JobStatus.STARTED)
+        started_dependency.save()
+
+        finished_dependency = Job.create(func=say_hello, status=JobStatus.FINISHED)
+        finished_dependency.save()
+
+        job_create = Job.create
+
+        def create_job_patch(*args, **kwargs):
+            # patch Job#create to set parent jobs as dependencies.
+            job = job_create(*args, **kwargs)
+            job._dependency_ids = [job.id for job in [started_dependency, finished_dependency]]
+            return job
+
+        q = Queue()
+        with patch.object(Job, 'create', create_job_patch) as patch_create_job:
+            dependent_job = q.enqueue(say_hello, depends_on=[started_dependency])
+            self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
+
+        q.enqueue_dependents(started_dependency)
+        self.assertEqual(dependent_job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(q.job_ids, [dependent_job.id])
+
+    def test_does_not_enqueue_dependent_if_other_dependencies_not_finished(self):
+
+        started_dependency = Job.create(func=say_hello, status=JobStatus.STARTED)
+        started_dependency.save()
+
+        queued_dependency = Job.create(func=say_hello, status=JobStatus.QUEUED)
+        queued_dependency.save()
+
+        job_create = Job.create
+
+        def create_job_patch(*args, **kwargs):
+            # patch Job#create to set parent jobs as dependencies.
+            job = job_create(*args, **kwargs)
+            job._dependency_ids = [job.id for job in [started_dependency, queued_dependency]]
+            return job
+
+        q = Queue()
+        with patch.object(Job, 'create', create_job_patch) as patch_create_job:
+            dependent_job = q.enqueue(say_hello, depends_on=[started_dependency])
+            self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
+
+        q.enqueue_dependents(started_dependency)
+        self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
         self.assertEqual(q.job_ids, [])
 
     def test_fetch_job_successful(self):
