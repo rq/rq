@@ -15,20 +15,15 @@ import warnings
 from datetime import timedelta
 from uuid import uuid4
 
-try:
-    from signal import SIGKILL
-except ImportError:
-    from signal import SIGTERM as SIGKILL
-
 from redis import WatchError
 
 from . import worker_registration
 from .compat import PY2, as_text, string_types, text_type
-from .connections import get_current_connection, push_connection, pop_connection
-
-from .defaults import (DEFAULT_RESULT_TTL,
-                       DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
-                       DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
+from .connections import (get_current_connection, pop_connection,
+                          push_connection)
+from .defaults import (DEFAULT_JOB_MONITORING_INTERVAL,
+                       DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT,
+                       DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL)
 from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
@@ -36,12 +31,21 @@ from .queue import Queue
 from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, enum,
-                    make_colorizer, utcformat, utcnow, utcparse)
+from .timeouts import (HorseMonitorTimeoutException, JobTimeoutException,
+                       UnixSignalDeathPenalty)
+from .utils import (backend_class, ensure_list, enum, make_colorizer,
+                    utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
 from .serializers import resolve_serializer
+
+try:
+    from signal import SIGKILL
+except ImportError:
+    from signal import SIGTERM as SIGKILL
+
+
+
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -845,6 +849,7 @@ class Worker(object):
                     # if dependencies are inserted after enqueue_dependents
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
+                    job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     # enqueue_dependents calls multi() on the pipeline!
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
@@ -856,7 +861,6 @@ class Worker(object):
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 

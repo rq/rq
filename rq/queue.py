@@ -480,7 +480,6 @@ class Queue(object):
                         status == JobStatus.FINISHED
                         for job_id, status
                         in dependents_dependencies
-                        if job_id != job.id
                     ):
                         continue
 

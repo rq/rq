@@ -411,6 +411,9 @@ class TestQueue(RQTestCase):
         job_2 = q.enqueue(say_hello, depends_on=parent_job)
 
         registry = DeferredJobRegistry(q.name, connection=self.testconn)
+
+        parent_job.set_status(JobStatus.FINISHED)
+
         self.assertEqual(
             set(registry.get_job_ids()),
             set([job_1.id, job_2.id])
@@ -441,6 +444,9 @@ class TestQueue(RQTestCase):
             set([job_1.id])
         )
         registry_2 = DeferredJobRegistry(q_2.name, connection=self.testconn)
+
+        parent_job.set_status(JobStatus.FINISHED)
+
         self.assertEqual(
             set(registry_2.get_job_ids()),
             set([job_2.id])
@@ -573,26 +579,33 @@ class TestQueue(RQTestCase):
 
     def test_enqueues_dependent_if_other_dependencies_finished(self):
 
-        started_dependency = Job.create(func=say_hello, status=JobStatus.STARTED)
-        started_dependency.save()
+        parent_jobs = [Job.create(func=say_hello) for _ in
+                       range(2)]
 
-        finished_dependency = Job.create(func=say_hello, status=JobStatus.FINISHED)
-        finished_dependency.save()
+        parent_jobs[0]._status = JobStatus.STARTED
+        parent_jobs[0].save()
+
+        parent_jobs[1]._status = JobStatus.FINISHED
+        parent_jobs[1].save()
 
         job_create = Job.create
 
         def create_job_patch(*args, **kwargs):
             # patch Job#create to set parent jobs as dependencies.
             job = job_create(*args, **kwargs)
-            job._dependency_ids = [job.id for job in [started_dependency, finished_dependency]]
+            job._dependency_ids = [job.id for job in parent_jobs]
             return job
 
         q = Queue()
         with patch.object(Job, 'create', create_job_patch) as patch_create_job:
-            dependent_job = q.enqueue(say_hello, depends_on=[started_dependency])
+            # dependent job deferred, b/c parent_job 0 is still 'started'
+            dependent_job = q.enqueue(say_hello, depends_on=parent_jobs[0])
             self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
 
-        q.enqueue_dependents(started_dependency)
+        # now set parent job 0 to 'finished'
+        parent_jobs[0].set_status(JobStatus.FINISHED)
+
+        q.enqueue_dependents(parent_jobs[0])
         self.assertEqual(dependent_job.get_status(), JobStatus.QUEUED)
         self.assertEqual(q.job_ids, [dependent_job.id])
 
