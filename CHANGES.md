@@ -1,3 +1,11 @@
+### RQ 1.1.0 (Unreleased)
+* Various internal API changes in preparation to support multiple job dependencies. Thanks @thomasmatecki!
+* `--verbose` or `--quiet` CLI arguments should override `--logging-level`. Thanks @zyt312074545!
+* Fixes a bug in `rq info` where it doesn't show workers for empty queues. Thanks @zyt312074545!
+* Fixed `queue.enqueue_dependents()` on custom `Queue` classes. Thanks @van-ess0!
+* `RQ` and Python versions are now stored in job metadata. Thanks @eoranged!
+* Added `failure_ttl` argument to job decorator. Thanks @pax0r!
+
 ### RQ 1.1.0 (2019-07-20)
 
 - Added `max_jobs` to `Worker.work` and `--max-jobs` to `rq worker` CLI. Thanks @perobertson!
