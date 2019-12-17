@@ -57,7 +57,7 @@ just to scale up your workers temporarily during peak periods.
 
 In addition to `--burst`, `rq worker` also accepts these arguments:
 
-* `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9`)
+* `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9` or `rq worker --url unix:///var/run/redis/redis.sock`)
 * `--path` or `-P`: multiple import paths are supported (e.g `rq worker --path foo --path bar`)
 * `--config` or `-c`: path to module containing RQ settings.
 * `--results-ttl`: job results will be kept for this number of seconds (defaults to 500).
