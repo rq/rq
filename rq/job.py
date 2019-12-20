@@ -744,9 +744,8 @@ class Job(object):
         pipe = pipeline if pipeline is not None else self.connection
 
         if watch:
-            pipe.watch(self.dependencies_key)
-            pipe.watch(*[self.redis_job_namespace_prefix + as_text(_id)
-                        for _id in pipe.smembers(self.dependencies_key)])
+            pipe.watch(*[Job.key_for(_id)
+                         for _id in self.connection.smembers(self.dependencies_key)])
 
         sort_by = self.redis_job_namespace_prefix + '*->ended_at'
         get_field = self.redis_job_namespace_prefix + '*->status'
@@ -761,6 +760,5 @@ class Job(object):
         ]
 
         return dependencies_statuses
-
 
 _job_stack = LocalStack()
