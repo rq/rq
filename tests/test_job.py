@@ -794,7 +794,7 @@ class TestJob(RQTestCase):
                 pipeline.touch(dependency_job.id)
                 pipeline.execute()
 
-    def test_get_dependencies_statuses_returns_ids_and_statuses(self):
+    def test_dependencies_finished_returns_false_if_dependencies_queued(self):
         queue = Queue(connection=self.testconn)
 
         dependency_job_ids = [
@@ -806,27 +806,21 @@ class TestJob(RQTestCase):
         dependent_job._dependency_ids = dependency_job_ids
         dependent_job.register_dependency()
 
-        dependencies_statuses = dependent_job.get_dependencies_statuses()
+        dependencies_finished = dependent_job.dependencies_finished()
 
-        self.assertSetEqual(
-            set(dependencies_statuses),
-            {(_id, JobStatus.QUEUED) for _id in dependency_job_ids}
-        )
+        self.assertFalse(dependencies_finished)
 
-    def test_get_dependencies_statuses_returns_empty_list_if_no_dependencies(self):
+    def test_dependencies_finished_returns_true_if_no_dependencies(self):
         queue = Queue(connection=self.testconn)
 
         dependent_job = Job.create(func=fixtures.say_hello)
         dependent_job.register_dependency()
 
-        dependencies_statuses = dependent_job.get_dependencies_statuses()
+        dependencies_finished = dependent_job.dependencies_finished()
 
-        self.assertListEqual(
-            dependencies_statuses,
-            []
-        )
+        self.assertTrue(dependencies_finished)
 
-    def test_get_dependencies_statuses_returns_ordered_by_end_time(self):
+    def test_dependencies_finished_returns_true_if_all_dependencies_finished(self):
         dependency_jobs = [
             Job.create(fixtures.say_hello)
             for _ in range(5)
@@ -838,19 +832,17 @@ class TestJob(RQTestCase):
 
         now = utcnow()
 
+        # Set ended_at timestamps
         for i, job in enumerate(dependency_jobs):
             job._status = JobStatus.FINISHED
             job.ended_at = now - timedelta(seconds=i)
             job.save()
 
-        dependencies_statuses = dependent_job.get_dependencies_statuses()
+        dependencies_finished = dependent_job.dependencies_finished()
 
-        self.assertListEqual(
-            dependencies_statuses,
-            [(job.id, JobStatus.FINISHED) for job in reversed(dependency_jobs)]
-        )
+        self.assertTrue(dependencies_finished)
 
-    def test_get_dependencies_statuses_returns_not_finished_job_ordered_first(self):
+    def test_dependencies_finished_returns_false_if_unfinished_job(self):
         dependency_jobs = [Job.create(fixtures.say_hello) for _ in range(2)]
 
         dependency_jobs[0]._status = JobStatus.FINISHED
@@ -867,19 +859,11 @@ class TestJob(RQTestCase):
 
         now = utcnow()
 
-        dependencies_statuses = dependent_job.get_dependencies_statuses()
+        dependencies_finished = dependent_job.dependencies_finished()
 
-        self.assertEqual(
-            dependencies_statuses[0],
-            (dependency_jobs[1].id, JobStatus.STARTED)
-        )
+        self.assertFalse(dependencies_finished)
 
-        self.assertEqual(
-            dependencies_statuses[1],
-            (dependency_jobs[0].id, JobStatus.FINISHED)
-        )
-
-    def test_get_dependencies_statuses_watches_job(self):
+    def test_dependencies_finished_watches_job(self):
         queue = Queue(connection=self.testconn)
 
         dependency_job = queue.enqueue(fixtures.say_hello)
@@ -890,9 +874,8 @@ class TestJob(RQTestCase):
 
         with self.testconn.pipeline() as pipeline:
 
-            dependent_job.get_dependencies_statuses(
+            dependent_job.dependencies_finished(
                 pipeline=pipeline,
-                watch=True
             )
 
             dependency_job.set_status(JobStatus.FAILED, pipeline=self.testconn)
