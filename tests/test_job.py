@@ -901,29 +901,3 @@ class TestJob(RQTestCase):
             with self.assertRaises(WatchError):
                 pipeline.touch(Job.key_for(dependent_job.id))
                 pipeline.execute()
-
-    def test_get_dependencies_statuses_watches_dependency_set(self):
-        queue = Queue(connection=self.testconn)
-
-        dependency_job = queue.enqueue(fixtures.say_hello)
-        dependent_job = Job.create(func=fixtures.say_hello)
-        dependent_job._dependency_ids = [dependency_job.id]
-        dependent_job.register_dependency()
-
-        with self.testconn.pipeline() as pipeline:
-
-            dependent_job.get_dependencies_statuses(
-                pipeline=pipeline,
-                watch=True
-            )
-
-            self.testconn.sadd(
-                dependent_job.dependencies_key,
-                queue.enqueue(fixtures.say_hello).id,
-            )
-
-            pipeline.multi()
-
-            with self.assertRaises(WatchError):
-                pipeline.touch(Job.key_for(dependent_job.id))
-                pipeline.execute()
