@@ -724,34 +724,29 @@ class Job(object):
             connection.sadd(dependents_key, self.id)
             connection.sadd(self.dependencies_key, dependency_id)
 
-    def get_dependencies_statuses(
+    def dependencies_finished(
             self,
-            watch=False,
             pipeline=None
     ):
-        """Returns a list of tuples containing the job ids and status of all
-        dependencies; e.g:
+        """Returns a boolean indicating if all of this jobs dependencies are _FINISHED_
 
-           [('14462606-09c4-41c2-8bf1-fbd109092318', 'started'),
-            ('e207328f-d5bc-4ea9-8d61-b449891e3230', 'finished'),  ...]
-
-        As a minor optimization allowing callers to more quickly tell if all
-        dependencies are _FINISHED_, the returned list is sorted by the
-        `ended_at` timestamp, so those jobs which are not yet finished are at
-        the start of the list.
+        If a pipeline is passed, all dependencies are WATCHed.
         """
 
         pipe = pipeline if pipeline is not None else self.connection
 
-        if watch:
-            pipe.watch(*[Job.key_for(_id)
+        if pipeline is not None:
+            pipe.watch(*[Job.key_for(as_text(_id))
                          for _id in self.connection.smembers(self.dependencies_key)])
 
         sort_by = self.redis_job_namespace_prefix + '*->ended_at'
         get_field = self.redis_job_namespace_prefix + '*->status'
 
-        # Sorting here lexographically works because these dates are stored in
-        # an ISO 8601 format, so lexographic order is the same as
+        # As a minor optimization to more quickly tell if all dependencies
+        # are _FINISHED_, sort dependencies by the `ended_at` timestamp so
+        # those jobs which are not yet finished are at the start of the
+        # list. Sorting here lexographically works because these dates are
+        # stored in an ISO 8601 format, so lexographic order is the same as
         # chronological order.
         dependencies_statuses = [
             (as_text(_id), as_text(status))
@@ -759,6 +754,8 @@ class Job(object):
                                          get=['#', get_field], alpha=True, groups=True, )
         ]
 
-        return dependencies_statuses
+        return all(status == JobStatus.FINISHED
+                   for job_id, status
+                   in dependencies_statuses)
 
 _job_stack = LocalStack()
