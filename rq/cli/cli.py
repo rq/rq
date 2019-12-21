@@ -200,11 +200,12 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
+@click.option('--success-handler', help='Success handler(s) to use', multiple=True)
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, job_monitoring_interval, disable_job_desc_logging, verbose, quiet, sentry_dsn,
-           exception_handler, pid, disable_default_exception_handler, max_jobs, queues,
+           exception_handler, pid, disable_default_exception_handler, max_jobs, success_handler, queues,
            log_format, date_format, **options):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
@@ -226,6 +227,10 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
         for h in exception_handler:
             exception_handlers.append(import_attribute(h))
 
+        success_handlers = []
+        for s_h in success_handler:
+            s_h.append(import_attribute(s_h))
+
         if is_suspended(cli_config.connection):
             click.secho('RQ is currently suspended, to resume job execution run "rq resume"', fg='red')
             sys.exit(1)
@@ -241,6 +246,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             job_class=cli_config.job_class, queue_class=cli_config.queue_class,
             exception_handlers=exception_handlers or None,
             disable_default_exception_handler=disable_default_exception_handler,
+            success_handlers=success_handlers,
             log_job_description=not disable_job_desc_logging
         )
 
