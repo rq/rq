@@ -229,7 +229,7 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
 
         success_handlers = []
         for s_h in success_handler:
-            s_h.append(import_attribute(s_h))
+            success_handlers.append(import_attribute(s_h))
 
         if is_suspended(cli_config.connection):
             click.secho('RQ is currently suspended, to resume job execution run "rq resume"', fg='red')

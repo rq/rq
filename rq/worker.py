@@ -903,7 +903,7 @@ class Worker(object):
 
     def success_job_callback(self,job,*exc_info):
         """Runs when job is completed."""
-        for handler in reversed(self._job_success_handlers):
+        for handler in self._job_success_handlers:
             self.log.debug('Invoking Success handler %s', handler)
             fallthrough = handler(job, *exc_info)
 
