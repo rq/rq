@@ -294,6 +294,18 @@ class TestRQCli(RQTestCase):
         self.assertFalse(job in registry)
         job.refresh()
         self.assertEqual(job.meta, {'foo': 1})
+    
+    def test_success_handlers(self):
+        """rq worker -u <url> -b --success-handler <handler>"""
+        connection = Redis.from_url(self.redis_url)
+        q = Queue('default', connection=connection)
+        runner = CliRunner()
+
+        job = q.enqueue(say_hello)
+        runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
+                             '--success-handler', 'tests.fixtures.add_meta'])
+        job.refresh()
+        self.assertEqual(job.meta, {'foo': 1})
 
     def test_suspend_and_resume(self):
         """rq suspend -u <url>

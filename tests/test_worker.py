@@ -952,6 +952,41 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.python_version, python_version)
 
 
+    def test_custom_success_handling(self):
+        """Custom exception handling."""
+
+        def first_handler(job, *exc_info):
+            job.meta = {'first_handler': True}
+            job.save_meta()
+            return True
+
+        def second_handler(job, *exc_info):
+            job.meta.update({'second_handler': True})
+            job.save_meta()
+
+        q = Queue()
+        self.assertEqual(q.count, 0)
+        job = q.enqueue(say_hello)
+
+        w = Worker([q], success_handlers=first_handler)
+        w.work(burst=True)
+
+        # Check the job
+        job.refresh()
+        self.assertEqual(job.is_finished, True)
+        self.assertTrue(job.meta['first_handler'])
+
+        job = q.enqueue(say_hello)
+        w = Worker([q], success_handlers=[first_handler, second_handler])
+        w.work(burst=True)
+
+        # Both custom exception handlers are run
+        job.refresh()
+        self.assertEqual(job.is_finished, True)
+        self.assertTrue(job.meta['first_handler'])
+        self.assertTrue(job.meta['second_handler'])
+
+
 def kill_worker(pid, double_kill):
     # wait for the worker to be started over on the main process
     time.sleep(0.5)
