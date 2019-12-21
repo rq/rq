@@ -12,7 +12,7 @@ import sys
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, get_failed_queue, __version__ as version
+from rq import Connection, __version__ as version
 from rq.cli.helpers import (read_config_file, refresh,
                             setup_loghandlers_from_args,
                             show_both, show_queues, show_workers, CliConfig)
@@ -20,11 +20,14 @@ from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
                          DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL,
-                         DEFAULT_JOB_MONITORING_INTERVAL)
+                         DEFAULT_JOB_MONITORING_INTERVAL,
+                         DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from rq.exceptions import InvalidJobOperationError
+from rq.registry import FailedJobRegistry, clean_registries
 from rq.utils import import_attribute
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
+from rq.worker_registration import clean_worker_registry
 
 
 # Disable the warning that Click displays (as of Click version 5.0) when users
@@ -111,16 +114,16 @@ def empty(cli_config, all, queues, **options):
 
 @main.command()
 @click.option('--all', '-a', is_flag=True, help='Requeue all failed jobs')
+@click.option('--queue', required=True, type=str)
 @click.argument('job_ids', nargs=-1)
 @pass_cli_config
-def requeue(cli_config, all, job_class, job_ids, **options):
+def requeue(cli_config, queue, all, job_class, job_ids,  **options):
     """Requeue failed jobs."""
 
-    failed_queue = get_failed_queue(connection=cli_config.connection,
-                                    job_class=cli_config.job_class)
-
+    failed_job_registry = FailedJobRegistry(queue,
+                                            connection=cli_config.connection)
     if all:
-        job_ids = failed_queue.job_ids
+        job_ids = failed_job_registry.get_job_ids()
 
     if not job_ids:
         click.echo('Nothing to do')
@@ -131,12 +134,12 @@ def requeue(cli_config, all, job_class, job_ids, **options):
     with click.progressbar(job_ids) as job_ids:
         for job_id in job_ids:
             try:
-                failed_queue.requeue(job_id)
+                failed_job_registry.requeue(job_id)
             except InvalidJobOperationError:
                 fail_count += 1
 
     if fail_count > 0:
-        click.secho('Unable to requeue {0} jobs from failed queue'.format(fail_count), fg='red')
+        click.secho('Unable to requeue {0} jobs from failed job registry'.format(fail_count), fg='red')
 
 
 @main.command()
@@ -160,7 +163,17 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
     try:
         with Connection(cli_config.connection):
-            refresh(interval, func, queues, raw, by_queue,
+
+            if queues:
+                qs = list(map(cli_config.queue_class, queues))
+            else:
+                qs = cli_config.queue_class.all()
+            
+            for queue in qs:
+                clean_registries(queue)
+                clean_worker_registry(queue)
+
+            refresh(interval, func, qs, raw, by_queue,
                     cli_config.queue_class, cli_config.worker_class)
     except ConnectionError as e:
         click.echo(e)
@@ -173,32 +186,38 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--logging_level', type=str, default="INFO", help='Set logging level')
+@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
+@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
-@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL , help='Default results timeout to be used')
-@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL , help='Default worker timeout to be used')
-@click.option('--job-monitoring-interval', type=int, default=DEFAULT_JOB_MONITORING_INTERVAL , help='Default job monitoring interval to be used')
+@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
+@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Default worker timeout to be used')
+@click.option('--job-monitoring-interval', type=int, default=DEFAULT_JOB_MONITORING_INTERVAL, help='Default job monitoring interval to be used')
+@click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
-@click.option('--sentry-dsn', envvar='SENTRY_DSN', help='Report exceptions to this Sentry DSN')
+@click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
+@click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
+@click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
-           worker_ttl, job_monitoring_interval, verbose, quiet, sentry_dsn,
-           exception_handler, pid, queues, **options):
+           worker_ttl, job_monitoring_interval, disable_job_desc_logging, verbose, quiet, sentry_dsn,
+           exception_handler, pid, disable_default_exception_handler, max_jobs, queues,
+           log_format, date_format, **options):
     """Starts an RQ worker."""
-
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
     queues = queues or settings.get('QUEUES', ['default'])
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
+    name = name or settings.get('NAME')
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
 
-    setup_loghandlers_from_args(verbose, quiet)
+    setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     try:
 
@@ -215,25 +234,26 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
                                          connection=cli_config.connection,
                                          job_class=cli_config.job_class)
                   for queue in queues]
-        worker = cli_config.worker_class(queues,
-                                         name=name,
-                                         connection=cli_config.connection,
-                                         default_worker_ttl=worker_ttl,
-                                         default_result_ttl=results_ttl,
-                                         job_monitoring_interval=job_monitoring_interval,
-                                         job_class=cli_config.job_class,
-                                         queue_class=cli_config.queue_class,
-                                         exception_handlers=exception_handlers or None)
+        worker = cli_config.worker_class(
+            queues, name=name, connection=cli_config.connection,
+            default_worker_ttl=worker_ttl, default_result_ttl=results_ttl,
+            job_monitoring_interval=job_monitoring_interval,
+            job_class=cli_config.job_class, queue_class=cli_config.queue_class,
+            exception_handlers=exception_handlers or None,
+            disable_default_exception_handler=disable_default_exception_handler,
+            log_job_description=not disable_job_desc_logging
+        )
 
         # Should we configure Sentry?
         if sentry_dsn:
-            from raven import Client
-            from raven.transport.http import HTTPTransport
             from rq.contrib.sentry import register_sentry
-            client = Client(sentry_dsn, transport=HTTPTransport)
-            register_sentry(client, worker)
+            register_sentry(sentry_dsn)
 
-        worker.work(burst=burst, logging_level=logging_level)
+        # if --verbose or --quiet, override --logging_level
+        if verbose or quiet:
+            logging_level = None
+
+        worker.work(burst=burst, logging_level=logging_level, date_format=date_format, log_format=log_format, max_jobs=max_jobs)
     except ConnectionError as e:
         print(e)
         sys.exit(1)
@@ -262,6 +282,6 @@ def suspend(cli_config, duration, **options):
 @main.command()
 @pass_cli_config
 def resume(cli_config, **options):
-    """Resumes processing of queues, that where suspended with `rq suspend`"""
+    """Resumes processing of queues, that were suspended with `rq suspend`"""
     connection_resume(cli_config.connection)
     click.echo("Resuming workers.")

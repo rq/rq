@@ -11,20 +11,21 @@ from uuid import uuid4
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
 from .connections import resolve_connection
-from .exceptions import NoSuchJobError, UnpickleError
+from .exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError
 from .local import LocalStack
-from .utils import enum, import_attribute, utcformat, utcnow, utcparse, parse_timeout
+from .utils import (enum, import_attribute, parse_timeout, str_to_date,
+                    utcformat, utcnow)
 
 try:
     import cPickle as pickle
 except ImportError:  # noqa  # pragma: no cover
     import pickle
 
+
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
-
 
 JobStatus = enum(
     'JobStatus',
@@ -62,16 +63,6 @@ def cancel_job(job_id, connection=None):
     Job.fetch(job_id, connection=connection).cancel()
 
 
-def requeue_job(job_id, connection=None, job_class=None):
-    """Requeues the job with the given job ID.  If no such job exists, just
-    remove the job ID from the failed queue, otherwise the job ID should refer
-    to a failed job (i.e. it should be on the failed queue).
-    """
-    from .queue import get_failed_queue
-    failed_queue = get_failed_queue(connection=connection, job_class=job_class)
-    return failed_queue.requeue(job_id)
-
-
 def get_current_job(connection=None, job_class=None):
     """Returns the Job instance that is currently being executed.  If this
     function is invoked from outside a job context, None is returned.
@@ -80,6 +71,11 @@ def get_current_job(connection=None, job_class=None):
         warnings.warn("job_class argument for get_current_job is deprecated.",
                       DeprecationWarning)
     return _job_stack.top
+
+
+def requeue_job(job_id, connection):
+    job = Job.fetch(job_id, connection=connection)
+    return job.requeue()
 
 
 class Job(object):
@@ -91,7 +87,8 @@ class Job(object):
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None):
+               depends_on=None, timeout=None, id=None, origin=None, meta=None,
+               failure_ttl=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -132,6 +129,7 @@ class Job(object):
         # Extra meta data
         job.description = description or job.get_call_string()
         job.result_ttl = result_ttl
+        job.failure_ttl = failure_ttl
         job.ttl = ttl
         job.timeout = parse_timeout(timeout)
         job._status = status
@@ -139,32 +137,19 @@ class Job(object):
 
         # dependency could be job instance or id
         if depends_on is not None:
-            job._dependency_id = depends_on.id if isinstance(depends_on, Job) else depends_on
+            job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
         return job
 
-    def get_status(self):
-        self._status = as_text(self.connection.hget(self.key, 'status'))
-        return self._status
+    def get_status(self, refresh=True):
+        if refresh:
+            self._status = as_text(self.connection.hget(self.key, 'status'))
 
-    def _get_status(self):
-        warnings.warn(
-            "job.status is deprecated. Use job.get_status() instead",
-            DeprecationWarning
-        )
-        return self.get_status()
+        return self._status
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        self.connection._hset(self.key, 'status', self._status, pipeline)
-
-    def _set_status(self, status):
-        warnings.warn(
-            "job.status is deprecated. Use job.set_status() instead",
-            DeprecationWarning
-        )
-        self.set_status(status)
-
-    status = property(_get_status, _set_status)
+        connection = pipeline or self.connection
+        connection.hset(self.key, 'status', self._status)
 
     @property
     def is_finished(self):
@@ -183,15 +168,27 @@ class Job(object):
         return self.get_status() == JobStatus.STARTED
 
     @property
+    def is_deferred(self):
+        return self.get_status() == JobStatus.DEFERRED
+
+    @property
+    def _dependency_id(self):
+        """Returns the first item in self._dependency_ids. Present
+        preserve compatibility with third party packages..
+        """
+        if self._dependency_ids:
+            return self._dependency_ids[0]
+
+    @property
     def dependency(self):
         """Returns a job's dependency. To avoid repeated Redis fetches, we cache
         job.dependency as job._dependency.
         """
-        if self._dependency_id is None:
+        if not self._dependency_ids:
             return None
         if hasattr(self, '_dependency'):
             return self._dependency
-        job = self.fetch(self._dependency_id, connection=self.connection)
+        job = self.fetch(self._dependency_ids[0], connection=self.connection)
         self._dependency = job
         return job
 
@@ -301,6 +298,30 @@ class Job(object):
         job.refresh()
         return job
 
+    @classmethod
+    def fetch_many(cls, job_ids, connection):
+        """
+        Bulk version of Job.fetch
+
+        For any job_ids which a job does not exist, the corresponding item in
+        the returned list will be None.
+        """
+        with connection.pipeline() as pipeline:
+            for job_id in job_ids:
+                pipeline.hgetall(cls.key_for(job_id))
+            results = pipeline.execute()
+
+        jobs = []
+        for i, job_id in enumerate(job_ids):
+            if results[i]:
+                job = cls(job_id, connection=connection)
+                job.restore(results[i])
+                jobs.append(job)
+            else:
+                jobs.append(None)
+
+        return jobs
+
     def __init__(self, id=None, connection=None):
         self.connection = resolve_connection(connection)
         self._id = id
@@ -319,9 +340,10 @@ class Job(object):
         self.exc_info = None
         self.timeout = None
         self.result_ttl = None
+        self.failure_ttl = None
         self.ttl = None
         self._status = None
-        self._dependency_id = None
+        self._dependency_ids = []
         self.meta = {}
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -379,6 +401,31 @@ class Job(object):
         return self.dependents_key_for(self.id)
 
     @property
+    def dependencies_key(self):
+        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+
+    def fetch_dependencies(self, watch=False, pipeline=None):
+        """
+        Fetch all of a job's dependencies. If a pipeline is supplied, and
+        watch is true, then set WATCH on all the keys of all dependencies.
+
+        Returned jobs will use self's connection, not the pipeline supplied.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+
+        if watch and self._dependency_ids:
+            connection.watch(*self._dependency_ids)
+
+        jobs = self.fetch_many(self._dependency_ids, connection=self.connection)
+
+        for i, job in enumerate(jobs):
+            if not job:
+                raise NoSuchJobError('Dependency {0} does not exist'.format(self._dependency_ids[i]))
+
+        return jobs
+
+
+    @property
     def result(self):
         """Returns the return value of the job.
 
@@ -405,24 +452,9 @@ class Job(object):
     """Backwards-compatibility accessor property `return_value`."""
     return_value = result
 
-    # Persistence
-    def refresh(self):  # noqa
-        """Overwrite the current instance's properties with the values in the
-        corresponding Redis key.
-
-        Will raise a NoSuchJobError if no corresponding Redis key exists.
-        """
-        key = self.key
-        obj = decode_redis_hash(self.connection.hgetall(key))
-        if len(obj) == 0:
-            raise NoSuchJobError('No such job: {0}'.format(key))
-
-        def to_date(date_str):
-            if date_str is None:
-                return
-            else:
-                return utcparse(as_text(date_str))
-
+    def restore(self, raw_data):
+        """Overwrite properties with the provided values stored in Redis"""
+        obj = decode_redis_hash(raw_data)
         try:
             raw_data = obj['data']
         except KeyError:
@@ -434,17 +466,21 @@ class Job(object):
             # Fallback to uncompressed string
             self.data = raw_data
 
-        self.created_at = to_date(as_text(obj.get('created_at')))
+        self.created_at = str_to_date(obj.get('created_at'))
         self.origin = as_text(obj.get('origin'))
         self.description = as_text(obj.get('description'))
-        self.enqueued_at = to_date(as_text(obj.get('enqueued_at')))
-        self.started_at = to_date(as_text(obj.get('started_at')))
-        self.ended_at = to_date(as_text(obj.get('ended_at')))
+        self.enqueued_at = str_to_date(obj.get('enqueued_at'))
+        self.started_at = str_to_date(obj.get('started_at'))
+        self.ended_at = str_to_date(obj.get('ended_at'))
         self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
-        self.timeout = parse_timeout(as_text(obj.get('timeout'))) if obj.get('timeout') else None
+        self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
-        self._status = as_text(obj.get('status') if obj.get('status') else None)
-        self._dependency_id = as_text(obj.get('dependency_id', None))
+        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
+        self._status = as_text(obj.get('status')) if obj.get('status') else None
+
+        dependency_id = obj.get('dependency_id', None)
+        self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
+
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
 
@@ -456,6 +492,17 @@ class Job(object):
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
 
+    # Persistence
+    def refresh(self):  # noqa
+        """Overwrite the current instance's properties with the values in the
+        corresponding Redis key.
+
+        Will raise a NoSuchJobError if no corresponding Redis key exists.
+        """
+        data = self.connection.hgetall(self.key)
+        if not data:
+            raise NoSuchJobError('No such job: {0}'.format(self.key))
+        self.restore(data)
 
     def to_dict(self, include_meta=True):
         """
@@ -489,10 +536,12 @@ class Job(object):
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
+        if self.failure_ttl is not None:
+            obj['failure_ttl'] = self.failure_ttl
         if self._status is not None:
             obj['status'] = self._status
-        if self._dependency_id is not None:
-            obj['dependency_id'] = self._dependency_id
+        if self._dependency_ids:
+            obj['dependency_id'] = self._dependency_ids[0]
         if self.meta and include_meta:
             obj['meta'] = dumps(self.meta)
         if self.ttl:
@@ -529,53 +578,52 @@ class Job(object):
         cancellation.
         """
         from .queue import Queue
-        pipeline = pipeline or self.connection._pipeline()
+        pipeline = pipeline or self.connection.pipeline()
         if self.origin:
             q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)
         pipeline.execute()
 
+    def requeue(self):
+        """Requeues job."""
+        self.failed_job_registry.requeue(self)
+
     def delete(self, pipeline=None, remove_from_queue=True,
                delete_dependents=False):
         """Cancels the job and deletes the job hash from Redis. Jobs depending
         on this job can optionally be deleted as well."""
-
         if remove_from_queue:
             self.cancel(pipeline=pipeline)
         connection = pipeline if pipeline is not None else self.connection
 
-        if self.get_status() == JobStatus.FINISHED:
+        if self.is_finished:
             from .registry import FinishedJobRegistry
             registry = FinishedJobRegistry(self.origin,
                                            connection=self.connection,
                                            job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.DEFERRED:
+        elif self.is_deferred:
             from .registry import DeferredJobRegistry
             registry = DeferredJobRegistry(self.origin,
                                            connection=self.connection,
                                            job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.STARTED:
+        elif self.is_started:
             from .registry import StartedJobRegistry
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,
                                           job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.get_status() == JobStatus.FAILED:
-            from .queue import get_failed_queue
-            failed_queue = get_failed_queue(connection=self.connection,
-                                            job_class=self.__class__)
-            failed_queue.remove(self, pipeline=pipeline)
+        elif self.is_failed:
+            self.failed_job_registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
 
-        connection.delete(self.key)
-        connection.delete(self.dependents_key)
+        connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline=None):
         """Delete jobs depending on this job."""
@@ -651,6 +699,14 @@ class Job(object):
         elif ttl > 0:
             connection = pipeline if pipeline is not None else self.connection
             connection.expire(self.key, ttl)
+            connection.expire(self.dependents_key, ttl)
+            connection.expire(self.dependencies_key, ttl)
+
+    @property
+    def failed_job_registry(self):
+        from .registry import FailedJobRegistry
+        return FailedJobRegistry(self.origin, connection=self.connection,
+                                 job_class=self.__class__)
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
@@ -671,7 +727,10 @@ class Job(object):
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
-        connection.sadd(self.dependents_key_for(self._dependency_id), self.id)
 
+        for dependency_id in self._dependency_ids:
+            dependents_key = self.dependents_key_for(dependency_id)
+            connection.sadd(dependents_key, self.id)
+            connection.sadd(self.dependencies_key, dependency_id)
 
 _job_stack = LocalStack()

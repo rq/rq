@@ -4,13 +4,12 @@ from __future__ import (absolute_import, division, print_function,
 
 import logging
 
-from redis import StrictRedis
+from redis import Redis
 from rq import pop_connection, push_connection
-from rq.compat import is_python_version
 
-if is_python_version((2, 7), (3, 2)):
+try:
     import unittest
-else:
+except ImportError:
     import unittest2 as unittest  # noqa
 
 
@@ -19,7 +18,7 @@ def find_empty_redis_database():
     will use/connect it when no keys are in there.
     """
     for dbnum in range(4, 17):
-        testconn = StrictRedis(db=dbnum)
+        testconn = Redis(db=dbnum)
         empty = testconn.dbsize() == 0
         if empty:
             return testconn

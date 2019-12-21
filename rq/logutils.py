@@ -5,17 +5,22 @@ from __future__ import (absolute_import, division, print_function,
 import logging
 
 from rq.utils import ColorizingStreamHandler
+from rq.defaults import (DEFAULT_LOGGING_FORMAT,
+                         DEFAULT_LOGGING_DATE_FORMAT)
 
 
-def setup_loghandlers(level):
+def setup_loghandlers(level=None, date_format=DEFAULT_LOGGING_DATE_FORMAT,
+                      log_format=DEFAULT_LOGGING_FORMAT):
     logger = logging.getLogger('rq.worker')
+
     if not _has_effective_handler(logger):
-        logger.setLevel(level)
-        formatter = logging.Formatter(fmt='%(asctime)s %(message)s',
-                                      datefmt='%H:%M:%S')
+        formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
         handler = ColorizingStreamHandler()
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+
+    if level is not None:
+        logger.setLevel(level)
 
 
 def _has_effective_handler(logger):

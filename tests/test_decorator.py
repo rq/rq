@@ -3,12 +3,12 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import mock
-from redis import StrictRedis
+from redis import Redis
+
 from rq.decorators import job
 from rq.job import Job
-from rq.worker import DEFAULT_RESULT_TTL
 from rq.queue import Queue
-
+from rq.worker import DEFAULT_RESULT_TTL
 from tests import RQTestCase
 from tests.fixtures import decorated_job
 
@@ -109,11 +109,12 @@ class TestDecorator(RQTestCase):
 
         bar_job = bar.delay()
 
+        self.assertEqual(foo_job._dependency_ids,[])
         self.assertIsNone(foo_job._dependency_id)
 
+        self.assertEqual(foo_job.dependency, None)
         self.assertEqual(bar_job.dependency, foo_job)
-
-        self.assertEqual(bar_job._dependency_id, foo_job.id)
+        self.assertEqual(bar_job.dependency.id, foo_job.id)
 
     def test_decorator_delay_accepts_depends_on_as_argument(self):
         """Ensure that passing in depends_on to the delay method of
@@ -145,14 +146,17 @@ class TestDecorator(RQTestCase):
         self.assertIsNone(foo_job._dependency_id)
         self.assertIsNone(bar_job._dependency_id)
 
-        self.assertEqual(baz_job.dependency, bar_job)
+        self.assertEqual(foo_job._dependency_ids,[])
+        self.assertEqual(bar_job._dependency_ids,[])
         self.assertEqual(baz_job._dependency_id, bar_job.id)
+        self.assertEqual(baz_job.dependency, bar_job)
+        self.assertEqual(baz_job.dependency.id, bar_job.id)
 
     @mock.patch('rq.queue.resolve_connection')
     def test_decorator_connection_laziness(self, resolve_connection):
         """Ensure that job decorator resolve connection in `lazy` way """
 
-        resolve_connection.return_value = StrictRedis()
+        resolve_connection.return_value = Redis()
 
         @job(queue='queue_name')
         def foo():
@@ -203,3 +207,17 @@ class TestDecorator(RQTestCase):
 
         custom_queue_job.delay(1, 2)
         self.assertEqual(queue.enqueue_call.call_count, 1)
+
+    def test_decorator_custom_failure_ttl(self):
+        """Ensure that passing in failure_ttl to the decorator sets the
+        failure_ttl on the job
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.failure_ttl, None)
+
+        @job('default', failure_ttl=10)
+        def hello():
+            return 'Why hello'
+        result = hello.delay()
+        self.assertEqual(result.failure_ttl, 10)

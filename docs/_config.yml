@@ -18,6 +18,8 @@ navigation:
     url: /docs/jobs/
   - text: Monitoring
     url: /docs/monitoring/
+  - text: Job Registries
+    url: /docs/job_registries/
   - text: Connections
     url: /docs/connections/
   - text: Exceptions
@@ -35,6 +37,8 @@ navigation:
     url: /patterns/sentry/
   - text: Supervisor
     url: /patterns/supervisor/
+  - text: Systemd
+    url: /patterns/systemd/
 - text: Contributing
   url: /contrib/
   subs:

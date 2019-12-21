@@ -3,13 +3,18 @@ them in the background with workers.  It is backed by Redis and it is designed
 to have a low barrier to entry.  It should be integrated in your web stack
 easily.
 
-RQ requires Redis >= 2.7.0.
+RQ requires Redis >= 3.0.0.
 
 [![Build status](https://travis-ci.org/rq/rq.svg?branch=master)](https://secure.travis-ci.org/rq/rq)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
 [![Coverage](https://codecov.io/gh/rq/rq/branch/master/graph/badge.svg)](https://codecov.io/gh/rq/rq)
 
 Full documentation can be found [here][d].
+
+
+## Support RQ
+
+If you find RQ useful, please consider supporting this project via [Tidelift](https://tidelift.com/subscription/pkg/pypi-rq?utm_source=pypi-rq&utm_medium=referral&utm_campaign=readme).
 
 
 ## Getting started
@@ -85,6 +90,7 @@ If you want the cutting edge version (that may well be broken), use this:
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
+
 
 [r]: http://python-requests.org
 [d]: http://python-rq.org/

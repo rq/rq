@@ -2,19 +2,20 @@ sudo: false
 language: python
 services:
   - redis
-python:
-  - "2.7"
-  - "3.3"
-  - "3.4"
-  - "3.5"
-  - "3.6"
-  - "3.6-dev"
-  - "pypy"
+matrix:
+  include:
+  - python: "2.7"
+  - python: "3.4"
+  - python: "3.5"
+  - python: "3.6"
+  - python: "3.7"
+    dist: xenial
+  - python: 3.8-dev
+    dist: xenial
+  - python: "pypy"
 install:
   - pip install -e .
-  - pip install pytest-cov
-  # - pip install coveralls
-  - pip install codecov
+  - pip install pytest-cov sentry-sdk codecov
   #- pip install pytest  # installed by Travis by default already
 script:
   - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5
