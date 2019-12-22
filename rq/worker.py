@@ -48,6 +48,9 @@ except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
 
+# Izumi Modifications
+from redis.exceptions import TimeoutError
+
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
@@ -498,6 +501,13 @@ class Worker(object):
                 except SystemExit:
                     # Cold shutdown detected
                     raise
+
+                # These are our custom changes
+                except TimeoutError:
+                    # This is an expected error thrown by us almost always
+                    # Break and let the worker logic restart the worker
+                    self.log.error("Socket timeout error occured, closing worker")
+                    break
 
                 except:  # noqa
                     self.log.error(
