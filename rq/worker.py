@@ -50,6 +50,8 @@ except ImportError:
 
 # Izumi Modifications
 from redis.exceptions import TimeoutError
+from src.shared.exceptions.errors.WorkerCancelledError import WorkerCancelledError #pylint: disable=import-error
+from src.shared.factory.utils.LoggingUtils import LoggingUtils #pylint: disable=import-error
 
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
@@ -458,9 +460,11 @@ class Worker(object):
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        LoggingUtils.info("Worker {}: started, version {}".format(self.key, VERSION))
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+        LoggingUtils.info("*** Listening on {}...".format(', '.join(qnames)), color=LoggingUtils.LGREEN)
 
         try:
             while True:
@@ -472,6 +476,7 @@ class Worker(object):
 
                     if self._stop_requested:
                         self.log.info('Worker %s: stopping on request', self.key)
+                        LoggingUtils.info('Worker {}: stopping on request'.format(self.key), color=LoggingUtils.LCYAN)
                         break
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
@@ -480,6 +485,7 @@ class Worker(object):
                     if result is None:
                         if burst:
                             self.log.info("Worker %s: done, quitting", self.key)
+                            LoggingUtils.info("Worker {}: done, quitting".format(self.key), color=LoggingUtils.LCYAN)
                         break
 
                     job, queue = result
@@ -493,28 +499,45 @@ class Worker(object):
                                 "Worker %s: finished executing %d jobs, quitting",
                                 self.key, completed_jobs
                             )
+                            LoggingUtils.info(
+                                "Worker {}: finished executing {} jobs, quitting".format(
+                                    self.key, completed_jobs
+                                )
+                            )
                             break
 
                 except StopRequested:
-                    break
+                    #break
+                    raise WorkerCancelledError
 
                 except SystemExit:
                     # Cold shutdown detected
-                    raise
+                    #raise
+                    raise WorkerCancelledError
 
                 # These are our custom changes
                 except TimeoutError:
                     # This is an expected error thrown by us almost always
-                    # Break and let the worker logic restart the worker
-                    self.log.error("Socket timeout error occured, closing worker")
-                    break
+                    # Catch it in the external loop so we can re-raise to not get stuck in a loop
+                    raise TimeoutError
 
                 except:  # noqa
                     self.log.error(
                         'Worker %s: found an unhandled exception, quitting...',
                         self.key, exc_info=True
                     )
+                    LoggingUtils.error("Worker {}: found an unhandled exception, quitting...".format(
+                        self.key
+                    ))
                     break
+        except WorkerCancelledError:
+            if not self.is_horse:
+                self.register_death()
+                raise WorkerCancelledError()
+        except TimeoutError:
+            if not self.is_horse:
+                self.register_death()
+                raise TimeoutError()
         finally:
             if not self.is_horse:
                 self.register_death()
