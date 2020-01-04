@@ -33,8 +33,8 @@ from .exceptions import DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .registry import (FailedJobRegistry, FinishedJobRegistry,
-                       StartedJobRegistry, clean_registries)
+from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
+from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, enum,
@@ -204,6 +204,7 @@ class Worker(object):
         self.failed_job_count = 0
         self.total_working_time = 0
         self.birth_date = None
+        self.scheduler = None
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -221,11 +222,11 @@ class Worker(object):
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""
-        return list(map(lambda q: q.name, self.queues))
+        return [queue.name for queue in self.queues]
 
     def queue_keys(self):
         """Returns the Redis keys representing this worker's queues."""
-        return list(map(lambda q: q.key, self.queues))
+        return [queue.key for queue in self.queues]
 
     @property
     def key(self):
@@ -411,7 +412,11 @@ class Worker(object):
             self.set_shutdown_requested_date()
             self.log.debug('Stopping after current horse is finished. '
                            'Press Ctrl+C again for a cold shutdown.')
+            if self.scheduler:
+                self.stop_scheduler()
         else:
+            if self.scheduler:
+                self.stop_scheduler()
             raise StopRequested()
 
     def handle_warm_shutdown_request(self):
@@ -440,8 +445,22 @@ class Worker(object):
         if before_state:
             self.set_state(before_state)
 
+    def run_maintenance_tasks(self):
+        """
+        Runs periodic maintenance tasks, these include:
+        1. Check if scheduler should be started. This check should not be run
+           on first run since worker.work() already calls
+           `scheduler.enqueue_scheduled_jobs()` on startup.
+        2. Cleaning registries
+        """
+        # No need to try to start scheduler on first run
+        if self.last_cleaned_at:
+            if self.scheduler and not self.scheduler._process:
+                self.scheduler.acquire_locks(auto_start=True)
+        self.clean_registries()
+
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None):
+             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -450,8 +469,7 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers(logging_level, date_format, log_format)
-        self._install_signal_handlers()
+        setup_loghandlers(logging_level, date_format, log_format)        
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
@@ -459,13 +477,27 @@ class Worker(object):
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
 
+        if with_scheduler:
+            self.scheduler = RQScheduler(self.queues, connection=self.connection)
+            self.scheduler.acquire_locks()
+            # If lock is acquired, start scheduler
+            if self.scheduler.acquired_locks:
+                # If worker is run on burst mode, enqueue_scheduled_jobs()
+                # before working. Otherwise, start scheduler in a separate process
+                if burst:
+                    self.scheduler.enqueue_scheduled_jobs()
+                else:
+                    self.scheduler.start()
+
+        self._install_signal_handlers()
+
         try:
             while True:
                 try:
                     self.check_for_suspension(burst)
 
                     if self.should_run_maintenance_tasks:
-                        self.clean_registries()
+                        self.run_maintenance_tasks()
 
                     if self._stop_requested:
                         self.log.info('Worker %s: stopping on request', self.key)
@@ -507,8 +539,22 @@ class Worker(object):
                     break
         finally:
             if not self.is_horse:
+
+                if self.scheduler:
+                    self.stop_scheduler()
+
                 self.register_death()
         return bool(completed_jobs)
+
+    def stop_scheduler(self):
+        """Ensure scheduler process is stopped"""
+        if self.scheduler._process and self.scheduler._process.pid:
+            # Send the kill signal to scheduler process
+            try:
+                os.kill(self.scheduler._process.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            self.scheduler._process.join()
 
     def dequeue_job_and_maintain_ttl(self, timeout):
         result = None
@@ -520,6 +566,9 @@ class Worker(object):
 
         while True:
             self.heartbeat()
+
+            if self.should_run_maintenance_tasks:
+                self.run_maintenance_tasks()
 
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
@@ -798,9 +847,7 @@ class Worker(object):
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 
-                        finished_job_registry = FinishedJobRegistry(job.origin,
-                                                                    self.connection,
-                                                                    job_class=self.job_class)
+                        finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline,
@@ -819,9 +866,7 @@ class Worker(object):
         self.prepare_job_execution(job, heartbeat_ttl)
         push_connection(self.connection)
 
-        started_job_registry = StartedJobRegistry(job.origin,
-                                                  self.connection,
-                                                  job_class=self.job_class)
+        started_job_registry = queue.started_job_registry
 
         try:
             job.started_at = utcnow()
@@ -837,7 +882,7 @@ class Worker(object):
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
-        except:
+        except:  # NOQA
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = self._get_safe_exception_string(
