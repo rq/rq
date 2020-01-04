@@ -250,6 +250,10 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             from rq.contrib.sentry import register_sentry
             register_sentry(sentry_dsn)
 
+        # if --verbose or --quiet, override --logging_level
+        if verbose or quiet:
+            logging_level = None
+
         worker.work(burst=burst, logging_level=logging_level,
                     date_format=date_format, log_format=log_format,
                     max_jobs=max_jobs, with_scheduler=with_scheduler)
