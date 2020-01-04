@@ -10,6 +10,7 @@ executed and removed right after completion (success or failure).
 * `FailedJobRegistry` Holds jobs that have been executed, but didn't finish successfully.
 * `DeferredJobRegistry` Holds deferred jobs (jobs that depend on another job and are waiting for that 
 job to finish).
+* `ScheduledJobRegistry` Holds schedduled jobs.
 
 You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
 Below is an example using a `StartedJobRegistry`.
@@ -44,6 +45,24 @@ print('Job in registry %s' % (job in registry))
 print('Job in registry %s' % (job.id in registry))
 ```
 
+_New in version 1.2.0_
+
+You can quickly access job registries from `Queue` objects.
+
+```python
+from redis import Redis
+from rq import Queue
+
+redis = Redis()
+queue = Queue(connection=redis)
+
+queue.started_job_registry  # Returns StartedJobRegistry
+queue.deferred_job_registry   # Returns DeferredJobRegistry
+queue.finished_job_registry  # Returns FinishedJobRegistry
+queue.failed_job_registry  # Returns FailedJobRegistry
+queue.scheduled_job_registry  # Returns ScheduledobRegistry
+```
+
 ## Removing Jobs
 
 _New in version 1.2.0_
@@ -69,5 +88,4 @@ for job_id in registry.get_job_ids():
 # use `delete_job=True`
 for job_id in registry.get_job_ids():
     registry.remove(job_id, delete_job=True)
-
 ```

@@ -201,12 +201,13 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--success-handler', help='Success handler(s) to use', multiple=True)
+@click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, job_monitoring_interval, disable_job_desc_logging, verbose, quiet, sentry_dsn,
-           exception_handler, pid, disable_default_exception_handler, max_jobs, success_handler, queues,
-           log_format, date_format, **options):
+           exception_handler, pid, disable_default_exception_handler, max_jobs, success_handler, with_scheduler,
+           queues, log_format, date_format, **options):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
@@ -259,7 +260,9 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
         if verbose or quiet:
             logging_level = None
 
-        worker.work(burst=burst, logging_level=logging_level, date_format=date_format, log_format=log_format, max_jobs=max_jobs)
+        worker.work(burst=burst, logging_level=logging_level,
+                    date_format=date_format, log_format=log_format,
+                    max_jobs=max_jobs, with_scheduler=with_scheduler)
     except ConnectionError as e:
         print(e)
         sys.exit(1)

@@ -2,11 +2,18 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from datetime import datetime, timedelta
+
 from rq import Queue
-from rq.exceptions import InvalidJobDependency, NoSuchJobError
+from rq.compat import utc
+from rq.exceptions import NoSuchJobError
+
 from rq.job import Job, JobStatus
-from rq.registry import DeferredJobRegistry
+from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+                         FinishedJobRegistry, ScheduledJobRegistry,
+                         StartedJobRegistry)
 from rq.worker import Worker
+
 from tests import RQTestCase
 from tests.fixtures import echo, say_hello
 
@@ -236,7 +243,7 @@ class TestQueue(RQTestCase):
             None
         )
         self.assertEqual(q.count, 0)
-    
+
     def test_enqueue_with_ttl(self):
         """Negative TTL value is not allowed"""
         queue = Queue()
@@ -520,3 +527,23 @@ class TestQueue(RQTestCase):
 
         job_fetch = q1.fetch_job(job_orig.id)
         self.assertIsNotNone(job_fetch)
+
+    def test_getting_registries(self):
+        """Getting job registries from queue object"""
+        queue = Queue('example')
+        self.assertEqual(queue.scheduled_job_registry, ScheduledJobRegistry(queue=queue))
+        self.assertEqual(queue.started_job_registry, StartedJobRegistry(queue=queue))
+        self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
+        self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
+        self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+
+
+class TestJobScheduling(RQTestCase):
+    def test_enqueue_at(self):
+        """enqueue_at() creates a job in ScheduledJobRegistry"""
+        queue = Queue(connection=self.testconn)
+        scheduled_time = datetime.now(utc) + timedelta(seconds=10)
+        job = queue.enqueue_at(scheduled_time, say_hello)
+        registry = ScheduledJobRegistry(queue=queue)
+        self.assertIn(job, registry)
+        self.assertTrue(registry.get_expiration_time(job), scheduled_time)

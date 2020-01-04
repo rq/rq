@@ -1,4 +1,8 @@
-from .compat import as_text
+import calendar
+import time
+from datetime import datetime, timedelta
+
+from .compat import as_text, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError
@@ -31,6 +35,9 @@ class BaseRegistry(object):
     def __len__(self):
         """Returns the number of jobs in this registry"""
         return self.count
+
+    def __eq__(self, other):
+        return (self.name == other.name and self.connection == other.connection)
 
     def __contains__(self, item):
         """
@@ -91,6 +98,11 @@ class BaseRegistry(object):
     def get_queue(self):
         """Returns Queue object associated with this registry."""
         return Queue(self.name, connection=self.connection)
+
+    def get_expiration_time(self, job):
+        """Returns job's expiration time."""
+        score = self.connection.zscore(self.key, job.id)
+        return datetime.utcfromtimestamp(score)
 
 
 class StartedJobRegistry(BaseRegistry):
@@ -219,6 +231,70 @@ class DeferredJobRegistry(BaseRegistry):
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
         pass
+
+
+class ScheduledJobRegistry(BaseRegistry):
+    """
+    Registry of scheduled jobs.
+    """
+    key_template = 'rq:scheduled:{0}'
+
+    def __init__(self, *args, **kwargs):
+        super(ScheduledJobRegistry, self).__init__(*args, **kwargs)
+        # The underlying implementation of get_jobs_to_enqueue() is
+        # the same as get_expired_job_ids, but get_expired_job_ids() doesn't
+        # make sense in this context
+        self.get_jobs_to_enqueue = self.get_expired_job_ids
+
+    def schedule(self, job, scheduled_datetime, pipeline=None):
+        """
+        Adds job to registry, scored by its execution time (in UTC).
+        If datetime has no tzinfo, it will assume localtimezone.
+        """
+        # If datetime has no timezone, assume server's local timezone
+        # if we're on Python 3. If we're on Python 2.7, raise an
+        # exception since Python < 3.2 has no builtin `timezone` class
+        if not scheduled_datetime.tzinfo:
+            try:
+                from datetime import timezone
+            except ImportError:
+                raise ValueError('datetime object with no timezone')
+            tz = timezone(timedelta(seconds=-time.timezone))
+            scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
+
+        timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
+        return self.connection.zadd(self.key, {job.id: timestamp})
+
+    def cleanup(self):
+        """This method is only here to prevent errors because this method is
+        automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry."""
+        pass
+
+    def remove_jobs(self, timestamp=None, pipeline=None):
+        """Remove jobs whose timestamp is in the past from registry."""
+        connection = pipeline if pipeline is not None else self.connection
+        score = timestamp if timestamp is not None else current_timestamp()
+        return connection.zremrangebyscore(self.key, 0, score)
+
+    def get_jobs_to_schedule(self, timestamp=None):
+        """Remove jobs whose timestamp is in the past from registry."""
+        score = timestamp if timestamp is not None else current_timestamp()
+        return [as_text(job_id) for job_id in
+                self.connection.zrangebyscore(self.key, 0, score)]
+
+    def get_scheduled_time(self, job_or_id):
+        """Returns datetime (UTC) at which job is scheduled to be enqueued"""
+        if isinstance(job_or_id, self.job_class):
+            job_id = job_or_id.id
+        else:
+            job_id = job_or_id
+
+        score = self.connection.zscore(self.key, job_id)
+        if not score:
+            raise NoSuchJobError
+
+        return datetime.fromtimestamp(score, tz=utc)
 
 
 def clean_registries(queue):

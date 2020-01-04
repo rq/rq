@@ -5,13 +5,14 @@ from __future__ import (absolute_import, division, print_function,
 import uuid
 import warnings
 
+from datetime import datetime
+
 from redis import WatchError
 
-from .compat import as_text, string_types, total_ordering
+from .compat import as_text, string_types, total_ordering, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import (DequeueTimeout, InvalidJobDependency, NoSuchJobError,
-                         UnpickleError)
+from .exceptions import DequeueTimeout, NoSuchJobError, UnpickleError
 from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, parse_timeout, utcnow
 
@@ -184,7 +185,31 @@ class Queue(object):
     def failed_job_registry(self):
         """Returns this queue's FailedJobRegistry."""
         from rq.registry import FailedJobRegistry
-        return FailedJobRegistry(queue=self)
+        return FailedJobRegistry(queue=self, job_class=self.job_class)
+
+    @property
+    def started_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import StartedJobRegistry
+        return StartedJobRegistry(queue=self, job_class=self.job_class)
+
+    @property
+    def finished_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import FinishedJobRegistry
+        return FinishedJobRegistry(queue=self)
+
+    @property
+    def deferred_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import DeferredJobRegistry
+        return DeferredJobRegistry(queue=self, job_class=self.job_class)
+
+    @property
+    def scheduled_job_registry(self):
+        """Returns this queue's FailedJobRegistry."""
+        from rq.registry import ScheduledJobRegistry
+        return ScheduledJobRegistry(queue=self, job_class=self.job_class)
 
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
@@ -220,6 +245,23 @@ class Queue(object):
         else:
             connection.rpush(self.key, job_id)
 
+    def create_job(self, func, args=None, kwargs=None, timeout=None,
+                   result_ttl=None, ttl=None, failure_ttl=None,
+                   description=None, depends_on=None, job_id=None,
+                   meta=None):
+        """Creates a job based on parameters given."""
+        timeout = parse_timeout(timeout) or self._default_timeout
+
+        job = self.job_class.create(
+            func, args=args, kwargs=kwargs, connection=self.connection,
+            result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
+            status=JobStatus.QUEUED, description=description,
+            depends_on=depends_on, timeout=timeout, id=job_id,
+            origin=self.name, meta=meta
+        )
+
+        return job
+
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, failure_ttl=None,
                      description=None, depends_on=None, job_id=None,
@@ -248,12 +290,12 @@ class Queue(object):
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
-            status=JobStatus.QUEUED, description=description,
-            depends_on=depends_on, timeout=timeout, id=job_id,
-            origin=self.name, meta=meta)
+            description=description, depends_on=depends_on, origin=self.name,
+            id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
+        )
 
         # If a _dependent_ job depends on any unfinished job, register all the
-        #_dependent_ job's dependencies instead of enqueueing it.
+        # _dependent_ job's dependencies instead of enqueueing it.
         #
         # `Job#fetch_dependencies` sets WATCH on all dependencies. If
         # WatchError is raised in the when the pipeline is executed, that means
@@ -337,6 +379,24 @@ class Queue(object):
             description=description, depends_on=depends_on, job_id=job_id,
             at_front=at_front, meta=meta
         )
+
+    def enqueue_at(self, datetime, func, *args, **kwargs):
+        """Schedules a job to be enqueued at specified time"""
+        from .registry import ScheduledJobRegistry
+
+        job = self.create_job(func, *args, **kwargs)
+        registry = ScheduledJobRegistry(queue=self)
+        with self.connection.pipeline() as pipeline:
+            job.save(pipeline=pipeline)
+            registry.schedule(job, datetime, pipeline=pipeline)
+            pipeline.execute()
+
+        return job
+
+    def enqueue_in(self, time_delta, func, *args, **kwargs):
+        """Schedules a job to be executed in a given `timedelta` object"""
+        return self.enqueue_at(datetime.now(utc) + time_delta,
+                               func, *args, **kwargs)
 
     def enqueue_job(self, job, pipeline=None, at_front=False):
         """Enqueues a job for delayed execution.

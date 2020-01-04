@@ -1,4 +1,5 @@
-### RQ 1.2.0 (Unreleased)
+### RQ 1.2.0 (2020-01-04)
+* This release also contains an alpha version of RQ's builtin job scheduling mechanism. Thanks @selwin!
 * Various internal API changes in preparation to support multiple job dependencies. Thanks @thomasmatecki!
 * `--verbose` or `--quiet` CLI arguments should override `--logging-level`. Thanks @zyt312074545!
 * Fixes a bug in `rq info` where it doesn't show workers for empty queues. Thanks @zyt312074545!

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from datetime import datetime, timedelta
+
 from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import InvalidJobOperation
@@ -56,6 +58,18 @@ class TestRegistry(RQTestCase):
 
         self.assertTrue(job in registry)
         self.assertTrue(job.id in registry)
+
+    def test_get_expiration_time(self):
+        """registry.get_expiration_time() returns correct datetime objects"""
+        registry = StartedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        registry.add(job, 5)
+        self.assertEqual(
+            registry.get_expiration_time(job),
+            (datetime.utcnow() + timedelta(seconds=5)).replace(microsecond=0)
+        )
 
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""

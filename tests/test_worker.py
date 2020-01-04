@@ -22,9 +22,9 @@ from mock import Mock
 
 from tests import RQTestCase, slow
 from tests.fixtures import (
-    create_file, create_file_after_timeout, div_by_zero, do_nothing, say_hello,
-    say_pid, run_dummy_heroku_worker, access_self, modify_self,
-    modify_self_and_error, long_running_job, save_key_ttl
+    access_self, create_file, create_file_after_timeout, div_by_zero, do_nothing,
+    kill_worker, long_running_job, modify_self, modify_self_and_error,
+    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid,
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
@@ -58,6 +58,9 @@ class TestWorker(RQTestCase):
         w = Worker(['foo', 'bar'])
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
+
+        self.assertEqual(w.queue_keys(), [w.queues[0].key, w.queues[1].key])
+        self.assertEqual(w.queue_names(), ['foo', 'bar'])
 
         # With iterable of strings
         w = Worker(iter(['foo', 'bar']))
@@ -1238,7 +1241,7 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
         # Mimic how exception info is actually passed forwards
         try:
             raise Exception(u"💪")
-        except:
+        except Exception:
             self.exc_info = sys.exc_info()
 
     def test_handle_exception_handles_non_ascii_in_exception_message(self):
