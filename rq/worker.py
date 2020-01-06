@@ -627,9 +627,9 @@ class Worker(object):
         """
 
         ret_val = None
+        job.started_at = job.started_at or utcnow()
         while True:
             try:
-                job.started_at = job.started_at or utcnow()
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
                     retpid, ret_val = os.waitpid(self._horse_pid, 0)
                 break
@@ -639,7 +639,7 @@ class Worker(object):
                 self.heartbeat(self.job_monitoring_interval + 5)
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if (utcnow() - job.started_at).total_seconds() > (job.timeout * 1.1):
+                if (utcnow() - job.started_at).total_seconds() > (job.timeout + 1):
                     self.kill_horse()
                     break
 
