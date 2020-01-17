@@ -11,13 +11,18 @@ from .job import Job
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .utils import current_timestamp, enum
+from .logutils import setup_loghandlers
 
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
 
-format = "%(asctime)s: %(message)s"
-logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+setup_loghandlers(
+    level=logging.INFO,
+    name="rq.scheduler",
+    log_format="%(asctime)s: %(message)s",
+    date_format="%H:%M:%S"
+)
 
 
 class RQScheduler(object):
