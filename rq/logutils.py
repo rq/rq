@@ -10,8 +10,8 @@ from rq.defaults import (DEFAULT_LOGGING_FORMAT,
 
 
 def setup_loghandlers(level=None, date_format=DEFAULT_LOGGING_DATE_FORMAT,
-                      log_format=DEFAULT_LOGGING_FORMAT):
-    logger = logging.getLogger('rq.worker')
+                      log_format=DEFAULT_LOGGING_FORMAT, name='rq.worker'):
+    logger = logging.getLogger(name)
 
     if not _has_effective_handler(logger):
         formatter = logging.Formatter(fmt=log_format, datefmt=date_format)
