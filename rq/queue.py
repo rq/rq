@@ -387,6 +387,7 @@ class Queue(object):
         job = self.create_job(func, *args, **kwargs)
         registry = ScheduledJobRegistry(queue=self)
         with self.connection.pipeline() as pipeline:
+            job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
             job.save(pipeline=pipeline)
             registry.schedule(job, datetime, pipeline=pipeline)
             pipeline.execute()
