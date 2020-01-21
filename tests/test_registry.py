@@ -318,26 +318,25 @@ class TestFailedJobRegistry(RQTestCase):
 
         timestamp = current_timestamp()
         registry.add(job)
-        self.assertLess(
-            self.testconn.zscore(key, job.id),
-            timestamp + DEFAULT_FAILURE_TTL + 2
-        )
-        self.assertGreater(
-            self.testconn.zscore(key, job.id),
-            timestamp + DEFAULT_FAILURE_TTL - 2
-        )
+        score = self.testconn.zscore(key, job.id)
+        self.assertLess(score, timestamp + DEFAULT_FAILURE_TTL + 2)
+        self.assertGreater(score, timestamp + DEFAULT_FAILURE_TTL - 2)
+
+        # Job key will also expire
+        job_ttl = self.testconn.ttl(job.key)
+        self.assertLess(job_ttl, DEFAULT_FAILURE_TTL + 2)
+        self.assertGreater(job_ttl, DEFAULT_FAILURE_TTL - 2)
 
         timestamp = current_timestamp()
         ttl = 5
-        registry.add(job, ttl=5)
-        self.assertLess(
-            self.testconn.zscore(key, job.id),
-            timestamp + ttl + 2
-        )
-        self.assertGreater(
-            self.testconn.zscore(key, job.id),
-            timestamp + ttl - 2
-        )
+        registry.add(job, ttl=ttl)
+        score = self.testconn.zscore(key, job.id)
+        self.assertLess(score, timestamp + ttl + 2)
+        self.assertGreater(score, timestamp + ttl - 2)
+
+        job_ttl = self.testconn.ttl(job.key)
+        self.assertLess(job_ttl, ttl + 2)
+        self.assertGreater(job_ttl, ttl - 2)
 
     def test_requeue(self):
         """FailedJobRegistry.requeue works properly"""
