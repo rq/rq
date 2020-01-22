@@ -248,14 +248,14 @@ class Queue(object):
     def create_job(self, func, args=None, kwargs=None, timeout=None,
                    result_ttl=None, ttl=None, failure_ttl=None,
                    description=None, depends_on=None, job_id=None,
-                   meta=None):
+                   meta=None, status=JobStatus.QUEUED):
         """Creates a job based on parameters given."""
         timeout = parse_timeout(timeout) or self._default_timeout
 
         job = self.job_class.create(
             func, args=args, kwargs=kwargs, connection=self.connection,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
-            status=JobStatus.QUEUED, description=description,
+            status=status, description=description,
             depends_on=depends_on, timeout=timeout, id=job_id,
             origin=self.name, meta=meta
         )
@@ -384,10 +384,9 @@ class Queue(object):
         """Schedules a job to be enqueued at specified time"""
         from .registry import ScheduledJobRegistry
 
-        job = self.create_job(func, *args, **kwargs)
+        job = self.create_job(func, status=JobStatus.SCHEDULED, *args, **kwargs)
         registry = ScheduledJobRegistry(queue=self)
         with self.connection.pipeline() as pipeline:
-            job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
             job.save(pipeline=pipeline)
             registry.schedule(job, datetime, pipeline=pipeline)
             pipeline.execute()
