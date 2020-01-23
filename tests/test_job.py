@@ -14,7 +14,8 @@ from rq.exceptions import NoSuchJobError, UnpickleError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry)
+                         FinishedJobRegistry, StartedJobRegistry,
+                         ScheduledJobRegistry)
 from rq.utils import utcformat
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
@@ -574,6 +575,16 @@ class TestJob(RQTestCase):
         job.save()
 
         registry = DeferredJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.SCHEDULED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = ScheduledJobRegistry(connection=self.testconn)
         registry.add(job, 500)
 
         job.delete()

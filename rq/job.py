@@ -173,6 +173,10 @@ class Job(object):
         return self.get_status() == JobStatus.DEFERRED
 
     @property
+    def is_scheduled(self):
+        return self.get_status() == JobStatus.SCHEDULED
+
+    @property
     def _dependency_id(self):
         """Returns the first item in self._dependency_ids. Present
         preserve compatibility with third party packages..
@@ -616,6 +620,13 @@ class Job(object):
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,
                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.is_scheduled:
+            from .registry import ScheduledJobRegistry
+            registry = ScheduledJobRegistry(self.origin,
+                                            connection=self.connection,
+                                            job_class=self.__class__)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed:
