@@ -1,3 +1,6 @@
+### RQ 1.2.2 (2020-01-31)
+* `Job.fetch()` now properly handles unpickleable return values. Thanks @selwin!
+
 ### RQ 1.2.1 (2020-01-31)
 * `enqueue_at()` and `enqueue_in()` now sets job status to `scheduled`. Thanks @coolhacker170597!
 * Failed jobs data are now automatically expired by Redis. Thanks @selwin!
