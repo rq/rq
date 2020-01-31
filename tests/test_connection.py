@@ -2,6 +2,8 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from redis import Redis
+
 from rq import Connection, Queue, use_connection, get_current_connection, pop_connection
 from rq.connections import NoRedisConnectionException
 
@@ -21,8 +23,8 @@ class TestConnectionInheritance(RQTestCase):
 
     def test_connection_stacking(self):
         """Connection stacking."""
-        conn1 = new_connection()
-        conn2 = new_connection()
+        conn1 = Redis(db=4)
+        conn2 = Redis(db=5)
 
         with Connection(conn1):
             q1 = Queue()
