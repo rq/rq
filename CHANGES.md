@@ -1,3 +1,8 @@
+### RQ 1.2.1 (2020-01-31)
+* `enqueue_at()` and `enqueue_in()` now sets job status to `scheduled`. Thanks @coolhacker170597!
+* Failed jobs data are now automatically expired by Redis. Thanks @selwin!
+* Fixes `RQScheduler` logging configuration. Thanks @FlorianPerucki!
+
 ### RQ 1.2.0 (2020-01-04)
 * This release also contains an alpha version of RQ's builtin job scheduling mechanism. Thanks @selwin!
 * Various internal API changes in preparation to support multiple job dependencies. Thanks @thomasmatecki!
