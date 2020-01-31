@@ -477,7 +477,12 @@ class Job(object):
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
-        self._result = unpickle(obj.get('result')) if obj.get('result') else None  # noqa
+        result = obj.get('result')
+        if result:
+            try:
+                self._result = unpickle(obj.get('result'))
+            except UnpickleError:
+                self._result = 'Unpickleable return value'
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa

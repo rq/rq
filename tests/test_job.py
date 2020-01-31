@@ -367,11 +367,17 @@ class TestJob(RQTestCase):
         self.assertDictEqual(serialized, serialized2)
 
     def test_unpickleable_result(self):
-        """Unpickleable job result doesn't crash job.to_dict()"""
+        """Unpickleable job result doesn't crash job.save() and job.refresh()"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
         job._result = queue.Queue()
-        data = job.to_dict()
-        self.assertEqual(data['result'], 'Unpickleable return value')
+        job.save()
+        self.assertEqual(
+            self.testconn.hget(job.key, 'result').decode('utf-8'),
+            'Unpickleable return value'
+        )
+
+        job = Job.fetch(job.id)
+        self.assertEqual(job.result, 'Unpickleable return value')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
