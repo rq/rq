@@ -688,7 +688,7 @@ class Worker(object):
                 self.heartbeat(self.job_monitoring_interval + 5)
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if (utcnow() - job.started_at).total_seconds() > (job.timeout + 1):
+                if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 1):
                     self.kill_horse()
                     break
 
