@@ -16,7 +16,7 @@ pass in Redis connection references to queues directly.
     <strong>Note:</strong>
     <p>
         The use of <code>use_connection</code> is deprecated.
-        Please don't use `use_connection` in your scripts.
+        Please don't use <code>use_connection</code> in your scripts.
         Instead, use explicit connection management.
     </p>
 </div>
