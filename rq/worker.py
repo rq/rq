@@ -894,6 +894,7 @@ class Worker(object):
         except:  # NOQA
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
+            job.result = exc_info[1]
             exc_string = self._get_safe_exception_string(
                 traceback.format_exception(*exc_info)
             )
