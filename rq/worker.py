@@ -376,6 +376,8 @@ class Worker(object):
         """
         try:
             os.kill(self.horse_pid, sig)
+            self.log.debug('Horse killed')
+            os.waitpid(self.horse_pid, 0)
         except OSError as e:
             if e.errno == errno.ESRCH:
                 # "No such process" is fine with us
