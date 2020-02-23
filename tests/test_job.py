@@ -810,7 +810,7 @@ class TestJob(RQTestCase):
         dependent_job._dependency_ids = dependency_job_ids
         dependent_job.register_dependency()
 
-        dependencies_finished = dependent_job.dependencies_finished()
+        dependencies_finished = dependent_job.dependencies_are_met()
 
         self.assertFalse(dependencies_finished)
 
@@ -820,7 +820,7 @@ class TestJob(RQTestCase):
         dependent_job = Job.create(func=fixtures.say_hello)
         dependent_job.register_dependency()
 
-        dependencies_finished = dependent_job.dependencies_finished()
+        dependencies_finished = dependent_job.dependencies_are_met()
 
         self.assertTrue(dependencies_finished)
 
@@ -842,7 +842,7 @@ class TestJob(RQTestCase):
             job.ended_at = now - timedelta(seconds=i)
             job.save()
 
-        dependencies_finished = dependent_job.dependencies_finished()
+        dependencies_finished = dependent_job.dependencies_are_met()
 
         self.assertTrue(dependencies_finished)
 
@@ -863,7 +863,7 @@ class TestJob(RQTestCase):
 
         now = utcnow()
 
-        dependencies_finished = dependent_job.dependencies_finished()
+        dependencies_finished = dependent_job.dependencies_are_met()
 
         self.assertFalse(dependencies_finished)
 
@@ -878,7 +878,7 @@ class TestJob(RQTestCase):
 
         with self.testconn.pipeline() as pipeline:
 
-            dependent_job.dependencies_finished(
+            dependent_job.dependencies_are_met(
                 pipeline=pipeline,
             )
 

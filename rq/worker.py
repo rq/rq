@@ -845,6 +845,7 @@ class Worker(object):
                     # if dependencies are inserted after enqueue_dependents
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
+                    # TODO: This was moved 
                     job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     # enqueue_dependents calls multi() on the pipeline!
                     queue.enqueue_dependents(job, pipeline=pipeline)

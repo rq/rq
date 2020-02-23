@@ -724,7 +724,7 @@ class Job(object):
             connection.sadd(dependents_key, self.id)
             connection.sadd(self.dependencies_key, dependency_id)
 
-    def dependencies_finished(
+    def dependencies_are_met(
             self,
             pipeline=None
     ):

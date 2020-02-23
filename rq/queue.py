@@ -467,7 +467,7 @@ class Queue(object):
                 dependent_jobs = [
                     job for job in self.job_class.fetch_many(dependent_job_ids,
                                                              connection=self.connection)
-                    if job.dependencies_finished(pipeline=pipe)
+                    if job.dependencies_are_met(pipeline=pipe)
                 ]
 
                 pipe.multi()
