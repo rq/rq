@@ -27,7 +27,7 @@ Another solution for testing purposes is to use the `is_async=False` queue
 parameter, that instructs it to instantly perform the job in the same
 thread instead of dispatching it to the workers. Workers are not required
 anymore.
-Additionally, we can use fakeredis to mock a redis instance, so we don't have to
+Additionally, we can use fake redis to mock a redis instance, so we don't have to
 run a redis server separately. The instance of the fake redis server can
 be directly passed as the connection argument to the queue:
 
