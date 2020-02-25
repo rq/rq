@@ -101,15 +101,11 @@ Some interesting job attributes include:
 * `job.func_name`
 * `job.args` arguments passed to the underlying job function
 * `job.kwargs` key word arguments passed to the underlying job function
-* `job.result` The return value of the function. Initially, right after enqueueing 
-a job, the return value will be None.  But when the job has been executed, and had 
-a return value or exception, this will return that value or exception.
-Return values written back to Redis will expire according to the `result_ttl` parameter 
-of the job (500 seconds by default).
+* `job.result` stores the return value of the job being executed, will return `None` prior to job execution. Results are kept according to the `result_ttl` parameter (500 seconds by default).
 * `job.enqueued_at`
 * `job.started_at`
 * `job.ended_at`
-* `job.exc_info`
+* `job.exc_info` stores exception information if job doesn't finish successfully.
 
 If you want to efficiently fetch a large number of jobs, use `Job.fetch_many()`.
 
