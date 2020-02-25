@@ -754,7 +754,7 @@ class Worker(object):
             os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
+        # contrast to the regular sys.exit()
         os._exit(0)
 
     def setup_work_horse_signals(self):
