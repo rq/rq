@@ -933,6 +933,7 @@ class Worker(object):
             'arguments': job.args,
             'kwargs': job.kwargs,
             'queue': job.origin,
+            'job_id': job.id,
         })
 
         for handler in self._exc_handlers:
