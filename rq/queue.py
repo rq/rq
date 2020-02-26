@@ -384,7 +384,32 @@ class Queue(object):
         """Schedules a job to be enqueued at specified time"""
         from .registry import ScheduledJobRegistry
 
-        job = self.create_job(func, status=JobStatus.SCHEDULED, *args, **kwargs)
+        if not isinstance(func, string_types) and func.__module__ == '__main__':
+            raise ValueError('Functions from the __main__ module cannot be processed '
+                             'by workers')
+
+        # Detect explicit invocations, i.e. of the form:
+        #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, job_timeout=30)
+        timeout = kwargs.pop('job_timeout', None)
+        description = kwargs.pop('description', None)
+        result_ttl = kwargs.pop('result_ttl', None)
+        ttl = kwargs.pop('ttl', None)
+        failure_ttl = kwargs.pop('failure_ttl', None)
+        depends_on = kwargs.pop('depends_on', None)
+        job_id = kwargs.pop('job_id', None)
+        at_front = kwargs.pop('at_front', False)
+        meta = kwargs.pop('meta', None)
+
+        if 'args' in kwargs or 'kwargs' in kwargs:
+            assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
+            args = kwargs.pop('args', None)
+            kwargs = kwargs.pop('kwargs', None)
+
+        job = self.create_job(func, status=JobStatus.SCHEDULED, args=args,
+            kwargs=kwargs, timeout=timeout, result_ttl=result_ttl,
+            ttl=ttl, failure_ttl=failure_ttl, description=description,
+            depends_on=depends_on, job_id=job_id, meta=meta)
+
         registry = ScheduledJobRegistry(queue=self)
         with self.connection.pipeline() as pipeline:
             job.save(pipeline=pipeline)
