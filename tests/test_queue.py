@@ -327,6 +327,19 @@ class TestQueue(RQTestCase):
             ((1,), {'timeout': 1, 'result_ttl': 1})
         )
 
+        # Explicit args and kwargs should also work with enqueue_at
+        time = datetime.now(utc) + timedelta(seconds=10)
+        job = q.enqueue_at(time, echo, job_timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
+        self.assertEqual(job.timeout, 2)
+        self.assertEqual(job.result_ttl, 2)
+        self.assertEqual(
+            job.perform(),
+            ((1,), {'timeout': 1, 'result_ttl': 1})
+        )
+
+        # Positional arguments is not allowed if explicit args and kwargs are used
+        self.assertRaises(Exception, q.enqueue, echo, 1, kwargs=kwargs)
+
     def test_all_queues(self):
         """All queues"""
         q1 = Queue('first-queue')
