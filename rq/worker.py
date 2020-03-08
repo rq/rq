@@ -620,7 +620,7 @@ class Worker(object):
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
          successful_job_count, total_working_time, hostname, pid, version, python_version) = data
         queues = as_text(queues)
-        self.hostname = hostname
+        self.hostname = as_text(hostname)
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
         self.python_version = as_text(python_version)
