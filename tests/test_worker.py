@@ -1189,7 +1189,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
             self.assertTrue(stderr.endswith(err), stderr)
 
-    def test_handle_shutdown_request(self):
+    @mock.patch('rq.worker.logger.info')
+    def test_handle_shutdown_request(self, mock_logger_info):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process
         and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo')
@@ -1202,8 +1203,11 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w._horse_pid = p.pid
         w.handle_warm_shutdown_request()
         p.join(2)
-        self.assertEqual(p.exitcode, -34)
+        # would expect p.exitcode to be -34 but for some reason os.waitpid is setting it to None, even though
+        # the process has ended
+        self.assertEqual(p.exitcode, None)
         self.assertFalse(os.path.exists(path))
+        mock_logger_info.assert_called_with('Killed horse pid %s', p.pid)
 
     def test_handle_shutdown_request_no_horse(self):
         """Mutate HerokuWorker so _horse_pid refers to non existent process

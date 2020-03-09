@@ -471,7 +471,7 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers(logging_level, date_format, log_format)        
+        setup_loghandlers(logging_level, date_format, log_format)
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
