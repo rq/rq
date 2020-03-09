@@ -1,3 +1,10 @@
+### RQ 1.3.0 (2020-03-09)
+* Support for infinite job timeout. Thanks @theY4Kman!
+* Added `__main__` file so you can now do `python -m rq.cli`. Thanks @bbayles!
+* Fixes an issue that may cause zombie processes. Thanks @wevsty!
+* `job_id` is now passed to logger during failed jobs. Thanks @smaccona!
+* `queue.enqueue_at()` and `queue.enqueue_in()` now supports explicit `args` and `kwargs` function invocation. Thanks @selwin!
+
 ### RQ 1.2.2 (2020-01-31)
 * `Job.fetch()` now properly handles unpickleable return values. Thanks @selwin!
 
