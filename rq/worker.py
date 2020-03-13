@@ -845,8 +845,6 @@ class Worker(object):
                     # if dependencies are inserted after enqueue_dependents
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
-                    # TODO: This was moved 
-                    job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                     # enqueue_dependents calls multi() on the pipeline!
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
@@ -858,6 +856,7 @@ class Worker(object):
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
+                        job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 

@@ -4,7 +4,6 @@ from __future__ import (absolute_import, division, print_function,
 
 import uuid
 import warnings
-
 from datetime import datetime
 
 from redis import WatchError
@@ -66,7 +65,8 @@ class Queue(object):
 
         if 'async' in kwargs:
             self._is_async = kwargs['async']
-            warnings.warn('The `async` keyword is deprecated. Use `is_async` instead', DeprecationWarning)
+            warnings.warn('The `async` keyword is deprecated. Use `is_async` instead',
+                          DeprecationWarning)
 
         # override class attribute job_class if one was passed
         if job_class is not None:
@@ -317,7 +317,8 @@ class Queue(object):
                         pipe.multi()
 
                         for dependency in dependencies:
-                            if dependency.get_status(refresh=False) != JobStatus.FINISHED:
+                            if dependency.get_status(
+                                refresh=False) != JobStatus.FINISHED:
                                 job.set_status(JobStatus.DEFERRED, pipeline=pipe)
                                 job.register_dependency(pipeline=pipe)
                                 job.save(pipeline=pipe)
@@ -379,8 +380,9 @@ class Queue(object):
         """Creates a job to represent the delayed function call and enqueues it."""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
-        
+         depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args,
+                                                                              **kwargs)
+
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
@@ -393,7 +395,8 @@ class Queue(object):
         from .registry import ScheduledJobRegistry
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args,
+                                                                              **kwargs)
         job = self.create_job(f, status=JobStatus.SCHEDULED, args=args, kwargs=kwargs,
                               timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                               failure_ttl=failure_ttl, description=description,
@@ -465,9 +468,14 @@ class Queue(object):
                                      for _id in pipe.smembers(dependents_key)]
 
                 dependent_jobs = [
-                    job for job in self.job_class.fetch_many(dependent_job_ids,
-                                                             connection=self.connection)
-                    if job.dependencies_are_met(pipeline=pipe)
+                    dependent_job for dependent_job
+                    in self.job_class.fetch_many(
+                        dependent_job_ids,
+                        connection=self.connection
+                    ) if dependent_job.dependencies_are_met(
+                        pipeline=pipe,
+                        exclude={job.id}
+                    )
                 ]
 
                 pipe.multi()
@@ -480,7 +488,8 @@ class Queue(object):
                     if dependent.origin == self.name:
                         self.enqueue_job(dependent, pipeline=pipe)
                     else:
-                        queue = self.__class__(name=dependent.origin, connection=self.connection)
+                        queue = self.__class__(name=dependent.origin,
+                                               connection=self.connection)
                         queue.enqueue_job(dependent, pipeline=pipe)
 
                 pipe.delete(dependents_key)
@@ -519,7 +528,8 @@ class Queue(object):
         connection = resolve_connection(connection)
         if timeout is not None:  # blocking variant
             if timeout == 0:
-                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
+                raise ValueError(
+                    'RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             result = connection.blpop(queue_keys, timeout)
             if result is None:
                 raise DequeueTimeout(timeout, queue_keys)
