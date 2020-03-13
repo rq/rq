@@ -403,18 +403,17 @@ class Job(object):
         watch is true, then set WATCH on all the keys of all dependencies.
 
         Returned jobs will use self's connection, not the pipeline supplied.
+
+        If a job has been deleted from redis, it is not returned.
         """
         connection = pipeline if pipeline is not None else self.connection
 
         if watch and self._dependency_ids:
             connection.watch(*self._dependency_ids)
 
-        jobs = self.fetch_many(self._dependency_ids, connection=self.connection)
-
-        for i, job in enumerate(jobs):
-            if not job:
-                raise NoSuchJobError(
-                    'Dependency {0} does not exist'.format(self._dependency_ids[i]))
+        jobs = [job for
+                job in self.fetch_many(self._dependency_ids, connection=self.connection)
+                if job]
 
         return jobs
 
@@ -739,6 +738,12 @@ class Job(object):
             connection.sadd(dependents_key, self.id)
             connection.sadd(self.dependencies_key, dependency_id)
 
+    @property
+    def dependencies_job_ids(self):
+        dependencies = self.connection.smembers(self.dependencies_key)
+        return [Job.key_for(as_text(_id))
+                for _id in dependencies]
+
     def dependencies_are_met(
         self,
         pipeline=None,
@@ -758,14 +763,15 @@ class Job(object):
 
         pipe = pipeline if pipeline is not None else self.connection
 
-        dependencies = self.connection.smembers(self.dependencies_key)
-
         if pipeline is not None:
-            pipe.watch(*[Job.key_for(as_text(_id))
-                         for _id in dependencies])
+            pipe.watch(*self.dependencies_job_ids)
 
         sort_by = self.redis_job_namespace_prefix + '*->ended_at'
-        get_field = self.redis_job_namespace_prefix + '*->status'
+        get_fields = (
+            '#',
+            self.redis_job_namespace_prefix + '*->created_at',
+            self.redis_job_namespace_prefix + '*->status'
+        )
 
         # As a minor optimization to more quickly tell if all dependencies
         # are _FINISHED_, sort dependencies by the `ended_at` timestamp so
@@ -774,16 +780,17 @@ class Job(object):
         # stored in an ISO 8601 format, so lexographic order is the same as
         # chronological order.
         dependencies_statuses = [
-            (as_text(_id), as_text(status))
-            for _id, status in pipe.sort(name=self.dependencies_key, by=sort_by,
-                                         get=['#', get_field], alpha=True,
-                                         groups=True, )
+            tuple(map(as_text, result))
+            for result in pipe.sort(name=self.dependencies_key, by=sort_by,
+                                    get=get_fields, alpha=True,
+                                    groups=True, )
         ]
 
-        return all(status == JobStatus.FINISHED
-                   for job_id, status
+        # if `created_at` is None, then this has been deleted!
+        return all(status == JobStatus.FINISHED or not created_at
+                   for dependency_id, created_at, status
                    in dependencies_statuses
-                   if job_id not in exclude)
+                   if dependency_id not in exclude)
 
 
 _job_stack = LocalStack()

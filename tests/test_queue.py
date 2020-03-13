@@ -531,20 +531,6 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, 123)
 
-    def test_enqueue_job_with_invalid_dependency(self):
-        """Enqueuing a job fails, if the dependency does not exist at all."""
-        parent_job = Job.create(func=say_hello)
-        # without save() the job is not visible to others
-
-        q = Queue()
-        with self.assertRaises(NoSuchJobError):
-            q.enqueue_call(say_hello, depends_on=parent_job)
-
-        with self.assertRaises(NoSuchJobError):
-            q.enqueue_call(say_hello, depends_on=parent_job.id)
-
-        self.assertEqual(q.job_ids, [])
-
     def test_enqueue_job_with_multiple_queued_dependencies(self):
 
         parent_jobs = [Job.create(func=say_hello) for _ in range(2)]

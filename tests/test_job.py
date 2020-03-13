@@ -8,7 +8,6 @@ import queue
 import zlib
 from datetime import datetime, timedelta
 
-import pytest
 from redis import WatchError
 
 from rq.compat import PY2, as_text
@@ -774,8 +773,12 @@ class TestJob(RQTestCase):
 
         dependency_job.delete()
 
-        with self.assertRaises(NoSuchJobError):
-            dependent_job.fetch_dependencies(pipeline=self.testconn)
+        self.assertNotIn(
+            dependent_job.id,
+            [job.id for job in dependent_job.fetch_dependencies(
+                pipeline=self.testconn
+            )]
+        )
 
     def test_fetch_dependencies_watches(self):
         queue = Queue(connection=self.testconn)
@@ -877,7 +880,6 @@ class TestJob(RQTestCase):
         dependent_job.register_dependency()
 
         with self.testconn.pipeline() as pipeline:
-
             dependent_job.dependencies_are_met(
                 pipeline=pipeline,
             )
@@ -888,3 +890,25 @@ class TestJob(RQTestCase):
             with self.assertRaises(WatchError):
                 pipeline.touch(Job.key_for(dependent_job.id))
                 pipeline.execute()
+
+    def test_can_enqueue_job_if_dependency_is_deleted(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello, result_ttl=0)
+
+        w = Worker([queue])
+        w.work(burst=True)
+
+        assert queue.enqueue(fixtures.say_hello, depends_on=dependency_job)
+
+    def test_dependents_are_met_if_dependency_is_deleted(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello, result_ttl=0)
+        dependent_job = queue.enqueue(fixtures.say_hello, depends_on=dependency_job)
+
+        w = Worker([queue])
+        w.work(burst=True, max_jobs=1)
+
+        assert dependent_job.get_status() == JobStatus.QUEUED
+        assert dependent_job.dependencies_are_met()
