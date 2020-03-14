@@ -21,6 +21,7 @@ try:
 except ImportError:  # noqa  # pragma: no cover
     import pickle
 
+
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
@@ -103,13 +104,11 @@ class Job(object):
             job._func_name = '{0}.{1}'.format(func.__module__, func.__name__)
         elif isinstance(func, string_types):
             job._func_name = as_text(func)
-        elif not inspect.isclass(func) and hasattr(func,
-                                                   '__call__'):  # a callable class instance
+        elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
             job._instance = func
             job._func_name = '__call__'
         else:
-            raise TypeError(
-                'Expected a callable or a string, but got: {0}'.format(func))
+            raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
         job._args = args
         job._kwargs = kwargs
 
@@ -124,8 +123,7 @@ class Job(object):
 
         # dependency could be job instance or id
         if depends_on is not None:
-            job._dependency_ids = [
-                depends_on.id if isinstance(depends_on, Job) else depends_on]
+            job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
         return job
 
     def get_status(self, refresh=True):
@@ -411,8 +409,8 @@ class Job(object):
         if watch and self._dependency_ids:
             connection.watch(*self._dependency_ids)
 
-        jobs = [job for
-                job in self.fetch_many(self._dependency_ids, connection=self.connection)
+        jobs = [job
+                for job in self.fetch_many(self._dependency_ids, connection=self.connection)
                 if job]
 
         return jobs
@@ -471,10 +469,8 @@ class Job(object):
             except Exception as e:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
-        self.result_ttl = int(obj.get('result_ttl')) if obj.get(
-            'result_ttl') else None  # noqa
-        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get(
-            'failure_ttl') else None  # noqa
+        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
+        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = as_text(obj.get('status')) if obj.get('status') else None
 
         dependency_id = obj.get('dependency_id', None)
@@ -791,6 +787,5 @@ class Job(object):
                    for dependency_id, created_at, status
                    in dependencies_statuses
                    if dependency_id not in exclude)
-
 
 _job_stack = LocalStack()
