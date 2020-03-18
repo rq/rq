@@ -3,7 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import dill
-from rq.serializers import resolve_serializer, DefaultSerializer, CustomSerializer
+from rq.serializers import resolve_serializer, DefaultSerializer, MySerializer
 
 try:
     import unittest
@@ -18,12 +18,12 @@ class TestSerializers(unittest.TestCase):
         self.assertIsNotNone(serializer)
         self.assertIsInstance(serializer, DefaultSerializer)
 
-        self.assertTrue(hasattr(serializer, 'serialize'))
-        self.assertTrue(hasattr(serializer, 'deserialize'))
+        self.assertTrue(hasattr(serializer, 'dumps'))
+        self.assertTrue(hasattr(serializer, 'loads'))
 
         serializer = resolve_serializer(dill)
         self.assertIsNotNone(serializer)
-        self.assertIsInstance(serializer, CustomSerializer)
+        self.assertIsInstance(serializer, MySerializer)
 
-        self.assertTrue(hasattr(serializer, 'serialize'))
-        self.assertTrue(hasattr(serializer, 'deserialize'))
+        self.assertTrue(hasattr(serializer, 'dumps'))
+        self.assertTrue(hasattr(serializer, 'loads'))

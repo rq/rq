@@ -190,7 +190,7 @@ class Job(object):
         return import_attribute(self.func_name)
 
     def _deserialize_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = self.serializer.deserialize(self.data)
+        self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
 
     @property
     def data(self):
@@ -208,7 +208,7 @@ class Job(object):
                 self._kwargs = {}
 
             job_tuple = self._func_name, self._instance, self._args, self._kwargs
-            self._data = self.serializer.serialize(job_tuple)
+            self._data = self.serializer.dumps(job_tuple)
         return self._data
 
     @data.setter
@@ -427,7 +427,7 @@ class Job(object):
             rv = self.connection.hget(self.key, 'result')
             if rv is not None:
                 # cache the result
-                self._result = self.serializer.deserialize(rv)
+                self._result = self.serializer.loads(rv)
         return self._result
 
     """Backwards-compatibility accessor property `return_value`."""
@@ -456,7 +456,7 @@ class Job(object):
         result = obj.get('result')
         if result:
             try:
-                self._result = self.serializer.deserialize(obj.get('result'))
+                self._result = self.serializer.loads(obj.get('result'))
             except (DeserializationError, UnpickleError) as e:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
@@ -468,7 +468,7 @@ class Job(object):
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
-        self.meta = self.serializer.deserialize(obj.get('meta')) if obj.get('meta') else {}
+        self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
@@ -512,7 +512,7 @@ class Job(object):
         obj['ended_at'] = utcformat(self.ended_at) if self.ended_at else ''
         if self._result is not None:
             try:
-                obj['result'] = self.serializer.serialize(self._result)
+                obj['result'] = self.serializer.dumps(self._result)
             except (DeserializationError, UnpickleError) as e:
                 obj['result'] = "Unserializable return value"
         if self.exc_info is not None:
@@ -528,7 +528,7 @@ class Job(object):
         if self._dependency_ids:
             obj['dependency_id'] = self._dependency_ids[0]
         if self.meta and include_meta:
-            obj['meta'] = self.serializer.serialize(self.meta)
+            obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
 
@@ -551,7 +551,7 @@ class Job(object):
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
-        meta = self.serializer.serialize(self.meta)
+        meta = self.serializer.dumps(self.meta)
         self.connection.hset(self.key, 'meta', meta)
 
     def cancel(self, pipeline=None):

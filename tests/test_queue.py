@@ -32,7 +32,7 @@ class TestQueue(RQTestCase):
 
     def test_create_queue_with_serializer(self):
         """Creating queues."""
-        q = Queue('my-queue', serializer=dill)
+        q = Queue('queue-with-serializer', serializer=dill)
         self.assertEqual(q.name, 'queue-with-serializer')
         self.assertEqual(str(q), '<Queue queue-with-serializer>')
         self.assertIsNotNone(q.serializer)
