@@ -2,7 +2,6 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import dill
 import json
 import sys
 import time
@@ -121,15 +120,6 @@ class TestJob(RQTestCase):
 
     def test_create_job_with_serializer(self):
         """Creation of jobs with serializer for instance methods."""
-        # Test using dill serializer
-        n = fixtures.Number(2)
-        job = Job.create(func=n.div, args=(4,), serializer=dill)
-
-        self.assertIsNotNone(job.serializer)
-        self.assertEqual(job.func, n.div)
-        self.assertEqual(job.instance, n)
-        self.assertEqual(job.args, (4,))
-
         # Test using json serializer
         n = fixtures.Number(2)
         job = Job.create(func=n.div, args=(4,), serializer=json)

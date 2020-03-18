@@ -75,6 +75,6 @@ def resolve_serializer(serializer):
 
     for instance_method in default_serializer_methods:
         if not hasattr(serializer, instance_method):
-            return DefaultSerializer()
+            raise NotImplementedError('Serializer should have (dumps, loads) methods.')
 
     return MySerializer(serializer)

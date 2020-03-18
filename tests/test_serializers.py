@@ -2,9 +2,8 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import dill
 import json
-from rq.serializers import resolve_serializer, DefaultSerializer, MySerializer
+from rq.serializers import resolve_serializer, MySerializer
 
 try:
     import unittest
@@ -17,15 +16,6 @@ class TestSerializers(unittest.TestCase):
         """Ensure function resolve_serializer works correctly"""
         serializer = resolve_serializer(None)
         self.assertIsNotNone(serializer)
-        self.assertIsInstance(serializer, DefaultSerializer)
-
-        self.assertTrue(hasattr(serializer, 'dumps'))
-        self.assertTrue(hasattr(serializer, 'loads'))
-
-        # Test using dill serializer
-        serializer = resolve_serializer(dill)
-        self.assertIsNotNone(serializer)
-        self.assertIsInstance(serializer, MySerializer)
 
         self.assertTrue(hasattr(serializer, 'dumps'))
         self.assertTrue(hasattr(serializer, 'loads'))
@@ -37,3 +27,7 @@ class TestSerializers(unittest.TestCase):
 
         self.assertTrue(hasattr(serializer, 'dumps'))
         self.assertTrue(hasattr(serializer, 'loads'))
+
+        # Test raise NotImplmentedError
+        with self.assertRaises(NotImplementedError):
+            resolve_serializer(object)
