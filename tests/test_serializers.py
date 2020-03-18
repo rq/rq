@@ -14,7 +14,7 @@ except ImportError:
 
 class TestSerializers(unittest.TestCase):
     def test_resolve_serializer(self):
-        """Ensure function parse_timeout works correctly"""
+        """Ensure function resolve_serializer works correctly"""
         serializer = resolve_serializer(None)
         self.assertIsNotNone(serializer)
         self.assertIsInstance(serializer, DefaultSerializer)
