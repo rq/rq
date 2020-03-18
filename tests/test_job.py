@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import dill
 import sys
 import time
 import zlib
@@ -113,6 +114,16 @@ class TestJob(RQTestCase):
         job = Job.create(func=n.div, args=(4,))
 
         # Job data is set
+        self.assertEqual(job.func, n.div)
+        self.assertEqual(job.instance, n)
+        self.assertEqual(job.args, (4,))
+
+    def test_create_job_with_serializer(self):
+        """Creation of jobs with serializer for instance methods."""
+        n = fixtures.Number(2)
+        job = Job.create(func=n.div, args=(4,), serializer=dill)
+
+        self.assertIsNotNone(job.serializer)
         self.assertEqual(job.func, n.div)
         self.assertEqual(job.instance, n)
         self.assertEqual(job.args, (4,))
@@ -373,11 +384,11 @@ class TestJob(RQTestCase):
         job.save()
         self.assertEqual(
             self.testconn.hget(job.key, 'result').decode('utf-8'),
-            'Unpickleable return value'
+            'Unserializable return value'
         )
 
         job = Job.fetch(job.id)
-        self.assertEqual(job.result, 'Unpickleable return value')
+        self.assertEqual(job.result, 'Unserializable return value')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""

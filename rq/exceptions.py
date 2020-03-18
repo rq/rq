@@ -37,3 +37,9 @@ class ShutDownImminentException(Exception):
 
 class TimeoutFormatError(Exception):
     pass
+
+
+class DeserializationError(Exception):
+    def __init__(self, message, raw_data, inner_exception=None):
+        super(DeserializationError, self).__init__(message, inner_exception)
+        self.raw_data = raw_data

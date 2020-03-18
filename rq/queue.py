@@ -12,9 +12,10 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import DequeueTimeout, NoSuchJobError, UnpickleError
+from .exceptions import DequeueTimeout, NoSuchJobError, UnpickleError, DeserializationError
 from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, parse_timeout, utcnow
+from .serializers import resolve_serializer
 
 
 def compact(lst):
@@ -29,7 +30,7 @@ class Queue(object):
     redis_queues_keys = 'rq:queues'
 
     @classmethod
-    def all(cls, connection=None, job_class=None):
+    def all(cls, connection=None, job_class=None, serializer=None):
         """Returns an iterable of all Queues.
         """
         connection = resolve_connection(connection)
@@ -37,13 +38,13 @@ class Queue(object):
         def to_queue(queue_key):
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection,
-                                      job_class=job_class)
+                                      job_class=job_class, serializer=serializer)
         return [to_queue(rq_key)
                 for rq_key in connection.smembers(cls.redis_queues_keys)
                 if rq_key]
 
     @classmethod
-    def from_queue_key(cls, queue_key, connection=None, job_class=None):
+    def from_queue_key(cls, queue_key, connection=None, job_class=None, serializer=None):
         """Returns a Queue instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
         Redis keys.
@@ -52,10 +53,10 @@ class Queue(object):
         if not queue_key.startswith(prefix):
             raise ValueError('Not a valid RQ queue key: {0}'.format(queue_key))
         name = queue_key[len(prefix):]
-        return cls(name, connection=connection, job_class=job_class)
+        return cls(name, connection=connection, job_class=job_class, serializer=serializer)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 is_async=True, job_class=None, **kwargs):
+                 is_async=True, job_class=None, serializer=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
@@ -72,6 +73,8 @@ class Queue(object):
             if isinstance(job_class, string_types):
                 job_class = import_attribute(job_class)
             self.job_class = job_class
+
+        self.serializer = resolve_serializer(serializer)
 
     def __len__(self):
         return self.count
@@ -269,7 +272,7 @@ class Queue(object):
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             status=status, description=description,
             depends_on=depends_on, timeout=timeout, id=job_id,
-            origin=self.name, meta=meta
+            origin=self.name, meta=meta, serializer=self.serializer
         )
 
         return job
@@ -552,7 +555,7 @@ class Queue(object):
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look
                 continue
-            except UnpickleError as e:
+            except (DeserializationError, UnpickleError) as e:
                 # Attach queue information on the exception for improved error
                 # reporting
                 e.job_id = job_id

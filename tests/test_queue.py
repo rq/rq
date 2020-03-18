@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import dill
 from datetime import datetime, timedelta
 
 from rq import Queue
@@ -28,6 +29,13 @@ class TestQueue(RQTestCase):
         q = Queue('my-queue')
         self.assertEqual(q.name, 'my-queue')
         self.assertEqual(str(q), '<Queue my-queue>')
+
+    def test_create_queue_with_serializer(self):
+        """Creating queues."""
+        q = Queue('my-queue', serializer=dill)
+        self.assertEqual(q.name, 'queue-with-serializer')
+        self.assertEqual(str(q), '<Queue queue-with-serializer>')
+        self.assertIsNotNone(q.serializer)
 
     def test_create_default_queue(self):
         """Instantiating the default queue."""
