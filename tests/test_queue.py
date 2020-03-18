@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import dill
+import json
 from datetime import datetime, timedelta
 
 from rq import Queue
@@ -32,7 +33,14 @@ class TestQueue(RQTestCase):
 
     def test_create_queue_with_serializer(self):
         """Creating queues."""
+        # Test using dill serializer
         q = Queue('queue-with-serializer', serializer=dill)
+        self.assertEqual(q.name, 'queue-with-serializer')
+        self.assertEqual(str(q), '<Queue queue-with-serializer>')
+        self.assertIsNotNone(q.serializer)
+
+        # Test using json serializer
+        q = Queue('queue-with-serializer', serializer=json)
         self.assertEqual(q.name, 'queue-with-serializer')
         self.assertEqual(str(q), '<Queue queue-with-serializer>')
         self.assertIsNotNone(q.serializer)

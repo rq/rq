@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import dill
+import json
 from rq.serializers import resolve_serializer, DefaultSerializer, MySerializer
 
 try:
@@ -21,7 +22,16 @@ class TestSerializers(unittest.TestCase):
         self.assertTrue(hasattr(serializer, 'dumps'))
         self.assertTrue(hasattr(serializer, 'loads'))
 
+        # Test using dill serializer
         serializer = resolve_serializer(dill)
+        self.assertIsNotNone(serializer)
+        self.assertIsInstance(serializer, MySerializer)
+
+        self.assertTrue(hasattr(serializer, 'dumps'))
+        self.assertTrue(hasattr(serializer, 'loads'))
+
+        # Test using json serializer
+        serializer = resolve_serializer(json)
         self.assertIsNotNone(serializer)
         self.assertIsInstance(serializer, MySerializer)
 
