@@ -10,7 +10,7 @@ from uuid import uuid4
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
 from .connections import resolve_connection
-from .exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError, DeserializationError
+from .exceptions import InvalidJobDependency, NoSuchJobError
 from .local import LocalStack
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
@@ -457,7 +457,7 @@ class Job(object):
         if result:
             try:
                 self._result = self.serializer.loads(obj.get('result'))
-            except (DeserializationError, UnpickleError) as e:
+            except Exception as e:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
@@ -513,7 +513,7 @@ class Job(object):
         if self._result is not None:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
-            except (DeserializationError, UnpickleError) as e:
+            except Exception as e:
                 obj['result'] = "Unserializable return value"
         if self.exc_info is not None:
             obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))

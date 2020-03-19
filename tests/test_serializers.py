@@ -3,20 +3,11 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import json
-import sys
+import queue as queue
+import unittest
+
 from rq.serializers import resolve_serializer, MySerializer
 from rq.exceptions import DeserializationError
-
-try:
-    import unittest
-except ImportError:
-    import unittest2 as unittest  # noqa
-
-is_py2 = sys.version[0] == '2'
-if is_py2:
-    import Queue as queue
-else:
-    import queue as queue
 
 
 class TestSerializers(unittest.TestCase):

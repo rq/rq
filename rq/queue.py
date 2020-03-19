@@ -555,7 +555,7 @@ class Queue(object):
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look
                 continue
-            except (DeserializationError, UnpickleError) as e:
+            except Exception as e:
                 # Attach queue information on the exception for improved error
                 # reporting
                 e.job_id = job_id

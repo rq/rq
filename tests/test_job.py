@@ -3,15 +3,15 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import json
-import sys
 import time
+import queue as queue
 import zlib
 from datetime import datetime
 
 from redis import WatchError
 
 from rq.compat import PY2, as_text
-from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.exceptions import NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
@@ -21,16 +21,7 @@ from rq.utils import utcformat
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
-is_py2 = sys.version[0] == '2'
-if is_py2:
-    import Queue as queue
-else:
-    import queue as queue
-
-try:
-    from cPickle import loads, dumps
-except ImportError:
-    from pickle import loads, dumps
+from pickle import loads, dumps, UnpicklingError
 
 
 class TestJob(RQTestCase):
@@ -285,7 +276,7 @@ class TestJob(RQTestCase):
         job.refresh()
 
         for attr in ('func_name', 'instance', 'args', 'kwargs'):
-            with self.assertRaises(UnpickleError):
+            with self.assertRaises(Exception):
                 getattr(job, attr)
 
     def test_job_is_unimportable(self):
@@ -383,6 +374,7 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
         job._result = queue.Queue()
         job.save()
+
         self.assertEqual(
             self.testconn.hget(job.key, 'result').decode('utf-8'),
             'Unserializable return value'
