@@ -41,6 +41,7 @@ from .utils import (backend_class, ensure_list, enum,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
+from .serializers import resolve_serializer
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -104,7 +105,7 @@ class Worker(object):
     log_job_description = True
 
     @classmethod
-    def all(cls, connection=None, job_class=None, queue_class=None, queue=None):
+    def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
         """Returns an iterable of all Workers.
         """
         if queue:
@@ -116,7 +117,7 @@ class Worker(object):
         workers = [cls.find_by_key(as_text(key),
                                    connection=connection,
                                    job_class=job_class,
-                                   queue_class=queue_class)
+                                   queue_class=queue_class, serializer=serializer)
                    for key in worker_keys]
         return compact(workers)
 
@@ -132,7 +133,7 @@ class Worker(object):
 
     @classmethod
     def find_by_key(cls, worker_key, connection=None, job_class=None,
-                    queue_class=None):
+                    queue_class=None, serializer=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -149,7 +150,7 @@ class Worker(object):
 
         name = worker_key[len(prefix):]
         worker = cls([], name, connection=connection, job_class=job_class,
-                     queue_class=queue_class, prepare_for_work=False)
+                     queue_class=queue_class, prepare_for_work=False, serializer=serializer)
 
         worker.refresh()
 
@@ -161,7 +162,7 @@ class Worker(object):
                  queue_class=None, log_job_description=True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler=False,
-                 prepare_for_work=True):  # noqa
+                 prepare_for_work=True, serializer=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -177,10 +178,11 @@ class Worker(object):
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
         self.version = VERSION
         self.python_version = sys.version
+        self.serializer = resolve_serializer(serializer)
 
         queues = [self.queue_class(name=q,
                                    connection=connection,
-                                   job_class=self.job_class)
+                                   job_class=self.job_class, serializer=self.serializer)
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
 
@@ -644,7 +646,7 @@ class Worker(object):
         if queues:
             self.queues = [self.queue_class(queue,
                                             connection=self.connection,
-                                            job_class=self.job_class)
+                                            job_class=self.job_class, serializer=self.serializer)
                            for queue in queues.split(',')]
 
     def increment_failed_job_count(self, pipeline=None):

@@ -21,7 +21,7 @@ from rq.utils import utcformat
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
-from pickle import loads, dumps, UnpicklingError
+from pickle import loads, dumps
 
 
 class TestJob(RQTestCase):

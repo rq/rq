@@ -6,8 +6,7 @@ import json
 import queue as queue
 import unittest
 
-from rq.serializers import resolve_serializer, MySerializer
-from rq.exceptions import DeserializationError
+from rq.serializers import resolve_serializer
 
 
 class TestSerializers(unittest.TestCase):
@@ -22,7 +21,6 @@ class TestSerializers(unittest.TestCase):
         # Test using json serializer
         serializer = resolve_serializer(json)
         self.assertIsNotNone(serializer)
-        self.assertIsInstance(serializer, MySerializer)
 
         self.assertTrue(hasattr(serializer, 'dumps'))
         self.assertTrue(hasattr(serializer, 'loads'))
@@ -31,6 +29,10 @@ class TestSerializers(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             resolve_serializer(object)
 
-        # Test raise DeserializationError
-        with self.assertRaises(DeserializationError):
-            serializer.dumps(queue.Queue())
+        # Test raise Exception
+        with self.assertRaises(Exception):
+            resolve_serializer(queue.Queue())
+
+        # Test using path.to.serializer string
+        serializer = resolve_serializer('tests.fixtures.Serializer')
+        self.assertIsNotNone(serializer)

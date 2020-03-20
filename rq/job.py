@@ -10,7 +10,7 @@ from uuid import uuid4
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
 from .connections import resolve_connection
-from .exceptions import InvalidJobDependency, NoSuchJobError
+from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)

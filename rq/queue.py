@@ -12,7 +12,7 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import DequeueTimeout, NoSuchJobError, UnpickleError, DeserializationError
+from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
 from .utils import backend_class, import_attribute, parse_timeout, utcnow
 from .serializers import resolve_serializer

@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import json
 import os
 import shutil
 import signal
@@ -96,6 +97,14 @@ class TestWorker(RQTestCase):
         w = Worker([Queue('foo'), Queue('bar')])
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
+
+        # With string and serializer
+        w = Worker('foo', serializer=json)
+        self.assertEqual(w.queues[0].name, 'foo')
+
+        # With queue having serializer
+        w = Worker(Queue('foo', serializer=json))
+        self.assertEqual(w.queues[0].name, 'foo')
 
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
