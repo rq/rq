@@ -4,7 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 import time
-import queue as queue
+import queue
 import zlib
 from datetime import datetime
 
