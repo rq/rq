@@ -103,7 +103,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.queues[0].name, 'foo')
 
         # With queue having serializer
-        w = Worker(Queue('foo', serializer=json))
+        w = Worker(Queue('foo'), serializer=json)
         self.assertEqual(w.queues[0].name, 'foo')
 
     def test_work_and_quit(self):

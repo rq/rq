@@ -82,6 +82,20 @@ job = Job.create(count_words_at_url,
           })
 ```
 
+## Job / Queue Creation with Custom Serializer
+
+When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing messages.
+Serializers used should have at least `loads` and `dumps` method.
+The default serializer used is `pickle`
+
+```python
+import json
+from rq import Job, Queue
+
+job = Job(connection=connection, serializer=json)
+queue = Queue(connection=connection, serializer=json)
+```
+
 ## Retrieving a Job from Redis
 
 All job information is stored in Redis. You can inspect a job and its attributes

@@ -202,6 +202,30 @@ queue = Queue('queue_name', connection=redis)
 workers = Worker.all(queue=queue)
 ```
 
+## Worker with Custom Serializer
+
+When creating a worker, you can pass in a custom serializer that will be implicitly passed to the queue.
+Serializers used should have at least `loads` and `dumps` method.
+The default serializer used is `pickle`
+
+```python
+import json
+from rq import Worker
+
+job = Worker('foo', serializer=json)
+```
+
+or when creating from a queue
+
+```python
+import json
+from rq import Queue, Worker
+
+w = Worker(Queue('foo'), serializer=json)
+```
+
+Queues will now use custom serializer
+
 
 ### Worker Statistics
 
