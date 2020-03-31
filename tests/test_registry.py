@@ -356,6 +356,8 @@ class TestFailedJobRegistry(RQTestCase):
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.started_at, None)
+        self.assertEqual(job.ended_at, None)
 
         worker.work(burst=True)
         self.assertTrue(job in registry)
