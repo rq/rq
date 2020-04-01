@@ -214,11 +214,16 @@ class FailedJobRegistry(BaseRegistry):
         result = self.connection.zrem(self.key, job.id)
         if not result:
             raise InvalidJobOperation
-
-        queue = Queue(job.origin, connection=self.connection,
-                      job_class=self.job_class)
-
-        return queue.enqueue_job(job)
+        
+        with self.connection.pipeline() as pipeline:
+            queue = Queue(job.origin, connection=self.connection,
+                          job_class=self.job_class)
+            job.started_at = None
+            job.ended_at = None
+            job.save()
+            job = queue.enqueue_job(job, pipeline=pipeline)
+            pipeline.execute()
+        return job
 
 
 class DeferredJobRegistry(BaseRegistry):

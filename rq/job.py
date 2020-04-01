@@ -531,10 +531,9 @@ class Job(object):
             obj['description'] = self.description
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
-        if self.started_at is not None:
-            obj['started_at'] = utcformat(self.started_at)
-        if self.ended_at is not None:
-            obj['ended_at'] = utcformat(self.ended_at)
+
+        obj['started_at'] = utcformat(self.started_at) if self.started_at else ''
+        obj['ended_at'] = utcformat(self.ended_at) if self.ended_at else ''
         if self._result is not None:
             try:
                 obj['result'] = dumps(self._result)
