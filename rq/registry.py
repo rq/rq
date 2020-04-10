@@ -214,7 +214,7 @@ class FailedJobRegistry(BaseRegistry):
         result = self.connection.zrem(self.key, job.id)
         if not result:
             raise InvalidJobOperation
-        
+
         with self.connection.pipeline() as pipeline:
             queue = Queue(job.origin, connection=self.connection,
                           job_class=self.job_class)
