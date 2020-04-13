@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import json
+import pickle
 import queue
 import unittest
 
@@ -14,9 +15,7 @@ class TestSerializers(unittest.TestCase):
         """Ensure function resolve_serializer works correctly"""
         serializer = resolve_serializer(None)
         self.assertIsNotNone(serializer)
-
-        self.assertTrue(hasattr(serializer, 'dumps'))
-        self.assertTrue(hasattr(serializer, 'loads'))
+        self.assertEqual(serializer, pickle)
 
         # Test using json serializer
         serializer = resolve_serializer(json)

@@ -84,7 +84,7 @@ job = Job.create(count_words_at_url,
 
 ## Job / Queue Creation with Custom Serializer
 
-When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing messages.
+When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
 Serializers used should have at least `loads` and `dumps` method.
 The default serializer used is `pickle`
 
