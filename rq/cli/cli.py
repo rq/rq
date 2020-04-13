@@ -168,7 +168,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
                 qs = list(map(cli_config.queue_class, queues))
             else:
                 qs = cli_config.queue_class.all()
-            
+
             for queue in qs:
                 clean_registries(queue)
                 clean_worker_registry(queue)
@@ -195,6 +195,8 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
+@click.option('--sentry-ca-certs', envvar='RQ_SENTRY_CA_CERTS', help='Path to CRT file for Sentry DSN')
+@click.option('--sentry-debug', envvar='RQ_SENTRY_DEBUG', help='Enable debug')
 @click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
@@ -204,13 +206,16 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
-           worker_ttl, job_monitoring_interval, disable_job_desc_logging, verbose, quiet, sentry_dsn,
-           exception_handler, pid, disable_default_exception_handler, max_jobs, with_scheduler,
-           queues, log_format, date_format, **options):
+           worker_ttl, job_monitoring_interval, disable_job_desc_logging,
+           verbose, quiet, sentry_ca_certs, sentry_debug, sentry_dsn,
+           exception_handler, pid, disable_default_exception_handler, max_jobs,
+           with_scheduler, queues, log_format, date_format, **options):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
     queues = queues or settings.get('QUEUES', ['default'])
+    sentry_ca_certs = sentry_ca_certs or settings.get('SENTRY_CA_CERTS')
+    sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
     name = name or settings.get('NAME')
 
@@ -247,8 +252,12 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
 
         # Should we configure Sentry?
         if sentry_dsn:
+            sentry_opts = {
+                "ca_certs": sentry_ca_certs,
+                "debug": sentry_debug
+            }
             from rq.contrib.sentry import register_sentry
-            register_sentry(sentry_dsn)
+            register_sentry(sentry_dsn, **sentry_opts)
 
         # if --verbose or --quiet, override --logging_level
         if verbose or quiet:
