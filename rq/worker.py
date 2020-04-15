@@ -208,7 +208,7 @@ class Worker(object):
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
-        if isinstance(exception_handlers, list):
+        if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
