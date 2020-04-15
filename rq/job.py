@@ -9,6 +9,7 @@ from functools import partial
 from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
+
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
@@ -740,12 +741,7 @@ class Job(object):
         return [Job.key_for(as_text(_id))
                 for _id in dependencies]
 
-    def dependencies_are_met(
-        self,
-        pipeline=None,
-        exclude=None
-
-    ):
+    def dependencies_are_met(self, exclude_job_id=None, pipeline=None):
         """Returns a boolean indicating if all of this jobs dependencies are _FINISHED_
 
         If a pipeline is passed, all dependencies are WATCHed.
@@ -755,7 +751,6 @@ class Job(object):
         `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
         method is _called_ in the _stack_ of it's dependents are being enqueued.
         """
-        exclude = exclude or []
 
         pipe = pipeline if pipeline is not None else self.connection
 
@@ -786,6 +781,6 @@ class Job(object):
         return all(status == JobStatus.FINISHED or not created_at
                    for dependency_id, created_at, status
                    in dependencies_statuses
-                   if dependency_id not in exclude)
+                   if not (exclude_job_id and dependency_id == exclude_job_id))
 
 _job_stack = LocalStack()

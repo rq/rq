@@ -469,8 +469,8 @@ class Queue(object):
                         dependent_job_ids,
                         connection=self.connection
                     ) if dependent_job.dependencies_are_met(
-                        pipeline=pipe,
-                        exclude={job.id}
+                        exclude_job_id=job.id,
+                        pipeline=pipe
                     )
                 ]
 
