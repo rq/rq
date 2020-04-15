@@ -20,7 +20,9 @@ def setup_loghandlers(level=None, date_format=DEFAULT_LOGGING_DATE_FORMAT,
         logger.addHandler(handler)
 
     if level is not None:
-        logger.setLevel(level)
+        # The level may be a numeric value (e.g. when using the logging module constants)
+        # Or a string representation of the logging level
+        logger.setLevel(level if isinstance(level, int) else level.upper())
 
 
 def _has_effective_handler(logger):
