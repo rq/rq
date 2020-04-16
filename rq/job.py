@@ -5,27 +5,17 @@ from __future__ import (absolute_import, division, print_function,
 import inspect
 import warnings
 import zlib
-from functools import partial
 from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types, text_type
 
 from .connections import resolve_connection
-from .exceptions import InvalidJobDependency, NoSuchJobError, UnpickleError
+from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
+from .serializers import resolve_serializer
 
-try:
-    import cPickle as pickle
-except ImportError:  # noqa  # pragma: no cover
-    import pickle
-
-
-# Serialize pickle dumps using the highest pickle protocol (binary, default
-# uses ascii)
-dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
-loads = pickle.loads
 
 JobStatus = enum(
     'JobStatus',
@@ -40,21 +30,6 @@ JobStatus = enum(
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
 UNEVALUATED = object()
-
-
-def unpickle(pickled_string):
-    """Unpickles a string, but raises a unified UnpickleError in case anything
-    fails.
-
-    This is a helper method to not have to deal with the fact that `loads()`
-    potentially raises many types of exceptions (e.g. AttributeError,
-    IndexError, TypeError, KeyError, etc.)
-    """
-    try:
-        obj = loads(pickled_string)
-    except Exception as e:
-        raise UnpickleError('Could not unpickle', pickled_string, e)
-    return obj
 
 
 def cancel_job(job_id, connection=None):
@@ -89,7 +64,7 @@ class Job(object):
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
-               failure_ttl=None):
+               failure_ttl=None, serializer=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -103,7 +78,7 @@ class Job(object):
         if not isinstance(kwargs, dict):
             raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
 
-        job = cls(connection=connection)
+        job = cls(connection=connection, serializer=serializer)
         if id is not None:
             job.set_id(id)
 
@@ -214,8 +189,8 @@ class Job(object):
 
         return import_attribute(self.func_name)
 
-    def _unpickle_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = unpickle(self.data)
+    def _deserialize_data(self):
+        self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
 
     @property
     def data(self):
@@ -233,7 +208,7 @@ class Job(object):
                 self._kwargs = {}
 
             job_tuple = self._func_name, self._instance, self._args, self._kwargs
-            self._data = dumps(job_tuple)
+            self._data = self.serializer.dumps(job_tuple)
         return self._data
 
     @data.setter
@@ -247,7 +222,7 @@ class Job(object):
     @property
     def func_name(self):
         if self._func_name is UNEVALUATED:
-            self._unpickle_data()
+            self._deserialize_data()
         return self._func_name
 
     @func_name.setter
@@ -258,7 +233,7 @@ class Job(object):
     @property
     def instance(self):
         if self._instance is UNEVALUATED:
-            self._unpickle_data()
+            self._deserialize_data()
         return self._instance
 
     @instance.setter
@@ -269,7 +244,7 @@ class Job(object):
     @property
     def args(self):
         if self._args is UNEVALUATED:
-            self._unpickle_data()
+            self._deserialize_data()
         return self._args
 
     @args.setter
@@ -280,7 +255,7 @@ class Job(object):
     @property
     def kwargs(self):
         if self._kwargs is UNEVALUATED:
-            self._unpickle_data()
+            self._deserialize_data()
         return self._kwargs
 
     @kwargs.setter
@@ -295,11 +270,11 @@ class Job(object):
         return conn.exists(cls.key_for(job_id))
 
     @classmethod
-    def fetch(cls, id, connection=None):
+    def fetch(cls, id, connection=None, serializer=None):
         """Fetches a persisted job from its corresponding Redis key and
         instantiates it.
         """
-        job = cls(id, connection=connection)
+        job = cls(id, connection=connection, serializer=serializer)
         job.refresh()
         return job
 
@@ -327,7 +302,7 @@ class Job(object):
 
         return jobs
 
-    def __init__(self, id=None, connection=None):
+    def __init__(self, id=None, connection=None, serializer=None):
         self.connection = resolve_connection(connection)
         self._id = id
         self.created_at = utcnow()
@@ -350,6 +325,7 @@ class Job(object):
         self._status = None
         self._dependency_ids = []
         self.meta = {}
+        self.serializer = resolve_serializer(serializer)
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -451,7 +427,7 @@ class Job(object):
             rv = self.connection.hget(self.key, 'result')
             if rv is not None:
                 # cache the result
-                self._result = loads(rv)
+                self._result = self.serializer.loads(rv)
         return self._result
 
     """Backwards-compatibility accessor property `return_value`."""
@@ -480,9 +456,9 @@ class Job(object):
         result = obj.get('result')
         if result:
             try:
-                self._result = unpickle(obj.get('result'))
-            except UnpickleError:
-                self._result = 'Unpickleable return value'
+                self._result = self.serializer.loads(obj.get('result'))
+            except Exception as e:
+                self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
@@ -492,7 +468,7 @@ class Job(object):
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
-        self.meta = unpickle(obj.get('meta')) if obj.get('meta') else {}
+        self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
@@ -536,9 +512,9 @@ class Job(object):
         obj['ended_at'] = utcformat(self.ended_at) if self.ended_at else ''
         if self._result is not None:
             try:
-                obj['result'] = dumps(self._result)
-            except:
-                obj['result'] = 'Unpickleable return value'
+                obj['result'] = self.serializer.dumps(self._result)
+            except Exception as e:
+                obj['result'] = "Unserializable return value"
         if self.exc_info is not None:
             obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
         if self.timeout is not None:
@@ -552,7 +528,7 @@ class Job(object):
         if self._dependency_ids:
             obj['dependency_id'] = self._dependency_ids[0]
         if self.meta and include_meta:
-            obj['meta'] = dumps(self.meta)
+            obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
 
@@ -575,7 +551,7 @@ class Job(object):
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
-        meta = dumps(self.meta)
+        meta = self.serializer.dumps(self.meta)
         self.connection.hset(self.key, 'meta', meta)
 
     def cancel(self, pipeline=None):

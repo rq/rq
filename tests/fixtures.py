@@ -175,3 +175,10 @@ def kill_worker(pid, double_kill, interval=0.5):
         # give the worker time to switch signal handler
         time.sleep(interval)
         os.kill(pid, signal.SIGTERM)
+
+
+class Serializer(object):
+    def loads(self): pass
+
+    def dumps(self): pass
+
