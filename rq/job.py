@@ -13,9 +13,9 @@ from rq.compat import as_text, decode_redis_hash, string_types, text_type
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
+from .serializers import resolve_serializer
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
-from .serializers import resolve_serializer
 
 try:
     import cPickle as pickle
@@ -736,9 +736,9 @@ class Job(object):
             connection.sadd(self.dependencies_key, dependency_id)
 
     @property
-    def dependencies_job_ids(self):
+    def dependency_ids(self):
         dependencies = self.connection.smembers(self.dependencies_key)
-        return [Job.key_for(as_text(_id))
+        return [Job.key_for(_id.decode())
                 for _id in dependencies]
 
     def dependencies_are_met(self, exclude_job_id=None, pipeline=None):
@@ -755,7 +755,7 @@ class Job(object):
         pipe = pipeline if pipeline is not None else self.connection
 
         if pipeline is not None:
-            pipe.watch(*self.dependencies_job_ids)
+            pipe.watch(*self.dependency_ids)
 
         sort_by = self.redis_job_namespace_prefix + '*->ended_at'
         get_fields = (

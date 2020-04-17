@@ -463,7 +463,7 @@ class Queue(object):
                 dependent_job_ids = [as_text(_id)
                                      for _id in pipe.smembers(dependents_key)]
 
-                dependent_jobs = [
+                jobs_to_enqueue = [
                     dependent_job for dependent_job
                     in self.job_class.fetch_many(
                         dependent_job_ids,
@@ -476,7 +476,7 @@ class Queue(object):
 
                 pipe.multi()
 
-                for dependent in dependent_jobs:
+                for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,
                                                    job_class=self.job_class)
