@@ -192,25 +192,25 @@ class Queue(object):
 
     @property
     def started_job_registry(self):
-        """Returns this queue's FailedJobRegistry."""
+        """Returns this queue's StartedJobRegistry."""
         from rq.registry import StartedJobRegistry
         return StartedJobRegistry(queue=self, job_class=self.job_class)
 
     @property
     def finished_job_registry(self):
-        """Returns this queue's FailedJobRegistry."""
+        """Returns this queue's FinishedJobRegistry."""
         from rq.registry import FinishedJobRegistry
         return FinishedJobRegistry(queue=self)
 
     @property
     def deferred_job_registry(self):
-        """Returns this queue's FailedJobRegistry."""
+        """Returns this queue's DeferredJobRegistry."""
         from rq.registry import DeferredJobRegistry
         return DeferredJobRegistry(queue=self, job_class=self.job_class)
 
     @property
     def scheduled_job_registry(self):
-        """Returns this queue's FailedJobRegistry."""
+        """Returns this queue's ScheduledJobRegistry."""
         from rq.registry import ScheduledJobRegistry
         return ScheduledJobRegistry(queue=self, job_class=self.job_class)
 
@@ -380,7 +380,7 @@ class Queue(object):
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
          depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
-        
+
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
@@ -401,6 +401,8 @@ class Queue(object):
 
         registry = ScheduledJobRegistry(queue=self)
         with self.connection.pipeline() as pipeline:
+            # Add Queue key set
+            pipeline.sadd(self.redis_queues_keys, self.key)
             job.save(pipeline=pipeline)
             registry.schedule(job, datetime, pipeline=pipeline)
             pipeline.execute()
