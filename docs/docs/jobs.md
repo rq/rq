@@ -82,6 +82,20 @@ job = Job.create(count_words_at_url,
           })
 ```
 
+## Job / Queue Creation with Custom Serializer
+
+When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
+Serializers used should have at least `loads` and `dumps` method.
+The default serializer used is `pickle`
+
+```python
+import json
+from rq import Job, Queue
+
+job = Job(connection=connection, serializer=json)
+queue = Queue(connection=connection, serializer=json)
+```
+
 ## Retrieving a Job from Redis
 
 All job information is stored in Redis. You can inspect a job and its attributes
@@ -101,15 +115,11 @@ Some interesting job attributes include:
 * `job.func_name`
 * `job.args` arguments passed to the underlying job function
 * `job.kwargs` key word arguments passed to the underlying job function
-* `job.result` The return value of the function. Initially, right after enqueueing 
-a job, the return value will be None.  But when the job has been executed, and had 
-a return value or exception, this will return that value or exception.
-Return values written back to Redis will expire according to the `result_ttl` parameter 
-of the job (500 seconds by default).
+* `job.result` stores the return value of the job being executed, will return `None` prior to job execution. Results are kept according to the `result_ttl` parameter (500 seconds by default).
 * `job.enqueued_at`
 * `job.started_at`
 * `job.ended_at`
-* `job.exc_info`
+* `job.exc_info` stores exception information if job doesn't finish successfully.
 
 If you want to efficiently fetch a large number of jobs, use `Job.fetch_many()`.
 

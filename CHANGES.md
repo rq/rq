@@ -1,3 +1,18 @@
+### RQ 1.3.0 (2020-03-09)
+* Support for infinite job timeout. Thanks @theY4Kman!
+* Added `__main__` file so you can now do `python -m rq.cli`. Thanks @bbayles!
+* Fixes an issue that may cause zombie processes. Thanks @wevsty!
+* `job_id` is now passed to logger during failed jobs. Thanks @smaccona!
+* `queue.enqueue_at()` and `queue.enqueue_in()` now supports explicit `args` and `kwargs` function invocation. Thanks @selwin!
+
+### RQ 1.2.2 (2020-01-31)
+* `Job.fetch()` now properly handles unpickleable return values. Thanks @selwin!
+
+### RQ 1.2.1 (2020-01-31)
+* `enqueue_at()` and `enqueue_in()` now sets job status to `scheduled`. Thanks @coolhacker170597!
+* Failed jobs data are now automatically expired by Redis. Thanks @selwin!
+* Fixes `RQScheduler` logging configuration. Thanks @FlorianPerucki!
+
 ### RQ 1.2.0 (2020-01-04)
 * This release also contains an alpha version of RQ's builtin job scheduling mechanism. Thanks @selwin!
 * Various internal API changes in preparation to support multiple job dependencies. Thanks @thomasmatecki!

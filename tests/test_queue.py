@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import json
 from datetime import datetime, timedelta
 
 from rq import Queue
@@ -28,6 +29,14 @@ class TestQueue(RQTestCase):
         q = Queue('my-queue')
         self.assertEqual(q.name, 'my-queue')
         self.assertEqual(str(q), '<Queue my-queue>')
+
+    def test_create_queue_with_serializer(self):
+        """Creating queues with serializer."""
+        # Test using json serializer
+        q = Queue('queue-with-serializer', serializer=json)
+        self.assertEqual(q.name, 'queue-with-serializer')
+        self.assertEqual(str(q), '<Queue queue-with-serializer>')
+        self.assertIsNotNone(q.serializer)
 
     def test_create_default_queue(self):
         """Instantiating the default queue."""
@@ -326,6 +335,19 @@ class TestQueue(RQTestCase):
             job.perform(),
             ((1,), {'timeout': 1, 'result_ttl': 1})
         )
+
+        # Explicit args and kwargs should also work with enqueue_at
+        time = datetime.now(utc) + timedelta(seconds=10)
+        job = q.enqueue_at(time, echo, job_timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
+        self.assertEqual(job.timeout, 2)
+        self.assertEqual(job.result_ttl, 2)
+        self.assertEqual(
+            job.perform(),
+            ((1,), {'timeout': 1, 'result_ttl': 1})
+        )
+
+        # Positional arguments is not allowed if explicit args and kwargs are used
+        self.assertRaises(Exception, q.enqueue, echo, 1, kwargs=kwargs)
 
     def test_all_queues(self):
         """All queues"""

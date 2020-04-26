@@ -2,33 +2,26 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-import sys
+import json
 import time
+import queue
 import zlib
 from datetime import datetime
 
 from redis import WatchError
 
 from rq.compat import PY2, as_text
-from rq.exceptions import NoSuchJobError, UnpickleError
+from rq.exceptions import NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry)
+                         FinishedJobRegistry, StartedJobRegistry,
+                         ScheduledJobRegistry)
 from rq.utils import utcformat
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
-is_py2 = sys.version[0] == '2'
-if is_py2:
-    import Queue as queue
-else:
-    import queue as queue
-
-try:
-    from cPickle import loads, dumps
-except ImportError:
-    from pickle import loads, dumps
+from pickle import loads, dumps
 
 
 class TestJob(RQTestCase):
@@ -112,6 +105,17 @@ class TestJob(RQTestCase):
         job = Job.create(func=n.div, args=(4,))
 
         # Job data is set
+        self.assertEqual(job.func, n.div)
+        self.assertEqual(job.instance, n)
+        self.assertEqual(job.args, (4,))
+
+    def test_create_job_with_serializer(self):
+        """Creation of jobs with serializer for instance methods."""
+        # Test using json serializer
+        n = fixtures.Number(2)
+        job = Job.create(func=n.div, args=(4,), serializer=json)
+
+        self.assertIsNotNone(job.serializer)
         self.assertEqual(job.func, n.div)
         self.assertEqual(job.instance, n)
         self.assertEqual(job.args, (4,))
@@ -218,7 +222,7 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description'])
+            [b'created_at', b'data', b'description', b'ended_at', b'started_at'])
 
     def test_persistence_of_parent_job(self):
         """Storing jobs with parent job, either instance or key."""
@@ -272,7 +276,7 @@ class TestJob(RQTestCase):
         job.refresh()
 
         for attr in ('func_name', 'instance', 'args', 'kwargs'):
-            with self.assertRaises(UnpickleError):
+            with self.assertRaises(Exception):
                 getattr(job, attr)
 
     def test_job_is_unimportable(self):
@@ -366,11 +370,18 @@ class TestJob(RQTestCase):
         self.assertDictEqual(serialized, serialized2)
 
     def test_unpickleable_result(self):
-        """Unpickleable job result doesn't crash job.to_dict()"""
+        """Unpickleable job result doesn't crash job.save() and job.refresh()"""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
         job._result = queue.Queue()
-        data = job.to_dict()
-        self.assertEqual(data['result'], 'Unpickleable return value')
+        job.save()
+
+        self.assertEqual(
+            self.testconn.hget(job.key, 'result').decode('utf-8'),
+            'Unserializable return value'
+        )
+
+        job = Job.fetch(job.id)
+        self.assertEqual(job.result, 'Unserializable return value')
 
     def test_result_ttl_is_persisted(self):
         """Ensure that job's result_ttl is set properly"""
@@ -574,6 +585,16 @@ class TestJob(RQTestCase):
         job.save()
 
         registry = DeferredJobRegistry(connection=self.testconn)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.SCHEDULED,
+                         connection=self.testconn, origin='default')
+        job.save()
+
+        registry = ScheduledJobRegistry(connection=self.testconn)
         registry.add(job, 500)
 
         job.delete()

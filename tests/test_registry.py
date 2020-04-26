@@ -152,6 +152,7 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job, self.registry)
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertTrue(job.exc_info)  # explanation is written to exc_info 
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
@@ -318,26 +319,25 @@ class TestFailedJobRegistry(RQTestCase):
 
         timestamp = current_timestamp()
         registry.add(job)
-        self.assertLess(
-            self.testconn.zscore(key, job.id),
-            timestamp + DEFAULT_FAILURE_TTL + 2
-        )
-        self.assertGreater(
-            self.testconn.zscore(key, job.id),
-            timestamp + DEFAULT_FAILURE_TTL - 2
-        )
+        score = self.testconn.zscore(key, job.id)
+        self.assertLess(score, timestamp + DEFAULT_FAILURE_TTL + 2)
+        self.assertGreater(score, timestamp + DEFAULT_FAILURE_TTL - 2)
+
+        # Job key will also expire
+        job_ttl = self.testconn.ttl(job.key)
+        self.assertLess(job_ttl, DEFAULT_FAILURE_TTL + 2)
+        self.assertGreater(job_ttl, DEFAULT_FAILURE_TTL - 2)
 
         timestamp = current_timestamp()
         ttl = 5
-        registry.add(job, ttl=5)
-        self.assertLess(
-            self.testconn.zscore(key, job.id),
-            timestamp + ttl + 2
-        )
-        self.assertGreater(
-            self.testconn.zscore(key, job.id),
-            timestamp + ttl - 2
-        )
+        registry.add(job, ttl=ttl)
+        score = self.testconn.zscore(key, job.id)
+        self.assertLess(score, timestamp + ttl + 2)
+        self.assertGreater(score, timestamp + ttl - 2)
+
+        job_ttl = self.testconn.ttl(job.key)
+        self.assertLess(job_ttl, ttl + 2)
+        self.assertGreater(job_ttl, ttl - 2)
 
     def test_requeue(self):
         """FailedJobRegistry.requeue works properly"""
@@ -356,6 +356,8 @@ class TestFailedJobRegistry(RQTestCase):
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.started_at, None)
+        self.assertEqual(job.ended_at, None)
 
         worker.work(burst=True)
         self.assertTrue(job in registry)

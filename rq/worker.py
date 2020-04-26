@@ -41,6 +41,7 @@ from .utils import (backend_class, ensure_list, enum,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
+from .serializers import resolve_serializer
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -104,7 +105,7 @@ class Worker(object):
     log_job_description = True
 
     @classmethod
-    def all(cls, connection=None, job_class=None, queue_class=None, queue=None):
+    def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
         """Returns an iterable of all Workers.
         """
         if queue:
@@ -116,7 +117,7 @@ class Worker(object):
         workers = [cls.find_by_key(as_text(key),
                                    connection=connection,
                                    job_class=job_class,
-                                   queue_class=queue_class)
+                                   queue_class=queue_class, serializer=serializer)
                    for key in worker_keys]
         return compact(workers)
 
@@ -132,7 +133,7 @@ class Worker(object):
 
     @classmethod
     def find_by_key(cls, worker_key, connection=None, job_class=None,
-                    queue_class=None):
+                    queue_class=None, serializer=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -149,7 +150,7 @@ class Worker(object):
 
         name = worker_key[len(prefix):]
         worker = cls([], name, connection=connection, job_class=job_class,
-                     queue_class=queue_class, prepare_for_work=False)
+                     queue_class=queue_class, prepare_for_work=False, serializer=serializer)
 
         worker.refresh()
 
@@ -162,7 +163,7 @@ class Worker(object):
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler=False,
                  success_handlers=None,
-                 prepare_for_work=True):  # noqa
+                 prepare_for_work=True, serializer=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -178,10 +179,11 @@ class Worker(object):
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
         self.version = VERSION
         self.python_version = sys.version
+        self.serializer = resolve_serializer(serializer)
 
         queues = [self.queue_class(name=q,
                                    connection=connection,
-                                   job_class=self.job_class)
+                                   job_class=self.job_class, serializer=self.serializer)
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
 
@@ -210,7 +212,7 @@ class Worker(object):
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
-        if isinstance(exception_handlers, list):
+        if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
@@ -384,6 +386,8 @@ class Worker(object):
         """
         try:
             os.kill(self.horse_pid, sig)
+            os.waitpid(self.horse_pid, 0)
+            self.log.info('Killed horse pid %s', self.horse_pid)
         except OSError as e:
             if e.errno == errno.ESRCH:
                 # "No such process" is fine with us
@@ -477,7 +481,7 @@ class Worker(object):
 
         The return value indicates whether any jobs were processed.
         """
-        setup_loghandlers(logging_level, date_format, log_format)        
+        setup_loghandlers(logging_level, date_format, log_format)
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
@@ -626,7 +630,7 @@ class Worker(object):
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
          successful_job_count, total_working_time, hostname, pid, version, python_version) = data
         queues = as_text(queues)
-        self.hostname = hostname
+        self.hostname = as_text(hostname)
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
         self.python_version = as_text(python_version)
@@ -650,7 +654,7 @@ class Worker(object):
         if queues:
             self.queues = [self.queue_class(queue,
                                             connection=self.connection,
-                                            job_class=self.job_class)
+                                            job_class=self.job_class, serializer=self.serializer)
                            for queue in queues.split(',')]
 
     def increment_failed_job_count(self, pipeline=None):
@@ -682,6 +686,9 @@ class Worker(object):
         either executes successfully or the status of the job is set to
         failed
         """
+
+        ret_val = None
+        job.started_at = job.started_at or utcnow()
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -691,6 +698,12 @@ class Worker(object):
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat(self.job_monitoring_interval + 5)
+
+                # Kill the job from this side if something is really wrong (interpreter lock/etc).
+                if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 1):
+                    self.kill_horse()
+                    break
+
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
                 # caused by a SIGINT or SIGTERM signal during
@@ -721,7 +734,7 @@ class Worker(object):
 
             self.handle_job_failure(
                 job,
-                exc_string="Work-horse process was terminated unexpectedly "
+                exc_string="Work-horse was terminated unexpectedly "
                            "(waitpid returned %s)" % ret_val
             )
 
@@ -753,7 +766,7 @@ class Worker(object):
             os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
-        # constrast to the regular sys.exit()
+        # contrast to the regular sys.exit()
         os._exit(0)
 
     def setup_work_horse_signals(self):
@@ -932,6 +945,7 @@ class Worker(object):
             'arguments': job.args,
             'kwargs': job.kwargs,
             'queue': job.origin,
+            'job_id': job.id,
         })
 
         for handler in self._exc_handlers:

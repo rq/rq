@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import json
 import os
 import shutil
 import signal
@@ -96,6 +97,14 @@ class TestWorker(RQTestCase):
         w = Worker([Queue('foo'), Queue('bar')])
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
+
+        # With string and serializer
+        w = Worker('foo', serializer=json)
+        self.assertEqual(w.queues[0].name, 'foo')
+
+        # With queue having serializer
+        w = Worker(Queue('foo'), serializer=json)
+        self.assertEqual(w.queues[0].name, 'foo')
 
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
@@ -1100,6 +1109,33 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertTrue(job in failed_job_registry)
         self.assertEqual(fooq.count, 0)
 
+    @slow
+    def test_work_horse_force_death(self):
+        """Simulate a frozen worker that doesn't observe the timeout properly.
+        Fake it by artificially setting the timeout of the parent process to
+        something much smaller after the process is already forked.
+        """
+        fooq = Queue('foo')
+        self.assertEqual(fooq.count, 0)
+        w = Worker(fooq)
+        sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
+        if os.path.exists(sentinel_file):
+            os.remove(sentinel_file)
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
+        job, queue = w.dequeue_job_and_maintain_ttl(5)
+        w.fork_work_horse(job, queue)
+        job.timeout = 5
+        w.job_monitoring_interval = 1
+        now = utcnow()
+        w.monitor_work_horse(job)
+        fudge_factor = 1
+        total_time = w.job_monitoring_interval + 5 + fudge_factor
+        self.assertTrue((utcnow() - now).total_seconds() < total_time)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        failed_job_registry = FailedJobRegistry(queue=fooq)
+        self.assertTrue(job in failed_job_registry)
+        self.assertEqual(fooq.count, 0)
+
 
 def schedule_access_self():
     q = Queue('default', connection=get_current_connection())
@@ -1207,7 +1243,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
             self.assertTrue(stderr.endswith(err), stderr)
 
-    def test_handle_shutdown_request(self):
+    @mock.patch('rq.worker.logger.info')
+    def test_handle_shutdown_request(self, mock_logger_info):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process
         and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo')
@@ -1220,8 +1257,11 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w._horse_pid = p.pid
         w.handle_warm_shutdown_request()
         p.join(2)
-        self.assertEqual(p.exitcode, -34)
+        # would expect p.exitcode to be -34 but for some reason os.waitpid is setting it to None, even though
+        # the process has ended
+        self.assertEqual(p.exitcode, None)
         self.assertFalse(os.path.exists(path))
+        mock_logger_info.assert_called_with('Killed horse pid %s', p.pid)
 
     def test_handle_shutdown_request_no_horse(self):
         """Mutate HerokuWorker so _horse_pid refers to non existent process

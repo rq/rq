@@ -135,6 +135,7 @@ class StartedJobRegistry(BaseRegistry):
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
                         job.set_status(JobStatus.FAILED)
+                        job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
@@ -197,7 +198,7 @@ class FailedJobRegistry(BaseRegistry):
 
         job.exc_info = exc_string
         job.save(pipeline=p, include_meta=False)
-        job.cleanup(ttl=-1, pipeline=p)  # failed job won't expire
+        job.cleanup(ttl=ttl, pipeline=p)
         p.zadd(self.key, {job.id: score})
 
         if not pipeline:
@@ -214,10 +215,15 @@ class FailedJobRegistry(BaseRegistry):
         if not result:
             raise InvalidJobOperation
 
-        queue = Queue(job.origin, connection=self.connection,
-                      job_class=self.job_class)
-
-        return queue.enqueue_job(job)
+        with self.connection.pipeline() as pipeline:
+            queue = Queue(job.origin, connection=self.connection,
+                          job_class=self.job_class)
+            job.started_at = None
+            job.ended_at = None
+            job.save()
+            job = queue.enqueue_job(job, pipeline=pipeline)
+            pipeline.execute()
+        return job
 
 
 class DeferredJobRegistry(BaseRegistry):

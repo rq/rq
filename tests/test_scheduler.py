@@ -267,9 +267,12 @@ class TestQueue(RQTestCase):
         scheduler = RQScheduler([queue], connection=self.testconn)
         scheduler.acquire_locks()
         # Jobs created using enqueue_at is put in the ScheduledJobRegistry
-        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=utc), say_hello)
+        job = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=utc), say_hello)
         self.assertEqual(len(queue), 0)
         self.assertEqual(len(registry), 1)
+
+        # enqueue_at set job status to "scheduled"
+        self.assertTrue(job.get_status() == 'scheduled')
 
         # After enqueue_scheduled_jobs() is called, the registry is empty
         # and job is enqueued

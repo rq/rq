@@ -10,7 +10,7 @@ executed and removed right after completion (success or failure).
 * `FailedJobRegistry` Holds jobs that have been executed, but didn't finish successfully.
 * `DeferredJobRegistry` Holds deferred jobs (jobs that depend on another job and are waiting for that 
 job to finish).
-* `ScheduledJobRegistry` Holds schedduled jobs.
+* `ScheduledJobRegistry` Holds scheduled jobs.
 
 You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
 Below is an example using a `StartedJobRegistry`.
@@ -60,7 +60,7 @@ queue.started_job_registry  # Returns StartedJobRegistry
 queue.deferred_job_registry   # Returns DeferredJobRegistry
 queue.finished_job_registry  # Returns FinishedJobRegistry
 queue.failed_job_registry  # Returns FailedJobRegistry
-queue.scheduled_job_registry  # Returns ScheduledobRegistry
+queue.scheduled_job_registry  # Returns ScheduledJobRegistry
 ```
 
 ## Removing Jobs

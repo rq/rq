@@ -70,30 +70,6 @@ class _Colorizer(object):
         else:
             return self.codes[color_key] + text + self.codes["reset"]
 
-    def ansiformat(self, attr, text):
-        """
-        Format ``text`` with a color and/or some attributes::
-
-            color       normal color
-            *color*     bold color
-            _color_     underlined color
-            +color+     blinking color
-        """
-        result = []
-        if attr[:1] == attr[-1:] == '+':
-            result.append(self.codes['blink'])
-            attr = attr[1:-1]
-        if attr[:1] == attr[-1:] == '*':
-            result.append(self.codes['bold'])
-            attr = attr[1:-1]
-        if attr[:1] == attr[-1:] == '_':
-            result.append(self.codes['underline'])
-            attr = attr[1:-1]
-        result.append(self.codes[attr])
-        result.append(text)
-        result.append(self.codes['reset'])
-        return ''.join(result)
-
 
 colorizer = _Colorizer()
 
@@ -250,7 +226,7 @@ def backend_class(holder, default_name, override=None):
 
 
 def str_to_date(date_str):
-    if date_str is None:
+    if not date_str:
         return
     else:
         return utcparse(as_text(date_str))
