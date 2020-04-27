@@ -282,7 +282,7 @@ class Queue(object):
                      at_front=False, meta=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
-
+nd
         It is much like `.enqueue()`, except that it takes the function's args
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.

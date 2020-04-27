@@ -910,5 +910,5 @@ class TestJob(RQTestCase):
         w = Worker([queue])
         w.work(burst=True, max_jobs=1)
 
-        assert dependent_job.get_status() == JobStatus.QUEUED
         assert dependent_job.dependencies_are_met()
+        assert dependent_job.get_status() == JobStatus.QUEUED
