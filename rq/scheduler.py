@@ -40,7 +40,7 @@ class RQScheduler(object):
 
     def __init__(self, queues, connection, interval=1):
         self._queue_names = set(parse_names(queues))
-        self._acquired_locks = set([])
+        self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
         self.connection = connection
@@ -68,7 +68,7 @@ class RQScheduler(object):
 
     def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
-        successful_locks = set([])
+        successful_locks = set()
         pid = os.getpid()
         logging.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:

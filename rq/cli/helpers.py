@@ -143,7 +143,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             queue_dict[queue] = worker_class.all(queue=queue)
 
         if queue_dict:
-            max_length = max([len(q.name) for q, in queue_dict.keys()])
+            max_length = max(len(q.name) for q, in queue_dict.keys())
         else:
             max_length = 0
 
