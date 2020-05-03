@@ -678,7 +678,7 @@ class Worker(object):
         """
 
         ret_val = None
-        job.started_at = job.started_at or utcnow()
+        job.started_at = utcnow()
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
