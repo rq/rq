@@ -51,6 +51,7 @@ class job(object):  # noqa
                 queue = self.queue
 
             depends_on = kwargs.pop('depends_on', None)
+            job_id = kwargs.pop('job_id', None)
             at_front = kwargs.pop('at_front', False)
 
             if not depends_on:
@@ -61,7 +62,7 @@ class job(object):  # noqa
 
             return queue.enqueue_call(f, args=args, kwargs=kwargs,
                                       timeout=self.timeout, result_ttl=self.result_ttl,
-                                      ttl=self.ttl, depends_on=depends_on, at_front=at_front,
+                                      ttl=self.ttl, depends_on=depends_on, job_id=job_id, at_front=at_front,
                                       meta=self.meta, description=self.description, failure_ttl=self.failure_ttl)
         f.delay = delay
         return f
