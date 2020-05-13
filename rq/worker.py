@@ -747,15 +747,10 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
-        try:
-            self.setup_work_horse_signals()
-            self._is_horse = True
-            self.log = logger
-            self.perform_job(job, queue)
-        except Exception as e:  # noqa
-            # Horse does not terminate properly
-            raise e
-            os._exit(1)
+        self.setup_work_horse_signals()
+        self._is_horse = True
+        self.log = logger
+        self.perform_job(job, queue)
 
         # os._exit() is the way to exit from childs after a fork(), in
         # contrast to the regular sys.exit()
