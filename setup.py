@@ -35,7 +35,7 @@ setup(
         'redis >= 3.0.0',
         'click >= 5.0'
     ],
-    python_requires='>=2.7',
+    python_requires='>=3.4',
     entry_points={
         'console_scripts': [
             'rq = rq.cli:main',
