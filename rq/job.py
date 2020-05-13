@@ -516,7 +516,7 @@ class Job(object):
             except Exception:
                 obj['result'] = "Unserializable return value"
         if self.exc_info is not None:
-            _exec_info = u'%s' % (self.exc_info,)
+            _exec_info = '%s' % (self.exc_info,)
             obj['exc_info'] = zlib.compress(_exec_info.encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
