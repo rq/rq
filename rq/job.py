@@ -513,10 +513,11 @@ class Job(object):
         if self._result is not None:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
-            except Exception as e:
+            except Exception:
                 obj['result'] = "Unserializable return value"
         if self.exc_info is not None:
-            obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
+            _exec_info = u'%s' % (self.exc_info,)
+            obj['exc_info'] = zlib.compress(_exec_info.encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
         if self.result_ttl is not None:
