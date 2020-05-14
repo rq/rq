@@ -763,11 +763,11 @@ class Job(object):
         if exclude_job_id:
             dependencies_ids.discard(exclude_job_id)
 
-        dependencies_statuses = [
-            connection.hget(self.key_for(key), 'status')
-            for key
-            in dependencies_ids
-        ]
+        with connection.pipeline() as pipeline:
+            for key in dependencies_ids:
+                pipeline.hget(self.key_for(key), 'status')
+
+            dependencies_statuses = pipeline.execute()
 
         return all(
             status.decode() == JobStatus.FINISHED
