@@ -104,3 +104,12 @@ except ImportError:
             return timedelta(0)
 
     utc = UTC()
+
+
+def hmset(pipe_or_connection, name, mapping):
+    # redis-py versions 3.5.0 and above accept a mapping parameter for hset
+    try:
+        return pipe_or_connection.hset(name, mapping=mapping)
+    # earlier versions require hmset to be used
+    except TypeError:
+        return pipe_or_connection.hmset(name, mapping)
