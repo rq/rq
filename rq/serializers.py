@@ -1,7 +1,13 @@
+from functools import partial
 import pickle
 
 from .compat import string_types
 from .utils import import_attribute
+
+
+class DefaultSerializer:
+    dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
+    loads = pickle.loads
 
 
 def resolve_serializer(serializer):
@@ -11,7 +17,7 @@ def resolve_serializer(serializer):
     Also accepts a string path to serializer that will be loaded as the serializer
     """
     if not serializer:
-        return pickle
+        return DefaultSerializer
 
     if isinstance(serializer, string_types):
         serializer = import_attribute(serializer)
