@@ -1,3 +1,7 @@
+### RQ 1.4.1 (2020-05-16)
+* Default serializer now uses `pickle.HIGHEST_PROTOCOL` for backward compatibility reasons. Thanks @bbayles!
+* Avoid deprecation warnings on redis-py >= 3.5.0. Thanks @bbayles!
+
 ### RQ 1.4.0 (2020-05-13)
 * Custom serializer is now supported. Thanks @solababs!
 * `delay()` now accepts `job_id` argument. Thanks @grayshirt!
