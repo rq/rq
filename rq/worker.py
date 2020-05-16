@@ -23,7 +23,7 @@ except ImportError:
 from redis import WatchError
 
 from . import worker_registration
-from .compat import PY2, as_text, string_types, text_type
+from .compat import PY2, as_text, hmset, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (DEFAULT_RESULT_TTL,
@@ -268,7 +268,7 @@ class Worker(object):
             now = utcnow()
             now_in_string = utcformat(now)
             self.birth_date = now
-            p.hmset(key, {
+            hmset(p, key, mapping={
                 'birth': now_in_string,
                 'last_heartbeat': now_in_string,
                 'queues': queues,
