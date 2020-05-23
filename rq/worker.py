@@ -23,7 +23,7 @@ except ImportError:
 from redis import WatchError
 
 from . import worker_registration
-from .compat import PY2, as_text, string_types, text_type
+from .compat import PY2, as_text, hmset, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (DEFAULT_RESULT_TTL,
@@ -268,7 +268,7 @@ class Worker(object):
             now = utcnow()
             now_in_string = utcformat(now)
             self.birth_date = now
-            p.hmset(key, {
+            hmset(p, key, mapping={
                 'birth': now_in_string,
                 'last_heartbeat': now_in_string,
                 'queues': queues,
@@ -680,7 +680,7 @@ class Worker(object):
         """
 
         ret_val = None
-        job.started_at = job.started_at or utcnow()
+        job.started_at = utcnow()
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -689,7 +689,7 @@ class Worker(object):
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
-                self.heartbeat(self.job_monitoring_interval + 5)
+                self.heartbeat(self.job_monitoring_interval + 30)
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 1):
@@ -747,15 +747,10 @@ class Worker(object):
         # that are different from the worker.
         random.seed()
 
-        try:
-            self.setup_work_horse_signals()
-            self._is_horse = True
-            self.log = logger
-            self.perform_job(job, queue)
-        except Exception as e:  # noqa
-            # Horse does not terminate properly
-            raise e
-            os._exit(1)
+        self.setup_work_horse_signals()
+        self._is_horse = True
+        self.log = logger
+        self.perform_job(job, queue)
 
         # os._exit() is the way to exit from childs after a fork(), in
         # contrast to the regular sys.exit()

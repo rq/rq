@@ -4,12 +4,13 @@ from __future__ import (absolute_import, division, print_function,
 
 import inspect
 import warnings
+import zlib
+
 from functools import partial
 from uuid import uuid4
 
-import zlib
-
-from rq.compat import as_text, decode_redis_hash, string_types, text_type
+from rq.compat import (as_text, decode_redis_hash, hmset, string_types,
+                       text_type)
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
@@ -557,7 +558,7 @@ class Job(object):
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        connection.hmset(key, self.to_dict(include_meta=include_meta))
+        hmset(connection, key, self.to_dict(include_meta=include_meta))
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""

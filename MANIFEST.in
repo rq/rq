@@ -1,2 +1,3 @@
 include LICENSE
+include *.toml
 recursive-exclude tests *

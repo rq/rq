@@ -35,7 +35,7 @@ setup(
         'redis >= 3.0.0',
         'click >= 5.0'
     ],
-    python_requires='>=2.7',
+    python_requires='>=3.4',
     entry_points={
         'console_scripts': [
             'rq = rq.cli:main',
@@ -65,8 +65,6 @@ setup(
         'Operating System :: MacOS',
         'Operating System :: Unix',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',

@@ -1,3 +1,15 @@
+### RQ 1.4.1 (2020-05-16)
+* Default serializer now uses `pickle.HIGHEST_PROTOCOL` for backward compatibility reasons. Thanks @bbayles!
+* Avoid deprecation warnings on redis-py >= 3.5.0. Thanks @bbayles!
+
+### RQ 1.4.0 (2020-05-13)
+* Custom serializer is now supported. Thanks @solababs!
+* `delay()` now accepts `job_id` argument. Thanks @grayshirt!
+* Fixed a bug that may cause early termination of scheduled or requeued jobs. Thanks @rmartin48!
+* When a job is scheduled, always add queue name to a set containing active RQ queue names. Thanks @mdawar!
+* Added `--sentry-ca-certs` and `--sentry-debug` parameters to `rq worker` CLI. Thanks @kichawa!
+* Jobs cleaned up by `StartedJobRegistry` are given an exception info. Thanks @selwin!
+
 ### RQ 1.3.0 (2020-03-09)
 * Support for infinite job timeout. Thanks @theY4Kman!
 * Added `__main__` file so you can now do `python -m rq.cli`. Thanks @bbayles!

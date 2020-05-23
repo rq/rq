@@ -53,7 +53,7 @@ from somewhere import say_hello
 queue = Queue(name='default', connection=Redis())
 
 # Schedules job to be run in 10 seconds
-job = queue.enqueue_at(timedelta(seconds=10), say_hello)
+job = queue.enqueue_in(timedelta(seconds=10), say_hello)
 ```
 
 Jobs that are scheduled for execution are not placed in the queue, but they are
