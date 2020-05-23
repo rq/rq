@@ -6,7 +6,7 @@ import json
 import time
 import queue
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from redis import WatchError
 
@@ -17,7 +17,7 @@ from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
                          ScheduledJobRegistry)
-from rq.utils import utcformat
+from rq.utils import utcformat, utcnow
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
@@ -773,8 +773,12 @@ class TestJob(RQTestCase):
 
         dependency_job.delete()
 
-        with self.assertRaises(NoSuchJobError):
-            dependent_job.fetch_dependencies(pipeline=self.testconn)
+        self.assertNotIn(
+            dependent_job.id,
+            [job.id for job in dependent_job.fetch_dependencies(
+                pipeline=self.testconn
+            )]
+        )
 
     def test_fetch_dependencies_watches(self):
         queue = Queue(connection=self.testconn)
@@ -796,3 +800,115 @@ class TestJob(RQTestCase):
                 self.testconn.set(dependency_job.id, 'somethingelsehappened')
                 pipeline.touch(dependency_job.id)
                 pipeline.execute()
+
+    def test_dependencies_finished_returns_false_if_dependencies_queued(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job_ids = [
+            queue.enqueue(fixtures.say_hello).id
+            for _ in range(5)
+        ]
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = dependency_job_ids
+        dependent_job.register_dependency()
+
+        dependencies_finished = dependent_job.dependencies_are_met()
+
+        self.assertFalse(dependencies_finished)
+
+    def test_dependencies_finished_returns_true_if_no_dependencies(self):
+        queue = Queue(connection=self.testconn)
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job.register_dependency()
+
+        dependencies_finished = dependent_job.dependencies_are_met()
+
+        self.assertTrue(dependencies_finished)
+
+    def test_dependencies_finished_returns_true_if_all_dependencies_finished(self):
+        dependency_jobs = [
+            Job.create(fixtures.say_hello)
+            for _ in range(5)
+        ]
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [job.id for job in dependency_jobs]
+        dependent_job.register_dependency()
+
+        now = utcnow()
+
+        # Set ended_at timestamps
+        for i, job in enumerate(dependency_jobs):
+            job._status = JobStatus.FINISHED
+            job.ended_at = now - timedelta(seconds=i)
+            job.save()
+
+        dependencies_finished = dependent_job.dependencies_are_met()
+
+        self.assertTrue(dependencies_finished)
+
+    def test_dependencies_finished_returns_false_if_unfinished_job(self):
+        dependency_jobs = [Job.create(fixtures.say_hello) for _ in range(2)]
+
+        dependency_jobs[0]._status = JobStatus.FINISHED
+        dependency_jobs[0].ended_at = utcnow()
+        dependency_jobs[0].save()
+
+        dependency_jobs[1]._status = JobStatus.STARTED
+        dependency_jobs[1].ended_at = None
+        dependency_jobs[1].save()
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [job.id for job in dependency_jobs]
+        dependent_job.register_dependency()
+
+        now = utcnow()
+
+        dependencies_finished = dependent_job.dependencies_are_met()
+
+        self.assertFalse(dependencies_finished)
+
+    def test_dependencies_finished_watches_job(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello)
+
+        dependent_job = Job.create(func=fixtures.say_hello)
+        dependent_job._dependency_ids = [dependency_job.id]
+        dependent_job.register_dependency()
+
+        with self.testconn.pipeline() as pipeline:
+            dependent_job.dependencies_are_met(
+                pipeline=pipeline,
+            )
+
+            dependency_job.set_status(JobStatus.FAILED, pipeline=self.testconn)
+            pipeline.multi()
+
+            with self.assertRaises(WatchError):
+                pipeline.touch(Job.key_for(dependent_job.id))
+                pipeline.execute()
+
+    def test_can_enqueue_job_if_dependency_is_deleted(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello, result_ttl=0)
+
+        w = Worker([queue])
+        w.work(burst=True)
+
+        assert queue.enqueue(fixtures.say_hello, depends_on=dependency_job)
+
+    def test_dependents_are_met_if_dependency_is_deleted(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(fixtures.say_hello, result_ttl=0)
+        dependent_job = queue.enqueue(fixtures.say_hello, depends_on=dependency_job)
+
+        w = Worker([queue])
+        w.work(burst=True, max_jobs=1)
+
+        assert dependent_job.dependencies_are_met()
+        assert dependent_job.get_status() == JobStatus.QUEUED

@@ -4,7 +4,6 @@ from __future__ import (absolute_import, division, print_function,
 
 import uuid
 import warnings
-
 from datetime import datetime
 
 from redis import WatchError
@@ -14,8 +13,8 @@ from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
-from .utils import backend_class, import_attribute, parse_timeout, utcnow
 from .serializers import resolve_serializer
+from .utils import backend_class, import_attribute, parse_timeout, utcnow
 
 
 def compact(lst):
@@ -283,7 +282,7 @@ class Queue(object):
                      at_front=False, meta=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
-
+nd
         It is much like `.enqueue()`, except that it takes the function's args
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
@@ -463,12 +462,23 @@ class Queue(object):
                 if pipeline is None:
                     pipe.watch(dependents_key)
 
-                dependent_jobs = [self.job_class.fetch(as_text(job_id), connection=self.connection)
-                                  for job_id in pipe.smembers(dependents_key)]
+                dependent_job_ids = [as_text(_id)
+                                     for _id in pipe.smembers(dependents_key)]
+
+                jobs_to_enqueue = [
+                    dependent_job for dependent_job
+                    in self.job_class.fetch_many(
+                        dependent_job_ids,
+                        connection=self.connection
+                    ) if dependent_job.dependencies_are_met(
+                        exclude_job_id=job.id,
+                        pipeline=pipe
+                    )
+                ]
 
                 pipe.multi()
 
-                for dependent in dependent_jobs:
+                for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,
                                                    job_class=self.job_class)

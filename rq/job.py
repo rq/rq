@@ -3,20 +3,26 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import inspect
+import pickle
 import warnings
 import zlib
+
+from functools import partial
 from uuid import uuid4
 
 from rq.compat import (as_text, decode_redis_hash, hmset, string_types,
                        text_type)
-
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
+from .serializers import resolve_serializer
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
-from .serializers import resolve_serializer
 
+# Serialize pickle dumps using the highest pickle protocol (binary, default
+# uses ascii)
+dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
+loads = pickle.loads
 
 JobStatus = enum(
     'JobStatus',
@@ -125,7 +131,7 @@ class Job(object):
 
     def set_status(self, status, pipeline=None):
         self._status = status
-        connection = pipeline or self.connection
+        connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
     @property
@@ -392,20 +398,19 @@ class Job(object):
         watch is true, then set WATCH on all the keys of all dependencies.
 
         Returned jobs will use self's connection, not the pipeline supplied.
+
+        If a job has been deleted from redis, it is not returned.
         """
         connection = pipeline if pipeline is not None else self.connection
 
         if watch and self._dependency_ids:
             connection.watch(*self._dependency_ids)
 
-        jobs = self.fetch_many(self._dependency_ids, connection=self.connection)
-
-        for i, job in enumerate(jobs):
-            if not job:
-                raise NoSuchJobError('Dependency {0} does not exist'.format(self._dependency_ids[i]))
+        jobs = [job
+                for job in self.fetch_many(self._dependency_ids, connection=self.connection)
+                if job]
 
         return jobs
-
 
     @property
     def result(self):
@@ -725,5 +730,46 @@ class Job(object):
             dependents_key = self.dependents_key_for(dependency_id)
             connection.sadd(dependents_key, self.id)
             connection.sadd(self.dependencies_key, dependency_id)
+
+    @property
+    def dependency_ids(self):
+        dependencies = self.connection.smembers(self.dependencies_key)
+        return [Job.key_for(_id.decode())
+                for _id in dependencies]
+
+    def dependencies_are_met(self, exclude_job_id=None, pipeline=None):
+        """Returns a boolean indicating if all of this jobs dependencies are _FINISHED_
+
+        If a pipeline is passed, all dependencies are WATCHed.
+
+        `exclude` allows us to exclude some job id from the status check. This is useful
+        when enqueueing the dependents of a _successful_ job -- that status of
+        `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
+        method is _called_ in the _stack_ of it's dependents are being enqueued.
+        """
+
+        connection = pipeline if pipeline is not None else self.connection
+
+        if pipeline is not None:
+            connection.watch(*self.dependency_ids)
+
+        dependencies_ids = {_id.decode()
+                            for _id in connection.smembers(self.dependencies_key)}
+
+        if exclude_job_id:
+            dependencies_ids.discard(exclude_job_id)
+
+        with connection.pipeline() as pipeline:
+            for key in dependencies_ids:
+                pipeline.hget(self.key_for(key), 'status')
+
+            dependencies_statuses = pipeline.execute()
+
+        return all(
+            status.decode() == JobStatus.FINISHED
+            for status
+            in dependencies_statuses
+            if status
+        )
 
 _job_stack = LocalStack()
