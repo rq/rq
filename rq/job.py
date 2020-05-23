@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import inspect
+import pickle
 import warnings
 import zlib
 
@@ -17,12 +18,6 @@ from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (enum, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
-
-try:
-    import cPickle as pickle
-except ImportError:  # noqa  # pragma: no cover
-    import pickle
-
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
