@@ -4,6 +4,8 @@ from __future__ import (absolute_import, division, print_function,
 
 import sys
 
+from redis.exceptions import ResponseError
+
 
 def is_python_version(*versions):
     for version in versions:
@@ -107,9 +109,14 @@ except ImportError:
 
 
 def hmset(pipe_or_connection, name, mapping):
-    # redis-py versions 3.5.0 and above accept a mapping parameter for hset
+    # redis-py versions 3.5.0 marks hmset as deprecated and introduces
+    # a "mapping" parameter for hset
     try:
-        return pipe_or_connection.hset(name, mapping=mapping)
+        try:
+            return pipe_or_connection.hset(name, mapping=mapping)
+        except ResponseError:
+            # On Redis server < 4.0, we have to fallback to hmset
+            return pipe_or_connection.hmset(name, mapping)
     # earlier versions require hmset to be used
     except TypeError:
         return pipe_or_connection.hmset(name, mapping)
