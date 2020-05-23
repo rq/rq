@@ -72,7 +72,7 @@ class TestScheduledJobRegistry(RQTestCase):
             # the timestamp maybe different
             registry.schedule(job, datetime(2019, 1, 1))
             self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                             1546300800 + time.timezone)  # 2019-01-01 UTC in Unix timestamp
+                             1546300800 + (time.timezone if time.daylight == 0 else time.altzone))  # 2019-01-01 UTC in Unix timestamp
 
             # Score is always stored in UTC even if datetime is in a different tz
             tz = timezone(timedelta(hours=7))
@@ -99,8 +99,8 @@ class TestScheduler(RQTestCase):
         self.assertTrue(scheduler.should_reacquire_locks)
         scheduler.acquire_locks()
         self.assertIsNotNone(scheduler.lock_acquisition_time)
-        
-        # scheduler.should_reacquire_locks always returns False if 
+
+        # scheduler.should_reacquire_locks always returns False if
         # scheduler.acquired_locks and scheduler._queue_names are the same
         self.assertFalse(scheduler.should_reacquire_locks)
         scheduler.lock_acquisition_time = datetime.now() - timedelta(minutes=16)
@@ -251,7 +251,7 @@ class TestWorker(RQTestCase):
 
         p.start()
         queue.enqueue_at(datetime(2019, 1, 1, tzinfo=utc), say_hello)
-        worker.work(burst=False, with_scheduler=True)        
+        worker.work(burst=False, with_scheduler=True)
         p.join(1)
         self.assertIsNotNone(worker.scheduler)
         registry = FinishedJobRegistry(queue=queue)
