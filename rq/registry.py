@@ -265,7 +265,7 @@ class ScheduledJobRegistry(BaseRegistry):
                 from datetime import timezone
             except ImportError:
                 raise ValueError('datetime object with no timezone')
-            tz = timezone(timedelta(seconds=-time.timezone))
+            tz = timezone(timedelta(seconds=-(time.timezone if time.daylight == 0 else time.altzone)))
             scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
 
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
