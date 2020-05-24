@@ -70,9 +70,38 @@ class TestScheduledJobRegistry(RQTestCase):
             # If we pass in a datetime with no timezone, `schedule()`
             # assumes local timezone so depending on your local timezone,
             # the timestamp maybe different
-            registry.schedule(job, datetime(2019, 1, 1))
-            self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                             1546300800 + (time.timezone if time.daylight == 0 else time.altzone))  # 2019-01-01 UTC in Unix timestamp
+
+            # we need to account for the difference between a timezone
+            # with DST active and without DST active.  The time.timezone
+            # property isn't accurate when time.daylight is non-zero,
+            # we'll test both.
+
+            # first, time.daylight == 0 (not in DST).
+            # mock the sitatuoin for American/New_York not in DST (UTC - 5)
+            # time.timezone = 18000
+            # time.daylight = 0
+            # time.altzone = 14400
+            mock_day = mock.patch('time.daylight', 0)
+            mock_tz = mock.patch('time.timezone', 18000)
+            mock_atz = mock.patch('time.altzone', 14400)
+            with mock_tz, mock_day, mock_atz:
+                registry.schedule(job, datetime(2019, 1, 1))
+                self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                                1546300800 + 18000)  # 2019-01-01 UTC in Unix timestamp
+
+            # second, time.daylight != 0 (in DST)
+            # mock the sitatuoin for American/New_York not in DST (UTC - 4)
+            # time.timezone = 18000
+            # time.daylight = 1
+            # time.altzone = 14400
+            mock_day = mock.patch('time.daylight', 1)
+            mock_tz = mock.patch('time.timezone', 18000)
+            mock_atz = mock.patch('time.altzone', 14400)
+            with mock_tz, mock_day, mock_atz:
+                registry.schedule(job, datetime(2019, 1, 1))
+                self.assertEqual(self.testconn.zscore(registry.key, job.id),
+                                1546300800 + 14400)  # 2019-01-01 UTC in Unix timestamp
+
 
             # Score is always stored in UTC even if datetime is in a different tz
             tz = timezone(timedelta(hours=7))
