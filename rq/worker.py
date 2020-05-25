@@ -20,7 +20,7 @@ try:
 except ImportError:
     from signal import SIGTERM as SIGKILL
 
-from redis import WatchError
+import redis.exceptions
 
 from . import worker_registration
 from .compat import PY2, as_text, hmset, string_types, text_type
@@ -508,7 +508,6 @@ class Worker(object):
                         break
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
-
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
@@ -569,12 +568,13 @@ class Worker(object):
         self.log.debug('*** Listening on %s...', green(qnames))
 
         while True:
-            self.heartbeat()
-
-            if self.should_run_maintenance_tasks:
-                self.run_maintenance_tasks()
 
             try:
+                self.heartbeat()
+
+                if self.should_run_maintenance_tasks:
+                    self.run_maintenance_tasks()
+
                 result = self.queue_class.dequeue_any(self.queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class)
@@ -591,6 +591,10 @@ class Worker(object):
                 break
             except DequeueTimeout:
                 pass
+            except redis.exceptions.ConnectionError as conn_err:
+                self.log.error('Could not connect to Redis instance: %s '
+                               'Retrying...', conn_err)
+                time.sleep(1)
 
         self.heartbeat()
         return result
@@ -864,7 +868,7 @@ class Worker(object):
 
                     pipeline.execute()
                     break
-                except WatchError:
+                except redis.exceptions.WatchError:
                     continue
 
     def perform_job(self, job, queue, heartbeat_ttl=None):
