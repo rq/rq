@@ -108,8 +108,10 @@ except ImportError:
 
 def hmset(pipe_or_connection, name, mapping):
     # redis-py versions 3.5.0 and above accept a mapping parameter for hset
-    try:
-        return pipe_or_connection.hset(name, mapping=mapping)
+    # This requires Redis server >= 4.0 so this is temporarily commented out
+    # and will be re-enabled at a later date
+    # try:
+    #    return pipe_or_connection.hset(name, mapping=mapping)
     # earlier versions require hmset to be used
-    except TypeError:
-        return pipe_or_connection.hmset(name, mapping)
+    # except TypeError:
+    return pipe_or_connection.hmset(name, mapping)
