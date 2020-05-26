@@ -1,3 +1,7 @@
+### RQ 1.4.2 (2020-05-26)
+* Reverted changes to `hmset` command which causes workers on Redis server < 4 to crash. Thanks @selwin!
+* Merged in more groundwork to enable jobs with multiple dependencies. Thanks @thomasmatecki!
+
 ### RQ 1.4.1 (2020-05-16)
 * Default serializer now uses `pickle.HIGHEST_PROTOCOL` for backward compatibility reasons. Thanks @bbayles!
 * Avoid deprecation warnings on redis-py >= 3.5.0. Thanks @bbayles!
