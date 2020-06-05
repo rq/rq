@@ -577,7 +577,7 @@ class Job(object):
 
     def requeue(self):
         """Requeues job."""
-        self.failed_job_registry.requeue(self)
+        return self.failed_job_registry.requeue(self)
 
     def delete(self, pipeline=None, remove_from_queue=True,
                delete_dependents=False):
