@@ -111,13 +111,13 @@ class TestWorker(RQTestCase):
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
         self.assertEqual(
-            w.work(burst=True), False,
+            w.work(burst=True, with_scheduler=True), False,
             'Did not expect any work on the queue.'
         )
 
         fooq.enqueue(say_hello, name='Frank')
         self.assertEqual(
-            w.work(burst=True), True,
+            w.work(burst=True, with_scheduler=True), True,
             'Expected at least some work done.'
         )
 
