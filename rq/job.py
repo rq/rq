@@ -123,6 +123,13 @@ class Job(object):
             job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
         return job
 
+    def get_position(self):
+        from .queue import Queue
+        if self.origin:
+            q = Queue(name=self.origin, connection=self.connection)
+            return q.get_job_position(self._id)
+        return None
+
     def get_status(self, refresh=True):
         if refresh:
             self._status = as_text(self.connection.hget(self.key, 'status'))

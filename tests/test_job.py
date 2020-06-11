@@ -528,6 +528,16 @@ class TestJob(RQTestCase):
         self.assertEqual(self.testconn.ttl(dependent_job.dependencies_key), 100)
         self.assertEqual(self.testconn.ttl(dependency_job.dependents_key), 100)
 
+    def test_job_get_position(self):
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello)
+        job2 = queue.enqueue(fixtures.say_hello)
+        job3 = Job(fixtures.say_hello)
+
+        self.assertEqual(0, job.get_position())
+        self.assertEqual(1, job2.get_position())
+        self.assertEqual(None, job3.get_position())
+
     def test_job_with_dependents_delete_parent(self):
         """job.delete() deletes itself from Redis but not dependents.
         Wthout a save, the dependent job is never saved into redis. The delete
