@@ -85,6 +85,14 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install -e git+https://github.com/nvie/rq.git@master#egg=rq
 
 
+## Monitoring
+
+You can check out these below dashboards for monitoring RQ.
+
+- [rq-dashboard](https://github.com/Parallels/rq-dashboard)
+- [rqmonitor](https://github.com/pranavgupta1234/rqmonitor)
+
+
 ## Project history
 
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
