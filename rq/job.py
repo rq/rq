@@ -664,6 +664,11 @@ class Job(object):
         """
         return default_ttl if self.result_ttl is None else self.result_ttl
 
+    def truncate_long_string(data, maxlen=75):
+        """ Truncates strings longer than maxlen
+        """
+        return (data[:maxlen] + '...') if len(data) > maxlen else data
+
     # Representation
     def get_call_string(self):  # noqa
         """Returns a string representation of the call, formatted as a regular
@@ -672,9 +677,9 @@ class Job(object):
         if self.func_name is None:
             return None
 
-        arg_list = [as_text(repr(arg)) for arg in self.args]
+        arg_list = [as_text(truncate_long_string(repr(arg))) for arg in self.args]
 
-        kwargs = ['{0}={1}'.format(k, as_text(repr(v))) for k, v in self.kwargs.items()]
+        kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v)))) for k, v in self.kwargs.items()]
         # Sort here because python 3.3 & 3.4 makes different call_string
         arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
