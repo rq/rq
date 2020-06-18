@@ -98,7 +98,7 @@ class Job(object):
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '{0}.{1}'.format(func.__module__, func.__name__)
+            job._func_name = '{0}.{1}'.format(func.__module__, func.__qualname__)
         elif isinstance(func, string_types):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
