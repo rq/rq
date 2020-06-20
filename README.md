@@ -85,12 +85,15 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install -e git+https://github.com/nvie/rq.git@master#egg=rq
 
 
-## Monitoring
+## Related Projects
 
-You can check out these below dashboards for monitoring RQ.
+Check out these below repos which might be useful in your rq based project.
 
 - [rq-dashboard](https://github.com/Parallels/rq-dashboard)
 - [rqmonitor](https://github.com/pranavgupta1234/rqmonitor)
+- [django-rq](https://github.com/rq/django-rq)
+- [Flask-RQ2](https://github.com/rq/Flask-RQ2)
+- [rq-scheduler](https://github.com/rq/rq-scheduler)
 
 
 ## Project history
