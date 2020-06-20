@@ -39,6 +39,11 @@ JobStatus = enum(
 UNEVALUATED = object()
 
 
+def truncate_long_string(data, maxlen=75):
+    """ Truncates strings longer than maxlen
+    """
+    return (data[:maxlen] + '...') if len(data) > maxlen else data
+	
 def cancel_job(job_id, connection=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
@@ -672,9 +677,9 @@ class Job(object):
         if self.func_name is None:
             return None
 
-        arg_list = [as_text(repr(arg)) for arg in self.args]
+        arg_list = [as_text(truncate_long_string(repr(arg))) for arg in self.args]
 
-        kwargs = ['{0}={1}'.format(k, as_text(repr(v))) for k, v in self.kwargs.items()]
+        kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v)))) for k, v in self.kwargs.items()]
         # Sort here because python 3.3 & 3.4 makes different call_string
         arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
