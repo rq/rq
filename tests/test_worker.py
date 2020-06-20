@@ -1084,7 +1084,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         now = utcnow()
         w.monitor_work_horse(job)
         fudge_factor = 1
-        total_time = w.job_monitoring_interval + 5 + fudge_factor
+        total_time = w.job_monitoring_interval + 65 + fudge_factor
         self.assertTrue((utcnow() - now).total_seconds() < total_time)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
