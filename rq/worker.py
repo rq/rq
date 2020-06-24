@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+#wait_time_after_connection_failure -*- coding: utf-8 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -103,6 +103,8 @@ class Worker(object):
     log_result_lifespan = True
     # `log_job_description` is used to toggle logging an entire jobs description.
     log_job_description = True
+    # Connection failed timeout exponential backoff factor
+    exponential_backoff_factor = 2.0
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
@@ -428,7 +430,6 @@ class Worker(object):
 
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
-
         before_state = None
         notified = False
 
@@ -566,7 +567,7 @@ class Worker(object):
         self.set_state(WorkerStatus.IDLE)
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
-
+        connection_wait_time = 1.0;
         while True:
 
             try:
@@ -594,7 +595,10 @@ class Worker(object):
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error('Could not connect to Redis instance: %s '
                                'Retrying...', conn_err)
-                time.sleep(1)
+                time.sleep(connection_wait_time)
+                connection_wait_time *= self.exponential_backoff_factor
+            else:
+                connection_wait_time = 1.0;
 
         self.heartbeat()
         return result
