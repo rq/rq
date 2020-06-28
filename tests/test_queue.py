@@ -133,6 +133,18 @@ class TestQueue(RQTestCase):
         self.assertEqual(0, len(self.testconn.smembers(Queue.redis_queues_keys)))
         self.assertEqual(False, self.testconn.exists(q.key))
 
+    def test_position(self):
+        """Test queue.delete properly removes queue but keeps the job keys in the redis store"""
+        q = Queue('example')
+        job = q.enqueue(say_hello)
+        job2 = q.enqueue(say_hello)
+        job3 = q.enqueue(say_hello)
+
+        self.assertEqual(0, q.get_job_position(job.id))
+        self.assertEqual(1, q.get_job_position(job2.id))
+        self.assertEqual(2, q.get_job_position(job3))
+        self.assertEqual(None, q.get_job_position("no_real_job"))
+
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
         q = Queue('example')
