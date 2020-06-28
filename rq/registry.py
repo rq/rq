@@ -304,7 +304,7 @@ class ScheduledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue):
-    """Cleans StartedJobRegistry and FinishedJobRegistry of a queue."""
+    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,
                                    job_class=queue.job_class)
