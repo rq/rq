@@ -278,7 +278,7 @@ class Worker(object):
                 'python_version': self.python_version,
             })
             worker_registration.register(self, p)
-            p.expire(key, self.default_worker_ttl)
+            p.expire(key, self.default_worker_ttl + 60)
             p.execute()
 
     def register_death(self):
