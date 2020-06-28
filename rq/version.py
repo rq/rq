@@ -2,4 +2,4 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-VERSION = '1.4.2'
+VERSION = '1.4.3'
