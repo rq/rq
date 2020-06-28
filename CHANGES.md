@@ -1,3 +1,9 @@
+### RQ 1.4.3 (2020-06-28)
+* Added `job.get_position()` and `queue.get_job_position()`. Thanks @aparcar!
+* Longer TTLs for worker keys to prevent them from expiring inside the worker lifecycle. Thanks @selwin!
+* Long job args/kwargs are now truncated during logging. Thanks @JhonnyBn!
+* `job.requeue()` now returns the modified job. Thanks @ericatkin!
+
 ### RQ 1.4.2 (2020-05-26)
 * Reverted changes to `hmset` command which causes workers on Redis server < 4 to crash. Thanks @selwin!
 * Merged in more groundwork to enable jobs with multiple dependencies. Thanks @thomasmatecki!
