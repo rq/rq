@@ -1,2 +1,2 @@
-redis>=3.0
-click>=3.0.0
+redis>=3.5.0
+click>=5.0.0

@@ -17,6 +17,15 @@ def get_version():
         raise RuntimeError('No version info found.')
 
 
+def get_requirements():
+    basedir = os.path.dirname(__file__)
+    try:
+        with open(os.path.join(basedir, 'requirements.txt')) as f:
+            return f.readlines()
+    except FileNotFoundError:
+        raise RuntimeError('No requirements info found.')
+
+
 setup(
     name='rq',
     version=get_version(),
@@ -31,10 +40,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     platforms='any',
-    install_requires=[
-        'redis >= 3.0.0',
-        'click >= 5.0'
-    ],
+    install_requires=get_requirements(),
     python_requires='>=3.4',
     entry_points={
         'console_scripts': [
