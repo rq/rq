@@ -60,13 +60,13 @@ class Queue(object):
         return cls(name, connection=connection, job_class=job_class)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 async=True, job_class=None):
+                 asynchronous=True, job_class=None):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout)
-        self._async = async
+        self._async = asynchronous
 
         # override class attribute job_class if one was passed
         if job_class is not None:
