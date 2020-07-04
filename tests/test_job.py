@@ -12,7 +12,7 @@ from redis import WatchError
 
 from rq.compat import PY2, as_text
 from rq.exceptions import NoSuchJobError
-from rq.job import Job, JobStatus, cancel_job, get_current_job
+from rq.job import Job, JobStatus, cancel_job, get_current_job, Retry
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
@@ -223,6 +223,19 @@ class TestJob(RQTestCase):
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
             [b'created_at', b'data', b'description', b'ended_at', b'started_at'])
+    
+    def test_persistence_of_retry_data(self):
+        """Retry related data is stored and restored properly"""
+        job = Job.create(func=fixtures.some_calculation)
+        job.retries_left = 3
+        job.retry_intervals = [1, 2, 3]
+        job.save()
+
+        job.retries_left = None
+        job.retry_intervals = None
+        job.refresh()
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [1, 2, 3])
 
     def test_persistence_of_parent_job(self):
         """Storing jobs with parent job, either instance or key."""
@@ -922,3 +935,22 @@ class TestJob(RQTestCase):
 
         assert dependent_job.dependencies_are_met()
         assert dependent_job.get_status() == JobStatus.QUEUED
+    
+    def test_retry(self):
+        """Retry parses `max` and `interval` correctly"""
+        retry = Retry(max=1)
+        self.assertEqual(retry.max, 1)
+        self.assertEqual(retry.intervals, [0])
+        self.assertRaises(ValueError, Retry, max=0)
+
+        retry = Retry(max=2, interval=5)
+        self.assertEqual(retry.max, 2)
+        self.assertEqual(retry.intervals, [5])
+
+        retry = Retry(max=3, interval=[5, 10])
+        self.assertEqual(retry.max, 3)
+        self.assertEqual(retry.intervals, [5, 10])
+
+        # interval can't be negative
+        self.assertRaises(ValueError, Retry, max=1, interval=-5)
+        self.assertRaises(ValueError, Retry, max=1, interval=[1, -5])

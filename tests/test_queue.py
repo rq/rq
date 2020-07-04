@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from mock.mock import patch
 
-from rq import Queue
+from rq import Retry, Queue
 from rq.compat import utc
 from rq.exceptions import NoSuchJobError
 
@@ -656,6 +656,15 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+    
+    def test_enqueue_with_retry(self):
+        """Enqueueing with retry_strategy works"""
+        queue = Queue('example', connection=self.testconn)
+        job = queue.enqueue(say_hello, retry_strategy=Retry(max=3, interval=5))
+
+        job = Job.fetch(job.id, connection=self.testconn)
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [5])
 
 
 class TestJobScheduling(RQTestCase):

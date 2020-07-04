@@ -97,7 +97,7 @@ class RQScheduler(object):
             )
 
     @classmethod
-    def get_locking_key(self, name):
+    def get_locking_key(cls, name):
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
 

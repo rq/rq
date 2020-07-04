@@ -3,10 +3,12 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import inspect
+import json
 import pickle
 import warnings
 import zlib
 
+from collections.abc import Iterable
 from functools import partial
 from uuid import uuid4
 
@@ -342,9 +344,12 @@ class Job(object):
         self.failure_ttl = None
         self.ttl = None
         self._status = None
-        self._dependency_ids = []
+        self._dependency_ids = []        
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
+        self.retries_left = None
+        # retry_intervals is a list of int e.g [60, 120, 240]
+        self.retry_intervals = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -487,6 +492,9 @@ class Job(object):
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        
+        self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
+        self.retry_intervals = json.loads(obj.get('retry_intervals')) if obj.get('retry_intervals') else None
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
@@ -515,10 +523,17 @@ class Job(object):
         You can exclude serializing the `meta` dictionary by setting
         `include_meta=False`.
         """
-        obj = {}
-        obj['created_at'] = utcformat(self.created_at or utcnow())
-        obj['data'] = zlib.compress(self.data)
-
+        obj = {
+            'created_at': utcformat(self.created_at or utcnow()),
+            'data': zlib.compress(self.data),
+            'started_at': utcformat(self.started_at) if self.started_at else '',
+            'ended_at': utcformat(self.ended_at) if self.ended_at else '',
+        }
+        
+        if self.retries_left is not None:
+            obj['retries_left'] = self.retries_left
+        if self.retry_intervals is not None:
+            obj['retry_intervals'] = json.dumps(self.retry_intervals)
         if self.origin is not None:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -526,8 +541,6 @@ class Job(object):
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
 
-        obj['started_at'] = utcformat(self.started_at) if self.started_at else ''
-        obj['ended_at'] = utcformat(self.ended_at) if self.ended_at else ''
         if self._result is not None:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
@@ -785,3 +798,24 @@ class Job(object):
         )
 
 _job_stack = LocalStack()
+
+
+class Retry(object):
+    def __init__(self, max, interval=0):
+        """`interval` can be a positive number or a list of ints"""
+        super().__init__()
+        if max < 1:
+            raise ValueError('max: please enter a value greater than 0')
+        
+        if isinstance(interval, int):
+            if interval < 0:
+                raise ValueError('interval: negative numbers are not allowed')
+            intervals = [interval]
+        elif isinstance(interval, Iterable):
+            for i in interval:
+                if i < 0:
+                    raise ValueError('interval: negative numbers are not allowed')
+            intervals = interval
+        
+        self.max = max
+        self.intervals = intervals
