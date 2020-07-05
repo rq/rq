@@ -660,7 +660,7 @@ class TestQueue(RQTestCase):
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""
         queue = Queue('example', connection=self.testconn)
-        job = queue.enqueue(say_hello, retry_strategy=Retry(max=3, interval=5))
+        job = queue.enqueue(say_hello, retry=Retry(max=3, interval=5))
 
         job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.retries_left, 3)

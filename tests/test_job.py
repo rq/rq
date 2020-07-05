@@ -954,3 +954,29 @@ class TestJob(RQTestCase):
         # interval can't be negative
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
         self.assertRaises(ValueError, Retry, max=1, interval=[1, -5])
+    
+    def test_get_retry_interval(self):
+        """get_retry_interval() returns the right retry interval"""
+        job = Job.create(func=fixtures.say_hello)
+
+        # Handle case where self.retry_intervals is None
+        job.retries_left = 2
+        self.assertEqual(job.get_retry_interval(), 0)
+
+        # Handle the most common case
+        job.retry_intervals = [1, 2]
+        self.assertEqual(job.get_retry_interval(), 1)
+        job.retries_left = 1
+        self.assertEqual(job.get_retry_interval(), 2)
+        
+        # Handle cases where number of retries > length of interval
+        job.retries_left = 4
+        job.retry_intervals = [1, 2, 3]
+        self.assertEqual(job.get_retry_interval(), 1)
+        job.retries_left = 3
+        self.assertEqual(job.get_retry_interval(), 1)
+        job.retries_left = 2
+        self.assertEqual(job.get_retry_interval(), 2)
+        job.retries_left = 1
+        self.assertEqual(job.get_retry_interval(), 3)
+        

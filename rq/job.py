@@ -730,6 +730,17 @@ class Job(object):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
+    
+    def get_retry_interval(self):
+        """Returns the desired retry interval.
+        If number of retries is bigger than length of intervals, the first
+        value in the list will be used multiple times.
+        """
+        if self.retry_intervals is None:
+            return 0
+        number_of_intervals = len(self.retry_intervals)
+        index = max(number_of_intervals - self.retries_left, 0)
+        return self.retry_intervals[index]
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they

@@ -383,7 +383,7 @@ nd
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
-        retry = kwargs.pop('retry_strategy', None)
+        retry = kwargs.pop('retry', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
@@ -408,7 +408,6 @@ nd
 
     def enqueue_at(self, datetime, f, *args, **kwargs):
         """Schedules a job to be enqueued at specified time"""
-        from .registry import ScheduledJobRegistry
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
          depends_on, job_id, at_front, meta, retry, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
@@ -417,14 +416,21 @@ nd
                               failure_ttl=failure_ttl, description=description,
                               depends_on=depends_on, job_id=job_id, meta=meta)
 
+        return self.schedule_job(job, datetime)
+    
+    def schedule_job(self, job, datetime, pipeline=None):
+        """Puts job on ScheduledJobRegistry"""
+        from .registry import ScheduledJobRegistry
         registry = ScheduledJobRegistry(queue=self)
-        with self.connection.pipeline() as pipeline:
-            # Add Queue key set
-            pipeline.sadd(self.redis_queues_keys, self.key)
-            job.save(pipeline=pipeline)
-            registry.schedule(job, datetime, pipeline=pipeline)
-            pipeline.execute()
 
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+
+        # Add Queue key set
+        pipe.sadd(self.redis_queues_keys, self.key)
+        job.save(pipeline=pipe)
+        registry.schedule(job, datetime, pipeline=pipe)
+        if pipeline is None:
+            pipe.execute()
         return job
 
     def enqueue_in(self, time_delta, func, *args, **kwargs):
