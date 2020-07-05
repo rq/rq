@@ -485,7 +485,7 @@ class Job(object):
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
-        self._status = as_text(obj.get('status')) if obj.get('status') else None
+        self._status = obj.get('status').decode() if obj.get('status') else None
 
         dependency_id = obj.get('dependency_id', None)
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
@@ -494,7 +494,8 @@ class Job(object):
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
         
         self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
-        self.retry_intervals = json.loads(obj.get('retry_intervals')) if obj.get('retry_intervals') else None
+        if obj.get('retry_intervals'):
+            self.retry_intervals = json.loads(obj.get('retry_intervals').decode())
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
