@@ -1,0 +1,45 @@
+name: Test rq
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.5, 3.6, 3.7, 3.8]
+        redis-version: [3, 4, 5, 6]
+        redis-py-version: [3.5.0, 3.5.3]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Start Redis
+      uses: supercharge/redis-github-action@1.1.0
+      with:
+        redis-version: ${{ matrix.redis-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install redis==${{ matrix.redis-py-version }}
+        pip install pytest pytest-cov sentry-sdk codecov mock
+        pip install -e .
+
+    - name: Test with pytest
+      run: |
+        RUN_SLOW_TESTS_TOO=1 pytest --cov rq --durations=5
+
+    - name: Codecov
+      run: |
+        codecov
