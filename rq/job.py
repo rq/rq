@@ -12,8 +12,7 @@ from collections.abc import Iterable
 from functools import partial
 from uuid import uuid4
 
-from rq.compat import (as_text, decode_redis_hash, hmset, string_types,
-                       text_type)
+from rq.compat import as_text, decode_redis_hash, hmset, string_types
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
@@ -374,7 +373,7 @@ class Job(object):
         first time the ID is requested.
         """
         if self._id is None:
-            self._id = text_type(uuid4())
+            self._id = str(uuid4())
         return self._id
 
     def set_id(self, value):
