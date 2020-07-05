@@ -673,7 +673,7 @@ class Worker(object):
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
-    def monitor_work_horse(self, job):
+    def monitor_work_horse(self, job, queue):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
         failed
@@ -725,7 +725,7 @@ class Worker(object):
             ).format(ret_val))
 
             self.handle_job_failure(
-                job,
+                job, queue=queue,
                 exc_string="Work-horse was terminated unexpectedly "
                            "(waitpid returned %s)" % ret_val
             )
@@ -738,7 +738,7 @@ class Worker(object):
         """
         self.set_state(WorkerStatus.BUSY)
         self.fork_work_horse(job, queue)
-        self.monitor_work_horse(job)
+        self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
     def main_work_horse(self, job, queue):

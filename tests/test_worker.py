@@ -1110,7 +1110,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w.fork_work_horse(job, queue)
         p = Process(target=wait_and_kill_work_horse, args=(w._horse_pid, 0.5))
         p.start()
-        w.monitor_work_horse(job)
+        w.monitor_work_horse(job, queue)
         job_status = job.get_status()
         p.join(1)
         self.assertEqual(job_status, JobStatus.FAILED)
@@ -1136,7 +1136,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         job.timeout = 5
         w.job_monitoring_interval = 1
         now = utcnow()
-        w.monitor_work_horse(job)
+        w.monitor_work_horse(job, queue)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
         self.assertTrue((utcnow() - now).total_seconds() < total_time)
