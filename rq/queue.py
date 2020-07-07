@@ -50,7 +50,7 @@ class Queue(object):
         """
         prefix = cls.redis_queue_namespace_prefix
         if not queue_key.startswith(prefix):
-            raise ValueError('Not a valid RQ queue key: {0}'.format(queue_key))
+            raise ValueError(f'Not a valid RQ queue key: {queue_key}')
         name = queue_key[len(prefix):]
         return cls(name, connection=connection, job_class=job_class, serializer=serializer)
 
@@ -59,7 +59,7 @@ class Queue(object):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
-        self._key = '{0}{1}'.format(prefix, name)
+        self._key = f'{prefix}{name}'
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
 
@@ -95,7 +95,7 @@ class Queue(object):
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return 'rq:clean_registries:%s' % self.name
+        return f'rq:clean_registries:{self.name}'
 
     def acquire_cleaning_lock(self):
         """Returns a boolean indicating whether a lock to clean this queue
@@ -605,7 +605,7 @@ nd
         return hash(self.name)
 
     def __repr__(self):  # noqa  # pragma: no cover
-        return '{0}({1!r})'.format(self.__class__.__name__, self.name)
+        return f'{self.__class__.__name__}({self.name!r})'
 
     def __str__(self):
-        return '<{0} {1}>'.format(self.__class__.__name__, self.name)
+        return f'<{self.__class__.__name__} {self.name}>'

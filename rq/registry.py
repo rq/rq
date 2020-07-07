@@ -135,7 +135,7 @@ class StartedJobRegistry(BaseRegistry):
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
                         job.set_status(JobStatus.FAILED)
-                        job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
+                        job.exc_info = f"Moved to FailedJobRegistry at {datetime.now()}"
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)

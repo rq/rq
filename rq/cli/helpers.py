@@ -130,11 +130,11 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
 
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
-            name = '%s (%s %s)' % (worker.name, worker.hostname, worker.pid)
+            name = f'{worker.name} ({worker.hostname} {worker.pid})'
             if not raw:
-                click.echo('%s: %s %s' % (name, state_symbol(worker.get_state()), queue_names))
+                click.echo(f'{name}: {state_symbol(worker.get_state())} {queue_names}')
             else:
-                click.echo('worker %s %s %s' % (name, worker.get_state(), queue_names))
+                click.echo(f'worker {name} {worker.get_state()} {queue_names}')
 
     else:
         # Display workers by queue
@@ -156,7 +156,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
                 )
             else:
                 queues_str = '–'
-            click.echo('%s %s' % (pad(queue.name + ':', max_length + 1), queues_str))
+            click.echo(f"{pad(queue.name + ':', max_length + 1)} {queues_str}")
 
     if not raw:
         click.echo('%d workers, %d queues' % (len(workers), len(queues)))
@@ -170,7 +170,7 @@ def show_both(queues, raw, by_queue, queue_class, worker_class):
     if not raw:
         click.echo('')
         import datetime
-        click.echo('Updated: %s' % datetime.datetime.now())
+        click.echo(f'Updated: {datetime.datetime.now()}')
 
 
 def refresh(interval, func, *args):

@@ -140,7 +140,7 @@ class Worker(object):
         """
         prefix = cls.redis_worker_namespace_prefix
         if not worker_key.startswith(prefix):
-            raise ValueError('Not a valid RQ worker key: %s' % worker_key)
+            raise ValueError(f'Not a valid RQ worker key: {worker_key}')
 
         if connection is None:
             connection = get_current_connection()
@@ -220,7 +220,7 @@ class Worker(object):
         """Sanity check for the given queues."""
         for queue in self.queues:
             if not isinstance(queue, self.queue_class):
-                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
+                raise TypeError(f'{queue} is not of type {self.queue_class} or string types')
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""
@@ -252,7 +252,7 @@ class Worker(object):
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname('rq: {0}'.format(message))
+        setprocname(f'rq: {message}')
 
     def register_birth(self):
         """Registers its own birth."""
@@ -671,7 +671,7 @@ class Worker(object):
             self.main_work_horse(job, queue)
         else:
             self._horse_pid = child_pid
-            self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
+            self.procline(f'Forked {child_pid} at {time.time()}')
 
     def monitor_work_horse(self, job):
         """The worker will monitor the work horse and make sure that it
@@ -906,7 +906,7 @@ class Worker(object):
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:
-            log_result = "{0!r}".format(as_text(text_type(rv)))
+            log_result = f"{as_text(text_type(rv))!r}"
             self.log.debug('Result: %s', yellow(log_result))
 
         if self.log_result_lifespan:
@@ -1050,4 +1050,4 @@ class HerokuWorker(Worker):
     def request_force_stop_sigrtmin(self, signum, frame):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         self.log.warning('raising ShutDownImminentException to cancel job...')
-        raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
+        raise ShutDownImminentException(f'shut down imminent (signal: {signal_name(signum)})', info)

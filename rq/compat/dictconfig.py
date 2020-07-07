@@ -29,7 +29,7 @@ IDENTIFIER = re.compile('^[a-z_][a-z0-9_]*$', re.I)
 def valid_ident(s):
     m = IDENTIFIER.match(s)
     if not m:
-        raise ValueError('Not a valid Python identifier: %r' % s)
+        raise ValueError(f'Not a valid Python identifier: {s!r}')
     return True
 
 #
@@ -43,11 +43,10 @@ except ImportError:
             rv = level
         elif str(level) == level:
             if level not in logging._levelNames:
-                raise ValueError('Unknown level: %r' % level)
+                raise ValueError(f'Unknown level: {level!r}')
             rv = logging._levelNames[level]
         else:
-            raise TypeError('Level not an integer or a '
-                            'valid string: %r' % level)
+            raise TypeError(f'Level not an integer or a valid string: {level!r}')
         return rv
 
 # The ConvertingXXX classes are wrappers around standard Python containers,
@@ -174,7 +173,7 @@ class BaseConfigurator(object):
             return found
         except ImportError:
             e, tb = sys.exc_info()[1:]
-            v = ValueError('Cannot resolve %r: %s' % (s, e))
+            v = ValueError(f'Cannot resolve {s!r}: {e}')
             v.__cause__, v.__traceback__ = e, tb
             raise v
 
@@ -187,7 +186,7 @@ class BaseConfigurator(object):
         rest = value
         m = self.WORD_PATTERN.match(rest)
         if m is None:
-            raise ValueError("Unable to convert %r" % value)
+            raise ValueError(f"Unable to convert {value!r}")
         else:
             rest = rest[m.end():]
             d = self.config[m.groups()[0]]
@@ -211,8 +210,7 @@ class BaseConfigurator(object):
                 if m:
                     rest = rest[m.end():]
                 else:
-                    raise ValueError('Unable to convert '
-                                     '%r at %r' % (value, rest))
+                    raise ValueError(f'Unable to convert {value!r} at {rest!r}')
         #rest should be empty
         return d
 
@@ -277,7 +275,7 @@ class DictConfigurator(BaseConfigurator):
         if 'version' not in config:
             raise ValueError("dictionary doesn't specify a version")
         if config['version'] != 1:
-            raise ValueError("Unsupported version: %s" % config['version'])
+            raise ValueError(f"Unsupported version: {config['version']}")
         incremental = config.pop('incremental', False)
         EMPTY_DICT = {}
         logging._acquireLock()
@@ -289,8 +287,7 @@ class DictConfigurator(BaseConfigurator):
                 if sys.version_info[:2] == (2, 7):
                     for name in handlers:
                         if name not in logging._handlers:
-                            raise ValueError('No handler found with '
-                                             'name %r'  % name)
+                            raise ValueError(f'No handler found with name {name!r}')
                         else:
                             try:
                                 handler = logging._handlers[name]
@@ -306,15 +303,13 @@ class DictConfigurator(BaseConfigurator):
                     try:
                         self.configure_logger(name, loggers[name], True)
                     except Exception as e:
-                        raise ValueError('Unable to configure logger '
-                                         '%r: %s' % (name, e))
+                        raise ValueError(f'Unable to configure logger {name!r}: {e}')
                 root = config.get('root', None)
                 if root:
                     try:
                         self.configure_root(root, True)
                     except Exception as e:
-                        raise ValueError('Unable to configure root '
-                                         'logger: %s' % e)
+                        raise ValueError(f'Unable to configure root logger: {e}')
             else:
                 disable_existing = config.pop('disable_existing_loggers', True)
 
@@ -328,16 +323,14 @@ class DictConfigurator(BaseConfigurator):
                         formatters[name] = self.configure_formatter(
                                                             formatters[name])
                     except Exception as e:
-                        raise ValueError('Unable to configure '
-                                         'formatter %r: %s' % (name, e))
+                        raise ValueError(f'Unable to configure formatter {name!r}: {e}')
                 # Next, do filters - they don't refer to anything else, either
                 filters = config.get('filters', EMPTY_DICT)
                 for name in filters:
                     try:
                         filters[name] = self.configure_filter(filters[name])
                     except Exception as e:
-                        raise ValueError('Unable to configure '
-                                         'filter %r: %s' % (name, e))
+                        raise ValueError(f'Unable to configure filter {name!r}: {e}')
 
                 # Next, do handlers - they refer to formatters and filters
                 # As handlers can refer to other handlers, sort the keys
@@ -349,8 +342,7 @@ class DictConfigurator(BaseConfigurator):
                         handler.name = name
                         handlers[name] = handler
                     except Exception as e:
-                        raise ValueError('Unable to configure handler '
-                                         '%r: %s' % (name, e))
+                        raise ValueError(f'Unable to configure handler {name!r}: {e}')
                 # Next, do loggers - they refer to handlers and filters
 
                 #we don't want to lose the existing loggers,
@@ -388,8 +380,7 @@ class DictConfigurator(BaseConfigurator):
                     try:
                         self.configure_logger(name, loggers[name])
                     except Exception as e:
-                        raise ValueError('Unable to configure logger '
-                                         '%r: %s' % (name, e))
+                        raise ValueError(f'Unable to configure logger {name!r}: {e}')
 
                 #Disable any old loggers. There's no point deleting
                 #them as other threads may continue to hold references
@@ -411,8 +402,7 @@ class DictConfigurator(BaseConfigurator):
                     try:
                         self.configure_root(root)
                     except Exception as e:
-                        raise ValueError('Unable to configure root '
-                                         'logger: %s' % e)
+                        raise ValueError(f'Unable to configure root logger: {e}')
         finally:
             logging._releaseLock()
 
@@ -453,7 +443,7 @@ class DictConfigurator(BaseConfigurator):
             try:
                 filterer.addFilter(self.config['filters'][f])
             except Exception as e:
-                raise ValueError('Unable to add filter %r: %s' % (f, e))
+                raise ValueError(f'Unable to add filter {f!r}: {e}')
 
     def configure_handler(self, config):
         """Configure a handler from a dictionary."""
@@ -462,8 +452,7 @@ class DictConfigurator(BaseConfigurator):
             try:
                 formatter = self.config['formatters'][formatter]
             except Exception as e:
-                raise ValueError('Unable to set formatter '
-                                 '%r: %s' % (formatter, e))
+                raise ValueError(f'Unable to set formatter {formatter!r}: {e}')
         level = config.pop('level', None)
         filters = config.pop('filters', None)
         if '()' in config:
@@ -514,7 +503,7 @@ class DictConfigurator(BaseConfigurator):
             try:
                 logger.addHandler(self.config['handlers'][h])
             except Exception as e:
-                raise ValueError('Unable to add handler %r: %s' % (h, e))
+                raise ValueError(f'Unable to add handler {h!r}: {e}')
 
     def common_logger_config(self, logger, config, incremental=False):
         """

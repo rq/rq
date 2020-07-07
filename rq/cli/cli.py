@@ -109,7 +109,7 @@ def empty(cli_config, all, queues, **options):
 
     for queue in queues:
         num_jobs = queue.empty()
-        click.echo('{0} jobs removed from {1} queue'.format(num_jobs, queue.name))
+        click.echo(f'{num_jobs} jobs removed from {queue.name} queue')
 
 
 @main.command()
@@ -129,7 +129,7 @@ def requeue(cli_config, queue, all, job_class, job_ids,  **options):
         click.echo('Nothing to do')
         sys.exit(0)
 
-    click.echo('Requeueing {0} jobs from failed queue'.format(len(job_ids)))
+    click.echo(f'Requeueing {len(job_ids)} jobs from failed queue')
     fail_count = 0
     with click.progressbar(job_ids) as job_ids:
         for job_id in job_ids:
@@ -139,7 +139,7 @@ def requeue(cli_config, queue, all, job_class, job_ids,  **options):
                 fail_count += 1
 
     if fail_count > 0:
-        click.secho('Unable to requeue {0} jobs from failed job registry'.format(fail_count), fg='red')
+        click.secho(f'Unable to requeue {fail_count} jobs from failed job registry', fg='red')
 
 
 @main.command()

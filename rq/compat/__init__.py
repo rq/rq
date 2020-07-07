@@ -58,7 +58,7 @@ if not PY2:
         elif isinstance(v, str):
             return v
         else:
-            raise ValueError('Unknown type %r' % type(v))
+            raise ValueError(f'Unknown type {type(v)!r}')
 
     def decode_redis_hash(h):
         return dict((as_text(k), h[k]) for k in h)

@@ -86,9 +86,9 @@ class Job(object):
             kwargs = {}
 
         if not isinstance(args, (tuple, list)):
-            raise TypeError('{0!r} is not a valid args list'.format(args))
+            raise TypeError('%s is not a valid args list' % args)
         if not isinstance(kwargs, dict):
-            raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
+            raise TypeError('%s is not a valid kwargs dict' % kwargs)
 
         job = cls(connection=connection, serializer=serializer)
         if id is not None:
@@ -103,14 +103,14 @@ class Job(object):
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '{0}.{1}'.format(func.__module__, func.__name__)
+            job._func_name = f'{func.__module__}.{func.__name__}'
         elif isinstance(func, string_types):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
             job._instance = func
             job._func_name = '__call__'
         else:
-            raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
+            raise TypeError(f'Expected a callable or a string, but got: {func}')
         job._args = args
         job._kwargs = kwargs
 
@@ -352,9 +352,7 @@ class Job(object):
                                                       self.enqueued_at)
 
     def __str__(self):
-        return '<{0} {1}: {2}>'.format(self.__class__.__name__,
-                                       self.id,
-                                       self.description)
+        return f'<{self.__class__.__name__} {self.id}: {self.description}>'
 
     # Job equality
     def __eq__(self, other):  # noqa
@@ -375,7 +373,7 @@ class Job(object):
     def set_id(self, value):
         """Sets a job ID for the given job."""
         if not isinstance(value, string_types):
-            raise TypeError('id must be a string, not {0}'.format(type(value)))
+            raise TypeError(f'id must be a string, not {type(value)}')
         self._id = value
 
     id = property(get_id, set_id)
@@ -388,7 +386,7 @@ class Job(object):
     @classmethod
     def dependents_key_for(cls, job_id):
         """The Redis key that is used to store job dependents hash under."""
-        return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
+        return f'{cls.redis_job_namespace_prefix}{job_id}:dependents'
 
     @property
     def key(self):
@@ -402,7 +400,7 @@ class Job(object):
 
     @property
     def dependencies_key(self):
-        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+        return f'{self.redis_job_namespace_prefix}:{self.id}:dependencies'
 
     def fetch_dependencies(self, watch=False, pipeline=None):
         """
@@ -457,7 +455,7 @@ class Job(object):
         try:
             raw_data = obj['data']
         except KeyError:
-            raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+            raise NoSuchJobError(f'Unexpected job format: {obj}')
 
         try:
             self.data = zlib.decompress(raw_data)
@@ -505,7 +503,7 @@ class Job(object):
         """
         data = self.connection.hgetall(self.key)
         if not data:
-            raise NoSuchJobError('No such job: {0}'.format(self.key))
+            raise NoSuchJobError(f'No such job: {self.key}')
         self.restore(data)
 
     def to_dict(self, include_meta=True):
@@ -686,12 +684,12 @@ class Job(object):
 
         arg_list = [as_text(truncate_long_string(repr(arg))) for arg in self.args]
 
-        kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v)))) for k, v in self.kwargs.items()]
+        kwargs = [f'{k}={as_text(truncate_long_string(repr(v)))}' for k, v in self.kwargs.items()]
         # Sort here because python 3.3 & 3.4 makes different call_string
         arg_list += sorted(kwargs)
         args = ', '.join(arg_list)
 
-        return '{0}({1})'.format(self.func_name, args)
+        return f'{self.func_name}({args})'
 
     def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually
