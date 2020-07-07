@@ -19,6 +19,7 @@
 * When a job is scheduled, always add queue name to a set containing active RQ queue names. Thanks @mdawar!
 * Added `--sentry-ca-certs` and `--sentry-debug` parameters to `rq worker` CLI. Thanks @kichawa!
 * Jobs cleaned up by `StartedJobRegistry` are given an exception info. Thanks @selwin!
+* Python 2.7 is no longer supported. Thanks @selwin!
 
 ### RQ 1.3.0 (2020-03-09)
 * Support for infinite job timeout. Thanks @theY4Kman!
