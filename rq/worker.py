@@ -397,8 +397,7 @@ class Worker(object):
         except ChildProcessError as e:
             # ChildProcessError: [Errno 10] No child processes
             pass
-        finally:
-            return pid, stat
+        return pid, stat
 
     def request_force_stop(self, signum, frame):
         """Terminates the application (cold shutdown).
