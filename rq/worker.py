@@ -13,6 +13,7 @@ import time
 import traceback
 import warnings
 from datetime import timedelta
+from distutils.version import StrictVersion
 from uuid import uuid4
 
 try:
@@ -23,7 +24,7 @@ except ImportError:
 from redis import WatchError
 
 from . import worker_registration
-from .compat import PY2, as_text, hmset, string_types, text_type
+from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (DEFAULT_RESULT_TTL,
@@ -167,6 +168,8 @@ class Worker(object):
             connection = get_current_connection()
         self.connection = connection
 
+        self.redis_server_version = None
+
         if prepare_for_work:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
@@ -215,6 +218,15 @@ class Worker(object):
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
+
+    def get_redis_server_version(self):
+        """Return Redis server version of connection"""
+        if not self.redis_server_version:
+            self.redis_server_version = StrictVersion(
+                self.connection.info("server")["redis_version"]
+            )
+
+        return self.redis_server_version
 
     def validate_queues(self):
         """Sanity check for the given queues."""
@@ -268,7 +280,8 @@ class Worker(object):
             now = utcnow()
             now_in_string = utcformat(now)
             self.birth_date = now
-            hmset(p, key, mapping={
+
+            mapping={
                 'birth': now_in_string,
                 'last_heartbeat': now_in_string,
                 'queues': queues,
@@ -276,7 +289,13 @@ class Worker(object):
                 'hostname': self.hostname,
                 'version': self.version,
                 'python_version': self.python_version,
-            })
+            }
+
+            if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+                p.hset(key, mapping=mapping)
+            else:
+                p.hmset(key, mapping)
+
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl + 60)
             p.execute()
@@ -581,6 +600,7 @@ class Worker(object):
                 if result is not None:
 
                     job, queue = result
+                    job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info(
                             '%s: %s (%s)', green(queue.name),
