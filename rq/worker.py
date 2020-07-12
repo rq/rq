@@ -1006,10 +1006,10 @@ class Worker(object):
 
     @property
     def should_run_maintenance_tasks(self):
-        """Maintenance tasks should run on first startup or 15 minutes."""
+        """Maintenance tasks should run on first startup or every 10 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(minutes=15):
+        if (utcnow() - self.last_cleaned_at) > timedelta(minutes=10):
             return True
         return False
 
