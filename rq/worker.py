@@ -385,7 +385,7 @@ class Worker(object):
             else:
                 raise
 
-    def wait_horse(self):
+    def wait_for_horse(self):
         """
         A waiting the end of the horse process and recycling resources.
         """
@@ -408,7 +408,7 @@ class Worker(object):
         if self.horse_pid:
             self.log.debug('Taking down horse %s with me', self.horse_pid)
             self.kill_horse()
-            self.wait_horse()
+            self.wait_for_horse()
         raise SystemExit()
 
     def request_stop(self, signum, frame):
@@ -707,7 +707,7 @@ class Worker(object):
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
                     self.kill_horse()
-                    self.wait_horse()
+                    self.wait_for_horse()
                     break
 
             except OSError as e:
