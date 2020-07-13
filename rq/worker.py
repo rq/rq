@@ -390,11 +390,10 @@ class Worker(object):
         """
         A waiting the end of the horse process and recycling resources.
         """
+        pid = None
+        stat = None
         try:
-            pid = None
-            stat = None
-            if self.horse_pid:
-                pid, stat = os.waitpid(self.horse_pid, 0)
+            pid, stat = os.waitpid(self.horse_pid, 0)
         except ChildProcessError as e:
             # ChildProcessError: [Errno 10] No child processes
             pass
