@@ -16,6 +16,8 @@ navigation:
     url: /docs/results/
   - text: Jobs
     url: /docs/jobs/
+  - text: Exceptions
+    url: /docs/exceptions/
   - text: Scheduling Jobs
     url: /docs/scheduling/
   - text: Monitoring
@@ -23,9 +25,7 @@ navigation:
   - text: Job Registries
     url: /docs/job_registries/
   - text: Connections
-    url: /docs/connections/
-  - text: Exceptions
-    url: /docs/exceptions/
+    url: /docs/connections/  
   - text: Testing
     url: /docs/testing/
 - text: Patterns
