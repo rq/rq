@@ -436,7 +436,7 @@ nd
                               depends_on=depends_on, job_id=job_id, meta=meta)
 
         return self.schedule_job(job, datetime)
-    
+
     def schedule_job(self, job, datetime, pipeline=None):
         """Puts job on ScheduledJobRegistry"""
         from .registry import ScheduledJobRegistry

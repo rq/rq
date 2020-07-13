@@ -51,7 +51,7 @@ class RQScheduler(object):
         self._stop_requested = False
         self._status = self.Status.STOPPED
         self._process = None
-    
+
     @property
     def connection(self):
         if self._connection:
@@ -87,8 +87,7 @@ class RQScheduler(object):
 
         # Always reset _scheduled_job_registries when acquiring locks
         self._scheduled_job_registries = []
-        self._acquired_locks = self._acquired_locks.union(successful_locks)        
-
+        self._acquired_locks = self._acquired_locks.union(successful_locks)
         self.lock_acquisition_time = datetime.now()
 
         # If auto_start is requested and scheduler is not started,
@@ -172,7 +171,7 @@ class RQScheduler(object):
         keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
         self._status = self.Status.STOPPED
-    
+
     def start(self):
         self._status = self.Status.STARTED
         # Redis instance can't be pickled across processes so we need to
