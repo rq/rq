@@ -12,7 +12,9 @@ import sys
 import time
 import traceback
 import warnings
+
 from datetime import datetime, timedelta, timezone
+from distutils.version import StrictVersion
 from uuid import uuid4
 
 try:
@@ -23,7 +25,7 @@ except ImportError:
 from redis import WatchError
 
 from . import worker_registration
-from .compat import PY2, as_text, hmset, string_types, text_type
+from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (DEFAULT_RESULT_TTL,
@@ -167,6 +169,8 @@ class Worker(object):
             connection = get_current_connection()
         self.connection = connection
 
+        self.redis_server_version = None
+
         if prepare_for_work:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
@@ -215,6 +219,15 @@ class Worker(object):
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
+
+    def get_redis_server_version(self):
+        """Return Redis server version of connection"""
+        if not self.redis_server_version:
+            self.redis_server_version = StrictVersion(
+                self.connection.info("server")["redis_version"]
+            )
+
+        return self.redis_server_version
 
     def validate_queues(self):
         """Sanity check for the given queues."""
@@ -268,7 +281,8 @@ class Worker(object):
             now = utcnow()
             now_in_string = utcformat(now)
             self.birth_date = now
-            hmset(p, key, mapping={
+
+            mapping={
                 'birth': now_in_string,
                 'last_heartbeat': now_in_string,
                 'queues': queues,
@@ -276,7 +290,13 @@ class Worker(object):
                 'hostname': self.hostname,
                 'version': self.version,
                 'python_version': self.python_version,
-            })
+            }
+
+            if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+                p.hset(key, mapping=mapping)
+            else:
+                p.hmset(key, mapping)
+
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl + 60)
             p.execute()
@@ -378,7 +398,6 @@ class Worker(object):
         """
         try:
             os.kill(self.horse_pid, sig)
-            os.waitpid(self.horse_pid, 0)
             self.log.info('Killed horse pid %s', self.horse_pid)
         except OSError as e:
             if e.errno == errno.ESRCH:
@@ -386,6 +405,19 @@ class Worker(object):
                 self.log.debug('Horse already dead')
             else:
                 raise
+
+    def wait_for_horse(self):
+        """
+        A waiting the end of the horse process and recycling resources.
+        """
+        pid = None
+        stat = None
+        try:
+            pid, stat = os.waitpid(self.horse_pid, 0)
+        except ChildProcessError as e:
+            # ChildProcessError: [Errno 10] No child processes
+            pass
+        return pid, stat
 
     def request_force_stop(self, signum, frame):
         """Terminates the application (cold shutdown).
@@ -396,6 +428,7 @@ class Worker(object):
         if self.horse_pid:
             self.log.debug('Taking down horse %s with me', self.horse_pid)
             self.kill_horse()
+            self.wait_for_horse()
         raise SystemExit()
 
     def request_stop(self, signum, frame):
@@ -581,6 +614,7 @@ class Worker(object):
                 if result is not None:
 
                     job, queue = result
+                    job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info(
                             '%s: %s (%s)', green(queue.name),
@@ -684,7 +718,7 @@ class Worker(object):
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
-                    retpid, ret_val = os.waitpid(self._horse_pid, 0)
+                    retpid, ret_val = self.wait_for_horse()
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
@@ -694,6 +728,7 @@ class Worker(object):
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
                     self.kill_horse()
+                    self.wait_for_horse()
                     break
 
             except OSError as e:
@@ -1004,10 +1039,10 @@ class Worker(object):
 
     @property
     def should_run_maintenance_tasks(self):
-        """Maintenance tasks should run on first startup or 15 minutes."""
+        """Maintenance tasks should run on first startup or every 10 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(minutes=15):
+        if (utcnow() - self.last_cleaned_at) > timedelta(minutes=10):
             return True
         return False
 

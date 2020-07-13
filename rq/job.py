@@ -9,10 +9,11 @@ import warnings
 import zlib
 
 from collections.abc import Iterable
+from distutils.version import StrictVersion
 from functools import partial
 from uuid import uuid4
 
-from rq.compat import as_text, decode_redis_hash, hmset, string_types
+from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
@@ -349,6 +350,7 @@ class Job(object):
         self.retries_left = None
         # retry_intervals is a list of int e.g [60, 120, 240]
         self.retry_intervals = None
+        self.redis_server_version = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -578,7 +580,21 @@ class Job(object):
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        hmset(connection, key, self.to_dict(include_meta=include_meta))
+        mapping = self.to_dict(include_meta=include_meta)
+
+        if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+            connection.hset(key, mapping=mapping)
+        else:
+            connection.hmset(key, mapping)
+
+    def get_redis_server_version(self):
+        """Return Redis server version of connection"""
+        if not self.redis_server_version:
+            self.redis_server_version = StrictVersion(
+                self.connection.info("server")["redis_version"]
+            )
+
+        return self.redis_server_version
 
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""

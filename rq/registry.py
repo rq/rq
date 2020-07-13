@@ -37,7 +37,10 @@ class BaseRegistry(object):
         return self.count
 
     def __eq__(self, other):
-        return (self.name == other.name and self.connection == other.connection)
+        return (
+            self.name == other.name and
+            self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
+        )
 
     def __contains__(self, item):
         """

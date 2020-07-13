@@ -6,6 +6,7 @@ import uuid
 import warnings
 from datetime import datetime
 
+from distutils.version import StrictVersion
 from redis import WatchError
 
 from .compat import as_text, string_types, total_ordering, utc
@@ -74,6 +75,7 @@ class Queue(object):
             self.job_class = job_class
 
         self.serializer = resolve_serializer(serializer)
+        self.redis_server_version = None
 
     def __len__(self):
         return self.count
@@ -86,6 +88,15 @@ class Queue(object):
 
     def __iter__(self):
         yield self
+
+    def get_redis_server_version(self):
+        """Return Redis server version of connection"""
+        if not self.redis_server_version:
+            self.redis_server_version = StrictVersion(
+                self.connection.info("server")["redis_version"]
+            )
+
+        return self.redis_server_version
 
     @property
     def key(self):
@@ -156,12 +167,20 @@ class Queue(object):
     def get_job_position(self, job_or_id):
         """Returns the position of a job within the queue
 
-        WARNING: The current implementation has a complexity of worse than O(N)
-        and should not be used for very long job queues. Future implementation
-        may use Redis LPOS command to improve the complexity to O(N) and
-        running natively in Redis C implementation.
+        Using Redis before 6.0.6 and redis-py before 3.5.4 has a complexity of
+        worse than O(N) and should not be used for very long job queues. Redis
+        and redis-py version afterwards should support the LPOS command
+        handling job positions within Redis c implementation.
         """
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
+
+        if self.get_redis_server_version() >= StrictVersion("6.0.6"):
+            try:
+                return self.connection.lpos(self.key, job_id)
+            except AttributeError:
+                # not yet implemented by redis-py
+                pass
+
         if job_id in self.job_ids:
             return self.job_ids.index(job_id)
         return None

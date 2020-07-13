@@ -1266,9 +1266,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w._horse_pid = p.pid
         w.handle_warm_shutdown_request()
         p.join(2)
-        # would expect p.exitcode to be -34 but for some reason os.waitpid is setting it to None, even though
-        # the process has ended
-        self.assertEqual(p.exitcode, None)
+        # would expect p.exitcode to be -34
+        self.assertEqual(p.exitcode, -34)
         self.assertFalse(os.path.exists(path))
         mock_logger_info.assert_called_with('Killed horse pid %s', p.pid)
 
