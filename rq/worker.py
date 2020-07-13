@@ -397,7 +397,6 @@ class Worker(object):
         """
         try:
             os.kill(self.horse_pid, sig)
-            os.waitpid(self.horse_pid, 0)
             self.log.info('Killed horse pid %s', self.horse_pid)
         except OSError as e:
             if e.errno == errno.ESRCH:
@@ -405,6 +404,19 @@ class Worker(object):
                 self.log.debug('Horse already dead')
             else:
                 raise
+
+    def wait_for_horse(self):
+        """
+        A waiting the end of the horse process and recycling resources.
+        """
+        pid = None
+        stat = None
+        try:
+            pid, stat = os.waitpid(self.horse_pid, 0)
+        except ChildProcessError as e:
+            # ChildProcessError: [Errno 10] No child processes
+            pass
+        return pid, stat
 
     def request_force_stop(self, signum, frame):
         """Terminates the application (cold shutdown).
@@ -415,6 +427,7 @@ class Worker(object):
         if self.horse_pid:
             self.log.debug('Taking down horse %s with me', self.horse_pid)
             self.kill_horse()
+            self.wait_for_horse()
         raise SystemExit()
 
     def request_stop(self, signum, frame):
@@ -704,7 +717,7 @@ class Worker(object):
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
-                    retpid, ret_val = os.waitpid(self._horse_pid, 0)
+                    retpid, ret_val = self.wait_for_horse()
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
@@ -714,6 +727,7 @@ class Worker(object):
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
                     self.kill_horse()
+                    self.wait_for_horse()
                     break
 
             except OSError as e:
