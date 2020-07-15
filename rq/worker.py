@@ -572,6 +572,8 @@ class Worker(object):
                         'Worker %s: found an unhandled exception, quitting...',
                         self.key, exc_info=True
                     )
+                    if self.is_horse:
+                        os._exit(1)
                     break
         finally:
             if not self.is_horse:
