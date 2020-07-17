@@ -907,12 +907,13 @@ class Worker(object):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.prepare_job_execution(job, heartbeat_ttl)
         push_connection(self.connection)
 
         started_job_registry = queue.started_job_registry
 
         try:
+            self.prepare_job_execution(job, heartbeat_ttl)
+
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
