@@ -572,8 +572,6 @@ class Worker(object):
                         'Worker %s: found an unhandled exception, quitting...',
                         self.key, exc_info=True
                     )
-                    if self.is_horse:
-                        os._exit(1)
                     break
         finally:
             if not self.is_horse:
@@ -703,7 +701,18 @@ class Worker(object):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
-            self.main_work_horse(job, queue)
+            try:
+                self.main_work_horse(job, queue)
+                os._exit(0) # just in case
+            except:
+                job.ended_at = utcnow()
+                exc_info = sys.exc_info()
+                exc_string = self._get_safe_exception_string(
+                    traceback.format_exception(*exc_info)
+                )
+                self.handle_job_failure(job=job, exc_string=exc_string)
+                self.handle_exception(job, *exc_info)
+                os._exit(1)
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
