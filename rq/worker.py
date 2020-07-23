@@ -1034,7 +1034,11 @@ class SimpleWorker(Worker):
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
-        timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
+        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
+        if job.timeout == -1:
+               timeout = DEFAULT_WORKER_TTL
+        else:
+               timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
         return self.perform_job(job, queue, heartbeat_ttl=timeout)
 
 
