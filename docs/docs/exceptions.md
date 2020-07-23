@@ -1,17 +1,64 @@
 ---
-title: "RQ: Exceptions"
+title: "RQ: Exceptions & Retries"
 layout: docs
 ---
 
-Jobs can fail due to exceptions occurring.  When your RQ workers run in the
+Jobs can fail due to exceptions occurring. When your RQ workers run in the
 background, how do you get notified of these exceptions?
 
-## Default: the `FailedJobRegistry`
+## Default: FailedJobRegistry
 
 The default safety net for RQ is the `FailedJobRegistry`. Every job that doesn't
 execute successfully is stored here, along with its exception information (type,
-value, traceback). While this makes sure no failing jobs "get lost", this is
-of no use to get notified pro-actively about job failure.
+value, traceback).
+
+```python
+from redis import Redis
+from rq import Queue
+from rq.registry import FailedJobRegistry
+
+redis = Redis()
+queue = Queue(connection=redis)
+registry = FailedJobRegistry(queue=queue)
+
+# Show all failed job IDs and the exceptions they caused during runtime
+for job_id in registry.get_job_ids():
+    job = Job.fetch(job_id, connection=redis)
+    print(job_id, job.exc_info)
+```
+
+## Retrying Failed Jobs
+
+_New in version 1.5.0_
+
+RQ lets you easily retry failed jobs. To configure retries, use RQ's
+`Retry` object that accepts `max` and `interval` arguments. For example:
+
+```python
+from redis import Redis
+from rq import Retry, Queue
+
+from somewhere import my_func
+
+queue = Queue(connection=redis)
+# Retry up to 3 times, failed job will be requeued immediately
+queue.enqueue(my_func, retry=Retry(max=3))
+
+# Retry up to 3 times, with 60 seconds interval in between executions
+queue.enqueue(my_func, retry=Retry(max=3, interval=60))
+
+# Retry up to 3 times, with longer interval in between retries
+queue.enqueue(my_func, retry=Retry(max=3, interval=[10, 30, 60]))
+```
+
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
+    <strong>Note:</strong>
+    <p>
+        If you use `interval` argument with `Retry`, don't forget to run your workers using
+        the `--with-scheduler` argument.
+    </p>
+</div>
 
 
 ## Custom Exception Handlers
