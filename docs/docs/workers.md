@@ -36,7 +36,7 @@ You should use process managers like [Supervisor](/patterns/supervisor/) or
 ### Burst Mode
 
 By default, workers will start working immediately and will block and wait for
-new work when they run out of work.  Workers can also be started in _burst     
+new work when they run out of work.  Workers can also be started in _burst
 mode_ to finish all currently available work and quit as soon as all given
 queues are emptied.
 In _burst mode_, a worker will also quit if there are no available jobs
