@@ -29,6 +29,11 @@ header
     margin: 0 auto 2em auto;
 }
 
+li
+{
+    padding-bottom: 5px;
+}
+
 ul.inline
 {
     list-style-type: none;
