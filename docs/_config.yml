@@ -22,7 +22,7 @@ navigation:
     url: /docs/scheduling/
   - text: Job Registries
     url: /docs/job_registries/
-    - text: Monitoring
+  - text: Monitoring
     url: /docs/monitoring/
   - text: Connections
     url: /docs/connections/  
