@@ -20,7 +20,7 @@ body
 header
 {
     background: url(../img/ribbon.png) no-repeat 50% 0;
-    max-width: 430px;
+    max-width: 630px;
     width: 100%;
     text-align: center;
 
@@ -86,7 +86,7 @@ header a:hover
 .container
 {
     margin: 0 auto;
-    max-width: 430px;
+    max-width: 630px;
     width: 100%;
 }
 

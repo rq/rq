@@ -45,14 +45,36 @@ Then, create an RQ queue:
 from redis import Redis
 from rq import Queue
 
-q = Queue(connection=Redis())
+queue = Queue(connection=Redis())
 ```
 
 And enqueue the function call:
 
 ```python
 from my_module import count_words_at_url
-job = q.enqueue(count_words_at_url, 'http://nvie.com')
+job = queue.enqueue(count_words_at_url, 'http://nvie.com')
+```
+
+Scheduling jobs are also similarly easy:
+
+```python
+# Schedule job to run at 9:15, October 10th
+job = queue.enqueue_at(datetime(2019, 10, 8, 9, 15), say_hello)
+
+# Schedule job to run in 10 seconds
+job = queue.enqueue_in(timedelta(seconds=10), say_hello)
+```
+
+Retrying failed jobs is also supported:
+
+```python
+from rq import Retry
+
+# Retry up to 3 times, failed job will be requeued immediately
+queue.enqueue(say_hello, retry=Retry(max=3))
+
+# Retry up to 3 times, with configurable intervals between retries
+queue.enqueue(say_hello, retry=Retry(max=3, interval=[10, 30, 60]))
 ```
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
@@ -64,7 +86,7 @@ To start executing enqueued function calls in the background, start a worker
 from your project's directory:
 
 ```console
-$ rq worker
+$ rq worker --with-scheduler
 *** Listening for work on default
 Got count_words_at_url('http://nvie.com') from default
 Job result = 818
