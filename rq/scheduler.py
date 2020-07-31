@@ -19,6 +19,7 @@ from redis import Redis
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
 
+logger = logging.getLogger(__name__)
 setup_loghandlers(
     level=logging.INFO,
     name="rq.scheduler",
@@ -80,7 +81,7 @@ class RQScheduler(object):
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set()
         pid = os.getpid()
-        logging.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
+        logger.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
             if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
                 successful_locks.add(name)
@@ -154,7 +155,7 @@ class RQScheduler(object):
 
     def heartbeat(self):
         """Updates the TTL on scheduler keys and the locks"""
-        logging.info("Scheduler sending heartbeat to %s", ", ".join(self.acquired_locks))
+        logger.debug("Scheduler sending heartbeat to %s", ", ".join(self.acquired_locks))
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
@@ -166,7 +167,7 @@ class RQScheduler(object):
             self.connection.expire(key, self.interval + 5)
 
     def stop(self):
-        logging.info("Scheduler stopping, releasing locks for %s...",
+        logger.info("Scheduler stopping, releasing locks for %s...",
                      ','.join(self._queue_names))
         keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
@@ -198,17 +199,17 @@ class RQScheduler(object):
 
 
 def run(scheduler):
-    logging.info("Scheduler for %s started with PID %s",
+    logger.info("Scheduler for %s started with PID %s",
                  ','.join(scheduler._queue_names), os.getpid())
     try:
         scheduler.work()
     except:  # noqa
-        logging.error(
+        logger.error(
             'Scheduler [PID %s] raised an exception.\n%s',
             os.getpid(), traceback.format_exc()
         )
         raise
-    logging.info("Scheduler with PID %s has stopped", os.getpid())
+    logger.info("Scheduler with PID %s has stopped", os.getpid())
 
 
 def parse_names(queues_or_names):
