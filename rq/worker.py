@@ -701,18 +701,8 @@ class Worker(object):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
-            try:
-                self.main_work_horse(job, queue)
-                os._exit(0) # just in case
-            except:
-                job.ended_at = utcnow()
-                exc_info = sys.exc_info()
-                exc_string = self._get_safe_exception_string(
-                    traceback.format_exception(*exc_info)
-                )
-                self.handle_job_failure(job=job, exc_string=exc_string)
-                self.handle_exception(job, *exc_info)
-                os._exit(1)
+            self.main_work_horse(job, queue)
+            os._exit(0) # just in case
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
@@ -786,7 +776,7 @@ class Worker(object):
         self.monitor_work_horse(job)
         self.set_state(WorkerStatus.IDLE)
 
-    def main_work_horse(self, job, queue):
+    def main_work_horse_int(self, job, queue):
         """This is the entry point of the newly spawned work horse."""
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
@@ -800,6 +790,20 @@ class Worker(object):
         # os._exit() is the way to exit from childs after a fork(), in
         # contrast to the regular sys.exit()
         os._exit(0)
+
+    def main_work_horse(self, job, queue):
+        try:
+            self.main_work_horse_int(job, queue)
+        except:
+            job.ended_at = utcnow()
+            exc_info = sys.exc_info()
+            exc_string = self._get_safe_exception_string(
+                traceback.format_exception(*exc_info)
+            )
+            self.handle_job_failure(job=job, exc_string=exc_string)
+            self.handle_exception(job, *exc_info)
+            os._exit(1)
+
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse."""
