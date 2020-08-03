@@ -1237,10 +1237,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertEqual(p.exitcode, 1)
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-            stderr = f.read().strip('\n')
-            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
-            self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
     def test_1_sec_shutdown(self):
@@ -1257,10 +1253,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-            stderr = f.read().strip('\n')
-            err = 'ShutDownImminentException: shut down imminent (signal: SIGALRM)'
-            self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
     def test_shutdown_double_sigrtmin(self):
@@ -1278,10 +1270,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-            stderr = f.read().strip('\n')
-            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
-            self.assertTrue(stderr.endswith(err), stderr)
 
     @mock.patch('rq.worker.logger.info')
     def test_handle_shutdown_request(self, mock_logger_info):
