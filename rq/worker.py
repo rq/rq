@@ -801,7 +801,7 @@ class Worker(object):
             exc_string = self._get_safe_exception_string(
                 traceback.format_exception(*exc_info)
             )
-            self.handle_job_failure(job=job, exc_string=exc_string)
+            self.handle_job_failure(job=job, queue=queue, exc_string=exc_string)
             self.handle_exception(job, *exc_info)
             os._exit(1)
 
