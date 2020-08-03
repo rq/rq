@@ -12,7 +12,8 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import timedelta
+
+from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
 from uuid import uuid4
 
@@ -707,7 +708,7 @@ class Worker(object):
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
-    def monitor_work_horse(self, job):
+    def monitor_work_horse(self, job, queue):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
         failed
@@ -760,7 +761,7 @@ class Worker(object):
             ).format(ret_val))
 
             self.handle_job_failure(
-                job,
+                job, queue=queue,
                 exc_string="Work-horse was terminated unexpectedly "
                            "(waitpid returned %s)" % ret_val
             )
@@ -773,7 +774,7 @@ class Worker(object):
         """
         self.set_state(WorkerStatus.BUSY)
         self.fork_work_horse(job, queue)
-        self.monitor_work_horse(job)
+        self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
     def main_work_horse_int(self, job, queue):
@@ -841,7 +842,7 @@ class Worker(object):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_failure(self, job, started_job_registry=None,
+    def handle_job_failure(self, job, queue, started_job_registry=None,
                            exc_string=''):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
@@ -857,7 +858,16 @@ class Worker(object):
                     self.connection,
                     job_class=self.job_class
                 )
-            job.set_status(JobStatus.FAILED, pipeline=pipeline)
+
+            # Requeue/reschedule if retry is configured
+            if job.retries_left and job.retries_left > 0:
+                retry = True
+                retry_interval = job.get_retry_interval()
+                job.retries_left = job.retries_left - 1
+            else:
+                retry = False
+                job.set_status(JobStatus.FAILED, pipeline=pipeline)
+
             started_job_registry.remove(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler:
@@ -870,9 +880,16 @@ class Worker(object):
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(
-                    job.ended_at - job.started_at,
-                    pipeline
+                    job.ended_at - job.started_at, pipeline
                 )
+
+            if retry:
+                if retry_interval:
+                    scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+                    job.set_status(JobStatus.SCHEDULED)
+                    queue.schedule_job(job, scheduled_datetime, pipeline=pipeline)
+                else:
+                    queue.enqueue_job(job, pipeline=pipeline)
 
             try:
                 pipeline.execute()
@@ -946,7 +963,7 @@ class Worker(object):
             exc_string = self._get_safe_exception_string(
                 traceback.format_exception(*exc_info)
             )
-            self.handle_job_failure(job=job, exc_string=exc_string,
+            self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)
             return False
@@ -973,7 +990,7 @@ class Worker(object):
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = Worker._get_safe_exception_string(
-            traceback.format_exception_only(*exc_info[:2]) + traceback.format_exception(*exc_info)
+            traceback.format_exception(*exc_info)
         )
         self.log.error(exc_string, exc_info=True, extra={
             'func': job.func_name,
@@ -1050,7 +1067,11 @@ class SimpleWorker(Worker):
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
-        timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
+        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
+        if job.timeout == -1:
+               timeout = DEFAULT_WORKER_TTL
+        else:
+               timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
         return self.perform_job(job, queue, heartbeat_ttl=timeout)
 
 

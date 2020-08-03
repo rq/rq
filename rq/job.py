@@ -3,15 +3,17 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import inspect
+import json
 import pickle
 import warnings
 import zlib
 
+from collections.abc import Iterable
 from distutils.version import StrictVersion
 from functools import partial
 from uuid import uuid4
 
-from rq.compat import as_text, decode_redis_hash, string_types, text_type
+from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
@@ -342,9 +344,12 @@ class Job(object):
         self.failure_ttl = None
         self.ttl = None
         self._status = None
-        self._dependency_ids = []
+        self._dependency_ids = []        
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
+        self.retries_left = None
+        # retry_intervals is a list of int e.g [60, 120, 240]
+        self.retry_intervals = None
         self.redis_server_version = None
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -370,7 +375,7 @@ class Job(object):
         first time the ID is requested.
         """
         if self._id is None:
-            self._id = text_type(uuid4())
+            self._id = str(uuid4())
         return self._id
 
     def set_id(self, value):
@@ -481,13 +486,17 @@ class Job(object):
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
-        self._status = as_text(obj.get('status')) if obj.get('status') else None
+        self._status = obj.get('status').decode() if obj.get('status') else None
 
         dependency_id = obj.get('dependency_id', None)
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        
+        self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
+        if obj.get('retry_intervals'):
+            self.retry_intervals = json.loads(obj.get('retry_intervals').decode())
 
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
@@ -516,10 +525,17 @@ class Job(object):
         You can exclude serializing the `meta` dictionary by setting
         `include_meta=False`.
         """
-        obj = {}
-        obj['created_at'] = utcformat(self.created_at or utcnow())
-        obj['data'] = zlib.compress(self.data)
-
+        obj = {
+            'created_at': utcformat(self.created_at or utcnow()),
+            'data': zlib.compress(self.data),
+            'started_at': utcformat(self.started_at) if self.started_at else '',
+            'ended_at': utcformat(self.ended_at) if self.ended_at else '',
+        }
+        
+        if self.retries_left is not None:
+            obj['retries_left'] = self.retries_left
+        if self.retry_intervals is not None:
+            obj['retry_intervals'] = json.dumps(self.retry_intervals)
         if self.origin is not None:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -527,8 +543,6 @@ class Job(object):
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
 
-        obj['started_at'] = utcformat(self.started_at) if self.started_at else ''
-        obj['ended_at'] = utcformat(self.ended_at) if self.ended_at else ''
         if self._result is not None:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
@@ -732,6 +746,17 @@ class Job(object):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
+    
+    def get_retry_interval(self):
+        """Returns the desired retry interval.
+        If number of retries is bigger than length of intervals, the first
+        value in the list will be used multiple times.
+        """
+        if self.retry_intervals is None:
+            return 0
+        number_of_intervals = len(self.retry_intervals)
+        index = max(number_of_intervals - self.retries_left, 0)
+        return self.retry_intervals[index]
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the job they
@@ -800,3 +825,24 @@ class Job(object):
         )
 
 _job_stack = LocalStack()
+
+
+class Retry(object):
+    def __init__(self, max, interval=0):
+        """`interval` can be a positive number or a list of ints"""
+        super().__init__()
+        if max < 1:
+            raise ValueError('max: please enter a value greater than 0')
+        
+        if isinstance(interval, int):
+            if interval < 0:
+                raise ValueError('interval: negative numbers are not allowed')
+            intervals = [interval]
+        elif isinstance(interval, Iterable):
+            for i in interval:
+                if i < 0:
+                    raise ValueError('interval: negative numbers are not allowed')
+            intervals = interval
+        
+        self.max = max
+        self.intervals = intervals

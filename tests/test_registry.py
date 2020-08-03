@@ -411,7 +411,7 @@ class TestFailedJobRegistry(RQTestCase):
         timestamp = current_timestamp()
 
         job = q.enqueue(div_by_zero, failure_ttl=5)
-        w.handle_job_failure(job)
+        w.handle_job_failure(job, q)
         # job is added to FailedJobRegistry with default failure ttl
         self.assertIn(job.id, registry.get_job_ids())
         self.assertLess(self.testconn.zscore(registry.key, job.id),
@@ -419,6 +419,6 @@ class TestFailedJobRegistry(RQTestCase):
 
         # job is added to FailedJobRegistry with specified ttl
         job = q.enqueue(div_by_zero, failure_ttl=5)
-        w.handle_job_failure(job)
+        w.handle_job_failure(job, q)
         self.assertLess(self.testconn.zscore(registry.key, job.id),
                         timestamp + 7)

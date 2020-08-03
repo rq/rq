@@ -1,3 +1,11 @@
+### RQ 1.5.0 (2020-07-26)
+* Failed jobs can now be retries. Thanks @selwin!
+* Fixed scheduler on Python > 3.8.0. Thanks @selwin!
+* RQ is now aware of which version of Redis server it's running on. Thanks @aparcar!
+* RQ now uses `hset()` on redis-py >= 3.5.0. Thanks @aparcar!
+* Fix incorrect worker timeout calculation in SimpleWorker.execute_job(). Thanks @davidmurray!
+* Make horse handling logic more robust. Thanks @wevsty!
+
 ### RQ 1.4.3 (2020-06-28)
 * Added `job.get_position()` and `queue.get_job_position()`. Thanks @aparcar!
 * Longer TTLs for worker keys to prevent them from expiring inside the worker lifecycle. Thanks @selwin!

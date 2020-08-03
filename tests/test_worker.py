@@ -11,7 +11,7 @@ import sys
 import time
 import zlib
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from time import sleep
 
@@ -30,7 +30,7 @@ from tests.fixtures import (
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
-from rq.job import Job, JobStatus
+from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
@@ -357,7 +357,7 @@ class TestWorker(RQTestCase):
         registry = StartedJobRegistry(connection=worker.connection)
         job.started_at = utcnow()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
-        worker.handle_job_failure(job)
+        worker.handle_job_failure(job, queue)
         worker.handle_job_success(job, queue, registry)
 
         worker.refresh()
@@ -365,13 +365,67 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.successful_job_count, 1)
         self.assertEqual(worker.total_working_time, 1.5)  # 1.5 seconds
 
-        worker.handle_job_failure(job)
+        worker.handle_job_failure(job, queue)
         worker.handle_job_success(job, queue, registry)
 
         worker.refresh()
         self.assertEqual(worker.failed_job_count, 2)
         self.assertEqual(worker.successful_job_count, 2)
         self.assertEqual(worker.total_working_time, 3.0)
+    
+    def test_handle_retry(self):
+        """handle_job_failure() handles retry properly"""
+        connection = self.testconn
+        queue = Queue(connection=connection)
+        retry = Retry(max=2)
+        job = queue.enqueue(div_by_zero, retry=retry)
+
+        worker = Worker([queue])
+
+        # If job if configured to retry, it will be put back in the queue
+        # This is the original execution
+        queue.empty()
+        worker.handle_job_failure(job, queue)
+        job.refresh()
+        self.assertEqual(job.retries_left, 1)
+        self.assertEqual([job.id], queue.job_ids)
+
+        # First retry
+        queue.empty()
+        worker.handle_job_failure(job, queue)
+        job.refresh()
+        self.assertEqual(job.retries_left, 0)
+        self.assertEqual([job.id], queue.job_ids)
+
+        # Second retry
+        queue.empty()
+        worker.handle_job_failure(job, queue)
+        job.refresh()
+        self.assertEqual(job.retries_left, 0)
+        self.assertEqual([], queue.job_ids)
+    
+    def test_retry_interval(self):
+        """Retries with intervals are scheduled"""
+        connection = self.testconn
+        queue = Queue(connection=connection)
+        retry = Retry(max=1, interval=5)
+        job = queue.enqueue(div_by_zero, retry=retry)
+
+        worker = Worker([queue])
+        registry = queue.scheduled_job_registry
+        # If job if configured to retry with interval, it will be scheduled,
+        # not directly put back in the queue
+        queue.empty()
+        worker.handle_job_failure(job, queue)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        self.assertEqual(job.retries_left, 0)
+        self.assertEqual(len(registry), 1)
+        self.assertEqual(queue.job_ids, [])
+        # Scheduled time is roughly 5 seconds from now
+        scheduled_time = registry.get_scheduled_time(job)
+        now = datetime.now(timezone.utc)
+        self.assertTrue(now + timedelta(seconds=4) < scheduled_time < now + timedelta(seconds=6))
 
     def test_total_working_time(self):
         """worker.total_working_time is stored properly"""
@@ -1087,7 +1141,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w.fork_work_horse(job, queue)
         p = Process(target=wait_and_kill_work_horse, args=(w._horse_pid, 0.5))
         p.start()
-        w.monitor_work_horse(job)
+        w.monitor_work_horse(job, queue)
         job_status = job.get_status()
         p.join(1)
         self.assertEqual(job_status, JobStatus.FAILED)
@@ -1113,7 +1167,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         job.timeout = 5
         w.job_monitoring_interval = 1
         now = utcnow()
-        w.monitor_work_horse(job)
+        w.monitor_work_horse(job, queue)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
         self.assertTrue((utcnow() - now).total_seconds() < total_time)

@@ -20,13 +20,18 @@ body
 header
 {
     background: url(../img/ribbon.png) no-repeat 50% 0;
-    max-width: 430px;
+    max-width: 630px;
     width: 100%;
     text-align: center;
 
     padding: 240px 0 1em 0;
     border-bottom: 1px dashed #e1e1e1;
     margin: 0 auto 2em auto;
+}
+
+li
+{
+    padding-bottom: 5px;
 }
 
 ul.inline
@@ -86,7 +91,7 @@ header a:hover
 .container
 {
     margin: 0 auto;
-    max-width: 430px;
+    max-width: 630px;
     width: 100%;
 }
 

@@ -282,7 +282,7 @@ class Queue(object):
     def create_job(self, func, args=None, kwargs=None, timeout=None,
                    result_ttl=None, ttl=None, failure_ttl=None,
                    description=None, depends_on=None, job_id=None,
-                   meta=None, status=JobStatus.QUEUED):
+                   meta=None, status=JobStatus.QUEUED, retry=None):
         """Creates a job based on parameters given."""
         timeout = parse_timeout(timeout)
 
@@ -306,12 +306,16 @@ class Queue(object):
             origin=self.name, meta=meta, serializer=self.serializer
         )
 
+        if retry:
+            job.retries_left = retry.max
+            job.retry_intervals = retry.intervals
+
         return job
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, failure_ttl=None,
                      description=None, depends_on=None, job_id=None,
-                     at_front=False, meta=None):
+                     at_front=False, meta=None, retry=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 nd
@@ -324,6 +328,7 @@ nd
             func, args=args, kwargs=kwargs, result_ttl=result_ttl, ttl=ttl,
             failure_ttl=failure_ttl, description=description, depends_on=depends_on,
             job_id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
+            retry=retry
         )
 
         # If a _dependent_ job depends on any unfinished job, register all the
@@ -397,6 +402,7 @@ nd
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
+        retry = kwargs.pop('retry', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
@@ -404,40 +410,46 @@ nd
             kwargs = kwargs.pop('kwargs', None)
 
         return (f, timeout, description, result_ttl, ttl, failure_ttl,
-                depends_on, job_id, at_front, meta, args, kwargs)
+                depends_on, job_id, at_front, meta, retry, args, kwargs)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues it."""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
 
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             description=description, depends_on=depends_on, job_id=job_id,
-            at_front=at_front, meta=meta
+            at_front=at_front, meta=meta, retry=retry
         )
 
     def enqueue_at(self, datetime, f, *args, **kwargs):
         """Schedules a job to be enqueued at specified time"""
-        from .registry import ScheduledJobRegistry
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
         job = self.create_job(f, status=JobStatus.SCHEDULED, args=args, kwargs=kwargs,
                               timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                               failure_ttl=failure_ttl, description=description,
                               depends_on=depends_on, job_id=job_id, meta=meta)
 
-        registry = ScheduledJobRegistry(queue=self)
-        with self.connection.pipeline() as pipeline:
-            # Add Queue key set
-            pipeline.sadd(self.redis_queues_keys, self.key)
-            job.save(pipeline=pipeline)
-            registry.schedule(job, datetime, pipeline=pipeline)
-            pipeline.execute()
+        return self.schedule_job(job, datetime)
 
+    def schedule_job(self, job, datetime, pipeline=None):
+        """Puts job on ScheduledJobRegistry"""
+        from .registry import ScheduledJobRegistry
+        registry = ScheduledJobRegistry(queue=self)
+
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+
+        # Add Queue key set
+        pipe.sadd(self.redis_queues_keys, self.key)
+        job.save(pipeline=pipe)
+        registry.schedule(job, datetime, pipeline=pipe)
+        if pipeline is None:
+            pipe.execute()
         return job
 
     def enqueue_in(self, time_delta, func, *args, **kwargs):

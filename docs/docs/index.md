@@ -115,6 +115,7 @@ redis_conn = Redis()
 q = Queue(connection=redis_conn)
 
 # Getting the number of jobs in the queue
+# Note: Only queued jobs are counted, not including deferred ones
 print(len(q))
 
 # Retrieving jobs
