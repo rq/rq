@@ -703,6 +703,7 @@ class Worker(object):
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
             self.main_work_horse(job, queue)
+            os._exit(0) # just in case
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
@@ -785,7 +786,10 @@ class Worker(object):
         self.setup_work_horse_signals()
         self._is_horse = True
         self.log = logger
-        self.perform_job(job, queue)
+        try:
+            self.perform_job(job, queue)
+        except:
+            os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
         # contrast to the regular sys.exit()
@@ -922,12 +926,13 @@ class Worker(object):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.prepare_job_execution(job, heartbeat_ttl)
         push_connection(self.connection)
 
         started_job_registry = queue.started_job_registry
 
         try:
+            self.prepare_job_execution(job, heartbeat_ttl)
+
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
