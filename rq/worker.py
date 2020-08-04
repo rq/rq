@@ -777,7 +777,7 @@ class Worker(object):
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def main_work_horse_int(self, job, queue):
+    def main_work_horse(self, job, queue):
         """This is the entry point of the newly spawned work horse."""
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
@@ -786,15 +786,8 @@ class Worker(object):
         self.setup_work_horse_signals()
         self._is_horse = True
         self.log = logger
-        self.perform_job(job, queue)
-
-        # os._exit() is the way to exit from childs after a fork(), in
-        # contrast to the regular sys.exit()
-        os._exit(0)
-
-    def main_work_horse(self, job, queue):
         try:
-            self.main_work_horse_int(job, queue)
+            self.perform_job(job, queue)
         except:
             exc_info = sys.exc_info()
             exc_string = self._get_safe_exception_string(
@@ -802,6 +795,9 @@ class Worker(object):
             )
             os._exit(1)
 
+        # os._exit() is the way to exit from childs after a fork(), in
+        # contrast to the regular sys.exit()
+        os._exit(0)
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse."""

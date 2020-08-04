@@ -325,7 +325,7 @@ class TestWorker(RQTestCase):
         enqueued_at_date = str(job.enqueued_at)
 
         w = Worker([q])
-        with mock.patch.object(w, 'main_work_horse_int', new_callable=raise_exc_mock):
+        with mock.patch.object(w, 'perform_job', new_callable=raise_exc_mock):
             w.work(burst=True)  # should silently pass
 
         # Postconditions
