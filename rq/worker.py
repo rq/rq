@@ -789,10 +789,6 @@ class Worker(object):
         try:
             self.perform_job(job, queue)
         except:
-            exc_info = sys.exc_info()
-            exc_string = self._get_safe_exception_string(
-                traceback.format_exception(*exc_info)
-            )
             os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
