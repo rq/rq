@@ -3,8 +3,14 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 import re
 import datetime
+import mock
+
+from distutils.version import StrictVersion
+
+from redis import Redis
+
 from tests import RQTestCase, fixtures
-from rq.utils import parse_timeout, first, is_nonstring_iterable, ensure_list, utcparse, backend_class
+from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse
 from rq.exceptions import TimeoutFormatError
 
 
@@ -66,3 +72,20 @@ class TestUtils(RQTestCase):
         self.assertEqual(fixtures.DummyQueue, backend_class(fixtures, 'DummyQueue', override=fixtures.DummyQueue))
         self.assertEqual(fixtures.DummyQueue,
                          backend_class(fixtures, 'DummyQueue', override='tests.fixtures.DummyQueue'))
+
+    def test_get_redis_version(self):
+        """Ensure get_version works properly"""
+        redis = Redis()
+        self.assertTrue(isinstance(get_version(redis), StrictVersion))
+
+        # Parses 3 digit version numbers correctly
+        class DummyRedis(Redis):
+            def info(*args):
+                return {'redis_version': '4.0.8'}
+        self.assertEqual(get_version(DummyRedis()), StrictVersion('4.0.8'))
+
+        # Parses 3 digit version numbers correctly
+        class DummyRedis(Redis):
+            def info(*args):
+                return {'redis_version': '3.0.7.9'}
+        self.assertEqual(get_version(DummyRedis()), StrictVersion('3.0.7'))

@@ -39,7 +39,7 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, enum,
+from .utils import (backend_class, ensure_list, enum, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -223,10 +223,7 @@ class Worker(object):
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = StrictVersion(
-                self.connection.info("server")["redis_version"]
-            )
-
+            self.redis_server_version = get_version(self.connection)
         return self.redis_server_version
 
     def validate_queues(self):
