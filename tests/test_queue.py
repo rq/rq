@@ -554,7 +554,7 @@ class TestQueue(RQTestCase):
         q = Queue()
         with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
             job = q.enqueue(say_hello, depends_on=parent_jobs[0],
-                            _dependency_ids = [job.id for job in parent_jobs])
+                            _dependency_ids=[job.id for job in parent_jobs])
             self.assertEqual(job.get_status(), JobStatus.DEFERRED)
             self.assertEqual(q.job_ids, [])
             self.assertEqual(job.fetch_dependencies(), parent_jobs)

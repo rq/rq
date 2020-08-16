@@ -15,7 +15,7 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
 from .serializers import resolve_serializer
-from .utils import backend_class, import_attribute, parse_timeout, utcnow
+from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
 
 
 def compact(lst):
@@ -92,10 +92,7 @@ class Queue(object):
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = StrictVersion(
-                self.connection.info("server")["redis_version"]
-            )
-
+            self.redis_server_version = get_version(self.connection)
         return self.redis_server_version
 
     @property

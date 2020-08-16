@@ -18,7 +18,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
-from .utils import (enum, import_attribute, parse_timeout, str_to_date,
+from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
@@ -590,9 +590,7 @@ class Job(object):
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = StrictVersion(
-                self.connection.info("server")["redis_version"]
-            )
+            self.redis_server_version = get_version(self.connection)
 
         return self.redis_server_version
 
