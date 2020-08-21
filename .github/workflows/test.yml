@@ -48,6 +48,8 @@ jobs:
       uses: AndreMiras/coveralls-python-action@develop
       with:
         parallel: true
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        debug: true
 
   coveralls_finish:
     needs: build
@@ -57,3 +59,5 @@ jobs:
       uses: AndreMiras/coveralls-python-action@develop
       with:
         parallel-finished: true
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        debug: true
