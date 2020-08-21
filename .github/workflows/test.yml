@@ -37,6 +37,8 @@ jobs:
         pip install -e .
 
     - name: Test with pytest
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
       run: |
         RUN_SLOW_TESTS_TOO=1 pytest --cov rq --durations=5
         coveralls
