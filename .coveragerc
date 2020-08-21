@@ -1,4 +1,5 @@
 [run]
+relative_files = True
 omit =
     rq/scripts/*
     rq/compat/*

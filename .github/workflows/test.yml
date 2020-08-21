@@ -48,7 +48,16 @@ jobs:
       run: |
         codecov
     
-    - name: Coveralls GitHub Action
-      uses: coverallsapp/github-action@v1.1.1
+    - name: Coveralls
+      uses: AndreMiras/coveralls-python-action@develop
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        parallel: true
+
+    coveralls_finish:
+      needs: test
+      runs-on: ubuntu-latest
+      steps:
+      - name: Coveralls Finished
+        uses: AndreMiras/coveralls-python-action@develop
+        with:
+          parallel-finished: true
