@@ -168,7 +168,7 @@ class RQScheduler(object):
 
     def stop(self):
         logger.info("Scheduler stopping, releasing locks for %s...",
-                     ','.join(self._queue_names))
+                    ','.join(self._queue_names))
         keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
         self._status = self.Status.STOPPED
@@ -200,7 +200,7 @@ class RQScheduler(object):
 
 def run(scheduler):
     logger.info("Scheduler for %s started with PID %s",
-                 ','.join(scheduler._queue_names), os.getpid())
+                ','.join(scheduler._queue_names), os.getpid())
     try:
         scheduler.work()
     except:  # noqa

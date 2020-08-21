@@ -38,8 +38,9 @@ jobs:
 
     - name: Test with pytest
       run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov rq --durations=5
+        RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
 
-    - name: Codecov
-      run: |
-        codecov
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v1
+      with:
+        file: ./coverage.xml
