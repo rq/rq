@@ -37,12 +37,11 @@ jobs:
         pip install -e .
 
     - name: Test with pytest
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         RUN_SLOW_TESTS_TOO=1 pytest --cov rq --durations=5
-    - env:
-        COVERALLS_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        name: Submit to coveralls
-        run: coveralls
+        coveralls
 
     - name: Codecov
       run: |
