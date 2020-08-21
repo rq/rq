@@ -33,12 +33,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install redis==${{ matrix.redis-py-version }}
-        pip install pytest pytest-cov sentry-sdk codecov mock
+        pip install pytest pytest-cov sentry-sdk codecov mock coveralls
         pip install -e .
 
     - name: Test with pytest
       run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov=. rq --durations=5
+        RUN_SLOW_TESTS_TOO=1 pytest rq --durations=5 --cov=.
 
     - name: Codecov
       run: |
