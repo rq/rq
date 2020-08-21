@@ -40,14 +40,7 @@ jobs:
       run: |
         RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
 
-    - name: Codecov
-      run: |
-        codecov
-
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
         file: ./coverage.xml
-        flags: unittests
-        env_vars: OS,PYTHON
-        name: codecov-umbrella
