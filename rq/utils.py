@@ -18,6 +18,8 @@ import sys
 from collections import Iterable
 from distutils.version import StrictVersion
 
+from redis.exceptions import ResponseError
+
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
 
@@ -251,8 +253,11 @@ def parse_timeout(timeout):
 
 def get_version(connection):
     """
-    Return StrictVersion of Redis server version.
+    Returns StrictVersion of Redis server version.
     This function also correctly handles 4 digit redis server versions.
     """
-    version_string = connection.info("server")["redis_version"]
+    try:
+        version_string = connection.info("server")["redis_version"]
+    except ResponseError:  # fakeredis doesn't implement Redis' INFO command
+        version_string = "5.0.9"
     return StrictVersion('.'.join(version_string.split('.')[:3]))
