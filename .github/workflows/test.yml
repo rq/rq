@@ -39,6 +39,7 @@ jobs:
     - name: Test with pytest
       run: |
         RUN_SLOW_TESTS_TOO=1 pytest --cov rq --durations=5
+        coveralls
 
     - name: Codecov
       run: |
