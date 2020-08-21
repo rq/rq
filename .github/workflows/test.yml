@@ -38,7 +38,7 @@ jobs:
 
     - name: Test with pytest
       env:
-        COVERALLS_REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         RUN_SLOW_TESTS_TOO=1 pytest --cov rq --durations=5
         coveralls
