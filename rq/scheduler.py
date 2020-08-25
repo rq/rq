@@ -46,6 +46,7 @@ class RQScheduler(object):
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
         self._connection_kwargs = connection.connection_pool.connection_kwargs
+        self._connection_class = connection.__class__  # client
         connection_class = connection.connection_pool.connection_class
         if issubclass(connection_class, SSLConnection):
             self._connection_kwargs['ssl'] = True
@@ -59,8 +60,8 @@ class RQScheduler(object):
     def connection(self):
         if self._connection:
             return self._connection
-        self._connection = Redis(**self._connection_kwargs)
-        return Redis(**self._connection_kwargs)
+        self._connection = self._connection_class(**self._connection_kwargs)
+        return self._connection
 
     @property
     def acquired_locks(self):
