@@ -90,7 +90,8 @@ The default serializer used is `pickle`
 
 ```python
 import json
-from rq import Job, Queue
+from rq import Queue
+from rq.job import Job
 
 job = Job(connection=connection, serializer=json)
 queue = Queue(connection=connection, serializer=json)
