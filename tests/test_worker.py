@@ -379,16 +379,19 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=connection)
         retry = Retry(max=2)
         job = queue.enqueue(div_by_zero, retry=retry)
+        registry = FailedJobRegistry(queue=queue)
 
         worker = Worker([queue])
 
         # If job if configured to retry, it will be put back in the queue
+        # and not put in the FailedJobRegistry.
         # This is the original execution
         queue.empty()
         worker.handle_job_failure(job, queue)
         job.refresh()
         self.assertEqual(job.retries_left, 1)
         self.assertEqual([job.id], queue.job_ids)
+        self.assertFalse(job in registry)
 
         # First retry
         queue.empty()
@@ -403,6 +406,8 @@ class TestWorker(RQTestCase):
         job.refresh()
         self.assertEqual(job.retries_left, 0)
         self.assertEqual([], queue.job_ids)
+        # If a job is no longer retries, it's put in FailedJobRegistry
+        self.assertTrue(job in registry)
     
     def test_retry_interval(self):
         """Retries with intervals are scheduled"""
