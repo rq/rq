@@ -856,7 +856,7 @@ class Worker(object):
 
             started_job_registry.remove(job, pipeline=pipeline)
 
-            if not self.disable_default_exception_handler:
+            if not self.disable_default_exception_handler and not retry:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                         job_class=self.job_class)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
