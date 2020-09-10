@@ -1,3 +1,4 @@
 include LICENSE
 include *.toml
+include requirements.txt
 recursive-exclude tests *
