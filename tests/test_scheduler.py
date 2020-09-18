@@ -7,7 +7,7 @@ from multiprocessing import Process
 from rq import Queue
 from rq.compat import utc, PY2
 from rq.exceptions import NoSuchJobError
-from rq.job import Job
+from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.utils import current_timestamp
@@ -321,3 +321,12 @@ class TestQueue(RQTestCase):
         self.assertTrue(
             now + timedelta(seconds=28) < scheduled_time < now + timedelta(seconds=32)
         )
+
+    def test_enqueue_in_with_retry(self):
+        """ Ensure that the retry parameter is passed
+        to the enqueue_at function from enqueue_in.
+        """
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue_in(timedelta(seconds=30), say_hello, retry=Retry(3, [2]))
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [2])
