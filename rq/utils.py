@@ -206,13 +206,16 @@ def current_timestamp():
 
 
 def enum(name, *sequential, **named):
-    values = dict(zip(sequential, range(len(sequential))), **named)
-
+    enum_values = dict(zip(sequential, range(len(sequential))), **named)
+    if "_values" in enum_values:
+        raise ValueError("'_values' is a protected member in and cannot be set as an enum name")
+    class_values = enum_values
+    class_values["_values"] = class_values
     # NOTE: Yes, we *really* want to cast using str() here.
     # On Python 2 type() requires a byte string (which is str() on Python 2).
     # On Python 3 it does not matter, so we'll use str(), which acts as
     # a no-op.
-    return type(str(name), (), values)
+    return type(str(name), (), class_values)
 
 
 def backend_class(holder, default_name, override=None):
