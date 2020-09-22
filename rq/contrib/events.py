@@ -17,33 +17,18 @@
 Events support for RQ workers and submitters
 """
 import json
+from collections import namedtuple
 from datetime import datetime
 from threading import Thread
-from typing import ContextManager, Iterable, List, Optional, Set, Tuple
-
-import attr
-import cattr
-from redis import Redis
-from redis.client import PubSub
+from typing import ContextManager, List, Optional, Set, Tuple
 from rq.job import Job, JobStatus
 
 from .utils.future import TypedFuture
+from ..connections import resolve_connection
+from ..serializers import resolve_serializer
+from ..utils import utcformat
 
-
-@attr.s(auto_attribs=True)
-class JobEvent:
-    """
-    Task event is a notification object that
-    """
-
-    id: str
-    status: str
-    date: datetime = attr.ib(factory=datetime.utcnow)
-
-
-cattr.register_unstructure_hook(datetime, lambda v: v.isoformat())
-cattr.register_structure_hook(datetime, lambda v, cl: datetime.fromisoformat(v))
-# cattr.register_structure_hook_func(JobStatus, lambda v, cl: JobStatus(v))
+JobEvent = namedtuple("JobEvent", ("id", "status", "date"))
 
 
 class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
@@ -52,11 +37,12 @@ class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
     """
 
     # pylint: disable=super-init-not-called
-    def __init__(self, redis, job_id, poll_frequency = 0.1, queue_prefix = None):
-        self.redis = redis
-        self.job_id = job_id
-        self._name = ("{}-".format(queue_prefix) if queue_prefix else "") + "job-{}".format(job_id)
+    def __init__(self, job, poll_frequency=0.1, queue_prefix=None, serializer=None):
+        self.connection = resolve_connection()
+        self.job_id = job.id if isinstance(job, Job) else job
+        self._name = ("{}-".format(queue_prefix) if queue_prefix else "") + "job-{}".format(self.job_id)
 
+        self._serializer = resolve_serializer(serializer)
         self._pubsub = None
         self._requested_stop = False
         self._waiters: List[Tuple[TypedFuture[JobEvent], Optional[Set[JobStatus]]]] = []
@@ -72,27 +58,29 @@ class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
 
     def send(self, event):
         """Send some JobEvent to redis."""
-        self.redis.publish(self.name, json.dumps(cattr.unstructure(event)))
+        data = dict(event._asdict())
+        data["date"] = utcformat(event.date) if event.date else ""
+        self.redis.publish(self.name, self._serializer.dumps(data))
 
-    def _receive_once(self, job, pubsub, old_status) -> Optional[JobEvent]:
+    def _receive_once(self, job, pubsub, old_status):
         message = pubsub.get_message(ignore_subscribe_messages=True, timeout=self._poll_frequency)
         new_status: Optional[str] = None
         if old_status is not None and JobStatus.terminal(old_status):
-            return JobEvent(job.id, status=old_status)
+            return JobEvent(job.id, status=old_status, date=datetime.utcnow())
         if message is None:
             new_status = job.get_status()
         else:
-            event: JobEvent = cattr.structure(json.loads(message["data"]), JobEvent)
+            event: JobEvent = self._serializer.loads(message["data"])
             new_status = event.status  # pylint: disable=no-member
         if new_status is not None and (old_status is None or old_status != new_status):
-            return JobEvent(job.id, status=new_status)
+            return JobEvent(job.id, status=new_status, date=datetime.utcnow())
         return None
 
     def _wait(self):
         pubsub = self.redis.pubsub()
         pubsub.subscribe(self.name)
         job = Job(id=self.job_id, connection=self.redis)
-        old_status: Optional[str] = job.get_status()
+        old_status = job.get_status()
         try:
             while not self._requested_stop:
                 # acquire message using pubsub
@@ -145,7 +133,7 @@ class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
         """
         return self._wait_thread is not None and self._wait_thread.is_alive()
 
-    def receive(self, *, only = None):
+    def receive(self, *, only=None):
         """Recieve an event from this queue."""
         if not self.receiving:
             raise RuntimeError(
