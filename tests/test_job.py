@@ -1005,3 +1005,42 @@ class TestJob(RQTestCase):
         self.assertEqual(job.get_retry_interval(), 2)
         job.retries_left = 1
         self.assertEqual(job.get_retry_interval(), 3)
+
+    @classmethod
+    def _enqueue_sequential_counter(cls, queue: Queue, size, args=None):
+        jobs = []
+        for i in range(size):
+            job: Job = Job.create(
+                fixtures.say_hello,
+                connection=queue.connection,
+                args=(f"Hello from {i}", *(args if args else ())),
+                depends_on=jobs[-1] if jobs else None,
+            )
+            queue.enqueue_job(job)
+            jobs.append(job)
+        return jobs
+
+    def test_get_parents(self):
+        """
+        Test job.get_parents() using distributed sequential counter:
+        - get_parents() are returning jobs in proper order: direct parent is first, then its grandparent, and so on.
+        - get_parents() is working for any *enqueued* job.
+        """
+        queue = Queue(connection=self.testconn)
+        jobs = self._enqueue_sequential_counter(queue, size=5)
+        for job_idx, job in enumerate(jobs):
+            parent_jobs = job.get_parents(recursive=True)
+            parent_jobs.reverse()
+            self.assertListEqual([j.id for j in jobs[:job_idx]], [j.id for j in parent_jobs])
+
+    def test_get_children(self):
+        """
+        Test job.get_children() using distributed sequential counter:
+        - get_children() are returning jobs in proper order: first are direct children (in any order) and then grand children
+        - get_children() is working for any *enqueued* job.
+        """
+        queue = Queue(connection=self.testconn)
+        jobs = self._enqueue_sequential_counter(queue, size=5)
+        for job_idx, job in enumerate(jobs):
+            child_jobs = job.get_children(recursive=True)
+            self.assertListEqual([j.id for j in jobs[job_idx+1:]], [j.id for j in child_jobs])
