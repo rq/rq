@@ -394,7 +394,7 @@ class Worker(object):
         Kill the horse but catch "No such process" error has the horse could already be dead.
         """
         try:
-            os.kill(self.horse_pid, sig)
+            os.killpg(os.getpgid(self.horse_pid), sig)
             self.log.info('Killed horse pid %s', self.horse_pid)
         except OSError as e:
             if e.errno == errno.ESRCH:
@@ -699,6 +699,7 @@ class Worker(object):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
+            os.setsid()
             self.main_work_horse(job, queue)
             os._exit(0) # just in case
         else:
