@@ -14,12 +14,16 @@ except ImportError:
     import unittest2 as unittest  # noqa
 
 
+def get_redis_host():
+    return os.getenv("RQ_TESTS_REDIS_HOST", "localhost")
+
+
 def find_empty_redis_database():
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
     """
     for dbnum in range(4, 17):
-        testconn = Redis(db=dbnum)
+        testconn = Redis(host=get_redis_host(), db=dbnum)
         empty = testconn.dbsize() == 0
         if empty:
             return testconn
