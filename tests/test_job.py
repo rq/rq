@@ -246,9 +246,10 @@ class TestJob(RQTestCase):
         self.assertEqual(stored_date, utcformat(job.created_at))
 
         # ... and no other keys are stored
-        self.assertEqual(
-            sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description', b'ended_at', b'started_at'])
+        self.assertCountEqual(
+            self.testconn.hkeys(job.key),
+            [b'created_at', b'data', b'description', b'ended_at', b'started_at']
+        )
 
     def test_persistence_of_retry_data(self):
         """Retry related data is stored and restored properly"""
@@ -959,8 +960,9 @@ class TestJob(RQTestCase):
         w = Worker([queue])
         w.work(burst=True, max_jobs=1)
 
-        assert dependent_job.dependencies_are_met()
-        assert dependent_job.get_status() == JobStatus.QUEUED
+        # dependent_job.refresh()
+        self.assertTrue(dependent_job.dependencies_are_met())
+        self.assertEqual(JobStatus.QUEUED, dependent_job.get_status())
 
     def test_retry(self):
         """Retry parses `max` and `interval` correctly"""
@@ -1010,13 +1012,11 @@ class TestJob(RQTestCase):
     def _enqueue_sequential_counter(cls, queue: Queue, size, args=None):
         jobs = []
         for i in range(size):
-            job: Job = Job.create(
-                fixtures.say_hello,
-                connection=queue.connection,
+            job: Job = queue.enqueue_call(
+                func=fixtures.say_hello,
                 args=(f"Hello from {i}", *(args if args else ())),
                 depends_on=jobs[-1] if jobs else None,
             )
-            queue.enqueue_job(job)
             jobs.append(job)
         return jobs
 

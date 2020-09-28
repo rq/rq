@@ -17,7 +17,7 @@ from rq.worker import Worker, WorkerStatus
 
 import pytest
 
-from tests import RQTestCase
+from tests import RQTestCase, get_redis_host
 from tests.fixtures import div_by_zero, say_hello
 
 
@@ -41,7 +41,7 @@ class TestRQCli(RQTestCase):
     def setUp(self):
         super(TestRQCli, self).setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
-        self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
+        self.redis_url = 'redis://%s:6379/%d' % (get_redis_host(), db_num)
         self.connection = Redis.from_url(self.redis_url)
 
         job = Job.create(func=div_by_zero, args=(1, 2, 3))

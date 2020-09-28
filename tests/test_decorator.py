@@ -6,10 +6,10 @@ import mock
 from redis import Redis
 
 from rq.decorators import job
-from rq.job import Job
+from rq.job import Job, RunCondition
 from rq.queue import Queue
 from rq.worker import DEFAULT_RESULT_TTL
-from tests import RQTestCase
+from tests import RQTestCase, get_redis_host
 from tests.fixtures import decorated_job
 
 
@@ -78,8 +78,8 @@ class TestDecorator(RQTestCase):
         self.assertEqual(result.meta, {})
 
         test_meta = {
-            'metaKey1': 1,
-            'metaKey2': 2,
+            "metaKey1": 1,
+            "metaKey2": 2,
         }
 
         @job('default', meta=test_meta)
@@ -156,7 +156,7 @@ class TestDecorator(RQTestCase):
     def test_decorator_connection_laziness(self, resolve_connection):
         """Ensure that job decorator resolve connection in `lazy` way """
 
-        resolve_connection.return_value = Redis()
+        resolve_connection.return_value = Redis(host=get_redis_host())
 
         @job(queue='queue_name')
         def foo():

@@ -152,7 +152,7 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job, self.registry)
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertTrue(job.exc_info)  # explanation is written to exc_info 
+        self.assertTrue(job.exc_info)  # explanation is written to exc_info
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
@@ -297,9 +297,10 @@ class TestDeferredRegistry(RQTestCase):
         """Ensure job creation and deletion works with DeferredJobRegistry."""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(say_hello)
+        registry = DeferredJobRegistry(connection=self.testconn)
+        self.assertEqual(registry.get_job_ids(), [])
         job2 = queue.enqueue(say_hello, depends_on=job)
 
-        registry = DeferredJobRegistry(connection=self.testconn)
         self.assertEqual(registry.get_job_ids(), [job2.id])
 
         # When deleted, job removes itself from DeferredJobRegistry
