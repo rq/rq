@@ -66,6 +66,9 @@ def create_file_after_timeout(path, timeout):
     time.sleep(timeout)
     create_file(path)
 
+def create_file_after_timeout_and_setsid(path, timeout):
+    os.setsid()
+    create_file_after_timeout(path, timeout)
 
 def access_self():
     assert get_current_connection() is not None

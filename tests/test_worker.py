@@ -23,7 +23,7 @@ from mock import Mock
 
 from tests import RQTestCase, slow
 from tests.fixtures import (
-    access_self, create_file, create_file_after_timeout, div_by_zero, do_nothing,
+    access_self, create_file, create_file_after_timeout, create_file_after_timeout_and_setsid, div_by_zero, do_nothing,
     kill_worker, long_running_job, modify_self, modify_self_and_error,
     run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid, raise_exc_mock
 )
@@ -36,7 +36,6 @@ from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, WorkerStatus
-
 
 class CustomJob(Job):
     pass
@@ -1283,9 +1282,10 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo')
 
         path = os.path.join(self.sandbox, 'shouldnt_exist')
-        p = Process(target=create_file_after_timeout, args=(path, 2))
+        p = Process(target=create_file_after_timeout_and_setsid, args=(path, 2))
         p.start()
         self.assertEqual(p.exitcode, None)
+        time.sleep(0.1)
 
         w._horse_pid = p.pid
         w.handle_warm_shutdown_request()
