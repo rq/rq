@@ -40,7 +40,7 @@ from redis import WatchError
 from .compat import as_text, string_types, total_ordering, utc
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
-from .exceptions import DequeueTimeout, NoSuchJobError
+from .exceptions import DequeueTimeout, NoSuchJobError, InvalidJobOperation
 from .job import Job, JobStatus, RunCondition
 from .serializers import resolve_serializer
 from .utils import backend_class, import_attribute, parse_timeout, utcnow
@@ -416,7 +416,12 @@ nd
             timeout=timeout,
             retry=retry,
         )
+        deferred = self.defer_job(job) if depends_on is not None else False
+        if not deferred:
+            self.enqueue_job(job, at_front=at_front)
+        return job
 
+    def defer_job(self, job, pipeline=None):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
         #
@@ -424,32 +429,31 @@ nd
         # WatchError is raised in the when the pipeline is executed, that means
         # something else has modified either the set of dependencies or the
         # status of one of them. In this case, we simply retry.
-        if depends_on is not None:
-            with self.connection.pipeline() as pipe:
-                while True:
-                    try:
+        pipe = pipeline or self.connection.pipeline()
+        while True:
+            try:
 
-                        pipe.watch(job.dependencies_key)
+                pipe.watch(job.dependencies_key)
 
-                        dependencies = job.fetch_dependencies(watch=True, pipeline=pipe)
+                dependencies = job.fetch_dependencies(watch=True, pipeline=pipe)
 
-                        pipe.multi()
+                pipe.multi()
 
-                        for dependency in dependencies:
-                            if not JobStatus.terminal(dependency.get_status(refresh=False)):
-                                job.set_status(JobStatus.DEFERRED, pipeline=pipe)
-                                job.register_dependency(pipeline=pipe)
-                                job.save(pipeline=pipe)
-                                job.cleanup(ttl=job.ttl, pipeline=pipe)
-                                pipe.execute()
-                                return job
+                for dependency in dependencies:
+                    if not JobStatus.terminal(dependency.get_status(refresh=False)):
+                        job.set_status(JobStatus.DEFERRED, pipeline=pipe)
+                        job.register_dependency(pipeline=pipe)
+                        job.save(pipeline=pipe)
+                        job.cleanup(ttl=job.ttl, pipeline=pipe)
+                        if pipeline is None:
+                            pipe.execute()
+                        return True
 
-                        break
-                    except WatchError:
-                        continue
-
-        job = self.enqueue_job(job, at_front=at_front)
-        return job
+                break
+            except WatchError:
+                if pipeline is not None:
+                    raise
+        return False
 
     def run_job(self, job):
         """
@@ -482,6 +486,7 @@ nd
                 )
             )
             job.cancel()
+            job.set_status(JobStatus.CANCELLED)
         return job
 
     @classmethod
@@ -629,7 +634,6 @@ nd
         If Queue is instantiated with is_async=False, job is executed immediately.
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
-
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
@@ -641,7 +645,6 @@ nd
             job.timeout = self._default_timeout
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
-        job.register_dependency(pipeline=pipeline)
         if self._is_async:
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
@@ -671,12 +674,25 @@ nd
                 if pipeline is None:
                     pipe.watch(dependents_key)
 
-                dependent_job_ids = [as_text(_id) for _id in pipe.smembers(dependents_key)]
+                with pipe.pipeline() as p:
+                    p.smembers(dependents_key)
+                    dependent_job_ids = [as_text(_id) for _id in p.execute()[0]]
+
+                    jobs_to_process = [
+                        dependent_job
+                        for dependent_job in self.job_class.fetch_many(dependent_job_ids, connection=self.connection)
+                    ]
+
+                    for dependent_job in jobs_to_process:
+                        dependent_job.save_dependency_status(job.id, job.get_status(refresh=False), pipeline=p)
+                    p.execute()
 
                 jobs_to_process = [
                     dependent_job
-                    for dependent_job in self.job_class.fetch_many(dependent_job_ids, connection=self.connection)
-                    if dependent_job.dependencies_are_met(exclude_job_id=job.id, pipeline=pipe)
+                    for dependent_job in jobs_to_process
+                    if dependent_job.dependencies_are_met(
+                        known_jobs_statuses={job.id: job.get_status(refresh=False)}, pipeline=pipe
+                    )
                 ]
 
                 pipe.multi()
@@ -754,7 +770,7 @@ nd
         job_class = backend_class(cls, "job_class", override=job_class)
 
         while True:
-            queue_keys = [q.key for q in queues]
+            queue_keys = random.shuffle([q.key for q in queues])
             result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:
                 return None

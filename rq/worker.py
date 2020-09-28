@@ -834,6 +834,8 @@ class Worker(object):
             2. Removing the job from StartedJobRegistry
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
+            5. Retry job if retries are set
+            6. Enqueue dependencies if no retries are set
         """
         self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
@@ -851,10 +853,13 @@ class Worker(object):
                 job.retries_left = job.retries_left - 1
             else:
                 retry = False
+
+            if not retry:
+                # calls pipeline.multi!
+                queue.enqueue_dependents(job, pipeline=pipeline)
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
             started_job_registry.remove(job, pipeline=pipeline)
-
             if not self.disable_default_exception_handler:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                         job_class=self.job_class)
@@ -875,7 +880,6 @@ class Worker(object):
                     queue.schedule_job(job, scheduled_datetime, pipeline=pipeline)
                 else:
                     queue.enqueue_job(job, pipeline=pipeline)
-
             try:
                 pipeline.execute()
             except Exception:
@@ -938,10 +942,12 @@ class Worker(object):
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
+            job._status = JobStatus.FINISHED
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except:  # NOQA
+            job._status = JobStatus.FAILED
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = self._get_safe_exception_string(

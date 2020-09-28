@@ -107,8 +107,42 @@ class BaseRegistry(object):
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
+    def cleanup(self, timestamp=None):
+        raise NotImplementedError()
 
-class StartedJobRegistry(BaseRegistry):
+
+class StatusJobRegistryMeta(type):
+    """
+    Mapping metaclass allows setting up a relationship between
+    various job states and respective queues
+    """
+    _mapping = {}
+
+    def __new__(mcs, name, bases, dct):
+        ret = super(StatusJobRegistryMeta, mcs).__new__(mcs, name, bases, dct)
+        if hasattr(ret, "STATUSES"):
+            for status in ret.STATUSES:
+                if status in mcs._mapping:
+                    raise TypeError("Status {} is already mapped to {}".format(status, ret.__name__))
+                mcs._mapping[status] = ret
+        return ret
+
+    def get_registry(self, status):
+        return self._mapping[status]
+
+    @classmethod
+    def get_registries(mcs):
+        return mcs._mapping.values()
+
+
+class StatusJobRegistry(BaseRegistry, metaclass=StatusJobRegistryMeta):
+    """
+    Job registry associated with a specific set of job statuses
+    """
+    STATUSES = ()
+
+
+class StartedJobRegistry(StatusJobRegistry):
     """
     Registry of currently executing jobs. Each queue maintains a
     StartedJobRegistry. Jobs in this registry are ones that are currently
@@ -118,6 +152,7 @@ class StartedJobRegistry(BaseRegistry):
     right after completion (success or failure).
     """
     key_template = 'rq:wip:{0}'
+    STATUSES = (JobStatus.STARTED,)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
@@ -151,12 +186,13 @@ class StartedJobRegistry(BaseRegistry):
         return job_ids
 
 
-class FinishedJobRegistry(BaseRegistry):
+class FinishedJobRegistry(StatusJobRegistry):
     """
     Registry of jobs that have been completed. Jobs are added to this
     registry after they have successfully completed for monitoring purposes.
     """
     key_template = 'rq:finished:{0}'
+    STATUSES = (JobStatus.FINISHED,)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -169,11 +205,12 @@ class FinishedJobRegistry(BaseRegistry):
         self.connection.zremrangebyscore(self.key, 0, score)
 
 
-class FailedJobRegistry(BaseRegistry):
+class FailedJobRegistry(StatusJobRegistry):
     """
     Registry of containing failed jobs.
     """
     key_template = 'rq:failed:{0}'
+    STATUSES = (JobStatus.FAILED,)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -229,24 +266,34 @@ class FailedJobRegistry(BaseRegistry):
         return job
 
 
-class DeferredJobRegistry(BaseRegistry):
+class CancelledJobRegistry(FailedJobRegistry):
+    """
+    Registry of containing jobs to be cancelled / already cancelled.
+    """
+    key_template = 'rq:cancelled:{0}'
+    STATUSES = (JobStatus.CANCELLED,)
+
+
+class DeferredJobRegistry(StatusJobRegistry):
     """
     Registry of deferred jobs (waiting for another job to finish).
     """
     key_template = 'rq:deferred:{0}'
+    STATUSES = (JobStatus.DEFERRED,)
 
-    def cleanup(self):
+    def cleanup(self, timestamp=None):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
         pass
 
 
-class ScheduledJobRegistry(BaseRegistry):
+class ScheduledJobRegistry(StatusJobRegistry):
     """
     Registry of scheduled jobs.
     """
     key_template = 'rq:scheduled:{0}'
+    STATUSES = (JobStatus.SCHEDULED,)
 
     def __init__(self, *args, **kwargs):
         super(ScheduledJobRegistry, self).__init__(*args, **kwargs)
@@ -274,7 +321,7 @@ class ScheduledJobRegistry(BaseRegistry):
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         return self.connection.zadd(self.key, {job.id: timestamp})
 
-    def cleanup(self):
+    def cleanup(self, timestamp=None):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
@@ -307,7 +354,8 @@ class ScheduledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue):
-    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
+    """Cleans StartedJobRegistry, FinishedJobRegistry, CancelledJobRegistry and FailedJobRegistry of a queue."""
+
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,
                                    job_class=queue.job_class)
@@ -320,4 +368,9 @@ def clean_registries(queue):
     registry = FailedJobRegistry(name=queue.name,
                                  connection=queue.connection,
                                  job_class=queue.job_class)
+    registry.cleanup()
+
+    registry = CancelledJobRegistry(name=queue.name,
+                                    connection=queue.connection,
+                                    job_class=queue.job_class)
     registry.cleanup()
