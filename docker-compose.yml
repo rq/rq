@@ -1,0 +1,19 @@
+---
+version: '3.3'
+
+services:
+  rq:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+    environment:
+      RQ_TESTS_REDIS_HOST: "redis"
+      # RUN_SLOW_TESTS_TOO: "true"
+    volumes:
+    - .:/rq
+    depends_on:
+    - redis
+  redis:
+    image: redis:latest
+    ports:
+    - 6379:6379
