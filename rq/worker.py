@@ -713,6 +713,7 @@ class Worker(object):
 
         ret_val = None
         job.started_at = utcnow()
+        job.set_heartbeat(job.started_at)
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -728,6 +729,8 @@ class Worker(object):
                     self.kill_horse()
                     self.wait_for_horse()
                     break
+
+                job.set_heartbeat(utcnow())
 
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
