@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import logging
+import os
 
 from redis import Redis
 from rq import pop_connection, push_connection
@@ -27,14 +28,7 @@ def find_empty_redis_database():
 
 def slow(f):
     import os
-    from functools import wraps
-
-    @wraps(f)
-    def _inner(*args, **kwargs):
-        if os.environ.get('RUN_SLOW_TESTS_TOO'):
-            f(*args, **kwargs)
-
-    return _inner
+    return unittest.skipIf(not os.environ.get('RUN_SLOW_TESTS_TOO'), "Skipping slow tests as RUN_SLOW_TESTS_TOO is not set.")(f)
 
 
 class RQTestCase(unittest.TestCase):
