@@ -723,6 +723,13 @@ class Worker(object):
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat(self.job_monitoring_interval + 60)
 
+                job_status = job.get_status()
+                if job_status is None:  # Job was cancelled/deleted
+                    self.log.info('killing running job (the horse) since it was cancelled')
+                    self.kill_horse()
+                    self.wait_for_horse()
+                    break
+
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
                     self.kill_horse()
