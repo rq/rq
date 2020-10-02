@@ -608,7 +608,9 @@ class Worker(object):
                 self.run_maintenance_tasks()
 
             try:
-                result = self.queue_class.dequeue_any(self.queues, timeout,
+                queues = list(self.queues)
+                random.shuffle(queues)
+                result = self.queue_class.dequeue_any(queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class)
                 if result is not None:

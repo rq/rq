@@ -285,14 +285,14 @@ class TestRQCli(RQTestCase):
         job = q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
         registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # If disable-default-exception-handler is given, job is not moved to FailedJobRegistry
         job = q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
                              '--disable-default-exception-handler'])
         registry = FailedJobRegistry(queue=q)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         # Both default and custom exception handler is run
         job = q.enqueue(div_by_zero)

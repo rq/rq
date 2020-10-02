@@ -29,8 +29,8 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-import uuid
 import traceback
+import uuid
 import warnings
 from datetime import datetime
 
@@ -770,7 +770,7 @@ nd
         job_class = backend_class(cls, "job_class", override=job_class)
 
         while True:
-            queue_keys = random.shuffle([q.key for q in queues])
+            queue_keys = [q.key for q in queues]
             result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:
                 return None
