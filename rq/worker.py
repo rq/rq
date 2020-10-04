@@ -306,7 +306,6 @@ class Worker(object):
             worker_registration.register(self, p)
             p.expire(key, self.default_worker_ttl + 60)
             p.execute()
-        self.subscribe()
 
     def register_death(self):
         """Registers its own death."""
@@ -318,7 +317,6 @@ class Worker(object):
             p.hset(self.key, 'death', utcformat(utcnow()))
             p.expire(self.key, 60)
             p.execute()
-        self.unsubscribe()
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""
@@ -509,7 +507,7 @@ class Worker(object):
     
     def subscribe(self):
         """Subscribe to this worker's channel"""
-        self.log.info('*** Subscribing to channel ' + self.pubsub_channel_name)
+        self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2)
@@ -517,6 +515,7 @@ class Worker(object):
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
         if self.pubsub_thread:
+            self.log.info('Unsubscribing from channel %s', self.pubsub_channel_name)
             self.pubsub_thread.stop()
             self.pubsub_thread.join()
             self.pubsub.unsubscribe()
@@ -536,6 +535,7 @@ class Worker(object):
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
@@ -606,6 +606,7 @@ class Worker(object):
                     self.stop_scheduler()
 
                 self.register_death()
+                self.unsubscribe()
         return bool(completed_jobs)
 
     def stop_scheduler(self):
