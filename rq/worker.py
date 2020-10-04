@@ -396,7 +396,6 @@ class Worker(object):
         """Installs signal handlers for handling SIGINT and SIGTERM
         gracefully.
         """
-
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
@@ -517,10 +516,11 @@ class Worker(object):
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
-        self.pubsub_thread.stop()
-        self.pubsub_thread.join()
-        self.pubsub.unsubscribe()
-        self.pubsub.close()
+        if self.pubsub_thread:
+            self.pubsub_thread.stop()
+            self.pubsub_thread.join()
+            self.pubsub.unsubscribe()
+            self.pubsub.close()
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
              log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
@@ -567,7 +567,6 @@ class Worker(object):
                         break
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
-
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
@@ -770,6 +769,7 @@ class Worker(object):
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat()
 
+        self._horse_pid = 0  # Set horse PID to 0, horse has finished working
         if ret_val == os.EX_OK:  # The process exited normally.
             return
         job_status = job.get_status()
@@ -1081,6 +1081,13 @@ class Worker(object):
             self.log.info('Received shutdown command, sending SIGINT signal.')
             pid = os.getpid()
             os.kill(pid, signal.SIGINT)
+        elif payload['command'] == 'kill-horse':
+            self.log.info('Received kill horse command.')
+            if self.horse_pid:
+                self.log.info('Kiling horse...')
+                self.kill_horse()
+            else:
+                self.log.info('Worker is not working, ignoring kill horse command')
 
 
 class SimpleWorker(Worker):
