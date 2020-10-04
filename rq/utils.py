@@ -15,7 +15,7 @@ import logging
 import numbers
 import sys
 
-from collections import Iterable
+from collections.abc import Iterable
 from distutils.version import StrictVersion
 
 from redis.exceptions import ResponseError
