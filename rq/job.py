@@ -51,8 +51,6 @@ from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_d
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
-dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
-loads = pickle.loads
 logger = logging.getLogger(__name__)
 
 
