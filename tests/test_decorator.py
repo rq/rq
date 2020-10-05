@@ -6,7 +6,7 @@ import mock
 from redis import Redis
 
 from rq.decorators import job
-from rq.job import Job, RunCondition
+from rq.job import Job, Retry, RunCondition
 from rq.queue import Queue
 from rq.worker import DEFAULT_RESULT_TTL
 from tests import RQTestCase, get_redis_host
@@ -221,3 +221,19 @@ class TestDecorator(RQTestCase):
             return 'Why hello'
         result = hello.delay()
         self.assertEqual(result.failure_ttl, 10)
+
+    def test_decorator_custom_retry(self):
+        """ Ensure that passing in retry to the decorator sets the
+        retry on the job
+        """
+        # Ensure default
+        result = decorated_job.delay(1, 2)
+        self.assertEqual(result.retries_left, None)
+        self.assertEqual(result.retry_intervals, None)
+
+        @job('default', retry=Retry(3, [2]))
+        def hello():
+            return 'Why hello'
+        result = hello.delay()
+        self.assertEqual(result.retries_left, 3)
+        self.assertEqual(result.retry_intervals, [2])

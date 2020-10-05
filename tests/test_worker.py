@@ -25,7 +25,7 @@ from tests import RQTestCase, slow
 from tests.fixtures import (
     access_self, create_file, create_file_after_timeout, div_by_zero, do_nothing,
     kill_worker, long_running_job, modify_self, modify_self_and_error,
-    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid,
+    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid, raise_exc_mock
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
@@ -312,6 +312,37 @@ class TestWorker(RQTestCase):
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertTrue(job.exc_info)  # should contain exc_info
 
+    def test_horse_fails(self):
+        """Tests that job status is set to FAILED even if horse unexpectedly fails"""
+        q = Queue()
+        self.assertEqual(q.count, 0)
+
+        # Action
+        job = q.enqueue(say_hello)
+        self.assertEqual(q.count, 1)
+
+        # keep for later
+        enqueued_at_date = str(job.enqueued_at)
+
+        w = Worker([q])
+        with mock.patch.object(w, 'perform_job', new_callable=raise_exc_mock):
+            w.work(burst=True)  # should silently pass
+
+        # Postconditions
+        self.assertEqual(q.count, 0)
+        failed_job_registry = FailedJobRegistry(queue=q)
+        self.assertTrue(job in failed_job_registry)
+        self.assertEqual(w.get_current_job_id(), None)
+
+        # Check the job
+        job = Job.fetch(job.id)
+        self.assertEqual(job.origin, q.name)
+
+        # Should be the original enqueued_at date, not the date of enqueueing
+        # to the failed queue
+        self.assertEqual(str(job.enqueued_at), enqueued_at_date)
+        self.assertTrue(job.exc_info)  # should contain exc_info
+
     def test_statistics(self):
         """Successful and failed job counts are saved properly"""
         queue = Queue()
@@ -348,16 +379,19 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=connection)
         retry = Retry(max=2)
         job = queue.enqueue(div_by_zero, retry=retry)
+        registry = FailedJobRegistry(queue=queue)
 
         worker = Worker([queue])
 
         # If job if configured to retry, it will be put back in the queue
+        # and not put in the FailedJobRegistry.
         # This is the original execution
         queue.empty()
         worker.handle_job_failure(job, queue)
         job.refresh()
         self.assertEqual(job.retries_left, 1)
         self.assertEqual([job.id], queue.job_ids)
+        self.assertFalse(job in registry)
 
         # First retry
         queue.empty()
@@ -372,6 +406,8 @@ class TestWorker(RQTestCase):
         job.refresh()
         self.assertEqual(job.retries_left, 0)
         self.assertEqual([], queue.job_ids)
+        # If a job is no longer retries, it's put in FailedJobRegistry
+        self.assertTrue(job in registry)
     
     def test_retry_interval(self):
         """Retries with intervals are scheduled"""
@@ -1206,10 +1242,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertEqual(p.exitcode, 1)
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-            stderr = f.read().strip('\n')
-            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
-            self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
     def test_1_sec_shutdown(self):
@@ -1226,10 +1258,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-            stderr = f.read().strip('\n')
-            err = 'ShutDownImminentException: shut down imminent (signal: SIGALRM)'
-            self.assertTrue(stderr.endswith(err), stderr)
 
     @slow
     def test_shutdown_double_sigrtmin(self):
@@ -1247,10 +1275,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.sandbox, 'started')))
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
-        with open(os.path.join(self.sandbox, 'stderr.log')) as f:
-            stderr = f.read().strip('\n')
-            err = 'ShutDownImminentException: shut down imminent (signal: SIGRTMIN)'
-            self.assertTrue(stderr.endswith(err), stderr)
 
     @mock.patch('rq.worker.logger.info')
     def test_handle_shutdown_request(self, mock_logger_info):

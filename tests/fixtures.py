@@ -37,6 +37,11 @@ def do_nothing():
     """The best job in the world."""
     pass
 
+def raise_exc():
+    raise Exception('raise_exc error')
+
+def raise_exc_mock():
+    return raise_exc
 
 def div_by_zero(x):
     """Prepare for a division-by-zero exception."""

@@ -13,12 +13,12 @@ from .registry import ScheduledJobRegistry
 from .utils import current_timestamp, enum
 from .logutils import setup_loghandlers
 
-from redis import Redis
-
+from redis import Redis, SSLConnection
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
 
+logger = logging.getLogger(__name__)
 setup_loghandlers(
     level=logging.INFO,
     name="rq.scheduler",
@@ -46,6 +46,10 @@ class RQScheduler(object):
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
         self._connection_kwargs = connection.connection_pool.connection_kwargs
+        self._connection_class = connection.__class__  # client
+        connection_class = connection.connection_pool.connection_class
+        if issubclass(connection_class, SSLConnection):
+            self._connection_kwargs['ssl'] = True
         self._connection = None
         self.interval = interval
         self._stop_requested = False
@@ -56,8 +60,8 @@ class RQScheduler(object):
     def connection(self):
         if self._connection:
             return self._connection
-        self._connection = Redis(**self._connection_kwargs)
-        return Redis(**self._connection_kwargs)
+        self._connection = self._connection_class(**self._connection_kwargs)
+        return self._connection
 
     @property
     def acquired_locks(self):
@@ -80,7 +84,7 @@ class RQScheduler(object):
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set()
         pid = os.getpid()
-        logging.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
+        logger.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
             if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
                 successful_locks.add(name)
@@ -154,7 +158,7 @@ class RQScheduler(object):
 
     def heartbeat(self):
         """Updates the TTL on scheduler keys and the locks"""
-        logging.info("Scheduler sending heartbeat to %s", ", ".join(self.acquired_locks))
+        logger.debug("Scheduler sending heartbeat to %s", ", ".join(self.acquired_locks))
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
@@ -166,8 +170,8 @@ class RQScheduler(object):
             self.connection.expire(key, self.interval + 5)
 
     def stop(self):
-        logging.info("Scheduler stopping, releasing locks for %s...",
-                     ','.join(self._queue_names))
+        logger.info("Scheduler stopping, releasing locks for %s...",
+                    ','.join(self._queue_names))
         keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
         self._status = self.Status.STOPPED
@@ -198,17 +202,17 @@ class RQScheduler(object):
 
 
 def run(scheduler):
-    logging.info("Scheduler for %s started with PID %s",
-                 ','.join(scheduler._queue_names), os.getpid())
+    logger.info("Scheduler for %s started with PID %s",
+                ','.join(scheduler._queue_names), os.getpid())
     try:
         scheduler.work()
     except:  # noqa
-        logging.error(
+        logger.error(
             'Scheduler [PID %s] raised an exception.\n%s',
             os.getpid(), traceback.format_exc()
         )
         raise
-    logging.info("Scheduler with PID %s has stopped", os.getpid())
+    logger.info("Scheduler with PID %s has stopped", os.getpid())
 
 
 def parse_names(queues_or_names):

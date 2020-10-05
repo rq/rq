@@ -39,7 +39,7 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, enum,
+from .utils import (backend_class, ensure_list, enum, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -223,10 +223,7 @@ class Worker(object):
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = StrictVersion(
-                self.connection.info("server")["redis_version"]
-            )
-
+            self.redis_server_version = get_version(self.connection)
         return self.redis_server_version
 
     def validate_queues(self):
@@ -705,6 +702,7 @@ class Worker(object):
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
             self.main_work_horse(job, queue)
+            os._exit(0) # just in case
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
@@ -787,7 +785,10 @@ class Worker(object):
         self.setup_work_horse_signals()
         self._is_horse = True
         self.log = logger
-        self.perform_job(job, queue)
+        try:
+            self.perform_job(job, queue)
+        except:
+            os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
         # contrast to the regular sys.exit()
@@ -862,7 +863,7 @@ class Worker(object):
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
             started_job_registry.remove(job, pipeline=pipeline)
-            if not self.disable_default_exception_handler:
+            if not self.disable_default_exception_handler and not retry:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                         job_class=self.job_class)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
@@ -928,12 +929,13 @@ class Worker(object):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.prepare_job_execution(job, heartbeat_ttl)
         push_connection(self.connection)
 
         started_job_registry = queue.started_job_registry
 
         try:
+            self.prepare_job_execution(job, heartbeat_ttl)
+
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
@@ -982,7 +984,7 @@ class Worker(object):
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = Worker._get_safe_exception_string(
-            traceback.format_exception_only(*exc_info[:2]) + traceback.format_exception(*exc_info)
+            traceback.format_exception(*exc_info)
         )
         self.log.error(exc_string, exc_info=True, extra={
             'func': job.func_name,

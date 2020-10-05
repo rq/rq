@@ -1,5 +1,17 @@
+### RQ 1.5.2 (2020-09-10)
+* Scheduler now uses the class of connection that's used. Thanks @pacahon!
+* Fixes a bug that puts retried jobs in `FailedJobRegistry`. Thanks @selwin!
+* Fixed a deprecated import. Thanks @elmaghallawy!
+
+### RQ 1.5.1 (2020-08-21)
+* Fixes for Redis server version parsing. Thanks @selwin!
+* Retries can now be set through @job decorator. Thanks @nerok!
+* Log messages below logging.ERROR is now sent to stdout. Thanks @selwin!
+* Better logger name for RQScheduler. Thanks @atainter!
+* Better handling of exceptions thrown by horses. Thanks @theambient! 
+
 ### RQ 1.5.0 (2020-07-26)
-* Failed jobs can now be retries. Thanks @selwin!
+* Failed jobs can now be retried. Thanks @selwin!
 * Fixed scheduler on Python > 3.8.0. Thanks @selwin!
 * RQ is now aware of which version of Redis server it's running on. Thanks @aparcar!
 * RQ now uses `hset()` on redis-py >= 3.5.0. Thanks @aparcar!

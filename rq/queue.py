@@ -43,7 +43,7 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError, InvalidJobOperation
 from .job import Job, JobStatus, RunCondition
 from .serializers import resolve_serializer
-from .utils import backend_class, import_attribute, parse_timeout, utcnow
+from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
 
 
 _logger = logging.getLogger(__name__)
@@ -130,8 +130,7 @@ class Queue(object):
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = StrictVersion(self.connection.info("server")["redis_version"])
-
+            self.redis_server_version = get_version(self.connection)
         return self.redis_server_version
 
     @property
@@ -604,6 +603,7 @@ nd
             depends_on=depends_on,
             job_id=job_id,
             meta=meta,
+            retry=retry,
         )
 
         return self.schedule_job(job, datetime)
