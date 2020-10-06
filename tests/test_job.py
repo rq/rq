@@ -1014,7 +1014,7 @@ class TestJob(RQTestCase):
         for i in range(size):
             job = queue.enqueue_call(
                 func=fixtures.say_hello,
-                args=(f"Hello from {i}", *(args if args else ())),
+                args=("Hello from {}".format(i), *(args if args else ())),
                 depends_on=jobs[-1] if jobs else None,
             )
             jobs.append(job)
