@@ -1012,7 +1012,7 @@ class TestJob(RQTestCase):
     def _enqueue_sequential_counter(cls, queue: Queue, size, args=None):
         jobs = []
         for i in range(size):
-            job: Job = queue.enqueue_call(
+            job = queue.enqueue_call(
                 func=fixtures.say_hello,
                 args=(f"Hello from {i}", *(args if args else ())),
                 depends_on=jobs[-1] if jobs else None,
