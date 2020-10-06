@@ -336,6 +336,9 @@ class Queue(object):
         meta=None,
         status=JobStatus.QUEUED,
         retry=None,
+        on_success=None,
+        on_failure=None,
+        run_when=None,
     ):
         """Creates a job based on parameters given."""
         timeout = parse_timeout(timeout)
@@ -368,6 +371,9 @@ class Queue(object):
             origin=self.name,
             meta=meta,
             serializer=self.serializer,
+            on_success=on_success,
+            on_failure=on_failure,
+            run_when=run_when
         )
 
         if retry:
@@ -417,6 +423,9 @@ nd
             status=JobStatus.QUEUED,
             timeout=timeout,
             retry=retry,
+            on_success=None,
+            on_failure=None,
+            run_when=None,
         )
         deferred = self.defer_job(job) if depends_on is not None else False
         if not deferred:
@@ -604,6 +613,9 @@ nd
             retry,
             args,
             kwargs,
+            on_success,
+            on_failure,
+            run_when,
         ) = Queue.parse_args(f, *args, **kwargs)
         job = self.create_job(
             f,
@@ -619,6 +631,9 @@ nd
             job_id=job_id,
             meta=meta,
             retry=retry,
+            on_success=on_success,
+            on_failure=on_failure,
+            run_when=run_when,
         )
 
         return self.schedule_job(job, datetime)
