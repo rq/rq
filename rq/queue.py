@@ -391,6 +391,9 @@ class Queue(object):
         at_front=False,
         meta=None,
         retry=None,
+        on_success=None,
+        on_failure=None,
+        run_when=None,
     ):
         """Creates a job to represent the delayed function call and enqueues
         it.
@@ -515,6 +518,9 @@ nd
         at_front = kwargs.pop("at_front", False)
         meta = kwargs.pop("meta", None)
         retry = kwargs.pop("retry", None)
+        on_success = kwargs.pop("on_success", None)
+        on_failure = kwargs.pop("on_failure", None)
+        run_when = kwargs.pop("run_when", None)
 
         if "args" in kwargs or "kwargs" in kwargs:
             assert args == (), "Extra positional arguments cannot be used when using explicit args and kwargs"  # noqa
@@ -535,6 +541,9 @@ nd
             retry,
             args,
             kwargs,
+            on_success,
+            on_failure,
+            run_when,
         )
 
     def enqueue(self, f, *args, **kwargs):
@@ -554,6 +563,9 @@ nd
             retry,
             args,
             kwargs,
+            on_success,
+            on_failure,
+            run_when,
         ) = Queue.parse_args(f, *args, **kwargs)
 
         return self.enqueue_call(
@@ -570,6 +582,9 @@ nd
             at_front=at_front,
             meta=meta,
             retry=retry,
+            on_success=on_success,
+            on_failure=on_failure,
+            run_when=run_when
         )
 
     def enqueue_at(self, datetime, f, *args, **kwargs):
