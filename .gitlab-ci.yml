@@ -1,0 +1,50 @@
+# CI/CD for internal operations
+---
+stages:
+- build
+- test
+- deploy/rc
+- integration
+- deploy/stable
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+default:
+  tags:
+  - os/linux
+  - type/docker
+
+
+lint:
+  image: python:3.5
+  stage: test
+  before_script:
+  - python -m pip install --upgrade pip
+  - pip install flake8
+  script:
+  # stop the build if there are Python syntax errors or undefined names
+  - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+  # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+  - flake8 . --count --exit-zero --max-complexity=5 --max-line-length=120 --statistics
+
+
+test:
+  image: python:${PYTHON_VERSION}
+  services:
+    - name: redis:${REDIS_VERSION}
+      alias: redis
+  stage: test
+  variables:
+    RQ_TESTS_REDIS_HOST: redis
+  before_script:
+  - pip install -e .
+  - pip install pytest-cov sentry-sdk codecov pytest mock
+  script:
+  - RUN_SLOW_TESTS_TOO=1 py.test --cov rq --durations=5
+  coverage: "/TOTAL.+ ([0-9]{1,3}%)/"
+  allow_failure: false
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.5", "3.6", "3.7", "3.8"]
+        REDIS_VERSION: ["5", "4", "3"]
