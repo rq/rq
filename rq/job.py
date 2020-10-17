@@ -28,6 +28,7 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import functools
 import inspect
 import json
 import logging
@@ -215,6 +216,15 @@ class Job(object):
             job._func_name = "__call__"
         else:
             raise TypeError("Expected a callable or a string, but got: {0}".format(func))
+
+        if isinstance(func, functools.partial):
+            if inspect.ismethod(func.func):
+                job._display_func_name = func.func.__name__
+            elif inspect.isfunction(func.func) or inspect.isbuiltin(func.func):
+                job._display_func_name = "{0}.{1}".format(func.func.__module__, func.func.__name__)
+        else:
+            job._display_func_name = None
+
         job._args = args
         job._kwargs = kwargs
 
@@ -325,7 +335,7 @@ class Job(object):
         return import_attribute(self.func_name)
 
     def _deserialize_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
+        self._display_func_name, self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
 
     @property
     def data(self):
@@ -342,7 +352,10 @@ class Job(object):
             if self._kwargs is UNEVALUATED:
                 self._kwargs = {}
 
-            job_tuple = self._func_name, self._instance, self._args, self._kwargs
+            if self._display_func_name is UNEVALUATED:
+                self._display_func_name = None
+
+            job_tuple = self._display_func_name, self._func_name, self._instance, self._args, self._kwargs
             self._data = self.serializer.dumps(job_tuple)
         return self._data
 
@@ -352,11 +365,20 @@ class Job(object):
         self._data = value
         # noinspection PyTypeChecker
         self._func_name = UNEVALUATED
+        self._display_func_name = UNEVALUATED
         self._instance = UNEVALUATED
         # noinspection PyTypeChecker
         self._args = UNEVALUATED
         # noinspection PyTypeChecker
         self._kwargs = UNEVALUATED
+
+    @property
+    def display_func_name(self):
+        if self._display_func_name is UNEVALUATED:
+            self._deserialize_data()
+        if self._display_func_name is None:
+            return self.func_name
+        return self._display_func_name
 
     @property
     def func_name(self):
@@ -451,6 +473,7 @@ class Job(object):
         self.created_at = utcnow()
         self._data = UNEVALUATED
         self._func_name = UNEVALUATED  # noqa
+        self._display_func_name = UNEVALUATED  # noqa
         self._instance = UNEVALUATED
         self._args = UNEVALUATED  # noqa
         self._kwargs = UNEVALUATED  # noqa
@@ -740,7 +763,7 @@ class Job(object):
         self.timeout = parse_timeout(obj.get("timeout")) if obj.get("timeout") else None
         self.result_ttl = int(obj.get("result_ttl")) if obj.get("result_ttl") else None  # noqa
         self.failure_ttl = int(obj.get("failure_ttl")) if obj.get("failure_ttl") else None  # noqa
-        self._status = obj.get("status").decode() if obj.get("status") else None
+        self._status = as_text(obj.get("status")) if obj.get("status") else None
 
         dependency_id = obj.get("dependency_id", None)
         self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
@@ -1041,17 +1064,23 @@ class Job(object):
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        if self.func_name is None:
+        if self.display_func_name is None:
             return None
 
-        arg_list = [as_text(truncate_long_string(repr(arg))) for arg in self.args]
+        if isinstance(self.instance, functools.partial):
+            args = [*self.args, *self.instance.args]
+            kwargs = {**self.kwargs, **self.instance.keywords}
+        else:
+            args = self.args
+            kwargs = self.kwargs
+        arg_list = [as_text(truncate_long_string(repr(arg))) for arg in args]
 
-        kwargs = ["{0}={1}".format(k, as_text(truncate_long_string(repr(v)))) for k, v in self.kwargs.items()]
+        kwargs = ["{0}={1}".format(k, as_text(truncate_long_string(repr(v)))) for k, v in kwargs.items()]
         # Sort here because python 3.3 & 3.4 makes different call_string
         arg_list += sorted(kwargs)
         args = ", ".join(arg_list)
 
-        return "{0}({1})".format(self.func_name, args)
+        return "{0}({1})".format(self.display_func_name, args)
 
     def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually
