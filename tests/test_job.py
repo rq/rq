@@ -167,7 +167,7 @@ class TestJob(RQTestCase):
         """Data property gets derived from the job tuple."""
         job = Job()
         job.func_name = 'foo'
-        fname, instance, args, kwargs = loads(job.data)
+        display_fname, fname, instance, args, kwargs = loads(job.data)
 
         self.assertEqual(fname, job.func_name)
         self.assertEqual(instance, None)
@@ -177,8 +177,9 @@ class TestJob(RQTestCase):
     def test_data_property_sets_job_properties(self):
         """Job tuple gets derived lazily from data property."""
         job = Job()
-        job.data = dumps(('foo', None, (1, 2, 3), {'bar': 'qux'}))
+        job.data = dumps((None, 'foo', None, (1, 2, 3), {'bar': 'qux'}))
 
+        self.assertEqual(job.display_func_name, 'foo')
         self.assertEqual(job.func_name, 'foo')
         self.assertEqual(job.instance, None)
         self.assertEqual(job.args, (1, 2, 3))
@@ -195,13 +196,13 @@ class TestJob(RQTestCase):
 
         # Saving writes pickled job data
         unpickled_data = loads(zlib.decompress(self.testconn.hget(job.key, 'data')))
-        self.assertEqual(unpickled_data[0], 'tests.fixtures.some_calculation')
+        self.assertEqual(unpickled_data[1], 'tests.fixtures.some_calculation')
 
     def test_fetch(self):
         """Fetching jobs."""
         # Prepare test
         self.testconn.hset('rq:job:some_id', 'data',
-                           "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
+                           "(S'tests.fixtures.some_calculation'\nS'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
         self.testconn.hset('rq:job:some_id', 'created_at',
                            '2012-02-07T22:13:24.123456Z')
 
