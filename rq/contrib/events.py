@@ -16,11 +16,9 @@
 """
 Events support for RQ workers and submitters
 """
-import json
 from collections import namedtuple
 from datetime import datetime
 from threading import Thread
-from typing import ContextManager, List, Optional, Set, Tuple
 from rq.job import Job, JobStatus
 
 from .utils.future import TypedFuture
@@ -31,7 +29,7 @@ from ..utils import utcformat
 JobEvent = namedtuple("JobEvent", ("id", "status", "date"))
 
 
-class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
+class JobEventQueue:  # pylint: disable=inherit-non-class
     """
     Custom queue for job events.
     """
@@ -45,9 +43,9 @@ class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
         self._serializer = resolve_serializer(serializer)
         self._pubsub = None
         self._requested_stop = False
-        self._waiters: List[Tuple[TypedFuture[JobEvent], Optional[Set[JobStatus]]]] = []
+        self._waiters = []
         self._poll_frequency = poll_frequency
-        self._wait_thread: Optional[Thread] = None
+        self._wait_thread = None
 
     @property
     def name(self) -> str:
@@ -60,26 +58,26 @@ class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
         """Send some JobEvent to redis."""
         data = dict(event._asdict())
         data["date"] = utcformat(event.date) if event.date else ""
-        self.redis.publish(self.name, self._serializer.dumps(data))
+        self.connection.publish(self.name, self._serializer.dumps(data))
 
     def _receive_once(self, job, pubsub, old_status):
         message = pubsub.get_message(ignore_subscribe_messages=True, timeout=self._poll_frequency)
-        new_status: Optional[str] = None
+        new_status = None
         if old_status is not None and JobStatus.terminal(old_status):
             return JobEvent(job.id, status=old_status, date=datetime.utcnow())
         if message is None:
             new_status = job.get_status()
         else:
-            event: JobEvent = self._serializer.loads(message["data"])
+            event = self._serializer.loads(message["data"])
             new_status = event.status  # pylint: disable=no-member
         if new_status is not None and (old_status is None or old_status != new_status):
             return JobEvent(job.id, status=new_status, date=datetime.utcnow())
         return None
 
     def _wait(self):
-        pubsub = self.redis.pubsub()
+        pubsub = self.connection.pubsub()
         pubsub.subscribe(self.name)
-        job = Job(id=self.job_id, connection=self.redis)
+        job = Job(id=self.job_id, connection=self.connection)
         old_status = job.get_status()
         try:
             while not self._requested_stop:
@@ -118,7 +116,7 @@ class JobEventQueue(ContextManager):  # pylint: disable=inherit-non-class
             self._wait_thread.start()
             self._requested_stop = False
 
-    def stop_receiving(self, wait_timeout: Optional[float] = None) -> bool:
+    def stop_receiving(self, wait_timeout=None) -> bool:
         """Tell this queue to stop recieving events."""
         if self.started:
             self._requested_stop = True
