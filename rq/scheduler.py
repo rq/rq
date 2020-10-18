@@ -128,7 +128,7 @@ class RQScheduler(object):
 
             # TODO: try to use Lua script to make get_jobs_to_schedule()
             # and remove_jobs() atomic
-            job_ids = registry.get_jobs_to_schedule(timestamp, chunk_size=1000)
+            job_ids = registry.get_jobs_to_schedule(timestamp)
 
             if not job_ids:
                 continue

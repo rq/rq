@@ -286,15 +286,11 @@ class ScheduledJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         return connection.zremrangebyscore(self.key, 0, score)
 
-    def get_jobs_to_schedule(self, timestamp=None, chunk_size=None):
+    def get_jobs_to_schedule(self, timestamp=None, chunk_size=1000):
         """Remove jobs whose timestamp is in the past from registry."""
         score = timestamp if timestamp is not None else current_timestamp()
-        if not chunk_size:
-            return [as_text(job_id) for job_id in
-                    self.connection.zrangebyscore(self.key, 0, score)]
-        else:
-            return [as_text(job_id) for job_id in
-                    self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)]
+        return [as_text(job_id) for job_id in
+                self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)]
 
     def get_scheduled_time(self, job_or_id):
         """Returns datetime (UTC) at which job is scheduled to be enqueued"""
