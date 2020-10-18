@@ -13,3 +13,13 @@ def send_command(redis, worker_name, command):
 def parse_payload(payload):
     """Returns a dict of command data"""
     return json.loads(payload.get('data').decode())
+
+
+def send_shutdown_command(redis, worker_name):
+    """Send shutdown command"""
+    send_command(redis, worker_name, 'shutdown')
+
+
+def send_kill_horse_command(redis, worker_name):
+    """Tell worker to kill it's horse"""
+    send_command(redis, worker_name, 'kill-horse')

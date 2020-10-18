@@ -6,7 +6,7 @@ from tests import RQTestCase
 from tests.fixtures import long_running_job
 
 from rq import Queue, Worker
-from rq.command import send_command
+from rq.command import send_command, send_kill_horse_command, send_shutdown_command
 
 
 class TestCommands(RQTestCase):
@@ -16,11 +16,11 @@ class TestCommands(RQTestCase):
         connection = self.testconn
         worker = Worker('foo', connection=connection)
 
-        def send_shutdown_command():
+        def _send_shutdown_command():
             time.sleep(0.25)
-            send_command(connection, worker.name, 'shutdown')
+            send_shutdown_command(connection, worker.name)
 
-        p = Process(target=send_shutdown_command)
+        p = Process(target=_send_shutdown_command)
         p.start()
         worker.work()
         p.join(1)
@@ -32,12 +32,12 @@ class TestCommands(RQTestCase):
         job = queue.enqueue(long_running_job, 4)
         worker = Worker('foo', connection=connection)
 
-        def send_kill_horse_command():
+        def _send_kill_horse_command():
             """Waits 0.25 seconds before sending kill-horse command"""
             time.sleep(0.25)
-            send_command(connection, worker.name, 'kill-horse')
+            send_kill_horse_command(connection, worker.name)
 
-        p = Process(target=send_kill_horse_command)
+        p = Process(target=_send_kill_horse_command)
         p.start()
         worker.work(burst=True)
         p.join(1)
