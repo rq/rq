@@ -43,7 +43,7 @@ class TestScheduledJobRegistry(RQTestCase):
         chunk_size = 1000
 
         for index in range(0, chunk_size * 2):
-            self.testconn.zadd(registry.key, {f'foo_{index}': 1})
+            self.testconn.zadd(registry.key, {'foo_{}'.format(index): 1})
 
         self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size)),
                          chunk_size)
