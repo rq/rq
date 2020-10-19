@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 import os
+import psutil
 import shutil
 import signal
 import subprocess
@@ -25,7 +26,8 @@ from tests import RQTestCase, slow
 from tests.fixtures import (
     access_self, create_file, create_file_after_timeout, create_file_after_timeout_and_setsid, div_by_zero, do_nothing,
     kill_worker, long_running_job, modify_self, modify_self_and_error,
-    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid, raise_exc_mock
+    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid, raise_exc_mock,
+    launch_process_within_worker_and_store_pid
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
@@ -1165,12 +1167,16 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
         if os.path.exists(sentinel_file):
             os.remove(sentinel_file)
-        fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
+        fooq.enqueue(launch_process_within_worker_and_store_pid, sentinel_file, 100)
         job, queue = w.dequeue_job_and_maintain_ttl(5)
         w.fork_work_horse(job, queue)
         job.timeout = 5
         w.job_monitoring_interval = 1
         now = utcnow()
+        time.sleep(1)
+        with open(sentinel_file) as f:
+            subprocess_pid = int(f.read().strip())
+        self.assertTrue(psutil.pid_exists(subprocess_pid))
         w.monitor_work_horse(job, queue)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
@@ -1179,6 +1185,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=fooq)
         self.assertTrue(job in failed_job_registry)
         self.assertEqual(fooq.count, 0)
+        self.assertFalse(psutil.pid_exists(subprocess_pid))
 
 
 def schedule_access_self():
