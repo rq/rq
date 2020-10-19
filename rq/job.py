@@ -351,7 +351,7 @@ class Job(object):
         # retry_intervals is a list of int e.g [60, 120, 240]
         self.retry_intervals = None
         self.redis_server_version = None
-        self.heartbeat = None
+        self.last_heartbeat = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -385,20 +385,20 @@ class Job(object):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
-    def set_heartbeat(self, heartbeat, pipeline=None):
-        self.heartbeat = heartbeat
+    def heartbeat(self, heartbeat, pipeline=None):
+        self.last_heartbeat = heartbeat
         connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'heartbeat', utcformat(self.heartbeat))
+        connection.hset(self.key, 'heartbeat', utcformat(self.last_heartbeat))
 
     def get_heartbeat(self, refresh=True):
         if refresh:
             raw = self.connection.hget(self.key, 'heartbeat')
             if raw:
-                self.heartbeat = str_to_date(raw)
+                self.last_heartbeat = str_to_date(raw)
             else:
-                self.heartbeat = None
+                self.last_heartbeat = None
 
-        return self.heartbeat
+        return self.last_heartbeat
 
     id = property(get_id, set_id)
 
@@ -493,7 +493,7 @@ class Job(object):
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
-        self.heartbeat = str_to_date(obj.get('heartbeat'))
+        self.last_heartbeat = str_to_date(obj.get('heartbeat'))
         result = obj.get('result')
         if result:
             try:
@@ -547,7 +547,7 @@ class Job(object):
             'data': zlib.compress(self.data),
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
-            'heartbeat': utcformat(self.heartbeat) if self.heartbeat else '',
+            'heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
         }
         
         if self.retries_left is not None:
