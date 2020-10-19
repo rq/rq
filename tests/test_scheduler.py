@@ -40,7 +40,7 @@ class TestScheduledJobRegistry(RQTestCase):
         queue = Queue(connection=self.testconn)
         registry = ScheduledJobRegistry(queue=queue)
         timestamp = current_timestamp()
-        chunk_size = 1000
+        chunk_size = 5
 
         for index in range(0, chunk_size * 2):
             self.testconn.zadd(registry.key, {'foo_{}'.format(index): 1})
