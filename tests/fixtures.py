@@ -10,6 +10,7 @@ import os
 import time
 import signal
 import sys
+import subprocess
 
 from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
@@ -66,6 +67,17 @@ def create_file_after_timeout(path, timeout):
     time.sleep(timeout)
     create_file(path)
 
+def create_file_after_timeout_and_setsid(path, timeout):
+    os.setsid()
+    create_file_after_timeout(path, timeout)
+
+def launch_process_within_worker_and_store_pid(path, timeout):
+
+    p = subprocess.Popen(['sleep', str(timeout)])
+    with open(path, 'w') as f:
+        f.write('{}'.format(p.pid))
+
+    p.wait()
 
 def access_self():
     assert get_current_connection() is not None
