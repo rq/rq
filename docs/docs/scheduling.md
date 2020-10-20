@@ -5,8 +5,6 @@ layout: docs
 
 _New in version 1.2.0._
 
-This builtin version of `RQScheduler` is still in alpha, use at your own risk!
-
 If you need a battle tested version of RQ job scheduling, please take a look at
 https://github.com/rq/rq-scheduler instead.
 
@@ -19,6 +17,11 @@ RQ to have job scheduling capabilities without:
 1. Running a separate `rqscheduler` CLI command.
 2. Worrying about a separate `Scheduler` class.
 
+Running RQ workers with the scheduler component is simple:
+
+```console
+$ rq worker --with-scheduler
+```
 
 ## Scheduling Jobs for Execution
 
