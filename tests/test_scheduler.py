@@ -7,7 +7,7 @@ from multiprocessing import Process
 from rq import Queue
 from rq.compat import utc, PY2
 from rq.exceptions import NoSuchJobError
-from rq.job import Job
+from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.utils import current_timestamp
@@ -34,6 +34,21 @@ class TestScheduledJobRegistry(RQTestCase):
         self.assertEqual(registry.get_jobs_to_enqueue(), ['foo'])
         self.assertEqual(registry.get_jobs_to_enqueue(timestamp + 20),
                          ['foo', 'bar'])
+
+    def test_get_jobs_to_schedule_with_chunk_size(self):
+        """Max amount of jobs returns by get_jobs_to_schedule() equal to chunk_size"""
+        queue = Queue(connection=self.testconn)
+        registry = ScheduledJobRegistry(queue=queue)
+        timestamp = current_timestamp()
+        chunk_size = 5
+
+        for index in range(0, chunk_size * 2):
+            self.testconn.zadd(registry.key, {'foo_{}'.format(index): 1})
+
+        self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size)),
+                         chunk_size)
+        self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size * 2)),
+                         chunk_size * 2)
 
     def test_get_scheduled_time(self):
         """get_scheduled_time() returns job's scheduled datetime"""
@@ -87,7 +102,7 @@ class TestScheduledJobRegistry(RQTestCase):
             with mock_tz, mock_day, mock_atz:
                 registry.schedule(job, datetime(2019, 1, 1))
                 self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                                1546300800 + 18000)  # 2019-01-01 UTC in Unix timestamp
+                                 1546300800 + 18000)  # 2019-01-01 UTC in Unix timestamp
 
             # second, time.daylight != 0 (in DST)
             # mock the sitatuoin for American/New_York not in DST (UTC - 4)
@@ -100,8 +115,7 @@ class TestScheduledJobRegistry(RQTestCase):
             with mock_tz, mock_day, mock_atz:
                 registry.schedule(job, datetime(2019, 1, 1))
                 self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                                1546300800 + 14400)  # 2019-01-01 UTC in Unix timestamp
-
+                                 1546300800 + 14400)  # 2019-01-01 UTC in Unix timestamp
 
             # Score is always stored in UTC even if datetime is in a different tz
             tz = timezone(timedelta(hours=7))
@@ -321,3 +335,12 @@ class TestQueue(RQTestCase):
         self.assertTrue(
             now + timedelta(seconds=28) < scheduled_time < now + timedelta(seconds=32)
         )
+
+    def test_enqueue_in_with_retry(self):
+        """ Ensure that the retry parameter is passed
+        to the enqueue_at function from enqueue_in.
+        """
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue_in(timedelta(seconds=30), say_hello, retry=Retry(3, [2]))
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [2])

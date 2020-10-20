@@ -430,7 +430,7 @@ nd
         job = self.create_job(f, status=JobStatus.SCHEDULED, args=args, kwargs=kwargs,
                               timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                               failure_ttl=failure_ttl, description=description,
-                              depends_on=depends_on, job_id=job_id, meta=meta)
+                              depends_on=depends_on, job_id=job_id, meta=meta, retry=retry)
 
         return self.schedule_job(job, datetime)
 

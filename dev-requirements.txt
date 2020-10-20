@@ -1,3 +1,4 @@
 mock
+psutil
 pytest
 sentry_sdk

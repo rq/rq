@@ -28,7 +28,6 @@ setup_loghandlers(
 
 
 class RQScheduler(object):
-
     # STARTED: scheduler has been started but sleeping
     # WORKING: scheduler is in the midst of scheduling jobs
     # STOPPED: scheduler is in stopped condition
@@ -86,7 +85,7 @@ class RQScheduler(object):
         pid = os.getpid()
         logger.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
+            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=60):
                 successful_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
@@ -137,11 +136,11 @@ class RQScheduler(object):
             queue = Queue(registry.name, connection=self.connection)
 
             with self.connection.pipeline() as pipeline:
-                # This should be done in bulk
-                for job_id in job_ids:
-                    job = Job.fetch(job_id, connection=self.connection)
-                    queue.enqueue_job(job, pipeline=pipeline)
-                registry.remove_jobs(timestamp)
+                jobs = Job.fetch_many(job_ids, connection=self.connection)
+                for job in jobs:
+                    if job is not None:
+                        queue.enqueue_job(job, pipeline=pipeline)
+                        registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
         self._status = self.Status.STARTED
 
