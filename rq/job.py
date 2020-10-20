@@ -388,17 +388,7 @@ class Job(object):
     def heartbeat(self, heartbeat, pipeline=None):
         self.last_heartbeat = heartbeat
         connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'heartbeat', utcformat(self.last_heartbeat))
-
-    def get_heartbeat(self, refresh=True):
-        if refresh:
-            raw = self.connection.hget(self.key, 'heartbeat')
-            if raw:
-                self.last_heartbeat = str_to_date(raw)
-            else:
-                self.last_heartbeat = None
-
-        return self.last_heartbeat
+        connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
 
     id = property(get_id, set_id)
 
@@ -493,7 +483,7 @@ class Job(object):
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
-        self.last_heartbeat = str_to_date(obj.get('heartbeat'))
+        self.last_heartbeat = str_to_date(obj.get('last_heartbeat'))
         result = obj.get('result')
         if result:
             try:
@@ -547,7 +537,7 @@ class Job(object):
             'data': zlib.compress(self.data),
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
-            'heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
+            'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
         }
         
         if self.retries_left is not None:

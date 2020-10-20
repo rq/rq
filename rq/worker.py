@@ -828,6 +828,7 @@ class Worker(object):
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
+            job.heartbeat(utcnow(), pipeline=pipeline)
             pipeline.hset(job.key, 'started_at', utcformat(utcnow()))
             pipeline.execute()
 
