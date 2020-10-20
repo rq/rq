@@ -85,7 +85,7 @@ class RQScheduler(object):
         pid = os.getpid()
         logger.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=5):
+            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=60):
                 successful_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
