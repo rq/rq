@@ -1,3 +1,4 @@
 mock
-pytest
 psutil
+pytest
+sentry_sdk
