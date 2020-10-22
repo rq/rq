@@ -447,7 +447,7 @@ class Worker(object):
 
         self.handle_warm_shutdown_request()
         self._shutdown()
-    
+
     def _shutdown(self):
         """
         If shutdown is requested in the middle of a job, wait until
@@ -504,7 +504,7 @@ class Worker(object):
             if self.scheduler and not self.scheduler._process:
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
-    
+
     def subscribe(self):
         """Subscribe to this worker's channel"""
         self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
@@ -541,7 +541,9 @@ class Worker(object):
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
 
         if with_scheduler:
-            self.scheduler = RQScheduler(self.queues, connection=self.connection)
+            self.scheduler = RQScheduler(
+                self.queues, connection=self.connection, logging_level=logging_level,
+                date_format=date_format, log_format=log_format)
             self.scheduler.acquire_locks()
             # If lock is acquired, start scheduler
             if self.scheduler.acquired_locks:
