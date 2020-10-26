@@ -1,3 +1,6 @@
+codecov
 mock
-pytest
 psutil
+pytest
+pytest-cov
+sentry-sdk
