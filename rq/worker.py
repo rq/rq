@@ -713,7 +713,6 @@ class Worker(object):
 
         ret_val = None
         job.started_at = utcnow()
-        job.heartbeat(job.started_at)
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
