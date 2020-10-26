@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import errno
+import json
 import logging
 import os
 import random
@@ -25,6 +26,7 @@ except ImportError:
 from redis import WatchError
 
 from . import worker_registration
+from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE
 from .compat import PY2, as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
@@ -211,6 +213,8 @@ class Worker(object):
         self.total_working_time = 0
         self.birth_date = None
         self.scheduler = None
+        self.pubsub = None
+        self.pubsub_thread = None
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -244,6 +248,11 @@ class Worker(object):
     def key(self):
         """Returns the worker's Redis hash key."""
         return self.redis_worker_namespace_prefix + self.name
+
+    @property
+    def pubsub_channel_name(self):
+        """Returns the worker's Redis hash key."""
+        return PUBSUB_CHANNEL_TEMPLATE % self.name
 
     @property
     def horse_pid(self):
@@ -385,7 +394,6 @@ class Worker(object):
         """Installs signal handlers for handling SIGINT and SIGTERM
         gracefully.
         """
-
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
@@ -438,9 +446,13 @@ class Worker(object):
         signal.signal(signal.SIGTERM, self.request_force_stop)
 
         self.handle_warm_shutdown_request()
-
-        # If shutdown is requested in the middle of a job, wait until
-        # finish before shutting down and save the request in redis
+        self._shutdown()
+    
+    def _shutdown(self):
+        """
+        If shutdown is requested in the middle of a job, wait until
+        finish before shutting down and save the request in redis
+        """
         if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
@@ -492,6 +504,22 @@ class Worker(object):
             if self.scheduler and not self.scheduler._process:
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
+    
+    def subscribe(self):
+        """Subscribe to this worker's channel"""
+        self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
+        self.pubsub = self.connection.pubsub()
+        self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
+        self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2)
+
+    def unsubscribe(self):
+        """Unsubscribe from pubsub channel"""
+        if self.pubsub_thread:
+            self.log.info('Unsubscribing from channel %s', self.pubsub_channel_name)
+            self.pubsub_thread.stop()
+            self.pubsub_thread.join()
+            self.pubsub.unsubscribe()
+            self.pubsub.close()
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
              log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
@@ -507,6 +535,7 @@ class Worker(object):
         completed_jobs = 0
         self.register_birth()
         self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
@@ -538,7 +567,6 @@ class Worker(object):
                         break
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
-
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
@@ -578,6 +606,7 @@ class Worker(object):
                     self.stop_scheduler()
 
                 self.register_death()
+                self.unsubscribe()
         return bool(completed_jobs)
 
     def stop_scheduler(self):
@@ -742,6 +771,7 @@ class Worker(object):
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat()
 
+        self._horse_pid = 0  # Set horse PID to 0, horse has finished working
         if ret_val == os.EX_OK:  # The process exited normally.
             return
         job_status = job.get_status()
@@ -1046,6 +1076,20 @@ class Worker(object):
         if (utcnow() - self.last_cleaned_at) > timedelta(minutes=10):
             return True
         return False
+
+    def handle_payload(self, message):
+        payload = parse_payload(message)
+        if payload['command'] == 'shutdown':
+            self.log.info('Received shutdown command, sending SIGINT signal.')
+            pid = os.getpid()
+            os.kill(pid, signal.SIGINT)
+        elif payload['command'] == 'kill-horse':
+            self.log.info('Received kill horse command.')
+            if self.horse_pid:
+                self.log.info('Kiling horse...')
+                self.kill_horse()
+            else:
+                self.log.info('Worker is not working, ignoring kill horse command')
 
 
 class SimpleWorker(Worker):
