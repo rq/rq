@@ -751,13 +751,18 @@ class Worker(object):
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
-                self.heartbeat(self.job_monitoring_interval + 60)
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
+                    self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
                     break
+
+                with self.connection.pipeline() as pipeline:
+                    self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+                    job.heartbeat(utcnow(), pipeline=pipeline)
+                    pipeline.execute()
 
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
@@ -853,6 +858,7 @@ class Worker(object):
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
             job.set_status(JobStatus.STARTED, pipeline=pipeline)
+            job.heartbeat(utcnow(), pipeline=pipeline)
             pipeline.hset(job.key, 'started_at', utcformat(utcnow()))
             pipeline.execute()
 

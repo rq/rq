@@ -222,8 +222,15 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description', b'ended_at', b'started_at'])
-    
+            [b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at'])
+
+        self.assertEqual(job.last_heartbeat, None)
+        self.assertEqual(job.last_heartbeat, None)
+
+        ts = utcnow()
+        job.heartbeat(ts)
+        self.assertEqual(job.last_heartbeat, ts)
+
     def test_persistence_of_retry_data(self):
         """Retry related data is stored and restored properly"""
         job = Job.create(func=fixtures.some_calculation)
