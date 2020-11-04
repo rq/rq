@@ -138,9 +138,11 @@ class StartedJobRegistry(BaseRegistry):
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
 
-                        job_currently_being_worked_on = not expired and job.worker_key and self.connection.exists(job.worker_key)
-                        if job_currently_being_worked_on:
-                            continue
+                        if not expired:
+                            if self.connection.exists(job.worker_key):
+                                continue
+                            else:
+                                pipeline.zrem(self.key, job_id)
 
                         job.set_status(JobStatus.FAILED)
                         job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
