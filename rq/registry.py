@@ -127,7 +127,12 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids_with_scores = [(as_text(job_id), job_score < score) for (job_id, job_score) in self.connection.zrange(self.key, 0, -1, withscores=True)]
+        job_ids_with_scores = [
+            (as_text(job_id), job_score < score)
+            for (job_id, job_score) in self.connection.zrange(
+                self.key, 0, -1, withscores=True
+            )
+        ]
 
         if job_ids_with_scores:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
