@@ -127,13 +127,13 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids = [(as_text(job_id), job_score < score) for (job_id, job_score) in self.connection.zrange(self.key, 0, -1, withscores=True)]
+        job_ids_with_scores = [(as_text(job_id), job_score < score) for (job_id, job_score) in self.connection.zrange(self.key, 0, -1, withscores=True)]
 
-        if job_ids:
+        if job_ids_with_scores:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
 
             with self.connection.pipeline() as pipeline:
-                for (job_id, expired) in job_ids:
+                for (job_id, expired) in job_ids_with_scores:
                     try:
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
@@ -155,7 +155,7 @@ class StartedJobRegistry(BaseRegistry):
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
-        return job_ids
+        return [job_id for (job_id, _) in job_ids_with_scores]
 
 
 class FinishedJobRegistry(BaseRegistry):
