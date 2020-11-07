@@ -40,6 +40,9 @@ class RQScheduler(object):
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
         self._connection_kwargs = connection.connection_pool.connection_kwargs
+        # Redis does not accept parser_class argument which is sometimes present
+        # on connection_pool kwargs, for example when hiredis is used
+        self._connection_kwargs.pop('parser_class', None)
         self._connection_class = connection.__class__  # client
         connection_class = connection.connection_pool.connection_class
         if issubclass(connection_class, SSLConnection):
