@@ -551,6 +551,7 @@ class Worker(object):
                 # before working. Otherwise, start scheduler in a separate process
                 if burst:
                     self.scheduler.enqueue_scheduled_jobs()
+                    self.scheduler.release_locks()
                 else:
                     self.scheduler.start()
 

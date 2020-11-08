@@ -268,6 +268,7 @@ class TestWorker(RQTestCase):
         worker = Worker(queues=[queue], connection=self.testconn)
         worker.work(burst=True, with_scheduler=True)
         self.assertIsNotNone(worker.scheduler)
+        self.assertIsNone(self.testconn.get(worker.scheduler.get_locking_key('default')))
 
     @mock.patch.object(RQScheduler, 'acquire_locks')
     def test_run_maintenance_tasks(self, mocked):
