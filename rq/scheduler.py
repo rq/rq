@@ -177,9 +177,14 @@ class RQScheduler(object):
     def stop(self):
         self.log.info("Scheduler stopping, releasing locks for %s...",
                       ','.join(self._queue_names))
+        self.release_locks()
+        self._status = self.Status.STOPPED
+
+    def release_locks(self):
+        """Release acquired locks"""
         keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
-        self._status = self.Status.STOPPED
+        self._acquired_locks = set()
 
     def start(self):
         self._status = self.Status.STARTED

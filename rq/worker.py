@@ -3,7 +3,6 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import errno
-import json
 import logging
 import os
 import random
@@ -551,6 +550,7 @@ class Worker(object):
                 # before working. Otherwise, start scheduler in a separate process
                 if burst:
                     self.scheduler.enqueue_scheduled_jobs()
+                    self.scheduler.release_locks()
                 else:
                     self.scheduler.start()
 
