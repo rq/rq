@@ -45,62 +45,22 @@ except ImportError:
 
 
 PY2 = sys.version_info[0] == 2
-if not PY2:
-    # Python 3.x and up
-    text_type = str
-    string_types = (str,)
 
-    def as_text(v):
-        if v is None:
-            return None
-        elif isinstance(v, bytes):
-            return v.decode('utf-8')
-        elif isinstance(v, str):
-            return v
-        else:
-            raise ValueError('Unknown type %r' % type(v))
-
-    def decode_redis_hash(h):
-        return dict((as_text(k), h[k]) for k in h)
-else:
-    # Python 2.x
-    def text_type(v):
-        try:
-            return unicode(v)  # noqa
-        except Exception:
-            return unicode(v, "utf-8", errors="ignore")  # noqa
-
-    string_types = (str, unicode)  # noqa
-
-    def as_text(v):
-        if v is None:
-            return None
-        elif isinstance(v, str):
-            return v.decode('utf-8')
-        elif isinstance(v, unicode):  # noqa
-            return v
-        else:
-            raise Exception("Input cannot be decoded into literal thing.")
-
-    def decode_redis_hash(h):
-        return h
+# Python 3.x and up
+text_type = str
+string_types = (str,)
 
 
-try:
-    from datetime import timezone
-    utc = timezone.utc
-except ImportError:
-    # Python 2.x workaround
-    from datetime import timedelta, tzinfo
+def as_text(v):
+    if v is None:
+        return None
+    elif isinstance(v, bytes):
+        return v.decode('utf-8')
+    elif isinstance(v, str):
+        return v
+    else:
+        raise ValueError('Unknown type %r' % type(v))
 
-    class UTC(tzinfo):
-        def utcoffset(self, dt):
-            return timedelta(0)
 
-        def tzname(self, dt):
-            return "UTC"
-
-        def dst(self, dt):
-            return timedelta(0)
-
-    utc = UTC()
+def decode_redis_hash(h):
+    return dict((as_text(k), h[k]) for k in h)

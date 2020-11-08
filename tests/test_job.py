@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from redis import WatchError
 
-from rq.compat import PY2, as_text
+from rq.compat import as_text
 from rq.exceptions import NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job, Retry
 from rq.queue import Queue
@@ -32,18 +32,9 @@ class TestJob(RQTestCase):
             args=[12, "☃"],
             kwargs=dict(snowman="☃", null=None),
         )
-
-        if not PY2:
-            # Python 3
-            expected_string = "myfunc(12, '☃', null=None, snowman='☃')"
-        else:
-            # Python 2
-            expected_string = u"myfunc(12, u'\\u2603', null=None, snowman=u'\\u2603')".decode(
-                'utf-8')
-
         self.assertEqual(
             job.description,
-            expected_string,
+            "myfunc(12, '☃', null=None, snowman='☃')",
         )
 
     def test_create_empty_job(self):
@@ -222,7 +213,7 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at'])
+            [b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at', b'worker_name'])
 
         self.assertEqual(job.last_heartbeat, None)
         self.assertEqual(job.last_heartbeat, None)
@@ -439,10 +430,20 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
         job.save()
         Job.fetch(job.id, connection=self.testconn)
-        if PY2:
-            self.assertEqual(job.description, "tests.fixtures.say_hello(u'Lionel')")
-        else:
-            self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
+        self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
+
+    def test_prepare_for_execution(self):
+        """job.prepare_for_execution works properly"""
+        job = Job.create(func=fixtures.say_hello)
+        job.save()
+        with self.testconn.pipeline() as pipeline:
+            job.prepare_for_execution("worker_name", pipeline)
+            pipeline.execute()
+        job.refresh()
+        self.assertEqual(job.worker_name, "worker_name")
+        self.assertEqual(job.get_status(), JobStatus.STARTED)
+        self.assertIsNotNone(job.last_heartbeat)
+        self.assertIsNotNone(job.started_at)
 
     def test_job_access_outside_job_fails(self):
         """The current job is accessible only within a job context."""

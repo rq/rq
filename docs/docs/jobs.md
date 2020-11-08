@@ -122,6 +122,7 @@ Some interesting job attributes include:
 * `job.ended_at`
 * `job.exc_info` stores exception information if job doesn't finish successfully.
 * `job.last_heartbeat` the latest timestamp that's periodically updated when the job is executing. Can be used to determine if the job is still active.
+* `job.worker_name` returns the worker name currently executing this job.
 
 If you want to efficiently fetch a large number of jobs, use `Job.fetch_many()`.
 

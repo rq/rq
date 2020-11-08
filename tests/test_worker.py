@@ -181,6 +181,7 @@ class TestWorker(RQTestCase):
             'Expected at least some work done.'
         )
         self.assertEqual(job.result, 'Hi there, Frank!')
+        self.assertIsNone(job.worker_name)
 
     def test_job_times(self):
         """job times are set correctly."""
@@ -296,7 +297,7 @@ class TestWorker(RQTestCase):
         enqueued_at_date = str(job.enqueued_at)
 
         w = Worker([q])
-        w.work(burst=True)  # should silently pass
+        w.work(burst=True)
 
         # Postconditions
         self.assertEqual(q.count, 0)
@@ -307,6 +308,7 @@ class TestWorker(RQTestCase):
         # Check the job
         job = Job.fetch(job.id)
         self.assertEqual(job.origin, q.name)
+        self.assertIsNone(job.worker_name)  # Worker name is cleared after failures
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
@@ -373,7 +375,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.failed_job_count, 2)
         self.assertEqual(worker.successful_job_count, 2)
         self.assertEqual(worker.total_working_time, 3.0)
-    
+
     def test_handle_retry(self):
         """handle_job_failure() handles retry properly"""
         connection = self.testconn
@@ -409,7 +411,7 @@ class TestWorker(RQTestCase):
         self.assertEqual([], queue.job_ids)
         # If a job is no longer retries, it's put in FailedJobRegistry
         self.assertTrue(job in registry)
-    
+
     def test_retry_interval(self):
         """Retries with intervals are scheduled"""
         connection = self.testconn
@@ -586,26 +588,26 @@ class TestWorker(RQTestCase):
         q = Queue()
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w = Worker([q])
-        self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
+        self.assertIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
         self.assertNotEqual(self.testconn.ttl(job.key), 0)
-        self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
+        self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
 
         # Job with -1 result_ttl don't expire
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
         w = Worker([q])
-        self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
+        self.assertIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
         self.assertEqual(self.testconn.ttl(job.key), -1)
-        self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
+        self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
 
         # Job with result_ttl = 0 gets deleted immediately
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=0)
         w = Worker([q])
-        self.assertIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
+        self.assertIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
         w.work(burst=True)
         self.assertEqual(self.testconn.get(job.key), None)
-        self.assertNotIn(job.get_id().encode('utf-8'), self.testconn.lrange(q.key, 0, -1))
+        self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
 
     def test_worker_sets_job_status(self):
         """Ensure that worker correctly sets job status."""
@@ -735,6 +737,10 @@ class TestWorker(RQTestCase):
         # Updates worker statuses
         self.assertEqual(worker.get_state(), 'busy')
         self.assertEqual(worker.get_current_job_id(), job.id)
+
+        # job status is also updated
+        self.assertEqual(job._status, JobStatus.STARTED)
+        self.assertEqual(job.worker_name, worker.name)
 
     def test_prepare_job_execution_inf_timeout(self):
         """Prepare job execution handles infinite job timeout"""

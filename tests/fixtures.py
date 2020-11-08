@@ -14,7 +14,7 @@ import subprocess
 
 from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
-from rq.compat import PY2, text_type
+from rq.compat import text_type
 from rq.worker import HerokuWorker
 
 
@@ -120,10 +120,7 @@ class CallableObject(object):
 
 class UnicodeStringObject(object):
     def __repr__(self):
-        if PY2:
-            return u'é'.encode('utf-8')
-        else:
-            return u'é'
+        return u'é'
 
 
 with Connection():

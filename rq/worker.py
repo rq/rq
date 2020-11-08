@@ -26,7 +26,7 @@ from redis import WatchError
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE
-from .compat import PY2, as_text, string_types, text_type
+from .compat import as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (DEFAULT_RESULT_TTL,
@@ -859,9 +859,7 @@ class Worker(object):
             registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
-            job.set_status(JobStatus.STARTED, pipeline=pipeline)
-            job.heartbeat(utcnow(), pipeline=pipeline)
-            pipeline.hset(job.key, 'started_at', utcformat(utcnow()))
+            job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
 
         msg = 'Processing {0} from {1} since {2}'
@@ -883,7 +881,7 @@ class Worker(object):
                     self.connection,
                     job_class=self.job_class
                 )
-
+            job.worker_name = None
             # Requeue/reschedule if retry is configured
             if job.retries_left and job.retries_left > 0:
                 retry = True
@@ -943,6 +941,7 @@ class Worker(object):
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
+                        job.worker_name = None
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 
@@ -985,9 +984,7 @@ class Worker(object):
         except:  # NOQA
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
-            exc_string = self._get_safe_exception_string(
-                traceback.format_exception(*exc_info)
-            )
+            exc_string = ''.join(traceback.format_exception(*exc_info))
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)
@@ -1014,9 +1011,7 @@ class Worker(object):
 
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = Worker._get_safe_exception_string(
-            traceback.format_exception(*exc_info)
-        )
+        exc_string = ''.join(traceback.format_exception(*exc_info))
         self.log.error(exc_string, exc_info=True, extra={
             'func': job.func_name,
             'arguments': job.args,
@@ -1036,16 +1031,6 @@ class Worker(object):
 
             if not fallthrough:
                 break
-
-    @staticmethod
-    def _get_safe_exception_string(exc_strings):
-        """Ensure list of exception strings is decoded on Python 2 and joined as one string safely."""
-        if sys.version_info[0] < 3:
-            try:
-                exc_strings = [exc.decode("utf-8") for exc in exc_strings]
-            except ValueError:
-                exc_strings = [exc.decode("latin-1") for exc in exc_strings]
-        return ''.join(exc_strings)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
@@ -1101,16 +1086,14 @@ class Worker(object):
 
 
 class SimpleWorker(Worker):
-    def main_work_horse(self, *args, **kwargs):
-        raise NotImplementedError("Test worker does not implement this method")
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
         # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
         if job.timeout == -1:
-               timeout = DEFAULT_WORKER_TTL
+            timeout = DEFAULT_WORKER_TTL
         else:
-               timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
+            timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
         return self.perform_job(job, queue, heartbeat_ttl=timeout)
 
 
@@ -1124,10 +1107,6 @@ class HerokuWorker(Worker):
     imminent_shutdown_delay = 6
 
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
-    if PY2:
-        frame_properties.extend(
-            ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
-        )
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""

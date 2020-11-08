@@ -4,12 +4,13 @@ from __future__ import (absolute_import, division, print_function,
 
 import uuid
 import warnings
-from datetime import datetime
+
+from datetime import datetime, timezone
 
 from distutils.version import StrictVersion
 from redis import WatchError
 
-from .compat import as_text, string_types, total_ordering, utc
+from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
@@ -451,7 +452,7 @@ nd
 
     def enqueue_in(self, time_delta, func, *args, **kwargs):
         """Schedules a job to be executed in a given `timedelta` object"""
-        return self.enqueue_at(datetime.now(utc) + time_delta,
+        return self.enqueue_at(datetime.now(timezone.utc) + time_delta,
                                func, *args, **kwargs)
 
     def enqueue_job(self, job, pipeline=None, at_front=False):

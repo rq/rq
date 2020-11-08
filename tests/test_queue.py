@@ -3,13 +3,10 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from mock.mock import patch
 
 from rq import Retry, Queue
-from rq.compat import utc
-from rq.exceptions import NoSuchJobError
-
 from rq.job import Job, JobStatus
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, ScheduledJobRegistry,
@@ -364,7 +361,7 @@ class TestQueue(RQTestCase):
         )
 
         # Explicit args and kwargs should also work with enqueue_at
-        time = datetime.now(utc) + timedelta(seconds=10)
+        time = datetime.now(timezone.utc) + timedelta(seconds=10)
         job = q.enqueue_at(time, echo, job_timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
         self.assertEqual(job.timeout, 2)
         self.assertEqual(job.result_ttl, 2)
@@ -671,7 +668,7 @@ class TestJobScheduling(RQTestCase):
     def test_enqueue_at(self):
         """enqueue_at() creates a job in ScheduledJobRegistry"""
         queue = Queue(connection=self.testconn)
-        scheduled_time = datetime.now(utc) + timedelta(seconds=10)
+        scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=10)
         job = queue.enqueue_at(scheduled_time, say_hello)
         registry = ScheduledJobRegistry(queue=queue)
         self.assertIn(job, registry)
