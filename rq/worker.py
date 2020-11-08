@@ -40,7 +40,7 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, enum, get_version,
+from .utils import (backend_class, current_timestamp, ensure_list, enum, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -778,9 +778,8 @@ class Worker(object):
 
                 with self.connection.pipeline() as pipeline:
                     self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-                    ts = utcnow()
-                    job.heartbeat(ts, pipeline=pipeline)
-                    pipeline.zadd(queue.started_job_registry.heartbeats_key, {job.id: ts})
+                    job.heartbeat(utcnow(), pipeline=pipeline)
+                    pipeline.zadd(queue.started_job_registry.heartbeats_key, {job.id: current_timestamp()})
                     pipeline.execute()
 
             except OSError as e:
