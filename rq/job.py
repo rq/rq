@@ -343,6 +343,7 @@ class Job(object):
         self.result_ttl = None
         self.failure_ttl = None
         self.ttl = None
+        self.worker_name = None
         self._status = None
         self._dependency_ids = []        
         self.meta = {}
@@ -479,6 +480,7 @@ class Job(object):
 
         self.created_at = str_to_date(obj.get('created_at'))
         self.origin = as_text(obj.get('origin'))
+        self.worker_name = obj.get('worker_name').decode() if obj.get('worker_name') else None
         self.description = as_text(obj.get('description'))
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
         self.started_at = str_to_date(obj.get('started_at'))
@@ -500,7 +502,7 @@ class Job(object):
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
-        
+
         self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj.get('retry_intervals').decode())
@@ -538,8 +540,9 @@ class Job(object):
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
+            'worker_name': self.worker_name or ''
         }
-        
+
         if self.retries_left is not None:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
@@ -554,7 +557,7 @@ class Job(object):
         if self._result is not None:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
-            except Exception as e:
+            except:  # noqa
                 obj['result'] = "Unserializable return value"
         if self.exc_info is not None:
             obj['exc_info'] = zlib.compress(str(self.exc_info).encode('utf-8'))
@@ -693,6 +696,20 @@ class Job(object):
         finally:
             assert self is _job_stack.pop()
         return self._result
+
+    def prepare_for_execution(self, worker_name, pipeline):
+        """Set job metadata before execution begins"""
+        self.worker_name = worker_name
+        self.last_heartbeat = utcnow()
+        self.started_at = self.last_heartbeat
+        self._status = JobStatus.STARTED
+        pipeline.hset(
+            self.key,
+            mapping={'last_heartbeat': utcformat(self.last_heartbeat),
+                     'status': self._status,
+                     'started_at': utcformat(self.started_at),
+                     'worker_name': worker_name}
+        )
 
     def _execute(self):
         return self.func(*self.args, **self.kwargs)

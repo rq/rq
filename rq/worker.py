@@ -26,7 +26,7 @@ from redis import WatchError
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE
-from .compat import PY2, as_text, string_types, text_type
+from .compat import as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (DEFAULT_RESULT_TTL,
@@ -859,9 +859,7 @@ class Worker(object):
             registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
             registry.add(job, timeout, pipeline=pipeline)
-            job.set_status(JobStatus.STARTED, pipeline=pipeline)
-            job.heartbeat(utcnow(), pipeline=pipeline)
-            pipeline.hset(job.key, 'started_at', utcformat(utcnow()))
+            job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
 
         msg = 'Processing {0} from {1} since {2}'
@@ -883,7 +881,7 @@ class Worker(object):
                     self.connection,
                     job_class=self.job_class
                 )
-
+            job.worker_name = None
             # Requeue/reschedule if retry is configured
             if job.retries_left and job.retries_left > 0:
                 retry = True
@@ -943,6 +941,7 @@ class Worker(object):
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
+                        job.worker_name = None
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 
@@ -1124,10 +1123,6 @@ class HerokuWorker(Worker):
     imminent_shutdown_delay = 6
 
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
-    if PY2:
-        frame_properties.extend(
-            ['f_exc_traceback', 'f_exc_type', 'f_exc_value', 'f_restricted']
-        )
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
