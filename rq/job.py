@@ -703,13 +703,16 @@ class Job(object):
         self.last_heartbeat = utcnow()
         self.started_at = self.last_heartbeat
         self._status = JobStatus.STARTED
-        pipeline.hset(
-            self.key,
-            mapping={'last_heartbeat': utcformat(self.last_heartbeat),
-                     'status': self._status,
-                     'started_at': utcformat(self.started_at),
-                     'worker_name': worker_name}
-        )
+        mapping = {
+            'last_heartbeat': utcformat(self.last_heartbeat),
+            'status': self._status,
+            'started_at': utcformat(self.started_at),
+            'worker_name': worker_name
+        }
+        if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+            pipeline.hset(self.key, mapping=mapping)
+        else:
+            pipeline.hmset(self.key, mapping)
 
     def _execute(self):
         return self.func(*self.args, **self.kwargs)
