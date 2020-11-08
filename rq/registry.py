@@ -119,6 +119,10 @@ class StartedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:wip:{0}'
 
+    @property
+    def heartbeats_key(self):
+        return '%s:heartbeats' % self.key
+
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
 
@@ -127,28 +131,16 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids_with_expiry = [
-            (as_text(job_id), job_score < score)
-            for (job_id, job_score) in self.connection.zrange(
-                self.key, 0, -1, withscores=True
-            )
-        ]
+        job_ids = self.get_expired_job_ids(score) + self.connection.zrangebyscore(self.heartbeats_key, 0, score)
 
-        if job_ids_with_expiry:
+        if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
 
             with self.connection.pipeline() as pipeline:
-                for (job_id, expired) in job_ids_with_expiry:
+                for job_id in job_ids:
                     try:
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
-
-                        if not expired:
-                            if self.connection.exists(job.worker_key):
-                                continue
-                            else:
-                                pipeline.zrem(self.key, job_id)
-
                         job.set_status(JobStatus.FAILED)
                         job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
@@ -158,9 +150,10 @@ class StartedJobRegistry(BaseRegistry):
                         pass
 
                 pipeline.zremrangebyscore(self.key, 0, score)
+                pipeline.zremrangebyscore(self.heartbeats_key, 0, score)
                 pipeline.execute()
 
-        return [job_id for (job_id, _) in job_ids_with_expiry]
+        return job_ids
 
 
 class FinishedJobRegistry(BaseRegistry):
