@@ -2,13 +2,12 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from click.testing import CliRunner
 from redis import Redis
 
 from rq import Queue
-from rq.compat import utc
 from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig
 from rq.job import Job
@@ -250,7 +249,7 @@ class TestRQCli(RQTestCase):
     def test_worker_with_scheduler(self):
         """rq worker -u <url> --with-scheduler"""
         queue = Queue(connection=self.connection)
-        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=utc), say_hello)
+        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
         registry = ScheduledJobRegistry(queue=queue)
 
         runner = CliRunner()

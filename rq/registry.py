@@ -1,8 +1,8 @@
 import calendar
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from .compat import as_text, utc
+from .compat import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError
@@ -303,7 +303,7 @@ class ScheduledJobRegistry(BaseRegistry):
         if not score:
             raise NoSuchJobError
 
-        return datetime.fromtimestamp(score, tz=utc)
+        return datetime.fromtimestamp(score, tz=timezone.utc)
 
 
 def clean_registries(queue):
