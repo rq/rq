@@ -1,9 +1,11 @@
+### RQ 1.6.1 (2020-11-08)
+* Worker now properly releases scheduler lock when run in burst mode. Thanks @selwin!
+
 ### RQ 1.6.0 (2020-11-08)
 * Workers now listen to external commands via pubsub. The first two features taking advantage of this infrastructure are `send_shutdown_command()` and `send_kill_horse_command()`. Thanks @selwin!
 * Added `job.last_heartbeat` property that's periodically updated when job is running. Thanks @theambient!
 * Now horses are killed by their parent group. This helps in cleanly killing all related processes if job uses multiprocessing. Thanks @theambient!
 * Fixed scheduler usage with Redis connections that uses custom parser classes. Thanks @selwin!
-* Worker now properly releases scheduler lock when run in burst mode. Thanks @selwin!
 * Scheduler now enqueue jobs in batches to prevent lock timeouts. Thanks @nikkonrom!
 * Scheduler now follows RQ worker's logging configuration. Thanks @christopher-dG!
 
