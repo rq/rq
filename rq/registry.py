@@ -81,7 +81,7 @@ class BaseRegistry(object):
             job_instance.delete()
         return result
 
-    def get_expired_job_ids(self, timestamp=None):
+    def get_expired_job_ids(self, timestamp=None, key=None):
         """Returns job ids whose score are less than current timestamp.
 
         Returns ids for jobs with an expiry time earlier than timestamp,
@@ -90,7 +90,7 @@ class BaseRegistry(object):
         """
         score = timestamp if timestamp is not None else current_timestamp()
         return [as_text(job_id) for job_id in
-                self.connection.zrangebyscore(self.key, 0, score)]
+                self.connection.zrangebyscore(key or self.key, 0, score)]
 
     def get_job_ids(self, start=0, end=-1):
         """Returns list of all job ids."""
@@ -131,7 +131,7 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids = self.get_expired_job_ids(score) + self.connection.zrangebyscore(self.heartbeats_key, 0, score)
+        job_ids = self.get_expired_job_ids(score, self.key) + self.get_expired_job_ids(score, self.heartbeats_key)
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
