@@ -127,16 +127,21 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids = self.get_expired_job_ids(score)
+        job_ids = [(as_text(job_id), job_score < score) for (job_id, job_score) in self.connection.zrange(self.key, 0, -1, withscores=True)]
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
 
             with self.connection.pipeline() as pipeline:
-                for job_id in job_ids:
+                for (job_id, expired) in job_ids:
                     try:
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
+
+                        job_currently_being_worked_on = not expired and job.worker_key and self.connection.exists(job.worker_key)
+                        if job_currently_being_worked_on:
+                            continue
+
                         job.set_status(JobStatus.FAILED)
                         job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)

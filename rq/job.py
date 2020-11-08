@@ -353,7 +353,7 @@ class Job(object):
         self.ttl = None
         self.worker_name = None
         self._status = None
-        self._dependency_ids = []        
+        self._dependency_ids = []
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left = None
@@ -361,6 +361,7 @@ class Job(object):
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
+        self.worker_key = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -504,6 +505,7 @@ class Job(object):
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = obj.get('status').decode() if obj.get('status') else None
+        self.worker_key = as_text(obj.get('worker_key')) if obj.get('worker_key') else None
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
@@ -586,6 +588,8 @@ class Job(object):
             obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
+        if self.worker_key:
+            obj['worker_key'] = self.worker_key
 
         return obj
 
@@ -788,7 +792,7 @@ class Job(object):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
-    
+
     def get_retry_interval(self):
         """Returns the desired retry interval.
         If number of retries is bigger than length of intervals, the first
@@ -875,7 +879,7 @@ class Retry(object):
         super().__init__()
         if max < 1:
             raise ValueError('max: please enter a value greater than 0')
-        
+
         if isinstance(interval, int):
             if interval < 0:
                 raise ValueError('interval: negative numbers are not allowed')
@@ -885,6 +889,6 @@ class Retry(object):
                 if i < 0:
                     raise ValueError('interval: negative numbers are not allowed')
             intervals = interval
-        
+
         self.max = max
         self.intervals = intervals

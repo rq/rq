@@ -139,7 +139,10 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.testconn)
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
         job = queue.enqueue(say_hello)
+        job.worker_key = 'dummy-worker-key'
+        job.save()
 
+        self.testconn.set('dummy-worker-key', 1)
         self.testconn.zadd(self.registry.key, {job.id: 2})
 
         # Job has not been moved to FailedJobRegistry
