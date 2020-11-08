@@ -984,9 +984,7 @@ class Worker(object):
         except:  # NOQA
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
-            exc_string = self._get_safe_exception_string(
-                traceback.format_exception(*exc_info)
-            )
+            exc_string = ''.join(traceback.format_exception(*exc_info))
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)
@@ -1013,9 +1011,7 @@ class Worker(object):
 
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = Worker._get_safe_exception_string(
-            traceback.format_exception(*exc_info)
-        )
+        exc_string = ''.join(traceback.format_exception(*exc_info))
         self.log.error(exc_string, exc_info=True, extra={
             'func': job.func_name,
             'arguments': job.args,
@@ -1035,16 +1031,6 @@ class Worker(object):
 
             if not fallthrough:
                 break
-
-    @staticmethod
-    def _get_safe_exception_string(exc_strings):
-        """Ensure list of exception strings is decoded on Python 2 and joined as one string safely."""
-        if sys.version_info[0] < 3:
-            try:
-                exc_strings = [exc.decode("utf-8") for exc in exc_strings]
-            except ValueError:
-                exc_strings = [exc.decode("latin-1") for exc in exc_strings]
-        return ''.join(exc_strings)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
@@ -1100,16 +1086,14 @@ class Worker(object):
 
 
 class SimpleWorker(Worker):
-    def main_work_horse(self, *args, **kwargs):
-        raise NotImplementedError("Test worker does not implement this method")
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
         # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
         if job.timeout == -1:
-               timeout = DEFAULT_WORKER_TTL
+            timeout = DEFAULT_WORKER_TTL
         else:
-               timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
+            timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
         return self.perform_job(job, queue, heartbeat_ttl=timeout)
 
 
