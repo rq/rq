@@ -139,10 +139,7 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.testconn)
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
         job = queue.enqueue(say_hello)
-        job.worker_key = 'dummy-worker-key'
-        job.save()
 
-        self.testconn.set('dummy-worker-key', 1)
         self.testconn.zadd(self.registry.key, {job.id: 2})
 
         # Job has not been moved to FailedJobRegistry
@@ -157,15 +154,14 @@ class TestRegistry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertTrue(job.exc_info)  # explanation is written to exc_info 
 
-    def test_cleanup_moves_zombie_jobs_to_failed_job_registry(self):
-        """Moving zombie jobs (non-expired jobs that no living working is working on) to FailedJobRegistry."""
+    def test_cleanup_moves_idle_jobs_to_failed_job_registry(self):
+        """Moving jobs that haven't had a heartbeat lately to FailedJobRegistry."""
         queue = Queue(connection=self.testconn)
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
         job = queue.enqueue(say_hello)
-        job.worker_key = 'dummy-worker-key'
         job.save()
 
-        self.testconn.zadd(self.registry.key, {job.id: float('inf')})
+        self.testconn.zadd(self.registry.heartbeats_key, {job.id: current_timestamp() - 10})
 
         self.registry.cleanup()
         self.assertIn(job.id, failed_job_registry)
