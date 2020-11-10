@@ -760,6 +760,7 @@ class Worker(object):
 
         ret_val = None
         job.started_at = utcnow()
+        timeout = self.job_monitoring_interval + 60
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -771,13 +772,13 @@ class Worker(object):
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
-                    self.heartbeat(self.job_monitoring_interval + 60)
+                    self.heartbeat(timeout)
                     self.kill_horse()
                     self.wait_for_horse()
                     break
 
                 with self.connection.pipeline() as pipeline:
-                    self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+                    self.heartbeat(timeout, pipeline=pipeline)
                     job.heartbeat(utcnow(), pipeline=pipeline)
                     pipeline.zadd(
                         queue.started_job_registry.heartbeats_key,
