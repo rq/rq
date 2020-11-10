@@ -123,12 +123,12 @@ class StartedJobRegistry(BaseRegistry):
     def heartbeats_key(self):
         return '%s:heartbeats' % self.key
 
-    def heartbeat(self, job, timeout, pipeline=pipeline):
-        pipeline.zadd(self.heartbeats_key, {job.id: current_timestamp() + timeout})
+    def heartbeat(self, job, timeout, pipeline=None):
+        connection = pipeline if pipeline is not None else self.connection
+        connection.zadd(self.heartbeats_key, {job.id: current_timestamp() + timeout})
 
     def add(self, job, ttl=None, pipeline=None):
-        connection = pipeline if pipeline is not None else self.connection
-        self.heartbeat(job, ttl, connection)
+        self.heartbeat(job, ttl, pipeline or self.connection)
 
         return super(StartedJobRegistry, self).add(job, ttl, pipeline)
 

@@ -159,9 +159,8 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.testconn)
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
         job = queue.enqueue(say_hello)
-        job.save()
 
-        self.testconn.zadd(self.registry.heartbeats_key, {job.id: current_timestamp() - 10})
+        self.registry.heartbeat(job, -10)
 
         self.registry.cleanup()
         self.assertIn(job.id, failed_job_registry)
