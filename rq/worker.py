@@ -779,11 +779,8 @@ class Worker(object):
 
                 with self.connection.pipeline() as pipeline:
                     self.heartbeat(timeout, pipeline=pipeline)
+                    queue.started_job_registry.heartbeat(job, timeout, pipeline=pipeline)
                     job.heartbeat(utcnow(), pipeline=pipeline)
-                    pipeline.zadd(
-                        queue.started_job_registry.heartbeats_key,
-                        {job.id: current_timestamp()}
-                    )
                     pipeline.execute()
 
             except OSError as e:
