@@ -128,9 +128,16 @@ class StartedJobRegistry(BaseRegistry):
         connection.zadd(self.heartbeats_key, {job.id: current_timestamp() + timeout})
 
     def add(self, job, ttl=None, pipeline=None):
-        self.heartbeat(job, ttl, pipeline or self.connection)
+        self.heartbeat(job, ttl, pipeline=pipeline)
 
-        return super(StartedJobRegistry, self).add(job, ttl, pipeline)
+        return super(StartedJobRegistry, self).add(job, ttl=ttl, pipeline=pipeline)
+
+    def remove(self, job, pipeline=None, delete_job=False):
+        connection = pipeline if pipeline is not None else self.connection
+        job_id = job.id if isinstance(job, self.job_class) else job
+        connection.zrem(self.heartbeats_key, job_id)
+
+        return super(StartedJobRegistry, self).remove(job, pipeline=pipeline, delete_job=delete_job)
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
