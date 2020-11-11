@@ -881,7 +881,7 @@ class Worker(object):
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
-            registry.add(job, timeout, pipeline=pipeline)
+            registry.add(job, timeout, heartbeat_ttl=heartbeat_ttl, pipeline=pipeline)
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
 
