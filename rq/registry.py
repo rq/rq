@@ -127,7 +127,7 @@ class StartedJobRegistry(BaseRegistry):
         connection = pipeline if pipeline is not None else self.connection
         connection.zadd(self.heartbeats_key, {job.id: current_timestamp() + timeout})
 
-    def add(self, job, ttl=None, heartbeat_ttl=None pipeline=None):
+    def add(self, job, ttl=None, heartbeat_ttl=None, pipeline=None):
         self.heartbeat(job, heartbeat_ttl or ttl, pipeline=pipeline)
 
         return super(StartedJobRegistry, self).add(job, ttl=ttl, pipeline=pipeline)
