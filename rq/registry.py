@@ -147,7 +147,7 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids = self.get_expired_job_ids(score, self.key) + self.get_expired_job_ids(score, self.heartbeats_key)
+        job_ids = set(self.get_expired_job_ids(score, self.key) + self.get_expired_job_ids(score, self.heartbeats_key))
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
@@ -165,8 +165,8 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         pass
 
-                pipeline.zremrangebyscore(self.key, 0, score)
-                pipeline.zremrangebyscore(self.heartbeats_key, 0, score)
+                pipeline.zrem(self.key, *job_ids)
+                pipeline.zrem(self.heartbeats_key, *job_ids)
                 pipeline.execute()
 
         return job_ids
