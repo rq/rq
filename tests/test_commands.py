@@ -8,7 +8,6 @@ from tests.fixtures import long_running_job
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus
 from rq.worker import WorkerStatus
 
 
@@ -46,6 +45,19 @@ class TestCommands(RQTestCase):
         p.join(1)
         job.refresh()
         self.assertTrue(job.id in queue.failed_job_registry)
+
+        def start_work():
+            worker.work()
+
+        p = Process(target=start_work)
+        p.start()
+        p.join(2)
+
+        send_kill_horse_command(connection, worker.name)
+        worker.refresh()
+        # Since worker is not busy, command will be ignored
+        self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
+        send_shutdown_command(connection, worker.name)
 
     def test_stop_job_command(self):
         """Ensure that stop_job command works properly."""
