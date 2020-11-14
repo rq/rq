@@ -2,16 +2,19 @@ import json
 import os
 import signal
 
+from rq.exceptions import InvalidJobOperation
+from rq.job import Job
+
 
 PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
 
 
-def send_command(redis, worker_name, command, **kwargs):
-    """Use Redis' pubsub mechanism to send a command"""
+def send_command(connection, worker_name, command, **kwargs):
+    """Use connection' pubsub mechanism to send a command"""
     payload = {'command': command}
     if kwargs:
         payload.update(kwargs)
-    redis.publish(PUBSUB_CHANNEL_TEMPLATE % worker_name, json.dumps(payload))
+    connection.publish(PUBSUB_CHANNEL_TEMPLATE % worker_name, json.dumps(payload))
 
 
 def parse_payload(payload):
@@ -19,19 +22,22 @@ def parse_payload(payload):
     return json.loads(payload.get('data').decode())
 
 
-def send_shutdown_command(redis, worker_name):
+def send_shutdown_command(connection, worker_name):
     """Send shutdown command"""
-    send_command(redis, worker_name, 'shutdown')
+    send_command(connection, worker_name, 'shutdown')
 
 
-def send_kill_horse_command(redis, worker_name):
+def send_kill_horse_command(connection, worker_name):
     """Tell worker to kill it's horse"""
-    send_command(redis, worker_name, 'kill-horse')
+    send_command(connection, worker_name, 'kill-horse')
 
 
-def send_stop_job_command(redis, worker_name, job_id):
-    """Tell worker to stop a job"""
-    send_command(redis, worker_name, 'stop-job', job_id=job_id)
+def send_stop_job_command(connection, job_id):
+    """Instruct a worker to stop a job"""
+    job = Job.fetch(job_id, connection=connection)
+    if not job.worker_name:
+        raise InvalidJobOperation('Job is not currently executing')
+    send_command(connection, job.worker_name, 'stop-job', job_id=job_id)
 
 
 def handle_command(worker, payload):
