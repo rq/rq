@@ -45,7 +45,8 @@ def truncate_long_string(data, maxlen=75):
     """ Truncates strings longer than maxlen
     """
     return (data[:maxlen] + '...') if len(data) > maxlen else data
-	
+
+
 def cancel_job(job_id, connection=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).

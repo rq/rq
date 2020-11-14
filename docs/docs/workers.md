@@ -409,3 +409,16 @@ for worker in workers:
    if worker.state = WorkerStatus.BUSY:
       send_kill_horse_command(redis, worker.name)
 ```
+
+_New in version 1.7.0._
+* `send_stop_job_command()`: tells worker to stop a job.
+
+```python
+from redis import Redis
+from rq.command import send_stop_job_command
+
+redis = Redis()
+
+# This will raise an exception if job is invalid or not currently executing
+send_stop_job_command(redis, job_id)
+```

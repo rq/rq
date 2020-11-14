@@ -25,7 +25,7 @@ except ImportError:
 from redis import WatchError
 
 from . import worker_registration
-from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE
+from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
 from .compat import as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
@@ -1071,18 +1071,10 @@ class Worker(object):
         return False
 
     def handle_payload(self, message):
+        """Handle external commands"""
+        self.log.debug('Received message: %s', message)
         payload = parse_payload(message)
-        if payload['command'] == 'shutdown':
-            self.log.info('Received shutdown command, sending SIGINT signal.')
-            pid = os.getpid()
-            os.kill(pid, signal.SIGINT)
-        elif payload['command'] == 'kill-horse':
-            self.log.info('Received kill horse command.')
-            if self.horse_pid:
-                self.log.info('Kiling horse...')
-                self.kill_horse()
-            else:
-                self.log.info('Worker is not working, ignoring kill horse command')
+        handle_command(self, payload)
 
 
 class SimpleWorker(Worker):
