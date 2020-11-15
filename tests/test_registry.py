@@ -134,7 +134,7 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
                          ['foo', 'bar'])
 
-    def test_cleanup_moves_expired_jobs_to_failed_job_registry(self):
+    def test_cleanup_moves_jobs_to_failed_job_registry(self):
         """Moving expired jobs to FailedJobRegistry."""
         queue = Queue(connection=self.testconn)
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
@@ -146,21 +146,6 @@ class TestRegistry(RQTestCase):
         self.registry.cleanup(1)
         self.assertNotIn(job, failed_job_registry)
         self.assertIn(job, self.registry)
-
-        self.registry.cleanup()
-        self.assertIn(job.id, failed_job_registry)
-        self.assertNotIn(job, self.registry)
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertTrue(job.exc_info)  # explanation is written to exc_info 
-
-    def test_cleanup_moves_idle_jobs_to_failed_job_registry(self):
-        """Moving jobs that haven't had a heartbeat lately to FailedJobRegistry."""
-        queue = Queue(connection=self.testconn)
-        failed_job_registry = FailedJobRegistry(connection=self.testconn)
-        job = queue.enqueue(say_hello)
-
-        self.registry.heartbeat(job, -10)
 
         self.registry.cleanup()
         self.assertIn(job.id, failed_job_registry)

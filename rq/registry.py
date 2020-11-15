@@ -81,7 +81,7 @@ class BaseRegistry(object):
             job_instance.delete()
         return result
 
-    def get_expired_job_ids(self, timestamp=None, key=None):
+    def get_expired_job_ids(self, timestamp=None):
         """Returns job ids whose score are less than current timestamp.
 
         Returns ids for jobs with an expiry time earlier than timestamp,
@@ -90,7 +90,7 @@ class BaseRegistry(object):
         """
         score = timestamp if timestamp is not None else current_timestamp()
         return [as_text(job_id) for job_id in
-                self.connection.zrangebyscore(key or self.key, 0, score)]
+                self.connection.zrangebyscore(self.key, 0, score)]
 
     def get_job_ids(self, start=0, end=-1):
         """Returns list of all job ids."""
@@ -119,26 +119,6 @@ class StartedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:wip:{0}'
 
-    @property
-    def heartbeats_key(self):
-        return '%s:heartbeats' % self.key
-
-    def heartbeat(self, job, timeout, pipeline=None):
-        connection = pipeline if pipeline is not None else self.connection
-        connection.zadd(self.heartbeats_key, {job.id: current_timestamp() + timeout})
-
-    def add(self, job, ttl=None, heartbeat_ttl=None, pipeline=None):
-        self.heartbeat(job, heartbeat_ttl or ttl, pipeline=pipeline)
-
-        return super(StartedJobRegistry, self).add(job, ttl=ttl, pipeline=pipeline)
-
-    def remove(self, job, pipeline=None, delete_job=False):
-        connection = pipeline if pipeline is not None else self.connection
-        job_id = job.id if isinstance(job, self.job_class) else job
-        connection.zrem(self.heartbeats_key, job_id)
-
-        return super(StartedJobRegistry, self).remove(job, pipeline=pipeline, delete_job=delete_job)
-
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
 
@@ -147,7 +127,7 @@ class StartedJobRegistry(BaseRegistry):
         unspecified. Removed jobs are added to the global failed job queue.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        job_ids = set(self.get_expired_job_ids(score, self.key) + self.get_expired_job_ids(score, self.heartbeats_key))
+        job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
@@ -165,8 +145,7 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         pass
 
-                pipeline.zrem(self.key, *job_ids)
-                pipeline.zrem(self.heartbeats_key, *job_ids)
+                pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
         return job_ids

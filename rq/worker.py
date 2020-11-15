@@ -40,7 +40,7 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, current_timestamp, ensure_list, enum, get_version,
+from .utils import (backend_class, ensure_list, enum, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -760,7 +760,6 @@ class Worker(object):
 
         ret_val = None
         job.started_at = utcnow()
-        timeout = self.job_monitoring_interval + 60
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -772,14 +771,13 @@ class Worker(object):
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
-                    self.heartbeat(timeout)
+                    self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
                     break
 
                 with self.connection.pipeline() as pipeline:
-                    self.heartbeat(timeout, pipeline=pipeline)
-                    queue.started_job_registry.heartbeat(job, timeout, pipeline=pipeline)
+                    self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
                     job.heartbeat(utcnow(), pipeline=pipeline)
                     pipeline.execute()
 
@@ -881,7 +879,7 @@ class Worker(object):
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
-            registry.add(job, timeout, heartbeat_ttl=heartbeat_ttl, pipeline=pipeline)
+            registry.add(job, timeout, pipeline=pipeline)
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
 
