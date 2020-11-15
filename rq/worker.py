@@ -760,6 +760,7 @@ class Worker(object):
 
         ret_val = None
         job.started_at = utcnow()
+        heartbeat_ttl = self.job_monitoring_interval + 60
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -771,13 +772,14 @@ class Worker(object):
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
-                    self.heartbeat(self.job_monitoring_interval + 60)
+                    self.heartbeat(heartbeat_ttl)
                     self.kill_horse()
                     self.wait_for_horse()
                     break
 
                 with self.connection.pipeline() as pipeline:
-                    self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+                    self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+                    queue.started_job_registry.add(job, heartbeat_ttl, pipeline=pipeline)
                     job.heartbeat(utcnow(), pipeline=pipeline)
                     pipeline.execute()
 
@@ -865,11 +867,6 @@ class Worker(object):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-        if job.timeout == -1:
-            timeout = -1
-        else:
-            timeout = job.timeout or 180
-
         if heartbeat_ttl is None:
             heartbeat_ttl = self.job_monitoring_interval + 60
 
@@ -879,7 +876,7 @@ class Worker(object):
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             registry = StartedJobRegistry(job.origin, self.connection,
                                           job_class=self.job_class)
-            registry.add(job, timeout, pipeline=pipeline)
+            registry.add(job, heartbeat_ttl, pipeline=pipeline)
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
 
