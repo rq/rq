@@ -155,7 +155,7 @@ class Queue(object):
 
     def fetch_job(self, job_id):
         try:
-            job = self.job_class.fetch(job_id, connection=self.connection)
+            job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
         except NoSuchJobError:
             self.remove(job_id)
         else:
@@ -511,7 +511,8 @@ nd
                     dependent_job for dependent_job
                     in self.job_class.fetch_many(
                         dependent_job_ids,
-                        connection=self.connection
+                        connection=self.connection,
+                        serializer=self.serializer
                     ) if dependent_job.dependencies_are_met(
                         exclude_job_id=job.id,
                         pipeline=pipe

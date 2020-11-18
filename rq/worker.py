@@ -387,7 +387,7 @@ class Worker(object):
         if job_id is None:
             return None
 
-        return self.job_class.fetch(job_id, self.connection)
+        return self.job_class.fetch(job_id, self.connection, self.serializer)
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
