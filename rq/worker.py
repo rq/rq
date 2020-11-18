@@ -638,7 +638,8 @@ class Worker(object):
             try:
                 result = self.queue_class.dequeue_any(self.queues, timeout,
                                                       connection=self.connection,
-                                                      job_class=self.job_class)
+                                                      job_class=self.job_class,
+                                                      serializer=self.serializer)
                 if result is not None:
 
                     job, queue = result

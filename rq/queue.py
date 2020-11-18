@@ -582,7 +582,7 @@ nd
             return None
 
     @classmethod
-    def dequeue_any(cls, queues, timeout, connection=None, job_class=None):
+    def dequeue_any(cls, queues, timeout, connection=None, job_class=None, serializer=None):
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -603,9 +603,10 @@ nd
             queue_key, job_id = map(as_text, result)
             queue = cls.from_queue_key(queue_key,
                                        connection=connection,
-                                       job_class=job_class)
+                                       job_class=job_class,
+                                       serializer=serializer)
             try:
-                job = job_class.fetch(job_id, connection=connection)
+                job = job_class.fetch(job_id, connection=connection, serializer=serializer)
             except NoSuchJobError:
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look

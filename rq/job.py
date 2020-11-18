@@ -65,7 +65,7 @@ def get_current_job(connection=None, job_class=None):
 
 
 def requeue_job(job_id, connection):
-    job = Job.fetch(job_id, connection=connection, serializer=self.serializer)
+    job = Job.fetch(job_id, connection=connection)
     return job.requeue()
 
 
@@ -301,7 +301,7 @@ class Job(object):
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids, connection):
+    def fetch_many(cls, job_ids, connection, serializer=None):
         """
         Bulk version of Job.fetch
 
@@ -316,7 +316,7 @@ class Job(object):
         jobs = []
         for i, job_id in enumerate(job_ids):
             if results[i]:
-                job = cls(job_id, connection=connection)
+                job = cls(job_id, connection=connection, serializer=serializer)
                 job.restore(results[i])
                 jobs.append(job)
             else:
