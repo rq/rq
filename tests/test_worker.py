@@ -46,6 +46,15 @@ class CustomJob(Job):
 class CustomQueue(Queue):
     pass
 
+class CustomSerializer():
+    @staticmethod
+    def dumps(*args, **kwargs):
+        return json.dumps(*args, **kwargs).encode('utf-8')
+
+    @staticmethod
+    def loads(s, *args, **kwargs):
+        return json.loads(s.decode('utf-8'), *args, **kwargs)
+
 
 class TestWorker(RQTestCase):
 
@@ -111,6 +120,21 @@ class TestWorker(RQTestCase):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
+        self.assertEqual(
+            w.work(burst=True), False,
+            'Did not expect any work on the queue.'
+        )
+
+        fooq.enqueue(say_hello, name='Frank')
+        self.assertEqual(
+            w.work(burst=True), True,
+            'Expected at least some work done.'
+        )
+
+    def test_work_and_quit_custom_serializer(self):
+        """Worker processes work, then quits."""
+        fooq, barq = Queue('foo', serializer=CustomSerializer), Queue('bar', serializer=CustomSerializer)
+        w = Worker([fooq, barq], serializer=CustomSerializer)
         self.assertEqual(
             w.work(burst=True), False,
             'Did not expect any work on the queue.'
