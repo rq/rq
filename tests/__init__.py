@@ -18,7 +18,7 @@ def find_empty_redis_database():
     will use/connect it when no keys are in there.
     """
     for dbnum in range(4, 17):
-        testconn = Redis(db=dbnum)
+        testconn = Redis(db=dbnum, port=1234, ssl=True, ssl_cert_reqs=None)
         empty = testconn.dbsize() == 0
         if empty:
             return testconn

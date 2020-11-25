@@ -1,9 +1,9 @@
 import os
-import time
-
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 
+import mock
+from redis import Redis
 from rq import Queue
 from rq.compat import PY2
 from rq.exceptions import NoSuchJobError
@@ -13,10 +13,9 @@ from rq.scheduler import RQScheduler
 from rq.utils import current_timestamp
 from rq.worker import Worker
 
-from .fixtures import kill_worker, say_hello
 from tests import RQTestCase
 
-import mock
+from .fixtures import kill_worker, say_hello
 
 
 class TestScheduledJobRegistry(RQTestCase):
@@ -75,15 +74,14 @@ class TestScheduledJobRegistry(RQTestCase):
         registry = ScheduledJobRegistry(queue=queue)
 
         from datetime import timezone
+
         # If we pass in a datetime with no timezone, `schedule()`
         # assumes local timezone so depending on your local timezone,
         # the timestamp maybe different
-
         # we need to account for the difference between a timezone
         # with DST active and without DST active.  The time.timezone
         # property isn't accurate when time.daylight is non-zero,
         # we'll test both.
-
         # first, time.daylight == 0 (not in DST).
         # mock the sitatuoin for American/New_York not in DST (UTC - 5)
         # time.timezone = 18000
