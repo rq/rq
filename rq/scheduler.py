@@ -3,9 +3,10 @@ import os
 import signal
 import time
 import traceback
-
 from datetime import datetime
 from multiprocessing import Process
+
+from redis import Redis, SSLConnection
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
@@ -13,8 +14,6 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .utils import current_timestamp, enum
-
-from redis import Redis, SSLConnection
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
@@ -39,7 +38,7 @@ class RQScheduler(object):
         self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
-        self._connection_kwargs = connection.connection_pool.connection_kwargs
+        self._connection_kwargs = connection.connection_pool.connection_kwargs.copy()
         # Redis does not accept parser_class argument which is sometimes present
         # on connection_pool kwargs, for example when hiredis is used
         self._connection_kwargs.pop('parser_class', None)
