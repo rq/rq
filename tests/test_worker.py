@@ -38,6 +38,7 @@ from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, WorkerStatus
+from rq.serializers import JSONSerializer
 
 class CustomJob(Job):
     pass
@@ -45,15 +46,6 @@ class CustomJob(Job):
 
 class CustomQueue(Queue):
     pass
-
-class CustomSerializer():
-    @staticmethod
-    def dumps(*args, **kwargs):
-        return json.dumps(*args, **kwargs).encode('utf-8')
-
-    @staticmethod
-    def loads(s, *args, **kwargs):
-        return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
 class TestWorker(RQTestCase):
@@ -133,8 +125,8 @@ class TestWorker(RQTestCase):
 
     def test_work_and_quit_custom_serializer(self):
         """Worker processes work, then quits."""
-        fooq, barq = Queue('foo', serializer=CustomSerializer), Queue('bar', serializer=CustomSerializer)
-        w = Worker([fooq, barq], serializer=CustomSerializer)
+        fooq, barq = Queue('foo', serializer=JSONSerializer), Queue('bar', serializer=JSONSerializer)
+        w = Worker([fooq, barq], serializer=JSONSerializer)
         self.assertEqual(
             w.work(burst=True), False,
             'Did not expect any work on the queue.'
