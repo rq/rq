@@ -7,6 +7,7 @@ RUN apt-get update \
     stunnel
 
 COPY tests/ssl_config/private.pem tests/ssl_config/stunnel.conf /etc/stunnel/
+RUN chmod 640 /etc/stunnel/private.pem
 
 COPY . /tmp/rq
 WORKDIR /tmp/rq
