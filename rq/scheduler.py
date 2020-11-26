@@ -38,6 +38,8 @@ class RQScheduler(object):
         self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
+        # Copy the connection kwargs before mutating them in order to not change the arguments
+        # used by the current connection pool to create new connections
         self._connection_kwargs = connection.connection_pool.connection_kwargs.copy()
         # Redis does not accept parser_class argument which is sometimes present
         # on connection_pool kwargs, for example when hiredis is used
@@ -46,6 +48,7 @@ class RQScheduler(object):
         connection_class = connection.connection_pool.connection_class
         if issubclass(connection_class, SSLConnection):
             self._connection_kwargs['ssl'] = True
+
         self._connection = None
         self.interval = interval
         self._stop_requested = False

@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 
 import mock
-from redis import Redis
 from rq import Queue
 from rq.compat import PY2
 from rq.exceptions import NoSuchJobError
@@ -13,7 +12,7 @@ from rq.scheduler import RQScheduler
 from rq.utils import current_timestamp
 from rq.worker import Worker
 
-from tests import RQTestCase
+from tests import RQTestCase, find_empty_redis_database
 
 from .fixtures import kill_worker, say_hello
 
@@ -78,15 +77,18 @@ class TestScheduledJobRegistry(RQTestCase):
         # If we pass in a datetime with no timezone, `schedule()`
         # assumes local timezone so depending on your local timezone,
         # the timestamp maybe different
+        #
         # we need to account for the difference between a timezone
         # with DST active and without DST active.  The time.timezone
         # property isn't accurate when time.daylight is non-zero,
         # we'll test both.
+        #
         # first, time.daylight == 0 (not in DST).
         # mock the sitatuoin for American/New_York not in DST (UTC - 5)
         # time.timezone = 18000
         # time.daylight = 0
         # time.altzone = 14400
+
         mock_day = mock.patch('time.daylight', 0)
         mock_tz = mock.patch('time.timezone', 18000)
         mock_atz = mock.patch('time.altzone', 14400)
@@ -282,6 +284,20 @@ class TestWorker(RQTestCase):
     def test_work(self):
         queue = Queue(connection=self.testconn)
         worker = Worker(queues=[queue], connection=self.testconn)
+        p = Process(target=kill_worker, args=(os.getpid(), False, 5))
+
+        p.start()
+        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
+        worker.work(burst=False, with_scheduler=True)
+        p.join(1)
+        self.assertIsNotNone(worker.scheduler)
+        registry = FinishedJobRegistry(queue=queue)
+        self.assertEqual(len(registry), 1)
+
+    def test_work_with_ssl(self):
+        connection = find_empty_redis_database(ssl=True)
+        queue = Queue(connection=connection)
+        worker = Worker(queues=[queue], connection=connection)
         p = Process(target=kill_worker, args=(os.getpid(), False, 5))
 
         p.start()

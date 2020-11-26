@@ -6,6 +6,7 @@ import logging
 
 from redis import Redis
 from rq import pop_connection, push_connection
+from rq.job import cancel_job
 
 try:
     import unittest
@@ -13,12 +14,17 @@ except ImportError:
     import unittest2 as unittest  # noqa
 
 
-def find_empty_redis_database():
+def find_empty_redis_database(ssl=False):
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
     """
     for dbnum in range(4, 17):
-        testconn = Redis(db=dbnum, port=1234, ssl=True, ssl_cert_reqs=None)
+        connection_kwargs = { 'db': dbnum }
+        if ssl:
+            connection_kwargs['port'] = 9736
+            connection_kwargs['ssl'] = True
+            connection_kwargs['ssl_cert_reqs'] = None # disable certificate validation
+        testconn = Redis(**connection_kwargs)
         empty = testconn.dbsize() == 0
         if empty:
             return testconn
