@@ -12,7 +12,7 @@ from rq.scheduler import RQScheduler
 from rq.utils import current_timestamp
 from rq.worker import Worker
 
-from tests import RQTestCase, find_empty_redis_database
+from tests import RQTestCase, find_empty_redis_database, ssl_test
 
 from .fixtures import kill_worker, say_hello
 
@@ -294,6 +294,7 @@ class TestWorker(RQTestCase):
         registry = FinishedJobRegistry(queue=queue)
         self.assertEqual(len(registry), 1)
 
+    @ssl_test
     def test_work_with_ssl(self):
         connection = find_empty_redis_database(ssl=True)
         queue = Queue(connection=connection)

@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import logging
+import os
 
 from redis import Redis
 from rq import pop_connection, push_connection
@@ -32,16 +33,10 @@ def find_empty_redis_database(ssl=False):
 
 
 def slow(f):
-    import os
-    from functools import wraps
+    return unittest.skipUnless(os.environ.get('RUN_SLOW_TESTS_TOO'), "Slow tests disabled")(f)
 
-    @wraps(f)
-    def _inner(*args, **kwargs):
-        if os.environ.get('RUN_SLOW_TESTS_TOO'):
-            f(*args, **kwargs)
-
-    return _inner
-
+def ssl_test(f):
+    return unittest.skipUnless(os.environ.get('RUN_SSL_TESTS'), "SSL tests disabled")(f)
 
 class RQTestCase(unittest.TestCase):
     """Base class to inherit test cases from for RQ.
