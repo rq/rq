@@ -5,7 +5,7 @@ easily.
 
 RQ requires Redis >= 3.0.0.
 
-![Build status](https://github.com/rq/rq/workflows/Test%20rq/badge.svg)
+[![Build status](https://github.com/rq/rq/workflows/Test%20rq/badge.svg)](https://github.com/rq/rq/actions?query=workflow%3A%22Test+rq%22)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
 [![Coverage](https://codecov.io/gh/rq/rq/branch/master/graph/badge.svg)](https://codecov.io/gh/rq/rq)
 
