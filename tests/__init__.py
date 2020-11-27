@@ -3,9 +3,11 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import logging
+import os
 
 from redis import Redis
 from rq import pop_connection, push_connection
+from rq.job import cancel_job
 
 try:
     import unittest
@@ -13,12 +15,17 @@ except ImportError:
     import unittest2 as unittest  # noqa
 
 
-def find_empty_redis_database():
+def find_empty_redis_database(ssl=False):
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
     """
     for dbnum in range(4, 17):
-        testconn = Redis(db=dbnum)
+        connection_kwargs = { 'db': dbnum }
+        if ssl:
+            connection_kwargs['port'] = 9736
+            connection_kwargs['ssl'] = True
+            connection_kwargs['ssl_cert_reqs'] = None # disable certificate validation
+        testconn = Redis(**connection_kwargs)
         empty = testconn.dbsize() == 0
         if empty:
             return testconn
@@ -26,16 +33,10 @@ def find_empty_redis_database():
 
 
 def slow(f):
-    import os
-    from functools import wraps
+    return unittest.skipUnless(os.environ.get('RUN_SLOW_TESTS_TOO'), "Slow tests disabled")(f)
 
-    @wraps(f)
-    def _inner(*args, **kwargs):
-        if os.environ.get('RUN_SLOW_TESTS_TOO'):
-            f(*args, **kwargs)
-
-    return _inner
-
+def ssl_test(f):
+    return unittest.skipUnless(os.environ.get('RUN_SSL_TESTS'), "SSL tests disabled")(f)
 
 class RQTestCase(unittest.TestCase):
     """Base class to inherit test cases from for RQ.
