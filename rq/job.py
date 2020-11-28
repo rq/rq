@@ -190,7 +190,7 @@ class Job(object):
             return None
         if hasattr(self, '_dependency'):
             return self._dependency
-        job = self.fetch(self._dependency_ids[0], connection=self.connection)
+        job = self.fetch(self._dependency_ids[0], connection=self.connection, serializer=self.serializer)
         self._dependency = job
         return job
 
@@ -301,7 +301,7 @@ class Job(object):
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids, connection):
+    def fetch_many(cls, job_ids, connection, serializer=None):
         """
         Bulk version of Job.fetch
 
@@ -316,7 +316,7 @@ class Job(object):
         jobs = []
         for i, job_id in enumerate(job_ids):
             if results[i]:
-                job = cls(job_id, connection=connection)
+                job = cls(job_id, connection=connection, serializer=serializer)
                 job.restore(results[i])
                 jobs.append(job)
             else:
@@ -679,7 +679,7 @@ class Job(object):
         connection = pipeline if pipeline is not None else self.connection
         for dependent_id in self.dependent_ids:
             try:
-                job = Job.fetch(dependent_id, connection=self.connection)
+                job = Job.fetch(dependent_id, connection=self.connection, serializer=self.serializer)
                 job.delete(pipeline=pipeline,
                            remove_from_queue=False)
             except NoSuchJobError:
