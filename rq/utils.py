@@ -134,6 +134,11 @@ def utcnow():
     return datetime.datetime.utcnow()
 
 
+def now():
+    """Return now in UTC"""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
 _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 

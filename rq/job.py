@@ -773,7 +773,7 @@ class Job(object):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
-    
+
     def get_retry_interval(self):
         """Returns the desired retry interval.
         If number of retries is bigger than length of intervals, the first
@@ -851,6 +851,7 @@ class Job(object):
             if status
         )
 
+
 _job_stack = LocalStack()
 
 
@@ -860,7 +861,7 @@ class Retry(object):
         super().__init__()
         if max < 1:
             raise ValueError('max: please enter a value greater than 0')
-        
+
         if isinstance(interval, int):
             if interval < 0:
                 raise ValueError('interval: negative numbers are not allowed')
@@ -870,6 +871,6 @@ class Retry(object):
                 if i < 0:
                     raise ValueError('interval: negative numbers are not allowed')
             intervals = interval
-        
+
         self.max = max
         self.intervals = intervals

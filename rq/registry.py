@@ -264,10 +264,6 @@ class ScheduledJobRegistry(BaseRegistry):
         # if we're on Python 3. If we're on Python 2.7, raise an
         # exception since Python < 3.2 has no builtin `timezone` class
         if not scheduled_datetime.tzinfo:
-            try:
-                from datetime import timezone
-            except ImportError:
-                raise ValueError('datetime object with no timezone')
             tz = timezone(timedelta(seconds=-(time.timezone if time.daylight == 0 else time.altzone)))
             scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
 

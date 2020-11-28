@@ -4,7 +4,6 @@ from multiprocessing import Process
 
 import mock
 from rq import Queue
-from rq.compat import PY2
 from rq.exceptions import NoSuchJobError
 from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry

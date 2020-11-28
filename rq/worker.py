@@ -733,7 +733,7 @@ class Worker(object):
         if child_pid == 0:
             os.setsid()
             self.main_work_horse(job, queue)
-            os._exit(0) # just in case
+            os._exit(0)  # just in case
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
