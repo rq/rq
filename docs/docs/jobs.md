@@ -8,9 +8,11 @@ instance from within the job function itself.  Or to store arbitrary data on
 jobs.
 
 
-## Job Creation
+## RQ's Job Object
 
-When you enqueue a function, the job will be returned.  You may then access the 
+### Job Creation
+
+When you enqueue a function, a job will be returned.  You may then access the 
 id property, which can later be used to retrieve the job.
 
 ```python
@@ -63,7 +65,7 @@ The keyword arguments accepted by `create()` are:
 * `description` to add additional description to the job
 * `connection`
 * `status`
-* `origin`
+* `origin` where this job was originally enqueued
 * `meta` a dictionary holding custom status information on this job
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
@@ -82,22 +84,7 @@ job = Job.create(count_words_at_url,
           })
 ```
 
-## Job / Queue Creation with Custom Serializer
-
-When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
-Serializers used should have at least `loads` and `dumps` method.
-The default serializer used is `pickle`
-
-```python
-import json
-from rq import Queue
-from rq.job import Job
-
-job = Job(connection=connection, serializer=json)
-queue = Queue(connection=connection, serializer=json)
-```
-
-## Retrieving a Job from Redis
+### Retrieving a Job from Redis
 
 All job information is stored in Redis. You can inspect a job and its attributes
 by using `Job.fetch()`.
@@ -113,6 +100,7 @@ print('Status: %s' % job.get_status())
 
 Some interesting job attributes include:
 * `job.get_status()` Possible values are `queued`, `started`, `deferred`, `finished`, and `failed`
+* `job.origin` queue name of this job
 * `job.func_name`
 * `job.args` arguments passed to the underlying job function
 * `job.kwargs` key word arguments passed to the underlying job function
@@ -131,6 +119,36 @@ If you want to efficiently fetch a large number of jobs, use `Job.fetch_many()`.
 jobs = Job.fetch_many(['foo_id', 'bar_id'], connection=redis)
 for job in jobs:
     print('Job %s: %s' % (job.id, job.func_name))
+```
+
+## Stopping a Currently Executing Job
+_New in version 1.7.0._
+
+You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](https://python-rq.org/docs/results/#dealing-with-exceptions).
+
+```python
+from redis import Redis
+from rq.command import send_stop_job_command
+
+redis = Redis()
+
+# This will raise an exception if job is invalid or not currently executing
+send_stop_job_command(redis, job_id)
+```
+
+## Job / Queue Creation with Custom Serializer
+
+When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
+Serializers used should have at least `loads` and `dumps` method.
+The default serializer used is `pickle`.
+
+```python
+from rq import Queue
+from rq.job import Job
+from rq.serializers import JSONSerializer
+
+job = Job(connection=connection, serializer=JSONSerializer)
+queue = Queue(connection=connection, serializer=JSONSerializer)
 ```
 
 ## Accessing The "current" Job from within the job function
@@ -175,8 +193,6 @@ def add(x, y):
 
 ## Time to live for job in queue
 
-_New in version 0.4.7._
-
 A job has two TTLs, one for the job result, `result_ttl`, and one for the job itself, `ttl`.  
 The latter is used if you have a job that shouldn't be executed after a certain amount of time.
 
@@ -195,7 +211,7 @@ job = q.enqueue(count_words_at_url,
                )
 ```
 
-## Job position in queue
+## Job Position in Queue
 
 For user feedback or debuging it is possible to get the position of a job
 within the work queue. This allows to track the job processing through the
@@ -229,7 +245,7 @@ On the Job instance, the `is_failed` property will be true. FailedJobRegistry
 can be accessed through `queue.failed_job_registry`.
 
 ```python
-from redis import StrictRedis
+from redis import Redis
 from rq import Queue
 from rq.job import Job
 
@@ -238,7 +254,7 @@ def div_by_zero(x):
     return x / 0
 
 
-connection = StrictRedis()
+connection = Redis()
 queue = Queue(connection=connection)
 job = queue.enqueue(div_by_zero, 1)
 registry = queue.failed_job_registry
@@ -247,12 +263,6 @@ worker = Worker([queue])
 worker.work(burst=True)
 
 assert len(registry) == 1  # Failed jobs are kept in FailedJobRegistry
-
-registry.requeue(job)  # Puts job back in its original queue
-
-assert len(registry) == 0
-
-assert queue.count == 1
 ```
 
 By default, failed jobs are kept for 1 year. You can change this by specifying
@@ -262,7 +272,31 @@ By default, failed jobs are kept for 1 year. You can change this by specifying
 job = queue.enqueue(foo_job, failure_ttl=300)  # 5 minutes in seconds
 ```
 
-## Requeueing Failed Jobs
+
+### Requeueing Failed Jobs
+
+If you need to manually requeue failed jobs, here's how to do it:
+
+```python
+from redis import Redis
+from rq import Queue
+
+connection = Redis()
+queue = Queue(connection=connection)
+registry = queue.failed_job_registry
+
+# This is how to get jobs from FailedJobRegistry
+for job_id in registry.get_job_ids():
+    registry.requeue(job_id)  # Puts job back in its original queue
+
+assert len(registry) == 0  # Registry will be empty when job is requeued
+```
+
+Starting from version 1.5.0, RQ also allows you to [automatically retry
+failed jobs](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
+
+
+### Requeueing Failed Jobs via CLI
 
 RQ also provides a CLI tool that makes requeueing failed jobs easy.
 

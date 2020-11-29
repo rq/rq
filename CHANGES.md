@@ -1,3 +1,9 @@
+### RQ 1.7.0 (2020-11-29)
+* Added `job.worker_name` attribute that tells you which worker is executing a job. Thanks @selwin!
+* Added `send_stop_job_command()` that tells a worker to stop executing a job. Thanks @selwin!
+* Added `JSONSerializer` as an alternative to the default `pickle` based serializer. Thanks @JackBoreczky!
+* Fixes `RQScheduler` running on Redis with `ssl=True`. Thanks @BobReid!
+
 ### RQ 1.6.1 (2020-11-08)
 * Worker now properly releases scheduler lock when run in burst mode. Thanks @selwin!
 

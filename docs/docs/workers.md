@@ -379,7 +379,9 @@ _New in version 1.6.0._
 Starting in version 1.6.0, workers use Redis' pubsub mechanism to listen to external commands while
 they're working. Two commands are currently implemented:
 
-* `send_shutdown_command()`: sends shutdown command to worker. This is similar to sending a SIGINT
+### Shutting Down a Worker
+
+`send_shutdown_command()` instructs a worker to shutdown. This is similar to sending a SIGINT
 signal to a worker.
 
 ```python
@@ -394,7 +396,9 @@ for worker in workers:
    send_shutdown_command(redis, worker.name)  # Tells worker to shutdown
 ```
 
-* `send_kill_horse_command()`: tells a worker to cancel a currently executing job. If worker is
+### Killing a Horse
+
+`send_kill_horse_command()` tells a worker to cancel a currently executing job. If worker is
 not currently working, this command will be ignored.
 
 ```python
@@ -410,8 +414,11 @@ for worker in workers:
       send_kill_horse_command(redis, worker.name)
 ```
 
+
+### Stopping a Job
 _New in version 1.7.0._
-* `send_stop_job_command()`: tells worker to stop a job.
+
+You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](https://python-rq.org/docs/results/#dealing-with-exceptions).
 
 ```python
 from redis import Redis
