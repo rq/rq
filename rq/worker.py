@@ -595,8 +595,8 @@ class Worker(object):
             except DequeueTimeout:
                 pass
             except redis.exceptions.ConnectionError as conn_err:
-                self.log.error('Could not connect to Redis instance: %s '
-                               'Retrying in %f seconds...' %connection_wait_time, conn_err)
+                self.log.error('Could not connect to Redis instance: %s Retrying in %d seconds...', 
+                                conn_err, connection_wait_time)
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
                 if connection_wait_time > self.max_connection_wait_time:
