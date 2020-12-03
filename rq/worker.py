@@ -1,4 +1,4 @@
-#wait_time_after_connection_failure -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -103,8 +103,10 @@ class Worker(object):
     log_result_lifespan = True
     # `log_job_description` is used to toggle logging an entire jobs description.
     log_job_description = True
-    # Connection failed timeout exponential backoff factor
+    # factor to increase connection_wait_time incase of continous connection failures.
     exponential_backoff_factor = 2.0
+    # Max Wait time (in seconds) after which exponential_backoff_factor wont be applicable.
+    max_connection_wait_time = 60.0
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
@@ -567,7 +569,7 @@ class Worker(object):
         self.set_state(WorkerStatus.IDLE)
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
-        connection_wait_time = 1.0;
+        connection_wait_time = 1.0
         while True:
 
             try:
@@ -594,11 +596,13 @@ class Worker(object):
                 pass
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error('Could not connect to Redis instance: %s '
-                               'Retrying...', conn_err)
+                               f'Retrying in {connection_wait_time} seconds...', conn_err)
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
+                if connection_wait_time > max_connection_wait_time:
+                    connection_wait_time = max_connection_wait_time
             else:
-                connection_wait_time = 1.0;
+                connection_wait_time = 1.0
 
         self.heartbeat()
         return result
