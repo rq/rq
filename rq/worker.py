@@ -596,11 +596,11 @@ class Worker(object):
                 pass
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error('Could not connect to Redis instance: %s '
-                               f'Retrying in {connection_wait_time} seconds...', conn_err)
+                               'Retrying in %f seconds...' %connection_wait_time, conn_err)
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
-                if connection_wait_time > max_connection_wait_time:
-                    connection_wait_time = max_connection_wait_time
+                if connection_wait_time > self.max_connection_wait_time:
+                    connection_wait_time = self.max_connection_wait_time
             else:
                 connection_wait_time = 1.0
 
