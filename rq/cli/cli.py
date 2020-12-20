@@ -62,7 +62,10 @@ shared_options = [
     click.option('--path', '-P',
                  default='.',
                  help='Specify the import path.',
-                 multiple=True)
+                 multiple=True),
+    click.option('--serializer', '-S',
+                 default=None,
+                 help='Serializer to use, JSON or Pickle')
 ]
 
 
@@ -117,7 +120,7 @@ def empty(cli_config, all, queues, **options):
 @click.option('--queue', required=True, type=str)
 @click.argument('job_ids', nargs=-1)
 @pass_cli_config
-def requeue(cli_config, queue, all, job_class, job_ids,  **options):
+def requeue(cli_config, queue, all, job_class, job_ids, **options):
     """Requeue failed jobs."""
 
     failed_job_registry = FailedJobRegistry(queue,
@@ -203,13 +206,14 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
+@click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(cli_config, burst, logging_level, name, results_ttl,
            worker_ttl, job_monitoring_interval, disable_job_desc_logging,
            verbose, quiet, sentry_ca_certs, sentry_debug, sentry_dsn,
            exception_handler, pid, disable_default_exception_handler, max_jobs,
-           with_scheduler, queues, log_format, date_format, **options):
+           with_scheduler, queues, log_format, date_format, serializer, **options):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
@@ -226,7 +230,6 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     try:
-
         cleanup_ghosts(cli_config.connection)
         exception_handlers = []
         for h in exception_handler:
@@ -247,7 +250,8 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             job_class=cli_config.job_class, queue_class=cli_config.queue_class,
             exception_handlers=exception_handlers or None,
             disable_default_exception_handler=disable_default_exception_handler,
-            log_job_description=not disable_job_desc_logging
+            log_job_description=not disable_job_desc_logging,
+            serializer=serializer
         )
 
         # Should we configure Sentry?
