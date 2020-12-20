@@ -802,17 +802,25 @@ class Worker(object):
             if not job.ended_at:
                 job.ended_at = utcnow()
 
-            # Unhandled failure: move the job to the failed queue
-            self.log.warning((
-                'Moving job to FailedJobRegistry '
-                '(work-horse terminated unexpectedly; waitpid returned {})'
-            ).format(ret_val))
+            if job.is_stopped:
+                # Work-horse killed deliberately
+                self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
+                self.handle_job_failure(
+                    job, queue=queue,
+                    exc_string="Job stopped by user, work-horse terminated."
+                )
+            else:
+                # Unhandled failure: move the job to the failed queue
+                self.log.warning((
+                    'Moving job to FailedJobRegistry '
+                    '(work-horse terminated unexpectedly; waitpid returned {})'
+                ).format(ret_val))
 
-            self.handle_job_failure(
-                job, queue=queue,
-                exc_string="Work-horse was terminated unexpectedly "
-                           "(waitpid returned %s)" % ret_val
-            )
+                self.handle_job_failure(
+                    job, queue=queue,
+                    exc_string="Work-horse was terminated unexpectedly "
+                            "(waitpid returned %s)" % ret_val
+                )
 
     def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -895,13 +903,12 @@ class Worker(object):
                     job_class=self.job_class
                 )
             job.worker_name = None
+
             # Requeue/reschedule if retry is configured
-            if job.retries_left and job.retries_left > 0:
-                retry = True
-                retry_interval = job.get_retry_interval()
-                job.retries_left = job.retries_left - 1
-            else:
-                retry = False
+            # Don't attempt to retry if the job was deliberately stopped
+            retry = not job.is_stopped and job.retries_left and job.retries_left > 0
+            # Don't overwrite the JobStatus of stopped jobs
+            if not retry and not job.is_stopped:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
             started_job_registry.remove(job, pipeline=pipeline)
@@ -920,6 +927,8 @@ class Worker(object):
                 )
 
             if retry:
+                retry_interval = job.get_retry_interval()
+                job.retries_left = job.retries_left - 1
                 if retry_interval:
                     scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
                     job.set_status(JobStatus.SCHEDULED)

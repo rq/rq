@@ -34,6 +34,7 @@ JobStatus = enum(
     STARTED='started',
     DEFERRED='deferred',
     SCHEDULED='scheduled',
+    STOPPED='stopped',
 )
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -173,6 +174,10 @@ class Job(object):
     @property
     def is_scheduled(self):
         return self.get_status() == JobStatus.SCHEDULED
+
+    @property
+    def is_stopped(self):
+        return self.get_status() == JobStatus.STOPPED
 
     @property
     def _dependency_id(self):

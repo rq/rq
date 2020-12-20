@@ -71,7 +71,7 @@ class TestCommands(RQTestCase):
         with self.assertRaises(InvalidJobOperation):
             send_stop_job_command(connection, job_id=job.id)
 
-        # An exception is raised if job ID is invalid        
+        # An exception is raised if job ID is invalid
         with self.assertRaises(NoSuchJobError):
             send_stop_job_command(connection, job_id='1')
 
@@ -92,6 +92,10 @@ class TestCommands(RQTestCase):
 
         send_stop_job_command(connection, job_id=job.id)
         time.sleep(0.25)
-        # Worker has stopped working        
+
+        # Job status is set appropriately
+        self.assertTrue(job.is_stopped)
+
+        # Worker has stopped working
         worker.refresh()
         self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
