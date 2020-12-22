@@ -1103,7 +1103,7 @@ class HerokuWorker(Worker):
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGUSR1"""
-        signal.signal(signal., self.request_stop_sigrtmin)
+        signal.signal(signal.SIGUSR1, self.request_stop_sigrtmin)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
