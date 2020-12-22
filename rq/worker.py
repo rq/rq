@@ -1094,7 +1094,7 @@ class HerokuWorker(Worker):
     """
     Modified version of rq worker which:
     * stops work horses getting killed with SIGTERM
-    * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
+    * sends SIGUSR1 to work horses on SIGTERM to the main process which in turn
     causes the horse to crash `imminent_shutdown_delay` seconds later
     """
     imminent_shutdown_delay = 6
@@ -1102,19 +1102,19 @@ class HerokuWorker(Worker):
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
 
     def setup_work_horse_signals(self):
-        """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
-        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
+        """Modified to ignore SIGINT and SIGTERM and only handle SIGUSR1"""
+        signal.signal(signal., self.request_stop_sigrtmin)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
     def handle_warm_shutdown_request(self):
-        """If horse is alive send it SIGRTMIN"""
+        """If horse is alive send it SIGUSR1"""
         if self.horse_pid != 0:
             self.log.info(
-                'Worker %s: warm shut down requested, sending horse SIGRTMIN signal',
+                'Worker %s: warm shut down requested, sending horse SIGUSR1 signal',
                 self.key
             )
-            self.kill_horse(sig=signal.SIGRTMIN)
+            self.kill_horse(sig=signal.SIGUSR1)
         else:
             self.log.warning('Warm shut down requested, no horse found')
 
@@ -1125,7 +1125,7 @@ class HerokuWorker(Worker):
         else:
             self.log.warning('Imminent shutdown, raising ShutDownImminentException in %d seconds',
                              self.imminent_shutdown_delay)
-            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
+            signal.signal(signal.SIGUSR1, self.request_force_stop_sigrtmin)
             signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
             signal.alarm(self.imminent_shutdown_delay)
 

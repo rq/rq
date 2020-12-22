@@ -1264,7 +1264,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         p.start()
         time.sleep(0.5)
 
-        os.kill(p.pid, signal.SIGRTMIN)
+        os.kill(p.pid, signal.SIGUSR1)
 
         p.join(2)
         self.assertEqual(p.exitcode, 1)
@@ -1278,7 +1278,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         p.start()
         time.sleep(0.5)
 
-        os.kill(p.pid, signal.SIGRTMIN)
+        os.kill(p.pid, signal.SIGUSR1)
         time.sleep(0.1)
         self.assertEqual(p.exitcode, None)
         p.join(2)
@@ -1289,15 +1289,15 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
     @slow
     def test_shutdown_double_sigrtmin(self):
-        """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
+        """Heroku work horse shutdown with long delay but SIGUSR1 sent twice"""
         p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10))
         p.start()
         time.sleep(0.5)
 
-        os.kill(p.pid, signal.SIGRTMIN)
+        os.kill(p.pid, signal.SIGUSR1)
         # we have to wait a short while otherwise the second signal wont bet processed.
         time.sleep(0.1)
-        os.kill(p.pid, signal.SIGRTMIN)
+        os.kill(p.pid, signal.SIGUSR1)
         p.join(2)
         self.assertEqual(p.exitcode, 1)
 
