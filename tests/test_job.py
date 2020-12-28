@@ -219,7 +219,7 @@ class TestJob(RQTestCase):
         self.assertEqual(job.last_heartbeat, None)
 
         ts = utcnow()
-        job.heartbeat(ts)
+        job.heartbeat(ts, 0)
         self.assertEqual(job.last_heartbeat, ts)
 
     def test_persistence_of_retry_data(self):

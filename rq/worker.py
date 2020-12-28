@@ -752,6 +752,10 @@ class Worker(object):
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
+    def get_heartbeat_ttl(self, job, elapsed_execution_time):
+        remaining_execution_time = job.timeout - elapsed_execution_time
+        return min(remaining_execution_time, self.job_monitoring_interval) + 60
+
     def monitor_work_horse(self, job, queue):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
@@ -760,7 +764,6 @@ class Worker(object):
 
         ret_val = None
         job.started_at = utcnow()
-        heartbeat_ttl = self.job_monitoring_interval + 60
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -769,18 +772,19 @@ class Worker(object):
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
+                elapsed_execution_time = (utcnow() - job.started_at).total_seconds()
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if job.timeout != -1 and (utcnow() - job.started_at).total_seconds() > (job.timeout + 60):
-                    self.heartbeat(heartbeat_ttl)
+                if job.timeout != -1 and elapsed_execution_time > (job.timeout + 60):
+                    self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
                     break
 
                 with self.connection.pipeline() as pipeline:
-                    self.heartbeat(heartbeat_ttl, pipeline=pipeline)
-                    queue.started_job_registry.add(job, heartbeat_ttl, pipeline=pipeline)
-                    job.heartbeat(utcnow(), pipeline=pipeline)
+                    self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+                    ttl = self.get_heartbeat_ttl(job, elapsed_execution_time)
+                    job.heartbeat(utcnow(), ttl, pipeline=pipeline)
                     pipeline.execute()
 
             except OSError as e:
@@ -863,20 +867,17 @@ class Worker(object):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job, heartbeat_ttl=None):
+    def prepare_job_execution(self, job):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-        if heartbeat_ttl is None:
-            heartbeat_ttl = self.job_monitoring_interval + 60
+        heartbeat_ttl = self.get_heartbeat_ttl(job, 0)
 
         with self.connection.pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
-            registry = StartedJobRegistry(job.origin, self.connection,
-                                          job_class=self.job_class)
-            registry.add(job, heartbeat_ttl, pipeline=pipeline)
+            job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
 
@@ -982,7 +983,7 @@ class Worker(object):
                 except redis.exceptions.WatchError:
                     continue
 
-    def perform_job(self, job, queue, heartbeat_ttl=None):
+    def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
@@ -991,7 +992,7 @@ class Worker(object):
         started_job_registry = queue.started_job_registry
 
         try:
-            self.prepare_job_execution(job, heartbeat_ttl)
+            self.prepare_job_execution(job)
 
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
@@ -1106,12 +1107,14 @@ class SimpleWorker(Worker):
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
+        return self.perform_job(job, queue)
+
+    def get_heartbeat_ttl(self, job, _):
         # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
         if job.timeout == -1:
-            timeout = DEFAULT_WORKER_TTL
+            return DEFAULT_WORKER_TTL
         else:
-            timeout = (job.timeout or DEFAULT_WORKER_TTL) + 60
-        return self.perform_job(job, queue, heartbeat_ttl=timeout)
+            return (job.timeout or DEFAULT_WORKER_TTL) + 60
 
 
 class HerokuWorker(Worker):

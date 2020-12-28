@@ -394,10 +394,11 @@ class Job(object):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
-    def heartbeat(self, heartbeat, pipeline=None):
+    def heartbeat(self, heartbeat, ttl, pipeline=None):
         self.last_heartbeat = heartbeat
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
+        self.started_job_registry.add(self, ttl, pipeline=pipeline)
 
     id = property(get_id, set_id)
 
@@ -782,6 +783,12 @@ class Job(object):
             connection.expire(self.key, ttl)
             connection.expire(self.dependents_key, ttl)
             connection.expire(self.dependencies_key, ttl)
+
+    @property
+    def started_job_registry(self):
+        from .registry import StartedJobRegistry
+        return StartedJobRegistry(self.origin, connection=self.connection,
+                                  job_class=self.__class__)
 
     @property
     def failed_job_registry(self):
