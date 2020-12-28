@@ -973,6 +973,10 @@ class TestJob(RQTestCase):
         assert dependent_job.dependencies_are_met()
         assert dependent_job.get_status() == JobStatus.QUEUED
 
+    def test_rpush_fixture(self):
+        fixtures.rpush('foo', 'bar')
+        assert as_text(self.testconn.lrange('foo', 0, 0)[0]) == 'bar'
+
     def test_execution_order_with_sole_dependency(self):
         queue = Queue(connection=self.testconn)
         key = 'test_job:job_order'
