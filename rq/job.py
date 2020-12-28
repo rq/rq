@@ -126,9 +126,10 @@ class Job(object):
         job._status = status
         job.meta = meta or {}
 
-        # dependency could be job instance or id
+        # dependency could be job instance or id, or list or tuple thereof
         if depends_on is not None:
-            job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
+            deps = depends_on if isinstance(depends_on, (list, tuple)) else [depends_on]
+            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in deps]
         return job
 
     def get_position(self):
