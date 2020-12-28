@@ -572,6 +572,7 @@ class Job(object):
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_ids:
+            obj['dependency_id'] = self._dependency_ids[0]  # for backwards compatibility
             obj['dependency_ids'] = json.dumps(self._dependency_ids)
         if self.meta and include_meta:
             obj['meta'] = self.serializer.dumps(self.meta)
