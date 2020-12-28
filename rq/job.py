@@ -499,8 +499,8 @@ class Job(object):
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = obj.get('status').decode() if obj.get('status') else None
 
-        dependency_id = obj.get('dependency_id', None)
-        self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
+        dependency_ids = json.loads(obj.get('dependency_ids', '[]'))
+        self._dependency_ids = [as_text(ID) for ID in dependency_ids]
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
@@ -572,7 +572,7 @@ class Job(object):
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_ids:
-            obj['dependency_id'] = self._dependency_ids[0]
+            obj['dependency_ids'] = json.dumps(self._dependency_ids)
         if self.meta and include_meta:
             obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
