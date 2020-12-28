@@ -943,7 +943,78 @@ class TestJob(RQTestCase):
 
         assert dependent_job.dependencies_are_met()
         assert dependent_job.get_status() == JobStatus.QUEUED
-    
+
+    def test_execution_order_with_sole_dependency(self):
+        queue = Queue(connection=self.testconn)
+        key = 'test_job:job_order'
+        w1 = Worker([queue])
+        w2 = Worker([queue])
+
+        # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
+        queue.enqueue_call(fixtures.long_running_job, kwargs={'timeout': 0.5}, job_id='slow_guy')
+        queue.enqueue_call(fixtures.rpush, args=[key, "A"])
+        queue.enqueue_call(fixtures.rpush, args=[key, "B"])
+
+        self.testconn.delete(key)
+        w1.work(burst=True)
+        w2.work(burst=True)
+        assert queue.count == 0
+
+        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
+        print('\n', order_completed)
+        assert order_completed == ["A", "B"]
+
+        # When job "A" depends on the slow job, then job "B" finishes before "A".
+        queue.enqueue_call(fixtures.long_running_job, kwargs={'timeout': 0.5}, job_id='slow_guy')
+        queue.enqueue_call(fixtures.rpush, args=[key, "A"], depends_on='slow_guy')
+        queue.enqueue_call(fixtures.rpush, args=[key, "B"])
+
+        self.testconn.delete(key)
+        w1.work(burst=True)
+        w2.work(burst=True)
+        assert queue.count == 0
+
+        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
+        print('\n', order_completed)
+        assert order_completed == ["B", "A"]
+
+    def test_execution_order_with_dual_dependency(self):
+        queue = Queue(connection=self.testconn)
+        key = 'test_job:job_order'
+        w1 = Worker([queue])
+        w2 = Worker([queue])
+
+        # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
+        queue.enqueue_call(fixtures.long_running_job, kwargs={'timeout': 0.3}, job_id='one_slow_job')
+        queue.enqueue_call(fixtures.long_running_job, kwargs={'timeout': 0.7}, job_id='another_slow_job')
+        queue.enqueue_call(fixtures.rpush, args=[key, "A"])
+        queue.enqueue_call(fixtures.rpush, args=[key, "B"])
+
+        self.testconn.delete(key)
+        w1.work(burst=True)
+        w2.work(burst=True)
+        assert queue.count == 0
+
+        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
+        print('\n', order_completed)
+        assert order_completed == ["A", "B"]
+
+        # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
+        # the two. Job "B" should be completed before job "A".
+        queue.enqueue_call(fixtures.long_running_job, kwargs={'timeout': 0.3}, job_id='one_slow_job')
+        queue.enqueue_call(fixtures.long_running_job, kwargs={'timeout': 0.7}, job_id='another_slow_job')
+        queue.enqueue_call(fixtures.rpush, args=[key, "A"], depends_on=['one_slow_job', 'another_slow_job'])
+        queue.enqueue_call(fixtures.rpush, args=[key, "B"], depends_on='one_slow_job')
+
+        self.testconn.delete(key)
+        w1.work(burst=True)
+        w2.work(burst=True)
+        assert queue.count == 0
+
+        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
+        print('\n', order_completed)
+        assert order_completed == ["B", "A"]
+
     def test_retry(self):
         """Retry parses `max` and `interval` correctly"""
         retry = Retry(max=1)

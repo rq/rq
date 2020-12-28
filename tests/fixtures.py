@@ -55,6 +55,11 @@ def some_calculation(x, y, z=1):
     """
     return x * y / z
 
+def rpush(key, value):
+    """Push a value into a list in Redis. Useful for detecting the order in
+    which jobs were executed."""
+    redis = get_current_connection()
+    redis.rpush(key, value)
 
 def create_file(path):
     """Creates a file at the given path.  Actually, leaves evidence that the
