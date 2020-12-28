@@ -176,7 +176,7 @@ class Job(object):
 
     @property
     def _dependency_id(self):
-        """Returns the first item in self._dependency_ids. Present
+        """Returns the first item in self._dependency_ids. Present to
         preserve compatibility with third party packages..
         """
         if self._dependency_ids:
@@ -184,7 +184,7 @@ class Job(object):
 
     @property
     def dependency(self):
-        """Returns a job's dependency. To avoid repeated Redis fetches, we cache
+        """Returns a job's first dependency. To avoid repeated Redis fetches, we cache
         job.dependency as job._dependency.
         """
         if not self._dependency_ids:
@@ -787,14 +787,14 @@ class Job(object):
         return self.retry_intervals[index]
 
     def register_dependency(self, pipeline=None):
-        """Jobs may have dependencies. Jobs are enqueued only if the job they
-        depend on is successfully performed. We record this relation as
+        """Jobs may have dependencies. Jobs are enqueued only if the jobs they
+        depend on are successfully performed. We record this relation as
         a reverse dependency (a Redis set), with a key that looks something
         like:
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the job in its dependency's dependents set
+        This method adds the job in its dependencies' dependents sets,
         and adds the job to DeferredJobRegistry.
         """
         from .registry import DeferredJobRegistry
