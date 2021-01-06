@@ -69,6 +69,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
+* `--serializer`: Serialization to use, i.e. Pickle, JSON or other custom serializer
 
 ## Inside the worker
 
@@ -205,23 +206,24 @@ workers = Worker.all(queue=queue)
 ## Worker with Custom Serializer
 
 When creating a worker, you can pass in a custom serializer that will be implicitly passed to the queue.
-Serializers used should have at least `loads` and `dumps` method.
+Serializers used should have at least `loads` and `dumps` method. An example of creating a custom serializer 
+class can be found in serializers.py (rq.serializers.JSONSerializer).
 The default serializer used is `pickle`
 
 ```python
-import json
 from rq import Worker
+from rq.serialzers import JSONSerializer
 
-job = Worker('foo', serializer=json)
+job = Worker('foo', serializer=JSONSerializer)
 ```
 
 or when creating from a queue
 
 ```python
-import json
 from rq import Queue, Worker
+from rq.serialzers import JSONSerializer
 
-w = Worker(Queue('foo'), serializer=json)
+w = Queue('foo', serializer=JSONSerializer)
 ```
 
 Queues will now use custom serializer
