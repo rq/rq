@@ -4,7 +4,7 @@ from rq.utils import split_list
 
 WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
 REDIS_WORKER_KEYS = 'rq:workers'
-MAX_REMOVABLE_KEYS = 1000
+MAX_KEYS = 1000
 
 
 def register(worker, pipeline=None):
@@ -64,7 +64,7 @@ def clean_worker_registry(queue):
                 invalid_keys.append(keys[i])
 
         if invalid_keys:
-            for invalid_subset in split_list(invalid_keys, MAX_REMOVABLE_KEYS):
+            for invalid_subset in split_list(invalid_keys, MAX_KEYS):
                 pipeline.srem(WORKERS_BY_QUEUE_KEY % queue.name, *invalid_subset)
                 pipeline.srem(REDIS_WORKER_KEYS, *invalid_subset)
                 pipeline.execute()
