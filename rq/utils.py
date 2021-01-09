@@ -261,3 +261,16 @@ def get_version(connection):
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
         version_string = "5.0.9"
     return StrictVersion('.'.join(version_string.split('.')[:3]))
+
+
+def ceildiv(a, b):
+    """Ceiling division. Returns the ceiling of the quotient of a division operation"""
+    return -(-a // b)
+
+
+def split_list(a_list, segment_size):
+    """
+    Splits a list into multiple smaller lists having size `segment_size`
+    """
+    for i in range(0, len(a_list), segment_size):
+        yield a_list[i:i + segment_size]

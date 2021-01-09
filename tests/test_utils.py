@@ -10,7 +10,8 @@ from distutils.version import StrictVersion
 from redis import Redis
 
 from tests import RQTestCase, fixtures
-from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse
+from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
+    split_list, ceildiv
 from rq.exceptions import TimeoutFormatError
 
 
@@ -89,3 +90,26 @@ class TestUtils(RQTestCase):
             def info(*args):
                 return {'redis_version': '3.0.7.9'}
         self.assertEqual(get_version(DummyRedis()), StrictVersion('3.0.7'))
+
+    def test_ceildiv_even(self):
+        """When a number is evenly divisible by another ceildiv returns the quotient"""
+        dividend = 12
+        divisor = 4
+        self.assertEqual(ceildiv(dividend, divisor), dividend // divisor)
+
+    def test_ceildiv_uneven(self):
+        """When a number is not evenly divisible by another ceildiv returns the quotient plus one"""
+        dividend = 13
+        divisor = 4
+        self.assertEqual(ceildiv(dividend, divisor), dividend // divisor + 1)
+
+    def test_split_list(self):
+        """Ensure split_list works properly"""
+        BIG_LIST_SIZE = 42
+        SEGMENT_SIZE = 5
+
+        big_list = ['1'] * BIG_LIST_SIZE
+        small_lists = list(split_list(big_list, SEGMENT_SIZE))
+
+        expected_small_list_count = ceildiv(BIG_LIST_SIZE, SEGMENT_SIZE)
+        self.assertEqual(len(small_lists), expected_small_list_count)
