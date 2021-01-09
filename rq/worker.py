@@ -598,6 +598,7 @@ class Worker(object):
                                conn_err, connection_wait_time)
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
+                connection_wait_time = min(connection_wait_time, 60)
             else:
                 connection_wait_time = 1.0
 
