@@ -975,7 +975,7 @@ class TestJob(RQTestCase):
 
     def test_rpush_fixture(self):
         fixtures.rpush('foo', 'bar')
-        assert as_text(self.testconn.lrange('foo', 0, 0)[0]) == 'bar'
+        assert self.testconn.lrange('foo', 0, 0)[0].decode() == 'bar'
 
     def test_execution_order_with_sole_dependency(self):
         queue = Queue(connection=self.testconn)
@@ -993,8 +993,7 @@ class TestJob(RQTestCase):
         w2.work(burst=True)
         assert queue.count == 0
 
-        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
-        print('\n', order_completed)
+        order_completed = [v.decode() for v in self.testconn.lrange(key, 0, 1)]
         assert order_completed == ["A", "B"]
 
         # When job "A" depends on the slow job, then job "B" finishes before "A".
@@ -1007,8 +1006,7 @@ class TestJob(RQTestCase):
         w2.work(burst=True)
         assert queue.count == 0
 
-        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
-        print('\n', order_completed)
+        order_completed = [v.decode() for v in self.testconn.lrange(key, 0, 1)]
         assert order_completed == ["B", "A"]
 
     def test_execution_order_with_dual_dependency(self):
@@ -1028,7 +1026,7 @@ class TestJob(RQTestCase):
         w2.work(burst=True)
         assert queue.count == 0
 
-        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
+        order_completed = [v.decode() for v in self.testconn.lrange(key, 0, 1)]
         print('\n', order_completed)
         assert order_completed == ["A", "B"]
 
@@ -1044,7 +1042,7 @@ class TestJob(RQTestCase):
         w2.work(burst=True)
         assert queue.count == 0
 
-        order_completed = [as_text(v) for v in self.testconn.lrange(key, 0, 1)]
+        order_completed = [v.decode() for v in self.testconn.lrange(key, 0, 1)]
         print('\n', order_completed)
         assert order_completed == ["B", "A"]
 
