@@ -3,7 +3,7 @@ import os
 import signal
 
 from rq.exceptions import InvalidJobOperation
-from rq.job import Job, JobStatus
+from rq.job import Job
 
 
 PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
@@ -72,7 +72,9 @@ def handle_stop_job_command(worker, payload):
     job_id = payload.get('job_id')
     worker.log.debug('Received command to stop job %s', job_id)
     if job_id and worker.get_current_job_id() == job_id:
-        worker.get_current_job().set_status(JobStatus.STOPPED)
+        # Sets the '_stopped_job_id' so that the job failure handler knows it
+        # was intentional.
+        worker._stopped_job_id = job_id
         worker.kill_horse()
     else:
         worker.log.info('Not working on job %s, command ignored.', job_id)

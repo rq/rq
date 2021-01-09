@@ -208,6 +208,8 @@ class Worker(object):
         self._is_horse = False
         self._horse_pid = 0
         self._stop_requested = False
+        self._stopped_job_id = None
+
         self.log = logger
         self.log_job_description = log_job_description
         self.last_cleaned_at = None
@@ -659,7 +661,7 @@ class Worker(object):
             except DequeueTimeout:
                 pass
             except redis.exceptions.ConnectionError as conn_err:
-                self.log.error('Could not connect to Redis instance: %s Retrying in %d seconds...', 
+                self.log.error('Could not connect to Redis instance: %s Retrying in %d seconds...',
                                 conn_err, connection_wait_time)
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
@@ -797,30 +799,28 @@ class Worker(object):
         job_status = job.get_status()
         if job_status is None:  # Job completed and its ttl has expired
             return
-        if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-
+        elif job_status == JobStatus.STOPPED:
+            # Work-horse killed deliberately
+            self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
+            self.handle_job_failure(
+                job, queue=queue,
+                exc_string="Job stopped by user, work-horse terminated."
+            )
+        elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             if not job.ended_at:
                 job.ended_at = utcnow()
 
-            if job.is_stopped:
-                # Work-horse killed deliberately
-                self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
-                self.handle_job_failure(
-                    job, queue=queue,
-                    exc_string="Job stopped by user, work-horse terminated."
-                )
-            else:
-                # Unhandled failure: move the job to the failed queue
-                self.log.warning((
-                    'Moving job to FailedJobRegistry '
-                    '(work-horse terminated unexpectedly; waitpid returned {})'
-                ).format(ret_val))
+            # Unhandled failure: move the job to the failed queue
+            self.log.warning((
+                'Moving job to FailedJobRegistry '
+                '(work-horse terminated unexpectedly; waitpid returned {})'
+            ).format(ret_val))
 
-                self.handle_job_failure(
-                    job, queue=queue,
-                    exc_string="Work-horse was terminated unexpectedly "
-                            "(waitpid returned %s)" % ret_val
-                )
+            self.handle_job_failure(
+                job, queue=queue,
+                exc_string="Work-horse was terminated unexpectedly "
+                        "(waitpid returned %s)" % ret_val
+            )
 
     def execute_job(self, job, queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -904,12 +904,18 @@ class Worker(object):
                 )
             job.worker_name = None
 
-            # Requeue/reschedule if retry is configured
-            # Don't attempt to retry if the job was deliberately stopped
-            retry = not job.is_stopped and job.retries_left and job.retries_left > 0
-            # Don't overwrite the JobStatus of stopped jobs
-            if not retry and not job.is_stopped:
-                job.set_status(JobStatus.FAILED, pipeline=pipeline)
+            # check whether a job was stopped intentionally and set the job
+            # status appropriately if it was this job.
+            job_is_stopped = self._stopped_job_id == job.id
+            retry = job.retries_left and job.retries_left > 0 and not job_is_stopped
+
+            if job_is_stopped:
+                job.set_status(JobStatus.STOPPED, pipeline=pipeline)
+                self._stopped_job_id = None
+            else:
+                # Requeue/reschedule if retry is configured, otherwise
+                if not retry:
+                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
             started_job_registry.remove(job, pipeline=pipeline)
 
