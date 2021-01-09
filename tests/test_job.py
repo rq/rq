@@ -435,8 +435,8 @@ class TestJob(RQTestCase):
     def test_multiple_dependencies_are_accepted_and_persisted(self):
         """Ensure job._dependency_ids accepts different input formats, and
         is set and restored properly"""
-        jobA = Job.create(func=fixtures.some_calculation, args=(3, 1, 4), id="A")
-        jobB = Job.create(func=fixtures.some_calculation, args=(2, 7, 2), id="B")
+        job_A = Job.create(func=fixtures.some_calculation, args=(3, 1, 4), id="A")
+        job_B = Job.create(func=fixtures.some_calculation, args=(2, 7, 2), id="B")
 
         # No dependencies
         job = Job.create(func=fixtures.say_hello)
@@ -447,13 +447,13 @@ class TestJob(RQTestCase):
         # Various ways of specifying dependencies
         cases = [
             ["A", ["A"]],
-            [jobA, ["A"]],
+            [job_A, ["A"]],
             [["A", "B"], ["A", "B"]],
-            [[jobA, jobB], ["A", "B"]],
-            [["A", jobB], ["A", "B"]],
+            [[job_A, job_B], ["A", "B"]],
+            [["A", job_B], ["A", "B"]],
             [("A", "B"), ["A", "B"]],
-            [(jobA, jobB), ["A", "B"]],
-            [(jobA, "B"), ["A", "B"]],
+            [(job_A, job_B), ["A", "B"]],
+            [(job_A, "B"), ["A", "B"]],
         ]
         for given, expected in cases:
             job = Job.create(func=fixtures.say_hello, depends_on=given)
