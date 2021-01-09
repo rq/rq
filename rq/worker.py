@@ -567,7 +567,7 @@ class Worker(object):
         self.set_state(WorkerStatus.IDLE)
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
-        connection_wait_time = 1.0;
+        connection_wait_time = 1.0
         while True:
 
             try:
@@ -598,7 +598,7 @@ class Worker(object):
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
             else:
-                connection_wait_time = 1.0;
+                connection_wait_time = 1.0
 
         self.heartbeat()
         return result
