@@ -1027,7 +1027,6 @@ class TestJob(RQTestCase):
         assert queue.count == 0
 
         order_completed = [v.decode() for v in self.testconn.lrange(key, 0, 1)]
-        print('\n', order_completed)
         assert order_completed == ["A", "B"]
 
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
@@ -1043,7 +1042,6 @@ class TestJob(RQTestCase):
         assert queue.count == 0
 
         order_completed = [v.decode() for v in self.testconn.lrange(key, 0, 1)]
-        print('\n', order_completed)
         assert order_completed == ["B", "A"]
 
     def test_retry(self):
