@@ -18,6 +18,7 @@ from time import sleep
 
 from unittest import skipIf
 
+import redis.exceptions
 import pytest
 import mock
 from mock import Mock
@@ -282,6 +283,19 @@ class TestWorker(RQTestCase):
         # for compatibility reasons
         self.testconn.hdel(w.key, 'birth')
         w.refresh()
+
+    @slow
+    def test_heartbeat_survives_lost_connection(self):
+        with mock.patch.object(Worker, 'heartbeat') as mocked:
+            # None -> Heartbeat is first called before the job loop
+            mocked.side_effect = [None, redis.exceptions.ConnectionError()]
+            q = Queue()
+            w = Worker([q])
+            w.work(burst=True)
+            # First call is prior to job loop, second raises the error,
+            # third is successful, after "recovery"
+            assert mocked.call_count == 3
+
 
     @slow
     def test_heartbeat_busy(self):
