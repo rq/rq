@@ -67,7 +67,7 @@ shared_options = [
                  multiple=True),
     click.option('--serializer', '-S',
                  default=DefaultSerializer,
-                 help='Serializer to use, JSON or Pickle')
+                 help='Path to serializer, defaults to rq.serializers.DefaultSerializer')
 ]
 
 
