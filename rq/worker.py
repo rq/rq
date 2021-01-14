@@ -22,7 +22,7 @@ try:
 except ImportError:
     from signal import SIGTERM as SIGKILL
 
-from redis import WatchError
+import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
@@ -106,6 +106,10 @@ class Worker(object):
     log_result_lifespan = True
     # `log_job_description` is used to toggle logging an entire jobs description.
     log_job_description = True
+    # factor to increase connection_wait_time incase of continous connection failures.
+    exponential_backoff_factor = 2.0
+    # Max Wait time (in seconds) after which exponential_backoff_factor wont be applicable.
+    max_connection_wait_time = 60.0
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
@@ -469,7 +473,6 @@ class Worker(object):
 
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
-
         before_state = None
         notified = False
 
@@ -628,14 +631,15 @@ class Worker(object):
         self.set_state(WorkerStatus.IDLE)
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
-
+        connection_wait_time = 1.0
         while True:
-            self.heartbeat()
-
-            if self.should_run_maintenance_tasks:
-                self.run_maintenance_tasks()
 
             try:
+                self.heartbeat()
+
+                if self.should_run_maintenance_tasks:
+                    self.run_maintenance_tasks()
+
                 result = self.queue_class.dequeue_any(self.queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
@@ -654,6 +658,14 @@ class Worker(object):
                 break
             except DequeueTimeout:
                 pass
+            except redis.exceptions.ConnectionError as conn_err:
+                self.log.error('Could not connect to Redis instance: %s Retrying in %d seconds...', 
+                                conn_err, connection_wait_time)
+                time.sleep(connection_wait_time)
+                connection_wait_time *= self.exponential_backoff_factor
+                connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
+            else:
+                connection_wait_time = 1.0
 
         self.heartbeat()
         return result
@@ -955,7 +967,7 @@ class Worker(object):
 
                     pipeline.execute()
                     break
-                except WatchError:
+                except redis.exceptions.WatchError:
                     continue
 
     def perform_job(self, job, queue, heartbeat_ttl=None):
