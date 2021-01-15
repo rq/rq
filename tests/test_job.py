@@ -973,6 +973,18 @@ class TestJob(RQTestCase):
         assert dependent_job.dependencies_are_met()
         assert dependent_job.get_status() == JobStatus.QUEUED
 
+    def test_dependencies_are_met_at_execution_time(self):
+        queue = Queue(connection=self.testconn)
+
+        queue.enqueue_call(fixtures.say_hello, job_id="A")
+        queue.enqueue_call(fixtures.say_hello, job_id="B")
+        job_C = queue.enqueue_call(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
+
+        w = Worker([queue])
+        w.work(burst=True)
+
+        assert job_C.result
+
     def test_rpush_fixture(self):
         fixtures.rpush('foo', 'bar')
         assert self.testconn.lrange('foo', 0, 0)[0].decode() == 'bar'
