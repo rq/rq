@@ -19,7 +19,7 @@ from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow)
+                    utcformat, utcnow, ensure_list)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
@@ -126,10 +126,10 @@ class Job(object):
         job._status = status
         job.meta = meta or {}
 
-        # dependency could be job instance or id, or list or tuple thereof
+        # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            deps = depends_on if isinstance(depends_on, (list, tuple)) else [depends_on]
-            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in deps]
+            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep
+                                   for dep in ensure_list(depends_on)]
         return job
 
     def get_position(self):
