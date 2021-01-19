@@ -12,6 +12,7 @@ from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig
 from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
+from rq.serializers import JSONSerializer
 from rq.worker import Worker, WorkerStatus
 
 import pytest
@@ -346,3 +347,13 @@ class TestRQCli(RQTestCase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn("Duration must be an integer greater than 1", result.output)
+
+    def test_serializer(self):
+        """rq worker -u <url> --serializer <serializer>"""
+        connection = Redis.from_url(self.redis_url)
+        q = Queue('default', connection=connection, serializer=JSONSerializer)
+        runner = CliRunner()
+        job = q.enqueue(say_hello)
+        runner.invoke(main, ['worker', '-u', self.redis_url,
+                            '--serializer rq.serializer.JSONSerializer'])
+        self.assertIn(job.id, q.job_ids)
