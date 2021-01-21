@@ -1009,29 +1009,21 @@ class TestJob(RQTestCase):
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 2)]
         self.assertEqual(queue.count, 0)
-        self.assertTrue(job_slow.is_finished)
-        self.assertTrue(job_A.is_finished)
-        self.assertTrue(job_B.is_finished)
-        self.assertEqual(jobs_completed[0], "A:w2")
-        self.assertEqual(jobs_completed[1], "B:w2")
-        self.assertEqual(jobs_completed[2], "slow:w1")
+        self.assertTrue(all(job.is_finished for job in [job_slow, job_A, job_B]))
+        self.assertEqual(jobs_completed, ["A:w2", "B:w2", "slow:w1"])
         self.testconn.delete(key)
 
         # When job "A" depends on the slow job, then job "B" finishes before "A".
+        # There is no clear requirement on which worker should take job "A", so we stay silent on that.
         job_slow = queue.enqueue_call(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", True], depends_on='slow_job')
+        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", False], depends_on='slow_job')
         job_B = queue.enqueue_call(fixtures.rpush, args=[key, "B", True])
         fixtures.burst_two_workers(queue)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 2)]
         self.assertEqual(queue.count, 0)
-        self.assertTrue(job_slow.is_finished)
-        self.assertTrue(job_A.is_finished)
-        self.assertTrue(job_B.is_finished)
-        self.assertEqual(jobs_completed[0], "B:w2")
-        self.assertEqual(jobs_completed[1], "slow:w1")
-        # Not clear which worker should take job A, so we are silent on that.
-        self.assertEqual(jobs_completed[2].split(":")[0], "A")
+        self.assertTrue(all(job.is_finished for job in [job_slow, job_A, job_B]))
+        self.assertEqual(jobs_completed, ["B:w2", "slow:w1", "A"])
 
     def test_execution_order_with_dual_dependency(self):
         queue = Queue(connection=self.testconn)
@@ -1046,35 +1038,23 @@ class TestJob(RQTestCase):
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 3)]
         self.assertEqual(queue.count, 0)
-        self.assertTrue(job_slow_1.is_finished)
-        self.assertTrue(job_slow_2.is_finished)
-        self.assertTrue(job_A.is_finished)
-        self.assertTrue(job_B.is_finished)
-        self.assertEqual(jobs_completed[0], "slow_1:w1")
-        self.assertEqual(jobs_completed[1], "A:w1")
-        self.assertEqual(jobs_completed[2], "B:w1")
-        self.assertEqual(jobs_completed[3], "slow_2:w2")
+        self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
+        self.assertEqual(jobs_completed, ["slow_1:w1", "A:w1", "B:w1", "slow_2:w2"])
         self.testconn.delete(key)
 
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
         # the two. Job "B" should be completed before job "A".
+        # There is no clear requirement on which worker should take job "A", so we stay silent on that.
         job_slow_1 = queue.enqueue_call(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
         job_slow_2 = queue.enqueue_call(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", True], depends_on=['slow_1', 'slow_2'])
+        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", False], depends_on=['slow_1', 'slow_2'])
         job_B = queue.enqueue_call(fixtures.rpush, args=[key, "B", True], depends_on=['slow_1'])
         fixtures.burst_two_workers(queue)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 3)]
         self.assertEqual(queue.count, 0)
-        self.assertTrue(job_slow_1.is_finished)
-        self.assertTrue(job_slow_2.is_finished)
-        self.assertTrue(job_A.is_finished)
-        self.assertTrue(job_B.is_finished)
-        self.assertEqual(jobs_completed[0], "slow_1:w1")
-        self.assertEqual(jobs_completed[1], "B:w1")
-        self.assertEqual(jobs_completed[2], "slow_2:w2")
-        # Not clear which worker should take job A, so we are silent on that.
-        self.assertEqual(jobs_completed[3].split(":")[0], "A")
+        self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
+        self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
 
     def test_retry(self):
         """Retry parses `max` and `interval` correctly"""
