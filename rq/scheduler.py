@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime
 from multiprocessing import Process
 
-from redis import Redis, SSLConnection
+from redis import Redis, SSLConnection, UnixDomainSocketConnection
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
@@ -48,6 +48,16 @@ class RQScheduler(object):
         connection_class = connection.connection_pool.connection_class
         if issubclass(connection_class, SSLConnection):
             self._connection_kwargs['ssl'] = True
+        if issubclass(connection_class, UnixDomainSocketConnection):
+            # The connection keyword arguments are obtained from
+            # `UnixDomainSocketConnection`, which expects `path`, but passed to
+            # `redis.client.Redis`, which expects `unix_socket_path`, renaming
+            # the key is necessary.
+            # `path` is not left in the dictionary as that keyword argument is
+            # not expected by `redis.client.Redis` and would raise an exception.
+            self._connection_kwargs['unix_socket_path'] = self._connection_kwargs.pop(
+                'path'
+            )
 
         self._connection = None
         self.interval = interval
