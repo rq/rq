@@ -719,6 +719,15 @@ class TestJob(RQTestCase):
 
         self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
 
+    def test_create_job_with_async(self):
+        """test creating jobs with async function"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello_async, job_id="1234")
+        self.assertEqual(job.id, "1234")
+        job.perform()
+
+        self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
+
     def test_get_call_string_unicode(self):
         """test call string with unicode keyword arguments"""
         queue = Queue(connection=self.testconn)

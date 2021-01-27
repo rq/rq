@@ -29,6 +29,13 @@ def say_hello(name=None):
     return 'Hi there, %s!' % (name,)
 
 
+async def say_hello_async(name=None):
+    """A async job with a single argument and a return value."""
+    if name is None:
+        name = 'Stranger'
+    return 'Hi there, %s!' % (name,)
+
+
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
     return text_type(say_hello(name))  # noqa
