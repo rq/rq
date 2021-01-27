@@ -976,9 +976,9 @@ class TestJob(RQTestCase):
     def test_dependencies_are_met_at_execution_time(self):
         queue = Queue(connection=self.testconn)
 
-        queue.enqueue_call(fixtures.say_hello, job_id="A")
-        queue.enqueue_call(fixtures.say_hello, job_id="B")
-        job_C = queue.enqueue_call(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
+        queue.enqueue(fixtures.say_hello, job_id="A")
+        queue.enqueue(fixtures.say_hello, job_id="B")
+        job_C = queue.enqueue(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
 
         w = Worker([queue])
         w.work(burst=True)
@@ -991,9 +991,9 @@ class TestJob(RQTestCase):
 
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         # Worker 1 will be busy with the slow job, so worker 2 will complete both fast jobs.
-        job_slow = queue.enqueue_call(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", True])
-        job_B = queue.enqueue_call(fixtures.rpush, args=[key, "B", True])
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True])
         fixtures.burst_two_workers(queue)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 2)]
@@ -1004,9 +1004,9 @@ class TestJob(RQTestCase):
 
         # When job "A" depends on the slow job, then job "B" finishes before "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow = queue.enqueue_call(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", False], depends_on='slow_job')
-        job_B = queue.enqueue_call(fixtures.rpush, args=[key, "B", True])
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", False], depends_on='slow_job')
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True])
         fixtures.burst_two_workers(queue)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 2)]
@@ -1019,10 +1019,10 @@ class TestJob(RQTestCase):
         key = 'test_job:job_order'
 
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
-        job_slow_1 = queue.enqueue_call(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue_call(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", True])
-        job_B = queue.enqueue_call(fixtures.rpush, args=[key, "B", True])
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True])
         fixtures.burst_two_workers(queue)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 3)]
@@ -1034,10 +1034,10 @@ class TestJob(RQTestCase):
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
         # the two. Job "B" should be completed before job "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow_1 = queue.enqueue_call(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue_call(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue_call(fixtures.rpush, args=[key, "A", False], depends_on=['slow_1', 'slow_2'])
-        job_B = queue.enqueue_call(fixtures.rpush, args=[key, "B", True], depends_on=['slow_1'])
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", False], depends_on=['slow_1', 'slow_2'])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True], depends_on=['slow_1'])
         fixtures.burst_two_workers(queue)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 3)]
