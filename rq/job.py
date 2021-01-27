@@ -719,7 +719,8 @@ class Job(object):
     def _execute(self):
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
-            return asyncio.run(result)
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(asyncio.wait([result]))
         return result
 
     def get_ttl(self, default_ttl=None):
