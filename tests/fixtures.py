@@ -31,9 +31,7 @@ def say_hello(name=None):
 
 async def say_hello_async(name=None):
     """A async job with a single argument and a return value."""
-    if name is None:
-        name = 'Stranger'
-    return 'Hi there, %s!' % (name,)
+    return say_hello(name)
 
 
 def say_hello_unicode(name=None):

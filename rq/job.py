@@ -720,7 +720,8 @@ class Job(object):
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
             loop = asyncio.get_event_loop()
-            return loop.run_until_complete(asyncio.wait([result]))
+            coro_result = loop.run_until_complete(result)
+            return coro_result
         return result
 
     def get_ttl(self, default_ttl=None):

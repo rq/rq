@@ -722,11 +722,17 @@ class TestJob(RQTestCase):
     def test_create_job_with_async(self):
         """test creating jobs with async function"""
         queue = Queue(connection=self.testconn)
-        job = queue.enqueue(fixtures.say_hello_async, job_id="1234")
-        self.assertEqual(job.id, "1234")
-        job.perform()
 
-        self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
+        async_job = queue.enqueue(fixtures.say_hello_async, job_id="async_job")
+        sync_job = queue.enqueue(fixtures.say_hello, job_id="sync_job")
+
+        self.assertEqual(async_job.id, "async_job")
+        self.assertEqual(sync_job.id, "sync_job")
+
+        async_task_result = async_job.perform()
+        sync_task_result = sync_job.perform()
+
+        self.assertEqual(sync_task_result, async_task_result)
 
     def test_get_call_string_unicode(self):
         """test call string with unicode keyword arguments"""
