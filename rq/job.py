@@ -19,7 +19,7 @@ from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow)
+                    utcformat, utcnow, ensure_list)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
@@ -126,9 +126,10 @@ class Job(object):
         job._status = status
         job.meta = meta or {}
 
-        # dependency could be job instance or id
+        # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            job._dependency_ids = [depends_on.id if isinstance(depends_on, Job) else depends_on]
+            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep
+                                   for dep in ensure_list(depends_on)]
         return job
 
     def get_position(self):
@@ -175,7 +176,7 @@ class Job(object):
 
     @property
     def _dependency_id(self):
-        """Returns the first item in self._dependency_ids. Present
+        """Returns the first item in self._dependency_ids. Present to
         preserve compatibility with third party packages..
         """
         if self._dependency_ids:
@@ -183,7 +184,7 @@ class Job(object):
 
     @property
     def dependency(self):
-        """Returns a job's dependency. To avoid repeated Redis fetches, we cache
+        """Returns a job's first dependency. To avoid repeated Redis fetches, we cache
         job.dependency as job._dependency.
         """
         if not self._dependency_ids:
@@ -498,8 +499,10 @@ class Job(object):
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = obj.get('status').decode() if obj.get('status') else None
 
-        dependency_id = obj.get('dependency_id', None)
-        self._dependency_ids = [as_text(dependency_id)] if dependency_id else []
+        dep_ids = obj.get('dependency_ids')
+        dep_id = obj.get('dependency_id')  # for backwards compatibility
+        self._dependency_ids = ( json.loads(dep_ids.decode()) if dep_ids
+                                else [dep_id.decode()] if dep_id else [] )
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
@@ -571,7 +574,8 @@ class Job(object):
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_ids:
-            obj['dependency_id'] = self._dependency_ids[0]
+            obj['dependency_id'] = self._dependency_ids[0]  # for backwards compatibility
+            obj['dependency_ids'] = json.dumps(self._dependency_ids)
         if self.meta and include_meta:
             obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
@@ -786,14 +790,14 @@ class Job(object):
         return self.retry_intervals[index]
 
     def register_dependency(self, pipeline=None):
-        """Jobs may have dependencies. Jobs are enqueued only if the job they
-        depend on is successfully performed. We record this relation as
+        """Jobs may have dependencies. Jobs are enqueued only if the jobs they
+        depend on are successfully performed. We record this relation as
         a reverse dependency (a Redis set), with a key that looks something
         like:
 
             rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
-        This method adds the job in its dependency's dependents set
+        This method adds the job in its dependencies' dependents sets,
         and adds the job to DeferredJobRegistry.
         """
         from .registry import DeferredJobRegistry
