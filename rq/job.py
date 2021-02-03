@@ -8,6 +8,7 @@ import pickle
 import warnings
 import zlib
 
+import asyncio
 from collections.abc import Iterable
 from distutils.version import StrictVersion
 from functools import partial
@@ -720,7 +721,12 @@ class Job(object):
             pipeline.hmset(self.key, mapping)
 
     def _execute(self):
-        return self.func(*self.args, **self.kwargs)
+        result = self.func(*self.args, **self.kwargs)
+        if asyncio.iscoroutine(result):
+            loop = asyncio.get_event_loop()
+            coro_result = loop.run_until_complete(result)
+            return coro_result
+        return result
 
     def get_ttl(self, default_ttl=None):
         """Returns ttl for a job that determines how long a job will be
