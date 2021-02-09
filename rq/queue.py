@@ -8,6 +8,8 @@ import warnings
 from datetime import datetime, timezone
 
 from distutils.version import StrictVersion
+from random import shuffle
+
 from redis import WatchError
 
 from .compat import as_text, string_types, total_ordering
@@ -640,3 +642,81 @@ nd
 
     def __str__(self):
         return '<{0} {1}>'.format(self.__class__.__name__, self.name)
+
+
+class RoundRobinQueue(Queue):
+    """Subclass of Queue that takes jobs from the queues following a round-robin strategy.
+    More precisely if queues=[q0,q1,...,qn] and a job is unqueued from qi, then in the next
+    iteration the queues will be polled in order [q(i+1),...,qn,q1,...,qi]
+    """
+    shift_queues = {}
+
+    @classmethod
+    def dequeue_any(cls, queues, timeout, connection=None, job_class=None, serializer=None):
+        job_class = backend_class(cls, 'job_class', override=job_class)
+
+        while True:
+            queue_keys = [q.key for q in queues]
+            queue_keys_fs = frozenset(queue_keys)
+            shift = cls.shift_queues.get(queue_keys_fs,0)
+            queue_keys_shifted = queue_keys[shift:] + queue_keys[:shift]
+            result = cls.lpop(queue_keys_shifted, timeout, connection=connection)
+            if result is None:
+                return None
+            queue_key, job_id = map(as_text, result)
+            # cls.last_accessed_queue = queue_key
+            queue = cls.from_queue_key(queue_key,
+                                       connection=connection,
+                                       job_class=job_class,
+                                       serializer=serializer)
+            position = queue_keys.index(cls.redis_queue_namespace_prefix + queue.name)
+            cls.shift_queues[queue_keys_fs] = (position + 1) % len(queue_keys)
+            try:
+                job = job_class.fetch(job_id, connection=connection, serializer=serializer)
+            except NoSuchJobError:
+                # Silently pass on jobs that don't exist (anymore),
+                # and continue in the look
+                continue
+            except Exception as e:
+                # Attach queue information on the exception for improved error
+                # reporting
+                e.job_id = job_id
+                e.queue = queue
+                raise e
+            return job, queue
+        return None, None
+
+
+class RandomQueue(Queue):
+    """Subclass of Queue that takes jobs from the queues following a random strategy.
+    More precisely, queues are shuffled at each iteration.
+    """
+    @classmethod
+    def dequeue_any(cls, queues, timeout, connection=None, job_class=None, serializer=None):
+        job_class = backend_class(cls, 'job_class', override=job_class)
+
+        while True:
+            queue_keys = [q.key for q in queues]
+            shuffle(queue_keys)
+            result = cls.lpop(queue_keys, timeout, connection=connection)
+            if result is None:
+                return None
+            queue_key, job_id = map(as_text, result)
+            queue = cls.from_queue_key(queue_key,
+                                       connection=connection,
+                                       job_class=job_class,
+                                       serializer=serializer)
+            try:
+                job = job_class.fetch(job_id, connection=connection, serializer=serializer)
+            except NoSuchJobError:
+                # Silently pass on jobs that don't exist (anymore),
+                # and continue in the look
+                continue
+            except Exception as e:
+                # Attach queue information on the exception for improved error
+                # reporting
+                e.job_id = job_id
+                e.queue = queue
+                raise e
+            return job, queue
+        return None, None
