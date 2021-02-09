@@ -72,6 +72,9 @@ def handle_stop_job_command(worker, payload):
     job_id = payload.get('job_id')
     worker.log.debug('Received command to stop job %s', job_id)
     if job_id and worker.get_current_job_id() == job_id:
+        # Sets the '_stopped_job_id' so that the job failure handler knows it
+        # was intentional.
+        worker._stopped_job_id = job_id
         worker.kill_horse()
     else:
         worker.log.info('Not working on job %s, command ignored.', job_id)
