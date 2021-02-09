@@ -440,7 +440,7 @@ class Job(object):
             connection.watch(*self._dependency_ids)
 
         jobs = [job
-                for job in self.fetch_many(self._dependency_ids, connection=self.connection)
+                for job in self.fetch_many(self._dependency_ids, connection=self.connection, serializer=self.serializer)
                 if job]
 
         return jobs
