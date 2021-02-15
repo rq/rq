@@ -20,4 +20,4 @@ Vagrantfile
 Gemfile
 Gemfile.lock
 _site/
-venv
+
