@@ -525,6 +525,9 @@ class Worker(object):
             self.pubsub.unsubscribe()
             self.pubsub.close()
 
+    def reorder_queues(self, reference_queue):
+        pass
+
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
              log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
         """Starts the work loop.
@@ -581,6 +584,7 @@ class Worker(object):
                         break
 
                     job, queue = result
+                    self.reorder_queues(reference_queue=queue)
                     self.execute_job(job, queue)
                     self.heartbeat()
 
@@ -1160,3 +1164,22 @@ class HerokuWorker(Worker):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         self.log.warning('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
+
+
+class RoundRobinWorker(Worker):
+    """
+    Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
+    """
+    def reorder_queues(self, reference_queue):
+        pos = self.queues.index(reference_queue)
+        self.queues=self.queues[pos+1:]+self.queues[:pos+1]
+
+
+class RandomWorker(Worker):
+    """
+    Modified version of Worker that dequeues jobs from the queues using a random strategy.
+    """
+
+    def reorder_queues(self, reference_queue):
+        from random import shuffle
+        shuffle(self.queues)
