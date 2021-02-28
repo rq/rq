@@ -506,6 +506,42 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+    
+    def test_enqueue_job_with_dependency_executes_both(self):
+        """Jobs are enqueued only when their dependencies are finished."""
+        q = Queue()
+        
+        job_a= Job.create(func=say_hello)
+        job_a.save()
+        job = q.enqueue_job(job_a)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        job_b= Job.create(func=say_hello, depends_on=job_a)
+        job_b.save()
+        job = q.enqueue_job(job_b)
+        
+        w = Worker([q])
+        w.work(burst=True)
+
+        self.assertEqual(job_a.get_status(), JobStatus.FINISHED)
+        self.assertEqual(job_b.get_status(), JobStatus.FINISHED)
+
+
+    def test_enqueue_job_with_dependency_defers_dependent(self):
+
+        """Jobs are enqueued only when their dependencies are finished."""
+        q = Queue()
+        
+        job_a= Job.create(func=say_hello)
+        job_a.save()
+        q.enqueue_job(job_a)
+
+        job_b = Job.create(func=say_hello, depends_on=job_a)
+        job_b.save()
+        q.enqueue_job(job_b)
+
+        self.assertEqual(job_a.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job_b.get_status(), JobStatus.DEFERRED)
 
     def test_enqueue_job_with_dependency_by_id(self):
         """Can specify job dependency with job object or job id."""
