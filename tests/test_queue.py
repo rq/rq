@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from mock.mock import patch
 
 from rq import Retry, Queue
-from rq.queue import RoundRobinQueue, RandomQueue
 from rq.job import Job, JobStatus
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, ScheduledJobRegistry,
@@ -263,109 +262,20 @@ class TestQueue(RQTestCase):
             'Bar should be dequeued second.'
         )
 
-    def test_dequeue_any_round_robin(self):
-        """Fetching work from queues of kind round robin."""
-        fooq = RoundRobinQueue('foo')
-        barq = RoundRobinQueue('bar')
-
-        self.assertEqual(RoundRobinQueue.dequeue_any([fooq, barq], None), None)
-
-        # Enqueue a single item
-        barq.enqueue(say_hello)
-        job, queue = RoundRobinQueue.dequeue_any([fooq, barq], None)
-        self.assertEqual(job.func, say_hello)
-        self.assertEqual(queue, barq)
-
-        # Enqueue items on both queues... should be dequeued in a round-robin fashion
-        barq.enqueue(say_hello, 'for Bar-1')
-        barq.enqueue(say_hello, 'for Bar-2')
-        fooq.enqueue(say_hello, 'for Foo-1')
-        fooq.enqueue(say_hello, 'for Foo-2')
-
-        job, queue = RoundRobinQueue.dequeue_any([fooq, barq], None)
-        self.assertEqual(queue, fooq)
-        self.assertEqual(job.func, say_hello)
-        self.assertEqual(job.origin, fooq.name)
-        self.assertEqual(
-            job.args[0], 'for Foo-1',
-            'Foo-1 should be dequeued first.'
-        )
-
-        job, queue = RoundRobinQueue.dequeue_any([fooq, barq], None)
-        self.assertEqual(queue, barq)
-        self.assertEqual(job.func, say_hello)
-        self.assertEqual(job.origin, barq.name)
-        self.assertEqual(
-            job.args[0], 'for Bar-1',
-            'Bar-1 should be dequeued second.'
-        )
-
-        job, queue = RoundRobinQueue.dequeue_any([fooq, barq], None)
-        self.assertEqual(queue, fooq)
-        self.assertEqual(job.func, say_hello)
-        self.assertEqual(job.origin, fooq.name)
-        self.assertEqual(
-            job.args[0], 'for Foo-2',
-            'Foo-2 should be dequeued third.'
-        )
-
-        job, queue = RoundRobinQueue.dequeue_any([fooq, barq], None)
-        self.assertEqual(queue, barq)
-        self.assertEqual(job.func, say_hello)
-        self.assertEqual(job.origin, barq.name)
-        self.assertEqual(
-            job.args[0], 'for Bar-2',
-            'Bar-2 should be dequeued fourth.'
-        )
-
-    def test_dequeue_any_random(self):
-        """Fetching work from queues of kind random."""
-        fooq = RandomQueue('foo')
-        barq = RandomQueue('bar')
-
-        self.assertEqual(RandomQueue.dequeue_any([fooq, barq], None), None)
-
-        # Enqueue a single item
-        barq.enqueue(say_hello)
-        job, queue = RandomQueue.dequeue_any([fooq, barq], None)
-        self.assertEqual(job.func, say_hello)
-        self.assertEqual(queue, barq)
-
-        # Enqueue items on both queues... should be dequeued in a random fashion
-        for i in range(10):
-            barq.enqueue(say_hello, 'for Bar-'+str(i))
-            fooq.enqueue(say_hello, 'for Foo-'+str(i))
-
-        found_bar = False
-        found_foo = False
-        for i in range(20):
-            # at least one of each queue should be dequeued among the first 10
-            job, queue = RandomQueue.dequeue_any([fooq, barq], None)
-            if i < 10 and queue == fooq:
-                found_foo = True
-            if i < 10 and queue == barq:
-                found_bar = True
-
-        self.assertTrue(found_bar, 'At least one Bar should be dequeued')
-        self.assertTrue(found_foo, 'At least one Foo should be dequeued')
-
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
 
-        QueueClasses = [Queue, RoundRobinQueue, RandomQueue]
+        q = Queue('low')
+        uuid = '49f205ab-8ea3-47dd-a1b5-bfa186870fc8'
+        q.push_job_id(uuid)
 
-        for QueueClass in QueueClasses:
-            q = QueueClass('low')
-            uuid = '49f205ab-8ea3-47dd-a1b5-bfa186870fc8'
-            q.push_job_id(uuid)
-
-            # Dequeue simply ignores the missing job and returns None
-            self.assertEqual(q.count, 1)
-            self.assertEqual(
-                QueueClass.dequeue_any([QueueClass(), QueueClass('low')], None),  # noqa
-                None
-            )
-            self.assertEqual(q.count, 0)
+        # Dequeue simply ignores the missing job and returns None
+        self.assertEqual(q.count, 1)
+        self.assertEqual(
+            Queue.dequeue_any([Queue(), Queue('low')], None),  # noqa
+            None
+        )
+        self.assertEqual(q.count, 0)
 
     def test_enqueue_with_ttl(self):
         """Negative TTL value is not allowed"""
