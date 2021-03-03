@@ -1040,13 +1040,22 @@ class Worker(object):
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = ''.join(traceback.format_exception(*exc_info))
-        self.log.error(exc_string, exc_info=True, extra={
-            'func': job.func_name,
-            'arguments': job.args,
-            'kwargs': job.kwargs,
-            'queue': job.origin,
-            'job_id': job.id,
-        })
+
+        # If the job cannot be deserialized, it will raise when func_name or
+        # the other properties are accessed, which will stop exceptions from
+        # being properly logged, so we guard against it here.
+        try:
+            extra = {
+                'func': job.func_name,
+                'arguments': job.args,
+                'kwargs': job.kwargs}
+        except: # noqa
+            extra = {}
+        # the properties below should be safe however
+        extra.update({'queue': job.origin, 'job_id': job.id})
+
+        # func_name
+        self.log.error(exc_string, exc_info=True, extra=extra)
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
