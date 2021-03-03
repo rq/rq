@@ -260,6 +260,38 @@ class TestWorker(RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=q)
         self.assertTrue(job in failed_job_registry)
 
+    @mock.patch('rq.worker.logger.error')
+    def test_deserializing_failure_is_handled(self, mock_logger_error):
+        """
+        Test that exceptions are properly handled for a job that fails to
+        deserialize.
+        """
+        q = Queue()
+        self.assertEqual(q.count, 0)
+
+        # as in test_work_is_unreadable(), we create a fake bad job
+        job = Job.create(func=div_by_zero, args=(3,), origin=q.name)
+        job.save()
+
+        # setting data to b'' ensures that pickling will completely fail
+        job_data = job.data
+        invalid_data = job_data.replace(b'div_by_zero', b'')
+        assert job_data != invalid_data
+        self.testconn.hset(job.key, 'data', zlib.compress(invalid_data))
+
+        # We use the low-level internal function to enqueue any data (bypassing
+        # validity checks)
+        q.push_job_id(job.id)
+        self.assertEqual(q.count, 1)
+
+        # Now we try to run the job...
+        w = Worker([q])
+        job, queue = w.dequeue_job_and_maintain_ttl(10)
+        w.perform_job(job, queue)
+
+        # An exception should be logged here at ERROR level
+        self.assertIn("pickle data was truncated", mock_logger_error.call_args[0][0])
+
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""
         q = Queue()
