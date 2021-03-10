@@ -38,7 +38,7 @@ from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegist
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
-from rq.worker import HerokuWorker, WorkerStatus
+from rq.worker import HerokuWorker, WorkerStatus, RoundRobinWorker, RandomWorker
 from rq.serializers import JSONSerializer
 
 class CustomJob(Job):
@@ -1362,3 +1362,56 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
     def test_handle_exception_handles_non_ascii_in_exception_message(self):
         """worker.handle_exception doesn't crash on non-ascii in exception message."""
         self.worker.handle_exception(Mock(), *self.exc_info)
+
+
+class TestRoundRobinWorker(RQTestCase):
+    def test_round_robin(self):
+        qs = [Queue(f'q{i}') for i in range(5)]
+
+        for i in range(5):
+            for j in range(3):
+                qs[i].enqueue(say_pid,
+                              job_id=f'q{i}_j{j}')
+
+        w = RoundRobinWorker(qs)
+        w.work(burst=True)
+        start_times = []
+        for i in range(5):
+            for j in range(3):
+                job = Job.fetch(f'q{i}_j{j}')
+                start_times.append((f'q{i}_j{j}', job.started_at))
+        sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
+        sorted_ids = [tup[0] for tup in sorted_by_time]
+        expected = [f'q{i}_j{j}' for j in range(3) for i in range(5)]
+        self.assertEqual(expected, sorted_ids)
+
+
+class TestRandomWorker(RQTestCase):
+    def test_random_worker(self):
+        qs = [Queue(f'q{i}') for i in range(5)]
+
+        for i in range(5):
+            for j in range(3):
+                qs[i].enqueue(say_pid,
+                              job_id=f'q{i}_j{j}')
+
+        w = RandomWorker(qs)
+        w.work(burst=True)
+        start_times = []
+        for i in range(5):
+            for j in range(3):
+                job = Job.fetch(f'q{i}_j{j}')
+                start_times.append((f'q{i}_j{j}', job.started_at))
+        sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
+        sorted_ids = [tup[0] for tup in sorted_by_time]
+        expected_rr = [f'q{i}_j{j}' for j in range(3) for i in range(5)]
+        expected_ser = [f'q{i}_j{j}' for i in range(5) for j in range(3)]
+        self.assertNotEqual(sorted_ids, expected_rr)
+        self.assertNotEqual(sorted_ids, expected_ser)
+        expected_rr.reverse()
+        expected_ser.reverse()
+        self.assertNotEqual(sorted_ids, expected_rr)
+        self.assertNotEqual(sorted_ids, expected_ser)
+        sorted_ids.sort()
+        expected_ser.sort()
+        self.assertEqual(sorted_ids, expected_ser)
