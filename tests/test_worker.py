@@ -786,7 +786,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(registry.get_job_ids(), [job.id])
 
         # Score in queue is +inf
-        self.assertEqual(self.testconn.zscore(registry.key, job.id), float('Inf'))
+        self.assertEqual(self.testconn.zscore(registry.key, job.id), float('In'))
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
@@ -1366,46 +1366,46 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
 
 class TestRoundRobinWorker(RQTestCase):
     def test_round_robin(self):
-        qs = [Queue(f'q{i}') for i in range(5)]
+        qs = [Queue('q%d' % i) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
                 qs[i].enqueue(say_pid,
-                              job_id=f'q{i}_j{j}')
+                              job_id='q%d_%d' % (i,j))
 
         w = RoundRobinWorker(qs)
         w.work(burst=True)
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch(f'q{i}_j{j}')
-                start_times.append((f'q{i}_j{j}', job.started_at))
+                job = Job.fetch('q%d_%d' % (i,j))
+                start_times.append(('q%d_%d' % (i,j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected = [f'q{i}_j{j}' for j in range(3) for i in range(5)]
+        expected = ['q%d_%d' % (i,j) for j in range(3) for i in range(5)]
         self.assertEqual(expected, sorted_ids)
 
 
 class TestRandomWorker(RQTestCase):
     def test_random_worker(self):
-        qs = [Queue(f'q{i}') for i in range(5)]
+        qs = [Queue('q%d' % i) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
                 qs[i].enqueue(say_pid,
-                              job_id=f'q{i}_j{j}')
+                              job_id='q%d_%d' % (i,j))
 
         w = RandomWorker(qs)
         w.work(burst=True)
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch(f'q{i}_j{j}')
-                start_times.append((f'q{i}_j{j}', job.started_at))
+                job = Job.fetch('q%d_%d' % (i,j))
+                start_times.append(('q%d_%d' % (i,j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected_rr = [f'q{i}_j{j}' for j in range(3) for i in range(5)]
-        expected_ser = [f'q{i}_j{j}' for i in range(5) for j in range(3)]
+        expected_rr = ['q%d_%d' % (i,j) for j in range(3) for i in range(5)]
+        expected_ser = ['q%d_%d' % (i,j) for i in range(5) for j in range(3)]
         self.assertNotEqual(sorted_ids, expected_rr)
         self.assertNotEqual(sorted_ids, expected_ser)
         expected_rr.reverse()
