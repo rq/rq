@@ -786,7 +786,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(registry.get_job_ids(), [job.id])
 
         # Score in queue is +inf
-        self.assertEqual(self.testconn.zscore(registry.key, job.id), float('In'))
+        self.assertEqual(self.testconn.zscore(registry.key, job.id), float('Inf'))
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
