@@ -230,7 +230,7 @@ def str_to_date(date_str):
     if not date_str:
         return
     else:
-        return utcparse(date_str.decode())
+        return utcparse(as_text(date_str))
 
 
 def parse_timeout(timeout):

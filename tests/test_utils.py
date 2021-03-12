@@ -11,7 +11,7 @@ from redis import Redis
 
 from tests import RQTestCase, fixtures
 from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
-    split_list, ceildiv
+    split_list, ceildiv, str_to_date
 from rq.exceptions import TimeoutFormatError
 
 
@@ -113,3 +113,13 @@ class TestUtils(RQTestCase):
 
         expected_small_list_count = ceildiv(BIG_LIST_SIZE, SEGMENT_SIZE)
         self.assertEqual(len(small_lists), expected_small_list_count)
+
+    def test_str_to_date(self):
+        ts_empty = None
+        ts_str = '2021-01-01T00:00:00.0Z'
+        ts_bytes = b'2021-01-01T00:00:00.0Z'
+        dt = datetime.datetime(2021, 1, 1, 0, 0, 0, 0)
+
+        self.assertIsNone(str_to_date(ts_empty))
+        self.assertEqual(str_to_date(ts_str), dt)
+        self.assertEqual(str_to_date(ts_bytes), dt)
