@@ -810,6 +810,7 @@ class Worker(object):
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat()
 
+        self.set_current_job_working_time(0)
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
         if ret_val == os.EX_OK:  # The process exited normally.
             return
