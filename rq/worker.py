@@ -753,8 +753,11 @@ class Worker(object):
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
     def get_heartbeat_ttl(self, job, elapsed_execution_time):
-        remaining_execution_time = job.timeout - elapsed_execution_time
-        return min(remaining_execution_time, self.job_monitoring_interval) + 60
+        if job.timeout and job.timeout > 0:
+            remaining_execution_time = job.timeout - elapsed_execution_time
+            return min(remaining_execution_time, self.job_monitoring_interval) + 60
+        else:
+            return self.job_monitoring_interval + 60
 
     def monitor_work_horse(self, job, queue):
         """The worker will monitor the work horse and make sure that it
