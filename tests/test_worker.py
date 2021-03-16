@@ -1371,18 +1371,20 @@ class TestRoundRobinWorker(RQTestCase):
         for i in range(5):
             for j in range(3):
                 qs[i].enqueue(say_pid,
-                              job_id='q%d_%d' % (i,j))
+                              job_id='q%d_%d' % (i, j))
 
         w = RoundRobinWorker(qs)
         w.work(burst=True)
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i,j))
-                start_times.append(('q%d_%d' % (i,j), job.started_at))
+                job = Job.fetch('q%d_%d' % (i, j))
+                start_times.append(('q%d_%d' % (i, j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected = ['q%d_%d' % (i,j) for j in range(3) for i in range(5)]
+        expected = ['q0_0', 'q1_0', 'q2_0', 'q3_0', 'q4_0',
+                    'q0_1', 'q1_1', 'q2_1', 'q3_1', 'q4_1',
+                    'q0_2', 'q1_2', 'q2_2', 'q3_2', 'q4_2']
         self.assertEqual(expected, sorted_ids)
 
 
@@ -1393,19 +1395,19 @@ class TestRandomWorker(RQTestCase):
         for i in range(5):
             for j in range(3):
                 qs[i].enqueue(say_pid,
-                              job_id='q%d_%d' % (i,j))
+                              job_id='q%d_%d' % (i, j))
 
         w = RandomWorker(qs)
         w.work(burst=True)
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i,j))
-                start_times.append(('q%d_%d' % (i,j), job.started_at))
+                job = Job.fetch('q%d_%d' % (i, j))
+                start_times.append(('q%d_%d' % (i, j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected_rr = ['q%d_%d' % (i,j) for j in range(3) for i in range(5)]
-        expected_ser = ['q%d_%d' % (i,j) for i in range(5) for j in range(3)]
+        expected_rr = ['q%d_%d' % (i, j) for j in range(3) for i in range(5)]
+        expected_ser = ['q%d_%d' % (i, j) for i in range(5) for j in range(3)]
         self.assertNotEqual(sorted_ids, expected_rr)
         self.assertNotEqual(sorted_ids, expected_ser)
         expected_rr.reverse()

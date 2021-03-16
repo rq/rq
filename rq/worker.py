@@ -16,6 +16,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
 from uuid import uuid4
+from random import shuffle
 
 try:
     from signal import SIGKILL
@@ -1172,7 +1173,7 @@ class RoundRobinWorker(Worker):
     """
     def reorder_queues(self, reference_queue):
         pos = self.queues.index(reference_queue)
-        self.queues=self.queues[pos+1:]+self.queues[:pos+1]
+        self.queues = self.queues[pos+1:] + self.queues[:pos+1]
 
 
 class RandomWorker(Worker):
@@ -1181,5 +1182,4 @@ class RandomWorker(Worker):
     """
 
     def reorder_queues(self, reference_queue):
-        from random import shuffle
         shuffle(self.queues)
