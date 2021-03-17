@@ -199,6 +199,7 @@ class Worker(object):
         self.name = name or uuid4().hex
         self.queues = queues
         self.validate_queues()
+        self._ordered_queues = self.queues[:]
         self._exc_handlers = []
 
         self.default_result_ttl = default_result_ttl
@@ -647,7 +648,7 @@ class Worker(object):
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                result = self.queue_class.dequeue_any(self.queues, timeout,
+                result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
@@ -1172,8 +1173,8 @@ class RoundRobinWorker(Worker):
     Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
     """
     def reorder_queues(self, reference_queue):
-        pos = self.queues.index(reference_queue)
-        self.queues = self.queues[pos+1:] + self.queues[:pos+1]
+        pos = self._ordered_queues.index(reference_queue)
+        self._ordered_queues = self._ordered_queues[pos+1:] + self._ordered_queues[:pos+1]
 
 
 class RandomWorker(Worker):
@@ -1182,4 +1183,4 @@ class RandomWorker(Worker):
     """
 
     def reorder_queues(self, reference_queue):
-        shuffle(self.queues)
+        shuffle(self._ordered_queues)
