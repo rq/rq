@@ -16,6 +16,7 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
 from uuid import uuid4
+from random import shuffle
 
 try:
     from signal import SIGKILL
@@ -198,6 +199,7 @@ class Worker(object):
         self.name = name or uuid4().hex
         self.queues = queues
         self.validate_queues()
+        self._ordered_queues = self.queues[:]
         self._exc_handlers = []
 
         self.default_result_ttl = default_result_ttl
@@ -525,6 +527,9 @@ class Worker(object):
             self.pubsub.unsubscribe()
             self.pubsub.close()
 
+    def reorder_queues(self, reference_queue):
+        pass
+
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
              log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
         """Starts the work loop.
@@ -581,6 +586,7 @@ class Worker(object):
                         break
 
                     job, queue = result
+                    self.reorder_queues(reference_queue=queue)
                     self.execute_job(job, queue)
                     self.heartbeat()
 
@@ -642,7 +648,7 @@ class Worker(object):
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                result = self.queue_class.dequeue_any(self.queues, timeout,
+                result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
@@ -1160,3 +1166,21 @@ class HerokuWorker(Worker):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         self.log.warning('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
+
+
+class RoundRobinWorker(Worker):
+    """
+    Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
+    """
+    def reorder_queues(self, reference_queue):
+        pos = self._ordered_queues.index(reference_queue)
+        self._ordered_queues = self._ordered_queues[pos+1:] + self._ordered_queues[:pos+1]
+
+
+class RandomWorker(Worker):
+    """
+    Modified version of Worker that dequeues jobs from the queues using a random strategy.
+    """
+
+    def reorder_queues(self, reference_queue):
+        shuffle(self._ordered_queues)
