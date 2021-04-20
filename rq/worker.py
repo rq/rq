@@ -16,13 +16,14 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
 from uuid import uuid4
+from random import shuffle
 
 try:
     from signal import SIGKILL
 except ImportError:
     from signal import SIGTERM as SIGKILL
 
-from redis import WatchError
+import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
@@ -106,6 +107,10 @@ class Worker(object):
     log_result_lifespan = True
     # `log_job_description` is used to toggle logging an entire jobs description.
     log_job_description = True
+    # factor to increase connection_wait_time incase of continous connection failures.
+    exponential_backoff_factor = 2.0
+    # Max Wait time (in seconds) after which exponential_backoff_factor wont be applicable.
+    max_connection_wait_time = 60.0
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
@@ -194,6 +199,7 @@ class Worker(object):
         self.name = name or uuid4().hex
         self.queues = queues
         self.validate_queues()
+        self._ordered_queues = self.queues[:]
         self._exc_handlers = []
 
         self.default_result_ttl = default_result_ttl
@@ -204,6 +210,8 @@ class Worker(object):
         self._is_horse = False
         self._horse_pid = 0
         self._stop_requested = False
+        self._stopped_job_id = None
+
         self.log = logger
         self.log_job_description = log_job_description
         self.last_cleaned_at = None
@@ -469,7 +477,6 @@ class Worker(object):
 
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
-
         before_state = None
         notified = False
 
@@ -519,6 +526,9 @@ class Worker(object):
             self.pubsub_thread.join()
             self.pubsub.unsubscribe()
             self.pubsub.close()
+
+    def reorder_queues(self, reference_queue):
+        pass
 
     def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
              log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
@@ -576,6 +586,7 @@ class Worker(object):
                         break
 
                     job, queue = result
+                    self.reorder_queues(reference_queue=queue)
                     self.execute_job(job, queue)
                     self.heartbeat()
 
@@ -628,15 +639,16 @@ class Worker(object):
         self.set_state(WorkerStatus.IDLE)
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
-
+        connection_wait_time = 1.0
         while True:
-            self.heartbeat()
-
-            if self.should_run_maintenance_tasks:
-                self.run_maintenance_tasks()
 
             try:
-                result = self.queue_class.dequeue_any(self.queues, timeout,
+                self.heartbeat()
+
+                if self.should_run_maintenance_tasks:
+                    self.run_maintenance_tasks()
+
+                result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
@@ -654,6 +666,14 @@ class Worker(object):
                 break
             except DequeueTimeout:
                 pass
+            except redis.exceptions.ConnectionError as conn_err:
+                self.log.error('Could not connect to Redis instance: %s Retrying in %d seconds...',
+                                conn_err, connection_wait_time)
+                time.sleep(connection_wait_time)
+                connection_wait_time *= self.exponential_backoff_factor
+                connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
+            else:
+                connection_wait_time = 1.0
 
         self.heartbeat()
         return result
@@ -785,8 +805,14 @@ class Worker(object):
         job_status = job.get_status()
         if job_status is None:  # Job completed and its ttl has expired
             return
-        if job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-
+        elif job_status == JobStatus.STOPPED:
+            # Work-horse killed deliberately
+            self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
+            self.handle_job_failure(
+                job, queue=queue,
+                exc_string="Job stopped by user, work-horse terminated."
+            )
+        elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             if not job.ended_at:
                 job.ended_at = utcnow()
 
@@ -799,7 +825,7 @@ class Worker(object):
             self.handle_job_failure(
                 job, queue=queue,
                 exc_string="Work-horse was terminated unexpectedly "
-                           "(waitpid returned %s)" % ret_val
+                        "(waitpid returned %s)" % ret_val
             )
 
     def execute_job(self, job, queue):
@@ -883,14 +909,19 @@ class Worker(object):
                     job_class=self.job_class
                 )
             job.worker_name = None
-            # Requeue/reschedule if retry is configured
-            if job.retries_left and job.retries_left > 0:
-                retry = True
-                retry_interval = job.get_retry_interval()
-                job.retries_left = job.retries_left - 1
+
+            # check whether a job was stopped intentionally and set the job
+            # status appropriately if it was this job.
+            job_is_stopped = self._stopped_job_id == job.id
+            retry = job.retries_left and job.retries_left > 0 and not job_is_stopped
+
+            if job_is_stopped:
+                job.set_status(JobStatus.STOPPED, pipeline=pipeline)
+                self._stopped_job_id = None
             else:
-                retry = False
-                job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                # Requeue/reschedule if retry is configured, otherwise
+                if not retry:
+                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
             started_job_registry.remove(job, pipeline=pipeline)
 
@@ -908,6 +939,8 @@ class Worker(object):
                 )
 
             if retry:
+                retry_interval = job.get_retry_interval()
+                job.retries_left = job.retries_left - 1
                 if retry_interval:
                     scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
                     job.set_status(JobStatus.SCHEDULED)
@@ -955,7 +988,7 @@ class Worker(object):
 
                     pipeline.execute()
                     break
-                except WatchError:
+                except redis.exceptions.WatchError:
                     continue
 
     def perform_job(self, job, queue, heartbeat_ttl=None):
@@ -1013,7 +1046,7 @@ class Worker(object):
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = ''.join(traceback.format_exception(*exc_info))
-        self.log.error(exc_string, exc_info=True, extra={
+        self.log.error(exc_string, extra={
             'func': job.func_name,
             'arguments': job.args,
             'kwargs': job.kwargs,
@@ -1133,3 +1166,21 @@ class HerokuWorker(Worker):
         info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
         self.log.warning('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
+
+
+class RoundRobinWorker(Worker):
+    """
+    Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
+    """
+    def reorder_queues(self, reference_queue):
+        pos = self._ordered_queues.index(reference_queue)
+        self._ordered_queues = self._ordered_queues[pos+1:] + self._ordered_queues[:pos+1]
+
+
+class RandomWorker(Worker):
+    """
+    Modified version of Worker that dequeues jobs from the queues using a random strategy.
+    """
+
+    def reorder_queues(self, reference_queue):
+        shuffle(self._ordered_queues)

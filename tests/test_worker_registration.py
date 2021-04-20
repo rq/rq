@@ -1,4 +1,6 @@
+from rq.utils import ceildiv
 from tests import RQTestCase
+from mock.mock import patch
 
 from rq import Queue, Worker
 from rq.worker_registration import (clean_worker_registry, get_keys, register,
@@ -87,3 +89,30 @@ class TestWorkerRegistry(RQTestCase):
         clean_worker_registry(queue)
         self.assertFalse(redis.sismember(worker.redis_workers_keys, worker.key))
         self.assertFalse(redis.sismember(REDIS_WORKER_KEYS, worker.key))
+
+    def test_clean_large_registry(self):
+        """
+        clean_registry() splits invalid_keys into multiple lists for set removal to avoid sending more than redis can
+        receive
+        """
+        MAX_WORKERS = 41
+        MAX_KEYS = 37
+        # srem is called twice per invalid key batch: once for WORKERS_BY_QUEUE_KEY; once for REDIS_WORKER_KEYS
+        SREM_CALL_COUNT = 2
+
+        queue = Queue(name='foo')
+        for i in range(MAX_WORKERS):
+            worker = Worker([queue])
+            register(worker)
+
+        with patch('rq.worker_registration.MAX_KEYS', MAX_KEYS), \
+             patch.object(queue.connection, 'pipeline', wraps=queue.connection.pipeline) as pipeline_mock:
+            # clean_worker_registry creates a pipeline with a context manager. Configure the mock using the context
+            # manager entry method __enter__
+            pipeline_mock.return_value.__enter__.return_value.srem.return_value = None
+            pipeline_mock.return_value.__enter__.return_value.execute.return_value = [0] * MAX_WORKERS
+
+            clean_worker_registry(queue)
+
+            expected_call_count = (ceildiv(MAX_WORKERS, MAX_KEYS)) * SREM_CALL_COUNT
+            self.assertEqual(pipeline_mock.return_value.__enter__.return_value.srem.call_count, expected_call_count)

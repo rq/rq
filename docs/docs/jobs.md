@@ -12,7 +12,7 @@ jobs.
 
 ### Job Creation
 
-When you enqueue a function, a job will be returned.  You may then access the 
+When you enqueue a function, a job will be returned.  You may then access the
 id property, which can later be used to retrieve the job.
 
 ```python
@@ -50,8 +50,8 @@ job = Job.create(count_words_at url, 'http://nvie.com', id='my_job_id')
 The keyword arguments accepted by `create()` are:
 
 * `timeout` specifies the maximum runtime of the job before it's interrupted
-  and marked as `failed`. Its default unit is seconds and it can be an integer 
-  or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can 
+  and marked as `failed`. Its default unit is seconds and it can be an integer
+  or a string representing an integer(e.g.  `2`, `'2'`). Furthermore, it can
   be a string with specify unit including hour, minute, second
   (e.g. `'1h'`, `'3m'`, `'5s'`).
 * `result_ttl` specifies how long (in seconds) successful jobs and their
@@ -70,7 +70,7 @@ The keyword arguments accepted by `create()` are:
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
-  
+
 In the last case, if you want to pass `description` and `ttl` keyword arguments
 to your job and not to RQ's enqueue function, this is what you do:
 
@@ -99,7 +99,7 @@ print('Status: %s' % job.get_status())
 ```
 
 Some interesting job attributes include:
-* `job.get_status()` Possible values are `queued`, `started`, `deferred`, `finished`, and `failed`
+* `job.get_status()` Possible values are `queued`, `started`, `deferred`, `finished`, `stopped`, and `failed`
 * `job.origin` queue name of this job
 * `job.func_name`
 * `job.args` arguments passed to the underlying job function
@@ -136,6 +136,8 @@ redis = Redis()
 send_stop_job_command(redis, job_id)
 ```
 
+Unlike failed jobs, stopped jobs will *not* be automatically retried if retry is configured. Subclasses of `Worker` which override `handle_job_failure()` should likewise take care to handle jobs with a `stopped` status appropriately.
+
 ## Job / Queue Creation with Custom Serializer
 
 When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
@@ -152,8 +154,8 @@ queue = Queue(connection=connection, serializer=JSONSerializer)
 ```
 
 ## Accessing The "current" Job from within the job function
- 
-Since job functions are regular Python functions, you must retrieve the 
+
+Since job functions are regular Python functions, you must retrieve the
 job in order to inspect or update the job's attributes.  To do this from within
 the function, you can use:
 
@@ -193,19 +195,19 @@ def add(x, y):
 
 ## Time to live for job in queue
 
-A job has two TTLs, one for the job result, `result_ttl`, and one for the job itself, `ttl`.  
+A job has two TTLs, one for the job result, `result_ttl`, and one for the job itself, `ttl`.
 The latter is used if you have a job that shouldn't be executed after a certain amount of time.
 
 ```python
 # When creating the job:
-job = Job.create(func=say_hello, 
+job = Job.create(func=say_hello,
                  result_ttl=600,  # how long (in seconds) to keep the job (if successful) and its results
                  ttl=43,  # maximum queued time (in seconds) of the job before it's discarded.
                 )
 
 # or when queueing a new job:
-job = q.enqueue(count_words_at_url, 
-                'http://nvie.com', 
+job = q.enqueue(count_words_at_url,
+                'http://nvie.com',
                 result_ttl=600,  # how long to keep the job (if successful) and its results
                 ttl=43  # maximum queued time
                )

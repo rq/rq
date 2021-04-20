@@ -18,6 +18,7 @@ from time import sleep
 
 from unittest import skipIf
 
+import redis.exceptions
 import pytest
 import mock
 from mock import Mock
@@ -37,7 +38,7 @@ from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegist
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
-from rq.worker import HerokuWorker, WorkerStatus
+from rq.worker import HerokuWorker, WorkerStatus, RoundRobinWorker, RandomWorker
 from rq.serializers import JSONSerializer
 
 class CustomJob(Job):
@@ -282,6 +283,19 @@ class TestWorker(RQTestCase):
         # for compatibility reasons
         self.testconn.hdel(w.key, 'birth')
         w.refresh()
+
+    @slow
+    def test_heartbeat_survives_lost_connection(self):
+        with mock.patch.object(Worker, 'heartbeat') as mocked:
+            # None -> Heartbeat is first called before the job loop
+            mocked.side_effect = [None, redis.exceptions.ConnectionError()]
+            q = Queue()
+            w = Worker([q])
+            w.work(burst=True)
+            # First call is prior to job loop, second raises the error,
+            # third is successful, after "recovery"
+            assert mocked.call_count == 3
+
 
     @slow
     def test_heartbeat_busy(self):
@@ -1348,3 +1362,58 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
     def test_handle_exception_handles_non_ascii_in_exception_message(self):
         """worker.handle_exception doesn't crash on non-ascii in exception message."""
         self.worker.handle_exception(Mock(), *self.exc_info)
+
+
+class TestRoundRobinWorker(RQTestCase):
+    def test_round_robin(self):
+        qs = [Queue('q%d' % i) for i in range(5)]
+
+        for i in range(5):
+            for j in range(3):
+                qs[i].enqueue(say_pid,
+                              job_id='q%d_%d' % (i, j))
+
+        w = RoundRobinWorker(qs)
+        w.work(burst=True)
+        start_times = []
+        for i in range(5):
+            for j in range(3):
+                job = Job.fetch('q%d_%d' % (i, j))
+                start_times.append(('q%d_%d' % (i, j), job.started_at))
+        sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
+        sorted_ids = [tup[0] for tup in sorted_by_time]
+        expected = ['q0_0', 'q1_0', 'q2_0', 'q3_0', 'q4_0',
+                    'q0_1', 'q1_1', 'q2_1', 'q3_1', 'q4_1',
+                    'q0_2', 'q1_2', 'q2_2', 'q3_2', 'q4_2']
+        self.assertEqual(expected, sorted_ids)
+
+
+class TestRandomWorker(RQTestCase):
+    def test_random_worker(self):
+        qs = [Queue('q%d' % i) for i in range(5)]
+
+        for i in range(5):
+            for j in range(3):
+                qs[i].enqueue(say_pid,
+                              job_id='q%d_%d' % (i, j))
+
+        w = RandomWorker(qs)
+        w.work(burst=True)
+        start_times = []
+        for i in range(5):
+            for j in range(3):
+                job = Job.fetch('q%d_%d' % (i, j))
+                start_times.append(('q%d_%d' % (i, j), job.started_at))
+        sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
+        sorted_ids = [tup[0] for tup in sorted_by_time]
+        expected_rr = ['q%d_%d' % (i, j) for j in range(3) for i in range(5)]
+        expected_ser = ['q%d_%d' % (i, j) for i in range(5) for j in range(3)]
+        self.assertNotEqual(sorted_ids, expected_rr)
+        self.assertNotEqual(sorted_ids, expected_ser)
+        expected_rr.reverse()
+        expected_ser.reverse()
+        self.assertNotEqual(sorted_ids, expected_rr)
+        self.assertNotEqual(sorted_ids, expected_ser)
+        sorted_ids.sort()
+        expected_ser.sort()
+        self.assertEqual(sorted_ids, expected_ser)

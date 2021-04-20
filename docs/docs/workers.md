@@ -70,6 +70,9 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
 
+_New in version 1.8.0._
+* `--serializer`: Path to serializer object (e.g "rq.serializers.DefaultSerializer" or "rq.serializers.JSONSerializer")
+
 ## Inside the worker
 
 ### The Worker Lifecycle
@@ -183,8 +186,6 @@ Aside from `worker.name`, worker also have the following properties:
 * `failed_job_count` - number of failed jobs processed
 * `total_working_time` - amount of time spent executing jobs, in seconds
 
-_New in version 0.10.0._
-
 If you only want to know the number of workers for monitoring purposes,
 `Worker.count()` is much more performant.
 
@@ -205,31 +206,30 @@ workers = Worker.all(queue=queue)
 ## Worker with Custom Serializer
 
 When creating a worker, you can pass in a custom serializer that will be implicitly passed to the queue.
-Serializers used should have at least `loads` and `dumps` method.
+Serializers used should have at least `loads` and `dumps` method. An example of creating a custom serializer 
+class can be found in serializers.py (rq.serializers.JSONSerializer).
 The default serializer used is `pickle`
 
 ```python
-import json
 from rq import Worker
+from rq.serialzers import JSONSerializer
 
-job = Worker('foo', serializer=json)
+job = Worker('foo', serializer=JSONSerializer)
 ```
 
 or when creating from a queue
 
 ```python
-import json
 from rq import Queue, Worker
+from rq.serialzers import JSONSerializer
 
-w = Worker(Queue('foo'), serializer=json)
+w = Queue('foo', serializer=JSONSerializer)
 ```
 
 Queues will now use custom serializer
 
 
 ### Worker Statistics
-
-_New in version 0.9.0._
 
 If you want to check the utilization of your queues, `Worker` instances
 store a few useful information:
@@ -308,12 +308,28 @@ more common requests so far are:
 2. Using a job execution model that does not require `os.fork`.
 3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
+4. Using a custom strategy for dequeuing jobs from different queues. 
+   See [link](#Round-Robin-and-Random-strategies-for-dequeuing-jobs-from-queues).
 
 You can use the `-w` option to specify a different worker class to use:
 
 ```console
 $ rq worker -w 'path.to.GeventWorker'
 ```
+
+
+## Round Robin and Random strategies for dequeuing jobs from queues
+
+In certain circumstances it can be useful that a when a worker is listening to multiple queues, 
+say `q1`,`q2`,`q3`, the jobs are dequeued using a Round Robin strategy. That is, the 1st
+dequeued job is taken from `q1`, the 2nd from `q2`, the 3rd from `q3`, the 4th
+from `q1`, the 5th from `q2` and so on. The custom worker class `rq.worker.RoundRobinWorker`
+implements this strategy. 
+
+In some other circumstances, when a worker is listening to multiple queues, it can be useful
+to pull jobs from the different queues randomly. The custom class `rq.worker.RandomWorker`
+implements this strategy. In fact, whenever a job is pulled from any queue, the list of queues is
+shuffled, so that no queue has more priority than the other ones.
 
 
 ## Custom Job and Queue Classes

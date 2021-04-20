@@ -1,3 +1,13 @@
+### RQ 1.8.0 (2021-03-31)
+* You can now declare multiple job dependencies. Thanks @skieffer and @thomasmatecki for laying the groundwork for multi dependency support in RQ.
+* Added `RoundRobinWorker` and `RandomWorker` classes to control how jobs are dequeued from multiple queues. Thanks @bielcardona!
+* Added `--serializer` option to `rq worker` CLI. Thanks @f0cker!
+* Added support for running asyncio tasks. Thanks @MyrikLD!
+* Added a new `STOPPED` job status so that you can differentiate between failed and manually stopped jobs. Thanks @dralley!
+* Fixed a serialization bug when used with job dependency feature. Thanks @jtfidje!
+* `clean_worker_registry()` now works in batches of 1,000 jobs to prevent modifying too many keys at once. Thanks @AxeOfMen and @TheSneak!
+* Workers will now wait and try to reconnect in case of Redis connection errors. Thanks @Asrst! 
+
 ### RQ 1.7.0 (2020-11-29)
 * Added `job.worker_name` attribute that tells you which worker is executing a job. Thanks @selwin!
 * Added `send_stop_job_command()` that tells a worker to stop executing a job. Thanks @selwin!
