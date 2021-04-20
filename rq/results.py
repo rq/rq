@@ -6,7 +6,7 @@ from enum import Enum
 
 from .compat import as_text
 from .serializers import resolve_serializer
-from .utils import now
+from .utils import current_timestamp, now
 
 
 def get_key(job_id):
@@ -41,25 +41,32 @@ class Result(object):
 
     @classmethod
     def get_latest(cls, job_id, connection):
-        return None
+        """Returns the latest result for given job_id"""
+        result = connection.zrange(cls.get_key(job_id), 0, 0, desc=True, withscores=True)
+        return result
 
     @classmethod
     def get_key(cls, job_id):
         return 'rq:results:%s' % job_id
 
     def save(self, job_id, timeout, connection):
-        result = connection.zadd(self.get_key(job_id), calendar.timegm(self.created_at.utctimetuple()),
-                                 self.serialize())
-        connection.expire(timeout)
+        key = self.get_key(job_id)
+        result = connection.zadd(key, {self.serialize(): calendar.timegm(self.created_at.utctimetuple())})
+        if timeout is not None:
+            connection.expire(key, timeout)
         return result
 
     def serialize(self):
         data = {
             'type': self.type.value
         }
+        print('###Return value', self.return_value)
+        serialized = self.serializer.dumps((self.return_value))
+        print('###Serialized return value', serialized)
+        # compressed = print(str(zlib.compress(serialized))
         if self.exc_string is not None:
             data['exc_string'] = as_text(zlib.compress(self.exc_string))
         if self.return_value is not None:
-            data['return_value'] = as_text(zlib.compress(self.serializer.dumps(self.return_value)))
-        print(data['return_value'])
+            data['return_value'] = str(serialized)
+        # print(data['return_value']).decode("utf-8")
         return json.dumps(data)

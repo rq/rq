@@ -507,7 +507,7 @@ class Job(object):
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
-        self._dependency_ids = ( json.loads(dep_ids.decode()) if dep_ids
+        self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [] )
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
