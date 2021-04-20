@@ -1046,7 +1046,7 @@ class Worker(object):
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = ''.join(traceback.format_exception(*exc_info))
-        self.log.error(exc_string, exc_info=True, extra={
+        self.log.error(exc_string, extra={
             'func': job.func_name,
             'arguments': job.args,
             'kwargs': job.kwargs,
