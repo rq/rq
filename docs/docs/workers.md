@@ -327,7 +327,7 @@ from `q1`, the 5th from `q2` and so on. The custom worker class `rq.worker.Round
 implements this strategy. 
 
 In some other circumstances, when a worker is listening to multiple queues, it can be useful
-to pull jobs from the different queues randomly. The custom class `rq.worker.RoundRobinWorker`
+to pull jobs from the different queues randomly. The custom class `rq.worker.RandomWorker`
 implements this strategy. In fact, whenever a job is pulled from any queue, the list of queues is
 shuffled, so that no queue has more priority than the other ones.
 
