@@ -316,7 +316,10 @@ class TestWorker(RQTestCase):
         p = Process(target=kill_worker, args=(os.getpid(), False, 5))
 
         p.start()
-        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
+        queue.enqueue_at(
+            datetime(2019, 1, 1, tzinfo=timezone.utc), 
+            say_hello, meta={'foo': 'bar'}
+        )
         worker.work(burst=False, with_scheduler=True)
         p.join(1)
         self.assertIsNotNone(worker.scheduler)
