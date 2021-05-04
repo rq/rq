@@ -143,6 +143,12 @@ class UnicodeStringObject(object):
         return u'é'
 
 
+class ClassWithAStaticMethod(object):
+    @staticmethod
+    def static_method():
+        return u"I'm a static method"
+
+
 with Connection():
     @job(queue='default')
     def decorated_job(x, y):
