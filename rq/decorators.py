@@ -11,7 +11,7 @@ from .queue import Queue
 from .utils import backend_class
 
 
-class job(object):  # noqa
+class job:  # noqa
     queue_class = Queue
 
     def __init__(self, queue, connection=None, timeout=None,

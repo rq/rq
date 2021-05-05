@@ -11,6 +11,7 @@ import zlib
 import asyncio
 from collections.abc import Iterable
 from distutils.version import StrictVersion
+from enum import Enum
 from functools import partial
 from uuid import uuid4
 
@@ -19,7 +20,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
-from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_date,
+from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow, ensure_list)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
@@ -27,16 +28,16 @@ from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_d
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
-JobStatus = enum(
-    'JobStatus',
-    QUEUED='queued',
-    FINISHED='finished',
-    FAILED='failed',
-    STARTED='started',
-    DEFERRED='deferred',
-    SCHEDULED='scheduled',
-    STOPPED='stopped',
-)
+
+class JobStatus(str, Enum):
+    QUEUED = 'queued',
+    FINISHED = 'finished',
+    FAILED = 'failed',
+    STARTED = 'started',
+    DEFERRED = 'deferred',
+    SCHEDULED = 'scheduled',
+    STOPPED = 'stopped',
+
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -71,7 +72,7 @@ def requeue_job(job_id, connection):
     return job.requeue()
 
 
-class Job(object):
+class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
     redis_job_namespace_prefix = 'rq:job:'
@@ -876,7 +877,7 @@ class Job(object):
 _job_stack = LocalStack()
 
 
-class Retry(object):
+class Retry:
     def __init__(self, max, interval=0):
         """`interval` can be a positive number or a list of ints"""
         super().__init__()
