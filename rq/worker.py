@@ -89,9 +89,9 @@ def signal_name(signum):
 
 
 class WorkerStatus(str, Enum):
-    STARTED = 'started',
-    SUSPENDED = 'suspended',
-    BUSY = 'busy',
+    STARTED = 'started'
+    SUSPENDED = 'suspended'
+    BUSY = 'busy'
     IDLE = 'idle'
 
 
