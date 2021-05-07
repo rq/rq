@@ -121,7 +121,7 @@ def echo(*args, **kwargs):
     return args, kwargs
 
 
-class Number(object):
+class Number:
     def __init__(self, value):
         self.value = value
 
@@ -133,12 +133,12 @@ class Number(object):
         return self.value / y
 
 
-class CallableObject(object):
+class CallableObject:
     def __call__(self):
         return u"I'm callable"
 
 
-class UnicodeStringObject(object):
+class UnicodeStringObject:
     def __repr__(self):
         return u'é'
 
@@ -203,7 +203,7 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
     w.main_work_horse(None, None)
 
 
-class DummyQueue(object):
+class DummyQueue:
     pass
 
 
@@ -217,7 +217,7 @@ def kill_worker(pid, double_kill, interval=0.5):
         os.kill(pid, signal.SIGTERM)
 
 
-class Serializer(object):
+class Serializer:
     def loads(self): pass
 
     def dumps(self): pass

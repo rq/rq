@@ -198,7 +198,7 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
-class CliConfig(object):
+class CliConfig:
     """A helper class to be used with click commands, to handle shared options"""
     def __init__(self, url=None, config=None, worker_class=DEFAULT_WORKER_CLASS,
                  job_class=DEFAULT_JOB_CLASS, queue_class=DEFAULT_QUEUE_CLASS,
