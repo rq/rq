@@ -179,9 +179,12 @@ class Worker:
         if prepare_for_work:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
+            client_id = connection.client_id()
+            self.address = [client['addr'] for client in connection.client_list() if int(client['id']) == client_id][0]
         else:
             self.hostname = None
             self.pid = None
+            self.address = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
@@ -301,6 +304,7 @@ class Worker:
                 'queues': queues,
                 'pid': self.pid,
                 'hostname': self.hostname,
+                'address': self.address,
                 'version': self.version,
                 'python_version': self.python_version,
             }
@@ -705,12 +709,14 @@ class Worker:
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
             'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'current_job_working_time', 'hostname', 'pid', 'version', 'python_version',
+            'total_working_time', 'current_job_working_time', 'hostname', 'address', 'pid', 'version', 'python_version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
-         successful_job_count, total_working_time, current_job_working_time, hostname, pid, version, python_version) = data
+         successful_job_count, total_working_time, current_job_working_time,
+         hostname, address, pid, version, python_version) = data
         queues = as_text(queues)
         self.hostname = as_text(hostname)
+        self.address = as_text(address)
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
         self.python_version = as_text(python_version)
