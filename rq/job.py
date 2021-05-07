@@ -11,7 +11,6 @@ import zlib
 import asyncio
 from collections.abc import Iterable
 from distutils.version import StrictVersion
-from enum import Enum
 from functools import partial
 from uuid import uuid4
 
@@ -20,7 +19,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
-from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
+from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow, ensure_list)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
@@ -28,16 +27,16 @@ from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
-
-class JobStatus(str, Enum):
-    QUEUED = 'queued'
-    FINISHED = 'finished'
-    FAILED = 'failed'
-    STARTED = 'started'
-    DEFERRED = 'deferred'
-    SCHEDULED = 'scheduled'
-    STOPPED = 'stopped'
-
+JobStatus = enum(
+    'JobStatus',
+    QUEUED='queued',
+    FINISHED='finished',
+    FAILED='failed',
+    STARTED='started',
+    DEFERRED='deferred',
+    SCHEDULED='scheduled',
+    STOPPED='stopped',
+)
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -72,10 +71,11 @@ def requeue_job(job_id, connection):
     return job.requeue()
 
 
-class Job:
+class Job(object):
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
     redis_job_namespace_prefix = 'rq:job:'
+    connection_class = None
 
     # Job construction
     @classmethod
@@ -109,7 +109,7 @@ class Job:
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '{0}.{1}'.format(func.__module__, func.__qualname__)
+            job._func_name = '{0}.{1}'.format(func.__module__, func.__name__)
         elif isinstance(func, string_types):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
@@ -334,6 +334,7 @@ class Job:
 
     def __init__(self, id=None, connection=None, serializer=None):
         self.connection = resolve_connection(connection)
+        self.connection_class = type(connection).__name__
         self._id = id
         self.created_at = utcnow()
         self._data = UNEVALUATED
@@ -510,7 +511,7 @@ class Job:
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = ( json.loads(dep_ids.decode()) if dep_ids
-                                else [dep_id.decode()] if dep_id else [] )
+                                 else [dep_id.decode()] if dep_id else [] )
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
@@ -614,7 +615,7 @@ class Job:
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
+            self.redis_server_version = get_version(self.connection, self.connection_type)
 
         return self.redis_server_version
 
@@ -877,7 +878,7 @@ class Job:
 _job_stack = LocalStack()
 
 
-class Retry:
+class Retry(object):
     def __init__(self, max, interval=0):
         """`interval` can be a positive number or a list of ints"""
         super().__init__()

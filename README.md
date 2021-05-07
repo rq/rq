@@ -43,9 +43,16 @@ Then, create an RQ queue:
 
 ```python
 from redis import Redis
+"""optional for cluster (not sentinel)"""
+from rediscluster import RedisCluster
 from rq import Queue
 
 queue = Queue(connection=Redis())
+
+"""or for RedisCluster"""
+
+startup_nodes = [{"host": "redis", "port": 7000, "db": 0}]
+queue = Queue(connection=RedisCluster(startup_nodes=startup_nodes, decode_responses=True, readonly_mode=False))
 ```
 
 And enqueue the function call:

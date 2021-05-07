@@ -24,11 +24,12 @@ def compact(lst):
 
 
 @total_ordering
-class Queue:
+class Queue(object):
     job_class = Job
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'
     redis_queues_keys = 'rq:queues'
+    connection_class = None
 
     @classmethod
     def all(cls, connection=None, job_class=None, serializer=None):
@@ -59,6 +60,7 @@ class Queue:
     def __init__(self, name='default', default_timeout=None, connection=None,
                  is_async=True, job_class=None, serializer=None, **kwargs):
         self.connection = resolve_connection(connection)
+        self.connection_class = type(connection).__name__
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
@@ -93,7 +95,7 @@ class Queue:
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
+            self.redis_server_version = get_version(self.connection, self.connection_class)
         return self.redis_server_version
 
     @property

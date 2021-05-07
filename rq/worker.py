@@ -15,7 +15,6 @@ import warnings
 
 from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
-from enum import Enum
 from uuid import uuid4
 from random import shuffle
 
@@ -42,7 +41,7 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, get_version,
+from .utils import (backend_class, ensure_list, enum, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -88,14 +87,16 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
 
 
-class WorkerStatus(str, Enum):
-    STARTED = 'started'
-    SUSPENDED = 'suspended'
-    BUSY = 'busy'
-    IDLE = 'idle'
+WorkerStatus = enum(
+    'WorkerStatus',
+    STARTED='started',
+    SUSPENDED='suspended',
+    BUSY='busy',
+    IDLE='idle'
+)
 
 
-class Worker:
+class Worker(object):
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
@@ -110,6 +111,7 @@ class Worker:
     exponential_backoff_factor = 2.0
     # Max Wait time (in seconds) after which exponential_backoff_factor wont be applicable.
     max_connection_wait_time = 60.0
+    connection_class = None
 
     @classmethod
     def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
@@ -173,6 +175,7 @@ class Worker:
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
+        self.connection_class = type(connection).__name__
 
         self.redis_server_version = None
 
@@ -234,7 +237,7 @@ class Worker:
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
+            self.redis_server_version = get_version(self.connection, self.connection_type)
         return self.redis_server_version
 
     def validate_queues(self):
