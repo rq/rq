@@ -131,7 +131,7 @@ class ConvertingTuple(tuple):
                 result.key = key
         return result
 
-class BaseConfigurator(object):
+class BaseConfigurator:
     """
     The configurator base class which defines some useful defaults.
     """

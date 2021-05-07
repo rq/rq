@@ -772,6 +772,14 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(job.get_call_string())
         job.perform()
 
+    def test_create_job_from_static_method(self):
+        """test creating jobs with static method"""
+        queue = Queue(connection=self.testconn)
+
+        job = queue.enqueue(fixtures.ClassWithAStaticMethod.static_method)
+        self.assertIsNotNone(job.get_call_string())
+        job.perform()
+
     def test_create_job_with_ttl_should_have_ttl_after_enqueued(self):
         """test creating jobs with ttl and checks if get_jobs returns it properly [issue502]"""
         queue = Queue(connection=self.testconn)

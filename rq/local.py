@@ -47,7 +47,7 @@ def release_local(local):
     local.__release_local__()
 
 
-class Local(object):
+class Local:
     __slots__ = ('__storage__', '__ident_func__')
 
     def __init__(self):
@@ -85,7 +85,7 @@ class Local(object):
             raise AttributeError(name)
 
 
-class LocalStack(object):
+class LocalStack:
     """This class works similar to a :class:`Local` but keeps a stack
     of objects instead.  This is best explained with an example::
 
@@ -172,7 +172,7 @@ class LocalStack(object):
         return len(stack)
 
 
-class LocalManager(object):
+class LocalManager:
     """Local objects cannot manage themselves. For that you need a local
     manager.  You can pass a local manager multiple locals or add them later
     by appending them to `manager.locals`.  Everytime the manager cleans up
@@ -230,7 +230,7 @@ class LocalManager(object):
         )
 
 
-class LocalProxy(object):
+class LocalProxy:
     """Acts as a proxy for a werkzeug local.  Forwards all operations to
     a proxied object.  The only operations not supported for forwarding
     are right handed operands and any kind of assignment.

@@ -11,7 +11,7 @@ from .queue import Queue
 from .utils import backend_class, current_timestamp
 
 
-class BaseRegistry(object):
+class BaseRegistry:
     """
     Base implementation of a job registry, implemented in Redis sorted set.
     Each job is stored as a key in the registry, scored by expiration time

@@ -4,6 +4,7 @@ import signal
 import time
 import traceback
 from datetime import datetime
+from enum import Enum
 from multiprocessing import Process
 
 from redis import SSLConnection, UnixDomainSocketConnection
@@ -14,23 +15,24 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp, enum
+from .utils import current_timestamp
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
 
 
-class RQScheduler(object):
+class SchedulerStatus(str, Enum):
+    STARTED = 'started'
+    WORKING = 'working'
+    STOPPED = 'stopped'
+
+
+class RQScheduler:
     # STARTED: scheduler has been started but sleeping
     # WORKING: scheduler is in the midst of scheduling jobs
     # STOPPED: scheduler is in stopped condition
 
-    Status = enum(
-        'SchedulerStatus',
-        STARTED='started',
-        WORKING='working',
-        STOPPED='stopped'
-    )
+    Status = SchedulerStatus
 
     def __init__(self, queues, connection, interval=1, logging_level=logging.INFO,
                  date_format=DEFAULT_LOGGING_DATE_FORMAT,

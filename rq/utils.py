@@ -24,7 +24,7 @@ from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
 
 
-class _Colorizer(object):
+class _Colorizer:
     def __init__(self):
         esc = "\x1b["
 
@@ -125,9 +125,37 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
 def import_attribute(name):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
-    module_name, attribute = name.rsplit('.', 1)
-    module = importlib.import_module(module_name)
-    return getattr(module, attribute)
+    name_bits = name.split('.')
+    module_name_bits, attribute_bits = name_bits[:-1], [name_bits[-1]]
+    module = None
+    # When the attribute we look for is a staticmethod, module name in its
+    # dotted path is not the last-before-end word
+    # E.g.: package_a.package_b.module_a.ClassA.my_static_method
+    # Thus we remove the bits from the end of the name until we can import it
+    while len(module_name_bits):
+        try:
+            module_name = '.'.join(module_name_bits)
+            module = importlib.import_module(module_name)
+            break
+        except ModuleNotFoundError:
+            attribute_bits.insert(0, module_name_bits.pop())
+
+    if module is None:
+        raise ValueError(f'Invalid attribute name: {name}')
+
+    attribute_name = '.'.join(attribute_bits)
+    if hasattr(module, attribute_name):
+        return getattr(module, attribute_name)
+
+    # staticmethods
+    attribute_name = attribute_bits.pop()
+    attribute_owner_name = '.'.join(attribute_bits)
+    attribute_owner = getattr(module, attribute_owner_name)
+
+    if not hasattr(attribute_owner, attribute_name):
+        raise ValueError(f'Invalid attribute name: {name}')
+
+    return getattr(attribute_owner, attribute_name)
 
 
 def utcnow():
@@ -204,16 +232,6 @@ def ensure_list(obj):
 def current_timestamp():
     """Returns current UTC timestamp"""
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
-
-
-def enum(name, *sequential, **named):
-    values = dict(zip(sequential, range(len(sequential))), **named)
-
-    # NOTE: Yes, we *really* want to cast using str() here.
-    # On Python 2 type() requires a byte string (which is str() on Python 2).
-    # On Python 3 it does not matter, so we'll use str(), which acts as
-    # a no-op.
-    return type(str(name), (), values)
 
 
 def backend_class(holder, default_name, override=None):
