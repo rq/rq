@@ -15,6 +15,7 @@ import warnings
 
 from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
+from enum import Enum
 from uuid import uuid4
 from random import shuffle
 
@@ -41,7 +42,7 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, enum, get_version,
+from .utils import (backend_class, ensure_list, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -87,16 +88,14 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
 
 
-WorkerStatus = enum(
-    'WorkerStatus',
-    STARTED='started',
-    SUSPENDED='suspended',
-    BUSY='busy',
-    IDLE='idle'
-)
+class WorkerStatus(str, Enum):
+    STARTED = 'started'
+    SUSPENDED = 'suspended'
+    BUSY = 'busy'
+    IDLE = 'idle'
 
 
-class Worker(object):
+class Worker:
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
