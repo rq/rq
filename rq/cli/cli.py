@@ -21,7 +21,8 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
                          DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL,
                          DEFAULT_JOB_MONITORING_INTERVAL,
-                         DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
+                         DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT,
+                         DEFAULT_SERIALIZER_CLASS)
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
 from rq.utils import import_attribute
@@ -66,7 +67,7 @@ shared_options = [
                  help='Specify the import path.',
                  multiple=True),
     click.option('--serializer', '-S',
-                 default=DefaultSerializer,
+                 default=DEFAULT_SERIALIZER_CLASS,
                  help='Path to serializer, defaults to rq.serializers.DefaultSerializer')
 ]
 
