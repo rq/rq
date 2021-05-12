@@ -26,7 +26,6 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
 from rq.utils import import_attribute
-from rq.serializers import DefaultSerializer
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
 from rq.worker_registration import clean_worker_registry
