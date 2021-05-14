@@ -176,16 +176,6 @@ class Worker:
 
         self.redis_server_version = None
 
-        if prepare_for_work:
-            self.hostname = socket.gethostname()
-            self.pid = os.getpid()
-            client_id = connection.client_id()
-            self.address = [client['addr'] for client in connection.client_list() if int(client['id']) == client_id][0]
-        else:
-            self.hostname = None
-            self.pid = None
-            self.address = None
-
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
         self.version = VERSION
@@ -227,6 +217,16 @@ class Worker:
         self.pubsub_thread = None
 
         self.disable_default_exception_handler = disable_default_exception_handler
+
+        if prepare_for_work:
+            self.hostname = socket.gethostname()
+            self.pid = os.getpid()
+            connection.client_setname(self.name)
+            self.address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+        else:
+            self.hostname = None
+            self.pid = None
+            self.address = None
 
         if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
