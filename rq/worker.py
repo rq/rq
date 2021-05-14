@@ -557,7 +557,7 @@ class Worker:
         if with_scheduler:
             self.scheduler = RQScheduler(
                 self.queues, connection=self.connection, logging_level=logging_level,
-                date_format=date_format, log_format=log_format)
+                date_format=date_format, log_format=log_format, serializer=self.serializer)
             self.scheduler.acquire_locks()
             # If lock is acquired, start scheduler
             if self.scheduler.acquired_locks:
