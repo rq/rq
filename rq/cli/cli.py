@@ -12,10 +12,10 @@ import sys
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, __version__ as version
+from rq import Connection, Retry, __version__ as version
 from rq.cli.helpers import (read_config_file, refresh,
                             setup_loghandlers_from_args,
-                            show_both, show_queues, show_workers, CliConfig)
+                            show_both, show_queues, show_workers, CliConfig, job_func)
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
@@ -303,3 +303,65 @@ def resume(cli_config, **options):
     """Resumes processing of queues, that were suspended with `rq suspend`"""
     connection_resume(cli_config.connection)
     click.echo("Resuming workers.")
+
+@main.command(context_settings={'ignore_unknown_options': True})
+@click.option('--queue','-q', help='The name of the queue.', default='default')
+@click.option('--timeout', help='Specifies the maximum runtime of the job before it’s interrupted and marked as failed.')
+@click.option('--result_ttl', help='Specifies how long successful jobs and their results are kept.')
+@click.option('--ttl', help='Specifies the maximum queued time of the job before it’s discarded.')
+@click.option('--failure_ttl', help='Specifies how long failed jobs are kept.')
+@click.option('--description', help='Additional description of the job')
+@click.option('--depends_on', help='Specifies another job id that must complete before this job will be queued.', multiple=True)
+@click.option('--job_id', help='The id of this job')
+@click.option('--at_front', is_flag=True, help='Will place the job at the front of the queue, instead of the back')
+@click.option('--retry-max', help='Maximum amound of retries', default=0, type=int)
+@click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
+@click.argument('func')
+@click.argument('arguments', nargs=-1)
+@pass_cli_config
+def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front, retry_max, retry_interval, func, arguments, **options):
+    """Enqueues a job from the command line"""
+    arguments = list(arguments)
+
+    args = []
+    kwargs = {}
+
+    keyword = None
+    arg_type = str
+    while len(arguments) != 0:
+        element = arguments.pop(0)
+        if element == '--int' or element == '-i':
+            arg_type = int
+        elif element == '--float' or element == '-f':
+            arg_type = float
+        elif element == '--bool' or element == '-b':
+            arg_type = bool
+        elif element == '--keyword' or element == '-k':
+            keyword = arguments.pop(0)
+        else:
+            if arg_type == bool:
+                if element.lower() in ['y', 'yes', 't', 'true']:
+                    element = True
+                elif element.lower() in ['n', 'no', 'f', 'false']:
+                    element = False
+                else:
+                    raise ValueError('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' (case insensitive). Found: \'%s\'' % element)
+            else:
+                element = arg_type(element)
+
+            if keyword is not None:
+                kwargs[keyword] = element
+            else:
+                args.append(element)
+
+            keyword = None
+            arg_type = str
+
+    retry = None
+    if retry_max > 0:
+        retry = Retry(retry_max, retry_interval)
+
+    with Connection(cli_config.connection):
+        queue = cli_config.queue_class(queue)
+
+        queue.enqueue_call(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front, None, retry)
