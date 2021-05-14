@@ -12,6 +12,8 @@ import sys
 import click
 from redis.exceptions import ConnectionError
 
+from datetime import datetime, timezone, timedelta
+
 from rq import Connection, Retry, __version__ as version
 from rq.cli.helpers import (read_config_file, refresh,
                             setup_loghandlers_from_args,
@@ -24,11 +26,12 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute
+from rq.utils import import_attribute, parse_timeout
 from rq.serializers import DefaultSerializer
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
 from rq.worker_registration import clean_worker_registry
+from rq.job import JobStatus
 
 
 
@@ -316,10 +319,12 @@ def resume(cli_config, **options):
 @click.option('--at_front', is_flag=True, help='Will place the job at the front of the queue, instead of the back')
 @click.option('--retry-max', help='Maximum amound of retries', default=0, type=int)
 @click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
+@click.option('--schedule-in', help='Timedelta in what the function is enqueued.')
+@click.option('--schedule-at', help='Time in what the function is enqueued.')
 @click.argument('func')
 @click.argument('arguments', nargs=-1)
 @pass_cli_config
-def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front, retry_max, retry_interval, func, arguments, **options):
+def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front, retry_max, retry_interval, schedule_in, schedule_at, func, arguments, **options):
     """Enqueues a job from the command line"""
     arguments = list(arguments)
 
@@ -361,7 +366,19 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
     if retry_max > 0:
         retry = Retry(retry_max, retry_interval)
 
+    schedule = None
+    if schedule_in is not None:
+        if schedule_at is not None:
+            raise ValueError('You can\'t specify both --schedule-in and --schedule-at')
+        schedule = datetime.now(timezone.utc) + timedelta(seconds=parse_timeout(schedule_in))
+    elif schedule_at is not None:
+        schedule = datetime.strptime(schedule_at, "%Y-%m-%dT%H:%M:%S")
+
     with Connection(cli_config.connection):
         queue = cli_config.queue_class(queue)
 
-        queue.enqueue_call(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front, None, retry)
+        if schedule is None:
+            queue.enqueue_call(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front, None, retry)
+        else:
+            job = queue.create_job(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, None, JobStatus.SCHEDULED    , retry)
+            queue.schedule_job(job, schedule)
