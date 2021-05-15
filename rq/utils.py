@@ -137,11 +137,11 @@ def import_attribute(name):
             module_name = '.'.join(module_name_bits)
             module = importlib.import_module(module_name)
             break
-        except ModuleNotFoundError:
+        except ImportError:
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
-        raise ValueError(f'Invalid attribute name: {name}')
+        raise ValueError('Invalid attribute name: %s' % name)
 
     attribute_name = '.'.join(attribute_bits)
     if hasattr(module, attribute_name):
@@ -153,7 +153,7 @@ def import_attribute(name):
     attribute_owner = getattr(module, attribute_owner_name)
 
     if not hasattr(attribute_owner, attribute_name):
-        raise ValueError(f'Invalid attribute name: {name}')
+        raise ValueError('Invalid attribute name: %s' % name)
 
     return getattr(attribute_owner, attribute_name)
 

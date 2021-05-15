@@ -10,6 +10,7 @@ import zlib
 
 import asyncio
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
 from enum import Enum
 from functools import partial
@@ -494,7 +495,7 @@ class Job:
         if result:
             try:
                 self._result = self.serializer.loads(obj.get('result'))
-            except Exception as e:
+            except Exception:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
@@ -503,8 +504,8 @@ class Job:
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
-        self._dependency_ids = ( json.loads(dep_ids.decode()) if dep_ids
-                                else [dep_id.decode()] if dep_id else [] )
+        self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
+                                else [dep_id.decode()] if dep_id else [])
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
@@ -792,6 +793,17 @@ class Job:
         index = max(number_of_intervals - self.retries_left, 0)
         return self.retry_intervals[index]
 
+    def retry(self, queue, pipeline):
+        """Requeue or schedule this job for execution"""
+        retry_interval = self.get_retry_interval()
+        self.retries_left = self.retries_left - 1
+        if retry_interval:
+            scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+            self.set_status(JobStatus.SCHEDULED)
+            queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+        else:
+            queue.enqueue_job(self, pipeline=pipeline)
+
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they
         depend on are successfully performed. We record this relation as
@@ -857,6 +869,7 @@ class Job:
             in dependencies_statuses
             if status
         )
+
 
 _job_stack = LocalStack()
 
