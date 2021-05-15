@@ -8,6 +8,7 @@ from rq.exceptions import NoSuchJobError
 from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
+from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp
 from rq.worker import Worker
 
@@ -308,6 +309,21 @@ class TestWorker(RQTestCase):
         registry = FinishedJobRegistry(queue=queue)
         self.assertEqual(len(registry), 1)
 
+    def test_work_with_serializer(self):
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
+        worker = Worker(queues=[queue], connection=self.testconn, serializer=JSONSerializer)
+        p = Process(target=kill_worker, args=(os.getpid(), False, 5))
+
+        p.start()
+        queue.enqueue_at(
+            datetime(2019, 1, 1, tzinfo=timezone.utc), 
+            say_hello, meta={'foo': 'bar'}
+        )
+        worker.work(burst=False, with_scheduler=True)
+        p.join(1)
+        self.assertIsNotNone(worker.scheduler)
+        registry = FinishedJobRegistry(queue=queue)
+        self.assertEqual(len(registry), 1)
 
 class TestQueue(RQTestCase):
 

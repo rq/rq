@@ -24,7 +24,7 @@ def compact(lst):
 
 
 @total_ordering
-class Queue(object):
+class Queue:
     job_class = Job
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'

@@ -15,7 +15,7 @@ import mock
 from click.testing import CliRunner
 
 
-class FakeSentry(object):
+class FakeSentry:
     servers = []
 
     def captureException(self, *args, **kwds):  # noqa

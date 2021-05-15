@@ -219,7 +219,7 @@ class TestJob(RQTestCase):
         self.assertEqual(job.last_heartbeat, None)
 
         ts = utcnow()
-        job.heartbeat(ts)
+        job.heartbeat(ts, 0)
         self.assertEqual(job.last_heartbeat, ts)
 
     def test_persistence_of_retry_data(self):
@@ -769,6 +769,14 @@ class TestJob(RQTestCase):
 
         job = queue.enqueue(fixtures.echo,
                             arg_with_unicode=fixtures.UnicodeStringObject())
+        self.assertIsNotNone(job.get_call_string())
+        job.perform()
+
+    def test_create_job_from_static_method(self):
+        """test creating jobs with static method"""
+        queue = Queue(connection=self.testconn)
+
+        job = queue.enqueue(fixtures.ClassWithAStaticMethod.static_method)
         self.assertIsNotNone(job.get_call_string())
         job.perform()
 
