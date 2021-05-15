@@ -497,7 +497,7 @@ class Job(object):
         result = obj.get('result')
         if result:
             try:
-                self._result = self.serializer.loads(obj.get('result'))
+                self._result = self.serializer.loads(result)
             except Exception as e:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None

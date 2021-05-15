@@ -13,5 +13,8 @@ class TestScheduledJobRegistry(RQTestCase):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        result = Result.create(job, Result.Type.SUCCESSFUL, return_value=1)
         print(Result.get_latest(job.id, self.connection))
+        Result.create(job, Result.Type.SUCCESSFUL, return_value=1)
+        result = Result.get_latest(job.id, self.connection)
+        print(result)
+        self.assertEqual(result.return_value, 1)
