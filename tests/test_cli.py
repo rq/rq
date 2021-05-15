@@ -357,3 +357,49 @@ class TestRQCli(RQTestCase):
         runner.invoke(main, ['worker', '-u', self.redis_url,
                             '--serializer rq.serializer.JSONSerializer'])
         self.assertIn(job.id, q.job_ids)
+
+    def test_cli_enqueue(self):
+        """rq enqueue -u <url> tests.fixtures.say_hello"""
+        queue = Queue(connection=self.connection)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello'])
+        self.assert_normal_execution(result)
+
+        prefix = 'Enqueued with job-id \''
+        suffix = '\'\n'
+
+        print(result.stdout)
+
+        self.assertTrue(result.stdout.startswith(prefix))
+        self.assertTrue(result.stdout.endswith(suffix))
+
+        job_id = result.stdout[len(prefix):-len(suffix)]
+        queue_key = 'rq:queue:default'
+        self.assertEqual(self.connection.llen(queue_key), 1)
+        self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
+
+        worker = Worker(queue)
+        worker.work(True)
+        self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
+
+    def test_cli_enqueue_args(self):
+        """rq enqueue -u <url> tests.fixtures.echo hello -i 2 -f 3 -b true --bool N -k keyword value"""
+        queue = Queue(connection=self.connection)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'hello', '-i', '2', '-f',
+                                      '3', '-b', 'true', '--bool', 'N', '-k', 'keyword', 'value'])
+        self.assert_normal_execution(result)
+
+        job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
+
+        worker = Worker(queue)
+        worker.work(True)
+
+        args, kwargs = Job(job_id).result
+
+        self.assertEqual(args, ('hello', 2, 3.0, True, False))
+        self.assertEqual(kwargs, {'keyword': 'value'})
