@@ -7,6 +7,8 @@ import importlib
 import time
 from functools import partial
 
+from datetime import datetime, timezone, timedelta
+
 import click
 import redis
 from redis import Redis
@@ -14,7 +16,7 @@ from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
 from rq.logutils import setup_loghandlers
-from rq.utils import import_attribute
+from rq.utils import import_attribute, parse_timeout
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
@@ -200,9 +202,63 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
 
 def job_func(func, args, kwargs):
     try:
-        importlib.import_module(func) # execute file
+        importlib.import_module(func)  # execute file
     except ImportError:
         import_attribute(func)(*args, **kwargs)
+
+
+def cast_element(element, arg_type):
+    if arg_type == bool:
+        if element.lower() in ['y', 'yes', 't', 'true']:
+            return True
+        elif element.lower() in ['n', 'no', 'f', 'false']:
+            return False
+        else:
+            raise ValueError('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' '
+                             '(case insensitive). Found: \'%s\'' % element)
+
+    else:
+        return arg_type(element)
+
+
+def parse_function_args(arguments):
+    arguments = list(arguments)
+
+    args = []
+    kwargs = {}
+
+    keyword = None
+    arg_type = str
+    while len(arguments) != 0:
+        element = arguments.pop(0)
+        if element == '--int' or element == '-i':
+            arg_type = int
+        elif element == '--float' or element == '-f':
+            arg_type = float
+        elif element == '--bool' or element == '-b':
+            arg_type = bool
+        elif element == '--keyword' or element == '-k':
+            keyword = arguments.pop(0)
+        else:
+            element = cast_element(element, arg_type)
+
+            if keyword is not None:
+                kwargs[keyword] = element
+            else:
+                args.append(element)
+
+            keyword = None
+            arg_type = str
+    return args, kwargs
+
+
+def parse_schedule(schedule_in, schedule_at):
+    if schedule_in is not None:
+        if schedule_at is not None:
+            raise ValueError('You can\'t specify both --schedule-in and --schedule-at')
+        return datetime.now(timezone.utc) + timedelta(seconds=parse_timeout(schedule_in))
+    elif schedule_at is not None:
+        return datetime.strptime(schedule_at, '%Y-%m-%dT%H:%M:%S')
 
 
 class CliConfig:
