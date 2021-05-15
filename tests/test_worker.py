@@ -41,6 +41,7 @@ from rq.version import VERSION
 from rq.worker import HerokuWorker, WorkerStatus, RoundRobinWorker, RandomWorker
 from rq.serializers import JSONSerializer
 
+
 class CustomJob(Job):
     pass
 
@@ -441,29 +442,6 @@ class TestWorker(RQTestCase):
         self.assertEqual([], queue.job_ids)
         # If a job is no longer retries, it's put in FailedJobRegistry
         self.assertTrue(job in registry)
-
-    def test_retry_interval(self):
-        """Retries with intervals are scheduled"""
-        connection = self.testconn
-        queue = Queue(connection=connection)
-        retry = Retry(max=1, interval=5)
-        job = queue.enqueue(div_by_zero, retry=retry)
-
-        worker = Worker([queue])
-        registry = queue.scheduled_job_registry
-        # If job if configured to retry with interval, it will be scheduled,
-        # not directly put back in the queue
-        queue.empty()
-        worker.handle_job_failure(job, queue)
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
-        self.assertEqual(job.retries_left, 0)
-        self.assertEqual(len(registry), 1)
-        self.assertEqual(queue.job_ids, [])
-        # Scheduled time is roughly 5 seconds from now
-        scheduled_time = registry.get_scheduled_time(job)
-        now = datetime.now(timezone.utc)
-        self.assertTrue(now + timedelta(seconds=4) < scheduled_time < now + timedelta(seconds=6))
 
     def test_total_working_time(self):
         """worker.total_working_time is stored properly"""
