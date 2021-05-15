@@ -341,9 +341,11 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
         queue = cli_config.queue_class(queue)
 
         if schedule is None:
-            queue.enqueue_call(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
-                               description, depends_on, job_id, at_front, None, retry)
+            job = queue.enqueue_call(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
+                                     description, depends_on, job_id, at_front, None, retry)
         else:
             job = queue.create_job(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
                                    description, depends_on, job_id, None, JobStatus.SCHEDULED, retry)
             queue.schedule_job(job, schedule)
+
+    click.echo('Enqueued with job-id \'%s\'' % job.id)
