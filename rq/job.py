@@ -21,7 +21,7 @@ from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow, ensure_list)
+                    utcformat, utcnow, ensure_list, generate_function_string)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
@@ -42,12 +42,6 @@ class JobStatus(str, Enum):
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
 UNEVALUATED = object()
-
-
-def truncate_long_string(data, maxlen=75):
-    """ Truncates strings longer than maxlen
-    """
-    return (data[:maxlen] + '...') if len(data) > maxlen else data
 
 
 def cancel_job(job_id, connection=None):
@@ -754,17 +748,7 @@ class Job:
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        if self.func_name is None:
-            return None
-
-        arg_list = [as_text(truncate_long_string(repr(arg))) for arg in self.args]
-
-        kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v)))) for k, v in self.kwargs.items()]
-        # Sort here because python 3.3 & 3.4 makes different call_string
-        arg_list += sorted(kwargs)
-        args = ', '.join(arg_list)
-
-        return '{0}({1})'.format(self.func_name, args)
+        return generate_function_string(self.func_name, self.args, self.kwargs)
 
     def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually

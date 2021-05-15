@@ -25,7 +25,7 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute
+from rq.utils import import_attribute, generate_function_string
 from rq.serializers import DefaultSerializer
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
@@ -323,13 +323,16 @@ def resume(cli_config, **options):
 @click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
 @click.option('--schedule-in', help='Timedelta in what the function is enqueued.')
 @click.option('--schedule-at', help='Time in what the function is enqueued.')
+@click.option('--quiet', is_flag=True, help='Only logs errors.')
 @click.argument('func')
 @click.argument('arguments', nargs=-1)
 @pass_cli_config
 def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front,
-            retry_max, retry_interval, schedule_in, schedule_at, func, arguments, **options):
+            retry_max, retry_interval, schedule_in, schedule_at, quiet, func, arguments, **options):
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
+
+    description = description or generate_function_string(func, args, kwargs)
 
     retry = None
     if retry_max > 0:
@@ -348,4 +351,5 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
                                    description, depends_on, job_id, None, JobStatus.SCHEDULED, retry)
             queue.schedule_job(job, schedule)
 
-    click.echo('Enqueued with job-id \'%s\'' % job.id)
+    if not quiet:
+        click.echo('Enqueued with job-id \'%s\'' % job.id)

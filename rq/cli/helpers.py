@@ -204,7 +204,7 @@ def job_func(func, args, kwargs):
     try:
         importlib.import_module(func)  # execute file
     except ImportError:
-        import_attribute(func)(*args, **kwargs)
+        return import_attribute(func)(*args, **kwargs)
 
 
 def cast_element(element, arg_type):
@@ -231,13 +231,15 @@ def parse_function_args(arguments):
     arg_type = str
     while len(arguments) != 0:
         element = arguments.pop(0)
-        if element == '--int' or element == '-i':
+        if element == '--int' or element == '--integer' or element == '-i':
             arg_type = int
         elif element == '--float' or element == '-f':
             arg_type = float
-        elif element == '--bool' or element == '-b':
+        elif element == '--bool' or element == '--boolean' or element == '-b':
             arg_type = bool
         elif element == '--keyword' or element == '-k':
+            if len(arguments) == 0:
+                raise ValueError('No keyword specified.')
             keyword = arguments.pop(0)
         else:
             element = cast_element(element, arg_type)
@@ -249,6 +251,12 @@ def parse_function_args(arguments):
 
             keyword = None
             arg_type = str
+
+    if keyword is not None:
+        raise ValueError('No value for keyword \'%s\' specified.' % keyword)
+    if arg_type != str:
+        raise ValueError('No value for type %s specified.' % arg_type.__name__)
+
     return args, kwargs
 
 
