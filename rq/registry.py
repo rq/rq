@@ -137,13 +137,21 @@ class StartedJobRegistry(BaseRegistry):
                     try:
                         job = self.job_class.fetch(job_id,
                                                    connection=self.connection)
+                    except NoSuchJobError:
+                        continue
+
+                    retry = job.retries_left and job.retries_left > 0
+
+                    if retry:
+                        queue = self.get_queue()
+                        job.retry(queue, pipeline)
+
+                    else:
                         job.set_status(JobStatus.FAILED)
                         job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
-                    except NoSuchJobError:
-                        pass
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
