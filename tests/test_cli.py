@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from datetime import datetime, timezone
+from time import sleep
 
 from click.testing import CliRunner
 from redis import Redis
@@ -14,6 +15,7 @@ from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
 from rq.worker import Worker, WorkerStatus
+from rq.scheduler import RQScheduler
 
 import pytest
 
@@ -403,3 +405,82 @@ class TestRQCli(RQTestCase):
 
         self.assertEqual(args, ('hello', 2, 3.0, True, False))
         self.assertEqual(kwargs, {'keyword': 'value'})
+
+    def test_cli_enqueue_schedule_in(self):
+        """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""
+        queue = Queue(connection=self.connection)
+        registry = ScheduledJobRegistry(queue=queue)
+        worker = Worker(queue)
+        scheduler = RQScheduler(queue, self.connection)
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 0)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                                      '--schedule-in', '1s'])
+        self.assert_normal_execution(result)
+
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        self.assertFalse(worker.work(True))
+
+        sleep(2)
+
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 1)
+        self.assertTrue(len(registry) == 0)
+
+        self.assertTrue(worker.work(True))
+
+    def test_cli_enqueue_schedule_at(self):
+        """
+        rq enqueue -u <url> tests.fixtures.say_hello --schedule-at 2021-01-01T00:00:00
+        rq enqueue -u <url> tests.fixtures.say_hello --schedule-at 2100-01-01T00:00:00
+        """
+        queue = Queue(connection=self.connection)
+        registry = ScheduledJobRegistry(queue=queue)
+        worker = Worker(queue)
+        scheduler = RQScheduler(queue, self.connection)
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 0)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                                      '--schedule-at', '2021-01-01T00:00:00'])
+        self.assert_normal_execution(result)
+
+        scheduler.acquire_locks()
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 1)
+        self.assertTrue(len(registry) == 0)
+
+        self.assertTrue(worker.work(True))
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 0)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                                      '--schedule-at', '2100-01-01T00:00:00'])
+        self.assert_normal_execution(result)
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        self.assertFalse(worker.work(True))
