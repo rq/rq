@@ -502,3 +502,39 @@ class TestRQCli(RQTestCase):
 
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [10, 20, 40])
+
+    def test_cli_enqueue_errors(self):
+        """
+        rq enqueue -u <url> tests.fixtures.echo -i
+
+        rq enqueue -u <url> tests.fixtures.echo -k
+
+        rq enqueue -u <url> tests.fixtures.echo -k keyword
+
+        rq enqueue -u <url> tests.fixtures.echo --schedule-in --schedule-at
+
+        rq enqueue -u <url> tests.fixtures.echo -b maybe
+        """
+        runner = CliRunner()
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-i'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('No value for type int specified.', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-k'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('No keyword specified.', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-k', 'keyword'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('No value for keyword \'keyword\' specified.', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '--schedule-in', '1s',
+                                      '--schedule-at', '2000-01-01T00:00:00'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('You can\'t specify both --schedule-in and --schedule-at', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-b', 'maybe'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' '
+                      '(case insensitive). Found: \'maybe\'', result.output)
