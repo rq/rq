@@ -441,6 +441,7 @@ class TestRQCli(RQTestCase):
     def test_cli_enqueue_schedule_at(self):
         """
         rq enqueue -u <url> tests.fixtures.say_hello --schedule-at 2021-01-01T00:00:00
+
         rq enqueue -u <url> tests.fixtures.say_hello --schedule-at 2100-01-01T00:00:00
         """
         queue = Queue(connection=self.connection)
@@ -484,3 +485,20 @@ class TestRQCli(RQTestCase):
         self.assertTrue(len(registry) == 1)
 
         self.assertFalse(worker.work(True))
+
+    def test_cli_enqueue_retry(self):
+        """rq enqueue -u <url> tests.fixtures.say_hello --retry-max 3 --retry-interval 10 --retry-interval 20
+        --retry-interval 40"""
+        queue = Queue(connection=self.connection)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello', '--retry-max', '3',
+                                      '--retry-interval', '10', '--retry-interval', '20', '--retry-interval', '40'])
+        self.assert_normal_execution(result)
+
+        job = Job.fetch(self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii'),
+                        connection=self.connection)
+
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [10, 20, 40])
