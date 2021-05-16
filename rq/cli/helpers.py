@@ -214,9 +214,8 @@ def cast_element(element, arg_type):
         elif element.lower() in ['n', 'no', 'f', 'false']:
             return False
         else:
-            raise ValueError('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' '
-                             '(case insensitive). Found: \'%s\'' % element)
-
+            raise click.UsageError('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' '
+                                   '(case insensitive). Found: \'%s\'' % element)
     else:
         return arg_type(element)
 
@@ -239,7 +238,7 @@ def parse_function_args(arguments):
             arg_type = bool
         elif element == '--keyword' or element == '-k':
             if len(arguments) == 0:
-                raise ValueError('No keyword specified.')
+                raise click.BadArgumentUsage('No keyword specified.')
             keyword = arguments.pop(0)
         else:
             element = cast_element(element, arg_type)
@@ -253,9 +252,9 @@ def parse_function_args(arguments):
             arg_type = str
 
     if keyword is not None:
-        raise ValueError('No value for keyword \'%s\' specified.' % keyword)
+        raise click.BadArgumentUsage('No value for keyword \'%s\' specified.' % keyword)
     if arg_type != str:
-        raise ValueError('No value for type %s specified.' % arg_type.__name__)
+        raise click.BadArgumentUsage('No value for type %s specified.' % arg_type.__name__)
 
     return args, kwargs
 
@@ -263,7 +262,7 @@ def parse_function_args(arguments):
 def parse_schedule(schedule_in, schedule_at):
     if schedule_in is not None:
         if schedule_at is not None:
-            raise ValueError('You can\'t specify both --schedule-in and --schedule-at')
+            raise click.BadArgumentUsage('You can\'t specify both --schedule-in and --schedule-at')
         return datetime.now(timezone.utc) + timedelta(seconds=parse_timeout(schedule_in))
     elif schedule_at is not None:
         return datetime.strptime(schedule_at, '%Y-%m-%dT%H:%M:%S')
