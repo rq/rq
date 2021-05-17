@@ -1,3 +1,10 @@
+### RQ 1.8.1 (2021-05-17)
+* Jobs that fail due to hard shutdowns are now retried. Thanks @selwin!
+* `Scheduler` now works with custom serializers. Thanks @alella!
+* Added support for click 8.0. Thanks @rpkak!
+* Enqueueing static methods are now supported. Thanks @pwws!
+* Job exceptions no longer get printed twice. Thanks @petrem!
+
 ### RQ 1.8.0 (2021-03-31)
 * You can now declare multiple job dependencies. Thanks @skieffer and @thomasmatecki for laying the groundwork for multi dependency support in RQ.
 * Added `RoundRobinWorker` and `RandomWorker` classes to control how jobs are dequeued from multiple queues. Thanks @bielcardona!
