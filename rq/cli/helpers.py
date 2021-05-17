@@ -131,7 +131,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
 
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
-            name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.address, worker.pid)
+            name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
             if not raw:
                 click.echo('%s: %s %s' % (name, state_symbol(worker.get_state()), queue_names))
             else:

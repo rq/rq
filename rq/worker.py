@@ -222,11 +222,11 @@ class Worker:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
             connection.client_setname(self.name)
-            self.address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+            self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
         else:
             self.hostname = None
             self.pid = None
-            self.address = None
+            self.ip_address = None
 
         if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
@@ -304,7 +304,7 @@ class Worker:
                 'queues': queues,
                 'pid': self.pid,
                 'hostname': self.hostname,
-                'address': self.address,
+                'ip_address': self.ip_address,
                 'version': self.version,
                 'python_version': self.python_version,
             }
@@ -708,15 +708,15 @@ class Worker:
     def refresh(self):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
-            'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'current_job_working_time', 'hostname', 'address', 'pid', 'version', 'python_version',
+            'birth', 'failed_job_count', 'successful_job_count', 'total_working_time',
+            'current_job_working_time', 'hostname', 'ip_address', 'pid', 'version', 'python_version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
          successful_job_count, total_working_time, current_job_working_time,
-         hostname, address, pid, version, python_version) = data
+         hostname, ip_address, pid, version, python_version) = data
         queues = as_text(queues)
         self.hostname = as_text(hostname)
-        self.address = as_text(address)
+        self.ip_address = as_text(ip_address)
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
         self.python_version = as_text(python_version)
