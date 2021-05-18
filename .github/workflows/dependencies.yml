@@ -38,8 +38,15 @@ jobs:
     - name: Test with pytest
       run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
 
+  issue:
+    name: Create failure issue
+    runs-on: ubuntu-latest
+
+    if: failure()
+    needs: build
+
+    steps:
     - name: Create failure issue
-      if: failure()
       run: |
         if [[ "$(curl --url https://api.github.com/repos/rpkak/rq/issues --request GET --data '{"creator": "github-actions"}')" != *"\""* ]]
           then curl --request POST \
