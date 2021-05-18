@@ -59,6 +59,11 @@ jobs:
 
     - name: Create failure issue
       run: |
+        cat log.txt
+        echo "{
+                        \"title\": \"RQ maybe may not work with dependencies in the future\",
+                        \"body\": \"This issue was automatically created by the GitHub Action workflow **${{ github.workflow }}**. \n\n View log: \n\n \`\`\` \n $(cat log.txt | while read line; do echo -n "$line\n"; done | sed -r 's/"/\\"/g') \n \`\`\`\"
+                      }"
         if [[ "$(curl --url https://api.github.com/repos/rpkak/rq/issues --request GET --data '{"creator": "github-actions"}')" != *"\""* ]]
           then curl --request POST \
                     --url https://api.github.com/repos/${{ github.repository }}/issues \
