@@ -357,4 +357,3 @@ class TestRQCli(RQTestCase):
         runner.invoke(main, ['worker', '-u', self.redis_url,
                             '--serializer rq.serializer.JSONSerializer'])
         self.assertIn(job.id, q.job_ids)
-        self.assertTrue(False)
