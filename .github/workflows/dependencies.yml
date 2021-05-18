@@ -38,6 +38,12 @@ jobs:
     - name: Test with pytest
       run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
 
+    - uses: actions/upload-artifact@v2
+      with:
+        name: dependencies-error
+        path: log.txt
+      if: failure()
+
   issue:
     name: Create failure issue
     runs-on: ubuntu-latest
@@ -46,6 +52,11 @@ jobs:
     needs: build
 
     steps:
+    - uses: actions/download-artifact@v2
+      with:
+        name: my-artifact
+        path: log.txt
+
     - name: Create failure issue
       run: |
         if [[ "$(curl --url https://api.github.com/repos/rpkak/rq/issues --request GET --data '{"creator": "github-actions"}')" != *"\""* ]]
