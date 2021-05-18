@@ -3,6 +3,7 @@ on:
     # View https://docs.github.com/en/actions/reference/events-that-trigger-workflows#schedule
     # I will lower this after testing
     - cron: '0,10,20,30,40,50 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
