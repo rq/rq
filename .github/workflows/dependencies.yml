@@ -41,6 +41,10 @@ jobs:
     - name: Create failure issue
       if: failure()
       run: |
+        echo "{
+          \"title\": \"RQ maybe may not work with dependencies in the future\",
+          \"body\": \"This issue was automatically created by the GitHub Action workflow **${{ github.workflow }}**. \n\n View log: \n\n \`\`\` \n $(cat log.txt) \n \`\`\`\"
+          }"
         curl --request POST \
         --url https://api.github.com/repos/${{ github.repository }}/issues \
         --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
