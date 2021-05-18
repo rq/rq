@@ -1,5 +1,11 @@
 FROM python:3.8
 
-RUN pip install rq
+WORKDIR /root
+
+COPY . /tmp/rq
+
+RUN pip install /tmp/rq
+
+RUN rm -r /tmp/rq
 
 ENTRYPOINT ["rq", "worker"]
