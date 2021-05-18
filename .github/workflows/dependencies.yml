@@ -1,3 +1,5 @@
+name: Dependencies
+
 on:
   schedule:
     # View https://docs.github.com/en/actions/reference/events-that-trigger-workflows#schedule
