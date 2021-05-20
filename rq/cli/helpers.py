@@ -5,6 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 import sys
 import importlib
 import time
+import os
 from functools import partial
 
 import click
@@ -14,7 +15,7 @@ from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
 from rq.logutils import setup_loghandlers
-from rq.utils import import_attribute
+from rq.utils import import_attribute, string_types
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
@@ -48,12 +49,22 @@ def get_redis_from_config(settings, connection_class=Redis):
         sn = Sentinel(instances, socket_timeout=socket_timeout, password=password, db=db)
         return sn.master_for(master_name)
 
+    ssl = settings.get('REDIS_SSL', False)
+    if isinstance(ssl, string_types):
+        if ssl.lower() in ['y', 'yes', 't', 'true']:
+            ssl = True
+        elif ssl.lower() in ['n', 'no', 'f', 'false', '']:
+            ssl = False
+        else:
+            raise ValueError('REDIS_SSL is a boolean and must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', '
+                             '\'f\' or \'false\' (case insensitive). Found: \'%s\'' % ssl)
+
     kwargs = {
         'host': settings.get('REDIS_HOST', 'localhost'),
         'port': settings.get('REDIS_PORT', 6379),
         'db': settings.get('REDIS_DB', 0),
         'password': settings.get('REDIS_PASSWORD', None),
-        'ssl': settings.get('REDIS_SSL', False),
+        'ssl': ssl,
         'ssl_ca_certs': settings.get('REDIS_SSL_CA_CERTS', None),
     }
 
@@ -235,8 +246,11 @@ class CliConfig:
         if self._connection is None:
             if self.url:
                 self._connection = self.connection_class.from_url(self.url)
-            else:
+            elif self.config:
                 settings = read_config_file(self.config) if self.config else {}
                 self._connection = get_redis_from_config(settings,
+                                                         self.connection_class)
+            else:
+                self._connection = get_redis_from_config(os.environ,
                                                          self.connection_class)
         return self._connection
