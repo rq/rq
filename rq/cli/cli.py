@@ -322,8 +322,9 @@ def resume(cli_config, **options):
 @click.option('--at-front', is_flag=True, help='Will place the job at the front of the queue, instead of the back')
 @click.option('--retry-max', help='Maximum amound of retries', default=0, type=int)
 @click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
-@click.option('--schedule-in', help='Timedelta in what the function is enqueued.')
-@click.option('--schedule-at', help='Time in what the function is enqueued.')
+@click.option('--schedule-in', help='Timedelta in what the function is enqueued (e.g. 10s, 5m, 2d).')
+@click.option('--schedule-at', help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
+              'timezone (e.g. 2021-05-27T21:45:00).')
 @click.option('--quiet', is_flag=True, help='Only logs errors.')
 @click.argument('func')
 @click.argument('arguments', nargs=-1)
