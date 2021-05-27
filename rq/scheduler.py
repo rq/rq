@@ -4,36 +4,39 @@ import signal
 import time
 import traceback
 from datetime import datetime
+from enum import Enum
 from multiprocessing import Process
 
-from redis import Redis, SSLConnection, UnixDomainSocketConnection
+from redis import SSLConnection, UnixDomainSocketConnection
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
-from .utils import current_timestamp, enum
+from .serializers import resolve_serializer
+from .utils import current_timestamp
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
 
 
-class RQScheduler(object):
+class SchedulerStatus(str, Enum):
+    STARTED = 'started'
+    WORKING = 'working'
+    STOPPED = 'stopped'
+
+
+class RQScheduler:
     # STARTED: scheduler has been started but sleeping
     # WORKING: scheduler is in the midst of scheduling jobs
     # STOPPED: scheduler is in stopped condition
 
-    Status = enum(
-        'SchedulerStatus',
-        STARTED='started',
-        WORKING='working',
-        STOPPED='stopped'
-    )
+    Status = SchedulerStatus
 
     def __init__(self, queues, connection, interval=1, logging_level=logging.INFO,
                  date_format=DEFAULT_LOGGING_DATE_FORMAT,
-                 log_format=DEFAULT_LOGGING_FORMAT):
+                 log_format=DEFAULT_LOGGING_FORMAT, serializer=None):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set()
         self._scheduled_job_registries = []
@@ -58,6 +61,7 @@ class RQScheduler(object):
             self._connection_kwargs['unix_socket_path'] = self._connection_kwargs.pop(
                 'path'
             )
+        self.serializer = resolve_serializer(serializer)
 
         self._connection = None
         self.interval = interval
@@ -150,10 +154,12 @@ class RQScheduler(object):
             if not job_ids:
                 continue
 
-            queue = Queue(registry.name, connection=self.connection)
+            queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
 
             with self.connection.pipeline() as pipeline:
-                jobs = Job.fetch_many(job_ids, connection=self.connection)
+                jobs = Job.fetch_many(
+                    job_ids, connection=self.connection, serializer=self.serializer
+                )
                 for job in jobs:
                     if job is not None:
                         queue.enqueue_job(job, pipeline=pipeline)

@@ -10,7 +10,9 @@ import zlib
 
 import asyncio
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 from distutils.version import StrictVersion
+from enum import Enum
 from functools import partial
 from uuid import uuid4
 
@@ -19,7 +21,7 @@ from .connections import resolve_connection
 from .exceptions import NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
-from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_date,
+from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow, ensure_list)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
@@ -27,16 +29,16 @@ from .utils import (enum, get_version, import_attribute, parse_timeout, str_to_d
 dumps = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
 loads = pickle.loads
 
-JobStatus = enum(
-    'JobStatus',
-    QUEUED='queued',
-    FINISHED='finished',
-    FAILED='failed',
-    STARTED='started',
-    DEFERRED='deferred',
-    SCHEDULED='scheduled',
-    STOPPED='stopped',
-)
+
+class JobStatus(str, Enum):
+    QUEUED = 'queued'
+    FINISHED = 'finished'
+    FAILED = 'failed'
+    STARTED = 'started'
+    DEFERRED = 'deferred'
+    SCHEDULED = 'scheduled'
+    STOPPED = 'stopped'
+
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
@@ -71,7 +73,7 @@ def requeue_job(job_id, connection):
     return job.requeue()
 
 
-class Job(object):
+class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
     redis_job_namespace_prefix = 'rq:job:'
@@ -108,7 +110,7 @@ class Job(object):
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '{0}.{1}'.format(func.__module__, func.__name__)
+            job._func_name = '{0}.{1}'.format(func.__module__, func.__qualname__)
         elif isinstance(func, string_types):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
@@ -353,7 +355,7 @@ class Job(object):
         self.ttl = None
         self.worker_name = None
         self._status = None
-        self._dependency_ids = []        
+        self._dependency_ids = []
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left = None
@@ -394,10 +396,11 @@ class Job(object):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
-    def heartbeat(self, heartbeat, pipeline=None):
+    def heartbeat(self, heartbeat, ttl, pipeline=None):
         self.last_heartbeat = heartbeat
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
+        self.started_job_registry.add(self, ttl, pipeline=pipeline)
 
     id = property(get_id, set_id)
 
@@ -498,7 +501,7 @@ class Job(object):
         if result:
             try:
                 self._result = self.serializer.loads(obj.get('result'))
-            except Exception as e:
+            except Exception:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
@@ -507,8 +510,8 @@ class Job(object):
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
-        self._dependency_ids = ( json.loads(dep_ids.decode()) if dep_ids
-                                else [dep_id.decode()] if dep_id else [] )
+        self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
+                                else [dep_id.decode()] if dep_id else [])
 
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
@@ -784,11 +787,17 @@ class Job(object):
             connection.expire(self.dependencies_key, ttl)
 
     @property
+    def started_job_registry(self):
+        from .registry import StartedJobRegistry
+        return StartedJobRegistry(self.origin, connection=self.connection,
+                                  job_class=self.__class__)
+
+    @property
     def failed_job_registry(self):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__)
-    
+
     def get_retry_interval(self):
         """Returns the desired retry interval.
         If number of retries is bigger than length of intervals, the first
@@ -799,6 +808,17 @@ class Job(object):
         number_of_intervals = len(self.retry_intervals)
         index = max(number_of_intervals - self.retries_left, 0)
         return self.retry_intervals[index]
+
+    def retry(self, queue, pipeline):
+        """Requeue or schedule this job for execution"""
+        retry_interval = self.get_retry_interval()
+        self.retries_left = self.retries_left - 1
+        if retry_interval:
+            scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+            self.set_status(JobStatus.SCHEDULED)
+            queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+        else:
+            queue.enqueue_job(self, pipeline=pipeline)
 
     def register_dependency(self, pipeline=None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they
@@ -866,16 +886,17 @@ class Job(object):
             if status
         )
 
+
 _job_stack = LocalStack()
 
 
-class Retry(object):
+class Retry:
     def __init__(self, max, interval=0):
         """`interval` can be a positive number or a list of ints"""
         super().__init__()
         if max < 1:
             raise ValueError('max: please enter a value greater than 0')
-        
+
         if isinstance(interval, int):
             if interval < 0:
                 raise ValueError('interval: negative numbers are not allowed')
@@ -885,6 +906,6 @@ class Retry(object):
                 if i < 0:
                     raise ValueError('interval: negative numbers are not allowed')
             intervals = interval
-        
+
         self.max = max
         self.intervals = intervals

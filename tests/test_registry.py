@@ -114,7 +114,6 @@ class TestRegistry(RQTestCase):
         self.assertIsNone(self.testconn.zscore(self.registry.key, job.id))
         self.assertFalse(self.testconn.exists(job.key))
 
-
     def test_get_job_ids(self):
         """Getting job ids from StartedJobRegistry."""
         timestamp = current_timestamp()
@@ -152,7 +151,7 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job, self.registry)
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertTrue(job.exc_info)  # explanation is written to exc_info 
+        self.assertTrue(job.exc_info)  # explanation is written to exc_info
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""

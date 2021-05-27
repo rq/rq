@@ -131,7 +131,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
 
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
-            name = '%s (%s %s)' % (worker.name, worker.hostname, worker.pid)
+            name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
             if not raw:
                 click.echo('%s: %s %s' % (name, state_symbol(worker.get_state()), queue_names))
             else:
@@ -198,7 +198,7 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
-class CliConfig(object):
+class CliConfig:
     """A helper class to be used with click commands, to handle shared options"""
     def __init__(self, url=None, config=None, worker_class=DEFAULT_WORKER_CLASS,
                  job_class=DEFAULT_JOB_CLASS, queue_class=DEFAULT_QUEUE_CLASS,
