@@ -50,14 +50,13 @@ def get_redis_from_config(settings, connection_class=Redis):
         return sn.master_for(master_name)
 
     ssl = settings.get('REDIS_SSL', False)
-    if isinstance(ssl, string_types):
+    if isinstance(ssl, str):
         if ssl.lower() in ['y', 'yes', 't', 'true']:
             ssl = True
         elif ssl.lower() in ['n', 'no', 'f', 'false', '']:
             ssl = False
         else:
-            raise ValueError('REDIS_SSL is a boolean and must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', '
-                             '\'f\' or \'false\' (case insensitive). Found: \'%s\'' % ssl)
+            raise ValueError('REDIS_SSL is a boolean and must be "True" or "False".')
 
     kwargs = {
         'host': settings.get('REDIS_HOST', 'localhost'),
