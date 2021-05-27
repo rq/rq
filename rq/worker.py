@@ -34,7 +34,7 @@ from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import (DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
-from .exceptions import DequeueTimeout, ShutDownImminentException
+from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -1066,11 +1066,10 @@ class Worker:
                 'func': job.func_name,
                 'arguments': job.args,
                 'kwargs': job.kwargs,
-                'queue': job.origin,
-                'job_id': job.id,
             }
-        except: # noqa
+        except DeserializationError:
             extra = {}
+
         # the properties below should be safe however
         extra.update({'queue': job.origin, 'job_id': job.id})
 
