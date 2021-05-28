@@ -83,7 +83,7 @@ class Job:
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
-               failure_ttl=None, serializer=None):
+               failure_ttl=None, serializer=None, *, on_success=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -120,6 +120,11 @@ class Job:
             raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
         job._args = args
         job._kwargs = kwargs
+
+        if on_success:
+            if not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
+                raise ValueError('on_success callback must be a function')
+            job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -219,6 +224,16 @@ class Job:
             return getattr(self.instance, func_name)
 
         return import_attribute(self.func_name)
+
+    @property
+    def success_callback(self):
+        if self._success_callback is UNEVALUATED:
+            if self._success_callback_name:
+                self._success_callback = import_attribute(self._success_callback_name)
+            else:
+                self._success_callback = None
+
+        return self._success_callback
 
     def _deserialize_data(self):
         self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
@@ -342,6 +357,8 @@ class Job:
         self._instance = UNEVALUATED
         self._args = UNEVALUATED
         self._kwargs = UNEVALUATED
+        self._success_callback_name = None
+        self._success_callback = UNEVALUATED
         self.description = None
         self.origin = None
         self.enqueued_at = None
@@ -508,6 +525,9 @@ class Job:
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
         self._status = obj.get('status').decode() if obj.get('status') else None
 
+        if obj.get('success_callback_name'):
+            self._success_callback_name = obj.get('success_callback_name').decode()
+
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
@@ -550,6 +570,7 @@ class Job:
         obj = {
             'created_at': utcformat(self.created_at or utcnow()),
             'data': zlib.compress(self.data),
+            'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',

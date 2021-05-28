@@ -280,7 +280,8 @@ class Queue:
     def create_job(self, func, args=None, kwargs=None, timeout=None,
                    result_ttl=None, ttl=None, failure_ttl=None,
                    description=None, depends_on=None, job_id=None,
-                   meta=None, status=JobStatus.QUEUED, retry=None):
+                   meta=None, status=JobStatus.QUEUED, retry=None, *,
+                   on_success=None):
         """Creates a job based on parameters given."""
         timeout = parse_timeout(timeout)
 
@@ -301,7 +302,7 @@ class Queue:
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             status=status, description=description,
             depends_on=depends_on, timeout=timeout, id=job_id,
-            origin=self.name, meta=meta, serializer=self.serializer
+            origin=self.name, meta=meta, serializer=self.serializer, on_success=on_success
         )
 
         if retry:
@@ -313,7 +314,7 @@ class Queue:
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, failure_ttl=None,
                      description=None, depends_on=None, job_id=None,
-                     at_front=False, meta=None, retry=None):
+                     at_front=False, meta=None, retry=None, on_success=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 nd
@@ -326,7 +327,7 @@ nd
             func, args=args, kwargs=kwargs, result_ttl=result_ttl, ttl=ttl,
             failure_ttl=failure_ttl, description=description, depends_on=depends_on,
             job_id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
-            retry=retry
+            retry=retry, on_success=on_success
         )
 
         # If a _dependent_ job depends on any unfinished job, register all the
@@ -401,6 +402,7 @@ nd
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
         retry = kwargs.pop('retry', None)
+        on_success = kwargs.pop('on_success', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
@@ -408,19 +410,19 @@ nd
             kwargs = kwargs.pop('kwargs', None)
 
         return (f, timeout, description, result_ttl, ttl, failure_ttl,
-                depends_on, job_id, at_front, meta, retry, args, kwargs)
+                depends_on, job_id, at_front, meta, retry, on_success, args, kwargs)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues it."""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, retry, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, on_success, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
 
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             description=description, depends_on=depends_on, job_id=job_id,
-            at_front=at_front, meta=meta, retry=retry
+            at_front=at_front, meta=meta, retry=retry, on_success=on_success
         )
 
     def enqueue_at(self, datetime, f, *args, **kwargs):

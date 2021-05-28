@@ -673,3 +673,13 @@ class TestJobScheduling(RQTestCase):
         registry = ScheduledJobRegistry(queue=queue)
         self.assertIn(job, registry)
         self.assertTrue(registry.get_expiration_time(job), scheduled_time)
+
+
+class TestCallbacks(RQTestCase):
+    def test_enqueue_with_callbacks(self):
+        """Test enqueue* methods with callbacks"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello, on_success=print)
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
+        self.assertEqual(job.success_callback, print)

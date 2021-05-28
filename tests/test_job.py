@@ -10,7 +10,7 @@ from redis import WatchError
 
 from rq.compat import as_text
 from rq.exceptions import NoSuchJobError
-from rq.job import Job, JobStatus, cancel_job, get_current_job
+from rq.job import Job, JobStatus, cancel_job, get_current_job, UNEVALUATED
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
@@ -1046,3 +1046,22 @@ class TestJob(RQTestCase):
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
         self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
+
+    def test_job_creation_with_callbacks(self):
+        """Ensure callbacks are created and persisted properly"""
+        job = Job.create(fixtures.say_hello)
+        self.assertIsNone(job._success_callback_name)
+        # _success_callback starts with UNEVALUATED
+        self.assertEqual(job._success_callback, UNEVALUATED)
+        self.assertEqual(job.success_callback, None)
+        # _success_callback becomes `None` after `job.success_callback` is called if there's no success callback
+        self.assertEqual(job._success_callback, None)  
+
+        # job.success_callback is assigned properly
+        job = Job.create(fixtures.say_hello, on_success=print)
+        self.assertIsNotNone(job._success_callback_name)
+        self.assertEqual(job.success_callback, print)
+        job.save()
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
+        self.assertEqual(job.success_callback, print)
