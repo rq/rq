@@ -13,7 +13,7 @@ import time
 import traceback
 import warnings
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from distutils.version import StrictVersion
 from enum import Enum
 from uuid import uuid4
@@ -176,13 +176,6 @@ class Worker:
 
         self.redis_server_version = None
 
-        if prepare_for_work:
-            self.hostname = socket.gethostname()
-            self.pid = os.getpid()
-        else:
-            self.hostname = None
-            self.pid = None
-
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
         self.version = VERSION
@@ -224,6 +217,16 @@ class Worker:
         self.pubsub_thread = None
 
         self.disable_default_exception_handler = disable_default_exception_handler
+
+        if prepare_for_work:
+            self.hostname = socket.gethostname()
+            self.pid = os.getpid()
+            connection.client_setname(self.name)
+            self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+        else:
+            self.hostname = None
+            self.pid = None
+            self.ip_address = None
 
         if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
@@ -295,12 +298,13 @@ class Worker:
             now_in_string = utcformat(now)
             self.birth_date = now
 
-            mapping={
+            mapping = {
                 'birth': now_in_string,
                 'last_heartbeat': now_in_string,
                 'queues': queues,
                 'pid': self.pid,
                 'hostname': self.hostname,
+                'ip_address': self.ip_address,
                 'version': self.version,
                 'python_version': self.python_version,
             }
@@ -673,7 +677,7 @@ class Worker:
                 pass
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error('Could not connect to Redis instance: %s Retrying in %d seconds...',
-                                conn_err, connection_wait_time)
+                               conn_err, connection_wait_time)
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
                 connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
@@ -704,13 +708,15 @@ class Worker:
     def refresh(self):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
-            'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'current_job_working_time', 'hostname', 'pid', 'version', 'python_version',
+            'birth', 'failed_job_count', 'successful_job_count', 'total_working_time',
+            'current_job_working_time', 'hostname', 'ip_address', 'pid', 'version', 'python_version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
-         successful_job_count, total_working_time, current_job_working_time, hostname, pid, version, python_version) = data
+         successful_job_count, total_working_time, current_job_working_time,
+         hostname, ip_address, pid, version, python_version) = data
         queues = as_text(queues)
         self.hostname = as_text(hostname)
+        self.ip_address = as_text(ip_address)
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
         self.python_version = as_text(python_version)
@@ -842,7 +848,7 @@ class Worker:
             self.handle_job_failure(
                 job, queue=queue,
                 exc_string="Work-horse was terminated unexpectedly "
-                        "(waitpid returned %s)" % ret_val
+                           "(waitpid returned %s)" % ret_val
             )
 
     def execute_job(self, job, queue):
@@ -951,14 +957,7 @@ class Worker:
                 )
 
             if retry:
-                retry_interval = job.get_retry_interval()
-                job.retries_left = job.retries_left - 1
-                if retry_interval:
-                    scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
-                    job.set_status(JobStatus.SCHEDULED)
-                    queue.schedule_job(job, scheduled_datetime, pipeline=pipeline)
-                else:
-                    queue.enqueue_job(job, pipeline=pipeline)
+                job.retry(queue, pipeline)
 
             try:
                 pipeline.execute()
@@ -1188,7 +1187,7 @@ class RoundRobinWorker(Worker):
     """
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos+1:] + self._ordered_queues[:pos+1]
+        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]
 
 
 class RandomWorker(Worker):
