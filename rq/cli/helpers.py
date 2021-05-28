@@ -15,7 +15,7 @@ from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
 from rq.logutils import setup_loghandlers
-from rq.utils import import_attribute, string_types
+from rq.utils import import_attribute
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
