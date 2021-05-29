@@ -264,3 +264,8 @@ def burst_two_workers(queue, timeout=2, tries=5, pause=0.1):
     # Now can start the second worker.
     w2.work(burst=True)
     w1.join(timeout)
+
+
+def save_result(job, connection, result):
+    """Store job result in a key"""
+    connection.set('success_callback:%s' % job.id, result, ex=60)

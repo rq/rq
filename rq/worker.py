@@ -1023,6 +1023,12 @@ class Worker:
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
+
+            # If we need to execute a callback, save the result prior to
+            # executing the callback
+            if job.success_callback:
+                job.success_callback(job, self.connection, rv)
+
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
