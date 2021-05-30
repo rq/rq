@@ -31,7 +31,7 @@ from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
 from .compat import as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
-from .defaults import (DEFAULT_RESULT_TTL,
+from .defaults import (CALLBACK_TIMEOUT, DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from .exceptions import DequeueTimeout, ShutDownImminentException
@@ -435,7 +435,7 @@ class Worker:
         stat = None
         try:
             pid, stat = os.waitpid(self.horse_pid, 0)
-        except ChildProcessError as e:
+        except ChildProcessError:
             # ChildProcessError: [Errno 10] No child processes
             pass
         return pid, stat
@@ -873,7 +873,7 @@ class Worker:
         self.log = logger
         try:
             self.perform_job(job, queue)
-        except:
+        except:  # noqa
             os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
@@ -1002,6 +1002,18 @@ class Worker:
                 except redis.exceptions.WatchError:
                     continue
 
+    def execute_success_callback(self, job, result):
+        """Executes success_callback with timeout"""
+        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
+        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+            job.success_callback(job, self.connection, result)
+
+    def execute_failure_callback(self, job):
+        """Executes failure_callback with timeout"""
+        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
+        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+            job.failure_callback(job, self.connection, *sys.exc_info())
+
     def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -1024,10 +1036,8 @@ class Worker:
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            # If we need to execute a callback, save the result prior to
-            # executing the callback
             if job.success_callback:
-                job.success_callback(job, self.connection, rv)
+                self.execute_success_callback(job, rv)
 
             self.handle_job_success(job=job,
                                     queue=queue,
@@ -1036,6 +1046,18 @@ class Worker:
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
+
+            if job.failure_callback:
+                try:
+                    self.execute_failure_callback(job)
+                except:  # noqa
+                    self.log.error(
+                        'Worker %s: error while executing failure callback',
+                        self.key, exc_info=True
+                    )
+                    exc_info = sys.exc_info()
+                    exc_string = ''.join(traceback.format_exception(*exc_info))
+
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)
@@ -1135,7 +1157,8 @@ class SimpleWorker(Worker):
         return self.perform_job(job, queue)
 
     def get_heartbeat_ttl(self, job):
-        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
+        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
+        # # We should just stick to DEFAULT_WORKER_TTL.
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
         else:

@@ -269,3 +269,13 @@ def burst_two_workers(queue, timeout=2, tries=5, pause=0.1):
 def save_result(job, connection, result):
     """Store job result in a key"""
     connection.set('success_callback:%s' % job.id, result, ex=60)
+
+
+def save_exception(job, connection, type, value, traceback):
+    """Store job exception in a key"""
+    connection.set('failure_callback:%s' % job.id, str(value), ex=60)
+
+
+def erroneous_callback(job):
+    """A callback that's not written properly"""
+    pass
