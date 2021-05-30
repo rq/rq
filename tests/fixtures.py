@@ -46,11 +46,14 @@ def do_nothing():
     """The best job in the world."""
     pass
 
+
 def raise_exc():
     raise Exception('raise_exc error')
 
+
 def raise_exc_mock():
     return raise_exc
+
 
 def div_by_zero(x):
     """Prepare for a division-by-zero exception."""
@@ -63,6 +66,7 @@ def some_calculation(x, y, z=1):
     """
     return x * y / z
 
+
 def rpush(key, value, append_worker_name=False, sleep=0):
     """Push a value into a list in Redis. Useful for detecting the order in
     which jobs were executed."""
@@ -73,8 +77,10 @@ def rpush(key, value, append_worker_name=False, sleep=0):
     redis = get_current_connection()
     redis.rpush(key, value)
 
+
 def check_dependencies_are_met():
     return get_current_job().dependencies_are_met()
+
 
 def create_file(path):
     """Creates a file at the given path.  Actually, leaves evidence that the
@@ -87,17 +93,18 @@ def create_file_after_timeout(path, timeout):
     time.sleep(timeout)
     create_file(path)
 
+
 def create_file_after_timeout_and_setsid(path, timeout):
     os.setsid()
     create_file_after_timeout(path, timeout)
 
-def launch_process_within_worker_and_store_pid(path, timeout):
 
+def launch_process_within_worker_and_store_pid(path, timeout):
     p = subprocess.Popen(['sleep', str(timeout)])
     with open(path, 'w') as f:
         f.write('{}'.format(p.pid))
-
     p.wait()
+
 
 def access_self():
     assert get_current_connection() is not None
