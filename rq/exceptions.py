@@ -18,6 +18,8 @@ class InvalidJobOperationError(Exception):
 class InvalidJobOperation(Exception):
     pass
 
+class OrphanedWorkerError(Exception):
+    pass
 
 class DequeueTimeout(Exception):
     pass
