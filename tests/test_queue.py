@@ -4,7 +4,6 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 from datetime import datetime, timedelta, timezone
-from os import pipe
 from mock.mock import patch
 from redis import WatchError
 
@@ -36,6 +35,7 @@ class MultipleDependencyJob(Job):
         _job = cls.create_job(*args, **kwargs)
         _job._dependency_ids = dependency_ids
         return _job
+
 
 class TestQueue(RQTestCase):
     def test_create_queue(self):
@@ -521,15 +521,14 @@ class TestQueue(RQTestCase):
                     job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
                     self.assertEqual(q.job_ids, [])
                     self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
-                    # Not in registry before execute, since passed in pipeline 
+                    # Not in registry before execute, since passed in pipeline
                     self.assertEqual(len(q.deferred_job_registry), 0)
                     pipe.execute()
                     break
                 except WatchError:
                     continue
-            # Only in registry after execute, since passed in pipeline 
+            # Only in registry after execute, since passed in pipeline
             self.assertEqual(len(q.deferred_job_registry), 1)
-
 
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.set_status(JobStatus.FINISHED)
@@ -697,7 +696,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
-    
+
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""
         queue = Queue('example', connection=self.testconn)

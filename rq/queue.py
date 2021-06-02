@@ -340,7 +340,7 @@ nd
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
             while True:
                 try:
-                    # Also calling watch even if caller 
+                    # Also calling watch even if caller
                     # passed in a pipeline since Queue#create_job
                     # is called from within this method.
                     pipe.watch(job.dependencies_key)
@@ -372,8 +372,8 @@ nd
                         # if pipeline comes from caller, re-raise to them
                         raise
         # No need for multi or While True loop because in this case
-        # Anything being watched came from caller, so 
-        # it will simply raise back up to them.    
+        # Anything being watched came from caller, so
+        # it will simply raise back up to them.
         job = self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
         return job
 
