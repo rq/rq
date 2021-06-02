@@ -34,7 +34,7 @@ from .connections import get_current_connection, push_connection, pop_connection
 from .defaults import (DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
-from .exceptions import DequeueTimeout, ShutDownImminentException
+from .exceptions import DequeueTimeout, ShutDownImminentException, JobFailture
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -911,7 +911,7 @@ class Worker:
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
     def handle_job_failure(self, job, queue, started_job_registry=None,
-                           exc_string=''):
+                           exc_string='', retry=None, seconds_until_next_retry=None, decrease_retries=True):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
             2. Removing the job from StartedJobRegistry
@@ -931,7 +931,9 @@ class Worker:
             # check whether a job was stopped intentionally and set the job
             # status appropriately if it was this job.
             job_is_stopped = self._stopped_job_id == job.id
-            retry = job.retries_left and job.retries_left > 0 and not job_is_stopped
+
+            if retry is None:
+                retry = job.retries_left is not None and job.retries_left > 0 and not job_is_stopped
 
             if job_is_stopped:
                 job.set_status(JobStatus.STOPPED, pipeline=pipeline)
@@ -957,7 +959,7 @@ class Worker:
                 )
 
             if retry:
-                job.retry(queue, pipeline)
+                job.retry(queue, pipeline, decrease_retries, seconds_until_next_retry)
 
             try:
                 pipeline.execute()
@@ -1028,11 +1030,25 @@ class Worker:
                                     started_job_registry=started_job_registry)
         except:  # NOQA
             job.ended_at = utcnow()
-            exc_info = sys.exc_info()
+            orig_exc_info = sys.exc_info()
+            exc_class, exc, _ = exc_info = orig_exc_info
+
+            if not issubclass(exc_info[0], JobFailture):
+                try:
+                    raise JobFailture(
+                        '%s occurred while performing job %s.' % (exc_class.__name__, job.get_id())) from exc
+                except JobFailture:
+                    exc_info = sys.exc_info()
+
+            _, job_failture, _ = exc_info
+
             exc_string = ''.join(traceback.format_exception(*exc_info))
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
-                                    started_job_registry=started_job_registry)
-            self.handle_exception(job, *exc_info)
+                                    started_job_registry=started_job_registry, retry=job_failture.retry,
+                                    seconds_until_next_retry=job_failture.seconds_until_next_retry,
+                                    decrease_retries=job_failture.decrease_retries)
+            self.handle_exception(job, *exc_info, show_traceback=job_failture.show_traceback,
+                                  use_exc_handlers=job_failture.use_exc_handlers)
             return False
 
         finally:
@@ -1054,28 +1070,30 @@ class Worker:
 
         return True
 
-    def handle_exception(self, job, *exc_info):
+    def handle_exception(self, job, *exc_info, show_traceback=True, use_exc_handlers=True):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = ''.join(traceback.format_exception(*exc_info))
-        self.log.error(exc_string, extra={
-            'func': job.func_name,
-            'arguments': job.args,
-            'kwargs': job.kwargs,
-            'queue': job.origin,
-            'job_id': job.id,
-        })
+        if show_traceback:
+            exc_string = ''.join(traceback.format_exception(*exc_info))
+            self.log.error(exc_string, extra={
+                'func': job.func_name,
+                'arguments': job.args,
+                'kwargs': job.kwargs,
+                'queue': job.origin,
+                'job_id': job.id,
+            })
 
-        for handler in self._exc_handlers:
-            self.log.debug('Invoking exception handler %s', handler)
-            fallthrough = handler(job, *exc_info)
+        if use_exc_handlers:
+            for handler in self._exc_handlers:
+                self.log.debug('Invoking exception handler %s', handler)
+                fallthrough = handler(job, *exc_info)
 
-            # Only handlers with explicit return values should disable further
-            # exc handling, so interpret a None return value as True.
-            if fallthrough is None:
-                fallthrough = True
+                # Only handlers with explicit return values should disable further
+                # exc handling, so interpret a None return value as True.
+                if fallthrough is None:
+                    fallthrough = True
 
-            if not fallthrough:
-                break
+                if not fallthrough:
+                    break
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""

@@ -31,3 +31,14 @@ class ShutDownImminentException(Exception):
 
 class TimeoutFormatError(Exception):
     pass
+
+
+class JobFailture(Exception):
+    def __init__(self, msg, retry=None, seconds_until_next_retry=None, decrease_retries=True, show_traceback=True,
+                 use_exc_handlers=True):
+        super(JobFailture, self).__init__(msg)
+        self.retry = retry
+        self.seconds_until_next_retry = seconds_until_next_retry
+        self.decrease_retries = decrease_retries
+        self.show_traceback = show_traceback
+        self.use_exc_handlers = use_exc_handlers

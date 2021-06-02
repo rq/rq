@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
-from .exceptions import NoSuchJobError
+from .exceptions import NoSuchJobError, JobFailture
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
@@ -806,15 +806,19 @@ class Job:
         if self.retry_intervals is None:
             return 0
         number_of_intervals = len(self.retry_intervals)
-        index = max(number_of_intervals - self.retries_left, 0)
+        index = max(number_of_intervals - max(self.retries_left, 1), 0)
         return self.retry_intervals[index]
 
-    def retry(self, queue, pipeline):
+    def retry(self, queue, pipeline, decrease_retries=True, seconds_until_next_retry=None):
         """Requeue or schedule this job for execution"""
-        retry_interval = self.get_retry_interval()
-        self.retries_left = self.retries_left - 1
-        if retry_interval:
-            scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+        if seconds_until_next_retry is None:
+            seconds_until_next_retry = self.get_retry_interval()
+
+        if decrease_retries and self.retries_left is not None and self.retries_left != 0:
+            self.retries_left = self.retries_left - 1
+
+        if seconds_until_next_retry:
+            scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=seconds_until_next_retry)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
         else:
@@ -885,6 +889,28 @@ class Job:
             in dependencies_statuses
             if status
         )
+
+    def fail(self, msg=None, exception=None, retry=None, seconds_until_next_retry=None, decrease_retries=True,
+             show_traceback=None, use_exc_handlers=True):
+        """Makes the job fail."""
+
+        if msg is not None:
+            _msg = msg
+        elif exception is not None:
+            _msg = '%s occurred while performing job %s.' % (type(exception).__name__, self.get_id())
+        else:
+            _msg = 'Job %s failed.' % self.get_id()
+
+        if show_traceback is None:
+            show_traceback = exception is not None or msg is not None
+
+        job_failture = JobFailture(_msg, retry, seconds_until_next_retry, decrease_retries, show_traceback,
+                                   use_exc_handlers)
+
+        if exception is None:
+            raise job_failture
+        else:
+            raise job_failture from exception
 
 
 _job_stack = LocalStack()
