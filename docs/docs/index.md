@@ -75,6 +75,7 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
 * `description` to add additional description to enqueued jobs.
+* `pipeline` specifies a custom `redis.Pipeline` instance to enqueue the job with.
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.

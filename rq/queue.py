@@ -313,7 +313,7 @@ class Queue:
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, failure_ttl=None,
                      description=None, depends_on=None, job_id=None,
-                     at_front=False, meta=None, retry=None):
+                     at_front=False, meta=None, retry=None, pipeline=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 nd
@@ -337,33 +337,44 @@ nd
         # something else has modified either the set of dependencies or the
         # status of one of them. In this case, we simply retry.
         if depends_on is not None:
-            with self.connection.pipeline() as pipe:
-                while True:
-                    try:
+            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            while True:
+                try:
+                    # Also calling watch even if caller 
+                    # passed in a pipeline since Queue#create_job
+                    # is called from within this method.
+                    pipe.watch(job.dependencies_key)
 
-                        pipe.watch(job.dependencies_key)
+                    dependencies = job.fetch_dependencies(
+                        watch=True,
+                        pipeline=pipe
+                    )
 
-                        dependencies = job.fetch_dependencies(
-                            watch=True,
-                            pipeline=pipe
-                        )
+                    pipe.multi()
 
-                        pipe.multi()
-
-                        for dependency in dependencies:
-                            if dependency.get_status(refresh=False) != JobStatus.FINISHED:
-                                job.set_status(JobStatus.DEFERRED, pipeline=pipe)
-                                job.register_dependency(pipeline=pipe)
-                                job.save(pipeline=pipe)
-                                job.cleanup(ttl=job.ttl, pipeline=pipe)
+                    for dependency in dependencies:
+                        if dependency.get_status(refresh=False) != JobStatus.FINISHED:
+                            job.set_status(JobStatus.DEFERRED, pipeline=pipe)
+                            job.register_dependency(pipeline=pipe)
+                            job.save(pipeline=pipe)
+                            job.cleanup(ttl=job.ttl, pipeline=pipe)
+                            if pipeline is None:
                                 pipe.execute()
-                                return job
-
-                        break
-                    except WatchError:
+                            return job
+                    job = self.enqueue_job(job, pipeline=pipe, at_front=at_front)
+                    if pipeline is None:
+                        pipe.execute()
+                    return job
+                except WatchError:
+                    if pipeline is None:
                         continue
-
-        job = self.enqueue_job(job, at_front=at_front)
+                    else:
+                        # if pipeline comes from caller, re-raise to them
+                        raise
+        # No need for multi or While True loop because in this case
+        # Anything being watched came from caller, so 
+        # it will simply raise back up to them.    
+        job = self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
         return job
 
     def run_job(self, job):
@@ -401,6 +412,7 @@ nd
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
         retry = kwargs.pop('retry', None)
+        pipeline = kwargs.pop('pipeline', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
@@ -408,32 +420,32 @@ nd
             kwargs = kwargs.pop('kwargs', None)
 
         return (f, timeout, description, result_ttl, ttl, failure_ttl,
-                depends_on, job_id, at_front, meta, retry, args, kwargs)
+                depends_on, job_id, at_front, meta, retry, pipeline, args, kwargs)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues it."""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, retry, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
 
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             description=description, depends_on=depends_on, job_id=job_id,
-            at_front=at_front, meta=meta, retry=retry
+            at_front=at_front, meta=meta, retry=retry, pipeline=pipeline
         )
 
     def enqueue_at(self, datetime, f, *args, **kwargs):
         """Schedules a job to be enqueued at specified time"""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, retry, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
         job = self.create_job(f, status=JobStatus.SCHEDULED, args=args, kwargs=kwargs,
                               timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                               failure_ttl=failure_ttl, description=description,
                               depends_on=depends_on, job_id=job_id, meta=meta, retry=retry)
 
-        return self.schedule_job(job, datetime)
+        return self.schedule_job(job, datetime, pipeline=pipeline)
 
     def schedule_job(self, job, datetime, pipeline=None):
         """Puts job on ScheduledJobRegistry"""

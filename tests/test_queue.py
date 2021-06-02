@@ -4,7 +4,9 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 from datetime import datetime, timedelta, timezone
+from os import pipe
 from mock.mock import patch
+from redis import WatchError
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
@@ -506,6 +508,48 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+    def test_enqueue_job_with_dependency_and_pipeline(self):
+        """Jobs are enqueued only when their dependencies are finished, and by the caller when passing a pipeline."""
+        # Job with unfinished dependency is not immediately enqueued
+        parent_job = Job.create(func=say_hello)
+        parent_job.save()
+        q = Queue()
+        with q.connection.pipeline() as pipe:
+            while True:
+                try:
+                    job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
+                    self.assertEqual(q.job_ids, [])
+                    self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
+                    # Not in registry before execute, since passed in pipeline 
+                    self.assertEqual(len(q.deferred_job_registry), 0)
+                    pipe.execute()
+                    break
+                except WatchError:
+                    continue
+            # Only in registry after execute, since passed in pipeline 
+            self.assertEqual(len(q.deferred_job_registry), 1)
+
+
+        # Jobs dependent on finished jobs are immediately enqueued
+        parent_job.set_status(JobStatus.FINISHED)
+        parent_job.save()
+        with q.connection.pipeline() as pipe:
+            while True:
+                try:
+                    job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
+                    # Pre execute conditions
+                    self.assertEqual(q.job_ids, [])
+                    self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+                    self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+                    pipe.execute()
+                    break
+                except WatchError:
+                    continue
+            # Post execute conditions
+            self.assertEqual(q.job_ids, [job.id])
+            self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+            self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
 
     def test_enqueue_job_with_dependency_by_id(self):
         """Can specify job dependency with job object or job id."""
