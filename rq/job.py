@@ -907,10 +907,7 @@ class Job:
         job_failture = JobFailture(_msg, retry, seconds_until_next_retry, decrease_retries, show_traceback,
                                    use_exc_handlers)
 
-        if exception is None:
-            raise job_failture
-        else:
-            raise job_failture from exception
+        raise job_failture from exception
 
 
 _job_stack = LocalStack()
