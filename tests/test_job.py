@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from redis import WatchError
 
 from rq.compat import as_text
-from rq.exceptions import NoSuchJobError
-from rq.job import Job, JobStatus, cancel_job, get_current_job
+from rq.exceptions import JobFailture, NoSuchJobError
+from rq.job import Job, JobStatus, Retry, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
@@ -1046,3 +1046,79 @@ class TestJob(RQTestCase):
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
         self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
+
+    def test_fail_method(self):
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queue)
+        registry = FailedJobRegistry(queue=queue)
+
+        queue.enqueue(fixtures.fail)
+
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(len(registry), 0)
+
+        worker.work(max_jobs=1)
+
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 1)
+
+    def test_fail_method_retry(self):
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queue)
+
+        job = queue.enqueue(fixtures.fail_with_retry, retry=Retry(1), meta={'decrease_retries': False})
+
+        job.refresh()
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(job.retries_left, 1)
+
+        worker.work(max_jobs=1)
+
+        job.refresh()
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(job.retries_left, 1)
+
+        worker.work(max_jobs=1)
+
+        job.refresh()
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(job.retries_left, 0)
+
+        worker.work(max_jobs=1)
+
+        job.refresh()
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(job.retries_left, 0)
+
+    def test_fail_method_args(self):
+        job = Job.create(fixtures.say_hello, connection=self.testconn, id='jobid')
+
+        try:
+            job.fail()
+        except JobFailture as f:
+            self.assertEqual(str(f), 'Job jobid failed.')
+            self.assertEqual(f.show_traceback, False)
+            self.assertEqual(f.__cause__, None)
+        else:
+            self.fail('job.fail() should throw a JobFailture.')
+
+        try:
+            job.fail(msg='I failed.')
+        except JobFailture as f:
+            self.assertEqual(str(f), 'I failed.')
+            self.assertEqual(f.show_traceback, True)
+            self.assertEqual(f.__cause__, None)
+        else:
+            self.fail('job.fail() should throw a JobFailture.')
+
+        try:
+            raise Exception
+        except Exception as e:
+            try:
+                job.fail(exception=e)
+            except JobFailture as f:
+                self.assertEqual(str(f), 'Exception occurred while performing job jobid.')
+                self.assertEqual(f.show_traceback, True)
+                self.assertEqual(f.__cause__, e)
+            else:
+                self.fail('job.fail() should throw a JobFailture.')

@@ -121,6 +121,18 @@ def echo(*args, **kwargs):
     return args, kwargs
 
 
+def fail():
+    get_current_job().fail()
+
+
+def fail_with_retry():
+    """Fails with retry=True. decrease_retries is read from the meta and set to True afterwards"""
+    current_job = get_current_job()
+    decrease_retries = current_job.meta['decrease_retries']
+    current_job.meta['decrease_retries'] = True
+    current_job.fail(retry=True, decrease_retries=decrease_retries)
+
+
 class Number:
     def __init__(self, value):
         self.value = value
