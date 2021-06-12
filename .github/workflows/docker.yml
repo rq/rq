@@ -37,7 +37,7 @@ jobs:
 
           # Login to registries
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
-          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u TODO --password-stdin
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u selwin --password-stdin
 
           # Build image
           docker build . --tag worker
