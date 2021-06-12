@@ -54,3 +54,5 @@ navigation:
     url: /contrib/testing/
   - text: Vagrant
     url: /contrib/vagrant/
+- text: Chat
+  url: /chat/
