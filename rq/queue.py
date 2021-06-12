@@ -24,7 +24,7 @@ def compact(lst):
     return [item for item in lst if item is not None]
 
 
-class JobEnqueueData(namedtuple('JobData', ["func", "args", "kwargs", "timeout",
+class JobEnqueueData(namedtuple('JobEnqueueData', ["func", "args", "kwargs", "timeout",
                                             "result_ttl", "ttl", "failure_ttl",
                                             "description", "job_id",
                                             "at_front", "meta", "retry"])):
