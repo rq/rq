@@ -5,6 +5,7 @@ from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save
 
 from rq import Queue, Worker
 from rq.job import Job, JobStatus, UNEVALUATED
+from rq.worker import SimpleWorker
 
 
 class QueueCallbackTestCase(RQTestCase):
@@ -12,6 +13,11 @@ class QueueCallbackTestCase(RQTestCase):
     def test_enqueue_with_success_callback(self):
         """Test enqueue* methods with on_success"""
         queue = Queue(connection=self.testconn)
+
+        # Only functions and builtins are supported as callback
+        with self.assertRaises(ValueError):
+            queue.enqueue(say_hello, on_success=Job.fetch)
+
         job = queue.enqueue(say_hello, on_success=print)
 
         job = Job.fetch(id=job.id, connection=self.testconn)
@@ -25,6 +31,11 @@ class QueueCallbackTestCase(RQTestCase):
     def test_enqueue_with_failure_callback(self):
         """queue.enqueue* methods with on_failure is persisted correctly"""
         queue = Queue(connection=self.testconn)
+
+        # Only functions and builtins are supported as callback
+        with self.assertRaises(ValueError):
+            queue.enqueue(say_hello, on_failure=Job.fetch)
+
         job = queue.enqueue(say_hello, on_failure=print)
 
         job = Job.fetch(id=job.id, connection=self.testconn)
@@ -40,7 +51,7 @@ class WorkerCallbackTestCase(RQTestCase):
     def test_success_callback(self):
         """Test success callback is executed only when job is successful"""
         queue = Queue(connection=self.testconn)
-        worker = Worker([queue])
+        worker = SimpleWorker([queue])
 
         job = queue.enqueue(say_hello, on_success=save_result)
 
@@ -70,7 +81,7 @@ class WorkerCallbackTestCase(RQTestCase):
     def test_failure_callback(self):
         """Test failure callback is executed only when job a fails"""
         queue = Queue(connection=self.testconn)
-        worker = Worker([queue])
+        worker = SimpleWorker([queue])
 
         job = queue.enqueue(div_by_zero, on_failure=save_exception)
 
