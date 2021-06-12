@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from redis import WatchError
 
 from rq.compat import as_text
-from rq.exceptions import NoSuchJobError
+from rq.exceptions import DeserializationError, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
@@ -53,13 +53,13 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.result)
         self.assertIsNone(job.exc_info)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.func
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.instance
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.args
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.kwargs
 
     def test_create_param_errors(self):

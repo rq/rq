@@ -4,6 +4,8 @@ from __future__ import (absolute_import, division, print_function,
 
 from datetime import datetime, timezone
 
+import os
+
 from click.testing import CliRunner
 from redis import Redis
 
@@ -104,6 +106,16 @@ class TestRQCli(RQTestCase):
         self.assertEqual(
             cli_config.connection.connection_pool.connection_kwargs['password'],
             '123'
+        )
+
+    def test_config_env_vars(self):
+        os.environ['REDIS_HOST'] = "testhost.example.com"
+
+        cli_config = CliConfig()
+
+        self.assertEqual(
+            cli_config.connection.connection_pool.connection_kwargs['host'],
+            'testhost.example.com',
         )
 
     def test_empty_nothing(self):
