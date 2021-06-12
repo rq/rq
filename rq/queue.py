@@ -5,6 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 import uuid
 import warnings
 
+from collections import namedtuple
 from datetime import datetime, timezone
 
 from distutils.version import StrictVersion
@@ -21,6 +22,30 @@ from .utils import backend_class, get_version, import_attribute, parse_timeout, 
 
 def compact(lst):
     return [item for item in lst if item is not None]
+
+
+class JobEnqueueData(namedtuple('JobData', ["func", "args", "kwargs", "timeout",
+                                            "result_ttl", "ttl", "failure_ttl",
+                                            "description", "job_id",
+                                            "at_front", "meta", "retry"])):
+    """Helper type to use when calling enqueue_many
+    NOTE: Does not support `depends_on` yet.
+    """
+
+    __slots__ = ()
+
+    @classmethod
+    def create(cls, func, args=None, kwargs=None, timeout=None,
+               result_ttl=None, ttl=None, failure_ttl=None,
+               description=None, job_id=None,
+               at_front=False, meta=None, retry=None):
+        # Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
+        return cls(
+            func, args, kwargs, timeout,
+            result_ttl, ttl, failure_ttl,
+            description, job_id,
+            at_front, meta, retry
+        )
 
 
 @total_ordering
@@ -310,25 +335,12 @@ class Queue:
 
         return job
 
-    def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, ttl=None, failure_ttl=None,
-                     description=None, depends_on=None, job_id=None,
-                     at_front=False, meta=None, retry=None, pipeline=None):
-        """Creates a job to represent the delayed function call and enqueues
-        it.
-nd
-        It is much like `.enqueue()`, except that it takes the function's args
-        and kwargs as explicit arguments.  Any kwargs passed to this function
-        contain options for RQ itself.
-        """
-
-        job = self.create_job(
-            func, args=args, kwargs=kwargs, result_ttl=result_ttl, ttl=ttl,
-            failure_ttl=failure_ttl, description=description, depends_on=depends_on,
-            job_id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
-            retry=retry
-        )
-
+    def setup_dependencies_and_enqueue(
+        self,
+        job,
+        pipeline=None,
+        at_front=False
+    ):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
         #
@@ -336,7 +348,9 @@ nd
         # WatchError is raised in the when the pipeline is executed, that means
         # something else has modified either the set of dependencies or the
         # status of one of them. In this case, we simply retry.
-        if depends_on is not None:
+        if job._dependency_id is not None:
+            # TODO: Only way without changes to check if dependencies were set up without fetching,
+            #  do we want a better way?
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
             while True:
                 try:
@@ -376,6 +390,66 @@ nd
         # it will simply raise back up to them.
         job = self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
         return job
+
+    def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
+                     result_ttl=None, ttl=None, failure_ttl=None,
+                     description=None, depends_on=None, job_id=None,
+                     at_front=False, meta=None, retry=None, pipeline=None):
+        """Creates a job to represent the delayed function call and enqueues
+        it.
+nd
+        It is much like `.enqueue()`, except that it takes the function's args
+        and kwargs as explicit arguments.  Any kwargs passed to this function
+        contain options for RQ itself.
+        """
+
+        job = self.create_job(
+            func, args=args, kwargs=kwargs, result_ttl=result_ttl, ttl=ttl,
+            failure_ttl=failure_ttl, description=description, depends_on=depends_on,
+            job_id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
+            retry=retry
+        )
+
+        return self.setup_dependencies_and_enqueue(
+            job,
+            pipeline=pipeline,
+            at_front=at_front
+        )
+
+    def enqueue_many(
+        self,
+        job_datas,
+        pipeline=None
+    ):
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        while True:
+            try:
+                pipe.multi()
+                jobs = [
+                    self.enqueue_job(
+                        self.create_job(
+                            job_data.func, args=job_data.args, kwargs=job_data.kwargs, result_ttl=job_data.result_ttl,
+                            ttl=job_data.ttl,
+                            failure_ttl=job_data.failure_ttl, description=job_data.description,
+                            depends_on=None,
+                            job_id=job_data.job_id, meta=job_data.meta, status=JobStatus.QUEUED,
+                            timeout=job_data.timeout,
+                            retry=job_data.retry
+                        ),
+                        pipeline=pipe,
+                        at_front=job_data.at_front
+                    )
+                    for job_data in job_datas
+                ]
+                if pipeline is None:
+                    pipe.execute()
+                return jobs
+            except WatchError:
+                if pipeline is None:
+                    continue
+                else:
+                    # if pipeline comes from caller, re-raise to them
+                    raise
 
     def run_job(self, job):
         job.perform()
