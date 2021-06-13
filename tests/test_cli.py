@@ -395,13 +395,13 @@ class TestRQCli(RQTestCase):
         self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
 
     def test_cli_enqueue_args(self):
-        """rq enqueue -u <url> tests.fixtures.echo hello -i 2 -f 3 -b true --bool N -k keyword value"""
+        """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""
         queue = Queue(connection=self.connection)
         self.assertTrue(queue.is_empty())
 
         runner = CliRunner()
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'hello', '-i', '2', '-f',
-                                      '3', '-b', 'true', '--bool', 'N', '-k', 'keyword', 'value'])
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'hello',
+                                      ':[1, {"key": "value"}]', 'json:=[3.0, true]', 'nojson=abc'])
         self.assert_normal_execution(result)
 
         job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
@@ -411,8 +411,8 @@ class TestRQCli(RQTestCase):
 
         args, kwargs = Job(job_id).result
 
-        self.assertEqual(args, ('hello', 2, 3.0, True, False))
-        self.assertEqual(kwargs, {'keyword': 'value'})
+        self.assertEqual(args, ('hello', [1, {'key': 'value'}]))
+        self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc'})
 
     def test_cli_enqueue_schedule_in(self):
         """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""
@@ -513,39 +513,26 @@ class TestRQCli(RQTestCase):
 
     def test_cli_enqueue_errors(self):
         """
-        rq enqueue -u <url> tests.fixtures.echo -i
+        rq enqueue -u <url> tests.fixtures.echo :invalid_json
 
-        rq enqueue -u <url> tests.fixtures.echo -k
-
-        rq enqueue -u <url> tests.fixtures.echo -k keyword
+        rq enqueue -u <url> tests.fixtures.echo key=value key=value
 
         rq enqueue -u <url> tests.fixtures.echo --schedule-in --schedule-at
-
-        rq enqueue -u <url> tests.fixtures.echo -b maybe
         """
         runner = CliRunner()
 
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-i'])
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', ':invalid_json'])
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIn('No value for type int specified.', result.output)
+        self.assertIn('Couldn\'t parse json.', result.output)
 
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-k'])
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'key=value', 'key=value'])
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIn('No keyword specified.', result.output)
-
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-k', 'keyword'])
-        self.assertNotEqual(result.exit_code, 0)
-        self.assertIn('No value for keyword \'keyword\' specified.', result.output)
+        self.assertIn('You can\'t specify multiple values for the same keyword.', result.output)
 
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '--schedule-in', '1s',
                                       '--schedule-at', '2000-01-01T00:00:00'])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('You can\'t specify both --schedule-in and --schedule-at', result.output)
-
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '-b', 'maybe'])
-        self.assertNotEqual(result.exit_code, 0)
-        self.assertIn('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' '
-                      '(case insensitive). Found: \'maybe\'', result.output)
 
     def test_job_func(self):
         """executes the rq.cli.helpers.job_func function"""

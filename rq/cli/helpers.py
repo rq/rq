@@ -8,6 +8,7 @@ import time
 from functools import partial
 
 from datetime import datetime, timezone, timedelta
+from json import loads, JSONDecodeError
 
 import click
 import redis
@@ -207,55 +208,35 @@ def job_func(func, args, kwargs):
         return import_attribute(func)(*args, **kwargs)
 
 
-def cast_element(element, arg_type):
-    if arg_type == bool:
-        if element.lower() in ['y', 'yes', 't', 'true']:
-            return True
-        elif element.lower() in ['n', 'no', 'f', 'false']:
-            return False
-        else:
-            raise click.UsageError('Boolean must be \'y\', \'yes\', \'t\', \'true\', \'n\', \'no\', \'f\' or \'false\' '
-                                   '(case insensitive). Found: \'%s\'' % element)
+def parse_function_arg(argument):
+    if argument.startswith(':'):  # no keyword, json
+        return None, loads(argument[1:])
     else:
-        return arg_type(element)
+        index = argument.find('=')
+        if index > 0:
+            if ':' in argument and argument.index(':') + 1 == index:  # keyword, json
+                return argument[:index - 1], loads(argument[index + 1:])
+            else:  # keyword, no json
+                return argument[:index], argument[index + 1:]
+        else:  # no keyword, no json
+            return None, argument
 
 
 def parse_function_args(arguments):
-    arguments = list(arguments)
-
     args = []
     kwargs = {}
 
-    keyword = None
-    arg_type = str
-    while len(arguments) != 0:
-        element = arguments.pop(0)
-        if element == '--int' or element == '--integer' or element == '-i':
-            arg_type = int
-        elif element == '--float' or element == '-f':
-            arg_type = float
-        elif element == '--bool' or element == '--boolean' or element == '-b':
-            arg_type = bool
-        elif element == '--keyword' or element == '-k':
-            if len(arguments) == 0:
-                raise click.BadArgumentUsage('No keyword specified.')
-            keyword = arguments.pop(0)
+    for argument in arguments:
+        try:
+            keyword, value = parse_function_arg(argument)
+        except JSONDecodeError:
+            raise click.BadParameter('Couldn\'t parse json.')
+        if keyword is not None:
+            if keyword in kwargs:
+                raise click.BadParameter('You can\'t specify multiple values for the same keyword.')
+            kwargs[keyword] = value
         else:
-            element = cast_element(element, arg_type)
-
-            if keyword is not None:
-                kwargs[keyword] = element
-            else:
-                args.append(element)
-
-            keyword = None
-            arg_type = str
-
-    if keyword is not None:
-        raise click.BadArgumentUsage('No value for keyword \'%s\' specified.' % keyword)
-    if arg_type != str:
-        raise click.BadArgumentUsage('No value for type %s specified.' % arg_type.__name__)
-
+            args.append(value)
     return args, kwargs
 
 

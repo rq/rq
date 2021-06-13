@@ -308,7 +308,7 @@ def resume(cli_config, **options):
     click.echo("Resuming workers.")
 
 
-@main.command(context_settings={'ignore_unknown_options': True})
+@main.command()
 @click.option('--queue', '-q', help='The name of the queue.', default='default')
 @click.option('--timeout',
               help='Specifies the maximum runtime of the job before it’s interrupted and marked as failed.')
