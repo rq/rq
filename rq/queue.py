@@ -24,28 +24,15 @@ def compact(lst):
     return [item for item in lst if item is not None]
 
 
-class JobEnqueueData(namedtuple('JobEnqueueData', ["func", "args", "kwargs", "timeout",
-                                            "result_ttl", "ttl", "failure_ttl",
-                                            "description", "job_id",
-                                            "at_front", "meta", "retry"])):
+class EnqueueData(namedtuple('EnqueueData', ["func", "args", "kwargs", "timeout",
+                                             "result_ttl", "ttl", "failure_ttl",
+                                             "description", "job_id",
+                                             "at_front", "meta", "retry"])):
     """Helper type to use when calling enqueue_many
     NOTE: Does not support `depends_on` yet.
     """
 
     __slots__ = ()
-
-    @classmethod
-    def create(cls, func, args=None, kwargs=None, timeout=None,
-               result_ttl=None, ttl=None, failure_ttl=None,
-               description=None, job_id=None,
-               at_front=False, meta=None, retry=None):
-        # Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
-        return cls(
-            func, args, kwargs, timeout,
-            result_ttl, ttl, failure_ttl,
-            description, job_id,
-            at_front, meta, retry
-        )
 
 
 @total_ordering
@@ -348,9 +335,7 @@ class Queue:
         # WatchError is raised in the when the pipeline is executed, that means
         # something else has modified either the set of dependencies or the
         # status of one of them. In this case, we simply retry.
-        if job._dependency_id is not None:
-            # TODO: Only way without changes to check if dependencies were set up without fetching,
-            #  do we want a better way?
+        if len(job._dependency_ids) > 0:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
             while True:
                 try:
@@ -416,40 +401,49 @@ nd
             at_front=at_front
         )
 
+    @staticmethod
+    def prepare_data(func, args=None, kwargs=None, timeout=None,
+                     result_ttl=None, ttl=None, failure_ttl=None,
+                     description=None, job_id=None,
+                     at_front=False, meta=None, retry=None):
+        # Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
+        # And can keep this logic within EnqueueData
+        return EnqueueData(
+            func, args, kwargs, timeout,
+            result_ttl, ttl, failure_ttl,
+            description, job_id,
+            at_front, meta, retry
+        )
+
     def enqueue_many(
         self,
         job_datas,
         pipeline=None
     ):
+        """
+        Creates multiple jobs (created via `Queue.prepare_data` calls)
+        to represent the delayed function calls and enqueues them.
+        """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
-        while True:
-            try:
-                pipe.multi()
-                jobs = [
-                    self.enqueue_job(
-                        self.create_job(
-                            job_data.func, args=job_data.args, kwargs=job_data.kwargs, result_ttl=job_data.result_ttl,
-                            ttl=job_data.ttl,
-                            failure_ttl=job_data.failure_ttl, description=job_data.description,
-                            depends_on=None,
-                            job_id=job_data.job_id, meta=job_data.meta, status=JobStatus.QUEUED,
-                            timeout=job_data.timeout,
-                            retry=job_data.retry
-                        ),
-                        pipeline=pipe,
-                        at_front=job_data.at_front
-                    )
-                    for job_data in job_datas
-                ]
-                if pipeline is None:
-                    pipe.execute()
-                return jobs
-            except WatchError:
-                if pipeline is None:
-                    continue
-                else:
-                    # if pipeline comes from caller, re-raise to them
-                    raise
+        jobs = [
+            self.enqueue_job(
+                self.create_job(
+                    job_data.func, args=job_data.args, kwargs=job_data.kwargs, result_ttl=job_data.result_ttl,
+                    ttl=job_data.ttl,
+                    failure_ttl=job_data.failure_ttl, description=job_data.description,
+                    depends_on=None,
+                    job_id=job_data.job_id, meta=job_data.meta, status=JobStatus.QUEUED,
+                    timeout=job_data.timeout,
+                    retry=job_data.retry
+                ),
+                pipeline=pipe,
+                at_front=job_data.at_front
+            )
+            for job_data in job_datas
+        ]
+        if pipeline is None:
+            pipe.execute()
+        return jobs
 
     def run_job(self, job):
         job.perform()

@@ -5,11 +5,9 @@ from __future__ import (absolute_import, division, print_function,
 import json
 from datetime import datetime, timedelta, timezone
 from mock.mock import patch
-from redis import WatchError
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
-from rq.queue import JobEnqueueData
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, ScheduledJobRegistry,
                          StartedJobRegistry)
@@ -517,56 +515,46 @@ class TestQueue(RQTestCase):
         parent_job.save()
         q = Queue()
         with q.connection.pipeline() as pipe:
-            while True:
-                try:
-                    job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
-                    self.assertEqual(q.job_ids, [])
-                    self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
-                    # Not in registry before execute, since passed in pipeline
-                    self.assertEqual(len(q.deferred_job_registry), 0)
-                    pipe.execute()
-                    break
-                except WatchError:
-                    continue
+            job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
+            self.assertEqual(q.job_ids, [])
+            self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
+            # Not in registry before execute, since passed in pipeline
+            self.assertEqual(len(q.deferred_job_registry), 0)
+            pipe.execute()
             # Only in registry after execute, since passed in pipeline
-            self.assertEqual(len(q.deferred_job_registry), 1)
+        self.assertEqual(len(q.deferred_job_registry), 1)
 
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.set_status(JobStatus.FINISHED)
         parent_job.save()
         with q.connection.pipeline() as pipe:
-            while True:
-                try:
-                    job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
-                    # Pre execute conditions
-                    self.assertEqual(q.job_ids, [])
-                    self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
-                    self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
-                    pipe.execute()
-                    break
-                except WatchError:
-                    continue
-            # Post execute conditions
-            self.assertEqual(q.job_ids, [job.id])
+            job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
+            # Pre execute conditions
+            self.assertEqual(q.job_ids, [])
             self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
             self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+            pipe.execute()
+        # Post execute conditions
+        self.assertEqual(q.job_ids, [job.id])
+        self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+        self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
 
     def test_enqueue_many_internal_pipeline(self):
         """Jobs should be enqueued in bulk with an internal pipeline, enqueued in order provided
         (but at_front still applies)"""
         # Job with unfinished dependency is not immediately enqueued
         q = Queue()
-        job_1_data = JobEnqueueData.create(
+        job_1_data = Queue.prepare_data(
             say_hello,
             job_id='fake_job_id_1',
             at_front=False
         )
-        job_2_data = JobEnqueueData.create(
+        job_2_data = Queue.prepare_data(
             say_hello,
             job_id='fake_job_id_2',
             at_front=False
         )
-        job_3_data = JobEnqueueData.create(
+        job_3_data = Queue.prepare_data(
             say_hello,
             job_id='fake_job_id_3',
             at_front=True
@@ -586,34 +574,29 @@ class TestQueue(RQTestCase):
         # Job with unfinished dependency is not immediately enqueued
         q = Queue()
         with q.connection.pipeline() as pipe:
-            while True:
-                try:
-                    job_1_data = JobEnqueueData.create(
-                        say_hello,
-                        job_id='fake_job_id_1',
-                        at_front=False
-                    )
-                    job_2_data = JobEnqueueData.create(
-                        say_hello,
-                        job_id='fake_job_id_2',
-                        at_front=False
-                    )
-                    job_3_data = JobEnqueueData.create(
-                        say_hello,
-                        job_id='fake_job_id_3',
-                        at_front=True
-                    )
-                    jobs = q.enqueue_many(
-                        [job_1_data, job_2_data, job_3_data],
-                        pipeline=pipe
-                    )
-                    self.assertEqual(q.job_ids, [])
-                    for job in jobs:
-                        self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
-                    pipe.execute()
-                    break
-                except WatchError:
-                    continue
+            job_1_data = Queue.prepare_data(
+                say_hello,
+                job_id='fake_job_id_1',
+                at_front=False
+            )
+            job_2_data = Queue.prepare_data(
+                say_hello,
+                job_id='fake_job_id_2',
+                at_front=False
+            )
+            job_3_data = Queue.prepare_data(
+                say_hello,
+                job_id='fake_job_id_3',
+                at_front=True
+            )
+            jobs = q.enqueue_many(
+                [job_1_data, job_2_data, job_3_data],
+                pipeline=pipe
+            )
+            self.assertEqual(q.job_ids, [])
+            for job in jobs:
+                self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+            pipe.execute()
             # Only in registry after execute, since passed in pipeline
             self.assertEqual(len(q), 3)
             self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
