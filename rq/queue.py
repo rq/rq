@@ -322,11 +322,10 @@ class Queue:
 
         return job
 
-    def setup_dependencies_and_enqueue(
+    def setup_dependencies(
         self,
         job,
-        pipeline=None,
-        at_front=False
+        pipeline=None
     ):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
@@ -360,20 +359,13 @@ class Queue:
                             if pipeline is None:
                                 pipe.execute()
                             return job
-                    job = self.enqueue_job(job, pipeline=pipe, at_front=at_front)
-                    if pipeline is None:
-                        pipe.execute()
-                    return job
+                    break
                 except WatchError:
                     if pipeline is None:
                         continue
                     else:
                         # if pipeline comes from caller, re-raise to them
                         raise
-        # No need for multi or While True loop because in this case
-        # Anything being watched came from caller, so
-        # it will simply raise back up to them.
-        job = self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
         return job
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
@@ -395,11 +387,14 @@ nd
             retry=retry
         )
 
-        return self.setup_dependencies_and_enqueue(
+        job = self.setup_dependencies(
             job,
-            pipeline=pipeline,
-            at_front=at_front
+            pipeline=pipeline
         )
+        # If we do not depend on an unfinished job, enqueue the job.
+        if job.get_status(refresh=False) != JobStatus.DEFERRED:
+            return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
+        return job
 
     @staticmethod
     def prepare_data(func, args=None, kwargs=None, timeout=None,
