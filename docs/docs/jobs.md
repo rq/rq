@@ -84,37 +84,6 @@ job = Job.create(count_words_at_url,
           })
 ```
 
-#### Bulk Job Enqueueing
-_New in version 1.9.0._  
-You can also enqueue multiple jobs in bulk with `queue.enqueue_many()` and `Queue.prepare_data()`:
-
-```python
-jobs = q.enqueue_many(
-  [
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
-  ]
-)
-```
-
-which will enqueue all the jobs in a single redis `pipeline` which you can optionally pass in yourself:
-
-```python
-with q.connection.pipeline() as pipe:
-  jobs = q.enqueue_many(
-    [
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
-    ]
-    pipeline=pipe
-  )
-  pipe.execute()
-```
-
-`Queue.prepare_data` accepts all arguments that `Queue.parse_args` does **EXCEPT** for `depends_on`,
-which is not supported at this time, so dependencies will be up to you to setup.
-
-
 ### Retrieving a Job from Redis
 
 All job information is stored in Redis. You can inspect a job and its attributes
