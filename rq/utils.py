@@ -142,8 +142,7 @@ def import_attribute(name):
             module = importlib.import_module(module_name)
             break
         except ImportError:
-            logging.warning("Import error for '%s'" % module_name)
-            logging.warning("Import error trace:", exc_info=True)
+            logging.warning("Import error for '%s'" % module_name, exc_info=True)
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
