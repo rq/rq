@@ -102,7 +102,7 @@ q = Queue('low', connection=redis_conn)
 q.enqueue('my_package.my_module.my_func', 3, 4)
 ```
 
-## Bulk Job Enqueueing
+### Bulk Job Enqueueing
 _New in version 1.9.0._  
 You can also enqueue multiple jobs in bulk with `queue.enqueue_many()` and `Queue.prepare_data()`:
 
@@ -132,7 +132,7 @@ with q.connection.pipeline() as pipe:
 `Queue.prepare_data` accepts all arguments that `Queue.parse_args` does **EXCEPT** for `depends_on`,
 which is not supported at this time, so dependencies will be up to you to setup.
 
-### Working with Queues
+## Working with Queues
 
 Besides enqueuing jobs, Queues have a few useful methods:
 
