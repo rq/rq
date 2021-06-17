@@ -9,6 +9,7 @@ from functools import partial
 
 from datetime import datetime, timezone, timedelta
 from json import loads, JSONDecodeError
+from ast import literal_eval
 
 import click
 import redis
@@ -209,29 +210,37 @@ def job_func(func, args, kwargs):
 
 
 def parse_function_arg(argument):
-    json = False
+    mode = 0  # 0: text, 1: json, 2: literal_eval (python)
     keyword = None
     if argument.startswith(':'):  # no keyword, json
-        json = True
+        mode = 1
+        value = argument[1:]
+    elif argument.startswith('#'):  # no keyword, literal_eval
+        mode = 2
         value = argument[1:]
     else:
         index = argument.find('=')
         if index > 0:
             if ':' in argument and argument.index(':') + 1 == index:  # keyword, json
-                json = True
+                mode = 1
                 keyword = argument[:index - 1]
-            else:  # keyword, no json
+            elif '#' in argument and argument.index('#') + 1 == index:  # keyword, literal_eval
+                mode = 2
+                keyword = argument[:index - 1]
+            else:  # keyword, text
                 keyword = argument[:index]
             value = argument[index + 1:]
-        else:  # no keyword, no json
+        else:  # no keyword, text
             value = argument
 
     if value.startswith('@'):
         with open(value[1:], 'r') as file:
             value = file.read()
 
-    if json:
+    if mode == 1:  # json
         value = loads(value)
+    elif mode == 2:  # literal_eval
+        value = literal_eval(value)
 
     return keyword, value
 
@@ -245,6 +254,9 @@ def parse_function_args(arguments):
             keyword, value = parse_function_arg(argument)
         except JSONDecodeError:
             raise click.BadParameter('Couldn\'t parse json.')
+        except (ValueError, SyntaxError):
+            raise click.BadParameter(
+                'Could not eval. View: https://docs.python.org/3/library/ast.html#ast.literal_eval')
         if keyword is not None:
             if keyword in kwargs:
                 raise click.BadParameter('You can\'t specify multiple values for the same keyword.')
