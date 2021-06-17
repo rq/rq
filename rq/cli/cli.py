@@ -326,15 +326,15 @@ def resume(cli_config, **options):
 @click.option('--schedule-at', help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
               'timezone (e.g. 2021-05-27T21:45:00).')
 @click.option('--quiet', is_flag=True, help='Only logs errors.')
-@click.argument('func')
+@click.argument('function')
 @click.argument('arguments', nargs=-1)
 @pass_cli_config
 def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front,
-            retry_max, retry_interval, schedule_in, schedule_at, quiet, func, arguments, **options):
+            retry_max, retry_interval, schedule_in, schedule_at, quiet, function, arguments, **options):
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
 
-    description = description or generate_function_string(func, args, kwargs)
+    description = description or generate_function_string(function, args, kwargs)
 
     retry = None
     if retry_max > 0:
@@ -346,10 +346,10 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
         queue = cli_config.queue_class(queue)
 
         if schedule is None:
-            job = queue.enqueue_call(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
+            job = queue.enqueue_call(job_func, (function, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
                                      description, depends_on, job_id, at_front, None, retry)
         else:
-            job = queue.create_job(job_func, (func, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
+            job = queue.create_job(job_func, (function, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
                                    description, depends_on, job_id, None, JobStatus.SCHEDULED, retry)
             queue.schedule_job(job, schedule)
 
