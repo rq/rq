@@ -401,7 +401,8 @@ class TestRQCli(RQTestCase):
 
         runner = CliRunner()
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'hello',
-                                      ':[1, {"key": "value"}]', 'json:=[3.0, true]', 'nojson=abc'])
+                                      ':[1, {"key": "value"}]', ':@tests/test.json', 'json:=[3.0, true]', 'nojson=abc',
+                                      'file=@tests/test.json'])
         self.assert_normal_execution(result)
 
         job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
@@ -411,8 +412,8 @@ class TestRQCli(RQTestCase):
 
         args, kwargs = Job(job_id).result
 
-        self.assertEqual(args, ('hello', [1, {'key': 'value'}]))
-        self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc'})
+        self.assertEqual(args, ('hello', [1, {'key': 'value'}], {"test": True}))
+        self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc', 'file': '{\n    "test": true\n}\n'})
 
     def test_cli_enqueue_schedule_in(self):
         """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""

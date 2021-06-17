@@ -209,17 +209,31 @@ def job_func(func, args, kwargs):
 
 
 def parse_function_arg(argument):
+    json = False
+    keyword = None
     if argument.startswith(':'):  # no keyword, json
-        return None, loads(argument[1:])
+        json = True
+        value = argument[1:]
     else:
         index = argument.find('=')
         if index > 0:
             if ':' in argument and argument.index(':') + 1 == index:  # keyword, json
-                return argument[:index - 1], loads(argument[index + 1:])
+                json = True
+                keyword = argument[:index - 1]
             else:  # keyword, no json
-                return argument[:index], argument[index + 1:]
+                keyword = argument[:index]
+            value = argument[index + 1:]
         else:  # no keyword, no json
-            return None, argument
+            value = argument
+
+    if value.startswith('@'):
+        with open(value[1:], 'r') as file:
+            value = file.read()
+
+    if json:
+        value = loads(value)
+
+    return keyword, value
 
 
 def parse_function_args(arguments):
