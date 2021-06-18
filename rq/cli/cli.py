@@ -26,13 +26,14 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_SERIALIZER_CLASS)
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute, generate_function_string
+from rq.utils import import_attribute, generate_function_string, make_colorizer
 from rq.serializers import DefaultSerializer
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
 from rq.worker_registration import clean_worker_registry
 from rq.job import JobStatus
 
+blue = make_colorizer('darkblue')
 
 
 # Disable the warning that Click displays (as of Click version 5.0) when users
@@ -334,7 +335,8 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
 
-    description = description or generate_function_string(function, args, kwargs)
+    function_string = generate_function_string(function, args, kwargs)
+    description = description or function_string
 
     retry = None
     if retry_max > 0:
@@ -354,4 +356,4 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
             queue.schedule_job(job, schedule)
 
     if not quiet:
-        click.echo('Enqueued with job-id \'%s\'' % job.id)
+        click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))

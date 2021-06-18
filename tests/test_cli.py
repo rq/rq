@@ -377,8 +377,8 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello'])
         self.assert_normal_execution(result)
 
-        prefix = 'Enqueued with job-id \''
-        suffix = '\'\n'
+        prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
+        suffix = '\'.\n'
 
         print(result.stdout)
 
