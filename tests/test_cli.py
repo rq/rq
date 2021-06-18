@@ -516,9 +516,13 @@ class TestRQCli(RQTestCase):
         """
         rq enqueue -u <url> tests.fixtures.echo :invalid_json
 
+        rq enqueue -u <url> tests.fixtures.echo #invalid_eval_statement
+
         rq enqueue -u <url> tests.fixtures.echo key=value key=value
 
-        rq enqueue -u <url> tests.fixtures.echo --schedule-in --schedule-at
+        rq enqueue -u <url> tests.fixtures.echo --schedule-in 1s --schedule-at 2000-01-01T00:00:00
+
+        rq enqueue -u <url> tests.fixtures.echo @not_existing_file
         """
         runner = CliRunner()
 
@@ -539,6 +543,10 @@ class TestRQCli(RQTestCase):
                                       '--schedule-at', '2000-01-01T00:00:00'])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('You can\'t specify both --schedule-in and --schedule-at', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '@not_existing_file'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('Not found', result.output)
 
     def test_job_func(self):
         """executes the rq.cli.helpers.job_func function"""

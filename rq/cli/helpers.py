@@ -234,8 +234,11 @@ def parse_function_arg(argument):
             value = argument
 
     if value.startswith('@'):
-        with open(value[1:], 'r') as file:
-            value = file.read()
+        try:
+            with open(value[1:], 'r') as file:
+                value = file.read()
+        except FileNotFoundError:
+            raise click.FileError(value[1:], 'Not found')
 
     if mode == 1:  # json
         value = loads(value)
