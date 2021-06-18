@@ -312,18 +312,18 @@ def resume(cli_config, **options):
 @main.command()
 @click.option('--queue', '-q', help='The name of the queue.', default='default')
 @click.option('--timeout',
-              help='Specifies the maximum runtime of the job before it’s interrupted and marked as failed.')
+              help='Specifies the maximum runtime of the job before it is interrupted and marked as failed.')
 @click.option('--result-ttl', help='Specifies how long successful jobs and their results are kept.')
-@click.option('--ttl', help='Specifies the maximum queued time of the job before it’s discarded.')
+@click.option('--ttl', help='Specifies the maximum queued time of the job before it is discarded.')
 @click.option('--failure-ttl', help='Specifies how long failed jobs are kept.')
 @click.option('--description', help='Additional description of the job')
 @click.option('--depends-on', help='Specifies another job id that must complete before this job will be queued.',
               multiple=True)
 @click.option('--job-id', help='The id of this job')
-@click.option('--at-front', is_flag=True, help='Will place the job at the front of the queue, instead of the back')
+@click.option('--at-front', is_flag=True, help='Will place the job at the front of the queue, instead of the end')
 @click.option('--retry-max', help='Maximum amound of retries', default=0, type=int)
 @click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
-@click.option('--schedule-in', help='Timedelta in what the function is enqueued (e.g. 10s, 5m, 2d).')
+@click.option('--schedule-in', help='Delay until the function is enqueued (e.g. 10s, 5m, 2d).')
 @click.option('--schedule-at', help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
               'timezone (e.g. 2021-05-27T21:45:00).')
 @click.option('--quiet', is_flag=True, help='Only logs errors.')
