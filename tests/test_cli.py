@@ -427,7 +427,7 @@ class TestRQCli(RQTestCase):
 
         runner = CliRunner()
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
-                                      '--schedule-in', '1s'])
+                                      '--schedule-in', '10s'])
         self.assert_normal_execution(result)
 
         scheduler.acquire_locks()
@@ -438,7 +438,7 @@ class TestRQCli(RQTestCase):
 
         self.assertFalse(worker.work(True))
 
-        sleep(2)
+        sleep(11)
 
         scheduler.enqueue_scheduled_jobs()
 
