@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
-from .exceptions import NoSuchJobError, JobFailture
+from .exceptions import DeserializationError, NoSuchJobError, JobFailture
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
@@ -221,7 +221,11 @@ class Job:
         return import_attribute(self.func_name)
 
     def _deserialize_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
+        try:
+            self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
+        except Exception as e:
+            # catch anything because serializers are generic
+            raise DeserializationError() from e
 
     @property
     def data(self):

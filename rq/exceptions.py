@@ -7,6 +7,10 @@ class NoSuchJobError(Exception):
     pass
 
 
+class DeserializationError(Exception):
+    pass
+
+
 class InvalidJobDependency(Exception):
     pass
 
