@@ -297,3 +297,21 @@ def split_list(a_list, segment_size):
     """
     for i in range(0, len(a_list), segment_size):
         yield a_list[i:i + segment_size]
+
+
+def get_call_string(func_name, args, kwargs):
+    """Returns a string representation of the call, formatted as a regular
+    Python function invocation statement.
+    """
+    if func_name is None:
+        return None
+    from .job import truncate_long_string  # work around circular import issue
+
+    arg_list = [as_text(truncate_long_string(repr(arg))) for arg in args]
+
+    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v)))) for k, v in kwargs.items()]
+    # Sort here because python 3.3 & 3.4 makes different call_string
+    arg_list += sorted(kwargs)
+    args = ', '.join(arg_list)
+
+    return '{0}({1})'.format(func_name, args)

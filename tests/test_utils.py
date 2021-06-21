@@ -11,7 +11,7 @@ from redis import Redis
 
 from tests import RQTestCase, fixtures
 from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
-    split_list, ceildiv
+    split_list, ceildiv, get_call_string
 from rq.exceptions import TimeoutFormatError
 
 
@@ -113,3 +113,8 @@ class TestUtils(RQTestCase):
 
         expected_small_list_count = ceildiv(BIG_LIST_SIZE, SEGMENT_SIZE)
         self.assertEqual(len(small_lists), expected_small_list_count)
+
+    def test_get_call_string(self):
+        """Ensure a case when all arguments are not None works properly"""
+        cs = get_call_string("f", ('some', 'args', 42), {"key1": "value1", "key2": True})
+        assert cs == "f('some', 'args', 42, key1='value1', key2=True)"
