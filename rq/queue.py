@@ -366,6 +366,8 @@ class Queue:
                     else:
                         # if pipeline comes from caller, re-raise to them
                         raise
+        elif pipeline is not None:
+            pipeline.multi()  # Ensure pipeline in multi mode before returning to caller
         return job
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
