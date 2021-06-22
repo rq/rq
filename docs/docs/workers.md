@@ -290,14 +290,13 @@ SENTRY_DSN = 'sync+http://public:secret@example.com/1'
 
 The example above shows all the options that are currently supported.
 
-_Note: The_ `QUEUES` _and_ `REDIS_PASSWORD` _settings are new since 0.3.3._
-
 To specify which module to read settings from, use the `-c` option:
 
 ```console
 $ rq worker -c settings
 ```
 
+Alternatively, you can also pass in these options via environment variables.
 
 ## Custom Worker Classes
 

@@ -292,7 +292,8 @@ class Queue:
     def create_job(self, func, args=None, kwargs=None, timeout=None,
                    result_ttl=None, ttl=None, failure_ttl=None,
                    description=None, depends_on=None, job_id=None,
-                   meta=None, status=JobStatus.QUEUED, retry=None):
+                   meta=None, status=JobStatus.QUEUED, retry=None, *,
+                   on_success=None, on_failure=None):
         """Creates a job based on parameters given."""
         timeout = parse_timeout(timeout)
 
@@ -313,7 +314,8 @@ class Queue:
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             status=status, description=description,
             depends_on=depends_on, timeout=timeout, id=job_id,
-            origin=self.name, meta=meta, serializer=self.serializer
+            origin=self.name, meta=meta, serializer=self.serializer, on_success=on_success,
+            on_failure=on_failure
         )
 
         if retry:
@@ -371,9 +373,9 @@ class Queue:
         return job
 
     def enqueue_call(self, func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, ttl=None, failure_ttl=None,
-                     description=None, depends_on=None, job_id=None,
-                     at_front=False, meta=None, retry=None, pipeline=None):
+                     result_ttl=None, ttl=None, failure_ttl=None, description=None,
+                     depends_on=None, job_id=None, at_front=False, meta=None,
+                     retry=None, on_success=None, on_failure=None, pipeline=None):
         """Creates a job to represent the delayed function call and enqueues
         it.
 nd
@@ -386,7 +388,7 @@ nd
             func, args=args, kwargs=kwargs, result_ttl=result_ttl, ttl=ttl,
             failure_ttl=failure_ttl, description=description, depends_on=depends_on,
             job_id=job_id, meta=meta, status=JobStatus.QUEUED, timeout=timeout,
-            retry=retry
+            retry=retry, on_success=on_success, on_failure=on_failure
         )
 
         job = self.setup_dependencies(
@@ -477,6 +479,8 @@ nd
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
         retry = kwargs.pop('retry', None)
+        on_success = kwargs.pop('on_success', None)
+        on_failure = kwargs.pop('on_failure', None)
         pipeline = kwargs.pop('pipeline', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
@@ -485,30 +489,35 @@ nd
             kwargs = kwargs.pop('kwargs', None)
 
         return (f, timeout, description, result_ttl, ttl, failure_ttl,
-                depends_on, job_id, at_front, meta, retry, pipeline, args, kwargs)
+                depends_on, job_id, at_front, meta, retry, on_success, on_failure,
+                pipeline, args, kwargs)
 
     def enqueue(self, f, *args, **kwargs):
         """Creates a job to represent the delayed function call and enqueues it."""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, retry, pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, on_success,
+         on_failure, pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
 
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             description=description, depends_on=depends_on, job_id=job_id,
-            at_front=at_front, meta=meta, retry=retry, pipeline=pipeline
+            at_front=at_front, meta=meta, retry=retry, on_success=on_success, on_failure=on_failure,
+            pipeline=pipeline
         )
 
     def enqueue_at(self, datetime, f, *args, **kwargs):
         """Schedules a job to be enqueued at specified time"""
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
-         depends_on, job_id, at_front, meta, retry, pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         depends_on, job_id, at_front, meta, retry, on_success, on_failure,
+         pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
         job = self.create_job(f, status=JobStatus.SCHEDULED, args=args, kwargs=kwargs,
                               timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                               failure_ttl=failure_ttl, description=description,
-                              depends_on=depends_on, job_id=job_id, meta=meta, retry=retry)
+                              depends_on=depends_on, job_id=job_id, meta=meta, retry=retry,
+                              on_success=on_success, on_failure=on_failure)
 
         return self.schedule_job(job, datetime, pipeline=pipeline)
 

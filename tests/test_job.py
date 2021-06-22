@@ -210,8 +210,10 @@ class TestJob(RQTestCase):
 
         # ... and no other keys are stored
         self.assertEqual(
-            sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at', b'worker_name'])
+            set(self.testconn.hkeys(job.key)),
+            {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
+             b'worker_name', b'success_callback_name', b'failure_callback_name'}
+        )
 
         self.assertEqual(job.last_heartbeat, None)
         self.assertEqual(job.last_heartbeat, None)
