@@ -299,13 +299,18 @@ def split_list(a_list, segment_size):
         yield a_list[i:i + segment_size]
 
 
-def get_call_string(func_name, args, kwargs):
+def get_call_string(func_name, args, kwargs, truncate=False, maxlen=75):
     """Returns a string representation of the call, formatted as a regular
-    Python function invocation statement.
+    Python function invocation statement. If truncate is True, truncate
+    arguments with representation longer than maxlen.
     """
     if func_name is None:
         return None
-    from .job import truncate_long_string  # work around circular import issue
+
+    def truncate_long_string(data):
+        if truncate is False:
+            return data
+        return (data[:maxlen] + '...') if len(data) > maxlen else data
 
     arg_list = [as_text(truncate_long_string(repr(arg))) for arg in args]
 

@@ -45,12 +45,6 @@ class JobStatus(str, Enum):
 UNEVALUATED = object()
 
 
-def truncate_long_string(data, maxlen=75):
-    """ Truncates strings longer than maxlen
-    """
-    return (data[:maxlen] + '...') if len(data) > maxlen else data
-
-
 def cancel_job(job_id, connection=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
@@ -759,7 +753,7 @@ class Job:
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        return get_call_string(self.func_name, self.args, self.kwargs)
+        return get_call_string(self.func_name, self.args, self.kwargs, truncate=True)
 
     def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually
