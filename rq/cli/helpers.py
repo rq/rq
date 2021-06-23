@@ -265,7 +265,7 @@ def parse_function_arg(argument, arg_pos):
     elif mode == ParsingMode.LITERAL_EVAL:  # literal_eval
         try:
             value = literal_eval(value)
-        except (ValueError, SyntaxError):
+        except Exception:
             raise click.BadParameter('Unable to eval %s as Python object. See '
                                      'https://docs.python.org/3/library/ast.html#ast.literal_eval'
                                      % (keyword or '%s. non keyword argument' % arg_pos))
