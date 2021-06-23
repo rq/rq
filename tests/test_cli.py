@@ -401,7 +401,7 @@ class TestRQCli(RQTestCase):
 
         runner = CliRunner()
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'hello',
-                                      ':[1, {"key": "value"}]', ':@tests/test.json', '#1, 2', 'json:=[3.0, true]',
+                                      ':[1, {"key": "value"}]', ':@tests/test.json', '%1, 2', 'json:=[3.0, true]',
                                       'nojson=abc', 'file=@tests/test.json'])
         self.assert_normal_execution(result)
 
@@ -516,7 +516,7 @@ class TestRQCli(RQTestCase):
         """
         rq enqueue -u <url> tests.fixtures.echo :invalid_json
 
-        rq enqueue -u <url> tests.fixtures.echo #invalid_eval_statement
+        rq enqueue -u <url> tests.fixtures.echo %invalid_eval_statement
 
         rq enqueue -u <url> tests.fixtures.echo key=value key=value
 
@@ -531,7 +531,7 @@ class TestRQCli(RQTestCase):
         self.assertIn('Unable to parse 1. non keyword argument as JSON.', result.output)
 
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo',
-                                      '#invalid_eval_statement'])
+                                      '%invalid_eval_statement'])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('Unable to eval 1. non keyword argument as Python object.', result.output)
 

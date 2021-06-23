@@ -147,8 +147,8 @@ There are two options:
 
 | | plain text | json | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
 |-|-|-|-|
-| keyword | `[key]=[value]` | `[key]:=[value]` | `[key]#=[value]` |
-| no keyword | `[value]` | `:[value]` | `#[value]` |
+| keyword | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]` |
+| no keyword | `[value]` | `:[value]` | `%[value]` |
 
 Where `[key]` is the keyword and `[value]` is the value which is parsed with the corresponding
 parsing method.
@@ -158,7 +158,7 @@ If the first character of `[value]` is `@` the subsequent path will be read.
 argument without keyword.
 
 **Warning:** Do not use plain text without keyword if you do not know what the value is.
-If the value starts with `@` or `:` or includes `=` it would be recognised as something else.
+If the value starts with `@`, `:` or `%` or includes `=` it would be recognised as something else.
 
 
 ## Working with Queues

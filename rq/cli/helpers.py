@@ -220,7 +220,7 @@ def parse_function_arg(argument, arg_pos):
     if argument.startswith(':'):  # no keyword, json
         mode = ParsingMode.JSON
         value = argument[1:]
-    elif argument.startswith('#'):  # no keyword, literal_eval
+    elif argument.startswith('%'):  # no keyword, literal_eval
         mode = ParsingMode.LITERAL_EVAL
         value = argument[1:]
     else:
@@ -229,7 +229,7 @@ def parse_function_arg(argument, arg_pos):
             if ':' in argument and argument.index(':') + 1 == index:  # keyword, json
                 mode = ParsingMode.JSON
                 keyword = argument[:index - 1]
-            elif '#' in argument and argument.index('#') + 1 == index:  # keyword, literal_eval
+            elif '%' in argument and argument.index('%') + 1 == index:  # keyword, literal_eval
                 mode = ParsingMode.LITERAL_EVAL
                 keyword = argument[:index - 1]
             else:  # keyword, text
