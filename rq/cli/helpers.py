@@ -6,6 +6,7 @@ import sys
 import importlib
 import time
 from functools import partial
+from enum import Enum
 
 from datetime import datetime, timezone, timedelta
 from json import loads, JSONDecodeError
@@ -209,28 +210,34 @@ def job_func(func, args, kwargs):
         return import_attribute(func)(*args, **kwargs)
 
 
-def parse_function_arg(argument):
-    mode = 0  # 0: text, 1: json, 2: literal_eval (python)
+def parse_function_arg(argument, arg_pos):
+    class ParsingMode(Enum):
+        PLAIN_TEXT = 0
+        JSON = 1
+        LITERAL_EVAL = 2
+
     keyword = None
     if argument.startswith(':'):  # no keyword, json
-        mode = 1
+        mode = ParsingMode.JSON
         value = argument[1:]
     elif argument.startswith('#'):  # no keyword, literal_eval
-        mode = 2
+        mode = ParsingMode.LITERAL_EVAL
         value = argument[1:]
     else:
         index = argument.find('=')
         if index > 0:
             if ':' in argument and argument.index(':') + 1 == index:  # keyword, json
-                mode = 1
+                mode = ParsingMode.JSON
                 keyword = argument[:index - 1]
             elif '#' in argument and argument.index('#') + 1 == index:  # keyword, literal_eval
-                mode = 2
+                mode = ParsingMode.LITERAL_EVAL
                 keyword = argument[:index - 1]
             else:  # keyword, text
+                mode = ParsingMode.PLAIN_TEXT
                 keyword = argument[:index]
             value = argument[index + 1:]
         else:  # no keyword, text
+            mode = ParsingMode.PLAIN_TEXT
             value = argument
 
     if value.startswith('@'):
@@ -240,10 +247,18 @@ def parse_function_arg(argument):
         except FileNotFoundError:
             raise click.FileError(value[1:], 'Not found')
 
-    if mode == 1:  # json
-        value = loads(value)
-    elif mode == 2:  # literal_eval
-        value = literal_eval(value)
+    if mode == ParsingMode.JSON:  # json
+        try:
+            value = loads(value)
+        except JSONDecodeError:
+            raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or '%s. non keyword argument' % arg_pos))
+    elif mode == ParsingMode.LITERAL_EVAL:  # literal_eval
+        try:
+            value = literal_eval(value)
+        except (ValueError, SyntaxError):
+            raise click.BadParameter('Unable to eval %s as Python object. See '
+                                     'https://docs.python.org/3/library/ast.html#ast.literal_eval'
+                                     % (keyword or '%s. non keyword argument' % arg_pos))
 
     return keyword, value
 
@@ -253,13 +268,7 @@ def parse_function_args(arguments):
     kwargs = {}
 
     for argument in arguments:
-        try:
-            keyword, value = parse_function_arg(argument)
-        except JSONDecodeError:
-            raise click.BadParameter('Couldn\'t parse json.')
-        except (ValueError, SyntaxError):
-            raise click.BadParameter(
-                'Could not eval. View: https://docs.python.org/3/library/ast.html#ast.literal_eval')
+        keyword, value = parse_function_arg(argument, len(args) + 1)
         if keyword is not None:
             if keyword in kwargs:
                 raise click.BadParameter('You can\'t specify multiple values for the same keyword.')
