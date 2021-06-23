@@ -118,3 +118,11 @@ class TestUtils(RQTestCase):
         """Ensure a case, when func_name, args and kwargs are not None, works properly"""
         cs = get_call_string("f", ('some', 'args', 42), {"key1": "value1", "key2": True})
         assert cs == "f('some', 'args', 42, key1='value1', key2=True)"
+
+    def test_get_call_string_with_max_length(self):
+        """Ensure get_call_string works properly when max_length is provided"""
+        func_name = "f"
+        args = (1234, 12345, 123456)
+        kwargs = {"len4": 1234, "len5": 12345, "len6": 123456}
+        cs = get_call_string(func_name, args, kwargs, max_length=5)
+        assert cs == "f(1234, 12345, 12345..., len4=1234, len5=12345, len6=12345...)"
