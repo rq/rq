@@ -297,3 +297,27 @@ def split_list(a_list, segment_size):
     """
     for i in range(0, len(a_list), segment_size):
         yield a_list[i:i + segment_size]
+
+
+def truncate_long_string(data, max_length=None):
+    """Truncate arguments with representation longer than max_length"""
+    if max_length is None:
+        return data
+    return (data[:max_length] + '...') if len(data) > max_length else data
+
+
+def get_call_string(func_name, args, kwargs, max_length=None):
+    """Returns a string representation of the call, formatted as a regular
+    Python function invocation statement. If max_length is not None, truncate
+    arguments with representation longer than max_length.
+    """
+    if func_name is None:
+        return None
+
+    arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
+
+    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
+    arg_list += sorted(kwargs)
+    args = ', '.join(arg_list)
+
+    return '{0}({1})'.format(func_name, args)
