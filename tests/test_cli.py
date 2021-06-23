@@ -2,7 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from time import sleep
 
 from click.testing import CliRunner
@@ -10,7 +10,7 @@ from redis import Redis
 
 from rq import Queue
 from rq.cli import main
-from rq.cli.helpers import read_config_file, CliConfig, job_func
+from rq.cli.helpers import read_config_file, CliConfig, job_func, parse_function_arg, parse_schedule
 from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
@@ -556,3 +556,23 @@ class TestRQCli(RQTestCase):
         self.assertEqual(value, 0)
         job_func('tests.executable_python_file', None, None)
         self.assertEqual(value, 1)
+
+    def test_parse_schedule(self):
+        """executes the rq.cli.helpers.parse_schedule function"""
+        self.assertEqual(parse_schedule(None, '2000-01-23T23:45:01'), datetime(2000, 1, 23, 23, 45, 1))
+
+        start = datetime.now(timezone.utc) + timedelta(minutes=5)
+        middle = parse_schedule('5m', None)
+        end = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        self.assertGreater(middle, start)
+        self.assertLess(middle, end)
+
+    def test_parse_function_arg(self):
+        """executes the rq.cli.helpers.parse_function_arg function"""
+        self.assertEqual(parse_function_arg('abc', 0), (None, 'abc'))
+        self.assertEqual(parse_function_arg(':{"json": true}', 1), (None, {'json': True}))
+        self.assertEqual(parse_function_arg('%1, 2', 2), (None, (1, 2)))
+        self.assertEqual(parse_function_arg('key=value', 3), ('key', 'value'))
+        self.assertEqual(parse_function_arg('jsonkey:=["json", "value"]', 4), ('jsonkey', ['json', 'value']))
+        self.assertEqual(parse_function_arg('evalkey%=1.2', 5), ('evalkey', (1.2)))
