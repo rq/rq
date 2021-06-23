@@ -11,7 +11,7 @@ from redis import Redis
 
 from tests import RQTestCase, fixtures
 from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
-    split_list, ceildiv, get_call_string
+    split_list, ceildiv, get_call_string, truncate_long_string
 from rq.exceptions import TimeoutFormatError
 
 
@@ -113,6 +113,13 @@ class TestUtils(RQTestCase):
 
         expected_small_list_count = ceildiv(BIG_LIST_SIZE, SEGMENT_SIZE)
         self.assertEqual(len(small_lists), expected_small_list_count)
+
+    def test_truncate_long_string(self):
+        """Ensure truncate_long_string works properly"""
+        assert truncate_long_string("12", max_length=3) == "12"
+        assert truncate_long_string("123", max_length=3) == "123"
+        assert truncate_long_string("1234", max_length=3) == "123..."
+        assert truncate_long_string("12345", max_length=3) == "123..."
 
     def test_get_call_string(self):
         """Ensure a case, when func_name, args and kwargs are not None, works properly"""
