@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from redis import WatchError
 
 from rq.compat import as_text
-from rq.exceptions import NoSuchJobError
+from rq.exceptions import DeserializationError, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
@@ -53,13 +53,13 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.result)
         self.assertIsNone(job.exc_info)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.func
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.instance
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.args
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.kwargs
 
     def test_create_param_errors(self):
@@ -210,8 +210,10 @@ class TestJob(RQTestCase):
 
         # ... and no other keys are stored
         self.assertEqual(
-            sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at', b'worker_name'])
+            set(self.testconn.hkeys(job.key)),
+            {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
+             b'worker_name', b'success_callback_name', b'failure_callback_name'}
+        )
 
         self.assertEqual(job.last_heartbeat, None)
         self.assertEqual(job.last_heartbeat, None)

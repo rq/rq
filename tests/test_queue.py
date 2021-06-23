@@ -35,6 +35,7 @@ class MultipleDependencyJob(Job):
         _job._dependency_ids = dependency_ids
         return _job
 
+
 class TestQueue(RQTestCase):
     def test_create_queue(self):
         """Creating queues."""
@@ -507,6 +508,115 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
+    def test_enqueue_job_with_dependency_and_pipeline(self):
+        """Jobs are enqueued only when their dependencies are finished, and by the caller when passing a pipeline."""
+        # Job with unfinished dependency is not immediately enqueued
+        parent_job = Job.create(func=say_hello)
+        parent_job.save()
+        q = Queue()
+        with q.connection.pipeline() as pipe:
+            job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
+            self.assertEqual(q.job_ids, [])
+            self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
+            # Not in registry before execute, since passed in pipeline
+            self.assertEqual(len(q.deferred_job_registry), 0)
+            pipe.execute()
+            # Only in registry after execute, since passed in pipeline
+        self.assertEqual(len(q.deferred_job_registry), 1)
+
+        # Jobs dependent on finished jobs are immediately enqueued
+        parent_job.set_status(JobStatus.FINISHED)
+        parent_job.save()
+        with q.connection.pipeline() as pipe:
+            job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
+            # Pre execute conditions
+            self.assertEqual(q.job_ids, [])
+            self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+            self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+            pipe.execute()
+        # Post execute conditions
+        self.assertEqual(q.job_ids, [job.id])
+        self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
+        self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+
+    def test_enqueue_job_with_no_dependency_prior_watch_and_pipeline(self):
+        """Jobs are enqueued only when their dependencies are finished, and by the caller when passing a pipeline."""
+        q = Queue()
+        with q.connection.pipeline() as pipe:
+            pipe.watch(b'fake_key')  # Test watch then enqueue
+            job = q.enqueue_call(say_hello, pipeline=pipe)
+            self.assertEqual(q.job_ids, [])
+            self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+            # Not in queue before execute, since passed in pipeline
+            self.assertEqual(len(q), 0)
+            # Make sure modifying key doesn't cause issues, if in multi mode won't fail
+            pipe.set(b'fake_key', b'fake_value')
+            pipe.execute()
+            # Only in registry after execute, since passed in pipeline
+        self.assertEqual(len(q), 1)
+
+    def test_enqueue_many_internal_pipeline(self):
+        """Jobs should be enqueued in bulk with an internal pipeline, enqueued in order provided
+        (but at_front still applies)"""
+        # Job with unfinished dependency is not immediately enqueued
+        q = Queue()
+        job_1_data = Queue.prepare_data(
+            say_hello,
+            job_id='fake_job_id_1',
+            at_front=False
+        )
+        job_2_data = Queue.prepare_data(
+            say_hello,
+            job_id='fake_job_id_2',
+            at_front=False
+        )
+        job_3_data = Queue.prepare_data(
+            say_hello,
+            job_id='fake_job_id_3',
+            at_front=True
+        )
+        jobs = q.enqueue_many(
+            [job_1_data, job_2_data, job_3_data],
+        )
+        for job in jobs:
+            self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+        # Only in registry after execute, since passed in pipeline
+        self.assertEqual(len(q), 3)
+        self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
+
+    def test_enqueue_many_with_passed_pipeline(self):
+        """Jobs should be enqueued in bulk with a passed pipeline, enqueued in order provided
+        (but at_front still applies)"""
+        # Job with unfinished dependency is not immediately enqueued
+        q = Queue()
+        with q.connection.pipeline() as pipe:
+            job_1_data = Queue.prepare_data(
+                say_hello,
+                job_id='fake_job_id_1',
+                at_front=False
+            )
+            job_2_data = Queue.prepare_data(
+                say_hello,
+                job_id='fake_job_id_2',
+                at_front=False
+            )
+            job_3_data = Queue.prepare_data(
+                say_hello,
+                job_id='fake_job_id_3',
+                at_front=True
+            )
+            jobs = q.enqueue_many(
+                [job_1_data, job_2_data, job_3_data],
+                pipeline=pipe
+            )
+            self.assertEqual(q.job_ids, [])
+            for job in jobs:
+                self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+            pipe.execute()
+            # Only in registry after execute, since passed in pipeline
+            self.assertEqual(len(q), 3)
+            self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
+
     def test_enqueue_job_with_dependency_by_id(self):
         """Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello)
@@ -653,7 +763,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
-    
+
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""
         queue = Queue('example', connection=self.testconn)

@@ -18,11 +18,11 @@ from uuid import uuid4
 
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
-from .exceptions import NoSuchJobError
+from .exceptions import DeserializationError, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow, ensure_list, generate_function_string)
+                    utcformat, utcnow, ensure_list, get_call_string)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
@@ -77,7 +77,7 @@ class Job:
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
-               failure_ttl=None, serializer=None):
+               failure_ttl=None, serializer=None, *, on_success=None, on_failure=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -114,6 +114,16 @@ class Job:
             raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
         job._args = args
         job._kwargs = kwargs
+
+        if on_success:
+            if not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
+                raise ValueError('on_success callback must be a function')
+            job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
+
+        if on_failure:
+            if not inspect.isfunction(on_failure) and not inspect.isbuiltin(on_failure):
+                raise ValueError('on_failure callback must be a function')
+            job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -214,8 +224,32 @@ class Job:
 
         return import_attribute(self.func_name)
 
+    @property
+    def success_callback(self):
+        if self._success_callback is UNEVALUATED:
+            if self._success_callback_name:
+                self._success_callback = import_attribute(self._success_callback_name)
+            else:
+                self._success_callback = None
+
+        return self._success_callback
+
+    @property
+    def failure_callback(self):
+        if self._failure_callback is UNEVALUATED:
+            if self._failure_callback_name:
+                self._failure_callback = import_attribute(self._failure_callback_name)
+            else:
+                self._failure_callback = None
+
+        return self._failure_callback
+
     def _deserialize_data(self):
-        self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
+        try:
+            self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
+        except Exception as e:
+            # catch anything because serializers are generic
+            raise DeserializationError() from e
 
     @property
     def data(self):
@@ -336,6 +370,10 @@ class Job:
         self._instance = UNEVALUATED
         self._args = UNEVALUATED
         self._kwargs = UNEVALUATED
+        self._success_callback_name = None
+        self._success_callback = UNEVALUATED
+        self._failure_callback_name = None
+        self._failure_callback = UNEVALUATED
         self.description = None
         self.origin = None
         self.enqueued_at = None
@@ -390,8 +428,8 @@ class Job:
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
-    def heartbeat(self, heartbeat, ttl, pipeline=None):
-        self.last_heartbeat = heartbeat
+    def heartbeat(self, timestamp, ttl, pipeline=None):
+        self.last_heartbeat = timestamp
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         self.started_job_registry.add(self, ttl, pipeline=pipeline)
@@ -498,9 +536,15 @@ class Job:
             except Exception:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
-        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None  # noqa
-        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None  # noqa
+        self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
+        self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
         self._status = obj.get('status').decode() if obj.get('status') else None
+
+        if obj.get('success_callback_name'):
+            self._success_callback_name = obj.get('success_callback_name').decode()
+
+        if obj.get('failure_callback_name'):
+            self._failure_callback_name = obj.get('failure_callback_name').decode()
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
@@ -544,6 +588,8 @@ class Job:
         obj = {
             'created_at': utcformat(self.created_at or utcnow()),
             'data': zlib.compress(self.data),
+            'success_callback_name': self._success_callback_name if self._success_callback_name else '',
+            'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
@@ -749,7 +795,7 @@ class Job:
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        return generate_function_string(self.func_name, self.args, self.kwargs)
+        return get_call_string(self.func_name, self.args, self.kwargs, max_length=75)
 
     def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually

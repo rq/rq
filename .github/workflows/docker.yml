@@ -1,0 +1,51 @@
+name: Docker
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ '*' ]
+  workflow_dispatch:
+
+
+jobs:
+  push:
+    if: github.repository == 'rq/rq'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Push
+        run: |
+          # Parse Version
+          # "master" -> "master"
+          # "v1.2.3" -> "1.2.3", "1.2", "1", "latest"
+
+          VERSIONS=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+
+          [[ "${{ github.ref }}" == "refs/tags/"* ]] && {
+            VERSIONS=$(echo $VERSIONS | sed -e 's/^v//')
+            i="$VERSIONS"
+            while [[ "$i" == *"."* ]]
+              do i="$(echo "$i" | sed 's/\(.*\)\..*/\1/g')"
+                 VERSIONS="$VERSIONS $i"
+            done
+            VERSIONS="$VERSIONS latest"
+          }
+          
+          echo Building with tags: $VERSIONS
+
+          # Login to registries
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u selwin --password-stdin
+
+          # Build image
+          docker build . --tag worker
+
+          # Tag and Push
+          for VERSION in $VERSIONS
+            do docker tag worker redisqueue/worker:$VERSION
+               docker push redisqueue/worker:$VERSION
+               docker tag worker docker.pkg.github.com/rq/rq/worker:$VERSION
+               docker push docker.pkg.github.com/rq/rq/worker:$VERSION
+          done

@@ -132,12 +132,17 @@ def import_attribute(name):
     # dotted path is not the last-before-end word
     # E.g.: package_a.package_b.module_a.ClassA.my_static_method
     # Thus we remove the bits from the end of the name until we can import it
+    #
+    # Sometimes the failure during importing is due to a genuine coding error in the imported module
+    # In this case, the exception is logged as a warning for ease of debugging.
+    # The above logic will apply anyways regardless of the cause of the import error.
     while len(module_name_bits):
         try:
             module_name = '.'.join(module_name_bits)
             module = importlib.import_module(module_name)
             break
         except ImportError:
+            logging.warning("Import error for '%s'" % module_name, exc_info=True)
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
@@ -294,23 +299,24 @@ def split_list(a_list, segment_size):
         yield a_list[i:i + segment_size]
 
 
-def truncate_long_string(data, maxlen=75):
-    """ Truncates strings longer than maxlen
-    """
-    return (data[:maxlen] + '...') if len(data) > maxlen else data
+def truncate_long_string(data, max_length=None):
+    """Truncate arguments with representation longer than max_length"""
+    if max_length is None:
+        return data
+    return (data[:max_length] + '...') if len(data) > max_length else data
 
 
-def generate_function_string(func_name, args, kwargs):
-    """Returns a string representation of a function with args, formatted as a regular
-    Python function invocation statement.
+def get_call_string(func_name, args, kwargs, max_length=None):
+    """Returns a string representation of the call, formatted as a regular
+    Python function invocation statement. If max_length is not None, truncate
+    arguments with representation longer than max_length.
     """
     if func_name is None:
         return None
 
-    arg_list = [as_text(truncate_long_string(repr(arg))) for arg in args]
+    arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
 
-    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v)))) for k, v in kwargs.items()]
-    # Sort here because python 3.3 & 3.4 makes different call_string
+    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
     arg_list += sorted(kwargs)
     args = ', '.join(arg_list)
 

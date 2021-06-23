@@ -26,7 +26,7 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_SERIALIZER_CLASS)
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute, generate_function_string, make_colorizer
+from rq.utils import import_attribute, get_call_string, make_colorizer
 from rq.serializers import DefaultSerializer
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
@@ -335,7 +335,7 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
 
-    function_string = generate_function_string(function, args, kwargs)
+    function_string = get_call_string(function, args, kwargs)
     description = description or function_string
 
     retry = None

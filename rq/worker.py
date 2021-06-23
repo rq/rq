@@ -31,10 +31,10 @@ from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
 from .compat import as_text, string_types, text_type
 from .connections import get_current_connection, push_connection, pop_connection
 
-from .defaults import (DEFAULT_RESULT_TTL,
+from .defaults import (CALLBACK_TIMEOUT, DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
-from .exceptions import DequeueTimeout, ShutDownImminentException
+from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -176,13 +176,6 @@ class Worker:
 
         self.redis_server_version = None
 
-        if prepare_for_work:
-            self.hostname = socket.gethostname()
-            self.pid = os.getpid()
-        else:
-            self.hostname = None
-            self.pid = None
-
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
         self.version = VERSION
@@ -224,6 +217,16 @@ class Worker:
         self.pubsub_thread = None
 
         self.disable_default_exception_handler = disable_default_exception_handler
+
+        if prepare_for_work:
+            self.hostname = socket.gethostname()
+            self.pid = os.getpid()
+            connection.client_setname(self.name)
+            self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+        else:
+            self.hostname = None
+            self.pid = None
+            self.ip_address = None
 
         if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
@@ -301,6 +304,7 @@ class Worker:
                 'queues': queues,
                 'pid': self.pid,
                 'hostname': self.hostname,
+                'ip_address': self.ip_address,
                 'version': self.version,
                 'python_version': self.python_version,
             }
@@ -431,7 +435,7 @@ class Worker:
         stat = None
         try:
             pid, stat = os.waitpid(self.horse_pid, 0)
-        except ChildProcessError as e:
+        except ChildProcessError:
             # ChildProcessError: [Errno 10] No child processes
             pass
         return pid, stat
@@ -704,13 +708,15 @@ class Worker:
     def refresh(self):
         data = self.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
-            'birth', 'failed_job_count', 'successful_job_count',
-            'total_working_time', 'current_job_working_time', 'hostname', 'pid', 'version', 'python_version',
+            'birth', 'failed_job_count', 'successful_job_count', 'total_working_time',
+            'current_job_working_time', 'hostname', 'ip_address', 'pid', 'version', 'python_version',
         )
         (queues, state, job_id, last_heartbeat, birth, failed_job_count,
-         successful_job_count, total_working_time, current_job_working_time, hostname, pid, version, python_version) = data
+         successful_job_count, total_working_time, current_job_working_time,
+         hostname, ip_address, pid, version, python_version) = data
         queues = as_text(queues)
         self.hostname = as_text(hostname)
+        self.ip_address = as_text(ip_address)
         self.pid = int(pid) if pid else None
         self.version = as_text(version)
         self.python_version = as_text(python_version)
@@ -867,7 +873,7 @@ class Worker:
         self.log = logger
         try:
             self.perform_job(job, queue)
-        except:
+        except:  # noqa
             os._exit(1)
 
         # os._exit() is the way to exit from childs after a fork(), in
@@ -996,6 +1002,18 @@ class Worker:
                 except redis.exceptions.WatchError:
                     continue
 
+    def execute_success_callback(self, job, result):
+        """Executes success_callback with timeout"""
+        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
+        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+            job.success_callback(job, self.connection, result)
+
+    def execute_failure_callback(self, job):
+        """Executes failure_callback with timeout"""
+        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
+        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+            job.failure_callback(job, self.connection, *sys.exc_info())
+
     def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -1017,6 +1035,10 @@ class Worker:
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
+
+            if job.success_callback:
+                self.execute_success_callback(job, rv)
+
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
@@ -1024,6 +1046,18 @@ class Worker:
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
+
+            if job.failure_callback:
+                try:
+                    self.execute_failure_callback(job)
+                except:  # noqa
+                    self.log.error(
+                        'Worker %s: error while executing failure callback',
+                        self.key, exc_info=True
+                    )
+                    exc_info = sys.exc_info()
+                    exc_string = ''.join(traceback.format_exception(*exc_info))
+
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)
@@ -1051,13 +1085,24 @@ class Worker:
     def handle_exception(self, job, *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = ''.join(traceback.format_exception(*exc_info))
-        self.log.error(exc_string, extra={
-            'func': job.func_name,
-            'arguments': job.args,
-            'kwargs': job.kwargs,
-            'queue': job.origin,
-            'job_id': job.id,
-        })
+
+        # If the job cannot be deserialized, it will raise when func_name or
+        # the other properties are accessed, which will stop exceptions from
+        # being properly logged, so we guard against it here.
+        try:
+            extra = {
+                'func': job.func_name,
+                'arguments': job.args,
+                'kwargs': job.kwargs,
+            }
+        except DeserializationError:
+            extra = {}
+
+        # the properties below should be safe however
+        extra.update({'queue': job.origin, 'job_id': job.id})
+
+        # func_name
+        self.log.error(exc_string, exc_info=True, extra=extra)
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
@@ -1123,7 +1168,8 @@ class SimpleWorker(Worker):
         return self.perform_job(job, queue)
 
     def get_heartbeat_ttl(self, job):
-        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59. We should just stick to DEFAULT_WORKER_TTL.
+        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
+        # # We should just stick to DEFAULT_WORKER_TTL.
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
         else:

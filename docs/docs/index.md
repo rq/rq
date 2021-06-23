@@ -69,12 +69,14 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `ttl` specifies the maximum queued time (in seconds) of the job before it's discarded.
   This argument defaults to `None` (infinite TTL).
 * `failure_ttl` specifies how long failed jobs are kept (defaults to 1 year)
-* `depends_on` specifies another job (or job id) that must complete before this
+* `depends_on` specifies another job (or list of jobs) that must complete before this
   job will be queued.
 * `job_id` allows you to manually specify this job's `job_id`
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
 * `description` to add additional description to enqueued jobs.
+* `on_success` allows you to run a function after a job completes successfully
+* `on_failure` allows you to run a function after a job fails
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
@@ -101,6 +103,102 @@ you can pass the function as a string reference, too.
 q = Queue('low', connection=redis_conn)
 q.enqueue('my_package.my_module.my_func', 3, 4)
 ```
+
+### Bulk Job Enqueueing
+_New in version 1.9.0._  
+You can also enqueue multiple jobs in bulk with `queue.enqueue_many()` and `Queue.prepare_data()`:
+
+```python
+jobs = q.enqueue_many(
+  [
+    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+  ]
+)
+```
+
+which will enqueue all the jobs in a single redis `pipeline` which you can optionally pass in yourself:
+
+```python
+with q.connection.pipeline() as pipe:
+  jobs = q.enqueue_many(
+    [
+      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
+      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+    ]
+    pipeline=pipe
+  )
+  pipe.execute()
+```
+
+`Queue.prepare_data` accepts all arguments that `Queue.parse_args` does **EXCEPT** for `depends_on`,
+which is not supported at this time, so dependencies will be up to you to setup.
+
+## Job dependencies
+
+RQ allows you to chain the execution of multiple jobs.
+To execute a job that depends on another job, use the `depends_on` argument:
+
+```python
+q = Queue('low', connection=my_redis_conn)
+report_job = q.enqueue(generate_report)
+q.enqueue(send_report, depends_on=report_job)
+```
+
+Specifying multiple dependencies are also supported:
+
+```python
+queue = Queue('low', connection=redis)
+foo_job = queue.enqueue(foo)
+bar_job = queue.enqueue(bar)
+baz_job = queue.enqueue(baz, depends_on=[foo_job, bar_job])
+```
+
+The ability to handle job dependencies allows you to split a big job into
+several smaller ones. A job that is dependent on another is enqueued only when
+its dependency finishes *successfully*.
+
+
+## Job Callbacks
+_New in version 1.9.0._
+
+If you want to execute a function whenever a job completes or fails, RQ provides
+`on_success` and `on_failure` callbacks.
+
+```python
+queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure)
+```
+
+### Success Callback
+
+Success callbacks must be a function that accepts `job`, `connection` and `result` arguments.
+Your function should also accept `*args` and `**kwargs` so your application doesn't break
+when additional parameters are added.
+
+```python
+def report_success(job, connection, result, *args, **kwargs):
+    pass
+```
+
+Success callbacks are executed after job execution is complete, before dependents are enqueued.
+If an exception happens when your callback is executed, job status will be set to `FAILED`
+and dependents won't be enqueued.
+
+Callbacks are limited to 60 seconds of execution time. If you want to execute a long running job,
+consider using RQ's job dependency feature instead.
+
+
+### Failure Callbacks
+
+Failure callbacks are functions that accept `job`, `connection`, `type`, `value` and `traceback`
+arguments. `type`, `value` and `traceback` values returned by [sys.exc_info()](https://docs.python.org/3/library/sys.html#sys.exc_info), which is the exception raised when executing your job.
+
+```python
+def report_failure(job, connection, type, value, traceback):
+    pass
+```
+
+Failure callbacks are limited to 60 seconds of execution time.
 
 
 ### CLI Enqueueing
@@ -251,22 +349,6 @@ The above code runs without an active worker and executes `fib(8)`
 synchronously within the same process. You may know this behaviour from Celery
 as `ALWAYS_EAGER`. Note, however, that you still need a working connection to
 a redis instance for storing states related to job execution and completion.
-
-
-## Job dependencies
-
-New in RQ 0.4.0 is the ability to chain the execution of multiple jobs.
-To execute a job that depends on another job, use the `depends_on` argument:
-
-```python
-q = Queue('low', connection=my_redis_conn)
-report_job = q.enqueue(generate_report)
-q.enqueue(send_report, depends_on=report_job)
-```
-
-The ability to handle job dependencies allows you to split a big job into
-several smaller ones. A job that is dependent on another is enqueued only when
-its dependency finishes *successfully*.
 
 
 ## The worker
