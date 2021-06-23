@@ -587,4 +587,6 @@ class TestRQCli(RQTestCase):
         self.assertEqual(parse_function_arg('%1, 2', 2), (None, (1, 2)))
         self.assertEqual(parse_function_arg('key=value', 3), ('key', 'value'))
         self.assertEqual(parse_function_arg('jsonkey:=["json", "value"]', 4), ('jsonkey', ['json', 'value']))
-        self.assertEqual(parse_function_arg('evalkey%=1.2', 5), ('evalkey', (1.2)))
+        self.assertEqual(parse_function_arg('evalkey%=1.2', 5), ('evalkey', 1.2))
+        self.assertEqual(parse_function_arg(':@tests/test.json', 6), (None, {'test': True}))
+        self.assertEqual(parse_function_arg('@tests/test.json', 7), (None, '{\n    "test": true\n}\n'))
