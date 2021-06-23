@@ -121,6 +121,9 @@ class TestUtils(RQTestCase):
         assert truncate_long_string("1234", max_length=3) == "123..."
         assert truncate_long_string("12345", max_length=3) == "123..."
 
+        s = "long string but no max_length provided so no truncating should occur" * 10
+        assert truncate_long_string(s) == s
+
     def test_get_call_string(self):
         """Ensure a case, when func_name, args and kwargs are not None, works properly"""
         cs = get_call_string("f", ('some', 'args', 42), {"key1": "value1", "key2": True})
