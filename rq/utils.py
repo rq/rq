@@ -299,18 +299,18 @@ def split_list(a_list, segment_size):
         yield a_list[i:i + segment_size]
 
 
-def get_call_string(func_name, args, kwargs, truncate=False, maxlen=75):
+def get_call_string(func_name, args, kwargs, max_length=None):
     """Returns a string representation of the call, formatted as a regular
-    Python function invocation statement. If truncate is True, truncate
-    arguments with representation longer than maxlen.
+    Python function invocation statement. If max_length is not None, truncate
+    arguments with representation longer than max_length.
     """
     if func_name is None:
         return None
 
     def truncate_long_string(data):
-        if truncate is False:
+        if max_length is None:
             return data
-        return (data[:maxlen] + '...') if len(data) > maxlen else data
+        return (data[:max_length] + '...') if len(data) > max_length else data
 
     arg_list = [as_text(truncate_long_string(repr(arg))) for arg in args]
 

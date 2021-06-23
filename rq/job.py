@@ -753,7 +753,7 @@ class Job:
         """Returns a string representation of the call, formatted as a regular
         Python function invocation statement.
         """
-        return get_call_string(self.func_name, self.args, self.kwargs, truncate=True)
+        return get_call_string(self.func_name, self.args, self.kwargs, max_length=75)
 
     def cleanup(self, ttl=None, pipeline=None, remove_from_queue=True):
         """Prepare job for eventual deletion (if needed). This method is usually

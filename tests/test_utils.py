@@ -115,6 +115,6 @@ class TestUtils(RQTestCase):
         self.assertEqual(len(small_lists), expected_small_list_count)
 
     def test_get_call_string(self):
-        """Ensure a case when all arguments are not None works properly"""
+        """Ensure a case, when func_name, args and kwargs are not None, works properly"""
         cs = get_call_string("f", ('some', 'args', 42), {"key1": "value1", "key2": True})
         assert cs == "f('some', 'args', 42, key1='value1', key2=True)"
