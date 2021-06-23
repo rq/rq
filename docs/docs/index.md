@@ -252,8 +252,28 @@ Where `[key]` is the keyword and `[value]` is the value which is parsed with the
 parsing method.
 
 If the first character of `[value]` is `@` the subsequent path will be read.
-`:@path/to/file.json` for example will be read as `path/to/file.json`, parsed and passed as an
-argument without keyword.
+
+##### Examples:
+
+* In `rq enqueue path.to.func abc` the argument will be passed as a string without keyword.
+* In `rq enqueue path.to.func abc=def` `def` will be passed as a string with `abc` as keyword.
+* In `rq enqueue path.to.func ':{"json": "abc"}'` the argument will be parsed as json and passed
+    without keyword.
+* In `rq enqueue path.to.func 'key:={"json": "abc"}'` the argument will be parsed as json and passed
+    with `key` as keyword.
+* In `rq enqueue path.to.func '%1, 2'` the argument will be parsed using literal-eval to the tuple
+    `(1, 2)` and passed without keyword.
+* In `rq enqueue path.to.func 'key%=1, 2'` the argument will be parsed using literal-eval to the tuple
+    `(1, 2)` and passed with `key` as keyword.
+* `rq enqueue path.to.func @path/to/file` will read the content of `path/to/file` and pass it as a
+    string without keyword.
+* `rq enqueue path.to.func key=@path/to/file` will read the content of `path/to/file` and pass it as a
+    string with `key` as keyword.
+* `rq enqueue path.to.func :@path/to/file.json` will read the content of `path/to/file.json`, parse it
+    and pass it without keyword.
+* `rq enqueue path.to.func key:=@path/to/file.json` will read the content of `path/to/file.json`, parse
+    it and pass it with `key` as keyword.
+
 
 **Warning:** Do not use plain text without keyword if you do not know what the value is.
 If the value starts with `@`, `:` or `%` or includes `=` it would be recognised as something else.
