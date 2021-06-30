@@ -256,7 +256,7 @@ If the first character of `[value]` is `@` the subsequent path will be read.
 ##### Examples:
 
 * In `rq enqueue path.to.func abc` the argument will be passed as a string without keyword.
-* In `rq enqueue path.to.func abc=def` `def` will be passed as a string with `abc` as keyword.
+* `rq enqueue path.to.func abc=def` -> `queue.enqueue(path.to.func, abc='def')`
 * In `rq enqueue path.to.func ':{"json": "abc"}'` the argument will be parsed as json and passed
     without keyword.
 * In `rq enqueue path.to.func 'key:={"json": "abc"}'` the argument will be parsed as json and passed
