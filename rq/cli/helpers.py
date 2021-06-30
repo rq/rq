@@ -213,13 +213,6 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
-def job_func(func, args, kwargs):
-    try:
-        importlib.import_module(func)  # execute file
-    except ImportError:
-        return import_attribute(func)(*args, **kwargs)
-
-
 def parse_function_arg(argument, arg_pos):
     class ParsingMode(Enum):
         PLAIN_TEXT = 0

@@ -12,7 +12,7 @@ from redis import Redis
 
 from rq import Queue
 from rq.cli import main
-from rq.cli.helpers import read_config_file, CliConfig, job_func, parse_function_arg, parse_schedule
+from rq.cli.helpers import read_config_file, CliConfig, parse_function_arg, parse_schedule
 from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
@@ -23,14 +23,6 @@ import pytest
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
-
-
-value = 0  # Used in executable_python_file.py and test_cli_enqueue_job_func()
-
-
-def set_value(new_value):
-    global value
-    value = new_value
 
 
 class TestRQCli(RQTestCase):
@@ -559,15 +551,6 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '@not_existing_file'])
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('Not found', result.output)
-
-    def test_job_func(self):
-        """executes the rq.cli.helpers.job_func function"""
-        self.assertEqual(job_func('tests.fixtures.echo', (1, 2.3, True), {'key': 'value'}),
-                         ((1, 2.3, True), {'key': 'value'}))
-
-        self.assertEqual(value, 0)
-        job_func('tests.executable_python_file', None, None)
-        self.assertEqual(value, 1)
 
     def test_parse_schedule(self):
         """executes the rq.cli.helpers.parse_schedule function"""

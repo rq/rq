@@ -15,7 +15,7 @@ from redis.exceptions import ConnectionError
 from rq import Connection, Retry, __version__ as version
 from rq.cli.helpers import (read_config_file, refresh,
                             setup_loghandlers_from_args,
-                            show_both, show_queues, show_workers, CliConfig, job_func, parse_function_args,
+                            show_both, show_queues, show_workers, CliConfig, parse_function_args,
                             parse_schedule)
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
@@ -348,10 +348,10 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
         queue = cli_config.queue_class(queue)
 
         if schedule is None:
-            job = queue.enqueue_call(job_func, (function, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
+            job = queue.enqueue_call(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,
                                      description, depends_on, job_id, at_front, None, retry)
         else:
-            job = queue.create_job(job_func, (function, args, kwargs), {}, timeout, result_ttl, ttl, failure_ttl,
+            job = queue.create_job(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,
                                    description, depends_on, job_id, None, JobStatus.SCHEDULED, retry)
             queue.schedule_job(job, schedule)
 
