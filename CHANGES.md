@@ -1,3 +1,9 @@
+### RQ 1.9.0 (2021-06-30)
+* Added success and failure callbacks. You can now do `queue.enqueue(foo, on_success=do_this, on_failure=do_that)`. Thanks @selwin!
+* Added `queue.enqueue_many()` to enqueue many jobs in one go. Thanks @joshcoden!
+* Various improvements to CLI commands. Thanks @rpkak!
+* Minor logging improvements. Thanks @clavigne and @natbusa!
+
 ### RQ 1.8.1 (2021-05-17)
 * Jobs that fail due to hard shutdowns are now retried. Thanks @selwin!
 * `Scheduler` now works with custom serializers. Thanks @alella!
