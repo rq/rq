@@ -448,7 +448,7 @@ nd
         job.perform()
         job.set_status(JobStatus.FINISHED)
         job.save(include_meta=False)
-        job.cleanup(DEFAULT_RESULT_TTL)
+        job.cleanup(job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL))
         return job
 
     @classmethod
