@@ -224,7 +224,10 @@ class Worker:
             try:
                 connection.client_setname(self.name)
             except redis.exceptions.ResponseError:
-                warnings.warn('CLIENT command not supported, setting ip_address to unknown')
+                warnings.warn(
+                    'CLIENT command not supported, setting ip_address to unknown',
+                    Warning
+                )
                 self.ip_address = 'unknown'
             else:
                 self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
