@@ -221,8 +221,13 @@ class Worker:
         if prepare_for_work:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
-            connection.client_setname(self.name)
-            self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+            try:
+                connection.client_setname(self.name)
+            except redis.exceptions.ResponseError:
+                warnings.warn('CLIENT command not supported, setting ip_address to unknown')
+                self.ip_address = 'unknown'
+            else:
+                self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
         else:
             self.hostname = None
             self.pid = None
