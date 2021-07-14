@@ -286,3 +286,10 @@ def save_exception(job, connection, type, value, traceback):
 def erroneous_callback(job):
     """A callback that's not written properly"""
     pass
+
+
+def log(text, stream='stdout'):
+    if stream == 'stdout':
+        print(text, file=sys.stdout)
+    if stream == 'stderr':
+        print(text, file=sys.stderr)
