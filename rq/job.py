@@ -7,6 +7,7 @@ import json
 import pickle
 import warnings
 import zlib
+import sys
 
 import asyncio
 from collections.abc import Iterable
@@ -15,6 +16,7 @@ from distutils.version import StrictVersion
 from enum import Enum
 from functools import partial
 from uuid import uuid4
+from io import StringIO
 
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
@@ -43,6 +45,25 @@ class JobStatus(str, Enum):
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
 UNEVALUATED = object()
+
+
+class _SteamCapture:
+    def __init__(self, original):
+        self.strio = StringIO()
+        self.original = original
+
+    def write(self, s):
+        self.strio.write(s)
+        return self.original.write(s)
+
+    def getvalue(self):
+        return self.strio.getvalue()
+
+    def setvalue(self, value):
+        self.strio = StringIO(value)
+
+    def __getattr__(self, attr):
+        return getattr(self.original, attr)
 
 
 def cancel_job(job_id, connection=None):
@@ -322,6 +343,14 @@ class Job:
         self._kwargs = value
         self._data = UNEVALUATED
 
+    @property
+    def stdout(self):
+        return self._stdout.getvalue()
+
+    @property
+    def stderr(self):
+        return self._stderr.getvalue()
+
     @classmethod
     def exists(cls, job_id, connection=None):
         """Returns whether a job hash exists for the given job ID."""
@@ -395,6 +424,8 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
+        self._stdout = _SteamCapture(sys.stdout)
+        self._stderr = _SteamCapture(sys.stderr)
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -566,6 +597,9 @@ class Job:
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
 
+        self._stdout.setvalue(as_text(obj.get('stdout')))
+        self._stderr.setvalue(as_text(obj.get('stderr')))
+
     # Persistence
     def refresh(self):  # noqa
         """Overwrite the current instance's properties with the values in the
@@ -593,7 +627,9 @@ class Job:
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
-            'worker_name': self.worker_name or ''
+            'worker_name': self.worker_name or '',
+            'stdout': self.stdout,
+            'stderr': self.stderr
         }
 
         if self.retries_left is not None:
