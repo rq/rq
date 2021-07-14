@@ -212,7 +212,7 @@ class TestJob(RQTestCase):
         self.assertEqual(
             set(self.testconn.hkeys(job.key)),
             {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
-             b'worker_name', b'success_callback_name', b'failure_callback_name'}
+             b'worker_name', b'success_callback_name', b'failure_callback_name', b'stdout', b'stderr'}
         )
 
         self.assertEqual(job.last_heartbeat, None)
