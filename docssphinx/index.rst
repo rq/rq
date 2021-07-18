@@ -14,6 +14,7 @@ RQ requires Redis >= 3.0.0.
 
    gettingstarted
    docs/index
+   api
    patterns/index
    contrib/index
    chat
