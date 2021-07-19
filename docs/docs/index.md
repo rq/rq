@@ -255,25 +255,16 @@ If the first character of `[value]` is `@` the subsequent path will be read.
 
 ##### Examples:
 
-* In `rq enqueue path.to.func abc` the argument will be passed as a string without keyword.
-* `rq enqueue path.to.func abc=def` -> `queue.enqueue(path.to.func, abc='def')`
-* In `rq enqueue path.to.func ':{"json": "abc"}'` the argument will be parsed as json and passed
-    without keyword.
-* In `rq enqueue path.to.func 'key:={"json": "abc"}'` the argument will be parsed as json and passed
-    with `key` as keyword.
-* In `rq enqueue path.to.func '%1, 2'` the argument will be parsed using literal-eval to the tuple
-    `(1, 2)` and passed without keyword.
-* In `rq enqueue path.to.func 'key%=1, 2'` the argument will be parsed using literal-eval to the tuple
-    `(1, 2)` and passed with `key` as keyword.
-* `rq enqueue path.to.func @path/to/file` will read the content of `path/to/file` and pass it as a
-    string without keyword.
-* `rq enqueue path.to.func key=@path/to/file` will read the content of `path/to/file` and pass it as a
-    string with `key` as keyword.
-* `rq enqueue path.to.func :@path/to/file.json` will read the content of `path/to/file.json`, parse it
-    and pass it without keyword.
-* `rq enqueue path.to.func key:=@path/to/file.json` will read the content of `path/to/file.json`, parse
-    it and pass it with `key` as keyword.
-
+* `rq enqueue path.to.func abc` -> `queue.enqueue(path.to.func, args=['abc'])`
+* `rq enqueue path.to.func abc=def` -> `queue.enqueue(path.to.func, kwargs={'abc': 'def'})`
+* `rq enqueue path.to.func ':{"json": "abc"}'` -> `queue.enqueue(path.to.func, args=[{'json': 'abc'}])`
+* `rq enqueue path.to.func 'key:={"json": "abc"}'` -> `queue.enqueue(path.to.func, kwargs={'key': {'json': 'abc'}})`
+* `rq enqueue path.to.func '%1, 2'` -> `queue.enqueue(path.to.func, args=[(1, 2)])`
+* `rq enqueue path.to.func 'key%=1, 2'` -> `queue.enqueue(path.to.func, kwargs={'key': (1, 2)})`
+* `rq enqueue path.to.func @path/to/file` -> `queue.enqueue(path.to.func, args=[open('path/to/file', 'r').read()])`
+* `rq enqueue path.to.func key=@path/to/file` -> `queue.enqueue(path.to.func, kwargs={'key': open('path/to/file', 'r').read()})`
+* `rq enqueue path.to.func :@path/to/file.json` -> `queue.enqueue(path.to.func, args=[json.loads(open('path/to/file.json', 'r').read())])`
+* `rq enqueue path.to.func key:=@path/to/file.json` -> `queue.enqueue(path.to.func, kwargs={'key': json.loads(open('path/to/file.json', 'r').read())})`
 
 **Warning:** Do not use plain text without keyword if you do not know what the value is.
 If the value starts with `@`, `:` or `%` or includes `=` it would be recognised as something else.
