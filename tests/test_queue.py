@@ -335,6 +335,18 @@ class TestQueue(RQTestCase):
         job = queue.enqueue_job(job)
         self.assertEqual(job.timeout, 15)
 
+    def test_synchronous_timeout(self):
+        queue = Queue(is_async=False)
+
+        no_expire_job = queue.enqueue(echo, result_ttl=-1)
+        self.assertEqual(queue.connection.ttl(no_expire_job.key), -1)
+
+        delete_job = queue.enqueue(echo, result_ttl=0)
+        self.assertEqual(queue.connection.ttl(delete_job.key), -2)
+
+        keep_job = queue.enqueue(echo, result_ttl=100)
+        self.assertLessEqual(queue.connection.ttl(keep_job.key), 100)
+
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
         q = Queue()
