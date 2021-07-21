@@ -255,16 +255,16 @@ If the first character of `[value]` is `@` the subsequent path will be read.
 
 ##### Examples:
 
-* `rq enqueue path.to.func abc` -> `queue.enqueue(path.to.func, args=['abc'])`
-* `rq enqueue path.to.func abc=def` -> `queue.enqueue(path.to.func, kwargs={'abc': 'def'})`
-* `rq enqueue path.to.func ':{"json": "abc"}'` -> `queue.enqueue(path.to.func, args=[{'json': 'abc'}])`
-* `rq enqueue path.to.func 'key:={"json": "abc"}'` -> `queue.enqueue(path.to.func, kwargs={'key': {'json': 'abc'}})`
-* `rq enqueue path.to.func '%1, 2'` -> `queue.enqueue(path.to.func, args=[(1, 2)])`
-* `rq enqueue path.to.func 'key%=1, 2'` -> `queue.enqueue(path.to.func, kwargs={'key': (1, 2)})`
-* `rq enqueue path.to.func @path/to/file` -> `queue.enqueue(path.to.func, args=[open('path/to/file', 'r').read()])`
-* `rq enqueue path.to.func key=@path/to/file` -> `queue.enqueue(path.to.func, kwargs={'key': open('path/to/file', 'r').read()})`
-* `rq enqueue path.to.func :@path/to/file.json` -> `queue.enqueue(path.to.func, args=[json.loads(open('path/to/file.json', 'r').read())])`
-* `rq enqueue path.to.func key:=@path/to/file.json` -> `queue.enqueue(path.to.func, kwargs={'key': json.loads(open('path/to/file.json', 'r').read())})`
+* `rq enqueue path.to.func abc` -> `queue.enqueue(path.to.func, 'abc')`
+* `rq enqueue path.to.func abc=def` -> `queue.enqueue(path.to.func, abc='def')`
+* `rq enqueue path.to.func ':{"json": "abc"}'` -> `queue.enqueue(path.to.func, {'json': 'abc'})`
+* `rq enqueue path.to.func 'key:={"json": "abc"}'` -> `queue.enqueue(path.to.func, key={'json': 'abc'})`
+* `rq enqueue path.to.func '%1, 2'` -> `queue.enqueue(path.to.func, (1, 2))`
+* `rq enqueue path.to.func 'key%=1, 2'` -> `queue.enqueue(path.to.func, key=(1, 2))`
+* `rq enqueue path.to.func @path/to/file` -> `queue.enqueue(path.to.func, open('path/to/file', 'r').read())`
+* `rq enqueue path.to.func key=@path/to/file` -> `queue.enqueue(path.to.func, key=open('path/to/file', 'r').read())`
+* `rq enqueue path.to.func :@path/to/file.json` -> `queue.enqueue(path.to.func, json.loads(open('path/to/file.json', 'r').read()))`
+* `rq enqueue path.to.func key:=@path/to/file.json` -> `queue.enqueue(path.to.func, key=json.loads(open('path/to/file.json', 'r').read()))`
 
 **Warning:** Do not use plain text without keyword if you do not know what the value is.
 If the value starts with `@`, `:` or `%` or includes `=` it would be recognised as something else.
