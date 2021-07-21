@@ -4,8 +4,10 @@ from __future__ import (absolute_import, division, print_function,
 
 from datetime import datetime, timezone, timedelta
 from time import sleep
+from uuid import uuid4
 
 import os
+import json
 
 from click.testing import CliRunner
 from redis import Redis
@@ -573,3 +575,79 @@ class TestRQCli(RQTestCase):
         self.assertEqual(parse_function_arg('evalkey%=1.2', 5), ('evalkey', 1.2))
         self.assertEqual(parse_function_arg(':@tests/test.json', 6), (None, {'test': True}))
         self.assertEqual(parse_function_arg('@tests/test.json', 7), (None, '{\n    "test": true\n}\n'))
+
+    def test_cli_enqueue_doc_test(self):
+        """tests the examples of the documentation"""
+        runner = CliRunner()
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), (['abc'], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc=def'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'abc': 'def'}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':{"json": "abc"}'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([{'json': 'abc'}], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:={"json": "abc"}'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': {'json': 'abc'}}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%1, 2'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([(1, 2)], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%None'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([None], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%True'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([True], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%=1, 2'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': (1, 2)}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([open('tests/test.json', 'r').read()], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key=@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json', 'r').read()}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json', 'r').read())], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:=@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json', 'r').read())}))
