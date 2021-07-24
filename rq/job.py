@@ -617,10 +617,10 @@ class Job:
 
         if obj.get('stdout') is not None:
             self._stdout = _SteamCapture(sys.stdout)
-            self._stdout.setvalue(as_text(obj.get('stdout')))
+            self._stdout.setvalue(as_text(zlib.decompress(obj.get('stdout'))))
         if obj.get('stderr') is not None:
             self._stderr = _SteamCapture(sys.stderr)
-            self._stderr.setvalue(as_text(obj.get('stderr')))
+            self._stderr.setvalue(as_text(zlib.decompress(obj.get('stderr'))))
 
     # Persistence
     def refresh(self):  # noqa
@@ -686,9 +686,9 @@ class Job:
         if self.ttl:
             obj['ttl'] = self.ttl
         if self.capture_stdout:
-            obj['stdout'] = self.stdout
+            obj['stdout'] = zlib.compress(self.stdout.encode('utf-8'))
         if self.capture_stderr:
-            obj['stderr'] = self.stderr
+            obj['stderr'] = zlib.compress(self.stderr.encode('utf-8'))
 
         return obj
 
