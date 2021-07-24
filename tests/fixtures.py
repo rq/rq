@@ -288,8 +288,6 @@ def erroneous_callback(job):
     pass
 
 
-def log(text, stream='stdout'):
-    if stream == 'stdout':
-        print(text, file=sys.stdout)
-    if stream == 'stderr':
-        print(text, file=sys.stderr)
+def log():
+    print('Output', file=sys.stdout)
+    print('Error', file=sys.stderr)

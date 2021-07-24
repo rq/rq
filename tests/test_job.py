@@ -212,7 +212,7 @@ class TestJob(RQTestCase):
         self.assertEqual(
             set(self.testconn.hkeys(job.key)),
             {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
-             b'worker_name', b'success_callback_name', b'failure_callback_name', b'stdout', b'stderr'}
+             b'worker_name', b'success_callback_name', b'failure_callback_name'}
         )
 
         self.assertEqual(job.last_heartbeat, None)
@@ -1053,18 +1053,28 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         worker = Worker(queue)
 
-        job = queue.enqueue(fixtures.log, 'Hello')
-        self.assertEqual(job.stdout, '')
-        self.assertEqual(job.stderr, '')
-        worker.work(True)
-        job.refresh()
-        self.assertEqual(job.stdout, 'Hello\n')
-        self.assertEqual(job.stderr, '')
+        job = queue.enqueue(fixtures.log, capture_stdout=True)
 
-        job = queue.enqueue(fixtures.log, 'Error', 'stderr')
+        self.assertTrue(job.capture_stdout)
+        self.assertFalse(job.capture_stderr)
+
+        with self.assertRaises(AttributeError):
+            job.stderr
+
         self.assertEqual(job.stdout, '')
+        worker.work(True)
+        job.refresh()
+        self.assertEqual(job.stdout, 'Output\n')
+
+        job = queue.enqueue(fixtures.log, capture_stderr=True)
+
+        self.assertFalse(job.capture_stdout)
+        self.assertTrue(job.capture_stderr)
+
+        with self.assertRaises(AttributeError):
+            job.stdout
+
         self.assertEqual(job.stderr, '')
         worker.work(True)
         job.refresh()
-        self.assertEqual(job.stdout, '')
         self.assertEqual(job.stderr, 'Error\n')

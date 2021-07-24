@@ -98,7 +98,8 @@ class Job:
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
-               failure_ttl=None, serializer=None, *, on_success=None, on_failure=None):
+               failure_ttl=None, serializer=None, *, on_success=None, on_failure=None,
+               capture_stdout=False, capture_stderr=False):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -154,6 +155,11 @@ class Job:
         job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
+
+        if capture_stdout:
+            job._stdout = _SteamCapture(sys.stdout)
+        if capture_stderr:
+            job._stderr = _SteamCapture(sys.stderr)
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
@@ -345,11 +351,23 @@ class Job:
 
     @property
     def stdout(self):
+        if self._stdout is None:
+            raise AttributeError('job.stdout is not available if capture_stdout is False.')
         return self._stdout.getvalue()
 
     @property
     def stderr(self):
+        if self._stderr is None:
+            raise AttributeError('job.stderr is not available if capture_stderr is False.')
         return self._stderr.getvalue()
+
+    @property
+    def capture_stdout(self):
+        return self._stdout is not None
+
+    @property
+    def capture_stderr(self):
+        return self._stderr is not None
 
     @classmethod
     def exists(cls, job_id, connection=None):
@@ -424,8 +442,8 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
-        self._stdout = _SteamCapture(sys.stdout)
-        self._stderr = _SteamCapture(sys.stderr)
+        self._stdout = None
+        self._stderr = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -597,8 +615,12 @@ class Job:
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
 
-        self._stdout.setvalue(as_text(obj.get('stdout')))
-        self._stderr.setvalue(as_text(obj.get('stderr')))
+        if obj.get('stdout') is not None:
+            self._stdout = _SteamCapture(sys.stdout)
+            self._stdout.setvalue(as_text(obj.get('stdout')))
+        if obj.get('stderr') is not None:
+            self._stderr = _SteamCapture(sys.stderr)
+            self._stderr.setvalue(as_text(obj.get('stderr')))
 
     # Persistence
     def refresh(self):  # noqa
@@ -627,9 +649,7 @@ class Job:
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
-            'worker_name': self.worker_name or '',
-            'stdout': self.stdout,
-            'stderr': self.stderr
+            'worker_name': self.worker_name or ''
         }
 
         if self.retries_left is not None:
@@ -665,6 +685,10 @@ class Job:
             obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
+        if self.capture_stdout:
+            obj['stdout'] = self.stdout
+        if self.capture_stderr:
+            obj['stderr'] = self.stderr
 
         return obj
 

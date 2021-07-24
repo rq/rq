@@ -1022,8 +1022,13 @@ class Worker:
 
         started_job_registry = queue.started_job_registry
 
-        sys.stdout = job._stdout
-        sys.stderr = job._stderr
+        capture_stdout = job.capture_stdout
+        capture_stderr = job.capture_stderr
+
+        if capture_stdout:
+            sys.stdout = job._stdout
+        if capture_stderr:
+            sys.stderr = job._stderr
 
         try:
             self.prepare_job_execution(job)
@@ -1034,8 +1039,10 @@ class Worker:
                 rv = job.perform()
 
             job.ended_at = utcnow()
-            sys.stdout = job._stdout.original
-            sys.stderr = job._stderr.original
+            if capture_stdout:
+                sys.stdout = job._stdout.original
+            if capture_stderr:
+                sys.stderr = job._stderr.original
 
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
@@ -1049,8 +1056,10 @@ class Worker:
                                     started_job_registry=started_job_registry)
         except:  # NOQA
             job.ended_at = utcnow()
-            sys.stdout = job._stdout.original
-            sys.stderr = job._stderr.original
+            if capture_stdout:
+                sys.stdout = job._stdout.original
+            if capture_stderr:
+                sys.stderr = job._stderr.original
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
