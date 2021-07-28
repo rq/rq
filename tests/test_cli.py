@@ -632,7 +632,7 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%={"foo": True}'])
         self.assert_normal_execution(result)
         job = Job.fetch(id)
-        self.assertEqual((job.args, job.kwargs), ([], {'key': {"foo": True}))
+        self.assertEqual((job.args, job.kwargs), ([], {'key': {"foo": True}}))
 
         id = str(uuid4())
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '@tests/test.json'])
