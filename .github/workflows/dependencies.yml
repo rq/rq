@@ -97,7 +97,7 @@ jobs:
 
     - name: Create failure issue
       run: |
-        if [[ "$(curl --url https://api.github.com/repos/${{ github.repository }}/issues --request GET --data '{"creator": "github-actions"}')" != *"\""* ]]
+        if [[ "$(curl --url https://api.github.com/repos/${{ github.repository }}/issues?creator=github-actions --request GET)" != *"\""* ]]
           then curl --request POST \
                     --url https://api.github.com/repos/${{ github.repository }}/issues \
                     --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
