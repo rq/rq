@@ -262,7 +262,8 @@ If the first character of `[value]` is `@` the subsequent path will be read.
 * `rq enqueue path.to.func '%1, 2'` -> `queue.enqueue(path.to.func, (1, 2))`
 * `rq enqueue path.to.func '%None'` -> `queue.enqueue(path.to.func, None)`
 * `rq enqueue path.to.func '%True'` -> `queue.enqueue(path.to.func, True)`
-* `rq enqueue path.to.func 'key%=1, 2'` -> `queue.enqueue(path.to.func, key=(1, 2))`
+* `rq enqueue path.to.func 'key%=(1, 2)'` -> `queue.enqueue(path.to.func, key=(1, 2))`
+* `rq enqueue path.to.func 'key%={"foo": True}'` -> `queue.enqueue(path.to.func, key={"foo": True})`
 * `rq enqueue path.to.func @path/to/file` -> `queue.enqueue(path.to.func, open('path/to/file', 'r').read())`
 * `rq enqueue path.to.func key=@path/to/file` -> `queue.enqueue(path.to.func, key=open('path/to/file', 'r').read())`
 * `rq enqueue path.to.func :@path/to/file.json` -> `queue.enqueue(path.to.func, json.loads(open('path/to/file.json', 'r').read()))`
