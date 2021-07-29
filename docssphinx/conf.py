@@ -49,7 +49,13 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'basic'
+html_logo = '_static/ribbon.png'
+html_favicon = '_static/favicon.png'
+html_sidebars = {
+    '**': ['localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html']
+}
+html_js_files = ['darkmode.js']
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

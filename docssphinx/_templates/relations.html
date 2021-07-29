@@ -1,0 +1,14 @@
+<div class="relationsbar">
+  {% if prev %}
+  <a class="previous" href="{{ prev.link|e }}">
+    <img src="https://fonts.gstatic.com/s/i/materialiconsoutlined/arrow_back_ios/v13/24px.svg">
+    <p>{{ prev.title }}</p>
+  </a>
+  {% endif %}
+  {% if next %}
+  <a class="next" href="{{ next.link|e }}">
+    <p>{{ next.title }}</p>
+    <img src="https://fonts.gstatic.com/s/i/materialiconsoutlined/arrow_forward_ios/v15/24px.svg">
+  </a>
+  {% endif %}
+</div>

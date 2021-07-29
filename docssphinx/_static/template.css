@@ -1,0 +1,189 @@
+div.documentwrapper {
+    float: left;
+    width: 100%;
+}
+
+div.bodywrapper {
+    margin: 1em 1em 1em calc(230px + 1em);
+}
+
+pre, pre.highlight {
+    padding: 1em 1.8em;
+    border-bottom: 1px solid var(--code-border);
+    border-right: 1px solid var(--code-border);
+    background: var(--code-background) url(bq.png) top left no-repeat;
+    line-height: 1.15em;
+    overflow: auto;
+}
+
+code {
+    background: var(--single-code-background);
+    padding: 0.2em 0.4em;
+    border-radius: 5px;
+    font-family: 'Droid Sans Mono', monospace;
+    font-size: 80%;
+}
+
+body {
+    font-family: Lato, sans-serif;
+    margin: 0;
+    background: linear-gradient(to right, var(--background-border), var(--background-center) 1030px, var(--background-border));
+    color: var(--test-color);
+}
+
+body.light {
+    --background-border: #DBE1E0;
+    --background-center: #FFFFFF;
+    --code-background: #F3F3F0;
+    --code-border: #CCCCCC;
+    --single-code-background: #DCDCD9;
+    --hyperlink: rgb(65, 131, 196);
+    --hyperlink-bottom: rgba(65, 131, 196, 0.1);
+    --test-color: #000000;
+    --highlighted-background-color: #fbe54e;
+}
+
+body.dark {
+    --background-border: #2B2B2B;
+    --background-center: #2B2B2B;
+    --code-background: #444444;
+    --code-border: #363636;
+    --single-code-background: #444444;
+    --hyperlink: rgb(65, 131, 196);
+    --hyperlink-bottom: rgba(65, 131, 196, 0.1);
+    --test-color: #cccccc;
+    --highlighted-background-color: #041ab1;
+}
+
+div.document {
+    max-width: 1030px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+div.sphinxsidebar ul ul, div.sphinxsidebar ul.want-points {
+    margin-left: 30px;
+}
+
+div.sphinxsidebar ul {
+    padding-left: 0;
+}
+
+div.document a {
+    border-bottom: 1px solid var(--hyperlink-bottom);
+    color: var(--hyperlink);
+    font-weight: 600;
+    text-decoration: none;
+    transition: color linear 0.1s;
+    -webkit-transition: color linear 0.1s;
+    -moz-transition: color linear 0.1s;
+}
+
+p.logo a, a.image-reference, a.previous, a.next {
+    border-bottom: none !important;
+}
+
+h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
+    margin-left: 3px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: normal;
+}
+
+h1 {
+    font-size: 280%;
+}
+
+h2 {
+    font-size: 210%;
+}
+
+h3 {
+    font-size: 163.8%;
+}
+
+h4 {
+    font-size: 140%;
+}
+
+h5 {
+    font-size: 116.2%;
+}
+
+h6 {
+    font-size: 93.8%;
+}
+
+div.sphinxsidebarwrapper {
+    padding-top: 0;
+}
+
+p.logo {
+    margin-top: 0;
+}
+
+
+div.documentwrapper li {
+    padding-bottom: 5px;
+}
+
+a.previous, a.next {
+    display: flex;
+    margin: 1em;
+    pointer-events: auto;
+}
+
+a.previous {
+    float: left;
+}
+
+a.next {
+    float: right;
+}
+
+div.relationsbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+
+dt:target, span.highlighted {
+    background-color: var(--highlighted-background-color);
+}
+
+/* darkmode */
+
+body.light {
+    --switch: #ffffff;
+    --inner-switch: #ff9900;
+    --switch-position: 2px;
+}
+
+body.dark {
+    --switch: #0000ff;
+    --inner-switch: #2B2B2B;
+    --switch-position: 38px;
+}
+
+.switch {
+    position: relative;
+    display: block;
+    height: 34px;
+    width: 70px;
+    background: var(--switch);
+    border-radius: 17px;
+    cursor: pointer;
+}
+
+.inner-switch {
+    border-radius: 50%;
+    background: var(--inner-switch);
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    top: 2px;
+    left: var(--switch-position);
+}

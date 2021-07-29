@@ -1,0 +1,15 @@
+{% extends "basic/layout.html" %}
+
+{% block extrahead %}
+{{ super() }}
+<link href="{{ pathto('_static/template.css', 1) }}" rel="stylesheet" type="text/css">
+<link href="{{ pathto('_static/syntax.css', 1) }}" rel="stylesheet" type="text/css">
+{% endblock %}
+
+
+{% block customsidebar %} hi {% endblock %}
+
+{% block relbar1 %}{% endblock %}
+{% block relbar2 %}{% endblock %}
+
+{% block footer %}{% endblock %}
