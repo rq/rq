@@ -517,6 +517,7 @@ class Worker:
     def run_maintenance_tasks(self):
         """
         Runs periodic maintenance tasks, these include:
+
         1. Check if scheduler should be started. This check should not be run
            on first run since worker.work() already calls
            `scheduler.enqueue_scheduled_jobs()` on startup.

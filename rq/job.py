@@ -801,6 +801,7 @@ class Job:
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
         result depends on the value of ttl:
+
         - If ttl is 0, cleanup the job immediately.
         - If it's a positive number, set the job to expire in X seconds.
         - If ttl is negative, don't set an expiry to it (persist
