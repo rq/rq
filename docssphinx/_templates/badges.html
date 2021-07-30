@@ -1,0 +1,11 @@
+{% for badge in badges %}
+<p class="badge">
+    {% if badge.get('link') %}
+    <a href="{{ badge['link'] }}">
+    {% endif %}
+        <img src="{{ badge.get('img', '') }}" alt="{{ badge.get('alt', '') }}">
+    {% if badge.get('link') %}
+    </a>
+    {% endif %}
+</p>
+{% endfor %}

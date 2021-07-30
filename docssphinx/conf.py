@@ -53,9 +53,28 @@ html_theme = 'basic'
 html_logo = '_static/ribbon.png'
 html_favicon = '_static/favicon.png'
 html_sidebars = {
-    '**': ['localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html']
+    '**': ['badges.html', 'localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html']
 }
 html_js_files = ['darkmode.js']
+html_context = {
+    'badges': [
+        {
+            'alt': 'Build status',
+            'img': 'https://github.com/rq/rq/workflows/Test%20rq/badge.svg',
+            'link': 'https://github.com/rq/rq/actions?query=workflow%3A%22Test+rq%22'
+        },
+        {
+            'alt': 'PyPI',
+            'img': 'https://img.shields.io/pypi/pyversions/rq.svg',
+            'link': 'https://pypi.python.org/pypi/rq'
+        },
+        {
+            'alt': 'Coverage',
+            'img': 'https://codecov.io/gh/rq/rq/branch/master/graph/badge.svg',
+            'link': 'https://codecov.io/gh/rq/rq'
+        }
+    ]
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

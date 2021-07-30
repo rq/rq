@@ -187,3 +187,9 @@ body.dark {
     top: 2px;
     left: var(--switch-position);
 }
+
+/* badges */
+
+p.badge {
+    margin: 3px 0;
+}
