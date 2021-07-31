@@ -3,9 +3,13 @@
 Chat
 ====
 
-Join our discord |link| if you need help or want to chat about contributions or what should come next in RQ.
+Join our discord `here <https://discord.gg/pYannYntWH>`__ if you need help or want to chat about contributions or what should come next in RQ.
 
 
-.. |link| raw:: html
+.. raw:: html
 
-   <a href="https://discord.gg/pYannYntWH" target="_blank" rel="noopener noreferrer">here</a>
+   <script>
+      const link = document.querySelector('a[href="https://discord.gg/pYannYntWH"]');
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
+   </script>
