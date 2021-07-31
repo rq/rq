@@ -53,11 +53,27 @@ html_theme = 'basic'
 html_logo = '_static/ribbon.png'
 html_favicon = '_static/favicon.png'
 html_sidebars = {
-    '**': ['badges.html', 'localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html']
+    '**': ['localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html'],
+    'index': ['badges.html', 'localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html']
 }
 html_js_files = ['darkmode.js']
 html_context = {
     'badges': [
+        {
+            'alt': 'GitHub Repo stars',
+            'img': 'https://img.shields.io/github/stars/rq/rq?logo=github',
+            'link': 'https://github.com/rq/rq/'
+        },
+        {
+            'alt': 'PyPI - Downloads',
+            'img': 'https://img.shields.io/pypi/dw/rq?label=pip%20downloads&logo=pypi&logoColor=fff',
+            'link': 'https://pypi.python.org/pypi/rq'
+        },
+        {
+            'alt': 'Docker Pulls',
+            'img': 'https://img.shields.io/docker/pulls/redisqueue/worker?logo=docker&logoColor=fff',
+            'link': 'https://hub.docker.com/r/redisqueue/worker'
+        },
         {
             'alt': 'Build status',
             'img': 'https://github.com/rq/rq/workflows/Test%20rq/badge.svg',
@@ -65,13 +81,18 @@ html_context = {
         },
         {
             'alt': 'PyPI',
-            'img': 'https://img.shields.io/pypi/pyversions/rq.svg',
+            'img': 'https://img.shields.io/pypi/pyversions/rq.svg?logo=python&logoColor=fff',
             'link': 'https://pypi.python.org/pypi/rq'
         },
         {
             'alt': 'Coverage',
             'img': 'https://codecov.io/gh/rq/rq/branch/master/graph/badge.svg',
             'link': 'https://codecov.io/gh/rq/rq'
+        },
+        {
+            'alt': 'Discord',
+            'img': 'https://img.shields.io/discord/844816706231861248?logo=discord&logoColor=fff',
+            'link': './chat.html'
         }
     ]
 }
