@@ -1,0 +1,3 @@
+Sphinx
+myst-parser
+-r requirements.txt
