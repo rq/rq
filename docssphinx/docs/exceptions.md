@@ -51,10 +51,10 @@ queue.enqueue(my_func, retry=Retry(max=3, interval=60))
 queue.enqueue(my_func, retry=Retry(max=3, interval=[10, 30, 60]))
 ```
 
-:::{warning}
+```{warning}
 If you use `interval` argument with `Retry`, don’t forget to run
 your workers using the `--with-scheduler` argument.
-:::
+```
 
 ## Custom Exception Handlers
 

@@ -8,11 +8,11 @@ references to queues directly.
 
 ## Single Redis connection (easy)
 
-:::{warning}
+```{warning}
 The use of `use_connection` is deprecated.
 Please don't use `use_connection` in your scripts.
 Instead, use explicit connection management.
-:::
+```
 
 In development mode, to connect to a default, local Redis server:
 

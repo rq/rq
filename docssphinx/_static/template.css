@@ -24,6 +24,11 @@ code {
     font-size: 80%;
 }
 
+.warning {
+    background: var(--warning-background);
+    border: solid 2px var(--warning-border);
+}
+
 body {
     font-family: Lato, sans-serif;
     margin: 0;
@@ -41,6 +46,8 @@ body.light {
     --hyperlink-bottom: rgba(65, 131, 196, 0.1);
     --test-color: #000000;
     --highlighted-background-color: #fbe54e;
+    --warning-background: #ffb6b6;
+    --warning-border: #ff7979;
 }
 
 body.dark {
@@ -53,6 +60,8 @@ body.dark {
     --hyperlink-bottom: rgba(65, 131, 196, 0.1);
     --test-color: #cccccc;
     --highlighted-background-color: #041ab1;
+    --warning-background: #780000;
+    --warning-border: #bc0000;
 }
 
 div.document {
