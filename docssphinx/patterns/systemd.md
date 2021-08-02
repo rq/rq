@@ -1,5 +1,3 @@
-(systemd)=
-
 # Systemd
 
 ## Running RQ Workers Under systemd

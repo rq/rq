@@ -1,5 +1,3 @@
-(workers)=
-
 # Workers
 
 A worker is a Python process that typically runs in the background and
@@ -28,8 +26,8 @@ is no concurrent processing going on. If you want to perform jobs
 concurrently, simply start more workers.
 
 You should use process managers like
-{ref}`Supervisor <supervisor>` or
-{ref}`systemd <systemd>` to run RQ workers in production.
+{doc}`Supervisor </patterns/supervisor>` or
+{doc}`systemd </patterns/systemd>` to run RQ workers in production.
 
 ### Burst Mode
 
@@ -143,7 +141,7 @@ with Connection():
 
 Workers are registered to the system under their names, which are
 generated randomly during instantiation (see
-{ref}`monitoring <monitoring>`). To override this default, specify
+{doc}`monitoring </docs/monitoring>`). To override this default, specify
 the name when starting the worker, or use the `--name` cli option.
 
 ```python

@@ -1,5 +1,3 @@
-(supervisor)=
-
 # Supervisor
 
 ## Putting RQ under supervisor

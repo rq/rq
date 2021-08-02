@@ -308,7 +308,7 @@ execution and completion.
 ## The worker
 
 To learn about workers, see the
-{ref}`workers <workers>` documentation.
+{doc}`workers </docs/workers>` documentation.
 
 ## Considerations for jobs
 

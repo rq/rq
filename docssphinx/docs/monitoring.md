@@ -1,5 +1,3 @@
-(monitoring)=
-
 # Monitoring
 
 Monitoring is where RQ shines.
