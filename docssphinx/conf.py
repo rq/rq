@@ -93,7 +93,7 @@ html_context = {
         {
             'alt': 'Discord',
             'img': 'https://img.shields.io/discord/844816706231861248?logo=discord&logoColor=fff',
-            'link': './chat.html'
+            'link': './chat/'
         }
     ]
 }
