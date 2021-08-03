@@ -66,10 +66,10 @@ class TestRegistry(RQTestCase):
         job = queue.enqueue(say_hello)
 
         registry.add(job, 5)
-        self.assertEqual(
-            registry.get_expiration_time(job),
-            (datetime.utcnow() + timedelta(seconds=5)).replace(microsecond=0)
-        )
+        time = registry.get_expiration_time(job)
+        expected_time = (datetime.utcnow() + timedelta(seconds=5)).replace(microsecond=0)
+        self.assertGreaterEqual(time, expected_time - timedelta(seconds=2))
+        self.assertLessEqual(time, expected_time + timedelta(seconds=2))
 
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
