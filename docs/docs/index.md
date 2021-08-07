@@ -203,6 +203,8 @@ Failure callbacks are limited to 60 seconds of execution time.
 
 ### CLI Enqueueing
 
+_New in version 1.10.0._
+
 If you prefer enqueueing jobs via the command line interface or do not use python
 you can use this.
 
