@@ -599,7 +599,7 @@ nd
                         dependent_job_ids,
                         connection=self.connection,
                         serializer=self.serializer
-                    ) if dependent_job.dependencies_are_met(
+                    ) if dependent_job and dependent_job.dependencies_are_met(
                         exclude_job_id=job.id,
                         pipeline=pipe
                     )
