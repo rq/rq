@@ -50,14 +50,13 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'basic'
+html_theme = 'furo'
 html_logo = '_static/ribbon.png'
 html_favicon = '_static/favicon.png'
+html_css_files = ['rq.css']
 html_sidebars = {
-    '**': ['localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html'],
-    'index': ['badges.html', 'localtoc.html', 'globaltoc.html', 'relations.html', 'darkmode.html', 'searchbox.html']
+    'index': ['sidebar/brand.html', 'sidebar/scroll-start.html', 'sidebar/search.html', 'badges.html', 'sidebar/ethical-ads.html', 'sidebar/scroll-end.html']
 }
-html_js_files = ['darkmode.js']
 html_context = {
     'badges': [
         {

@@ -1,9 +1,6 @@
 API Reference
 =============
 
-.. contents::
-   :local:
-
 Classes
 -------
 

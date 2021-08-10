@@ -1,3 +1,4 @@
 Sphinx
 myst-parser
+furo
 -r requirements.txt
