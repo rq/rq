@@ -122,12 +122,13 @@ def empty(cli_config, all, queues, **options):
 @click.option('--queue', required=True, type=str)
 @click.argument('job_ids', nargs=-1)
 @pass_cli_config
-def requeue(cli_config, queue, all, job_class, job_ids, **options):
+def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
     """Requeue failed jobs."""
 
     failed_job_registry = FailedJobRegistry(queue,
                                             connection=cli_config.connection,
-                                            serializer=cli_config.serializer)
+                                            job_class=job_class,
+                                            serializer=serializer)
     if all:
         job_ids = failed_job_registry.get_job_ids()
 
