@@ -1,4 +1,5 @@
 import calendar
+from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -21,13 +22,15 @@ class BaseRegistry:
     key_template = 'rq:registry:{0}'
 
     def __init__(self, name='default', connection=None, job_class=None,
-                 queue=None):
+                 queue=None, serializer=None):
         if queue:
             self.name = queue.name
             self.connection = resolve_connection(queue.connection)
+            self.serializer = queue.serializer
         else:
             self.name = name
             self.connection = resolve_connection(connection)
+            self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
@@ -77,7 +80,7 @@ class BaseRegistry:
             if isinstance(job, self.job_class):
                 job_instance = job
             else:
-                job_instance = Job.fetch(job_id, connection=connection)
+                job_instance = Job.fetch(job_id, connection=connection, serializer=self.serializer)
             job_instance.delete()
         return result
 
@@ -100,7 +103,7 @@ class BaseRegistry:
 
     def get_queue(self):
         """Returns Queue object associated with this registry."""
-        return Queue(self.name, connection=self.connection)
+        return Queue(self.name, connection=self.connection, serializer=self.serializer)
 
     def get_expiration_time(self, job):
         """Returns job's expiration time."""
@@ -130,13 +133,14 @@ class StartedJobRegistry(BaseRegistry):
         job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
-            failed_job_registry = FailedJobRegistry(self.name, self.connection)
+            failed_job_registry = FailedJobRegistry(self.name, self.connection, serializer=self.serializer)
 
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
                     try:
                         job = self.job_class.fetch(job_id,
-                                                   connection=self.connection)
+                                                   connection=self.connection,
+                                                   serializer=self.serializer)
                     except NoSuchJobError:
                         continue
 
@@ -219,8 +223,12 @@ class FailedJobRegistry(BaseRegistry):
         """Requeues the job with the given job ID."""
         if isinstance(job_or_id, self.job_class):
             job = job_or_id
+            serializer = job.serializer
         else:
-            job = self.job_class.fetch(job_or_id, connection=self.connection)
+            serializer = self.serializer
+            job = self.job_class.fetch(job_or_id, connection=self.connection,
+                                        serializer=serializer)
+                            
 
         result = self.connection.zrem(self.key, job.id)
         if not result:
@@ -228,7 +236,7 @@ class FailedJobRegistry(BaseRegistry):
 
         with self.connection.pipeline() as pipeline:
             queue = Queue(job.origin, connection=self.connection,
-                          job_class=self.job_class)
+                          job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
             job.save()
@@ -318,14 +326,17 @@ def clean_registries(queue):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,
-                                   job_class=queue.job_class)
+                                   job_class=queue.job_class,
+                                   serializer=queue.serializer)
     registry.cleanup()
     registry = StartedJobRegistry(name=queue.name,
                                   connection=queue.connection,
-                                  job_class=queue.job_class)
+                                  job_class=queue.job_class,
+                                  serializer=queue.serializer)
     registry.cleanup()
 
     registry = FailedJobRegistry(name=queue.name,
                                  connection=queue.connection,
-                                 job_class=queue.job_class)
+                                 job_class=queue.job_class,
+                                 serializer=queue.serializer)
     registry.cleanup()

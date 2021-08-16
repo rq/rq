@@ -32,9 +32,9 @@ def send_kill_horse_command(connection, worker_name):
     send_command(connection, worker_name, 'kill-horse')
 
 
-def send_stop_job_command(connection, job_id):
+def send_stop_job_command(connection, job_id, serializer=None):
     """Instruct a worker to stop a job"""
-    job = Job.fetch(job_id, connection=connection)
+    job = Job.fetch(job_id, connection=connection, serializer=None)
     if not job.worker_name:
         raise InvalidJobOperation('Job is not currently executing')
     send_command(connection, job.worker_name, 'stop-job', job_id=job_id)

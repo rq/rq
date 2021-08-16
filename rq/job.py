@@ -45,11 +45,11 @@ class JobStatus(str, Enum):
 UNEVALUATED = object()
 
 
-def cancel_job(job_id, connection=None):
+def cancel_job(job_id, connection=None, serializer=None):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job.fetch(job_id, connection=connection).cancel()
+    Job.fetch(job_id, connection=connection, serializer=serializer).cancel()
 
 
 def get_current_job(connection=None, job_class=None):
@@ -62,8 +62,8 @@ def get_current_job(connection=None, job_class=None):
     return _job_stack.top
 
 
-def requeue_job(job_id, connection):
-    job = Job.fetch(job_id, connection=connection)
+def requeue_job(job_id, connection, serializer=None):
+    job = Job.fetch(job_id, connection=connection, serializer=serializer)
     return job.requeue()
 
 
@@ -695,28 +695,32 @@ class Job:
             from .registry import FinishedJobRegistry
             registry = FinishedJobRegistry(self.origin,
                                            connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_deferred:
             from .registry import DeferredJobRegistry
             registry = DeferredJobRegistry(self.origin,
                                            connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_started:
             from .registry import StartedJobRegistry
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,
-                                          job_class=self.__class__)
+                                          job_class=self.__class__,
+                                          serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
             from .registry import ScheduledJobRegistry
             registry = ScheduledJobRegistry(self.origin,
                                             connection=self.connection,
-                                            job_class=self.__class__)
+                                            job_class=self.__class__,
+                                            serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed:
@@ -820,13 +824,15 @@ class Job:
     def started_job_registry(self):
         from .registry import StartedJobRegistry
         return StartedJobRegistry(self.origin, connection=self.connection,
-                                  job_class=self.__class__)
+                                  job_class=self.__class__,
+                                  serializer=self.serializer)
 
     @property
     def failed_job_registry(self):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
-                                 job_class=self.__class__)
+                                 job_class=self.__class__,
+                                 serializer=self.serializer)
 
     def get_retry_interval(self):
         """Returns the desired retry interval.
@@ -865,7 +871,8 @@ class Job:
 
         registry = DeferredJobRegistry(self.origin,
                                        connection=self.connection,
-                                       job_class=self.__class__)
+                                       job_class=self.__class__,
+                                       serializer=self.serializer)
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
