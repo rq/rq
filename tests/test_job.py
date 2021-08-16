@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+from rq.serializers import JSONSerializer
 import time
 import queue
 import zlib
@@ -580,9 +581,9 @@ class TestJob(RQTestCase):
         Wthout a save, the dependent job is never saved into redis. The delete
         method will get and pass a NoSuchJobError.
         """
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
 
         job.delete()
@@ -598,49 +599,49 @@ class TestJob(RQTestCase):
     def test_job_delete_removes_itself_from_registries(self):
         """job.delete() should remove itself from job registries"""
         job = Job.create(func=fixtures.say_hello, status=JobStatus.FAILED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
-        registry = FailedJobRegistry(connection=self.testconn)
+        registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.FINISHED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = FinishedJobRegistry(connection=self.testconn)
+        registry = FinishedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.STARTED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = StartedJobRegistry(connection=self.testconn)
+        registry = StartedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.DEFERRED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = DeferredJobRegistry(connection=self.testconn)
+        registry = DeferredJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.SCHEDULED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = ScheduledJobRegistry(connection=self.testconn)
+        registry = ScheduledJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
@@ -649,9 +650,9 @@ class TestJob(RQTestCase):
     def test_job_with_dependents_delete_parent_with_saved(self):
         """job.delete() deletes itself from Redis but not dependents. If the
         dependent job was saved, it will remain in redis."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
         job2.save()
 
@@ -667,10 +668,10 @@ class TestJob(RQTestCase):
 
     def test_job_with_dependents_deleteall(self):
         """job.delete() deletes itself from Redis. Dependents need to be
-        deleted explictely."""
-        queue = Queue(connection=self.testconn)
+        deleted explicitly."""
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
 
         job.delete(delete_dependents=True)
@@ -685,9 +686,9 @@ class TestJob(RQTestCase):
         deleted explictely. Without a save, the dependent job is never saved
         into redis. The delete method will get and pass a NoSuchJobError.
         """
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
         job2.save()
 
@@ -713,9 +714,9 @@ class TestJob(RQTestCase):
         """
         job.delete() deletes itself from Redis.
         """
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         dependency_job = queue.enqueue(fixtures.say_hello)
-        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job, serializer=JSONSerializer)
 
         dependent_job.register_dependency()
         dependent_job.save()
@@ -786,6 +787,14 @@ class TestJob(RQTestCase):
         job = queue.enqueue(fixtures.say_hello)
         self.assertEqual(1, len(queue.get_jobs()))
         cancel_job(job.id)
+        self.assertEqual(0, len(queue.get_jobs()))
+
+    def test_create_and_cancel_job_with_serializer(self):
+        """test creating and using cancel_job (with serializer) deletes job properly"""
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
+        job = queue.enqueue(fixtures.say_hello)
+        self.assertEqual(1, len(queue.get_jobs()))
+        cancel_job(job.id, serializer=JSONSerializer)
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):

@@ -164,6 +164,45 @@ class TestRQCli(RQTestCase):
         self.assertNotIn(job2, registry)
         self.assertNotIn(job3, registry)
 
+    def test_requeue_with_serializer(self):
+        """rq requeue -u <url> -S <serializer> --all"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('requeue', connection=connection, serializer=JSONSerializer)
+        registry = queue.failed_job_registry
+
+        runner = CliRunner()
+
+        job = queue.enqueue(div_by_zero)
+        job2 = queue.enqueue(div_by_zero)
+        job3 = queue.enqueue(div_by_zero)
+
+        worker = Worker([queue], serializer=JSONSerializer)
+        worker.work(burst=True)
+
+        self.assertIn(job, registry)
+        self.assertIn(job2, registry)
+        self.assertIn(job3, registry)
+
+        result = runner.invoke(
+            main,
+            ['requeue', '-u', self.redis_url, '--queue', 'requeue', '-S', 'rq.serializers.JSONSerializer', job.id]
+        )
+        self.assert_normal_execution(result)
+
+        # Only the first specified job is requeued
+        self.assertNotIn(job, registry)
+        self.assertIn(job2, registry)
+        self.assertIn(job3, registry)
+
+        result = runner.invoke(
+            main,
+            ['requeue', '-u', self.redis_url, '--queue', 'requeue', '-S', 'rq.serializers.JSONSerializer', '--all']
+        )
+        self.assert_normal_execution(result)
+        # With --all flag, all failed jobs are requeued
+        self.assertNotIn(job2, registry)
+        self.assertNotIn(job3, registry)
+
     def test_info(self):
         """rq info -u <url>"""
         runner = CliRunner()
