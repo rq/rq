@@ -439,6 +439,32 @@ class TestRQCli(RQTestCase):
         worker.work(True)
         self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
 
+    def test_cli_enqueue_with_serializer(self):
+        """rq enqueue -u <url> -S rq.serializers.JSONSerializer tests.fixtures.say_hello"""
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '-S', 'rq.serializers.JSONSerializer',  'tests.fixtures.say_hello'])
+        self.assert_normal_execution(result)
+
+        prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
+        suffix = '\'.\n'
+
+        print(result.stdout)
+
+        self.assertTrue(result.stdout.startswith(prefix))
+        self.assertTrue(result.stdout.endswith(suffix))
+
+        job_id = result.stdout[len(prefix):-len(suffix)]
+        queue_key = 'rq:queue:default'
+        self.assertEqual(self.connection.llen(queue_key), 1)
+        self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
+
+        worker = Worker(queue, serializer=JSONSerializer)
+        worker.work(True)
+        self.assertEqual(Job(job_id, serializer=JSONSerializer).result, 'Hi there, Stranger!')
+
     def test_cli_enqueue_args(self):
         """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""
         queue = Queue(connection=self.connection)
