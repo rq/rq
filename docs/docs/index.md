@@ -201,6 +201,80 @@ def report_failure(job, connection, type, value, traceback):
 Failure callbacks are limited to 60 seconds of execution time.
 
 
+### CLI Enqueueing
+
+_New in version 1.10.0._
+
+If you prefer enqueueing jobs via the command line interface or do not use python
+you can use this.
+
+
+#### Usage:
+```bash
+rq enqueue [OPTIONS] FUNCTION [ARGUMENTS]
+```
+
+#### Options:
+* `-q, --queue [value]`      The name of the queue.
+* `--timeout [value]`        Specifies the maximum runtime of the job before it is
+                               interrupted and marked as failed.
+* `--result-ttl [value]`     Specifies how long successful jobs and their results
+                               are kept.
+* `--ttl [value]`            Specifies the maximum queued time of the job before
+                               it is discarded.
+* `--failure-ttl [value]`    Specifies how long failed jobs are kept.
+* `--description [value]`    Additional description of the job
+* `--depends-on [value]`     Specifies another job id that must complete before this
+                               job will be queued.
+* `--job-id [value]`         The id of this job
+* `--at-front`               Will place the job at the front of the queue, instead
+                               of the end
+* `--retry-max [value]`      Maximum number of retries
+* `--retry-interval [value]` Interval between retries in seconds
+* `--schedule-in [value]`    Delay until the function is enqueued (e.g. 10s, 5m, 2d).
+* `--schedule-at [value]`    Schedule job to be enqueued at a certain time formatted
+                               in ISO 8601 without timezone (e.g. 2021-05-27T21:45:00).
+* `--quiet`                  Only logs errors.
+
+#### Function:
+There are two options:
+* Execute a function: dot-separated string of package, module and function (Just like
+    passing a string to `queue.enqueue()`).
+* Execute a python file: dot-separated pathname of the file. Because it is technically
+    an import `__name__ == '__main__'` will not work.
+
+#### Arguments:
+
+| | plain text | json | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
+|-|-|-|-|
+| keyword | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]` |
+| no keyword | `[value]` | `:[value]` | `%[value]` |
+
+Where `[key]` is the keyword and `[value]` is the value which is parsed with the corresponding
+parsing method.
+
+If the first character of `[value]` is `@` the subsequent path will be read.
+
+##### Examples:
+
+* `rq enqueue path.to.func abc` -> `queue.enqueue(path.to.func, 'abc')`
+* `rq enqueue path.to.func abc=def` -> `queue.enqueue(path.to.func, abc='def')`
+* `rq enqueue path.to.func ':{"json": "abc"}'` -> `queue.enqueue(path.to.func, {'json': 'abc'})`
+* `rq enqueue path.to.func 'key:={"json": "abc"}'` -> `queue.enqueue(path.to.func, key={'json': 'abc'})`
+* `rq enqueue path.to.func '%1, 2'` -> `queue.enqueue(path.to.func, (1, 2))`
+* `rq enqueue path.to.func '%None'` -> `queue.enqueue(path.to.func, None)`
+* `rq enqueue path.to.func '%True'` -> `queue.enqueue(path.to.func, True)`
+* `rq enqueue path.to.func 'key%=(1, 2)'` -> `queue.enqueue(path.to.func, key=(1, 2))`
+* `rq enqueue path.to.func 'key%={"foo": True}'` -> `queue.enqueue(path.to.func, key={"foo": True})`
+* `rq enqueue path.to.func @path/to/file` -> `queue.enqueue(path.to.func, open('path/to/file', 'r').read())`
+* `rq enqueue path.to.func key=@path/to/file` -> `queue.enqueue(path.to.func, key=open('path/to/file', 'r').read())`
+* `rq enqueue path.to.func :@path/to/file.json` -> `queue.enqueue(path.to.func, json.loads(open('path/to/file.json', 'r').read()))`
+* `rq enqueue path.to.func key:=@path/to/file.json` -> `queue.enqueue(path.to.func, key=json.loads(open('path/to/file.json', 'r').read()))`
+
+**Warning:** Do not use plain text without keyword if you do not know what the value is.
+If the value starts with `@`, `:` or `%` or includes `=` it would be recognised as something else.
+
+
 ## Working with Queues
 
 Besides enqueuing jobs, Queues have a few useful methods:
