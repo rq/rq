@@ -2,20 +2,24 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from time import sleep
+from uuid import uuid4
 
 import os
+import json
 
 from click.testing import CliRunner
 from redis import Redis
 
 from rq import Queue
 from rq.cli import main
-from rq.cli.helpers import read_config_file, CliConfig
+from rq.cli.helpers import read_config_file, CliConfig, parse_function_arg, parse_schedule
 from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
 from rq.worker import Worker, WorkerStatus
+from rq.scheduler import RQScheduler
 
 import pytest
 
@@ -408,3 +412,287 @@ class TestRQCli(RQTestCase):
         runner.invoke(main, ['worker', '-u', self.redis_url,
                             '--serializer rq.serializer.JSONSerializer'])
         self.assertIn(job.id, q.job_ids)
+
+    def test_cli_enqueue(self):
+        """rq enqueue -u <url> tests.fixtures.say_hello"""
+        queue = Queue(connection=self.connection)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello'])
+        self.assert_normal_execution(result)
+
+        prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
+        suffix = '\'.\n'
+
+        print(result.stdout)
+
+        self.assertTrue(result.stdout.startswith(prefix))
+        self.assertTrue(result.stdout.endswith(suffix))
+
+        job_id = result.stdout[len(prefix):-len(suffix)]
+        queue_key = 'rq:queue:default'
+        self.assertEqual(self.connection.llen(queue_key), 1)
+        self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
+
+        worker = Worker(queue)
+        worker.work(True)
+        self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
+
+    def test_cli_enqueue_args(self):
+        """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""
+        queue = Queue(connection=self.connection)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'hello',
+                                      ':[1, {"key": "value"}]', ':@tests/test.json', '%1, 2', 'json:=[3.0, true]',
+                                      'nojson=abc', 'file=@tests/test.json'])
+        self.assert_normal_execution(result)
+
+        job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
+
+        worker = Worker(queue)
+        worker.work(True)
+
+        args, kwargs = Job(job_id).result
+
+        self.assertEqual(args, ('hello', [1, {'key': 'value'}], {"test": True}, (1, 2)))
+        self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc', 'file': '{\n    "test": true\n}\n'})
+
+    def test_cli_enqueue_schedule_in(self):
+        """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""
+        queue = Queue(connection=self.connection)
+        registry = ScheduledJobRegistry(queue=queue)
+        worker = Worker(queue)
+        scheduler = RQScheduler(queue, self.connection)
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 0)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                                      '--schedule-in', '10s'])
+        self.assert_normal_execution(result)
+
+        scheduler.acquire_locks()
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        self.assertFalse(worker.work(True))
+
+        sleep(11)
+
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 1)
+        self.assertTrue(len(registry) == 0)
+
+        self.assertTrue(worker.work(True))
+
+    def test_cli_enqueue_schedule_at(self):
+        """
+        rq enqueue -u <url> tests.fixtures.say_hello --schedule-at 2021-01-01T00:00:00
+
+        rq enqueue -u <url> tests.fixtures.say_hello --schedule-at 2100-01-01T00:00:00
+        """
+        queue = Queue(connection=self.connection)
+        registry = ScheduledJobRegistry(queue=queue)
+        worker = Worker(queue)
+        scheduler = RQScheduler(queue, self.connection)
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 0)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                                      '--schedule-at', '2021-01-01T00:00:00'])
+        self.assert_normal_execution(result)
+
+        scheduler.acquire_locks()
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 1)
+        self.assertTrue(len(registry) == 0)
+
+        self.assertTrue(worker.work(True))
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 0)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                                      '--schedule-at', '2100-01-01T00:00:00'])
+        self.assert_normal_execution(result)
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        scheduler.enqueue_scheduled_jobs()
+
+        self.assertTrue(len(queue) == 0)
+        self.assertTrue(len(registry) == 1)
+
+        self.assertFalse(worker.work(True))
+
+    def test_cli_enqueue_retry(self):
+        """rq enqueue -u <url> tests.fixtures.say_hello --retry-max 3 --retry-interval 10 --retry-interval 20
+        --retry-interval 40"""
+        queue = Queue(connection=self.connection)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello', '--retry-max', '3',
+                                      '--retry-interval', '10', '--retry-interval', '20', '--retry-interval', '40'])
+        self.assert_normal_execution(result)
+
+        job = Job.fetch(self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii'),
+                        connection=self.connection)
+
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [10, 20, 40])
+
+    def test_cli_enqueue_errors(self):
+        """
+        rq enqueue -u <url> tests.fixtures.echo :invalid_json
+
+        rq enqueue -u <url> tests.fixtures.echo %invalid_eval_statement
+
+        rq enqueue -u <url> tests.fixtures.echo key=value key=value
+
+        rq enqueue -u <url> tests.fixtures.echo --schedule-in 1s --schedule-at 2000-01-01T00:00:00
+
+        rq enqueue -u <url> tests.fixtures.echo @not_existing_file
+        """
+        runner = CliRunner()
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', ':invalid_json'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('Unable to parse 1. non keyword argument as JSON.', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo',
+                                      '%invalid_eval_statement'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('Unable to eval 1. non keyword argument as Python object.', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'key=value', 'key=value'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('You can\'t specify multiple values for the same keyword.', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '--schedule-in', '1s',
+                                      '--schedule-at', '2000-01-01T00:00:00'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('You can\'t specify both --schedule-in and --schedule-at', result.output)
+
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '@not_existing_file'])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('Not found', result.output)
+
+    def test_parse_schedule(self):
+        """executes the rq.cli.helpers.parse_schedule function"""
+        self.assertEqual(parse_schedule(None, '2000-01-23T23:45:01'), datetime(2000, 1, 23, 23, 45, 1))
+
+        start = datetime.now(timezone.utc) + timedelta(minutes=5)
+        middle = parse_schedule('5m', None)
+        end = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        self.assertGreater(middle, start)
+        self.assertLess(middle, end)
+
+    def test_parse_function_arg(self):
+        """executes the rq.cli.helpers.parse_function_arg function"""
+        self.assertEqual(parse_function_arg('abc', 0), (None, 'abc'))
+        self.assertEqual(parse_function_arg(':{"json": true}', 1), (None, {'json': True}))
+        self.assertEqual(parse_function_arg('%1, 2', 2), (None, (1, 2)))
+        self.assertEqual(parse_function_arg('key=value', 3), ('key', 'value'))
+        self.assertEqual(parse_function_arg('jsonkey:=["json", "value"]', 4), ('jsonkey', ['json', 'value']))
+        self.assertEqual(parse_function_arg('evalkey%=1.2', 5), ('evalkey', 1.2))
+        self.assertEqual(parse_function_arg(':@tests/test.json', 6), (None, {'test': True}))
+        self.assertEqual(parse_function_arg('@tests/test.json', 7), (None, '{\n    "test": true\n}\n'))
+
+    def test_cli_enqueue_doc_test(self):
+        """tests the examples of the documentation"""
+        runner = CliRunner()
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), (['abc'], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc=def'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'abc': 'def'}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':{"json": "abc"}'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([{'json': 'abc'}], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:={"json": "abc"}'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': {'json': 'abc'}}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%1, 2'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([(1, 2)], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%None'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([None], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%True'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([True], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%=(1, 2)'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': (1, 2)}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%={"foo": True}'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': {"foo": True}}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([open('tests/test.json', 'r').read()], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key=@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json', 'r').read()}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json', 'r').read())], {}))
+
+        id = str(uuid4())
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:=@tests/test.json'])
+        self.assert_normal_execution(result)
+        job = Job.fetch(id)
+        self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json', 'r').read())}))
