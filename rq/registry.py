@@ -231,6 +231,7 @@ class FailedJobRegistry(BaseRegistry):
                           job_class=self.job_class)
             job.started_at = None
             job.ended_at = None
+            job.exc_info = ''
             job.save()
             job = queue.enqueue_job(job, pipeline=pipeline)
             pipeline.execute()
