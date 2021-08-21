@@ -329,6 +329,15 @@ class TestWorker(RQTestCase):
             # third is successful, after "recovery"
             assert mocked.call_count == 3
 
+    def test_job_timeout_moved_to_failed_job_registry(self):
+        """Jobs that run long are moved to FailedJobRegistry"""
+        queue = Queue()
+        worker = Worker([queue])
+        job = queue.enqueue(long_running_job, 5, job_timeout=1)
+        worker.work(burst=True)
+        self.assertIn(job, job.failed_job_registry)
+        job.refresh()
+        self.assertIn('rq.timeouts.JobTimeoutException', job.exc_info)
 
     @slow
     def test_heartbeat_busy(self):
