@@ -993,6 +993,7 @@ class Worker:
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
+                        self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         job.worker_name = None
                         # Don't clobber the user's meta dictionary!
@@ -1003,9 +1004,11 @@ class Worker:
 
                     job.cleanup(result_ttl, pipeline=pipeline,
                                 remove_from_queue=False)
+                    self.log.debug('Removing job %s from StartedJobRegistry', job.id)
                     started_job_registry.remove(job, pipeline=pipeline)
 
                     pipeline.execute()
+                    self.log.debug('Finished handling successful execution of job %s', job.id)
                     break
                 except redis.exceptions.WatchError:
                     continue
