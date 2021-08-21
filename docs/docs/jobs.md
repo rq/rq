@@ -84,7 +84,7 @@ job = Job.create(count_words_at_url,
           })
 ```
 
-### Retrieving a Job from Redis
+### Retrieving Jobs
 
 All job information is stored in Redis. You can inspect a job and its attributes
 by using `Job.fetch()`.
@@ -100,7 +100,7 @@ print('Status: %s' % job.get_status())
 
 Some interesting job attributes include:
 * `job.get_status(refresh=True)` Possible values are `queued`, `started`,
-  `deferred`, `finished`, `stopped`, `scheduled` and `failed`. If `refresh` is
+  `deferred`, `finished`, `stopped`, `scheduled`, `canceled` and `failed`. If `refresh` is
   `True` fresh values are fetched from Redis.
 * `job.get_meta(refresh=True)` Returns custom `job.meta` dict containing user
   stored data. If `refresh` is `True` fresh values are fetched from Redis.
@@ -126,7 +126,7 @@ for job in jobs:
 ```
 
 ## Stopping a Currently Executing Job
-_New in version 1.7.0._
+_New in version 1.7.0_
 
 You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](https://python-rq.org/docs/results/#dealing-with-exceptions).
 
@@ -141,6 +141,35 @@ send_stop_job_command(redis, job_id)
 ```
 
 Unlike failed jobs, stopped jobs will *not* be automatically retried if retry is configured. Subclasses of `Worker` which override `handle_job_failure()` should likewise take care to handle jobs with a `stopped` status appropriately.
+
+## Canceling a Job
+_New in version 1.10.0_
+
+To prevent a job from running, cancel a job, use `job.cancel()`.
+
+```python
+from redis import Redis
+from rq.job import Job
+from rq.registry import CanceledJobRegistry
+from .queue import Queue
+
+redis = Redis()
+job = Job.fetch('my_job_id', connection=redis)
+job.cancel()
+
+job.get_status()  # Job status is CANCELED
+
+registry = CanceledJobRegistry(job.origin, connection=job.connection)
+print(job in registry)  # Job is in CanceledJobRegistry
+```
+
+Canceling a job will remove:
+1. Sets job status to `CANCELED`
+2. Removes job from queue
+3. Puts job into `CanceledJobRegistry`
+
+Note that `job.cancel()` does **not** delete the job itself from Redis. If you want to
+delete the job from Redis and reclaim memory, use `job.delete()`.
 
 ## Job / Queue Creation with Custom Serializer
 
