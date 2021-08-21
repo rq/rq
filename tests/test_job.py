@@ -347,6 +347,22 @@ class TestJob(RQTestCase):
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
 
+    def test_get_meta(self):
+        """Test get_meta() function"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.meta['foo'] = 'bar'
+        job.save()
+        self.assertEqual(job.get_meta()['foo'], 'bar')
+
+        # manually write different data in meta
+        self.testconn.hset(job.key, 'meta', dumps({'fee': 'boo'}))
+
+        # check if refresh=False keeps old data
+        self.assertEqual(job.get_meta(False)['foo'], 'bar')
+
+        # check if meta is updated
+        self.assertEqual(job.get_meta()['fee'], 'boo')
+
     def test_custom_meta_is_rewriten_by_save_meta(self):
         """New meta data can be stored by save_meta."""
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))

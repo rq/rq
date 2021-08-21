@@ -158,6 +158,13 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
+    def get_meta(self, refresh=True):
+        if refresh:
+            meta = self.connection.hget(self.key, 'meta')
+            self.meta = self.serializer.loads(meta) if meta else {}
+
+        return self.meta
+
     @property
     def is_finished(self):
         return self.get_status() == JobStatus.FINISHED

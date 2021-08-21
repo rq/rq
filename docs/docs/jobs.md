@@ -99,7 +99,11 @@ print('Status: %s' % job.get_status())
 ```
 
 Some interesting job attributes include:
-* `job.get_status()` Possible values are `queued`, `started`, `deferred`, `finished`, `stopped`, `scheduled` and `failed`
+* `job.get_status(refresh=True)` Possible values are `queued`, `started`,
+  `deferred`, `finished`, `stopped`, `scheduled` and `failed`. If `refresh` is
+  `True` fresh values are fetched from Redis.
+* `job.get_meta(refresh=True)` Returns custom `job.meta` dict containing user
+  stored data. If `refresh` is `True` fresh values are fetched from Redis.
 * `job.origin` queue name of this job
 * `job.func_name`
 * `job.args` arguments passed to the underlying job function
