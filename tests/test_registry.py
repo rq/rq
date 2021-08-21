@@ -10,7 +10,7 @@ from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import (clean_registries, DeferredJobRegistry,
+from rq.registry import (CanceledJobRegistry, clean_registries, DeferredJobRegistry,
                          FailedJobRegistry, FinishedJobRegistry,
                          StartedJobRegistry)
 
@@ -132,6 +132,10 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.get_expired_job_ids(), ['foo'])
         self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
                          ['foo', 'bar'])
+
+        # CanceledJobRegistry does not implement get_expired_job_ids()
+        registry = CanceledJobRegistry(connection=self.testconn)
+        self.assertRaises(NotImplementedError, registry.get_expired_job_ids)
 
     def test_cleanup_moves_jobs_to_failed_job_registry(self):
         """Moving expired jobs to FailedJobRegistry."""
