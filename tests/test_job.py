@@ -12,7 +12,7 @@ from rq.compat import as_text
 from rq.exceptions import DeserializationError, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
-from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
                          ScheduledJobRegistry)
 from rq.utils import utcformat, utcnow
@@ -797,12 +797,19 @@ class TestJob(RQTestCase):
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_create_and_cancel_job(self):
-        """test creating and using cancel_job deletes job properly"""
+        """Ensure job.cancel() works properly"""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         self.assertEqual(1, len(queue.get_jobs()))
         cancel_job(job.id)
         self.assertEqual(0, len(queue.get_jobs()))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(job, registry)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        job.delete()
+        self.assertNotIn(job, registry)
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""

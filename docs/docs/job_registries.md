@@ -11,6 +11,7 @@ executed and removed right after completion (success or failure).
 * `DeferredJobRegistry` Holds deferred jobs (jobs that depend on another job and are waiting for that 
 job to finish).
 * `ScheduledJobRegistry` Holds scheduled jobs.
+* `CanceledJobRegistry` Holds canceled jobs.
 
 You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
 Below is an example using a `StartedJobRegistry`.

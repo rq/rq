@@ -580,7 +580,7 @@ class TestWorker(RQTestCase):
         self.assertTrue(job.meta['first_handler'])
         self.assertEqual(job.meta.get('second_handler'), None)
 
-    def test_cancelled_jobs_arent_executed(self):
+    def test_deleted_jobs_arent_executed(self):
         """Cancelling jobs."""
 
         SENTINEL_FILE = '/tmp/rq-tests.txt'  # noqa
