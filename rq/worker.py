@@ -1007,8 +1007,9 @@ class Worker:
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
                     started_job_registry.remove(job, pipeline=pipeline)
 
-                    pipeline.execute()
-                    self.log.debug('Finished handling successful execution of job %s', job.id)
+                    result = pipeline.execute()
+                    self.log.debug('Finished handling successful execution of job %s. Redis returns %s',
+                                    job.id, result)
                     break
                 except redis.exceptions.WatchError:
                     continue
@@ -1152,7 +1153,7 @@ class Worker:
             # to run clean_registries().
             if queue.acquire_cleaning_lock():
                 self.log.info('Cleaning registries for queue: %s', queue.name)
-                clean_registries(queue)
+                clean_registries(queue, logger=self.log)
                 clean_worker_registry(queue)
         self.last_cleaned_at = utcnow()
 

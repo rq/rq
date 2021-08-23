@@ -21,7 +21,7 @@ class BaseRegistry:
     key_template = 'rq:registry:{0}'
 
     def __init__(self, name='default', connection=None, job_class=None,
-                 queue=None):
+                 queue=None, logger=None):
         if queue:
             self.name = queue.name
             self.connection = resolve_connection(queue.connection)
@@ -31,6 +31,7 @@ class BaseRegistry:
 
         self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
+        self.logger = logger
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -148,10 +149,16 @@ class StartedJobRegistry(BaseRegistry):
         seconds since the Unix epoch. timestamp defaults to call time if
         unspecified. Removed jobs are added to the global failed job queue.
         """
+        if self.logger:
+            self.logger.debug('Cleaning up StartedJobRegistry for queue %s...', self.name)
         score = timestamp if timestamp is not None else current_timestamp()
         job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
+
+            if self.logger:
+                self.logger.debug('Moving job(s) to FailedJobRegistry: %s', job_ids)
+
             failed_job_registry = FailedJobRegistry(self.name, self.connection)
 
             with self.connection.pipeline() as pipeline:
@@ -322,18 +329,18 @@ class CanceledJobRegistry(BaseRegistry):
         raise NotImplementedError
 
 
-def clean_registries(queue):
+def clean_registries(queue, logger=None):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,
-                                   job_class=queue.job_class)
+                                   job_class=queue.job_class, logger=logger)
     registry.cleanup()
     registry = StartedJobRegistry(name=queue.name,
                                   connection=queue.connection,
-                                  job_class=queue.job_class)
+                                  job_class=queue.job_class, logger=logger)
     registry.cleanup()
 
     registry = FailedJobRegistry(name=queue.name,
                                  connection=queue.connection,
-                                 job_class=queue.job_class)
+                                 job_class=queue.job_class, logger=logger)
     registry.cleanup()
