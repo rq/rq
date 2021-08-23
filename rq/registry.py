@@ -110,6 +110,28 @@ class BaseRegistry:
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
+    def requeue(self, job_or_id):
+        """Requeues the job with the given job ID."""
+        if isinstance(job_or_id, self.job_class):
+            job = job_or_id
+        else:
+            job = self.job_class.fetch(job_or_id, connection=self.connection)
+
+        result = self.connection.zrem(self.key, job.id)
+        if not result:
+            raise InvalidJobOperation
+
+        with self.connection.pipeline() as pipeline:
+            queue = Queue(job.origin, connection=self.connection,
+                          job_class=self.job_class)
+            job.started_at = None
+            job.ended_at = None
+            job.exc_info = ''
+            job.save()
+            job = queue.enqueue_job(job, pipeline=pipeline)
+            pipeline.execute()
+        return job
+
 
 class StartedJobRegistry(BaseRegistry):
     """
@@ -219,31 +241,6 @@ class FailedJobRegistry(BaseRegistry):
         if not pipeline:
             p.execute()
 
-    def requeue(self, job_or_id):
-        """Requeues the job with the given job ID."""
-        if isinstance(job_or_id, self.job_class):
-            job = job_or_id
-            serializer = job.serializer
-        else:
-            serializer = self.serializer
-            job = self.job_class.fetch(job_or_id, connection=self.connection,
-                                        serializer=serializer)
-                            
-
-        result = self.connection.zrem(self.key, job.id)
-        if not result:
-            raise InvalidJobOperation
-
-        with self.connection.pipeline() as pipeline:
-            queue = Queue(job.origin, connection=self.connection,
-                          job_class=self.job_class, serializer=serializer)
-            job.started_at = None
-            job.ended_at = None
-            job.save()
-            job = queue.enqueue_job(job, pipeline=pipeline)
-            pipeline.execute()
-        return job
-
 
 class DeferredJobRegistry(BaseRegistry):
     """
@@ -320,6 +317,13 @@ class ScheduledJobRegistry(BaseRegistry):
             raise NoSuchJobError
 
         return datetime.fromtimestamp(score, tz=timezone.utc)
+
+
+class CanceledJobRegistry(BaseRegistry):
+    key_template = 'rq:canceled:{0}'
+
+    def get_expired_job_ids(self, timestamp=None):
+        raise NotImplementedError
 
 
 def clean_registries(queue):

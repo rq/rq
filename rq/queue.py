@@ -261,8 +261,7 @@ class Queue:
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
         if pipeline is not None:
-            pipeline.lrem(self.key, 1, job_id)
-            return
+            return pipeline.lrem(self.key, 1, job_id)
 
         return self.connection.lrem(self.key, 1, job_id)
 

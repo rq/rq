@@ -38,6 +38,7 @@ class JobStatus(str, Enum):
     DEFERRED = 'deferred'
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
+    CANCELED = 'canceled'
 
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -158,6 +159,13 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
+    def get_meta(self, refresh=True):
+        if refresh:
+            meta = self.connection.hget(self.key, 'meta')
+            self.meta = self.serializer.loads(meta) if meta else {}
+
+        return self.meta
+
     @property
     def is_finished(self):
         return self.get_status() == JobStatus.FINISHED
@@ -177,6 +185,10 @@ class Job:
     @property
     def is_deferred(self):
         return self.get_status() == JobStatus.DEFERRED
+
+    @property
+    def is_canceled(self):
+        return self.get_status() == JobStatus.CANCELED
 
     @property
     def is_scheduled(self):
@@ -672,11 +684,18 @@ class Job:
         without worrying about the internals required to implement job
         cancellation.
         """
-        from .queue import Queue
         pipeline = pipeline or self.connection.pipeline()
         if self.origin:
+            from .registry import CanceledJobRegistry
+            from .queue import Queue
+
             q = Queue(name=self.origin, connection=self.connection)
             q.remove(self, pipeline=pipeline)
+
+            self.set_status(JobStatus.CANCELED, pipeline=pipeline)
+
+            registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
+            registry.add(self, pipeline=pipeline)
         pipeline.execute()
 
     def requeue(self):
@@ -687,9 +706,13 @@ class Job:
                delete_dependents=False):
         """Cancels the job and deletes the job hash from Redis. Jobs depending
         on this job can optionally be deleted as well."""
-        if remove_from_queue:
-            self.cancel(pipeline=pipeline)
+
         connection = pipeline if pipeline is not None else self.connection
+
+        if remove_from_queue:
+            from .queue import Queue
+            q = Queue(name=self.origin, connection=self.connection)
+            q.remove(self, pipeline=pipeline)
 
         if self.is_finished:
             from .registry import FinishedJobRegistry
@@ -725,6 +748,12 @@ class Job:
 
         elif self.is_failed:
             self.failed_job_registry.remove(self, pipeline=pipeline)
+
+        elif self.is_canceled:
+            from .registry import CanceledJobRegistry
+            registry = CanceledJobRegistry(self.origin, connection=self.connection,
+                                           job_class=self.__class__)
+            registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)

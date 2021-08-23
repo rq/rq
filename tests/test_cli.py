@@ -425,12 +425,10 @@ class TestRQCli(RQTestCase):
         prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
         suffix = '\'.\n'
 
-        print(result.stdout)
+        self.assertTrue(result.output.startswith(prefix))
+        self.assertTrue(result.output.endswith(suffix))
 
-        self.assertTrue(result.stdout.startswith(prefix))
-        self.assertTrue(result.stdout.endswith(suffix))
-
-        job_id = result.stdout[len(prefix):-len(suffix)]
+        job_id = result.output[len(prefix):-len(suffix)]
         queue_key = 'rq:queue:default'
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)

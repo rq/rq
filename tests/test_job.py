@@ -13,7 +13,7 @@ from rq.compat import as_text
 from rq.exceptions import DeserializationError, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
-from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
                          ScheduledJobRegistry)
 from rq.utils import utcformat, utcnow
@@ -347,6 +347,22 @@ class TestJob(RQTestCase):
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
+
+    def test_get_meta(self):
+        """Test get_meta() function"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.meta['foo'] = 'bar'
+        job.save()
+        self.assertEqual(job.get_meta()['foo'], 'bar')
+
+        # manually write different data in meta
+        self.testconn.hset(job.key, 'meta', dumps({'fee': 'boo'}))
+
+        # check if refresh=False keeps old data
+        self.assertEqual(job.get_meta(False)['foo'], 'bar')
+
+        # check if meta is updated
+        self.assertEqual(job.get_meta()['fee'], 'boo')
 
     def test_custom_meta_is_rewriten_by_save_meta(self):
         """New meta data can be stored by save_meta."""
@@ -782,12 +798,19 @@ class TestJob(RQTestCase):
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_create_and_cancel_job(self):
-        """test creating and using cancel_job deletes job properly"""
+        """Ensure job.cancel() works properly"""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         self.assertEqual(1, len(queue.get_jobs()))
         cancel_job(job.id)
         self.assertEqual(0, len(queue.get_jobs()))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(job, registry)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        job.delete()
+        self.assertNotIn(job, registry)
 
     def test_create_and_cancel_job_with_serializer(self):
         """test creating and using cancel_job (with serializer) deletes job properly"""
