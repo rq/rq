@@ -4,7 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 from datetime import datetime, timedelta, timezone
-from rq.serializers import JSONSerializer
+from rq.serializers import DefaultSerializer, JSONSerializer
 from mock.mock import patch
 
 from rq import Retry, Queue
@@ -785,6 +785,13 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+
+        # Make sure we don't use default when queue has custom
+        self.assertEqual(queue.scheduled_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.started_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.failed_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.deferred_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.finished_job_registry.serializer, JSONSerializer)
 
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""

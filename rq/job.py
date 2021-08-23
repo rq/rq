@@ -689,12 +689,17 @@ class Job:
             from .registry import CanceledJobRegistry
             from .queue import Queue
 
-            q = Queue(name=self.origin, connection=self.connection)
+            q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
 
             self.set_status(JobStatus.CANCELED, pipeline=pipeline)
 
-            registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
+            registry = CanceledJobRegistry(
+                self.origin,
+                self.connection,
+                job_class=self.__class__,
+                serializer=self.serializer
+            )
             registry.add(self, pipeline=pipeline)
         pipeline.execute()
 
@@ -711,7 +716,7 @@ class Job:
 
         if remove_from_queue:
             from .queue import Queue
-            q = Queue(name=self.origin, connection=self.connection)
+            q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
 
         if self.is_finished:
@@ -752,7 +757,8 @@ class Job:
         elif self.is_canceled:
             from .registry import CanceledJobRegistry
             registry = CanceledJobRegistry(self.origin, connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
