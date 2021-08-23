@@ -811,6 +811,54 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertNotIn(job, registry)
 
+    def test_create_and_cancel_job_enqueue_dependents(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.say_hello)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        cancel_job(dependency.id, enqueue_dependents=True)
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
+    def test_create_and_cancel_job_enqueue_dependents_with_pipeline(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.say_hello)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        self.testconn.set('some:key', b'some:value')
+
+        with self.testconn.pipeline() as pipe:
+            pipe.watch('some:key')
+            self.assertEqual(self.testconn.get('some:key'), b'some:value')
+            dependency.cancel(pipeline=pipe, enqueue_dependents=True)
+            pipe.set('some:key', b'some:other:value')
+            pipe.execute()
+        self.assertEqual(self.testconn.get('some:key'), b'some:other:value')
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""
         job_id = 'random'

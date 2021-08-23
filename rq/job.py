@@ -16,6 +16,8 @@ from enum import Enum
 from functools import partial
 from uuid import uuid4
 
+from redis import WatchError
+
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
 from .exceptions import DeserializationError, NoSuchJobError
@@ -46,11 +48,11 @@ class JobStatus(str, Enum):
 UNEVALUATED = object()
 
 
-def cancel_job(job_id, connection=None):
+def cancel_job(job_id, connection=None, enqueue_dependents=False):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job.fetch(job_id, connection=connection).cancel()
+    Job.fetch(job_id, connection=connection).cancel(enqueue_dependents=enqueue_dependents)
 
 
 def get_current_job(connection=None, job_class=None):
@@ -676,27 +678,47 @@ class Job:
         meta = self.serializer.dumps(self.meta)
         self.connection.hset(self.key, 'meta', meta)
 
-    def cancel(self, pipeline=None):
+    def cancel(self, pipeline=None, enqueue_dependents=False):
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
         cancellation.
+
+        You can enqueue the jobs dependents optionally, 
+        Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
-        pipeline = pipeline or self.connection.pipeline()
-        if self.origin:
-            from .registry import CanceledJobRegistry
-            from .queue import Queue
+        pipe = pipeline or self.connection.pipeline()
+        while True:
+            try:
+                if self.origin:
+                    from .registry import CanceledJobRegistry
+                    from .queue import Queue
 
-            q = Queue(name=self.origin, connection=self.connection)
-            q.remove(self, pipeline=pipeline)
+                    q = Queue(name=self.origin, connection=self.connection)
+                    if enqueue_dependents:
+                        # Only WATCH if no pipeline passed, otherwise caller is responsible
+                        if pipeline is None:
+                            pipe.watch(self.dependents_key)
+                        q.enqueue_dependents(self, pipeline=pipeline)
+                    q.remove(self, pipeline=pipe)
 
-            self.set_status(JobStatus.CANCELED, pipeline=pipeline)
+                    self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
-            registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
-            registry.add(self, pipeline=pipeline)
-        pipeline.execute()
+                    registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
+                    registry.add(self, pipeline=pipe)
+                if pipeline is None:
+                    pipe.execute()
+                break
+            except WatchError:
+                if pipeline is None:
+                    continue
+                else:
+                    # if the pipeline comes from the caller, we re-raise the
+                    # exception as it it the responsibility of the caller to
+                    # handle it
+                    raise
 
     def requeue(self):
         """Requeues job."""
