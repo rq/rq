@@ -830,6 +830,8 @@ class Worker:
                 self.heartbeat()
 
         self.set_current_job_working_time(0)
+        queue.started_job_registry.remove(job)
+
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
         if ret_val == os.EX_OK:  # The process exited normally.
             return
