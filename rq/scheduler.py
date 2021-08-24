@@ -129,7 +129,7 @@ class RQScheduler:
             queue_names = self._acquired_locks
         for name in queue_names:
             self._scheduled_job_registries.append(
-                ScheduledJobRegistry(name, connection=self.connection)
+                ScheduledJobRegistry(name, connection=self.connection, serializer=self.serializer)
             )
 
     @classmethod

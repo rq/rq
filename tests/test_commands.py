@@ -1,3 +1,4 @@
+from rq.serializers import JSONSerializer
 import time
 
 from multiprocessing import Process
@@ -63,17 +64,17 @@ class TestCommands(RQTestCase):
         """Ensure that stop_job command works properly."""
 
         connection = self.testconn
-        queue = Queue('foo', connection=connection)
+        queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_running_job, 3)
-        worker = Worker('foo', connection=connection)
+        worker = Worker('foo', connection=connection, serializer=JSONSerializer)
 
         # If job is not executing, an error is raised
         with self.assertRaises(InvalidJobOperation):
-            send_stop_job_command(connection, job_id=job.id)
+            send_stop_job_command(connection, job_id=job.id, serializer=JSONSerializer)
 
         # An exception is raised if job ID is invalid
         with self.assertRaises(NoSuchJobError):
-            send_stop_job_command(connection, job_id='1')
+            send_stop_job_command(connection, job_id='1', serializer=JSONSerializer)
 
         def start_work():
             worker.work(burst=True)
@@ -90,7 +91,7 @@ class TestCommands(RQTestCase):
         worker.refresh()
         self.assertEqual(worker.get_state(), WorkerStatus.BUSY)
 
-        send_stop_job_command(connection, job_id=job.id)
+        send_stop_job_command(connection, job_id=job.id, serializer=JSONSerializer)
         time.sleep(0.25)
 
         # Job status is set appropriately
