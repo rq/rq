@@ -689,25 +689,24 @@ class Job:
         You can enqueue the jobs dependents optionally, 
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
+
+        from .registry import CanceledJobRegistry
+        from .queue import Queue
         pipe = pipeline or self.connection.pipeline()
         while True:
             try:
-                if self.origin:
-                    from .registry import CanceledJobRegistry
-                    from .queue import Queue
+                q = Queue(name=self.origin, connection=self.connection)
+                if enqueue_dependents:
+                    # Only WATCH if no pipeline passed, otherwise caller is responsible
+                    if pipeline is None:
+                        pipe.watch(self.dependents_key)
+                    q.enqueue_dependents(self, pipeline=pipeline)
+                q.remove(self, pipeline=pipe)
 
-                    q = Queue(name=self.origin, connection=self.connection)
-                    if enqueue_dependents:
-                        # Only WATCH if no pipeline passed, otherwise caller is responsible
-                        if pipeline is None:
-                            pipe.watch(self.dependents_key)
-                        q.enqueue_dependents(self, pipeline=pipeline)
-                    q.remove(self, pipeline=pipe)
+                self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
-                    self.set_status(JobStatus.CANCELED, pipeline=pipe)
-
-                    registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
-                    registry.add(self, pipeline=pipe)
+                registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
+                registry.add(self, pipeline=pipe)
                 if pipeline is None:
                     pipe.execute()
                 break
