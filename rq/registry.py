@@ -61,15 +61,15 @@ class BaseRegistry:
         self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job, ttl=0, pipeline=None):
+    def add(self, job, ttl=0, pipeline=None, xx=False):
         """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf"""
         score = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
             score = '+inf'
         if pipeline is not None:
-            return pipeline.zadd(self.key, {job.id: score})
+            return pipeline.zadd(self.key, {job.id: score}, xx=xx)
 
-        return self.connection.zadd(self.key, {job.id: score})
+        return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
     def remove(self, job, pipeline=None, delete_job=False):
         """Removes job from registry and deletes it if `delete_job == True`"""

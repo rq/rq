@@ -814,7 +814,7 @@ class Worker:
                 with self.connection.pipeline() as pipeline:
                     self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
                     ttl = self.get_heartbeat_ttl(job)
-                    job.heartbeat(utcnow(), ttl, pipeline=pipeline)
+                    job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
                     pipeline.execute()
 
             except OSError as e:
