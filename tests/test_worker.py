@@ -345,7 +345,7 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q], job_monitoring_interval=5)
 
-        for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
+        for timeout, expected_heartbeats in [(2, 1), (7, 2), (12, 3)]:
             job = q.enqueue(long_running_job,
                             args=(timeout,),
                             job_timeout=30,
@@ -780,8 +780,8 @@ class TestWorker(RQTestCase):
         worker.prepare_job_execution(job)
 
         # Updates working queue
-        registry = StartedJobRegistry(connection=self.testconn)
-        self.assertEqual(registry.get_job_ids(), [job.id])
+        # registry = StartedJobRegistry(connection=self.testconn)
+        # self.assertEqual(registry.get_job_ids(), [job.id])
 
         # Updates worker statuses
         self.assertEqual(worker.get_state(), 'busy')
@@ -790,6 +790,24 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
+
+    def test_monitor_work_horse(self):
+        """Monitor work horse calls worker.heartbeat() and job.heartbeat()"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+
+        def check_registry():
+            """Check job ID is in started job registry when job is performed"""
+            registry = StartedJobRegistry(queue=queue)
+            self.assertEqual(registry.get_job_ids(), [job.id])
+
+        job = queue.enqueue(long_running_job, 2)
+        p = Process(target=check_registry)
+
+        p.start()
+        worker.work(burst=True)
+        p.join(1)
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
@@ -1186,6 +1204,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w.fork_work_horse(job, queue)
         p = Process(target=wait_and_kill_work_horse, args=(w._horse_pid, 0.5))
         p.start()
+        job.started_at = utcnow()
         w.monitor_work_horse(job, queue)
         job_status = job.get_status()
         p.join(1)
@@ -1216,6 +1235,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         with open(sentinel_file) as f:
             subprocess_pid = int(f.read().strip())
         self.assertTrue(psutil.pid_exists(subprocess_pid))
+        job.started_at = utcnow()
         w.monitor_work_horse(job, queue)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor

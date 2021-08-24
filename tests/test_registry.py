@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from datetime import datetime, timedelta
-from rq.serializers import JSONSerializer
+from multiprocessing import Process
 
 from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
@@ -14,9 +14,10 @@ from rq.worker import Worker
 from rq.registry import (CanceledJobRegistry, clean_registries, DeferredJobRegistry,
                          FailedJobRegistry, FinishedJobRegistry,
                          StartedJobRegistry)
+from rq.serializers import JSONSerializer
 
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, say_hello
+from tests.fixtures import div_by_zero, long_running_job, say_hello
 
 
 class CustomJob(Job):
@@ -177,24 +178,24 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.testconn)
         worker = Worker([queue])
 
-        job = queue.enqueue(say_hello)
-        self.assertTrue(job.is_queued)
+        def check_registry():
+            """Check job ID is in started job registry when job is performed"""
+            self.assertEqual(registry.get_job_ids(), [job.id])
 
-        worker.prepare_job_execution(job)
-        self.assertIn(job.id, registry.get_job_ids())
-        self.assertTrue(job.is_started)
+        job = queue.enqueue(long_running_job, 2)
+        p = Process(target=check_registry)
 
-        worker.perform_job(job, queue)
+        p.start()
+        worker.work(burst=True)
+        p.join(1)
+
+        # After work is done, job is no longer in StartedJobRegistry
         self.assertNotIn(job.id, registry.get_job_ids())
         self.assertTrue(job.is_finished)
 
-        # Job that fails
+        # If a job fails, it will also be removed from registry after execution
         job = queue.enqueue(div_by_zero)
-
-        worker.prepare_job_execution(job)
-        self.assertIn(job.id, registry.get_job_ids())
-
-        worker.perform_job(job, queue)
+        worker.work(burst=True)
         self.assertNotIn(job.id, registry.get_job_ids())
 
     def test_job_deletion(self):
@@ -207,6 +208,7 @@ class TestRegistry(RQTestCase):
         self.assertTrue(job.is_queued)
 
         worker.prepare_job_execution(job)
+        job.heartbeat(datetime.utcnow(), 60)
         self.assertIn(job.id, registry.get_job_ids())
 
         job.delete()

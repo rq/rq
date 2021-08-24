@@ -794,7 +794,8 @@ class Job:
         """Set job metadata before execution begins"""
         self.worker_name = worker_name
         self.last_heartbeat = utcnow()
-        self.started_at = self.last_heartbeat
+        if not self.started_at:  # This should be set by the worker
+            self.started_at = self.last_heartbeat
         self._status = JobStatus.STARTED
         mapping = {
             'last_heartbeat': utcformat(self.last_heartbeat),

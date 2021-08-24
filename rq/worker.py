@@ -791,9 +791,13 @@ class Worker:
         either executes successfully or the status of the job is set to
         failed
         """
-
         ret_val = None
-        job.started_at = utcnow()
+
+        with self.connection.pipeline() as pipeline:
+            heartbeat_ttl = self.get_heartbeat_ttl(job)
+            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
+
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -865,6 +869,7 @@ class Worker:
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
+        job.started_at = utcnow()
         self.set_state(WorkerStatus.BUSY)
         self.fork_work_horse(job, queue)
         self.monitor_work_horse(job, queue)
@@ -908,9 +913,9 @@ class Worker:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
 
-            heartbeat_ttl = self.get_heartbeat_ttl(job)
-            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
-            job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
+            # heartbeat_ttl = self.get_heartbeat_ttl(job)
+            # self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            # job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
@@ -1037,7 +1042,6 @@ class Worker:
         try:
             self.prepare_job_execution(job)
 
-            job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 rv = job.perform()
