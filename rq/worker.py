@@ -932,7 +932,8 @@ class Worker:
                 started_job_registry = StartedJobRegistry(
                     job.origin,
                     self.connection,
-                    job_class=self.job_class
+                    job_class=self.job_class,
+                    serializer=self.serializer
                 )
             job.worker_name = None
 
@@ -953,7 +954,7 @@ class Worker:
 
             if not self.disable_default_exception_handler and not retry:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
-                                                        job_class=self.job_class)
+                                                        job_class=self.job_class, serializer=job.serializer)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline)
 

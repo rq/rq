@@ -168,6 +168,45 @@ class TestRQCli(RQTestCase):
         self.assertNotIn(job2, registry)
         self.assertNotIn(job3, registry)
 
+    def test_requeue_with_serializer(self):
+        """rq requeue -u <url> -S <serializer> --all"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('requeue', connection=connection, serializer=JSONSerializer)
+        registry = queue.failed_job_registry
+
+        runner = CliRunner()
+
+        job = queue.enqueue(div_by_zero)
+        job2 = queue.enqueue(div_by_zero)
+        job3 = queue.enqueue(div_by_zero)
+
+        worker = Worker([queue], serializer=JSONSerializer)
+        worker.work(burst=True)
+
+        self.assertIn(job, registry)
+        self.assertIn(job2, registry)
+        self.assertIn(job3, registry)
+
+        result = runner.invoke(
+            main,
+            ['requeue', '-u', self.redis_url, '--queue', 'requeue', '-S', 'rq.serializers.JSONSerializer', job.id]
+        )
+        self.assert_normal_execution(result)
+
+        # Only the first specified job is requeued
+        self.assertNotIn(job, registry)
+        self.assertIn(job2, registry)
+        self.assertIn(job3, registry)
+
+        result = runner.invoke(
+            main,
+            ['requeue', '-u', self.redis_url, '--queue', 'requeue', '-S', 'rq.serializers.JSONSerializer', '--all']
+        )
+        self.assert_normal_execution(result)
+        # With --all flag, all failed jobs are requeued
+        self.assertNotIn(job2, registry)
+        self.assertNotIn(job3, registry)
+
     def test_info(self):
         """rq info -u <url>"""
         runner = CliRunner()
@@ -397,6 +436,32 @@ class TestRQCli(RQTestCase):
         worker = Worker(queue)
         worker.work(True)
         self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
+
+    def test_cli_enqueue_with_serializer(self):
+        """rq enqueue -u <url> -S rq.serializers.JSONSerializer tests.fixtures.say_hello"""
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        self.assertTrue(queue.is_empty())
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '-S', 'rq.serializers.JSONSerializer',  'tests.fixtures.say_hello'])
+        self.assert_normal_execution(result)
+
+        prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
+        suffix = '\'.\n'
+
+        print(result.stdout)
+
+        self.assertTrue(result.stdout.startswith(prefix))
+        self.assertTrue(result.stdout.endswith(suffix))
+
+        job_id = result.stdout[len(prefix):-len(suffix)]
+        queue_key = 'rq:queue:default'
+        self.assertEqual(self.connection.llen(queue_key), 1)
+        self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
+
+        worker = Worker(queue, serializer=JSONSerializer)
+        worker.work(True)
+        self.assertEqual(Job(job_id, serializer=JSONSerializer).result, 'Hi there, Stranger!')
 
     def test_cli_enqueue_args(self):
         """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""

@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 from datetime import datetime, timedelta, timezone
+from rq.serializers import DefaultSerializer, JSONSerializer
 from mock.mock import patch
 
 from rq import Retry, Queue
@@ -145,7 +146,7 @@ class TestQueue(RQTestCase):
 
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
-        q = Queue('example')
+        q = Queue('example', serializer=JSONSerializer)
         job = q.enqueue(say_hello)
         self.assertIn(job.id, q.job_ids)
         q.remove(job)
@@ -775,6 +776,22 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+
+    def test_getting_registries_with_serializer(self):
+        """Getting job registries from queue object (with custom serializer)"""
+        queue = Queue('example', serializer=JSONSerializer)
+        self.assertEqual(queue.scheduled_job_registry, ScheduledJobRegistry(queue=queue))
+        self.assertEqual(queue.started_job_registry, StartedJobRegistry(queue=queue))
+        self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
+        self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
+        self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+
+        # Make sure we don't use default when queue has custom
+        self.assertEqual(queue.scheduled_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.started_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.failed_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.deferred_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.finished_job_registry.serializer, JSONSerializer)
 
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""

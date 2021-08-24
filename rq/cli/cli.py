@@ -126,11 +126,13 @@ def empty(cli_config, all, queues, **options):
 @click.option('--queue', required=True, type=str)
 @click.argument('job_ids', nargs=-1)
 @pass_cli_config
-def requeue(cli_config, queue, all, job_class, job_ids, **options):
+def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
     """Requeue failed jobs."""
 
     failed_job_registry = FailedJobRegistry(queue,
-                                            connection=cli_config.connection)
+                                            connection=cli_config.connection,
+                                            job_class=job_class,
+                                            serializer=serializer)
     if all:
         job_ids = failed_job_registry.get_job_ids()
 
@@ -321,7 +323,7 @@ def resume(cli_config, **options):
               multiple=True)
 @click.option('--job-id', help='The id of this job')
 @click.option('--at-front', is_flag=True, help='Will place the job at the front of the queue, instead of the end')
-@click.option('--retry-max', help='Maximum amound of retries', default=0, type=int)
+@click.option('--retry-max', help='Maximum amount of retries', default=0, type=int)
 @click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
 @click.option('--schedule-in', help='Delay until the function is enqueued (e.g. 10s, 5m, 2d).')
 @click.option('--schedule-at', help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
@@ -331,10 +333,9 @@ def resume(cli_config, **options):
 @click.argument('arguments', nargs=-1)
 @pass_cli_config
 def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front,
-            retry_max, retry_interval, schedule_in, schedule_at, quiet, function, arguments, **options):
+            retry_max, retry_interval, schedule_in, schedule_at, quiet, serializer, function, arguments, **options):
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
-
     function_string = get_call_string(function, args, kwargs)
     description = description or function_string
 
@@ -345,7 +346,7 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
     schedule = parse_schedule(schedule_in, schedule_at)
 
     with Connection(cli_config.connection):
-        queue = cli_config.queue_class(queue)
+        queue = cli_config.queue_class(queue, serializer=serializer)
 
         if schedule is None:
             job = queue.enqueue_call(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,

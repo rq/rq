@@ -48,11 +48,11 @@ class JobStatus(str, Enum):
 UNEVALUATED = object()
 
 
-def cancel_job(job_id, connection=None, enqueue_dependents=False):
+def cancel_job(job_id, connection=None, serializer=None, enqueue_dependents=False):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job.fetch(job_id, connection=connection).cancel(enqueue_dependents=enqueue_dependents)
+    Job.fetch(job_id, connection=connection, serializer=serializer).cancel(enqueue_dependents=enqueue_dependents)
 
 
 def get_current_job(connection=None, job_class=None):
@@ -65,8 +65,8 @@ def get_current_job(connection=None, job_class=None):
     return _job_stack.top
 
 
-def requeue_job(job_id, connection):
-    job = Job.fetch(job_id, connection=connection)
+def requeue_job(job_id, connection, serializer=None):
+    job = Job.fetch(job_id, connection=connection, serializer=serializer)
     return job.requeue()
 
 
@@ -695,7 +695,12 @@ class Job:
         pipe = pipeline or self.connection.pipeline()
         while True:
             try:
-                q = Queue(name=self.origin, connection=self.connection)
+                q = Queue(
+                    name=self.origin,
+                    connection=self.connection,
+                    job_class=self.__class__,
+                    serializer=self.serializer
+                )
                 if enqueue_dependents:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
@@ -705,7 +710,12 @@ class Job:
 
                 self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
-                registry = CanceledJobRegistry(self.origin, self.connection, job_class=self.__class__)
+                registry = CanceledJobRegistry(
+                    self.origin,
+                    self.connection,
+                    job_class=self.__class__,
+                    serializer=self.serializer                    
+                )
                 registry.add(self, pipeline=pipe)
                 if pipeline is None:
                     pipe.execute()
@@ -732,35 +742,39 @@ class Job:
 
         if remove_from_queue:
             from .queue import Queue
-            q = Queue(name=self.origin, connection=self.connection)
+            q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
 
         if self.is_finished:
             from .registry import FinishedJobRegistry
             registry = FinishedJobRegistry(self.origin,
                                            connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_deferred:
             from .registry import DeferredJobRegistry
             registry = DeferredJobRegistry(self.origin,
                                            connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_started:
             from .registry import StartedJobRegistry
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,
-                                          job_class=self.__class__)
+                                          job_class=self.__class__,
+                                          serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
             from .registry import ScheduledJobRegistry
             registry = ScheduledJobRegistry(self.origin,
                                             connection=self.connection,
-                                            job_class=self.__class__)
+                                            job_class=self.__class__,
+                                            serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed:
@@ -769,7 +783,8 @@ class Job:
         elif self.is_canceled:
             from .registry import CanceledJobRegistry
             registry = CanceledJobRegistry(self.origin, connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         if delete_dependents:
@@ -870,13 +885,15 @@ class Job:
     def started_job_registry(self):
         from .registry import StartedJobRegistry
         return StartedJobRegistry(self.origin, connection=self.connection,
-                                  job_class=self.__class__)
+                                  job_class=self.__class__,
+                                  serializer=self.serializer)
 
     @property
     def failed_job_registry(self):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
-                                 job_class=self.__class__)
+                                 job_class=self.__class__,
+                                 serializer=self.serializer)
 
     def get_retry_interval(self):
         """Returns the desired retry interval.
@@ -915,7 +932,8 @@ class Job:
 
         registry = DeferredJobRegistry(self.origin,
                                        connection=self.connection,
-                                       job_class=self.__class__)
+                                       job_class=self.__class__,
+                                       serializer=self.serializer)
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
