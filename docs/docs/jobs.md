@@ -171,6 +171,17 @@ Canceling a job will remove:
 Note that `job.cancel()` does **not** delete the job itself from Redis. If you want to
 delete the job from Redis and reclaim memory, use `job.delete()`.
 
+Note: if you want to enqueue the dependents of the job you 
+are trying to cancel use the following:
+
+```python
+from rq import cancel_job
+cancel_job(
+  '2eafc1e6-48c2-464b-a0ff-88fd199d039c',
+  enqueue_dependents=True
+)
+```
+
 ## Job / Queue Creation with Custom Serializer
 
 When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
