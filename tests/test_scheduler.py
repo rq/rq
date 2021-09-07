@@ -198,8 +198,8 @@ class TestScheduler(RQTestCase):
             pipeline.expire(locking_key_2, 1000)
 
         scheduler.heartbeat()
-        self.assertEqual(self.testconn.ttl(locking_key_1), 6)
-        self.assertEqual(self.testconn.ttl(locking_key_1), 6)
+        self.assertEqual(self.testconn.ttl(locking_key_1), 61)
+        self.assertEqual(self.testconn.ttl(locking_key_1), 61)
 
         # scheduler.stop() releases locks and sets status to STOPPED
         scheduler._status = scheduler.Status.WORKING
@@ -213,7 +213,7 @@ class TestScheduler(RQTestCase):
         scheduler.acquire_locks()
         self.testconn.expire(locking_key_1, 1000)
         scheduler.heartbeat()
-        self.assertEqual(self.testconn.ttl(locking_key_1), 6)
+        self.assertEqual(self.testconn.ttl(locking_key_1), 61)
 
     def test_enqueue_scheduled_jobs(self):
         """Scheduler can enqueue scheduled jobs"""
