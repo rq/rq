@@ -449,8 +449,6 @@ class TestRQCli(RQTestCase):
         prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
         suffix = '\'.\n'
 
-        print(result.output)
-
         self.assertTrue(result.output.startswith(prefix))
         self.assertTrue(result.output.endswith(suffix))
 
