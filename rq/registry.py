@@ -327,6 +327,12 @@ class CanceledJobRegistry(BaseRegistry):
     def get_expired_job_ids(self, timestamp=None):
         raise NotImplementedError
 
+    def cleanup(self):
+        """This method is only here to prevent errors because this method is
+        automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry."""
+        pass
+
 
 def clean_registries(queue):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""

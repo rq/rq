@@ -256,6 +256,12 @@ class Queue:
         from rq.registry import ScheduledJobRegistry
         return ScheduledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
+    @property
+    def canceled_job_registry(self):
+        """Returns this queue's CanceledJobRegistry."""
+        from rq.registry import CanceledJobRegistry
+        return CanceledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
