@@ -533,7 +533,7 @@ class Worker:
         self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
-        self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2)
+        self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
