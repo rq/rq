@@ -308,7 +308,7 @@ more common requests so far are:
 3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
 4. Using a custom strategy for dequeuing jobs from different queues. 
-   See [link](#Round-Robin-and-Random-strategies-for-dequeuing-jobs-from-queues).
+   See [link](#round-robin-and-random-strategies-for-dequeuing-jobs-from-queues).
 
 You can use the `-w` option to specify a different worker class to use:
 
