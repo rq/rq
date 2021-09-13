@@ -100,16 +100,18 @@ def main():
 @click.option('--all', '-a', is_flag=True, help='Empty all queues')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def empty(cli_config, all, queues, **options):
+def empty(cli_config, all, queues, serializer, **options):
     """Empty given queues."""
 
     if all:
         queues = cli_config.queue_class.all(connection=cli_config.connection,
-                                            job_class=cli_config.job_class)
+                                            job_class=cli_config.job_class,
+                                            serializer=serializer)
     else:
         queues = [cli_config.queue_class(queue,
                                          connection=cli_config.connection,
-                                         job_class=cli_config.job_class)
+                                         job_class=cli_config.job_class,
+                                         serializer=serializer)
                   for queue in queues]
 
     if not queues:
@@ -249,7 +251,8 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
 
         queues = [cli_config.queue_class(queue,
                                          connection=cli_config.connection,
-                                         job_class=cli_config.job_class)
+                                         job_class=cli_config.job_class,
+                                         serializer=serializer)
                   for queue in queues]
         worker = cli_config.worker_class(
             queues, name=name, connection=cli_config.connection,
