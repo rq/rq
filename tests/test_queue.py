@@ -9,7 +9,7 @@ from mock.mock import patch
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
-from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, ScheduledJobRegistry,
                          StartedJobRegistry)
 from rq.worker import Worker
@@ -776,6 +776,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+        self.assertEqual(queue.canceled_job_registry, CanceledJobRegistry(queue=queue))
 
     def test_getting_registries_with_serializer(self):
         """Getting job registries from queue object (with custom serializer)"""
@@ -785,6 +786,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+        self.assertEqual(queue.canceled_job_registry, CanceledJobRegistry(queue=queue))
 
         # Make sure we don't use default when queue has custom
         self.assertEqual(queue.scheduled_job_registry.serializer, JSONSerializer)
@@ -792,6 +794,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry.serializer, JSONSerializer)
         self.assertEqual(queue.deferred_job_registry.serializer, JSONSerializer)
         self.assertEqual(queue.finished_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.canceled_job_registry.serializer, JSONSerializer)
 
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""
