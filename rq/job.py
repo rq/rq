@@ -835,7 +835,7 @@ class Job:
     def _execute(self):
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
-            loop = asyncio.get_event_loop()
+            loop = asyncio.new_event_loop()
             coro_result = loop.run_until_complete(result)
             return coro_result
         return result
