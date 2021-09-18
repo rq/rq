@@ -11,7 +11,6 @@ import zlib
 import asyncio
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
-from distutils.version import StrictVersion
 from enum import Enum
 from functools import partial
 from uuid import uuid4
@@ -661,7 +660,7 @@ class Job:
 
         mapping = self.to_dict(include_meta=include_meta)
 
-        if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+        if self.get_redis_server_version() >= (4, 0, 0):
             connection.hset(key, mapping=mapping)
         else:
             connection.hmset(key, mapping)
@@ -828,7 +827,7 @@ class Job:
             'started_at': utcformat(self.started_at),
             'worker_name': worker_name
         }
-        if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+        if self.get_redis_server_version() >= (4, 0, 0):
             pipeline.hset(self.key, mapping=mapping)
         else:
             pipeline.hmset(self.key, mapping)

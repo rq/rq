@@ -16,7 +16,6 @@ import numbers
 import sys
 
 from collections.abc import Iterable
-from distutils.version import StrictVersion
 
 from redis.exceptions import ResponseError
 
@@ -276,14 +275,13 @@ def parse_timeout(timeout):
 
 def get_version(connection):
     """
-    Returns StrictVersion of Redis server version.
+    Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
     """
     try:
-        version_string = connection.info("server")["redis_version"]
+        return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3]) 
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
-        version_string = "5.0.9"
-    return StrictVersion('.'.join(version_string.split('.')[:3]))
+        return (5, 0, 9)
 
 
 def ceildiv(a, b):
