@@ -12,6 +12,7 @@ from enum import Enum
 from datetime import datetime, timezone, timedelta
 from json import loads, JSONDecodeError
 from ast import literal_eval
+from shutil import get_terminal_size
 
 import click
 import redis
@@ -104,7 +105,7 @@ def state_symbol(state):
 def show_queues(queues, raw, by_queue, queue_class, worker_class):
 
     num_jobs = 0
-    termwidth, _ = click.get_terminal_size()
+    termwidth = get_terminal_size().columns
     chartwidth = min(20, termwidth - 20)
 
     max_count = 0
