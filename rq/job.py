@@ -710,7 +710,6 @@ class Job:
                     pipeline=pipe,
                     remove_from_queue=True
                 )
-                q.remove(self, pipeline=pipe)
 
                 self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
