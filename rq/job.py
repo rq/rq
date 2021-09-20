@@ -706,6 +706,10 @@ class Job:
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
                     q.enqueue_dependents(self, pipeline=pipeline)
+                self._remove_job_from_container(
+                    pipeline=pipe,
+                    remove_from_queue=True
+                )
                 q.remove(self, pipeline=pipe)
 
                 self.set_status(JobStatus.CANCELED, pipeline=pipe)
@@ -733,13 +737,7 @@ class Job:
         """Requeues job."""
         return self.failed_job_registry.requeue(self)
 
-    def delete(self, pipeline=None, remove_from_queue=True,
-               delete_dependents=False):
-        """Cancels the job and deletes the job hash from Redis. Jobs depending
-        on this job can optionally be deleted as well."""
-
-        connection = pipeline if pipeline is not None else self.connection
-
+    def _remove_job_from_container(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
             from .queue import Queue
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
@@ -786,6 +784,15 @@ class Job:
                                            job_class=self.__class__,
                                            serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
+
+    def delete(self, pipeline=None, remove_from_queue=True,
+               delete_dependents=False):
+        """Cancels the job and deletes the job hash from Redis. Jobs depending
+        on this job can optionally be deleted as well."""
+
+        connection = pipeline if pipeline is not None else self.connection
+
+        self._remove_job_from_container(pipeline=pipeline, remove_from_queue=True)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)

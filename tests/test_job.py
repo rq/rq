@@ -832,6 +832,38 @@ class TestJob(RQTestCase):
         dependency.delete()
         self.assertNotIn(dependency, registry)
 
+    def test_create_and_cancel_job_enqueue_dependents_in_registry(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True and when the job is in a registry"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.raise_exc)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        w = Worker([queue])
+        w.work(burst=True, max_jobs=1)
+        dependency.refresh()
+        dependent.refresh()
+        self.assertEqual(0, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        self.assertEqual(1, len(queue.failed_job_registry))
+        cancel_job(dependency.id, enqueue_dependents=True)
+        dependency.refresh()
+        dependent.refresh()
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        self.assertEqual(0, len(queue.failed_job_registry))
+        self.assertEqual(1, len(queue.canceled_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertNotIn(dependency, queue.failed_job_registry)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
     def test_create_and_cancel_job_enqueue_dependents_with_pipeline(self):
         """Ensure job.cancel() works properly with enqueue_dependents=True"""
         queue = Queue(connection=self.testconn)
