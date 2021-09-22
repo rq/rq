@@ -691,7 +691,7 @@ class Job:
         """
 
         if self.is_canceled:
-            raise InvalidJobOperation(f"Cannot cancel already canceled job: {self.get_id()}")
+            raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
         from .registry import CanceledJobRegistry
         from .queue import Queue
         pipe = pipeline or self.connection.pipeline()
