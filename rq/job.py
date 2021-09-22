@@ -20,7 +20,7 @@ from redis import WatchError
 
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
-from .exceptions import DeserializationError, NoSuchJobError
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
@@ -690,6 +690,8 @@ class Job:
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
 
+        if self.is_canceled:
+            raise InvalidJobOperation(f"Cannot cancel already canceled job: {self.get_id()}")
         from .registry import CanceledJobRegistry
         from .queue import Queue
         pipe = pipeline or self.connection.pipeline()

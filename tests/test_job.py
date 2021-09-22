@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from redis import WatchError
 
 from rq.compat import as_text
-from rq.exceptions import DeserializationError, NoSuchJobError
+from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
@@ -811,6 +811,27 @@ class TestJob(RQTestCase):
         # If job is deleted, it's also removed from CanceledJobRegistry
         job.delete()
         self.assertNotIn(job, registry)
+
+    def test_create_and_cancel_job_fails_already_canceled(self):
+        """Ensure job.cancel() fails on already canceld job"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello, job_id='fake_job_id')
+        self.assertEqual(1, len(queue.get_jobs()))
+
+        # First cancel should be fine
+        cancel_job(job.id)
+        self.assertEqual(0, len(queue.get_jobs()))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(job, registry)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+
+        # Second cancel should fail
+        self.assertRaisesRegex(
+            InvalidJobOperation,
+            r'Cannot cancel already canceled job: fake_job_id',
+            cancel_job,
+            job.id
+        )
 
     def test_create_and_cancel_job_enqueue_dependents(self):
         """Ensure job.cancel() works properly with enqueue_dependents=True"""
