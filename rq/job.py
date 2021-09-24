@@ -744,6 +744,7 @@ class Job:
             from .queue import Queue
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
+            q.queued_job_registry.remove(self, pipeline=pipeline)
 
         if self.is_finished:
             from .registry import FinishedJobRegistry
@@ -892,6 +893,14 @@ class Job:
     def failed_job_registry(self):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
+                                 job_class=self.__class__,
+                                 serializer=self.serializer)
+
+    @property
+    def queued_job_registry(self):
+        """Returns this queue's QueuedJobRegistry."""
+        from rq.registry import QueuedJobRegistry
+        return QueuedJobRegistry(self.origin, connection=self.connection,
                                  job_class=self.__class__,
                                  serializer=self.serializer)
 

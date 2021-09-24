@@ -910,6 +910,7 @@ class Worker:
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            job.queued_job_registry.remove(job, pipeline=pipeline)
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 
             job.prepare_for_execution(self.name, pipeline=pipeline)

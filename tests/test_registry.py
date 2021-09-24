@@ -6,16 +6,17 @@ from rq.serializers import JSONSerializer
 
 from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
-from rq.exceptions import InvalidJobOperation
+from rq.exceptions import InvalidJobOperation, InvalidJobOperationError
 from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
-from rq.utils import current_timestamp
+from rq.utils import current_timestamp, utcnow
 from rq.worker import Worker
 from rq.registry import (CanceledJobRegistry, clean_registries, DeferredJobRegistry,
                          FailedJobRegistry, FinishedJobRegistry,
                          StartedJobRegistry)
 
 from tests import RQTestCase
+from tests import fixtures
 from tests.fixtures import div_by_zero, say_hello
 
 
@@ -226,6 +227,13 @@ class TestRegistry(RQTestCase):
         """clean_registries() cleans Started and Finished job registries."""
 
         queue = Queue(connection=self.testconn)
+        fake_job = queue.create_job(
+            fixtures.say_hello,
+            job_id='fake_id'
+        )
+        enqueued_at_original = utcnow()
+        fake_job.enqueued_at = enqueued_at_original
+        fake_job.save()
 
         finished_job_registry = FinishedJobRegistry(connection=self.testconn)
         self.testconn.zadd(finished_job_registry.key, {'foo': 1})
@@ -236,10 +244,17 @@ class TestRegistry(RQTestCase):
         failed_job_registry = FailedJobRegistry(connection=self.testconn)
         self.testconn.zadd(failed_job_registry.key, {'foo': 1})
 
+        queued_job_registry = queue.queued_job_registry
+        queued_job_registry.add(fake_job)
+
         clean_registries(queue)
         self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(failed_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(queued_job_registry.key), 1)
+        self.assertEqual(len(queue), 1)
+        fake_job.refresh()
+        self.assertNotEqual(fake_job.enqueued_at, enqueued_at_original)
 
     def test_clean_registries_with_serializer(self):
         """clean_registries() cleans Started and Finished job registries (with serializer)."""
@@ -518,3 +533,123 @@ class TestFailedJobRegistry(RQTestCase):
         w.handle_job_failure(job, q)
         self.assertLess(self.testconn.zscore(registry.key, job.id),
                         timestamp + 7)
+
+
+class TestQueuedJobRegistry(RQTestCase):
+
+    def setUp(self):
+        super(TestQueuedJobRegistry, self).setUp()
+        self.queue = Queue(connection=self.testconn)
+        self.registry = self.queue.queued_job_registry
+
+    def registry_length(self):
+        return self.testconn.zcard(self.registry.key)
+
+    def test_cleanup_front_of_queue_has_no_timestamp(self):
+        job_1 = self.queue.create_job(
+            fixtures.say_hello,
+            job_id='job_1'
+        )
+        job_1.save()
+        job_2 = self.queue.create_job(
+            fixtures.say_hello,
+            job_id='job_2'
+        )
+        job_2.enqueued_at = utcnow()
+        job_2.save()
+        self.queue.push_job_id(job_1.id)
+        self.registry.add(job_2)
+        self.assertRaisesRegex(
+            InvalidJobOperationError,
+            r'Queued job job_1 has no enqueue_at value!',
+            self.registry.requeue_stuck_jobs
+        )
+
+    def test_cleanup_empty_front_of_queue_requeued(self):
+        job_1 = self.queue.create_job(
+            fixtures.say_hello,
+            job_id='job_1'
+        )
+        enqueued_at_original = utcnow()
+        job_1.enqueued_at = enqueued_at_original
+        job_1.save()
+        self.registry.add(job_1)
+        self.assertEqual(self.registry_length(), 1)
+        self.registry.requeue_stuck_jobs()
+        job_1.refresh()
+        self.assertNotEqual(job_1.enqueued_at, enqueued_at_original)
+
+    def test_cleanup_no_jobs_to_requeue(self):
+        job_1 = self.queue.enqueue_call(
+            fixtures.say_hello,
+            job_id='job_1'
+        )
+        enqueued_at_original = job_1.enqueued_at
+        self.assertEqual(self.registry_length(), 1)
+        self.assertEqual(len(self.queue), 1)
+        self.registry.requeue_stuck_jobs()
+        self.assertEqual(self.registry_length(), 1)
+        self.assertEqual(len(self.queue), 1)
+        job_1.refresh()
+        self.assertEqual(job_1.enqueued_at, enqueued_at_original)
+    
+    def test_cleanup_registry_job_has_no_timestamp(self):
+        job_1 = self.queue.enqueue_call(
+            fixtures.say_hello,
+            job_id='job_1'
+        )
+        job_2 = self.queue.create_job(
+            fixtures.say_hello,
+            job_id='job_2'
+        )
+        job_2.save()
+        self.registry.add(job_2)
+        self.assertEqual(self.registry_length(), 2)
+        self.assertEqual(len(self.queue), 1)
+        self.registry.requeue_stuck_jobs()
+        self.assertEqual(self.registry_length(), 2)
+        self.assertEqual(len(self.queue), 1)
+        job_1.refresh()
+
+    def test_cleanup_registry_job_not_in_redis(self):
+        # In the real world, this would happen if
+        # The ttl of a job caused it to expired
+        # We just simulate it by never calling save 
+        # on the job
+        job_1 = self.queue.enqueue_call(
+            fixtures.say_hello,
+            job_id='job_1'
+        )
+        job_2 = self.queue.create_job(
+            fixtures.say_hello,
+            job_id='job_2'
+        )
+        self.registry.add(job_2)
+        self.assertEqual(self.registry_length(), 2)
+        self.assertEqual(len(self.queue), 1)
+        self.assertIn(job_2, self.registry)
+        self.registry.requeue_stuck_jobs()
+        self.assertEqual(self.registry_length(), 1)
+        self.assertNotIn(job_2, self.registry)
+        self.assertEqual(len(self.queue), 1)
+        job_1.refresh()
+
+    def test_cleanup_job_older_than_front_of_queue(self):
+        job_1 = self.queue.create_job(
+            fixtures.say_hello,
+            job_id='job_1'
+        )
+        job_1.enqueued_at = utcnow()
+        job_1.save()
+        job_2 = self.queue.enqueue_call(
+            fixtures.say_hello,
+            job_id='job_2'
+        )
+        self.registry.add(job_1)
+        self.assertEqual(len(self.queue), 1)
+        self.registry.requeue_stuck_jobs()
+        self.assertEqual(len(self.queue), 2)
+        
+
+
+

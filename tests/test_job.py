@@ -663,6 +663,18 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
+    def test_job_delete_remove_from_queue(self):
+        """job.delete() with remove_from_queue should remove job from Queue and its QueuedJobRegistry"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue_call(func=fixtures.say_hello)
+        self.assertIn(job, queue.get_jobs())
+        self.assertIn(job, queue.queued_job_registry)
+        self.assertEqual(self.testconn.exists(job.key), 1)
+        job.delete()
+        self.assertNotIn(job, queue.get_jobs())
+        self.assertNotIn(job, queue.queued_job_registry)
+        self.assertEqual(self.testconn.exists(job.key), 0)
+
     def test_job_with_dependents_delete_parent_with_saved(self):
         """job.delete() deletes itself from Redis but not dependents. If the
         dependent job was saved, it will remain in redis."""

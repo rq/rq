@@ -12,6 +12,8 @@ executed and removed right after completion (success or failure).
 job to finish).
 * `ScheduledJobRegistry` Holds scheduled jobs.
 * `CanceledJobRegistry` Holds canceled jobs.
+* `QueuedJobRegistry` Holds jobs from the time they are enqueued, until they are moved to the `QueuedJobRegistry`.
+This exists mostly to catch jobs from getting lost between being dequeued and then getting added to the `StartedJobRegistry`, if there are failure in between, this makes sure that jobs get requeued if a worker loses track of the job, notably from redis failures, like hitting connection limits, for example.
 
 You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
 Below is an example using a `StartedJobRegistry`.
@@ -62,6 +64,8 @@ queue.deferred_job_registry   # Returns DeferredJobRegistry
 queue.finished_job_registry  # Returns FinishedJobRegistry
 queue.failed_job_registry  # Returns FailedJobRegistry
 queue.scheduled_job_registry  # Returns ScheduledJobRegistry
+queue.canceled_job_registry  # Returns CanceledJobRegistry
+queue.queued_job_registry  # Returns QueuedJobRegistry
 ```
 
 ## Removing Jobs

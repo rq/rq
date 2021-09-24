@@ -34,7 +34,7 @@ from tests.fixtures import (
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
 from rq.job import Job, JobStatus, Retry
-from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
+from rq.registry import QueuedJobRegistry, StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
@@ -776,12 +776,18 @@ class TestWorker(RQTestCase):
         """Prepare job execution does the necessary bookkeeping."""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(say_hello)
+        # Confirm job is in QueuedJobRegistry before call
+        self.assertIn(job, QueuedJobRegistry(connection=self.testconn))
+
         worker = Worker([queue])
         worker.prepare_job_execution(job)
 
         # Updates working queue
         registry = StartedJobRegistry(connection=self.testconn)
         self.assertEqual(registry.get_job_ids(), [job.id])
+
+        # Removes job from QueuedJobRegistry
+        self.assertNotIn(job, QueuedJobRegistry(connection=self.testconn))
 
         # Updates worker statuses
         self.assertEqual(worker.get_state(), 'busy')

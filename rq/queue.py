@@ -245,6 +245,12 @@ class Queue:
         return FinishedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
+    def queued_job_registry(self):
+        """Returns this queue's QueuedJobRegistry."""
+        from rq.registry import QueuedJobRegistry
+        return QueuedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+
+    @property
     def deferred_job_registry(self):
         """Returns this queue's DeferredJobRegistry."""
         from rq.registry import DeferredJobRegistry
@@ -560,11 +566,13 @@ nd
 
         job.origin = self.name
         job.enqueued_at = utcnow()
-
+        # TODO: Specify xx operator to prev'tent jobs from being double added to registry
+        # (really just updated when it shouldn't already be there?)
         if job.timeout is None:
             job.timeout = self._default_timeout
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
+        self.queued_job_registry.add(job, pipeline=pipe)
 
         if self._is_async:
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
