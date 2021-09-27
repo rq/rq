@@ -492,6 +492,17 @@ class Worker:
     def handle_warm_shutdown_request(self):
         self.log.info('Warm shut down requested')
 
+    def add_queue(self, queue):
+        self.log.info(f'Asked to add queue: {queue}')
+        found = False
+        for q in self.queues:
+            if q.name == queue:
+                break
+        if not found:
+            self.queues.append(Queue(queue, connection=self.connection))
+            self._ordered_queues = self.queues[:]
+        
+
     def check_for_suspension(self, burst):
         """Check to see if workers have been suspended by `rq suspend`"""
         before_state = None
@@ -597,6 +608,7 @@ class Worker:
 
                     timeout = None if burst else max(1, self.default_worker_ttl - 15)
                     result = self.dequeue_job_and_maintain_ttl(timeout)
+                    
                     if result is None:
                         if burst:
                             self.log.info("Worker %s: done, quitting", self.key)

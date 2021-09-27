@@ -26,6 +26,10 @@ def send_shutdown_command(connection, worker_name):
     """Send shutdown command"""
     send_command(connection, worker_name, 'shutdown')
 
+def send_add_queue_command(connection, worker_name, queue):
+    """Send add-queue command"""
+    send_command(connection, worker_name, 'add-queue', queue=queue)
+
 
 def send_kill_horse_command(connection, worker_name):
     """Tell worker to kill it's horse"""
@@ -48,6 +52,8 @@ def handle_command(worker, payload):
         handle_shutdown_command(worker)
     elif payload['command'] == 'kill-horse':
         handle_kill_worker_command(worker, payload)
+    elif payload['command'] == 'add-queue':
+        handle_add_queue_command(worker, payload)
 
 
 def handle_shutdown_command(worker):
@@ -55,6 +61,11 @@ def handle_shutdown_command(worker):
     worker.log.info('Received shutdown command, sending SIGINT signal.')
     pid = os.getpid()
     os.kill(pid, signal.SIGINT)
+
+def handle_add_queue_command(worker, payload):
+    """Perform add-queue command"""
+    worker.log.info(f"Received add-queue command: {payload['command']}")
+    worker.add_queue(payload['queue'])
 
 
 def handle_kill_worker_command(worker, payload):
