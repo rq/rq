@@ -290,7 +290,9 @@ class ScheduledJobRegistry(BaseRegistry):
         return self.connection.zadd(self.key, {job.id: timestamp})
 
     def cleanup(self):
-        """Re"""
+        """This method is only here to prevent errors because this method is
+        automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry."""
 
     def remove_jobs(self, timestamp=None, pipeline=None):
         """Remove jobs whose timestamp is in the past from registry."""
