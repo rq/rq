@@ -606,10 +606,11 @@ class TestQueuedJobRegistry(RQTestCase):
         self.registry.add(job_2)
         self.assertEqual(self.registry_length(), 2)
         self.assertEqual(len(self.queue), 1)
-        self.registry.requeue_stuck_jobs()
-        self.assertEqual(self.registry_length(), 2)
-        self.assertEqual(len(self.queue), 1)
-        job_1.refresh()
+        self.assertRaisesRegex(
+            InvalidJobOperationError,
+            r'Job job_2 has no enqueue_at value!',
+            self.registry.requeue_stuck_jobs
+        )
 
     def test_cleanup_registry_job_not_in_redis(self):
         # In the real world, this would happen if
