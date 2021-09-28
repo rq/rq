@@ -14,7 +14,7 @@ job to finish).
 * `CanceledJobRegistry` Holds canceled jobs.
 * `QueuedJobRegistry` Holds jobs from the time they are enqueued, until they are moved to the `StartedJobRegistry`.
 This exists mostly to catch jobs from getting lost between being dequeued and then getting added to the `StartedJobRegistry`,
-if there are failure in between, this makes sure that jobs get requeued if a worker loses track of the job, notably from redis failures, like hitting connection limits, for example.
+if there are any failures in between, this makes sure that jobs get requeued if a worker loses track of the job, notably from redis failures, like hitting connection limits, for example.
 
 You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
 Below is an example using a `StartedJobRegistry`.

@@ -346,7 +346,7 @@ class QueuedJobRegistry(BaseRegistry):
         pass
 
     def requeue_stuck_jobs(self):
-        """This method requeues jobs that are not in the queue but are still queued in status
+        """This method requeues jobs that are popped off the queue but still belong to QueuedJobRegistry
         It is not defined in cleanup since we don't want this being called everytime count or get_job_ids is called
         """
         job_ids = self.get_job_ids()
@@ -360,7 +360,7 @@ class QueuedJobRegistry(BaseRegistry):
             # This is faster than seeing if the job is in the queue directly.
             front_timestamp = self._get_front_queue_timestamp() 
             try:
-                if front_timestamp:
+                if front_timestamp is not None:
                     job = self.job_class.fetch(
                         job_id,
                         connection=self.connection,
@@ -387,7 +387,7 @@ class QueuedJobRegistry(BaseRegistry):
         jobs = queue.get_jobs(offset=0, length=1)
         if jobs: # If the queue is non-empty
             front_job = jobs[0]
-            if front_job.enqueued_at:
+            if front_job.enqueued_at is not None:
                 return front_job.enqueued_at
             else:
                 # TODO: What if somehow this Value is none, we might want to

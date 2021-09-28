@@ -566,7 +566,7 @@ nd
 
         job.origin = self.name
         job.enqueued_at = utcnow()
-        # TODO: Specify xx operator to prev'tent jobs from being double added to registry
+        # TODO: Specify xx operator to prevent jobs from being multiple times in the registry
         # (really just updated when it shouldn't already be there?)
         if job.timeout is None:
             job.timeout = self._default_timeout
