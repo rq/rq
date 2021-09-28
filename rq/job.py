@@ -708,7 +708,7 @@ class Job:
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
                     q.enqueue_dependents(self, pipeline=pipeline)
-                self._remove_job_from_container(
+                self._remove_from_registries(
                     pipeline=pipe,
                     remove_from_queue=True
                 )
@@ -738,7 +738,7 @@ class Job:
         """Requeues job."""
         return self.failed_job_registry.requeue(self)
 
-    def _remove_job_from_container(self, pipeline=None, remove_from_queue=True):
+    def _remove_from_registries(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
             from .queue import Queue
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
@@ -793,7 +793,7 @@ class Job:
 
         connection = pipeline if pipeline is not None else self.connection
 
-        self._remove_job_from_container(pipeline=pipeline, remove_from_queue=True)
+        self._remove_from_registries(pipeline=pipeline, remove_from_queue=True)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
