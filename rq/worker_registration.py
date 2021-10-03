@@ -1,6 +1,7 @@
+from rq.config import DEFAULT_CONFIG, Config
 from .compat import as_text
 
-from rq.utils import split_list
+from rq.utils import overwrite_config_connection, split_list, overwrite_obj_config
 
 WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
 REDIS_WORKER_KEYS = 'rq:workers'
@@ -9,7 +10,7 @@ MAX_KEYS = 1000
 
 def register(worker, pipeline=None):
     """Store worker key in Redis so we can easily discover active workers."""
-    connection = pipeline if pipeline is not None else worker.connection
+    connection = pipeline if pipeline is not None else worker.config.connection
     connection.sadd(worker.redis_workers_keys, worker.key)
     for name in worker.queue_names():
         redis_key = WORKERS_BY_QUEUE_KEY % name
@@ -19,7 +20,7 @@ def register(worker, pipeline=None):
 def unregister(worker, pipeline=None):
     """Remove worker key from Redis."""
     if pipeline is None:
-        connection = worker.connection.pipeline()
+        connection = worker.config.connection.pipeline()
     else:
         connection = pipeline
 
@@ -32,26 +33,25 @@ def unregister(worker, pipeline=None):
         connection.execute()
 
 
-def get_keys(queue=None, connection=None):
+def get_keys(queue=None, connection=None, config=None):
     """Returnes a list of worker keys for a queue"""
-    if queue is None and connection is None:
-        raise ValueError('"queue" or "connection" argument is required')
+    config = overwrite_obj_config(queue, config)
+    config = overwrite_config_connection(config, connection)
 
     if queue:
-        redis = queue.connection
         redis_key = WORKERS_BY_QUEUE_KEY % queue.name
     else:
-        redis = connection
         redis_key = REDIS_WORKER_KEYS
 
-    return {as_text(key) for key in redis.smembers(redis_key)}
+    return {as_text(key) for key in config.connection.smembers(redis_key)}
 
 
-def clean_worker_registry(queue):
+def clean_worker_registry(queue, config=None):
     """Delete invalid worker keys in registry"""
+    config = overwrite_obj_config(queue, config)
     keys = list(get_keys(queue))
 
-    with queue.connection.pipeline() as pipeline:
+    with config.connection.pipeline() as pipeline:
 
         for key in keys:
             pipeline.exists(key)

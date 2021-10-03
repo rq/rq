@@ -10,6 +10,9 @@ from rq import pop_connection, push_connection
 
 import unittest
 
+from rq.config import Config
+from rq.serializers import JSONSerializer
+
 
 def find_empty_redis_database(ssl=False):
     """Tries to connect to a random Redis database (starting from 4), and
@@ -54,6 +57,8 @@ class RQTestCase(unittest.TestCase):
 
         # Store the connection (for sanity checking)
         cls.testconn = testconn
+
+        cls.jsonconfig = Config(connection=testconn, serializer=JSONSerializer)
 
         # Shut up logging
         logging.disable(logging.ERROR)

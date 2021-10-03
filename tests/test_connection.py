@@ -4,8 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 from redis import Redis
 
-from rq import Connection, Queue, use_connection, get_current_connection, pop_connection
-from rq.connections import NoRedisConnectionException
+from rq import Connection, Queue, use_connection, get_current_connection
 
 from tests import find_empty_redis_database, RQTestCase
 from tests.fixtures import do_nothing
@@ -27,10 +26,10 @@ class TestConnectionInheritance(RQTestCase):
         conn2 = Redis(db=5)
 
         with Connection(conn1):
-            q1 = Queue()
+            q1_conn = Queue().config.connection
             with Connection(conn2):
-                q2 = Queue()
-        self.assertNotEqual(q1.connection, q2.connection)
+                q2_conn = Queue().config.connection
+        self.assertNotEqual(q1_conn, q2_conn)
 
     def test_connection_pass_thru(self):
         """Connection passed through from queues to jobs."""
@@ -62,9 +61,3 @@ class TestConnectionHelpers(RQTestCase):
                 use_connection()
                 with Connection(new_connection()):
                     use_connection()
-
-    def test_resolve_connection_raises_on_no_connection(self):
-        """Test function resolve_connection raises if there is no connection."""
-        pop_connection()
-        with self.assertRaises(NoRedisConnectionException):
-            Queue()

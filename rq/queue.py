@@ -12,12 +12,11 @@ from distutils.version import StrictVersion
 from redis import WatchError
 
 from .compat import as_text, string_types, total_ordering
-from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
-from .job import Job, JobStatus
-from .serializers import resolve_serializer
-from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
+from .job import JobStatus
+from .utils import get_version, overwrite_config_connection, parse_timeout, utcnow
+from .config import DEFAULT_CONFIG, Config
 
 
 def compact(lst):
@@ -37,40 +36,65 @@ class EnqueueData(namedtuple('EnqueueData', ["func", "args", "kwargs", "timeout"
 
 @total_ordering
 class Queue:
-    job_class = Job
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
     redis_queue_namespace_prefix = 'rq:queue:'
     redis_queues_keys = 'rq:queues'
 
     @classmethod
-    def all(cls, connection=None, job_class=None, serializer=None):
+    def all(cls, connection=None, job_class=None, serializer=None, config=DEFAULT_CONFIG):
         """Returns an iterable of all Queues.
         """
-        connection = resolve_connection(connection)
+        if serializer is not None:
+            warnings.warn('serializer argument of Queue.all is deprecated and will be removed in RQ 2. '
+                          'Use Queue.all(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Queue.all is deprecated and will be removed in RQ 2. '
+                          'Use Queue.all(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+        config = overwrite_config_connection(config, connection)
 
         def to_queue(queue_key):
             return cls.from_queue_key(as_text(queue_key),
-                                      connection=connection,
-                                      job_class=job_class, serializer=serializer)
+                                      config=config)
         return [to_queue(rq_key)
-                for rq_key in connection.smembers(cls.redis_queues_keys)
+                for rq_key in config.connection.smembers(cls.redis_queues_keys)
                 if rq_key]
 
     @classmethod
-    def from_queue_key(cls, queue_key, connection=None, job_class=None, serializer=None):
+    def from_queue_key(cls, queue_key, connection=None, job_class=None, serializer=None, config=DEFAULT_CONFIG):
         """Returns a Queue instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
         Redis keys.
         """
+        if serializer is not None:
+            warnings.warn('serializer argument of Queue.from_queue_key is deprecated and will be removed in RQ 2. '
+                          'Use Queue.from_queue_key(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Queue.from_queue_key is deprecated and will be removed in RQ 2. '
+                          'Use Queue.from_queue_key(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+        config = overwrite_config_connection(config, connection)
+
         prefix = cls.redis_queue_namespace_prefix
         if not queue_key.startswith(prefix):
             raise ValueError('Not a valid RQ queue key: {0}'.format(queue_key))
         name = queue_key[len(prefix):]
-        return cls(name, connection=connection, job_class=job_class, serializer=serializer)
+        return cls(name, config=config)
 
     def __init__(self, name='default', default_timeout=None, connection=None,
-                 is_async=True, job_class=None, serializer=None, **kwargs):
-        self.connection = resolve_connection(connection)
+                 is_async=True, job_class=None, serializer=None, config=DEFAULT_CONFIG, **kwargs):
+        if serializer is not None:
+            warnings.warn('serializer argument of Queue is deprecated and will be removed in RQ 2. '
+                          'Use Queue(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Queue is deprecated and will be removed in RQ 2. '
+                          'Use Queue(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+
+        self.config = overwrite_config_connection(config, connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
@@ -81,14 +105,25 @@ class Queue:
             self._is_async = kwargs['async']
             warnings.warn('The `async` keyword is deprecated. Use `is_async` instead', DeprecationWarning)
 
-        # override class attribute job_class if one was passed
-        if job_class is not None:
-            if isinstance(job_class, string_types):
-                job_class = import_attribute(job_class)
-            self.job_class = job_class
-
-        self.serializer = resolve_serializer(serializer)
         self.redis_server_version = None
+
+    @property
+    def connection(self):
+        warnings.warn('queue.connection is deprecated and will be removed in RQ 2. '
+                      'Use queue.config.connection instead.', DeprecationWarning)
+        return self.config.connection
+
+    @property
+    def serializer(self):
+        warnings.warn('queue.serializer is deprecated and will be removed in RQ 2. '
+                      'Use queue.config.serializer instead.', DeprecationWarning)
+        return self.config.serializer
+
+    @property
+    def job_class(self):
+        warnings.warn('queue.job_class is deprecated and will be removed in RQ 2. '
+                      'Use queue.config.job_class instead.', DeprecationWarning)
+        return self.config.job_class
 
     def __len__(self):
         return self.count
@@ -105,7 +140,7 @@ class Queue:
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
+            self.redis_server_version = get_version(self.config.connection)
         return self.redis_server_version
 
     @property
@@ -122,7 +157,7 @@ class Queue:
         """Returns a boolean indicating whether a lock to clean this queue
         is acquired. A lock expires in 899 seconds (15 minutes - 1 second)
         """
-        return self.connection.set(self.registry_cleaning_key, 1, nx=1, ex=899)
+        return self.config.connection.set(self.registry_cleaning_key, 1, nx=1, ex=899)
 
     def empty(self):
         """Removes all messages on the queue."""
@@ -142,8 +177,8 @@ class Queue:
                 count = count + 1
             end
             return count
-        """.format(self.job_class.redis_job_namespace_prefix).encode("utf-8")
-        script = self.connection.register_script(script)
+        """.format(self.config.job_class.redis_job_namespace_prefix).encode("utf-8")
+        script = self.config.connection.register_script(script)
         return script(keys=[self.key])
 
     def delete(self, delete_jobs=True):
@@ -151,7 +186,7 @@ class Queue:
         if delete_jobs:
             self.empty()
 
-        with self.connection.pipeline() as pipeline:
+        with self.config.connection.pipeline() as pipeline:
             pipeline.srem(self.redis_queues_keys, self._key)
             pipeline.delete(self._key)
             pipeline.execute()
@@ -167,7 +202,7 @@ class Queue:
 
     def fetch_job(self, job_id):
         try:
-            job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
+            job = self.config.job_class.fetch(job_id, config=self.config)
         except NoSuchJobError:
             self.remove(job_id)
         else:
@@ -182,11 +217,11 @@ class Queue:
         and redis-py version afterwards should support the LPOS command
         handling job positions within Redis c implementation.
         """
-        job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
+        job_id = job_or_id.id if isinstance(job_or_id, self.config.job_class) else job_or_id
 
         if self.get_redis_server_version() >= StrictVersion("6.0.6"):
             try:
-                return self.connection.lpos(self.key, job_id)
+                return self.config.connection.lpos(self.key, job_id)
             except AttributeError:
                 # not yet implemented by redis-py
                 pass
@@ -203,7 +238,7 @@ class Queue:
         else:
             end = length
         return [as_text(job_id) for job_id in
-                self.connection.lrange(self.key, start, end)]
+                self.config.connection.lrange(self.key, start, end)]
 
     def get_jobs(self, offset=0, length=-1):
         """Returns a slice of jobs in the queue."""
@@ -223,53 +258,53 @@ class Queue:
     @property
     def count(self):
         """Returns a count of all messages in the queue."""
-        return self.connection.llen(self.key)
+        return self.config.connection.llen(self.key)
 
     @property
     def failed_job_registry(self):
         """Returns this queue's FailedJobRegistry."""
         from rq.registry import FailedJobRegistry
-        return FailedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+        return FailedJobRegistry(queue=self)
 
     @property
     def started_job_registry(self):
         """Returns this queue's StartedJobRegistry."""
         from rq.registry import StartedJobRegistry
-        return StartedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+        return StartedJobRegistry(queue=self)
 
     @property
     def finished_job_registry(self):
         """Returns this queue's FinishedJobRegistry."""
         from rq.registry import FinishedJobRegistry
         # TODO: Why was job_class only ommited here before?  Was it intentional?
-        return FinishedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+        return FinishedJobRegistry(queue=self)
 
     @property
     def deferred_job_registry(self):
         """Returns this queue's DeferredJobRegistry."""
         from rq.registry import DeferredJobRegistry
-        return DeferredJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+        return DeferredJobRegistry(queue=self)
 
     @property
     def scheduled_job_registry(self):
         """Returns this queue's ScheduledJobRegistry."""
         from rq.registry import ScheduledJobRegistry
-        return ScheduledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+        return ScheduledJobRegistry(queue=self)
 
     @property
     def canceled_job_registry(self):
         """Returns this queue's CanceledJobRegistry."""
         from rq.registry import CanceledJobRegistry
-        return CanceledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+        return CanceledJobRegistry(queue=self)
 
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
-        job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
+        job_id = job_or_id.id if isinstance(job_or_id, self.config.job_class) else job_or_id
 
         if pipeline is not None:
             return pipeline.lrem(self.key, 1, job_id)
 
-        return self.connection.lrem(self.key, 1, job_id)
+        return self.config.connection.lrem(self.key, 1, job_id)
 
     def compact(self):
         """Removes all "dead" jobs from the queue by cycling through it, while
@@ -278,18 +313,18 @@ class Queue:
         COMPACT_QUEUE = '{0}_compact:{1}'.format(
             self.redis_queue_namespace_prefix, uuid.uuid4())  # noqa
 
-        self.connection.rename(self.key, COMPACT_QUEUE)
+        self.config.connection.rename(self.key, COMPACT_QUEUE)
         while True:
-            job_id = as_text(self.connection.lpop(COMPACT_QUEUE))
+            job_id = as_text(self.config.connection.lpop(COMPACT_QUEUE))
             if job_id is None:
                 break
-            if self.job_class.exists(job_id, self.connection):
-                self.connection.rpush(self.key, job_id)
+            if self.config.job_class.exists(job_id, config=self.config):
+                self.config.connection.rpush(self.key, job_id)
 
     def push_job_id(self, job_id, pipeline=None, at_front=False):
         """Pushes a job ID on the corresponding Redis queue.
         'at_front' allows you to push the job onto the front instead of the back of the queue"""
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         if at_front:
             connection.lpush(self.key, job_id)
         else:
@@ -315,12 +350,12 @@ class Queue:
         if ttl is not None and ttl <= 0:
             raise ValueError('Job ttl must be greater than 0')
 
-        job = self.job_class.create(
-            func, args=args, kwargs=kwargs, connection=self.connection,
+        job = self.config.job_class.create(
+            func, args=args, kwargs=kwargs, config=self.config,
             result_ttl=result_ttl, ttl=ttl, failure_ttl=failure_ttl,
             status=status, description=description,
             depends_on=depends_on, timeout=timeout, id=job_id,
-            origin=self.name, meta=meta, serializer=self.serializer, on_success=on_success,
+            origin=self.name, meta=meta, on_success=on_success,
             on_failure=on_failure
         )
 
@@ -343,7 +378,7 @@ class Queue:
         # something else has modified either the set of dependencies or the
         # status of one of them. In this case, we simply retry.
         if len(job._dependency_ids) > 0:
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.config.connection.pipeline()
             while True:
                 try:
                     # Also calling watch even if caller
@@ -429,7 +464,7 @@ nd
         Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.config.connection.pipeline()
         jobs = [
             self.enqueue_job(
                 self.create_job(
@@ -532,7 +567,7 @@ nd
         from .registry import ScheduledJobRegistry
         registry = ScheduledJobRegistry(queue=self)
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.config.connection.pipeline()
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -552,7 +587,7 @@ nd
 
         If Queue is instantiated with is_async=False, job is executed immediately.
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.config.connection.pipeline()
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -586,7 +621,7 @@ nd
         """
         from .registry import DeferredJobRegistry
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.config.connection.pipeline()
         dependents_key = job.dependents_key
 
         while True:
@@ -601,11 +636,8 @@ nd
 
                 jobs_to_enqueue = [
                     dependent_job for dependent_job
-                    in self.job_class.fetch_many(
-                        dependent_job_ids,
-                        connection=self.connection,
-                        serializer=self.serializer
-                    ) if dependent_job and dependent_job.dependencies_are_met(
+                    in self.config.job_class.fetch_many(dependent_job_ids, config=self.config)
+                    if dependent_job and dependent_job.dependencies_are_met(
                         exclude_job_id=job.id,
                         pipeline=pipe
                     )
@@ -615,14 +647,12 @@ nd
 
                 for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
-                                                   self.connection,
-                                                   job_class=self.job_class,
-                                                   serializer=self.serializer)
+                                                   config=self.config)
                     registry.remove(dependent, pipeline=pipe)
                     if dependent.origin == self.name:
                         self.enqueue_job(dependent, pipeline=pipe)
                     else:
-                        queue = self.__class__(name=dependent.origin, connection=self.connection)
+                        queue = self.__class__(name=dependent.origin, config=self.config)
                         queue.enqueue_job(dependent, pipeline=pipe)
 
                 pipe.delete(dependents_key)
@@ -642,10 +672,10 @@ nd
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
-        return as_text(self.connection.lpop(self.key))
+        return as_text(self.config.connection.lpop(self.key))
 
     @classmethod
-    def lpop(cls, queue_keys, timeout, connection=None):
+    def lpop(cls, queue_keys, timeout, connection=None, config=DEFAULT_CONFIG):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -658,24 +688,24 @@ nd
             None - non-blocking (return immediately)
              > 0 - maximum number of seconds to block
         """
-        connection = resolve_connection(connection)
+        config = overwrite_config_connection(config, connection)
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
-            result = connection.blpop(queue_keys, timeout)
+            result = config.connection.blpop(queue_keys, timeout)
             if result is None:
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
             return queue_key, job_id
         else:  # non-blocking variant
             for queue_key in queue_keys:
-                blob = connection.lpop(queue_key)
+                blob = config.connection.lpop(queue_key)
                 if blob is not None:
                     return queue_key, blob
             return None
 
     @classmethod
-    def dequeue_any(cls, queues, timeout, connection=None, job_class=None, serializer=None):
+    def dequeue_any(cls, queues, timeout, connection=None, job_class=None, serializer=None, config=DEFAULT_CONFIG):
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -686,20 +716,26 @@ nd
 
         See the documentation of cls.lpop for the interpretation of timeout.
         """
-        job_class = backend_class(cls, 'job_class', override=job_class)
+        if serializer is not None:
+            warnings.warn('serializer argument of Queue.dequeue_any is deprecated and will be removed in RQ 2. '
+                          'Use Queue.dequeue_any(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Queue.dequeue_any is deprecated and will be removed in RQ 2. '
+                          'Use Queue.dequeue_any(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+        config = overwrite_config_connection(config, connection)
 
         while True:
             queue_keys = [q.key for q in queues]
-            result = cls.lpop(queue_keys, timeout, connection=connection)
+            result = cls.lpop(queue_keys, timeout, config=config)
             if result is None:
                 return None
             queue_key, job_id = map(as_text, result)
             queue = cls.from_queue_key(queue_key,
-                                       connection=connection,
-                                       job_class=job_class,
-                                       serializer=serializer)
+                                       config=config)
             try:
-                job = job_class.fetch(job_id, connection=connection, serializer=serializer)
+                job = config.job_class.fetch(job_id, config=config)
             except NoSuchJobError:
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look

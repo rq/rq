@@ -3,18 +3,17 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 from functools import wraps
+import warnings
 
 from rq.compat import string_types
 
 from .defaults import DEFAULT_RESULT_TTL
-from .queue import Queue
-from .utils import backend_class
+from .config import DEFAULT_CONFIG, Config
+from .utils import overwrite_config_connection
 
 
 class job:  # noqa
-    queue_class = Queue
-
-    def __init__(self, queue, connection=None, timeout=None,
+    def __init__(self, queue, config=DEFAULT_CONFIG, connection=None, timeout=None,
                  result_ttl=DEFAULT_RESULT_TTL, ttl=None,
                  queue_class=None, depends_on=None, at_front=None, meta=None,
                  description=None, failure_ttl=None, retry=None):
@@ -29,9 +28,14 @@ class job:  # noqa
 
             simple_add.delay(1, 2) # Puts simple_add function into queue
         """
+
+        if queue_class is not None:
+            warnings.warn('queue_class argument of job decorator is deprecated and will be removed in RQ 2. '
+                          'Use @job(config=Config(queue_class=queue_class)) instead.', DeprecationWarning)
+            config = Config(template=config, queue_class=queue_class)
+
         self.queue = queue
-        self.queue_class = backend_class(self, 'queue_class', override=queue_class)
-        self.connection = connection
+        self.config = overwrite_config_connection(config, connection)
         self.timeout = timeout
         self.result_ttl = result_ttl
         self.ttl = ttl
@@ -46,8 +50,7 @@ class job:  # noqa
         @wraps(f)
         def delay(*args, **kwargs):
             if isinstance(self.queue, string_types):
-                queue = self.queue_class(name=self.queue,
-                                         connection=self.connection)
+                queue = self.config.queue_class(name=self.queue, config=self.config)
             else:
                 queue = self.queue
 

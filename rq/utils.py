@@ -20,7 +20,7 @@ from distutils.version import StrictVersion
 
 from redis.exceptions import ResponseError
 
-from .compat import as_text, is_python_version, string_types
+from .compat import as_text, string_types
 from .exceptions import TimeoutFormatError
 
 
@@ -163,6 +163,13 @@ def import_attribute(name):
     return getattr(attribute_owner, attribute_name)
 
 
+def resolve_class(clazz):
+    if isinstance(clazz, str):
+        return import_attribute(clazz)
+    else:
+        return clazz
+
+
 def utcnow():
     return datetime.datetime.utcnow()
 
@@ -239,16 +246,6 @@ def current_timestamp():
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
 
 
-def backend_class(holder, default_name, override=None):
-    """Get a backend class using its default attribute name or an override"""
-    if override is None:
-        return getattr(holder, default_name)
-    elif isinstance(override, string_types):
-        return import_attribute(override)
-    else:
-        return override
-
-
 def str_to_date(date_str):
     if not date_str:
         return
@@ -321,3 +318,27 @@ def get_call_string(func_name, args, kwargs, max_length=None):
     args = ', '.join(arg_list)
 
     return '{0}({1})'.format(func_name, args)
+
+
+def overwrite_obj_config(obj=None, config=None):
+    """Returns config if it is not None.
+
+    Returns obj.config if obj is not None and config is None.
+
+    Returns DEFAULT_CONFIG if obj and config are None.
+    """
+    if config is not None:
+        return config
+    elif obj is not None:
+        return obj.config
+    else:
+        from rq.config import DEFAULT_CONFIG
+        return DEFAULT_CONFIG
+
+
+def overwrite_config_connection(config, connection=None):
+    from .config import Config
+    if connection is not None and config.connection != connection:
+        return Config(template=config, connection=connection)
+    else:
+        return config

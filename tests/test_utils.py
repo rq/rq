@@ -10,7 +10,7 @@ from distutils.version import StrictVersion
 from redis import Redis
 
 from tests import RQTestCase, fixtures
-from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
+from rq.utils import ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
     split_list, ceildiv, get_call_string, truncate_long_string
 from rq.exceptions import TimeoutFormatError
 
@@ -65,14 +65,6 @@ class TestUtils(RQTestCase):
         """Ensure function utcparse works correctly"""
         utc_formated_time = '2017-08-31T10:14:02Z'
         self.assertEqual(datetime.datetime(2017, 8, 31, 10, 14, 2), utcparse(utc_formated_time))
-
-    def test_backend_class(self):
-        """Ensure function backend_class works correctly"""
-        self.assertEqual(fixtures.DummyQueue, backend_class(fixtures, 'DummyQueue'))
-        self.assertNotEqual(fixtures.say_pid, backend_class(fixtures, 'DummyQueue'))
-        self.assertEqual(fixtures.DummyQueue, backend_class(fixtures, 'DummyQueue', override=fixtures.DummyQueue))
-        self.assertEqual(fixtures.DummyQueue,
-                         backend_class(fixtures, 'DummyQueue', override='tests.fixtures.DummyQueue'))
 
     def test_get_redis_version(self):
         """Ensure get_version works properly"""

@@ -107,7 +107,6 @@ def launch_process_within_worker_and_store_pid(path, timeout):
 
 
 def access_self():
-    assert get_current_connection() is not None
     assert get_current_job() is not None
 
 

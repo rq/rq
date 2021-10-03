@@ -21,7 +21,7 @@ class TestCommands(RQTestCase):
 
         def _send_shutdown_command():
             time.sleep(0.25)
-            send_shutdown_command(connection, worker.name)
+            send_shutdown_command(worker.name)
 
         p = Process(target=_send_shutdown_command)
         p.start()
@@ -38,7 +38,7 @@ class TestCommands(RQTestCase):
         def _send_kill_horse_command():
             """Waits 0.25 seconds before sending kill-horse command"""
             time.sleep(0.25)
-            send_kill_horse_command(connection, worker.name)
+            send_kill_horse_command(worker.name)
 
         p = Process(target=_send_kill_horse_command)
         p.start()
@@ -54,11 +54,11 @@ class TestCommands(RQTestCase):
         p.start()
         p.join(2)
 
-        send_kill_horse_command(connection, worker.name)
+        send_kill_horse_command(worker.name)
         worker.refresh()
         # Since worker is not busy, command will be ignored
         self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
-        send_shutdown_command(connection, worker.name)
+        send_shutdown_command(worker.name)
 
     def test_stop_job_command(self):
         """Ensure that stop_job command works properly."""
@@ -70,11 +70,11 @@ class TestCommands(RQTestCase):
 
         # If job is not executing, an error is raised
         with self.assertRaises(InvalidJobOperation):
-            send_stop_job_command(connection, job_id=job.id, serializer=JSONSerializer)
+            send_stop_job_command(job_id=job.id, serializer=JSONSerializer)
 
         # An exception is raised if job ID is invalid
         with self.assertRaises(NoSuchJobError):
-            send_stop_job_command(connection, job_id='1', serializer=JSONSerializer)
+            send_stop_job_command(job_id='1', serializer=JSONSerializer)
 
         def start_work():
             worker.work(burst=True)
@@ -85,13 +85,13 @@ class TestCommands(RQTestCase):
 
         time.sleep(0.1)
 
-        send_command(connection, worker.name, 'stop-job', job_id=1)
+        send_command(worker.name, 'stop-job', job_id=1)
         time.sleep(0.25)
         # Worker still working due to job_id mismatch
         worker.refresh()
         self.assertEqual(worker.get_state(), WorkerStatus.BUSY)
 
-        send_stop_job_command(connection, job_id=job.id, serializer=JSONSerializer)
+        send_stop_job_command(job_id=job.id, serializer=JSONSerializer)
         time.sleep(0.25)
 
         # Job status is set appropriately

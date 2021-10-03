@@ -14,7 +14,8 @@ from redis import Redis
 
 from rq import Queue
 from rq.cli import main
-from rq.cli.helpers import read_config_file, CliConfig, parse_function_arg, parse_schedule
+from rq.cli.helpers import read_config_file, process_shared_options, parse_function_arg, parse_schedule
+from rq.defaults import DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS, DEFAULT_QUEUE_CLASS, DEFAULT_SERIALIZER_CLASS, DEFAULT_WORKER_CLASS
 from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
@@ -25,6 +26,11 @@ import pytest
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
+
+unmodified_process_shared_options_args = {'url': None, 'worker_class': DEFAULT_WORKER_CLASS,
+                                          'job_class': DEFAULT_JOB_CLASS, 'queue_class': DEFAULT_QUEUE_CLASS,
+                                          'connection_class': DEFAULT_CONNECTION_CLASS, 'path': ['.'],
+                                          'serializer': DEFAULT_SERIALIZER_CLASS}
 
 
 class TestRQCli(RQTestCase):
@@ -61,64 +67,73 @@ class TestRQCli(RQTestCase):
 
     def test_config_file_option(self):
         """"""
-        cli_config = CliConfig(config='tests.config_files.dummy')
+        config = process_shared_options(
+            config='tests.config_files.dummy',
+            **unmodified_process_shared_options_args
+        )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            config.connection.connection_pool.connection_kwargs['host'],
             'testhost.example.com',
         )
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '--config', cli_config.config])
+        result = runner.invoke(main, ['info', '--config', 'tests.config_files.dummy'])
         self.assertEqual(result.exit_code, 1)
 
     def test_config_file_default_options(self):
         """"""
-        cli_config = CliConfig(config='tests.config_files.dummy')
+        config = process_shared_options(
+            config='tests.config_files.dummy',
+            **unmodified_process_shared_options_args
+        )
 
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            config.connection.connection_pool.connection_kwargs['host'],
             'testhost.example.com',
         )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['port'],
+            config.connection.connection_pool.connection_kwargs['port'],
             6379
         )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['db'],
+            config.connection.connection_pool.connection_kwargs['db'],
             0
         )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['password'],
+            config.connection.connection_pool.connection_kwargs['password'],
             None
         )
 
     def test_config_file_default_options_override(self):
         """"""
-        cli_config = CliConfig(config='tests.config_files.dummy_override')
+        config = process_shared_options(
+            config='tests.config_files.dummy_override',
+            **unmodified_process_shared_options_args
+        )
 
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            config.connection.connection_pool.connection_kwargs['host'],
             'testhost.example.com',
         )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['port'],
+            config.connection.connection_pool.connection_kwargs['port'],
             6378
         )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['db'],
+            config.connection.connection_pool.connection_kwargs['db'],
             2
         )
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['password'],
+            config.connection.connection_pool.connection_kwargs['password'],
             '123'
         )
 
     def test_config_env_vars(self):
         os.environ['REDIS_HOST'] = "testhost.example.com"
 
-        cli_config = CliConfig()
+        config = process_shared_options(config=None, **unmodified_process_shared_options_args)
 
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            config.connection.connection_pool.connection_kwargs['host'],
             'testhost.example.com',
         )
 

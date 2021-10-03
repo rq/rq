@@ -6,6 +6,7 @@ import traceback
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
+import warnings
 
 from redis import SSLConnection, UnixDomainSocketConnection
 
@@ -14,8 +15,8 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
-from .serializers import resolve_serializer
-from .utils import current_timestamp
+from .utils import current_timestamp, overwrite_config_connection
+from .config import DEFAULT_CONFIG, Config
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
@@ -34,23 +35,28 @@ class RQScheduler:
 
     Status = SchedulerStatus
 
-    def __init__(self, queues, connection, interval=1, logging_level=logging.INFO,
+    def __init__(self, queues, connection=None, interval=1, logging_level=logging.INFO,
                  date_format=DEFAULT_LOGGING_DATE_FORMAT,
-                 log_format=DEFAULT_LOGGING_FORMAT, serializer=None):
+                 log_format=DEFAULT_LOGGING_FORMAT, serializer=None, config=DEFAULT_CONFIG):
+        if serializer is not None:
+            warnings.warn('serializer argument of RQScheduler is deprecated and will be removed in RQ 2. '
+                          'Use RQScheduler(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        config = overwrite_config_connection(config, connection)
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
         # Copy the connection kwargs before mutating them in order to not change the arguments
         # used by the current connection pool to create new connections
-        self._connection_kwargs = connection.connection_pool.connection_kwargs.copy()
+        connection_kwargs = config.connection.connection_pool.connection_kwargs.copy()
         # Redis does not accept parser_class argument which is sometimes present
         # on connection_pool kwargs, for example when hiredis is used
-        self._connection_kwargs.pop('parser_class', None)
-        self._connection_class = connection.__class__  # client
-        connection_class = connection.connection_pool.connection_class
+        connection_kwargs.pop('parser_class', None)
+        redis_class = config.connection.__class__  # client
+        connection_class = config.connection.connection_pool.connection_class
         if issubclass(connection_class, SSLConnection):
-            self._connection_kwargs['ssl'] = True
+            connection_kwargs['ssl'] = True
         if issubclass(connection_class, UnixDomainSocketConnection):
             # The connection keyword arguments are obtained from
             # `UnixDomainSocketConnection`, which expects `path`, but passed to
@@ -58,10 +64,11 @@ class RQScheduler:
             # the key is necessary.
             # `path` is not left in the dictionary as that keyword argument is
             # not expected by `redis.client.Redis` and would raise an exception.
-            self._connection_kwargs['unix_socket_path'] = self._connection_kwargs.pop(
+            connection_kwargs['unix_socket_path'] = connection_kwargs.pop(
                 'path'
             )
-        self.serializer = resolve_serializer(serializer)
+
+        self.config = Config(template=config, connection=redis_class(**connection_kwargs))
 
         self._connection = None
         self.interval = interval
@@ -78,10 +85,15 @@ class RQScheduler:
 
     @property
     def connection(self):
-        if self._connection:
-            return self._connection
-        self._connection = self._connection_class(**self._connection_kwargs)
-        return self._connection
+        warnings.warn('scheduler.connection is deprecated and will be removed in RQ 2. '
+                      'Use scheduler.config.connection instead.', DeprecationWarning)
+        return self.config.connection
+
+    @property
+    def serializer(self):
+        warnings.warn('scheduler.serializer is deprecated and will be removed in RQ 2. '
+                      'Use scheduler.config.serializer instead.', DeprecationWarning)
+        return self.config.serializer
 
     @property
     def acquired_locks(self):
@@ -106,7 +118,7 @@ class RQScheduler:
         pid = os.getpid()
         self.log.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=self.interval + 60):
+            if self.config.connection.set(self.get_locking_key(name), pid, nx=True, ex=self.interval + 60):
                 successful_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
@@ -129,7 +141,7 @@ class RQScheduler:
             queue_names = self._acquired_locks
         for name in queue_names:
             self._scheduled_job_registries.append(
-                ScheduledJobRegistry(name, connection=self.connection, serializer=self.serializer)
+                ScheduledJobRegistry(name, config=self.config)
             )
 
     @classmethod
@@ -154,12 +166,10 @@ class RQScheduler:
             if not job_ids:
                 continue
 
-            queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
+            queue = Queue(registry.name, config=self.config)
 
-            with self.connection.pipeline() as pipeline:
-                jobs = Job.fetch_many(
-                    job_ids, connection=self.connection, serializer=self.serializer
-                )
+            with self.config.connection.pipeline() as pipeline:
+                jobs = Job.fetch_many(job_ids, config=self.config)
                 for job in jobs:
                     if job is not None:
                         queue.enqueue_job(job, pipeline=pipeline)
@@ -183,14 +193,14 @@ class RQScheduler:
         self.log.debug("Scheduler sending heartbeat to %s",
                        ", ".join(self.acquired_locks))
         if len(self._queue_names) > 1:
-            with self.connection.pipeline() as pipeline:
+            with self.config.connection.pipeline() as pipeline:
                 for name in self._queue_names:
                     key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 60)
                 pipeline.execute()
         else:
             key = self.get_locking_key(next(iter(self._queue_names)))
-            self.connection.expire(key, self.interval + 60)
+            self.config.connection.expire(key, self.interval + 60)
 
     def stop(self):
         self.log.info("Scheduler stopping, releasing locks for %s...",
@@ -201,7 +211,7 @@ class RQScheduler:
     def release_locks(self):
         """Release acquired locks"""
         keys = [self.get_locking_key(name) for name in self._queue_names]
-        self.connection.delete(*keys)
+        self.config.connection.delete(*keys)
         self._acquired_locks = set()
 
     def start(self):

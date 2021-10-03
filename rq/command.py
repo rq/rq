@@ -1,20 +1,23 @@
 import json
 import os
 import signal
+import warnings
 
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job
+from rq.config import DEFAULT_CONFIG, Config
+from rq.utils import overwrite_config_connection
 
 
 PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
 
 
-def send_command(connection, worker_name, command, **kwargs):
+def send_command(worker_name, command, config=DEFAULT_CONFIG, **kwargs):
     """Use connection' pubsub mechanism to send a command"""
     payload = {'command': command}
     if kwargs:
         payload.update(kwargs)
-    connection.publish(PUBSUB_CHANNEL_TEMPLATE % worker_name, json.dumps(payload))
+    config.connection.publish(PUBSUB_CHANNEL_TEMPLATE % worker_name, json.dumps(payload))
 
 
 def parse_payload(payload):
@@ -22,22 +25,29 @@ def parse_payload(payload):
     return json.loads(payload.get('data').decode())
 
 
-def send_shutdown_command(connection, worker_name):
+def send_shutdown_command(worker_name, config=DEFAULT_CONFIG, connection=None):
     """Send shutdown command"""
-    send_command(connection, worker_name, 'shutdown')
+    config = overwrite_config_connection(config, connection)
+    send_command(worker_name, 'shutdown', config=config)
 
 
-def send_kill_horse_command(connection, worker_name):
+def send_kill_horse_command(worker_name, config=DEFAULT_CONFIG, connection=None):
     """Tell worker to kill it's horse"""
-    send_command(connection, worker_name, 'kill-horse')
+    config = overwrite_config_connection(config, connection)
+    send_command(worker_name, 'kill-horse', config=config)
 
 
-def send_stop_job_command(connection, job_id, serializer=None):
+def send_stop_job_command(job_id, serializer=None, config=DEFAULT_CONFIG, connection=None):
     """Instruct a worker to stop a job"""
-    job = Job.fetch(job_id, connection=connection, serializer=serializer)
+    if serializer is not None:
+        warnings.warn('serializer argument of send_stop_job_command is deprecated and will be removed in RQ 2. '
+                      'Use send_stop_job_command(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+        config = Config(template=config, serializer=serializer)
+    config = overwrite_config_connection(config, connection)
+    job = Job.fetch(job_id, config=config)
     if not job.worker_name:
         raise InvalidJobOperation('Job is not currently executing')
-    send_command(connection, job.worker_name, 'stop-job', job_id=job_id)
+    send_command(job.worker_name, 'stop-job', config=config, job_id=job_id)
 
 
 def handle_command(worker, payload):
@@ -71,7 +81,9 @@ def handle_stop_job_command(worker, payload):
     """Handles stop job command"""
     job_id = payload.get('job_id')
     worker.log.debug('Received command to stop job %s', job_id)
-    if job_id and worker.get_current_job_id() == job_id:
+    cid = worker.get_current_job_id()
+    print(cid)
+    if job_id and cid == job_id:
         # Sets the '_stopped_job_id' so that the job failure handler knows it
         # was intentional.
         worker._stopped_job_id = job_id
