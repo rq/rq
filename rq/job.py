@@ -19,7 +19,7 @@ from uuid import uuid4
 from redis import WatchError
 
 from rq.compat import as_text, decode_redis_hash, string_types
-from .exceptions import DeserializationError, NoSuchJobError
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .utils import (get_version, import_attribute, overwrite_config_connection, parse_timeout, str_to_date,
                     utcformat, utcnow, ensure_list, get_call_string)
@@ -734,6 +734,8 @@ class Job:
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
 
+        if self.is_canceled:
+            raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
         from .registry import CanceledJobRegistry
         from .queue import Queue
         pipe = pipeline or self.config.connection.pipeline()
@@ -745,7 +747,10 @@ class Job:
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
                     q.enqueue_dependents(self, pipeline=pipeline)
-                q.remove(self, pipeline=pipe)
+                self._remove_from_registries(
+                    pipeline=pipe,
+                    remove_from_queue=True
+                )
 
                 self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
@@ -767,13 +772,7 @@ class Job:
         """Requeues job."""
         return self.failed_job_registry.requeue(self)
 
-    def delete(self, pipeline=None, remove_from_queue=True,
-               delete_dependents=False):
-        """Cancels the job and deletes the job hash from Redis. Jobs depending
-        on this job can optionally be deleted as well."""
-
-        connection = pipeline if pipeline is not None else self.config.connection
-
+    def _remove_from_registries(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
             from .queue import Queue
             q = Queue(name=self.origin, config=self.config)
@@ -806,6 +805,15 @@ class Job:
             from .registry import CanceledJobRegistry
             registry = CanceledJobRegistry(self.origin, config=self.config)
             registry.remove(self, pipeline=pipeline)
+
+    def delete(self, pipeline=None, remove_from_queue=True,
+               delete_dependents=False):
+        """Cancels the job and deletes the job hash from Redis. Jobs depending
+        on this job can optionally be deleted as well."""
+
+        connection = pipeline if pipeline is not None else self.config.connection
+
+        self._remove_from_registries(pipeline=pipeline, remove_from_queue=True)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)

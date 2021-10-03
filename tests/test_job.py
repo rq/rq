@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from redis import WatchError
 
 from rq.compat import as_text
-from rq.exceptions import DeserializationError, NoSuchJobError
+from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
@@ -812,6 +812,27 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertNotIn(job, registry)
 
+    def test_create_and_cancel_job_fails_already_canceled(self):
+        """Ensure job.cancel() fails on already canceld job"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello, job_id='fake_job_id')
+        self.assertEqual(1, len(queue.get_jobs()))
+
+        # First cancel should be fine
+        cancel_job(job.id)
+        self.assertEqual(0, len(queue.get_jobs()))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(job, registry)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+
+        # Second cancel should fail
+        self.assertRaisesRegex(
+            InvalidJobOperation,
+            r'Cannot cancel already canceled job: fake_job_id',
+            cancel_job,
+            job.id
+        )
+
     def test_create_and_cancel_job_enqueue_dependents(self):
         """Ensure job.cancel() works properly with enqueue_dependents=True"""
         queue = Queue(connection=self.testconn)
@@ -826,6 +847,38 @@ class TestJob(RQTestCase):
         registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
         self.assertIn(dependency, registry)
         self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
+    def test_create_and_cancel_job_enqueue_dependents_in_registry(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True and when the job is in a registry"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.raise_exc)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        w = Worker([queue])
+        w.work(burst=True, max_jobs=1)
+        dependency.refresh()
+        dependent.refresh()
+        self.assertEqual(0, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        self.assertEqual(1, len(queue.failed_job_registry))
+        cancel_job(dependency.id, enqueue_dependents=True)
+        dependency.refresh()
+        dependent.refresh()
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        self.assertEqual(0, len(queue.failed_job_registry))
+        self.assertEqual(1, len(queue.canceled_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertNotIn(dependency, queue.failed_job_registry)
         self.assertIn(dependent, queue.get_jobs())
         self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
         # If job is deleted, it's also removed from CanceledJobRegistry
