@@ -166,10 +166,10 @@ class RQScheduler:
             if not job_ids:
                 continue
 
-            queue = Queue(registry.name, config=self.config)
+            queue = self.config.queue_class(registry.name, config=self.config)
 
             with self.config.connection.pipeline() as pipeline:
-                jobs = Job.fetch_many(job_ids, config=self.config)
+                jobs = self.config.job_class.fetch_many(job_ids, config=self.config)
                 for job in jobs:
                     if job is not None:
                         queue.enqueue_job(job, pipeline=pipeline)

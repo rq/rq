@@ -57,7 +57,7 @@ def cancel_job(job_id, connection=None, serializer=None, config=DEFAULT_CONFIG, 
         config = Config(template=config, serializer=serializer)
     config = overwrite_config_connection(config, connection)
 
-    Job.fetch(job_id, config=config).cancel(enqueue_dependents=enqueue_dependents)
+    config.job_class.fetch(job_id, config=config).cancel(enqueue_dependents=enqueue_dependents)
 
 
 def get_current_job(connection=None, job_class=None):
@@ -76,7 +76,7 @@ def requeue_job(job_id, connection=None, serializer=None, config=DEFAULT_CONFIG)
                       'Use requeue_job(config=Config(serializer=serializer)) instead.', DeprecationWarning)
         config = Config(template=config, serializer=serializer)
     config = overwrite_config_connection(config, connection)
-    job = Job.fetch(job_id, config=config)
+    job = config.job_class.fetch(job_id, config=config)
     return job.requeue()
 
 
@@ -160,9 +160,8 @@ class Job:
         return job
 
     def get_position(self):
-        from .queue import Queue
         if self.origin:
-            q = Queue(name=self.origin, config=self.config)
+            q = self.config.queue_class(name=self.origin, config=self.config)
             return q.get_job_position(self._id)
         return None
 
@@ -737,11 +736,10 @@ class Job:
         if self.is_canceled:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
         from .registry import CanceledJobRegistry
-        from .queue import Queue
         pipe = pipeline or self.config.connection.pipeline()
         while True:
             try:
-                q = Queue(name=self.origin, config=self.config)
+                q = self.config.queue_class(name=self.origin, config=self.config)
                 if enqueue_dependents:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
@@ -774,8 +772,7 @@ class Job:
 
     def _remove_from_registries(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
-            from .queue import Queue
-            q = Queue(name=self.origin, config=self.config)
+            q = self.config.queue_class(name=self.origin, config=self.config)
             q.remove(self, pipeline=pipeline)
 
         if self.is_finished:
@@ -825,7 +822,7 @@ class Job:
         connection = pipeline if pipeline is not None else self.config.connection
         for dependent_id in self.dependent_ids:
             try:
-                job = Job.fetch(dependent_id, config=self.config)
+                job = self.__class__.fetch(dependent_id, config=self.config)
                 job.delete(pipeline=pipeline,
                            remove_from_queue=False)
             except NoSuchJobError:
@@ -967,7 +964,7 @@ class Job:
     @property
     def dependency_ids(self):
         dependencies = self.config.connection.smembers(self.dependencies_key)
-        return [Job.key_for(_id.decode())
+        return [self.__class__.key_for(_id.decode())
                 for _id in dependencies]
 
     def dependencies_are_met(self, exclude_job_id=None, pipeline=None):

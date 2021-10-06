@@ -5,7 +5,6 @@ from __future__ import (absolute_import, division, print_function,
 
 import logging
 from rq.config import DEFAULT_CONFIG
-from rq import Worker
 from rq.utils import overwrite_config_connection
 
 
@@ -23,7 +22,7 @@ def cleanup_ghosts(conn=None, config=DEFAULT_CONFIG):
     This function will clean up any of such legacy ghosted workers.
     """
     config = overwrite_config_connection(config, conn)
-    for worker in Worker.all(config=config):
+    for worker in config.worker_class.all(config=config):
         if config.connection.ttl(worker.key) == -1:
             ttl = worker.default_worker_ttl
             config.connection.expire(worker.key, ttl)

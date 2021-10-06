@@ -4,7 +4,6 @@ import signal
 import warnings
 
 from rq.exceptions import InvalidJobOperation
-from rq.job import Job
 from rq.config import DEFAULT_CONFIG, Config
 from rq.utils import overwrite_config_connection
 
@@ -44,7 +43,7 @@ def send_stop_job_command(job_id, serializer=None, config=DEFAULT_CONFIG, connec
                       'Use send_stop_job_command(config=Config(serializer=serializer)) instead.', DeprecationWarning)
         config = Config(template=config, serializer=serializer)
     config = overwrite_config_connection(config, connection)
-    job = Job.fetch(job_id, config=config)
+    job = config.job_class.fetch(job_id, config=config)
     if not job.worker_name:
         raise InvalidJobOperation('Job is not currently executing')
     send_command(job.worker_name, 'stop-job', config=config, job_id=job_id)

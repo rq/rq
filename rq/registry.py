@@ -7,8 +7,7 @@ import warnings
 from .compat import as_text
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError
-from .job import Job, JobStatus
-from .queue import Queue
+from .job import JobStatus
 from .utils import current_timestamp, overwrite_config_connection
 from .config import DEFAULT_CONFIG, Config
 
@@ -106,7 +105,7 @@ class BaseRegistry:
             if isinstance(job, config.job_class):
                 job_instance = job
             else:
-                job_instance = Job.fetch(job_id, config=config)
+                job_instance = self.config.job_class.fetch(job_id, config=config)
             job_instance.delete()
         return result
 
@@ -129,7 +128,7 @@ class BaseRegistry:
 
     def get_queue(self):
         """Returns Queue object associated with this registry."""
-        return Queue(self.name, config=self.config)
+        return self.config.queue_class(self.name, config=self.config)
 
     def get_expiration_time(self, job):
         """Returns job's expiration time."""
@@ -150,7 +149,7 @@ class BaseRegistry:
             raise InvalidJobOperation
 
         with config.connection.pipeline() as pipeline:
-            queue = Queue(job.origin, config=self.config)
+            queue = self.config.queue_class(job.origin, config=self.config)
             job.started_at = None
             job.ended_at = None
             job.exc_info = ''

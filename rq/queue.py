@@ -538,7 +538,7 @@ nd
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
          depends_on, job_id, at_front, meta, retry, on_success,
-         on_failure, pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         on_failure, pipeline, args, kwargs) = self.__class__.parse_args(f, *args, **kwargs)
 
         return self.enqueue_call(
             func=f, args=args, kwargs=kwargs, timeout=timeout,
@@ -553,7 +553,7 @@ nd
 
         (f, timeout, description, result_ttl, ttl, failure_ttl,
          depends_on, job_id, at_front, meta, retry, on_success, on_failure,
-         pipeline, args, kwargs) = Queue.parse_args(f, *args, **kwargs)
+         pipeline, args, kwargs) = self.__class__.parse_args(f, *args, **kwargs)
         job = self.create_job(f, status=JobStatus.SCHEDULED, args=args, kwargs=kwargs,
                               timeout=timeout, result_ttl=result_ttl, ttl=ttl,
                               failure_ttl=failure_ttl, description=description,
