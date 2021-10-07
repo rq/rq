@@ -14,7 +14,6 @@ import traceback
 import warnings
 
 from datetime import timedelta
-from distutils.version import StrictVersion
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
@@ -317,7 +316,7 @@ class Worker:
                 'python_version': self.python_version,
             }
 
-            if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+            if self.get_redis_server_version() >= (4, 0, 0):
                 p.hset(key, mapping=mapping)
             else:
                 p.hmset(key, mapping)

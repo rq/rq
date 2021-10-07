@@ -8,7 +8,6 @@ import warnings
 from collections import namedtuple
 from datetime import datetime, timezone
 
-from distutils.version import StrictVersion
 from redis import WatchError
 
 from .compat import as_text, string_types, total_ordering
@@ -184,7 +183,7 @@ class Queue:
         """
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
-        if self.get_redis_server_version() >= StrictVersion("6.0.6"):
+        if self.get_redis_server_version() >= (6, 0, 6):
             try:
                 return self.connection.lpos(self.key, job_id)
             except AttributeError:
