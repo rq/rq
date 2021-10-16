@@ -16,7 +16,6 @@ import numbers
 import sys
 
 from collections.abc import Iterable
-from distutils.version import StrictVersion
 
 from redis.exceptions import ResponseError
 
@@ -132,12 +131,17 @@ def import_attribute(name):
     # dotted path is not the last-before-end word
     # E.g.: package_a.package_b.module_a.ClassA.my_static_method
     # Thus we remove the bits from the end of the name until we can import it
+    #
+    # Sometimes the failure during importing is due to a genuine coding error in the imported module
+    # In this case, the exception is logged as a warning for ease of debugging.
+    # The above logic will apply anyways regardless of the cause of the import error.
     while len(module_name_bits):
         try:
             module_name = '.'.join(module_name_bits)
             module = importlib.import_module(module_name)
             break
         except ImportError:
+            logging.warning("Import error for '%s'" % module_name, exc_info=True)
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
@@ -276,14 +280,13 @@ def parse_timeout(timeout):
 
 def get_version(connection):
     """
-    Returns StrictVersion of Redis server version.
+    Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
     """
     try:
-        version_string = connection.info("server")["redis_version"]
+        return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3]) 
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
-        version_string = "5.0.9"
-    return StrictVersion('.'.join(version_string.split('.')[:3]))
+        return (5, 0, 9)
 
 
 def ceildiv(a, b):
@@ -297,3 +300,27 @@ def split_list(a_list, segment_size):
     """
     for i in range(0, len(a_list), segment_size):
         yield a_list[i:i + segment_size]
+
+
+def truncate_long_string(data, max_length=None):
+    """Truncate arguments with representation longer than max_length"""
+    if max_length is None:
+        return data
+    return (data[:max_length] + '...') if len(data) > max_length else data
+
+
+def get_call_string(func_name, args, kwargs, max_length=None):
+    """Returns a string representation of the call, formatted as a regular
+    Python function invocation statement. If max_length is not None, truncate
+    arguments with representation longer than max_length.
+    """
+    if func_name is None:
+        return None
+
+    arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
+
+    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
+    arg_list += sorted(kwargs)
+    args = ', '.join(arg_list)
+
+    return '{0}({1})'.format(func_name, args)

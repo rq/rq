@@ -106,7 +106,7 @@ class RQScheduler:
         pid = os.getpid()
         self.log.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=60):
+            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=self.interval + 60):
                 successful_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
@@ -129,7 +129,7 @@ class RQScheduler:
             queue_names = self._acquired_locks
         for name in queue_names:
             self._scheduled_job_registries.append(
-                ScheduledJobRegistry(name, connection=self.connection)
+                ScheduledJobRegistry(name, connection=self.connection, serializer=self.serializer)
             )
 
     @classmethod
@@ -186,11 +186,11 @@ class RQScheduler:
             with self.connection.pipeline() as pipeline:
                 for name in self._queue_names:
                     key = self.get_locking_key(name)
-                    pipeline.expire(key, self.interval + 5)
+                    pipeline.expire(key, self.interval + 60)
                 pipeline.execute()
         else:
             key = self.get_locking_key(next(iter(self._queue_names)))
-            self.connection.expire(key, self.interval + 5)
+            self.connection.expire(key, self.interval + 60)
 
     def stop(self):
         self.log.info("Scheduler stopping, releasing locks for %s...",

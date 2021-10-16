@@ -12,10 +12,11 @@ import sys
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, __version__ as version
+from rq import Connection, Retry, __version__ as version
 from rq.cli.helpers import (read_config_file, refresh,
                             setup_loghandlers_from_args,
-                            show_both, show_queues, show_workers, CliConfig)
+                            show_both, show_queues, show_workers, CliConfig, parse_function_args,
+                            parse_schedule)
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
@@ -25,11 +26,14 @@ from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
                          DEFAULT_SERIALIZER_CLASS)
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute
+from rq.utils import import_attribute, get_call_string, make_colorizer
+from rq.serializers import DefaultSerializer
 from rq.suspension import (suspend as connection_suspend,
                            resume as connection_resume, is_suspended)
 from rq.worker_registration import clean_worker_registry
+from rq.job import JobStatus
 
+blue = make_colorizer('darkblue')
 
 
 # Disable the warning that Click displays (as of Click version 5.0) when users
@@ -96,16 +100,18 @@ def main():
 @click.option('--all', '-a', is_flag=True, help='Empty all queues')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def empty(cli_config, all, queues, **options):
+def empty(cli_config, all, queues, serializer, **options):
     """Empty given queues."""
 
     if all:
         queues = cli_config.queue_class.all(connection=cli_config.connection,
-                                            job_class=cli_config.job_class)
+                                            job_class=cli_config.job_class,
+                                            serializer=serializer)
     else:
         queues = [cli_config.queue_class(queue,
                                          connection=cli_config.connection,
-                                         job_class=cli_config.job_class)
+                                         job_class=cli_config.job_class,
+                                         serializer=serializer)
                   for queue in queues]
 
     if not queues:
@@ -122,11 +128,13 @@ def empty(cli_config, all, queues, **options):
 @click.option('--queue', required=True, type=str)
 @click.argument('job_ids', nargs=-1)
 @pass_cli_config
-def requeue(cli_config, queue, all, job_class, job_ids, **options):
+def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
     """Requeue failed jobs."""
 
     failed_job_registry = FailedJobRegistry(queue,
-                                            connection=cli_config.connection)
+                                            connection=cli_config.connection,
+                                            job_class=job_class,
+                                            serializer=serializer)
     if all:
         job_ids = failed_job_registry.get_job_ids()
 
@@ -243,7 +251,8 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
 
         queues = [cli_config.queue_class(queue,
                                          connection=cli_config.connection,
-                                         job_class=cli_config.job_class)
+                                         job_class=cli_config.job_class,
+                                         serializer=serializer)
                   for queue in queues]
         worker = cli_config.worker_class(
             queues, name=name, connection=cli_config.connection,
@@ -303,3 +312,52 @@ def resume(cli_config, **options):
     """Resumes processing of queues, that were suspended with `rq suspend`"""
     connection_resume(cli_config.connection)
     click.echo("Resuming workers.")
+
+
+@main.command()
+@click.option('--queue', '-q', help='The name of the queue.', default='default')
+@click.option('--timeout',
+              help='Specifies the maximum runtime of the job before it is interrupted and marked as failed.')
+@click.option('--result-ttl', help='Specifies how long successful jobs and their results are kept.')
+@click.option('--ttl', help='Specifies the maximum queued time of the job before it is discarded.')
+@click.option('--failure-ttl', help='Specifies how long failed jobs are kept.')
+@click.option('--description', help='Additional description of the job')
+@click.option('--depends-on', help='Specifies another job id that must complete before this job will be queued.',
+              multiple=True)
+@click.option('--job-id', help='The id of this job')
+@click.option('--at-front', is_flag=True, help='Will place the job at the front of the queue, instead of the end')
+@click.option('--retry-max', help='Maximum amount of retries', default=0, type=int)
+@click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
+@click.option('--schedule-in', help='Delay until the function is enqueued (e.g. 10s, 5m, 2d).')
+@click.option('--schedule-at', help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
+              'timezone (e.g. 2021-05-27T21:45:00).')
+@click.option('--quiet', is_flag=True, help='Only logs errors.')
+@click.argument('function')
+@click.argument('arguments', nargs=-1)
+@pass_cli_config
+def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front,
+            retry_max, retry_interval, schedule_in, schedule_at, quiet, serializer, function, arguments, **options):
+    """Enqueues a job from the command line"""
+    args, kwargs = parse_function_args(arguments)
+    function_string = get_call_string(function, args, kwargs)
+    description = description or function_string
+
+    retry = None
+    if retry_max > 0:
+        retry = Retry(retry_max, retry_interval)
+
+    schedule = parse_schedule(schedule_in, schedule_at)
+
+    with Connection(cli_config.connection):
+        queue = cli_config.queue_class(queue, serializer=serializer)
+
+        if schedule is None:
+            job = queue.enqueue_call(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,
+                                     description, depends_on, job_id, at_front, None, retry)
+        else:
+            job = queue.create_job(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,
+                                   description, depends_on, job_id, None, JobStatus.SCHEDULED, retry)
+            queue.schedule_job(job, schedule)
+
+    if not quiet:
+        click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))

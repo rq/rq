@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+from rq.serializers import JSONSerializer
 import time
 import queue
 import zlib
@@ -9,10 +10,10 @@ from datetime import datetime, timedelta
 from redis import WatchError
 
 from rq.compat import as_text
-from rq.exceptions import NoSuchJobError
+from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.job import Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
-from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
                          ScheduledJobRegistry)
 from rq.utils import utcformat, utcnow
@@ -53,13 +54,13 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.result)
         self.assertIsNone(job.exc_info)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.func
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.instance
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.args
-        with self.assertRaises(ValueError):
+        with self.assertRaises(DeserializationError):
             job.kwargs
 
     def test_create_param_errors(self):
@@ -210,8 +211,10 @@ class TestJob(RQTestCase):
 
         # ... and no other keys are stored
         self.assertEqual(
-            sorted(self.testconn.hkeys(job.key)),
-            [b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at', b'worker_name'])
+            set(self.testconn.hkeys(job.key)),
+            {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
+             b'worker_name', b'success_callback_name', b'failure_callback_name'}
+        )
 
         self.assertEqual(job.last_heartbeat, None)
         self.assertEqual(job.last_heartbeat, None)
@@ -344,6 +347,22 @@ class TestJob(RQTestCase):
 
         job2 = Job.fetch(job.id)
         self.assertEqual(job2.meta['foo'], 'bar')
+
+    def test_get_meta(self):
+        """Test get_meta() function"""
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',))
+        job.meta['foo'] = 'bar'
+        job.save()
+        self.assertEqual(job.get_meta()['foo'], 'bar')
+
+        # manually write different data in meta
+        self.testconn.hset(job.key, 'meta', dumps({'fee': 'boo'}))
+
+        # check if refresh=False keeps old data
+        self.assertEqual(job.get_meta(False)['foo'], 'bar')
+
+        # check if meta is updated
+        self.assertEqual(job.get_meta()['fee'], 'boo')
 
     def test_custom_meta_is_rewriten_by_save_meta(self):
         """New meta data can be stored by save_meta."""
@@ -578,9 +597,9 @@ class TestJob(RQTestCase):
         Wthout a save, the dependent job is never saved into redis. The delete
         method will get and pass a NoSuchJobError.
         """
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
 
         job.delete()
@@ -596,49 +615,49 @@ class TestJob(RQTestCase):
     def test_job_delete_removes_itself_from_registries(self):
         """job.delete() should remove itself from job registries"""
         job = Job.create(func=fixtures.say_hello, status=JobStatus.FAILED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
-        registry = FailedJobRegistry(connection=self.testconn)
+        registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.FINISHED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = FinishedJobRegistry(connection=self.testconn)
+        registry = FinishedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.STARTED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = StartedJobRegistry(connection=self.testconn)
+        registry = StartedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.DEFERRED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = DeferredJobRegistry(connection=self.testconn)
+        registry = DeferredJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
         self.assertFalse(job in registry)
 
         job = Job.create(func=fixtures.say_hello, status=JobStatus.SCHEDULED,
-                         connection=self.testconn, origin='default')
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
 
-        registry = ScheduledJobRegistry(connection=self.testconn)
+        registry = ScheduledJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
 
         job.delete()
@@ -647,9 +666,9 @@ class TestJob(RQTestCase):
     def test_job_with_dependents_delete_parent_with_saved(self):
         """job.delete() deletes itself from Redis but not dependents. If the
         dependent job was saved, it will remain in redis."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
         job2.save()
 
@@ -665,10 +684,10 @@ class TestJob(RQTestCase):
 
     def test_job_with_dependents_deleteall(self):
         """job.delete() deletes itself from Redis. Dependents need to be
-        deleted explictely."""
-        queue = Queue(connection=self.testconn)
+        deleted explicitly."""
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
 
         job.delete(delete_dependents=True)
@@ -683,9 +702,9 @@ class TestJob(RQTestCase):
         deleted explictely. Without a save, the dependent job is never saved
         into redis. The delete method will get and pass a NoSuchJobError.
         """
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
-        job2 = Job.create(func=fixtures.say_hello, depends_on=job)
+        job2 = Job.create(func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer)
         job2.register_dependency()
         job2.save()
 
@@ -711,9 +730,9 @@ class TestJob(RQTestCase):
         """
         job.delete() deletes itself from Redis.
         """
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
         dependency_job = queue.enqueue(fixtures.say_hello)
-        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
+        dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job, serializer=JSONSerializer)
 
         dependent_job.register_dependency()
         dependent_job.save()
@@ -779,11 +798,127 @@ class TestJob(RQTestCase):
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_create_and_cancel_job(self):
-        """test creating and using cancel_job deletes job properly"""
+        """Ensure job.cancel() works properly"""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello)
         self.assertEqual(1, len(queue.get_jobs()))
         cancel_job(job.id)
+        self.assertEqual(0, len(queue.get_jobs()))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(job, registry)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        job.delete()
+        self.assertNotIn(job, registry)
+
+    def test_create_and_cancel_job_fails_already_canceled(self):
+        """Ensure job.cancel() fails on already canceld job"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(fixtures.say_hello, job_id='fake_job_id')
+        self.assertEqual(1, len(queue.get_jobs()))
+
+        # First cancel should be fine
+        cancel_job(job.id)
+        self.assertEqual(0, len(queue.get_jobs()))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(job, registry)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+
+        # Second cancel should fail
+        self.assertRaisesRegex(
+            InvalidJobOperation,
+            r'Cannot cancel already canceled job: fake_job_id',
+            cancel_job,
+            job.id
+        )
+
+    def test_create_and_cancel_job_enqueue_dependents(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.say_hello)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        cancel_job(dependency.id, enqueue_dependents=True)
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
+    def test_create_and_cancel_job_enqueue_dependents_in_registry(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True and when the job is in a registry"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.raise_exc)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        w = Worker([queue])
+        w.work(burst=True, max_jobs=1)
+        dependency.refresh()
+        dependent.refresh()
+        self.assertEqual(0, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        self.assertEqual(1, len(queue.failed_job_registry))
+        cancel_job(dependency.id, enqueue_dependents=True)
+        dependency.refresh()
+        dependent.refresh()
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        self.assertEqual(0, len(queue.failed_job_registry))
+        self.assertEqual(1, len(queue.canceled_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertNotIn(dependency, queue.failed_job_registry)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
+    def test_create_and_cancel_job_enqueue_dependents_with_pipeline(self):
+        """Ensure job.cancel() works properly with enqueue_dependents=True"""
+        queue = Queue(connection=self.testconn)
+        dependency = queue.enqueue(fixtures.say_hello)
+        dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(1, len(queue.deferred_job_registry))
+        self.testconn.set('some:key', b'some:value')
+
+        with self.testconn.pipeline() as pipe:
+            pipe.watch('some:key')
+            self.assertEqual(self.testconn.get('some:key'), b'some:value')
+            dependency.cancel(pipeline=pipe, enqueue_dependents=True)
+            pipe.set('some:key', b'some:other:value')
+            pipe.execute()
+        self.assertEqual(self.testconn.get('some:key'), b'some:other:value')
+        self.assertEqual(1, len(queue.get_jobs()))
+        self.assertEqual(0, len(queue.deferred_job_registry))
+        registry = CanceledJobRegistry(connection=self.testconn, queue=queue)
+        self.assertIn(dependency, registry)
+        self.assertEqual(dependency.get_status(), JobStatus.CANCELED)
+        self.assertIn(dependent, queue.get_jobs())
+        self.assertEqual(dependent.get_status(), JobStatus.QUEUED)
+        # If job is deleted, it's also removed from CanceledJobRegistry
+        dependency.delete()
+        self.assertNotIn(dependency, registry)
+
+    def test_create_and_cancel_job_with_serializer(self):
+        """test creating and using cancel_job (with serializer) deletes job properly"""
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
+        job = queue.enqueue(fixtures.say_hello)
+        self.assertEqual(1, len(queue.get_jobs()))
+        cancel_job(job.id, serializer=JSONSerializer)
         self.assertEqual(0, len(queue.get_jobs()))
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):

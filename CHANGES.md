@@ -1,3 +1,20 @@
+### RQ 1.10.0 (2021-09-09)
+* You can now enqueue jobs from CLI. Docs [here](https://python-rq.org/docs/#cli-enqueueing). Thanks @rpkak!
+* Added a new `CanceledJobRegistry` to keep track of canceled jobs. Thanks @selwin!
+* Added custom serializer support to various places in RQ. Thanks @joshcoden!
+* `cancel_job(job_id, enqueue_dependents=True)` allows you to cancel a job while enqueueing its dependents. Thanks @joshcoden!
+* Added `job.get_meta()` to fetch fresh meta value directly from Redis. Thanks @aparcar!
+* Fixes a race condition that could cause jobs to be incorrectly added to FailedJobRegistry. Thanks @selwin!
+* Requeueing a job now clears `job.exc_info`. Thanks @selwin!
+* Repo infrastructure improvements by @rpkak.
+* Other minor fixes by @cesarferradas and @bbayles.
+
+### RQ 1.9.0 (2021-06-30)
+* Added success and failure callbacks. You can now do `queue.enqueue(foo, on_success=do_this, on_failure=do_that)`. Thanks @selwin!
+* Added `queue.enqueue_many()` to enqueue many jobs in one go. Thanks @joshcoden!
+* Various improvements to CLI commands. Thanks @rpkak!
+* Minor logging improvements. Thanks @clavigne and @natbusa!
+
 ### RQ 1.8.1 (2021-05-17)
 * Jobs that fail due to hard shutdowns are now retried. Thanks @selwin!
 * `Scheduler` now works with custom serializers. Thanks @alella!

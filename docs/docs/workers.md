@@ -290,14 +290,13 @@ SENTRY_DSN = 'sync+http://public:secret@example.com/1'
 
 The example above shows all the options that are currently supported.
 
-_Note: The_ `QUEUES` _and_ `REDIS_PASSWORD` _settings are new since 0.3.3._
-
 To specify which module to read settings from, use the `-c` option:
 
 ```console
 $ rq worker -c settings
 ```
 
+Alternatively, you can also pass in these options via environment variables.
 
 ## Custom Worker Classes
 
@@ -309,7 +308,7 @@ more common requests so far are:
 3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
 4. Using a custom strategy for dequeuing jobs from different queues. 
-   See [link](#Round-Robin-and-Random-strategies-for-dequeuing-jobs-from-queues).
+   See [link](#round-robin-and-random-strategies-for-dequeuing-jobs-from-queues).
 
 You can use the `-w` option to specify a different worker class to use:
 

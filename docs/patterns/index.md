@@ -38,7 +38,7 @@ if __name__ == '__main__':
         worker.work()
 {% endhighlight %}
 
-Than, add the command to your `Procfile`:
+Then, add the command to your `Procfile`:
 
     worker: python -u run-worker.py
 

@@ -261,6 +261,38 @@ class TestWorker(RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=q)
         self.assertTrue(job in failed_job_registry)
 
+    @mock.patch('rq.worker.logger.error')
+    def test_deserializing_failure_is_handled(self, mock_logger_error):
+        """
+        Test that exceptions are properly handled for a job that fails to
+        deserialize.
+        """
+        q = Queue()
+        self.assertEqual(q.count, 0)
+
+        # as in test_work_is_unreadable(), we create a fake bad job
+        job = Job.create(func=div_by_zero, args=(3,), origin=q.name)
+        job.save()
+
+        # setting data to b'' ensures that pickling will completely fail
+        job_data = job.data
+        invalid_data = job_data.replace(b'div_by_zero', b'')
+        assert job_data != invalid_data
+        self.testconn.hset(job.key, 'data', zlib.compress(invalid_data))
+
+        # We use the low-level internal function to enqueue any data (bypassing
+        # validity checks)
+        q.push_job_id(job.id)
+        self.assertEqual(q.count, 1)
+
+        # Now we try to run the job...
+        w = Worker([q])
+        job, queue = w.dequeue_job_and_maintain_ttl(10)
+        w.perform_job(job, queue)
+
+        # An exception should be logged here at ERROR level
+        self.assertIn("Traceback", mock_logger_error.call_args[0][0])
+
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""
         q = Queue()
@@ -297,6 +329,15 @@ class TestWorker(RQTestCase):
             # third is successful, after "recovery"
             assert mocked.call_count == 3
 
+    def test_job_timeout_moved_to_failed_job_registry(self):
+        """Jobs that run long are moved to FailedJobRegistry"""
+        queue = Queue()
+        worker = Worker([queue])
+        job = queue.enqueue(long_running_job, 5, job_timeout=1)
+        worker.work(burst=True)
+        self.assertIn(job, job.failed_job_registry)
+        job.refresh()
+        self.assertIn('rq.timeouts.JobTimeoutException', job.exc_info)
 
     @slow
     def test_heartbeat_busy(self):
@@ -539,7 +580,7 @@ class TestWorker(RQTestCase):
         self.assertTrue(job.meta['first_handler'])
         self.assertEqual(job.meta.get('second_handler'), None)
 
-    def test_cancelled_jobs_arent_executed(self):
+    def test_deleted_jobs_arent_executed(self):
         """Cancelling jobs."""
 
         SENTINEL_FILE = '/tmp/rq-tests.txt'  # noqa
