@@ -225,9 +225,11 @@ def kill_worker(pid, double_kill, interval=0.5):
 
 
 class Serializer:
-    def loads(self): pass
+    def loads(self):
+        pass
 
-    def dumps(self): pass
+    def dumps(self):
+        pass
 
 
 def start_worker(queue_name, conn_kwargs, worker_name, burst):
@@ -241,6 +243,7 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst):
             w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs))
             w.work(burst=burst)
 
+
 def start_worker_process(queue_name, connection=None, worker_name=None, burst=False):
     """
     Use multiprocessing to start a new worker in a separate process.
@@ -250,6 +253,7 @@ def start_worker_process(queue_name, connection=None, worker_name=None, burst=Fa
     p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst))
     p.start()
     return p
+
 
 def burst_two_workers(queue, timeout=2, tries=5, pause=0.1):
     """

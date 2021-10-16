@@ -230,7 +230,8 @@ class Worker:
                 )
                 self.ip_address = 'unknown'
             else:
-                self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+                self.ip_address = [client['addr'] for client in connection.client_list()
+                                   if client['name'] == self.name][0]
         else:
             self.hostname = None
             self.pid = None
@@ -957,6 +958,7 @@ class Worker:
                                                         job_class=self.job_class, serializer=job.serializer)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline)
+                Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)

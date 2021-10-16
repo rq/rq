@@ -6,8 +6,7 @@ from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from enum import Enum
 
-from .compat import as_text
-from .defaults import DEFAULT_RESULT_TTL
+from .job import Job
 from .serializers import resolve_serializer
 from .utils import now
 
@@ -25,7 +24,7 @@ class Result(object):
 
     def __init__(self, type, connection, created_at=None, return_value=None, exc_string=None, serializer=None):
         self.return_value = return_value
-        self.exc_string = None
+        self.exc_string = exc_string
         self.type = type
         self.created_at = created_at if created_at else now()
         self.serializer = resolve_serializer(serializer)
@@ -39,8 +38,16 @@ class Result(object):
         return result
 
     @classmethod
-    def get_latest(cls, job_id, connection, serializer=None):
-        """Returns the latest result for given job_id"""
+    def create_failure(cls, job, ttl, exc_string, pipeline=None):
+        result = cls(type=cls.Type.FAILED, connection=job.connection,
+                     exc_string=exc_string, serializer=job.serializer)
+        result.save(job.id, ttl=ttl, pipeline=pipeline)
+        return result
+
+    @classmethod
+    def get_latest(cls, job, connection, serializer=None):
+        """Returns the latest result for given job instance or ID"""
+        job_id = job.id if isinstance(job, Job) else job
         response = connection.zrange(cls.get_key(job_id), 0, 0, desc=True, withscores=True)
         if not response:
             return None
@@ -48,19 +55,30 @@ class Result(object):
         result_data, timestamp = response[0]
         result_data = json.loads(result_data)
         created_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
         if result_data:
             serializer = resolve_serializer(serializer)
-            return_value = b64decode(result_data['return_value'])
+            return_value = result_data.get('return_value')
+            if return_value is not None:
+                return_value = serializer.loads(b64decode(return_value))
+
+            exc_string = result_data.get('exc_string')
+            if exc_string:
+                exc_string = zlib.decompress(b64decode(exc_string)).decode()
+
             return Result(Result.Type(result_data['type']), connection=connection,
                           created_at=created_at,
-                          return_value=serializer.loads(return_value),
-                          exc_string=result_data.get('exc_string'))
+                          return_value=return_value,
+                          exc_string=exc_string)
 
     @classmethod
     def get_key(cls, job_id):
         return 'rq:results:%s' % job_id
 
-    def save(self, job_id, ttl, pipeline=None):
+    def save(self, job, ttl, pipeline=None):
+        """Save result data to Redis"""
+        job_id = job.id if isinstance(job, Job) else job
+
         key = self.get_key(job_id)
 
         connection = pipeline if pipeline is not None else self.connection
@@ -73,13 +91,12 @@ class Result(object):
         data = {
             'type': self.type.value
         }
-        # print('###Return value', self.return_value)
-        serialized = self.serializer.dumps(self.return_value)
-        # print('###Serialized return value', serialized)
-        # compressed = print(str(zlib.compress(serialized))
+
         if self.exc_string is not None:
-            data['exc_string'] = as_text(zlib.compress(self.exc_string))
+            data['exc_string'] = b64encode(zlib.compress(self.exc_string.encode())).decode()
+
+        serialized = self.serializer.dumps(self.return_value)
         if self.return_value is not None:
             data['return_value'] = b64encode(serialized).decode()
-        # print(data['return_value']).decode("utf-8")
+
         return json.dumps(data)    

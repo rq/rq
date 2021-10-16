@@ -12,7 +12,7 @@ import sys
 import time
 import zlib
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from multiprocessing import Process
 from time import sleep
 
@@ -389,6 +389,9 @@ class TestWorker(RQTestCase):
         # to the failed queue
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertTrue(job.exc_info)  # should contain exc_info
+        result = Result.get_latest(job.id, connection=self.connection)
+        self.assertEqual(result.exc_string, job.exc_info)
+        self.assertEqual(result.type, Result.Type.FAILED)
 
     def test_horse_fails(self):
         """Tests that job status is set to FAILED even if horse unexpectedly fails"""
