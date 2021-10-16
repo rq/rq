@@ -35,6 +35,7 @@ from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
 from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
+from rq.results import Result
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
@@ -198,7 +199,9 @@ class TestWorker(RQTestCase):
             w.work(burst=True), True,
             'Expected at least some work done.'
         )
-        self.assertEqual(job.result, 'Hi there, Frank!')
+        expected_result = 'Hi there, Frank!'
+        self.assertEqual(job.result, expected_result)
+        self.assertEqual(Result.get_latest(job.id, connection=self.testconn).return_value, expected_result)
         self.assertIsNone(job.worker_name)
 
     def test_job_times(self):

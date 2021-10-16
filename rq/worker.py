@@ -38,6 +38,7 @@ from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
+from .results import Result
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
@@ -998,6 +999,9 @@ class Worker:
                         job.worker_name = None
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
+
+                        Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
+                                      ttl=result_ttl, pipeline=pipeline)
 
                         finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)

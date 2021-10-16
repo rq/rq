@@ -7,18 +7,13 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from .compat import as_text
+from .defaults import DEFAULT_RESULT_TTL
 from .serializers import resolve_serializer
 from .utils import now
 
 
 def get_key(job_id):
     return 'rq:results:%s' % job_id
-
-
-class ResultType(Enum):
-    SUCCESSFUL = 1
-    FAILED = 2
-    STOPPED = 3
 
 
 class Result(object):
@@ -37,10 +32,10 @@ class Result(object):
         self.connection = connection
 
     @classmethod
-    def create(cls, job, type, return_value=None, exc_string=None, default_ttl=None, pipeline=None):
+    def create(cls, job, type, ttl, return_value=None, exc_string=None, pipeline=None):
         result = cls(type=type, connection=job.connection, return_value=return_value,
                      exc_string=exc_string, serializer=job.serializer)
-        result.save(job.id, timeout=job.get_result_ttl(default_ttl), pipeline=pipeline)
+        result.save(job.id, ttl=ttl, pipeline=pipeline)
         return result
 
     @classmethod
@@ -65,13 +60,13 @@ class Result(object):
     def get_key(cls, job_id):
         return 'rq:results:%s' % job_id
 
-    def save(self, job_id, timeout, pipeline=None):
+    def save(self, job_id, ttl, pipeline=None):
         key = self.get_key(job_id)
 
         connection = pipeline if pipeline is not None else self.connection
         result = connection.zadd(key, {self.serialize(): calendar.timegm(self.created_at.utctimetuple())})
-        if timeout is not None:
-            connection.expire(key, timeout)
+        if ttl is not None:
+            connection.expire(key, ttl)
         return result
 
     def serialize(self):
