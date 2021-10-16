@@ -28,17 +28,19 @@ class Result(object):
         FAILED = 2
         STOPPED = 3
 
-    def __init__(self, type, created_at=None, return_value=None, exc_string=None, serializer=None):
+    def __init__(self, type, connection, created_at=None, return_value=None, exc_string=None, serializer=None):
         self.return_value = return_value
         self.exc_string = None
         self.type = type
         self.created_at = created_at if created_at else now()
         self.serializer = resolve_serializer(serializer)
+        self.connection = connection
 
     @classmethod
-    def create(cls, job, type, return_value=None, exc_string=None, default_ttl=None):
-        result = cls(type=type, return_value=return_value, exc_string=exc_string, serializer=job.serializer)
-        result.save(job.id, timeout=job.get_result_ttl(default_ttl), connection=job.connection)
+    def create(cls, job, type, return_value=None, exc_string=None, default_ttl=None, pipeline=None):
+        result = cls(type=type, connection=job.connection, return_value=return_value,
+                     exc_string=exc_string, serializer=job.serializer)
+        result.save(job.id, timeout=job.get_result_ttl(default_ttl), pipeline=pipeline)
         return result
 
     @classmethod
@@ -54,7 +56,7 @@ class Result(object):
         if result_data:
             serializer = resolve_serializer(serializer)
             return_value = b64decode(result_data['return_value'])
-            return Result(Result.Type(result_data['type']),
+            return Result(Result.Type(result_data['type']), connection=connection,
                           created_at=created_at,
                           return_value=serializer.loads(return_value),
                           exc_string=result_data.get('exc_string'))
@@ -63,8 +65,10 @@ class Result(object):
     def get_key(cls, job_id):
         return 'rq:results:%s' % job_id
 
-    def save(self, job_id, timeout, connection):
+    def save(self, job_id, timeout, pipeline=None):
         key = self.get_key(job_id)
+
+        connection = pipeline if pipeline is not None else self.connection
         result = connection.zadd(key, {self.serialize(): calendar.timegm(self.created_at.utctimetuple())})
         if timeout is not None:
             connection.expire(key, timeout)
