@@ -152,26 +152,6 @@ class TestDecorator(RQTestCase):
         self.assertEqual(baz_job.dependency, bar_job)
         self.assertEqual(baz_job.dependency.id, bar_job.id)
 
-    @mock.patch('rq.queue.resolve_connection')
-    def test_decorator_connection_laziness(self, resolve_connection):
-        """Ensure that job decorator resolve connection in `lazy` way """
-
-        resolve_connection.return_value = Redis()
-
-        @job(queue='queue_name')
-        def foo():
-            return 'do something'
-
-        self.assertEqual(resolve_connection.call_count, 0)
-
-        foo()
-
-        self.assertEqual(resolve_connection.call_count, 0)
-
-        foo.delay()
-
-        self.assertEqual(resolve_connection.call_count, 1)
-
     def test_decorator_custom_queue_class(self):
         """Ensure that a custom queue class can be passed to the job decorator"""
         class CustomQueue(Queue):
@@ -182,7 +162,7 @@ class TestDecorator(RQTestCase):
         )
 
         custom_decorator = job(queue='default', queue_class=CustomQueue)
-        self.assertIs(custom_decorator.queue_class, CustomQueue)
+        self.assertIs(custom_decorator.config.queue_class, CustomQueue)
 
         @custom_decorator
         def custom_queue_class_job(x, y):

@@ -15,14 +15,13 @@ from ast import literal_eval
 from shutil import get_terminal_size
 
 import click
-import redis
 from redis import Redis
 from redis.sentinel import Sentinel
-from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
-                         DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
 from rq.logutils import setup_loghandlers
 from rq.utils import import_attribute, parse_timeout
 from rq.worker import WorkerStatus
+from rq.serializers import resolve_serializer
+from rq.config import Config
 
 red = partial(click.style, fg='red')
 green = partial(click.style, fg='green')
@@ -103,7 +102,7 @@ def state_symbol(state):
         return state
 
 
-def show_queues(queues, raw, by_queue, queue_class, worker_class):
+def show_queues(queues, raw, by_queue, config):
 
     num_jobs = 0
     termwidth = get_terminal_size().columns
@@ -134,14 +133,14 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
         click.echo('%d queues, %d jobs total' % (len(queues), num_jobs))
 
 
-def show_workers(queues, raw, by_queue, queue_class, worker_class):
+def show_workers(queues, raw, by_queue, config):
     workers = set()
     if queues:
         for queue in queues:
-            for worker in worker_class.all(queue=queue):
+            for worker in config.worker_class.all(queue=queue):
                 workers.add(worker)
     else:
-        for worker in worker_class.all():
+        for worker in config.worker_class.all():
             workers.add(worker)
 
     if not by_queue:
@@ -158,7 +157,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
         # Display workers by queue
         queue_dict = {}
         for queue in queues:
-            queue_dict[queue] = worker_class.all(queue=queue)
+            queue_dict[queue] = config.worker_class.all(queue=queue)
 
         if queue_dict:
             max_length = max(len(q.name) for q, in queue_dict.keys())
@@ -180,11 +179,11 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
         click.echo('%d workers, %d queues' % (len(workers), len(queues)))
 
 
-def show_both(queues, raw, by_queue, queue_class, worker_class):
-    show_queues(queues, raw, by_queue, queue_class, worker_class)
+def show_both(queues, raw, by_queue, config):
+    show_queues(queues, raw, by_queue, config)
     if not raw:
         click.echo('')
-    show_workers(queues, raw, by_queue, queue_class, worker_class)
+    show_workers(queues, raw, by_queue, config)
     if not raw:
         click.echo('')
         import datetime
@@ -292,48 +291,47 @@ def parse_schedule(schedule_in, schedule_at):
         return datetime.strptime(schedule_at, '%Y-%m-%dT%H:%M:%S')
 
 
-class CliConfig:
-    """A helper class to be used with click commands, to handle shared options"""
-    def __init__(self, url=None, config=None, worker_class=DEFAULT_WORKER_CLASS,
-                 job_class=DEFAULT_JOB_CLASS, queue_class=DEFAULT_QUEUE_CLASS,
-                 connection_class=DEFAULT_CONNECTION_CLASS, path=None, *args, **kwargs):
-        self._connection = None
-        self.url = url
-        self.config = config
+def process_shared_options(url, config, worker_class, job_class, queue_class, connection_class, path, serializer):
+    """Porcesses shared options and returns a config object."""
+    if path:
+        for pth in path:
+            sys.path.append(pth)
 
-        if path:
-            for pth in path:
-                sys.path.append(pth)
+    try:
+        worker_class = import_attribute(worker_class)
+    except (ImportError, AttributeError) as exc:
+        raise click.BadParameter(str(exc), param_hint='--worker-class')
+    try:
+        job_class = import_attribute(job_class)
+    except (ImportError, AttributeError) as exc:
+        raise click.BadParameter(str(exc), param_hint='--job-class')
 
-        try:
-            self.worker_class = import_attribute(worker_class)
-        except (ImportError, AttributeError) as exc:
-            raise click.BadParameter(str(exc), param_hint='--worker-class')
-        try:
-            self.job_class = import_attribute(job_class)
-        except (ImportError, AttributeError) as exc:
-            raise click.BadParameter(str(exc), param_hint='--job-class')
+    try:
+        queue_class = import_attribute(queue_class)
+    except (ImportError, AttributeError) as exc:
+        raise click.BadParameter(str(exc), param_hint='--queue-class')
 
-        try:
-            self.queue_class = import_attribute(queue_class)
-        except (ImportError, AttributeError) as exc:
-            raise click.BadParameter(str(exc), param_hint='--queue-class')
+    try:
+        connection_class = import_attribute(connection_class)
+    except (ImportError, AttributeError) as exc:
+        raise click.BadParameter(str(exc), param_hint='--connection-class')
 
-        try:
-            self.connection_class = import_attribute(connection_class)
-        except (ImportError, AttributeError) as exc:
-            raise click.BadParameter(str(exc), param_hint='--connection-class')
+    try:
+        serializer = resolve_serializer(serializer)
+    except (ImportError, AttributeError, NotImplementedError) as exc:
+        raise click.BadParameter(str(exc), param_hint='--serializer')
 
-    @property
-    def connection(self):
-        if self._connection is None:
-            if self.url:
-                self._connection = self.connection_class.from_url(self.url)
-            elif self.config:
-                settings = read_config_file(self.config) if self.config else {}
-                self._connection = get_redis_from_config(settings,
-                                                         self.connection_class)
-            else:
-                self._connection = get_redis_from_config(os.environ,
-                                                         self.connection_class)
-        return self._connection
+    if url:
+        connection = connection_class.from_url(url)
+    elif config:
+        connection = get_redis_from_config(read_config_file(config), connection_class)
+    else:
+        connection = get_redis_from_config(os.environ, connection_class)
+
+    return Config(
+        job_class=job_class,
+        queue_class=queue_class,
+        worker_class=worker_class,
+        serializer=serializer,
+        connection=connection
+    )

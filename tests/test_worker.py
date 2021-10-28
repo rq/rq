@@ -735,7 +735,6 @@ class TestWorker(RQTestCase):
         worker_generic = Worker([q_generic])
         self.assertEqual(worker_custom.queue_class, CustomQueue)
         self.assertEqual(worker_generic.queue_class, Queue)
-        self.assertEqual(Worker.queue_class, Queue)
 
     def test_custom_job_class_is_not_global(self):
         """Ensure Worker custom job class is not global."""
@@ -745,7 +744,6 @@ class TestWorker(RQTestCase):
         worker_generic = Worker([q_generic])
         self.assertEqual(worker_custom.job_class, CustomJob)
         self.assertEqual(worker_generic.job_class, Job)
-        self.assertEqual(Worker.job_class, Job)
 
     def test_work_via_simpleworker(self):
         """Worker processes work, with forking disabled,

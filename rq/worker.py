@@ -28,24 +28,22 @@ import redis.exceptions
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
 from .compat import as_text, string_types, text_type
-from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (CALLBACK_TIMEOUT, DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
-from .job import Job, JobStatus
+from .job import JobStatus
 from .logutils import setup_loghandlers
-from .queue import Queue
 from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (backend_class, ensure_list, get_version,
-                    make_colorizer, utcformat, utcnow, utcparse)
+from .utils import (ensure_list, get_version,
+                    make_colorizer, overwrite_config_connection, utcformat, utcnow, utcparse, overwrite_obj_config)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
-from .serializers import resolve_serializer
+from .config import DEFAULT_CONFIG, Config
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -98,8 +96,6 @@ class Worker:
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
-    queue_class = Queue
-    job_class = Job
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
     # messages are logged after every job, by default they are.
     log_result_lifespan = True
@@ -111,52 +107,73 @@ class Worker:
     max_connection_wait_time = 60.0
 
     @classmethod
-    def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
+    def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None, config=None):
         """Returns an iterable of all Workers.
         """
-        if queue:
-            connection = queue.connection
-        elif connection is None:
-            connection = get_current_connection()
+        config = overwrite_obj_config(queue, config)
+        if serializer is not None:
+            warnings.warn('serializer argument of Worker.all is deprecated and will be removed in RQ 2. '
+                          'Use Worker.all(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Worker.all is deprecated and will be removed in RQ 2. '
+                          'Use Worker.all(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+        if queue_class is not None:
+            warnings.warn('queue_class argument of Worker.all is deprecated and will be removed in RQ 2. '
+                          'Use Worker.all(config=Config(queue_class=queue_class)) instead.', DeprecationWarning)
+            config = Config(template=config, queue_class=queue_class)
+        config = overwrite_config_connection(config, connection)
 
-        worker_keys = get_keys(queue=queue, connection=connection)
+        worker_keys = get_keys(queue=queue, config=config)
         workers = [cls.find_by_key(as_text(key),
-                                   connection=connection,
-                                   job_class=job_class,
-                                   queue_class=queue_class, serializer=serializer)
+                                   config=config)
                    for key in worker_keys]
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection=None, queue=None):
+    def all_keys(cls, connection=None,  queue=None, config=DEFAULT_CONFIG):
+        config = overwrite_config_connection(config, connection)
         return [as_text(key)
-                for key in get_keys(queue=queue, connection=connection)]
+                for key in get_keys(queue=queue, config=config)]
 
     @classmethod
-    def count(cls, connection=None, queue=None):
+    def count(cls, connection=None, queue=None, config=DEFAULT_CONFIG):
         """Returns the number of workers by queue or connection"""
-        return len(get_keys(queue=queue, connection=connection))
+        config = overwrite_config_connection(config, connection)
+        return len(get_keys(queue=queue, config=config))
 
     @classmethod
     def find_by_key(cls, worker_key, connection=None, job_class=None,
-                    queue_class=None, serializer=None):
+                    queue_class=None, serializer=None, config=DEFAULT_CONFIG):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
         """
+        if serializer is not None:
+            warnings.warn('serializer argument of Worker.find_by_key is deprecated and will be removed in RQ 2. '
+                          'Use Worker.find_by_key(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Worker.find_by_key is deprecated and will be removed in RQ 2. '
+                          'Use Worker.find_by_key(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+        if queue_class is not None:
+            warnings.warn('queue_class argument of Worker.find_by_key is deprecated and will be removed in RQ 2. '
+                          'Use Worker.find_by_key(config=Config(queue_class=queue_class)) instead.', DeprecationWarning)
+            config = Config(template=config, queue_class=queue_class)
+        config = overwrite_config_connection(config, connection)
+
         prefix = cls.redis_worker_namespace_prefix
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % worker_key)
 
-        if connection is None:
-            connection = get_current_connection()
-        if not connection.exists(worker_key):
-            connection.srem(cls.redis_workers_keys, worker_key)
+        if not config.connection.exists(worker_key):
+            config.connection.srem(cls.redis_workers_keys, worker_key)
             return None
 
         name = worker_key[len(prefix):]
-        worker = cls([], name, connection=connection, job_class=job_class,
-                     queue_class=queue_class, prepare_for_work=False, serializer=serializer)
+        worker = cls([], name, config=config, prepare_for_work=False)
 
         worker.refresh()
 
@@ -168,22 +185,28 @@ class Worker:
                  queue_class=None, log_job_description=True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler=False,
-                 prepare_for_work=True, serializer=None):  # noqa
-        if connection is None:
-            connection = get_current_connection()
-        self.connection = connection
+                 prepare_for_work=True, serializer=None, config=DEFAULT_CONFIG):  # noqa
+        if serializer is not None:
+            warnings.warn('serializer argument of Worker is deprecated and will be removed in RQ 2. '
+                          'Use Worker(config=Config(serializer=serializer)) instead.', DeprecationWarning)
+            config = Config(template=config, serializer=serializer)
+        if job_class is not None:
+            warnings.warn('job_class argument of Worker is deprecated and will be removed in RQ 2. '
+                          'Use Worker(config=Config(job_class=job_class)) instead.', DeprecationWarning)
+            config = Config(template=config, job_class=job_class)
+        if queue_class is not None:
+            warnings.warn('queue_class argument of Worker is deprecated and will be removed in RQ 2. '
+                          'Use Worker(config=Config(queue_class=queue_class)) instead.', DeprecationWarning)
+            config = Config(template=config, queue_class=queue_class)
+        config = overwrite_config_connection(config, connection)
 
         self.redis_server_version = None
 
-        self.job_class = backend_class(self, 'job_class', override=job_class)
-        self.queue_class = backend_class(self, 'queue_class', override=queue_class)
+        self.config = config
         self.version = VERSION
         self.python_version = sys.version
-        self.serializer = resolve_serializer(serializer)
 
-        queues = [self.queue_class(name=q,
-                                   connection=connection,
-                                   job_class=self.job_class, serializer=self.serializer)
+        queues = [self.config.queue_class(name=q, config=self.config)
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
 
@@ -221,7 +244,7 @@ class Worker:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
             try:
-                connection.client_setname(self.name)
+                self.config.connection.client_setname(self.name)
             except redis.exceptions.ResponseError:
                 warnings.warn(
                     'CLIENT command not supported, setting ip_address to unknown',
@@ -229,7 +252,8 @@ class Worker:
                 )
                 self.ip_address = 'unknown'
             else:
-                self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+                self.ip_address = [client['addr'] for client in self.config.connection.client_list()
+                                   if client['name'] == self.name][0]
         else:
             self.hostname = None
             self.pid = None
@@ -241,17 +265,42 @@ class Worker:
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
+    @property
+    def connection(self):
+        warnings.warn('worker.connection is deprecated and will be removed in RQ 2. '
+                      'Use worker.config.connection instead.', DeprecationWarning)
+        return self.config.connection
+
+    @property
+    def serializer(self):
+        warnings.warn('worker.serializer is deprecated and will be removed in RQ 2. '
+                      'Use worker.config.serializer instead.', DeprecationWarning)
+        return self.config.serializer
+
+    @property
+    def job_class(self):
+        warnings.warn('worker.job_class is deprecated and will be removed in RQ 2. '
+                      'Use worker.config.job_class instead.', DeprecationWarning)
+        return self.config.job_class
+
+    @property
+    def queue_class(self):
+        warnings.warn('worker.queue_class is deprecated and will be removed in RQ 2. '
+                      'Use worker.config.queue_class instead.', DeprecationWarning)
+        return self.config.queue_class
+
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
+            self.redis_server_version = get_version(self.config.connection)
         return self.redis_server_version
 
     def validate_queues(self):
         """Sanity check for the given queues."""
         for queue in self.queues:
-            if not isinstance(queue, self.queue_class):
-                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
+            if not isinstance(queue, self.config.queue_class):
+                raise TypeError('{0} is not of type {1} or string types'
+                    .format(queue, self.config.queue_class))
 
     def queue_names(self):
         """Returns the queue names of this worker's queues."""
@@ -293,13 +342,13 @@ class Worker:
     def register_birth(self):
         """Registers its own birth."""
         self.log.debug('Registering birth of worker %s', self.name)
-        if self.connection.exists(self.key) and \
-                not self.connection.hexists(self.key, 'death'):
+        if self.config.connection.exists(self.key) and \
+                not self.config.connection.hexists(self.key, 'death'):
             msg = 'There exists an active worker named {0!r} already'
             raise ValueError(msg.format(self.name))
         key = self.key
         queues = ','.join(self.queue_names())
-        with self.connection.pipeline() as p:
+        with self.config.connection.pipeline() as p:
             p.delete(key)
             now = utcnow()
             now_in_string = utcformat(now)
@@ -328,7 +377,7 @@ class Worker:
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Registering death')
-        with self.connection.pipeline() as p:
+        with self.config.connection.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             worker_registration.unregister(self, p)
@@ -338,7 +387,7 @@ class Worker:
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""
-        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(utcnow()))
+        self.config.connection.hset(self.key, 'shutdown_requested_date', utcformat(utcnow()))
 
     # @property
     # def birth_date(self):
@@ -350,20 +399,21 @@ class Worker:
     @property
     def shutdown_requested_date(self):
         """Fetches shutdown_requested_date from Redis."""
-        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
+        shutdown_requested_timestamp = self.config.connection \
+            .hget(self.key, 'shutdown_requested_date')
         if shutdown_requested_timestamp is not None:
             return utcparse(as_text(shutdown_requested_timestamp))
 
     @property
     def death_date(self):
         """Fetches death date from Redis."""
-        death_timestamp = self.connection.hget(self.key, 'death')
+        death_timestamp = self.config.connection.hget(self.key, 'death')
         if death_timestamp is not None:
             return utcparse(as_text(death_timestamp))
 
     def set_state(self, state, pipeline=None):
         self._state = state
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         connection.hset(self.key, 'state', state)
 
     def _set_state(self, state):
@@ -389,11 +439,11 @@ class Worker:
 
     def set_current_job_working_time(self, current_job_working_time, pipeline=None):
         self.current_job_working_time = current_job_working_time
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
     def set_current_job_id(self, job_id, pipeline=None):
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
 
         if job_id is None:
             connection.hdel(self.key, 'current_job')
@@ -401,7 +451,7 @@ class Worker:
             connection.hset(self.key, 'current_job', job_id)
 
     def get_current_job_id(self, pipeline=None):
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         return as_text(connection.hget(self.key, 'current_job'))
 
     def get_current_job(self):
@@ -411,7 +461,7 @@ class Worker:
         if job_id is None:
             return None
 
-        return self.job_class.fetch(job_id, self.connection, self.serializer)
+        return self.config.job_class.fetch(job_id, config=self.config)
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
@@ -496,7 +546,7 @@ class Worker:
         before_state = None
         notified = False
 
-        while not self._stop_requested and is_suspended(self.connection, self):
+        while not self._stop_requested and is_suspended(self.config.connection, self):
 
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
@@ -530,7 +580,7 @@ class Worker:
     def subscribe(self):
         """Subscribe to this worker's channel"""
         self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
-        self.pubsub = self.connection.pubsub()
+        self.pubsub = self.config.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
 
@@ -567,8 +617,8 @@ class Worker:
 
         if with_scheduler:
             self.scheduler = RQScheduler(
-                self.queues, connection=self.connection, logging_level=logging_level,
-                date_format=date_format, log_format=log_format, serializer=self.serializer)
+                self.queues, config=self.config, logging_level=logging_level,
+                date_format=date_format, log_format=log_format)
             self.scheduler.acquire_locks()
             # If lock is acquired, start scheduler
             if self.scheduler.acquired_locks:
@@ -664,10 +714,8 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
-                                                      connection=self.connection,
-                                                      job_class=self.job_class,
-                                                      serializer=self.serializer)
+                result = self.config.queue_class.dequeue_any(self._ordered_queues, timeout,
+                                                                    config=self.config)
                 if result is not None:
 
                     job, queue = result
@@ -706,14 +754,14 @@ class Worker:
         the expiration time of the worker.
         """
         timeout = timeout or self.default_worker_ttl + 60
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
         self.log.debug('Sent heartbeat to prevent worker timeout. '
                        'Next one should arrive within %s seconds.', timeout)
 
     def refresh(self):
-        data = self.connection.hmget(
+        data = self.config.connection.hmget(
             self.key, 'queues', 'state', 'current_job', 'last_heartbeat',
             'birth', 'failed_job_count', 'successful_job_count', 'total_working_time',
             'current_job_working_time', 'hostname', 'ip_address', 'pid', 'version', 'python_version',
@@ -747,17 +795,14 @@ class Worker:
             self.current_job_working_time = float(as_text(current_job_working_time))
 
         if queues:
-            self.queues = [self.queue_class(queue,
-                                            connection=self.connection,
-                                            job_class=self.job_class, serializer=self.serializer)
-                           for queue in queues.split(',')]
+            self.queues = [self.config.queue_class(queue, config=self.config) for queue in queues.split(',')]
 
     def increment_failed_job_count(self, pipeline=None):
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
 
     def increment_successful_job_count(self, pipeline=None):
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.config.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
 
     def increment_total_working_time(self, job_execution_time, pipeline):
@@ -810,7 +855,7 @@ class Worker:
                     self.wait_for_horse()
                     break
 
-                with self.connection.pipeline() as pipeline:
+                with self.config.connection.pipeline() as pipeline:
                     self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
                     ttl = self.get_heartbeat_ttl(job)
                     job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
@@ -902,7 +947,7 @@ class Worker:
         job execution.
         """
 
-        with self.connection.pipeline() as pipeline:
+        with self.config.connection.pipeline() as pipeline:
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
@@ -926,14 +971,9 @@ class Worker:
             4. Add the job to FailedJobRegistry
         """
         self.log.debug('Handling failed execution of job %s', job.id)
-        with self.connection.pipeline() as pipeline:
+        with self.config.connection.pipeline() as pipeline:
             if started_job_registry is None:
-                started_job_registry = StartedJobRegistry(
-                    job.origin,
-                    self.connection,
-                    job_class=self.job_class,
-                    serializer=self.serializer
-                )
+                started_job_registry = StartedJobRegistry(job.origin, config=self.config)
             job.worker_name = None
 
             # check whether a job was stopped intentionally and set the job
@@ -952,8 +992,7 @@ class Worker:
             started_job_registry.remove(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
-                failed_job_registry = FailedJobRegistry(job.origin, job.connection,
-                                                        job_class=self.job_class, serializer=job.serializer)
+                failed_job_registry = FailedJobRegistry(job.origin, config=self.config)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline)
 
@@ -976,7 +1015,7 @@ class Worker:
 
     def handle_job_success(self, job, queue, started_job_registry):
         self.log.debug('Handling successful execution of job %s', job.id)
-        with self.connection.pipeline() as pipeline:
+        with self.config.connection.pipeline() as pipeline:
             while True:
                 try:
                     # if dependencies are inserted after enqueue_dependents
@@ -1017,19 +1056,18 @@ class Worker:
         """Executes success_callback with timeout"""
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.success_callback(job, self.connection, result)
+            job.success_callback(job, self.config.connection, result)
 
     def execute_failure_callback(self, job):
         """Executes failure_callback with timeout"""
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.failure_callback(job, self.connection, *sys.exc_info())
+            job.failure_callback(job, self.config.connection, *sys.exc_info())
 
     def perform_job(self, job, queue):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        push_connection(self.connection)
 
         started_job_registry = queue.started_job_registry
 
@@ -1037,7 +1075,7 @@ class Worker:
             self.prepare_job_execution(job)
 
             job.started_at = utcnow()
-            timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
+            timeout = job.timeout or self.config.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 rv = job.perform()
 
@@ -1073,9 +1111,6 @@ class Worker:
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)
             return False
-
-        finally:
-            pop_connection()
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:

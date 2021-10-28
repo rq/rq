@@ -9,5 +9,6 @@ from .job import cancel_job, get_current_job, requeue_job, Retry
 from .queue import Queue
 from .version import VERSION
 from .worker import SimpleWorker, Worker
+from .config import Config
 
 __version__ = VERSION

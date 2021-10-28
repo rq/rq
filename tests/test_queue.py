@@ -672,7 +672,7 @@ class TestQueue(RQTestCase):
             job.save()
 
         q = Queue()
-        with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
+        with patch('rq.job.Job.create', new=MultipleDependencyJob.create):
             job = q.enqueue(say_hello, depends_on=parent_jobs[0],
                             _dependency_ids=[job.id for job in parent_jobs])
             self.assertEqual(job.get_status(), JobStatus.DEFERRED)
@@ -688,7 +688,7 @@ class TestQueue(RQTestCase):
             job.save()
 
         q = Queue()
-        with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
+        with patch('rq.job.Job.create', new=MultipleDependencyJob.create):
             job = q.enqueue(say_hello, depends_on=parent_jobs[0],
                             _dependency_ids=[job.id for job in parent_jobs])
             self.assertEqual(job.get_status(), JobStatus.QUEUED)
@@ -710,7 +710,7 @@ class TestQueue(RQTestCase):
         parent_jobs[2].save()
 
         q = Queue()
-        with patch('rq.queue.Job.create',
+        with patch('rq.job.Job.create',
                    new=MultipleDependencyJob.create):
             # dependent job deferred, b/c parent_job 0 is still 'started'
             dependent_job = q.enqueue(say_hello, depends_on=parent_jobs[0],
@@ -733,7 +733,7 @@ class TestQueue(RQTestCase):
         queued_dependency.save()
 
         q = Queue()
-        with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
+        with patch('rq.job.Job.create', new=MultipleDependencyJob.create):
             dependent_job = q.enqueue(say_hello, depends_on=[started_dependency],
                                       _dependency_ids=[started_dependency.id, queued_dependency.id])
             self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)

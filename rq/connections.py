@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from redis import Redis
 
 from .local import LocalStack, release_local
+import warnings
 
 
 class NoRedisConnectionException(Exception):
@@ -29,11 +30,17 @@ def Connection(connection=None):  # noqa
 
 def push_connection(redis):
     """Pushes the given connection on the stack."""
+    warnings.warn('push_connection and pop_connection are deprecated and '
+                  'will be removed in RQ 2. Use Config(connection=Redis([...])) '
+                  'instead.', DeprecationWarning)
     _connection_stack.push(redis)
 
 
 def pop_connection():
     """Pops the topmost connection from the stack."""
+    warnings.warn('push_connection and pop_connection are deprecated and '
+                  'will be removed in RQ 2. Use Config(connection=Redis([...])) '
+                  'instead.', DeprecationWarning)
     return _connection_stack.pop()
 
 
