@@ -520,6 +520,16 @@ class Job:
     """Backwards-compatibility accessor property `return_value`."""
     return_value = result
 
+    def results(self):
+        """Returns all Result objects"""
+        from .results import Result
+        return Result.all(self, self.connection)
+
+    def get_latest_result(self):
+        """Returns the latest Result object"""
+        from .results import Result
+        return Result.get_latest(self, self.connection)
+
     def restore(self, raw_data):
         """Overwrite properties with the provided values stored in Redis"""
         obj = decode_redis_hash(raw_data)
