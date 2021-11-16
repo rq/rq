@@ -885,7 +885,7 @@ class Worker:
             ttl = self.get_heartbeat_ttl(job)
             job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
-            if results[3] == 1:
+            if results[2] == 1:
                 self.connection.delete(job.key)
 
     def main_work_horse(self, job, queue):
