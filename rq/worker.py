@@ -810,11 +810,7 @@ class Worker:
                     self.wait_for_horse()
                     break
 
-                with self.connection.pipeline() as pipeline:
-                    self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-                    ttl = self.get_heartbeat_ttl(job)
-                    job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
-                    pipeline.execute()
+                self.maintain_heartbeats(job)
 
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
@@ -868,6 +864,27 @@ class Worker:
         self.fork_work_horse(job, queue)
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
+
+    def maintain_heartbeats(self, job):
+        """Updates worker and job's last heartbeat field. If job was
+        enqueued with `result_ttl=0`, a race condition could happen where this heartbeat
+        arrives after job has been deleted, leaving a job key that contains only
+        `last_heartbeat` field.
+
+        hset() is used when updating job's timestamp. This command returns 1 if a new
+        Redis key is created, 0 otherwise. So in this case we check the return of job's
+        heartbeat() command. If a new key was created, this means the job was already
+        deleted. In this case, we simply send another delete command to remove the key.
+
+        https://github.com/rq/rq/issues/1450
+        """
+        with self.connection.pipeline() as pipeline:
+            self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+            ttl = self.get_heartbeat_ttl(job)
+            job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
+            results = pipeline.execute()
+            if results[0] == 1:
+                self.connection.delete(job.key)
 
     def main_work_horse(self, job, queue):
         """This is the entry point of the newly spawned work horse."""

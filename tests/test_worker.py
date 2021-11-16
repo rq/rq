@@ -317,6 +317,20 @@ class TestWorker(RQTestCase):
         self.testconn.hdel(w.key, 'birth')
         w.refresh()
 
+    def test_maintain_heartbeats(self):
+        """worker.maintain_heartbeats() shouldn't create new job keys"""
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue], connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker.maintain_heartbeats(job)
+        self.assertTrue(self.testconn.exists(worker.key))
+        self.assertTrue(self.testconn.exists(job.key))
+
+        self.testconn.delete(job.key)
+
+        worker.maintain_heartbeats(job)
+        self.assertFalse(self.testconn.exists(job.key))
+
     @slow
     def test_heartbeat_survives_lost_connection(self):
         with mock.patch.object(Worker, 'heartbeat') as mocked:
