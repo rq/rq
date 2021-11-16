@@ -828,7 +828,9 @@ class Worker:
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
         if ret_val == os.EX_OK:  # The process exited normally.
             return
+
         job_status = job.get_status()
+
         if job_status is None:  # Job completed and its ttl has expired
             return
         elif job_status == JobStatus.STOPPED:
@@ -883,7 +885,7 @@ class Worker:
             ttl = self.get_heartbeat_ttl(job)
             job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
-            if results[0] == 1:
+            if results[3] == 1:
                 self.connection.delete(job.key)
 
     def main_work_horse(self, job, queue):
