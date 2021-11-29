@@ -12,15 +12,16 @@ import sys
 import asyncio
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
-from distutils.version import StrictVersion
 from enum import Enum
 from functools import partial
 from uuid import uuid4
 from io import StringIO
 
+from redis import WatchError
+
 from rq.compat import as_text, decode_redis_hash, string_types
 from .connections import resolve_connection
-from .exceptions import DeserializationError, NoSuchJobError
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
@@ -40,6 +41,7 @@ class JobStatus(str, Enum):
     DEFERRED = 'deferred'
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
+    CANCELED = 'canceled'
 
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -66,11 +68,11 @@ class _SteamCapture:
         return getattr(self.original, attr)
 
 
-def cancel_job(job_id, connection=None):
+def cancel_job(job_id, connection=None, serializer=None, enqueue_dependents=False):
     """Cancels the job with the given job ID, preventing execution.  Discards
     any job info (i.e. it can't be requeued later).
     """
-    Job.fetch(job_id, connection=connection).cancel()
+    Job.fetch(job_id, connection=connection, serializer=serializer).cancel(enqueue_dependents=enqueue_dependents)
 
 
 def get_current_job(connection=None, job_class=None):
@@ -83,8 +85,8 @@ def get_current_job(connection=None, job_class=None):
     return _job_stack.top
 
 
-def requeue_job(job_id, connection):
-    job = Job.fetch(job_id, connection=connection)
+def requeue_job(job_id, connection, serializer=None):
+    job = Job.fetch(job_id, connection=connection, serializer=serializer)
     return job.requeue()
 
 
@@ -185,6 +187,13 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
+    def get_meta(self, refresh=True):
+        if refresh:
+            meta = self.connection.hget(self.key, 'meta')
+            self.meta = self.serializer.loads(meta) if meta else {}
+
+        return self.meta
+
     @property
     def is_finished(self):
         return self.get_status() == JobStatus.FINISHED
@@ -204,6 +213,10 @@ class Job:
     @property
     def is_deferred(self):
         return self.get_status() == JobStatus.DEFERRED
+
+    @property
+    def is_canceled(self):
+        return self.get_status() == JobStatus.CANCELED
 
     @property
     def is_scheduled(self):
@@ -477,11 +490,11 @@ class Job:
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
-    def heartbeat(self, timestamp, ttl, pipeline=None):
+    def heartbeat(self, timestamp, ttl, pipeline=None, xx=False):
         self.last_heartbeat = timestamp
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
-        self.started_job_registry.add(self, ttl, pipeline=pipeline)
+        self.started_job_registry.add(self, ttl, pipeline=pipeline, xx=xx)
 
     id = property(get_id, set_id)
 
@@ -707,7 +720,7 @@ class Job:
 
         mapping = self.to_dict(include_meta=include_meta)
 
-        if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+        if self.get_redis_server_version() >= (4, 0, 0):
             connection.hset(key, mapping=mapping)
         else:
             connection.hmset(key, mapping)
@@ -724,63 +737,122 @@ class Job:
         meta = self.serializer.dumps(self.meta)
         self.connection.hset(self.key, 'meta', meta)
 
-    def cancel(self, pipeline=None):
+    def cancel(self, pipeline=None, enqueue_dependents=False):
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
 
         This method merely exists as a high-level API call to cancel jobs
         without worrying about the internals required to implement job
         cancellation.
+
+        You can enqueue the jobs dependents optionally, 
+        Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
+
+        if self.is_canceled:
+            raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
+        from .registry import CanceledJobRegistry
         from .queue import Queue
-        pipeline = pipeline or self.connection.pipeline()
-        if self.origin:
-            q = Queue(name=self.origin, connection=self.connection)
-            q.remove(self, pipeline=pipeline)
-        pipeline.execute()
+        pipe = pipeline or self.connection.pipeline()
+        while True:
+            try:
+                q = Queue(
+                    name=self.origin,
+                    connection=self.connection,
+                    job_class=self.__class__,
+                    serializer=self.serializer
+                )
+                if enqueue_dependents:
+                    # Only WATCH if no pipeline passed, otherwise caller is responsible
+                    if pipeline is None:
+                        pipe.watch(self.dependents_key)
+                    q.enqueue_dependents(self, pipeline=pipeline)
+                self._remove_from_registries(
+                    pipeline=pipe,
+                    remove_from_queue=True
+                )
+
+                self.set_status(JobStatus.CANCELED, pipeline=pipe)
+
+                registry = CanceledJobRegistry(
+                    self.origin,
+                    self.connection,
+                    job_class=self.__class__,
+                    serializer=self.serializer                    
+                )
+                registry.add(self, pipeline=pipe)
+                if pipeline is None:
+                    pipe.execute()
+                break
+            except WatchError:
+                if pipeline is None:
+                    continue
+                else:
+                    # if the pipeline comes from the caller, we re-raise the
+                    # exception as it it the responsibility of the caller to
+                    # handle it
+                    raise
 
     def requeue(self):
         """Requeues job."""
         return self.failed_job_registry.requeue(self)
 
-    def delete(self, pipeline=None, remove_from_queue=True,
-               delete_dependents=False):
-        """Cancels the job and deletes the job hash from Redis. Jobs depending
-        on this job can optionally be deleted as well."""
+    def _remove_from_registries(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
-            self.cancel(pipeline=pipeline)
-        connection = pipeline if pipeline is not None else self.connection
+            from .queue import Queue
+            q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
+            q.remove(self, pipeline=pipeline)
 
         if self.is_finished:
             from .registry import FinishedJobRegistry
             registry = FinishedJobRegistry(self.origin,
                                            connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_deferred:
             from .registry import DeferredJobRegistry
             registry = DeferredJobRegistry(self.origin,
                                            connection=self.connection,
-                                           job_class=self.__class__)
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_started:
             from .registry import StartedJobRegistry
             registry = StartedJobRegistry(self.origin,
                                           connection=self.connection,
-                                          job_class=self.__class__)
+                                          job_class=self.__class__,
+                                          serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
             from .registry import ScheduledJobRegistry
             registry = ScheduledJobRegistry(self.origin,
                                             connection=self.connection,
-                                            job_class=self.__class__)
+                                            job_class=self.__class__,
+                                            serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed:
             self.failed_job_registry.remove(self, pipeline=pipeline)
+
+        elif self.is_canceled:
+            from .registry import CanceledJobRegistry
+            registry = CanceledJobRegistry(self.origin, connection=self.connection,
+                                           job_class=self.__class__,
+                                           serializer=self.serializer)
+            registry.remove(self, pipeline=pipeline)
+
+    def delete(self, pipeline=None, remove_from_queue=True,
+               delete_dependents=False):
+        """Cancels the job and deletes the job hash from Redis. Jobs depending
+        on this job can optionally be deleted as well."""
+
+        connection = pipeline if pipeline is not None else self.connection
+
+        self._remove_from_registries(pipeline=pipeline, remove_from_queue=True)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
@@ -823,7 +895,7 @@ class Job:
             'started_at': utcformat(self.started_at),
             'worker_name': worker_name
         }
-        if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+        if self.get_redis_server_version() >= (4, 0, 0):
             pipeline.hset(self.key, mapping=mapping)
         else:
             pipeline.hmset(self.key, mapping)
@@ -831,7 +903,7 @@ class Job:
     def _execute(self):
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
-            loop = asyncio.get_event_loop()
+            loop = asyncio.new_event_loop()
             coro_result = loop.run_until_complete(result)
             return coro_result
         return result
@@ -880,13 +952,15 @@ class Job:
     def started_job_registry(self):
         from .registry import StartedJobRegistry
         return StartedJobRegistry(self.origin, connection=self.connection,
-                                  job_class=self.__class__)
+                                  job_class=self.__class__,
+                                  serializer=self.serializer)
 
     @property
     def failed_job_registry(self):
         from .registry import FailedJobRegistry
         return FailedJobRegistry(self.origin, connection=self.connection,
-                                 job_class=self.__class__)
+                                 job_class=self.__class__,
+                                 serializer=self.serializer)
 
     def get_retry_interval(self):
         """Returns the desired retry interval.
@@ -925,7 +999,8 @@ class Job:
 
         registry = DeferredJobRegistry(self.origin,
                                        connection=self.connection,
-                                       job_class=self.__class__)
+                                       job_class=self.__class__,
+                                       serializer=self.serializer)
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection

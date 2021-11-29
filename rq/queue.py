@@ -8,7 +8,6 @@ import warnings
 from collections import namedtuple
 from datetime import datetime, timezone
 
-from distutils.version import StrictVersion
 from redis import WatchError
 
 from .compat import as_text, string_types, total_ordering
@@ -185,7 +184,7 @@ class Queue:
         """
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
-        if self.get_redis_server_version() >= StrictVersion("6.0.6"):
+        if self.get_redis_server_version() >= (6, 0, 6):
             try:
                 return self.connection.lpos(self.key, job_id)
             except AttributeError:
@@ -230,39 +229,45 @@ class Queue:
     def failed_job_registry(self):
         """Returns this queue's FailedJobRegistry."""
         from rq.registry import FailedJobRegistry
-        return FailedJobRegistry(queue=self, job_class=self.job_class)
+        return FailedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
     def started_job_registry(self):
         """Returns this queue's StartedJobRegistry."""
         from rq.registry import StartedJobRegistry
-        return StartedJobRegistry(queue=self, job_class=self.job_class)
+        return StartedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
     def finished_job_registry(self):
         """Returns this queue's FinishedJobRegistry."""
         from rq.registry import FinishedJobRegistry
-        return FinishedJobRegistry(queue=self)
+        # TODO: Why was job_class only ommited here before?  Was it intentional?
+        return FinishedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
     def deferred_job_registry(self):
         """Returns this queue's DeferredJobRegistry."""
         from rq.registry import DeferredJobRegistry
-        return DeferredJobRegistry(queue=self, job_class=self.job_class)
+        return DeferredJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
     def scheduled_job_registry(self):
         """Returns this queue's ScheduledJobRegistry."""
         from rq.registry import ScheduledJobRegistry
-        return ScheduledJobRegistry(queue=self, job_class=self.job_class)
+        return ScheduledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+
+    @property
+    def canceled_job_registry(self):
+        """Returns this queue's CanceledJobRegistry."""
+        from rq.registry import CanceledJobRegistry
+        return CanceledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     def remove(self, job_or_id, pipeline=None):
         """Removes Job from queue, accepts either a Job instance or ID."""
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
         if pipeline is not None:
-            pipeline.lrem(self.key, 1, job_id)
-            return
+            return pipeline.lrem(self.key, 1, job_id)
 
         return self.connection.lrem(self.key, 1, job_id)
 
@@ -455,7 +460,7 @@ nd
         job.perform()
         job.set_status(JobStatus.FINISHED)
         job.save(include_meta=False)
-        job.cleanup(DEFAULT_RESULT_TTL)
+        job.cleanup(job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL))
         return job
 
     @classmethod
@@ -609,7 +614,7 @@ nd
                         dependent_job_ids,
                         connection=self.connection,
                         serializer=self.serializer
-                    ) if dependent_job.dependencies_are_met(
+                    ) if dependent_job and dependent_job.dependencies_are_met(
                         exclude_job_id=job.id,
                         pipeline=pipe
                     )
@@ -620,7 +625,8 @@ nd
                 for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,
-                                                   job_class=self.job_class)
+                                                   job_class=self.job_class,
+                                                   serializer=self.serializer)
                     registry.remove(dependent, pipeline=pipe)
                     if dependent.origin == self.name:
                         self.enqueue_job(dependent, pipeline=pipe)

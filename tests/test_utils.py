@@ -5,8 +5,6 @@ import re
 import datetime
 import mock
 
-from distutils.version import StrictVersion
-
 from redis import Redis
 
 from tests import RQTestCase, fixtures
@@ -77,19 +75,19 @@ class TestUtils(RQTestCase):
     def test_get_redis_version(self):
         """Ensure get_version works properly"""
         redis = Redis()
-        self.assertTrue(isinstance(get_version(redis), StrictVersion))
+        self.assertTrue(isinstance(get_version(redis), tuple))
 
         # Parses 3 digit version numbers correctly
         class DummyRedis(Redis):
             def info(*args):
                 return {'redis_version': '4.0.8'}
-        self.assertEqual(get_version(DummyRedis()), StrictVersion('4.0.8'))
+        self.assertEqual(get_version(DummyRedis()), (4, 0, 8))
 
         # Parses 3 digit version numbers correctly
         class DummyRedis(Redis):
             def info(*args):
                 return {'redis_version': '3.0.7.9'}
-        self.assertEqual(get_version(DummyRedis()), StrictVersion('3.0.7'))
+        self.assertEqual(get_version(DummyRedis()), (3, 0, 7))
 
     def test_ceildiv_even(self):
         """When a number is evenly divisible by another ceildiv returns the quotient"""

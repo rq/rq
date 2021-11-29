@@ -14,7 +14,6 @@ import traceback
 import warnings
 
 from datetime import timedelta
-from distutils.version import StrictVersion
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
@@ -221,8 +220,16 @@ class Worker:
         if prepare_for_work:
             self.hostname = socket.gethostname()
             self.pid = os.getpid()
-            connection.client_setname(self.name)
-            self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+            try:
+                connection.client_setname(self.name)
+            except redis.exceptions.ResponseError:
+                warnings.warn(
+                    'CLIENT command not supported, setting ip_address to unknown',
+                    Warning
+                )
+                self.ip_address = 'unknown'
+            else:
+                self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
         else:
             self.hostname = None
             self.pid = None
@@ -309,7 +316,7 @@ class Worker:
                 'python_version': self.python_version,
             }
 
-            if self.get_redis_server_version() >= StrictVersion("4.0.0"):
+            if self.get_redis_server_version() >= (4, 0, 0):
                 p.hset(key, mapping=mapping)
             else:
                 p.hmset(key, mapping)
@@ -525,7 +532,7 @@ class Worker:
         self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
-        self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2)
+        self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
@@ -806,7 +813,7 @@ class Worker:
                 with self.connection.pipeline() as pipeline:
                     self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
                     ttl = self.get_heartbeat_ttl(job)
-                    job.heartbeat(utcnow(), ttl, pipeline=pipeline)
+                    job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
                     pipeline.execute()
 
             except OSError as e:
@@ -924,7 +931,8 @@ class Worker:
                 started_job_registry = StartedJobRegistry(
                     job.origin,
                     self.connection,
-                    job_class=self.job_class
+                    job_class=self.job_class,
+                    serializer=self.serializer
                 )
             job.worker_name = None
 
@@ -945,7 +953,7 @@ class Worker:
 
             if not self.disable_default_exception_handler and not retry:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
-                                                        job_class=self.job_class)
+                                                        job_class=self.job_class, serializer=job.serializer)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline)
 
@@ -985,6 +993,7 @@ class Worker:
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
+                        self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         job.worker_name = None
                         # Don't clobber the user's meta dictionary!
@@ -995,9 +1004,11 @@ class Worker:
 
                     job.cleanup(result_ttl, pipeline=pipeline,
                                 remove_from_queue=False)
+                    self.log.debug('Removing job %s from StartedJobRegistry', job.id)
                     started_job_registry.remove(job, pipeline=pipeline)
 
                     pipeline.execute()
+                    self.log.debug('Finished handling successful execution of job %s', job.id)
                     break
                 except redis.exceptions.WatchError:
                     continue

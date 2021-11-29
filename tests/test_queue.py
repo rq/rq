@@ -4,11 +4,12 @@ from __future__ import (absolute_import, division, print_function,
 
 import json
 from datetime import datetime, timedelta, timezone
+from rq.serializers import DefaultSerializer, JSONSerializer
 from mock.mock import patch
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
-from rq.registry import (DeferredJobRegistry, FailedJobRegistry,
+from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, ScheduledJobRegistry,
                          StartedJobRegistry)
 from rq.worker import Worker
@@ -145,7 +146,7 @@ class TestQueue(RQTestCase):
 
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
-        q = Queue('example')
+        q = Queue('example', serializer=JSONSerializer)
         job = q.enqueue(say_hello)
         self.assertIn(job.id, q.job_ids)
         q.remove(job)
@@ -334,6 +335,18 @@ class TestQueue(RQTestCase):
         job = Job.create(func=echo)
         job = queue.enqueue_job(job)
         self.assertEqual(job.timeout, 15)
+
+    def test_synchronous_timeout(self):
+        queue = Queue(is_async=False)
+
+        no_expire_job = queue.enqueue(echo, result_ttl=-1)
+        self.assertEqual(queue.connection.ttl(no_expire_job.key), -1)
+
+        delete_job = queue.enqueue(echo, result_ttl=0)
+        self.assertEqual(queue.connection.ttl(delete_job.key), -2)
+
+        keep_job = queue.enqueue(echo, result_ttl=100)
+        self.assertLessEqual(queue.connection.ttl(keep_job.key), 100)
 
     def test_enqueue_explicit_args(self):
         """enqueue() works for both implicit/explicit args."""
@@ -763,6 +776,25 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
         self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
         self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+        self.assertEqual(queue.canceled_job_registry, CanceledJobRegistry(queue=queue))
+
+    def test_getting_registries_with_serializer(self):
+        """Getting job registries from queue object (with custom serializer)"""
+        queue = Queue('example', serializer=JSONSerializer)
+        self.assertEqual(queue.scheduled_job_registry, ScheduledJobRegistry(queue=queue))
+        self.assertEqual(queue.started_job_registry, StartedJobRegistry(queue=queue))
+        self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
+        self.assertEqual(queue.deferred_job_registry, DeferredJobRegistry(queue=queue))
+        self.assertEqual(queue.finished_job_registry, FinishedJobRegistry(queue=queue))
+        self.assertEqual(queue.canceled_job_registry, CanceledJobRegistry(queue=queue))
+
+        # Make sure we don't use default when queue has custom
+        self.assertEqual(queue.scheduled_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.started_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.failed_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.deferred_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.finished_job_registry.serializer, JSONSerializer)
+        self.assertEqual(queue.canceled_job_registry.serializer, JSONSerializer)
 
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""

@@ -59,7 +59,7 @@ Scheduling jobs are also similarly easy:
 
 ```python
 # Schedule job to run at 9:15, October 10th
-job = queue.enqueue_at(datetime(2019, 10, 8, 9, 15), say_hello)
+job = queue.enqueue_at(datetime(2019, 10, 10, 9, 15), say_hello)
 
 # Schedule job to run in 10 seconds
 job = queue.enqueue_in(timedelta(seconds=10), say_hello)
@@ -104,7 +104,7 @@ Simply use the following command to install the latest released version:
 
 If you want the cutting edge version (that may well be broken), use this:
 
-    pip install git+https://github.com/nvie/rq.git@master#egg=rq
+    pip install git+https://github.com/rq/rq.git@master#egg=rq
 
 
 ## Related Projects

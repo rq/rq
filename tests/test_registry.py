@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 from datetime import datetime, timedelta
+from rq.serializers import JSONSerializer
 
 from rq.compat import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
@@ -10,7 +11,7 @@ from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.registry import (clean_registries, DeferredJobRegistry,
+from rq.registry import (CanceledJobRegistry, clean_registries, DeferredJobRegistry,
                          FailedJobRegistry, FinishedJobRegistry,
                          StartedJobRegistry)
 
@@ -34,10 +35,12 @@ class TestRegistry(RQTestCase):
         registry = StartedJobRegistry(queue=queue)
         self.assertEqual(registry.name, queue.name)
         self.assertEqual(registry.connection, queue.connection)
+        self.assertEqual(registry.serializer, queue.serializer)
 
-        registry = StartedJobRegistry('bar', self.testconn)
+        registry = StartedJobRegistry('bar', self.testconn, serializer=JSONSerializer)
         self.assertEqual(registry.name, 'bar')
         self.assertEqual(registry.connection, self.testconn)
+        self.assertEqual(registry.serializer, JSONSerializer)
 
     def test_key(self):
         self.assertEqual(self.registry.key, 'rq:wip:default')
@@ -66,10 +69,10 @@ class TestRegistry(RQTestCase):
         job = queue.enqueue(say_hello)
 
         registry.add(job, 5)
-        self.assertEqual(
-            registry.get_expiration_time(job),
-            (datetime.utcnow() + timedelta(seconds=5)).replace(microsecond=0)
-        )
+        time = registry.get_expiration_time(job)
+        expected_time = (datetime.utcnow() + timedelta(seconds=5)).replace(microsecond=0)
+        self.assertGreaterEqual(time, expected_time - timedelta(seconds=2))
+        self.assertLessEqual(time, expected_time + timedelta(seconds=2))
 
     def test_add_and_remove(self):
         """Adding and removing job to StartedJobRegistry."""
@@ -114,6 +117,17 @@ class TestRegistry(RQTestCase):
         self.assertIsNone(self.testconn.zscore(self.registry.key, job.id))
         self.assertFalse(self.testconn.exists(job.key))
 
+    def test_add_and_remove_with_serializer(self):
+        """Adding and removing job to StartedJobRegistry (with serializer)."""
+        # delete_job = True also works with job.id and custom serializer
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
+        registry = StartedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello)
+        registry.add(job, -1)
+        registry.remove(job.id, delete_job=True)
+        self.assertIsNone(self.testconn.zscore(registry.key, job.id))
+        self.assertFalse(self.testconn.exists(job.key))
+
     def test_get_job_ids(self):
         """Getting job ids from StartedJobRegistry."""
         timestamp = current_timestamp()
@@ -132,6 +146,10 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.get_expired_job_ids(), ['foo'])
         self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
                          ['foo', 'bar'])
+
+        # CanceledJobRegistry does not implement get_expired_job_ids()
+        registry = CanceledJobRegistry(connection=self.testconn)
+        self.assertRaises(NotImplementedError, registry.get_expired_job_ids)
 
     def test_cleanup_moves_jobs_to_failed_job_registry(self):
         """Moving expired jobs to FailedJobRegistry."""
@@ -202,6 +220,8 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
 
+        # Make sure 
+
     def test_clean_registries(self):
         """clean_registries() cleans Started and Finished job registries."""
 
@@ -221,14 +241,33 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
         self.assertEqual(self.testconn.zcard(failed_job_registry.key), 0)
 
+    def test_clean_registries_with_serializer(self):
+        """clean_registries() cleans Started and Finished job registries (with serializer)."""
+
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
+
+        finished_job_registry = FinishedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
+        self.testconn.zadd(finished_job_registry.key, {'foo': 1})
+
+        started_job_registry = StartedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
+        self.testconn.zadd(started_job_registry.key, {'foo': 1})
+
+        failed_job_registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
+        self.testconn.zadd(failed_job_registry.key, {'foo': 1})
+
+        clean_registries(queue)
+        self.assertEqual(self.testconn.zcard(finished_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(started_job_registry.key), 0)
+        self.assertEqual(self.testconn.zcard(failed_job_registry.key), 0)
+
     def test_get_queue(self):
         """registry.get_queue() returns the right Queue object."""
         registry = StartedJobRegistry(connection=self.testconn)
         self.assertEqual(registry.get_queue(), Queue(connection=self.testconn))
 
-        registry = StartedJobRegistry('foo', connection=self.testconn)
+        registry = StartedJobRegistry('foo', connection=self.testconn, serializer=JSONSerializer)
         self.assertEqual(registry.get_queue(),
-                         Queue('foo', connection=self.testconn))
+                         Queue('foo', connection=self.testconn, serializer=JSONSerializer))
 
 
 class TestFinishedJobRegistry(RQTestCase):
@@ -252,6 +291,10 @@ class TestFinishedJobRegistry(RQTestCase):
 
         self.registry.cleanup(timestamp + 20)
         self.assertEqual(self.registry.get_job_ids(), ['baz'])
+
+        # CanceledJobRegistry now implements noop cleanup, should not raise exception
+        registry = CanceledJobRegistry(connection=self.testconn)
+        registry.cleanup()
 
     def test_jobs_are_put_in_registry(self):
         """Completed jobs are added to FinishedJobRegistry."""
@@ -357,6 +400,7 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
         self.assertEqual(job.started_at, None)
         self.assertEqual(job.ended_at, None)
+        self.assertEqual(job.exc_info, '')
 
         worker.work(burst=True)
         self.assertTrue(job in registry)
@@ -374,6 +418,59 @@ class TestFailedJobRegistry(RQTestCase):
 
         # requeue_job should work the same way
         requeue_job(job.id, connection=self.testconn)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # And so does job.requeue()
+        job.requeue()
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+    def test_requeue_with_serializer(self):
+        """FailedJobRegistry.requeue works properly (with serializer)"""
+        queue = Queue(connection=self.testconn, serializer=JSONSerializer)
+        job = queue.enqueue(div_by_zero, failure_ttl=5)
+
+        worker = Worker([queue], serializer=JSONSerializer)
+        worker.work(burst=True)
+
+        registry = FailedJobRegistry(connection=worker.connection, serializer=JSONSerializer)
+        self.assertTrue(job in registry)
+
+        registry.requeue(job.id)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.started_at, None)
+        self.assertEqual(job.ended_at, None)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # Should also work with job instance
+        registry.requeue(job)
+        self.assertFalse(job in registry)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        worker.work(burst=True)
+        self.assertTrue(job in registry)
+
+        # requeue_job should work the same way
+        requeue_job(job.id, connection=self.testconn, serializer=JSONSerializer)
         self.assertFalse(job in registry)
         self.assertIn(job.id, queue.get_job_ids())
 

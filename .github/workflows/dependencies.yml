@@ -1,0 +1,109 @@
+name: Dependencies
+
+on:
+  schedule:
+    # View https://docs.github.com/en/actions/reference/events-that-trigger-workflows#schedule
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.repository == 'rq/rq'
+    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.5", "3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        redis-version: [3, 4, 5, 6]
+        redis-py-version: [3.5.0]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Start Redis
+      uses: supercharge/redis-github-action@1.1.0
+      with:
+        redis-version: ${{ matrix.redis-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install redis==${{ matrix.redis-py-version }}
+        pip install -r requirements.txt -r dev-requirements.txt
+        pip install -e .
+
+    - name: Test with pytest
+      run: |
+        RUN_SLOW_TESTS_TOO=1 pytest --durations=5
+
+  dependency-build:
+    name: Check development branches of dependencies
+    runs-on: ubuntu-latest
+    needs: build
+    if: success()
+
+    strategy:
+      matrix:
+        python-version: ["3.5", "3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        redis-version: [3, 4, 5, 6]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Start Redis
+      uses: supercharge/redis-github-action@1.1.0
+      with:
+        redis-version: ${{ matrix.redis-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install git+https://github.com/andymccurdy/redis-py
+        pip install git+https://github.com/pallets/click
+        pip install -r dev-requirements.txt
+        pip install -e .
+
+    - name: Test with pytest
+      run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: dependencies-error
+        path: log.txt
+      if: failure()
+
+  issue:
+    name: Create failure issue
+    runs-on: ubuntu-latest
+
+    if: failure()
+    needs: dependency-build
+
+    steps:
+    - uses: actions/download-artifact@v2
+      with:
+        name: dependencies-error
+        path: .
+
+    - name: Create failure issue
+      run: |
+        if [[ "$(curl --url https://api.github.com/repos/${{ github.repository }}/issues?creator=github-actions --request GET)" != *"\""* ]]
+          then curl --request POST \
+                    --url https://api.github.com/repos/${{ github.repository }}/issues \
+                    --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+                    --header 'content-type: application/json' \
+                    --data "{
+                        \"title\": \"RQ maybe may not work with dependencies in the future\",
+                        \"body\": \"This issue was automatically created by the GitHub Action workflow **${{ github.workflow }}**. \n\n View log: \n\n \`\`\` \n $(cat log.txt | while read line; do echo -n "$line\n"; done | sed -r 's/"/\\"/g') \n \`\`\`\"
+                      }"
+        fi
