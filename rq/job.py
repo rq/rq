@@ -6,6 +6,7 @@ import inspect
 import json
 import pickle
 import warnings
+import os
 import zlib
 
 import asyncio
@@ -72,7 +73,7 @@ def requeue_job(job_id, connection, serializer=None):
 class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data.
     """
-    redis_job_namespace_prefix = 'rq:job:'
+    redis_job_namespace_prefix = '{}:rq:job:'.format(pfx=os.getenv('B_HOSTNAME', ''))
 
     # Job construction
     @classmethod

@@ -1,4 +1,6 @@
-WORKERS_SUSPENDED = 'rq:suspended'
+import os
+
+WORKERS_SUSPENDED = '{}.rq:suspended'.format(os.getenv('B_HOSTNAME', ''))
 
 
 def is_suspended(connection, worker=None):

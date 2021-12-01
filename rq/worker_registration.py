@@ -1,9 +1,11 @@
+import os
+
 from .compat import as_text
 
 from rq.utils import split_list
 
-WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
-REDIS_WORKER_KEYS = 'rq:workers'
+WORKERS_BY_QUEUE_KEY = '{}:rq:workers:%s'.format(os.getenv('B_HOSTNAME', ''))
+REDIS_WORKER_KEYS = '{}:rq:workers'.format(os.getenv('B_HOSTNAME', ''))
 MAX_KEYS = 1000
 
 

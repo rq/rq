@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import uuid
 import warnings
+import os
 
 from collections import namedtuple
 from datetime import datetime, timezone
@@ -38,8 +39,8 @@ class EnqueueData(namedtuple('EnqueueData', ["func", "args", "kwargs", "timeout"
 class Queue:
     job_class = Job
     DEFAULT_TIMEOUT = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix = 'rq:queue:'
-    redis_queues_keys = 'rq:queues'
+    redis_queue_namespace_prefix = '{}:rq:queue:'.format(os.getenv('B_HOSTNAME', ''))
+    redis_queues_keys = '{}.rq:queues'.format(os.getenv('B_HOSTNAME', ''))
 
     @classmethod
     def all(cls, connection=None, job_class=None, serializer=None):
@@ -115,7 +116,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return 'rq:clean_registries:%s' % self.name
+        return '%s:rq:clean_registries:%s' % (os.getenv('B_HOSTNAME', ''), self.name)
 
     def acquire_cleaning_lock(self):
         """Returns a boolean indicating whether a lock to clean this queue

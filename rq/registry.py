@@ -1,4 +1,5 @@
 import calendar
+import os
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
@@ -19,7 +20,7 @@ class BaseRegistry:
     (unix timestamp).
     """
     job_class = Job
-    key_template = 'rq:registry:{0}'
+    key_template = '%s:rq:registry:{0}' % os.getenv('B_HOSTNAME', '')
 
     def __init__(self, name='default', connection=None, job_class=None,
                  queue=None, serializer=None):
@@ -144,7 +145,7 @@ class StartedJobRegistry(BaseRegistry):
     Jobs are added to registry right before they are executed and removed
     right after completion (success or failure).
     """
-    key_template = 'rq:wip:{0}'
+    key_template = '%s:rq:wip:{0}' % os.getenv('B_HOSTNAME', '')
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
@@ -192,7 +193,7 @@ class FinishedJobRegistry(BaseRegistry):
     Registry of jobs that have been completed. Jobs are added to this
     registry after they have successfully completed for monitoring purposes.
     """
-    key_template = 'rq:finished:{0}'
+    key_template = '%s:rq:finished:{0}' % os.getenv('B_HOSTNAME', '')
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -209,7 +210,7 @@ class FailedJobRegistry(BaseRegistry):
     """
     Registry of containing failed jobs.
     """
-    key_template = 'rq:failed:{0}'
+    key_template = '%s:rq:failed:{0}' % os.getenv('B_HOSTNAME', '')
 
     def cleanup(self, timestamp=None):
         """Remove expired jobs from registry.
@@ -248,7 +249,7 @@ class DeferredJobRegistry(BaseRegistry):
     """
     Registry of deferred jobs (waiting for another job to finish).
     """
-    key_template = 'rq:deferred:{0}'
+    key_template = '%s:rq:deferred:{0}' % os.getenv('B_HOSTNAME', '')
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is
@@ -261,7 +262,7 @@ class ScheduledJobRegistry(BaseRegistry):
     """
     Registry of scheduled jobs.
     """
-    key_template = 'rq:scheduled:{0}'
+    key_template = '%s:rq:scheduled:{0}' % os.getenv('B_HOSTNAME', '')
 
     def __init__(self, *args, **kwargs):
         super(ScheduledJobRegistry, self).__init__(*args, **kwargs)
@@ -322,7 +323,7 @@ class ScheduledJobRegistry(BaseRegistry):
 
 
 class CanceledJobRegistry(BaseRegistry):
-    key_template = 'rq:canceled:{0}'
+    key_template = '%s:rq:canceled:{0}' % os.getenv('B_HOSTNAME', '')
 
     def get_expired_job_ids(self, timestamp=None):
         raise NotImplementedError

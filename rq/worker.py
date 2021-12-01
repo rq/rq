@@ -95,7 +95,7 @@ class WorkerStatus(str, Enum):
 
 
 class Worker:
-    redis_worker_namespace_prefix = 'rq:worker:'
+    redis_worker_namespace_prefix = '{}:rq:worker:'.format(os.getenv('B_HOSTNAME', ''))
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
@@ -288,7 +288,8 @@ class Worker:
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname('rq: {0}'.format(message))
+        procpfx = '%s:rq: {0}' % os.getenv('B_HOSTNAME', '')
+        setprocname(procpfx.format(message))
 
     def register_birth(self):
         """Registers its own birth."""

@@ -17,8 +17,8 @@ from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
 from .utils import current_timestamp
 
-SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
-SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
+SCHEDULER_KEY_TEMPLATE = '{}:rq:scheduler:%s'.format(os.getenv('B_HOSTNAME', ''))
+SCHEDULER_LOCKING_KEY_TEMPLATE = '{}:rq:scheduler-lock:%s'.format(os.getenv('B_HOSTNAME', ''))
 
 
 class SchedulerStatus(str, Enum):

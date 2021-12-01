@@ -5,8 +5,7 @@ import signal
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job
 
-
-PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
+PUBSUB_CHANNEL_TEMPLATE = '{}:rq:pubsub:%s'.format(os.getenv('B_HOSTNAME', ''))
 
 
 def send_command(connection, worker_name, command, **kwargs):
