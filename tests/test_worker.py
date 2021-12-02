@@ -317,6 +317,20 @@ class TestWorker(RQTestCase):
         self.testconn.hdel(w.key, 'birth')
         w.refresh()
 
+    def test_maintain_heartbeats(self):
+        """worker.maintain_heartbeats() shouldn't create new job keys"""
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue], connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker.maintain_heartbeats(job)
+        self.assertTrue(self.testconn.exists(worker.key))
+        self.assertTrue(self.testconn.exists(job.key))
+
+        self.testconn.delete(job.key)
+
+        worker.maintain_heartbeats(job)
+        self.assertFalse(self.testconn.exists(job.key))
+
     @slow
     def test_heartbeat_survives_lost_connection(self):
         with mock.patch.object(Worker, 'heartbeat') as mocked:
@@ -1202,23 +1216,29 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         """
         fooq = Queue('foo')
         self.assertEqual(fooq.count, 0)
-        w = Worker(fooq)
+        w = Worker([fooq], job_monitoring_interval=1)
+
         sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
         if os.path.exists(sentinel_file):
             os.remove(sentinel_file)
-        fooq.enqueue(launch_process_within_worker_and_store_pid, sentinel_file, 100)
-        job, queue = w.dequeue_job_and_maintain_ttl(5)
+
+        job = fooq.enqueue(launch_process_within_worker_and_store_pid, sentinel_file, 100)
+
+        _, queue = w.dequeue_job_and_maintain_ttl(5)
+        w.prepare_job_execution(job)
         w.fork_work_horse(job, queue)
         job.timeout = 5
-        w.job_monitoring_interval = 1
-        now = utcnow()
+
         time.sleep(1)
         with open(sentinel_file) as f:
             subprocess_pid = int(f.read().strip())
         self.assertTrue(psutil.pid_exists(subprocess_pid))
+
         w.monitor_work_horse(job, queue)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
+
+        now = utcnow()
         self.assertTrue((utcnow() - now).total_seconds() < total_time)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
