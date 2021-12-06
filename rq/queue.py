@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import sys
 import warnings
 
 from collections import namedtuple
@@ -51,6 +52,7 @@ class Queue:
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection,
                                       job_class=job_class, serializer=serializer)
+
         return [to_queue(rq_key)
                 for rq_key in connection.smembers(cls.redis_queues_keys)
                 if rq_key]
@@ -330,9 +332,9 @@ class Queue:
         return job
 
     def setup_dependencies(
-        self,
-        job,
-        pipeline=None
+            self,
+            job,
+            pipeline=None
     ):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
@@ -420,9 +422,9 @@ nd
         )
 
     def enqueue_many(
-        self,
-        job_datas,
-        pipeline=None
+            self,
+            job_datas,
+            pipeline=None
     ):
         """
         Creates multiple jobs (created via `Queue.prepare_data` calls)
@@ -572,7 +574,22 @@ nd
             pipe.execute()
 
         if not self._is_async:
+            job = self.run_sync(job)
+
+        return job
+
+    def run_sync(self, job):
+        with self.connection.pipeline() as pipeline:
+            job.prepare_for_execution('sync', pipeline)
+
+        try:
             job = self.run_job(job)
+        except:  # noqa
+            if job.failure_callback:
+                job.failure_callback(job, self.connection, *sys.exc_info())
+        else:
+            if job.success_callback:
+                job.success_callback(job, self.connection, job.result)
 
         return job
 
