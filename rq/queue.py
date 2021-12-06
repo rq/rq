@@ -52,7 +52,6 @@ class Queue:
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection,
                                       job_class=job_class, serializer=serializer)
-
         return [to_queue(rq_key)
                 for rq_key in connection.smembers(cls.redis_queues_keys)
                 if rq_key]
@@ -332,9 +331,9 @@ class Queue:
         return job
 
     def setup_dependencies(
-            self,
-            job,
-            pipeline=None
+        self,
+        job,
+        pipeline=None
     ):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
@@ -422,9 +421,9 @@ nd
         )
 
     def enqueue_many(
-            self,
-            job_datas,
-            pipeline=None
+        self,
+        job_datas,
+        pipeline=None
     ):
         """
         Creates multiple jobs (created via `Queue.prepare_data` calls)
