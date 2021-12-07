@@ -13,7 +13,7 @@ your product.
 RQ can be used in combination with supervisor easily.  You'd typically want to
 use the following supervisor settings:
 
-{% highlight ini %}
+```
 [program:myworker]
 ; Point the command to the specific rq command you want to run.
 ; If you use virtualenv, be sure to point it to
@@ -38,14 +38,14 @@ stopsignal=TERM
 ; These are up to you
 autostart=true
 autorestart=true
-{% endhighlight %}
+```
 
 ### Conda environments
 
 [Conda][2] virtualenvs can be used for RQ jobs which require non-Python
 dependencies. You can use a similar approach as with regular virtualenvs.
 
-{% highlight ini %}
+```
 [program:myworker]
 ; Point the command to the specific rq command you want to run.
 ; For conda virtual environments, install RQ into your env.
@@ -70,7 +70,7 @@ stopsignal=TERM
 ; These are up to you
 autostart=true
 autorestart=true
-{% endhighlight %}
+```
 
 [1]: http://supervisord.org/
 [2]: https://conda.io/docs/

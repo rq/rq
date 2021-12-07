@@ -138,7 +138,7 @@ Workers are registered to the system under their names, which are generated
 randomly during instantiation (see [monitoring][m]). To override this default,
 specify the name when starting the worker, or use the `--name` cli option.
 
-{% highlight python %}
+```python
 from redis import Redis
 from rq import Queue, Worker
 
@@ -147,7 +147,7 @@ queue = Queue('queue_name')
 
 # Start a worker with a custom name
 worker = Worker([queue], connection=redis, name='foo')
-{% endhighlight %}
+```
 
 [m]: /docs/monitoring/
 
