@@ -12,7 +12,7 @@ To run multiple workers under systemd, you'll first need to create a unit file.
 We can name this file `rqworker@.service`, put this file in `/etc/systemd/system`
 directory (location may differ by what distributions you run).
 
-{% highlight ini %}
+```
 [Unit]
 Description=RQ Worker Number %i
 After=network.target
@@ -31,7 +31,7 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
-{% endhighlight %}
+```
 
 If your unit file is properly installed, you should be able to start workers by
 invoking `systemctl start rqworker@1.service`, `systemctl start rqworker@2.service`
