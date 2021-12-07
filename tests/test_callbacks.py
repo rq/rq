@@ -47,6 +47,36 @@ class QueueCallbackTestCase(RQTestCase):
         self.assertEqual(job.failure_callback, print)
 
 
+class SyncJobCallback(RQTestCase):
+    def test_success_callback(self):
+        """Test success callback is executed only when job is successful"""
+        queue = Queue(is_async=False)
+
+        job = queue.enqueue(say_hello, on_success=save_result)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(
+            self.testconn.get('success_callback:%s' % job.id).decode(),
+            job.result
+        )
+
+        job = queue.enqueue(div_by_zero, on_success=save_result)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertFalse(self.testconn.exists('success_callback:%s' % job.id))
+
+    def test_failure_callback(self):
+        """queue.enqueue* methods with on_failure is persisted correctly"""
+        queue = Queue(is_async=False)
+
+        job = queue.enqueue(div_by_zero, on_failure=save_exception)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertIn('div_by_zero',
+                      self.testconn.get('failure_callback:%s' % job.id).decode())
+
+        job = queue.enqueue(div_by_zero, on_success=save_result)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertFalse(self.testconn.exists('failure_callback:%s' % job.id))
+
+
 class WorkerCallbackTestCase(RQTestCase):
     def test_success_callback(self):
         """Test success callback is executed only when job is successful"""

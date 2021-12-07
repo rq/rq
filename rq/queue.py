@@ -584,6 +584,7 @@ nd
         try:
             job = self.run_job(job)
         except:  # noqa
+            job.set_status(JobStatus.FAILED)
             if job.failure_callback:
                 job.failure_callback(job, self.connection, *sys.exc_info())
         else:
