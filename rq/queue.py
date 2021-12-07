@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import uuid
+import sys
 import warnings
 
 from collections import namedtuple
@@ -572,7 +573,23 @@ nd
             pipe.execute()
 
         if not self._is_async:
+            job = self.run_sync(job)
+
+        return job
+
+    def run_sync(self, job):
+        with self.connection.pipeline() as pipeline:
+            job.prepare_for_execution('sync', pipeline)
+
+        try:
             job = self.run_job(job)
+        except:  # noqa
+            job.set_status(JobStatus.FAILED)
+            if job.failure_callback:
+                job.failure_callback(job, self.connection, *sys.exc_info())
+        else:
+            if job.success_callback:
+                job.success_callback(job, self.connection, job.result)
 
         return job
 
