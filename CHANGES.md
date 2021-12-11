@@ -1,5 +1,5 @@
 ### RQ 1.10.1 (2021-12-07)
-* Failure callbacks are now properly called when job is run synchronously. Thanks @ericman93!
+* **BACKWARDS INCOMPATIBLE**: synchronous execution of jobs now correctly mimics async job execution. Exception is no longer raised when a job fails, job status will now be correctly set to `FAILED` and failure callbacks are now properly called when job is run synchronously. Thanks @ericman93!
 * Fixes a bug that could cause job keys to be left over when `result_ttl=0`. Thanks @selwin!
 * Allow `ssl_cert_reqs` argument to be passed to Redis. Thanks @mgcdanny!
 * Better compatibility with Python 3.10. Thanks @rpkak!
