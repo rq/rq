@@ -998,7 +998,7 @@ class TestJob(RQTestCase):
             pipeline.multi()
 
             with self.assertRaises(WatchError):
-                self.testconn.set(dependency_job.id, 'somethingelsehappened')
+                self.testconn.set(Job.key_for(dependency_job.id), 'somethingelsehappened')
                 pipeline.touch(dependency_job.id)
                 pipeline.execute()
 
