@@ -15,7 +15,7 @@ from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
-from .job import Job, JobStatus
+from .job import Job, JobStatus, Dependency
 from .serializers import resolve_serializer
 from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
 
@@ -52,6 +52,7 @@ class Queue:
             return cls.from_queue_key(as_text(queue_key),
                                       connection=connection,
                                       job_class=job_class, serializer=serializer)
+
         return [to_queue(rq_key)
                 for rq_key in connection.smembers(cls.redis_queues_keys)
                 if rq_key]
@@ -328,12 +329,15 @@ class Queue:
             job.retries_left = retry.max
             job.retry_intervals = retry.intervals
 
+        if depends_on:
+            job.dependency_allow_fail = depends_on.allow_failure
+
         return job
 
     def setup_dependencies(
-        self,
-        job,
-        pipeline=None
+            self,
+            job,
+            pipeline=None
     ):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
@@ -429,9 +433,9 @@ nd
         )
 
     def enqueue_many(
-        self,
-        job_datas,
-        pipeline=None
+            self,
+            job_datas,
+            pipeline=None
     ):
         """
         Creates multiple jobs (created via `Queue.prepare_data` calls)

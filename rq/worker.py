@@ -58,7 +58,6 @@ green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -230,7 +229,8 @@ class Worker:
                 )
                 self.ip_address = 'unknown'
             else:
-                self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+                self.ip_address = \
+                    [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
         else:
             self.hostname = None
             self.pid = None
@@ -847,9 +847,9 @@ class Worker:
 
             # Unhandled failure: move the job to the failed queue
             self.log.warning((
-                'Moving job to FailedJobRegistry '
-                '(work-horse terminated unexpectedly; waitpid returned {})'
-            ).format(ret_val))
+                                 'Moving job to FailedJobRegistry '
+                                 '(work-horse terminated unexpectedly; waitpid returned {})'
+                             ).format(ret_val))
 
             self.handle_job_failure(
                 job, queue=queue,
@@ -985,6 +985,12 @@ class Worker:
 
             if retry:
                 job.retry(queue, pipeline)
+            else:
+                # if dependencies are inserted after enqueue_dependents
+                # a WatchError is thrown by execute()
+                pipeline.watch(job.dependents_key)
+                # enqueue_dependents calls multi() on the pipeline!
+                queue.enqueue_dependents(job, pipeline=pipeline)
 
             try:
                 pipeline.execute()
@@ -1256,6 +1262,7 @@ class RoundRobinWorker(Worker):
     """
     Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
     """
+
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
         self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]

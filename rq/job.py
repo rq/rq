@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import partial
+from typing import List
 from uuid import uuid4
 
 from redis import WatchError
@@ -40,6 +41,18 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+
+
+class Dependency:
+    def __init__(self, jobs: List[Job], allow_failure: bool = False):
+        jobs = ensure_list(jobs)
+        if not all(isinstance(job, Job) for job in jobs):
+            raise ValueError("jobs: must contain objects of type Job")
+        elif len(jobs) < 1:
+            raise ValueError("jobs: cannot be empty.")
+
+        self.dependencies = jobs
+        self.allow_failure = allow_failure
 
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -78,7 +91,7 @@ class Job:
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on=None, timeout=None, id=None, origin=None, meta=None,
+               depends_on: Dependency = None, timeout=None, id=None, origin=None, meta=None,
                failure_ttl=None, serializer=None, *, on_success=None, on_failure=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -138,8 +151,8 @@ class Job:
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep
-                                   for dep in ensure_list(depends_on)]
+            job._dependency_ids = [dep.id for dep in depends_on.dependencies]
+
         return job
 
     def get_position(self):
@@ -408,6 +421,7 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
+        self.dependency_allow_fail = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -644,6 +658,9 @@ class Job:
         if self.ttl:
             obj['ttl'] = self.ttl
 
+        if self.dependency_allow_fail is not None:
+            obj["dependency_allow_fail"] = self.dependency_allow_fail
+
         return obj
 
     def save(self, pipeline=None, include_meta=True):
@@ -719,7 +736,7 @@ class Job:
                     self.origin,
                     self.connection,
                     job_class=self.__class__,
-                    serializer=self.serializer                    
+                    serializer=self.serializer
                 )
                 registry.add(self, pipeline=pipe)
                 if pipeline is None:
@@ -987,7 +1004,7 @@ class Job:
             dependencies_statuses = pipeline.execute()
 
         return all(
-            status.decode() == JobStatus.FINISHED
+            status.decode() == JobStatus.FINISHED or self.dependency_allow_fail
             for status
             in dependencies_statuses
             if status
