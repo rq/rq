@@ -797,8 +797,7 @@ class TestWorker(RQTestCase):
         registry = StartedJobRegistry(connection=self.testconn)
         self.assertEqual(registry.get_job_ids(), [job.id])
 
-        # Updates worker statuses
-        self.assertEqual(worker.get_state(), 'busy')
+        # Updates worker's current job
         self.assertEqual(worker.get_current_job_id(), job.id)
 
         # job status is also updated

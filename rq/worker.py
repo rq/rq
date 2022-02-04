@@ -922,7 +922,6 @@ class Worker:
         """
 
         with self.connection.pipeline() as pipeline:
-            self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
 
