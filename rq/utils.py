@@ -22,6 +22,7 @@ from redis.exceptions import ResponseError
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
 
+logger = logging.getLogger(__name__)
 
 class _Colorizer:
     def __init__(self):
@@ -141,7 +142,7 @@ def import_attribute(name):
             module = importlib.import_module(module_name)
             break
         except ImportError:
-            logging.warning("Import error for '%s'" % module_name, exc_info=True)
+            logger.warning("Import error for '%s'" % module_name, exc_info=True)
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
