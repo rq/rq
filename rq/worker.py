@@ -1194,7 +1194,9 @@ class SimpleWorker(Worker):
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
-        return self.perform_job(job, queue)
+        self.set_state(WorkerStatus.BUSY)
+        self.perform_job(job, queue)
+        self.set_state(WorkerStatus.IDLE)
 
     def get_heartbeat_ttl(self, job):
         # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
