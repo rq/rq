@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from .compat import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
-from .exceptions import InvalidJobOperation, NoSuchJobError
+from .exceptions import InvalidJobOperation, InvalidJobOperationError, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import Queue
 from .utils import backend_class, current_timestamp
@@ -293,7 +293,6 @@ class ScheduledJobRegistry(BaseRegistry):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry."""
-        pass
 
     def remove_jobs(self, timestamp=None, pipeline=None):
         """Remove jobs whose timestamp is in the past from registry."""
@@ -334,6 +333,66 @@ class CanceledJobRegistry(BaseRegistry):
         pass
 
 
+class QueuedJobRegistry(BaseRegistry):
+    key_template = 'rq:queued:{0}'
+
+    def get_expired_job_ids(self, timestamp=None):
+        raise NotImplementedError
+
+    def cleanup(self):
+        """This method is only here to prevent errors because this method is
+        automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry."""
+        pass
+
+    def requeue_stuck_jobs(self):
+        """This method requeues jobs that are popped off the queue but still belong to QueuedJobRegistry
+        It is not defined in cleanup since we don't want this being called everytime count or get_job_ids is called
+        """
+        job_ids = self.get_job_ids()
+        for job_id in job_ids:
+            # If job was enqueued AFTER the front of the queue it must have already been dequeued
+            # This is faster than seeing if the job is in the queue directly.
+            front_timestamp = self._get_front_queue_timestamp() 
+            try:
+                if front_timestamp is not None:
+                    job = self.job_class.fetch(
+                        job_id,
+                        connection=self.connection,
+                        serializer=self.serializer
+                    )
+                    if job.enqueued_at:
+                        if job.enqueued_at < front_timestamp:
+                            self.requeue(job)
+                    else:
+                        raise InvalidJobOperationError(
+                            "Job {} has no enqueue_at value!".format(job.id)
+                        )
+                else:
+                    self.requeue(job_id)
+            except NoSuchJobError:
+                # Job has expired (job.ttl) or otherwise been deleted
+                # TODO: think about how to handle the job ttl just working through expire command and compact on the queue?
+                # If job expired via ttl, ignore it for now
+                self.remove(job_id)
+                continue
+        
+
+    def _get_front_queue_timestamp(self):
+        queue = self.get_queue()
+        jobs = queue.get_jobs(offset=0, length=1)
+        if jobs: # If the queue is non-empty
+            front_job = jobs[0]
+            if front_job.enqueued_at is not None:
+                return front_job.enqueued_at
+            else:
+                raise InvalidJobOperationError(
+                    "Queued job {} has no enqueue_at value!".format(front_job.id)
+                )
+        else:
+            return None
+
+
 def clean_registries(queue):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name,
@@ -352,3 +411,9 @@ def clean_registries(queue):
                                  job_class=queue.job_class,
                                  serializer=queue.serializer)
     registry.cleanup()
+
+    registry = QueuedJobRegistry(name=queue.name,
+                                 connection=queue.connection,
+                                 job_class=queue.job_class,
+                                 serializer=queue.serializer)
+    registry.requeue_stuck_jobs()
