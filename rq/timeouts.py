@@ -3,6 +3,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import signal
+import threading
 
 
 class BaseTimeoutException(Exception):
@@ -76,3 +77,32 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         """
         signal.alarm(0)
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
+
+class CrossPlatformDeathPenalty(BaseDeathPenalty):
+    def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
+        super().__init__(timeout, exception, **kwargs)
+        self._timer = None
+        self.reset_timer()
+
+    def reset_timer(self):
+        """Creates a new timer since timers can only be used once."""
+        self._timer = threading.Timer(self._timeout, self.handle_death_penalty)
+
+    def handle_death_penalty(self, signum, frame):
+        raise self._exception(
+            f"Task exceeded maximum timeout value ({self._timeout} seconds)"
+        )
+
+    def setup_death_penalty(self):
+        """Sets up an alarm signal and a signal handler that raises
+        an exception after the timeout amount (expressed in seconds).
+        """
+        self._timer.start()
+
+    def cancel_death_penalty(self):
+        """Removes the death penalty alarm and puts back the system into
+        default signal handling.
+        """
+        self._timer.cancel()
+        self.reset_timer()
