@@ -40,7 +40,8 @@ from .queue import Queue
 from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
+from .timeouts import (JobTimeoutException, HorseMonitorTimeoutException,
+                       UnixSignalDeathPenalty, CrossPlatformDeathPenalty)
 from .utils import (backend_class, ensure_list, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
@@ -1191,6 +1192,7 @@ class Worker:
 
 
 class SimpleWorker(Worker):
+    death_penalty_class = CrossPlatformDeathPenalty
 
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
