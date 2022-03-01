@@ -155,6 +155,7 @@ class Job:
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
             if isinstance(depends_on, Dependency):
+                job.dependency_allow_fail = depends_on.allow_failure
                 depends_on_list = depends_on.dependencies
             else:
                 depends_on_list = ensure_list(depends_on)
