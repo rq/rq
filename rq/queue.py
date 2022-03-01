@@ -329,7 +329,7 @@ class Queue:
             job.retries_left = retry.max
             job.retry_intervals = retry.intervals
 
-        if depends_on:
+        if isinstance(depends_on, Dependency):
             job.dependency_allow_fail = depends_on.allow_failure
 
         return job
@@ -394,9 +394,8 @@ class Queue:
                      result_ttl=None, ttl=None, failure_ttl=None, description=None,
                      depends_on=None, job_id=None, at_front=False, meta=None,
                      retry=None, on_success=None, on_failure=None, pipeline=None):
-        """Creates a job to represent the delayed function call and enqueues
-        it.
-nd
+        """Creates a job to represent the delayed function call and enqueues it.
+
         It is much like `.enqueue()`, except that it takes the function's args
         and kwargs as explicit arguments.  Any kwargs passed to this function
         contain options for RQ itself.
