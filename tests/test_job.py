@@ -11,7 +11,7 @@ from redis import WatchError
 
 from rq.compat import as_text
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus, cancel_job, get_current_job
+from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
@@ -435,6 +435,22 @@ class TestJob(RQTestCase):
         job.save()
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
+
+    def test_dependency_allow_fail_is_persisted(self):
+        """Ensure that job.dependency_allow_fail is properly set
+        when providing Dependency object to depends_on."""
+        dep_job = Job.create(func=fixtures.say_hello)
+
+        # default to False, maintaining current behavior
+        job = Job.create(func=fixtures.say_hello, depends_on=Dependency([dep_job]))
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertFalse(job.dependency_allow_fail)
+
+        job = Job.create(func=fixtures.say_hello, depends_on=Dependency([dep_job], allow_failure=True))
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertTrue(job.dependency_allow_fail)
 
     def test_multiple_dependencies_are_accepted_and_persisted(self):
         """Ensure job._dependency_ids accepts different input formats, and
