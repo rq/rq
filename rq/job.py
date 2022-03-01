@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import partial
-from typing import List
+from typing import List, Union
 from uuid import uuid4
 
 from redis import WatchError
@@ -44,10 +44,13 @@ class JobStatus(str, Enum):
 
 
 class Dependency:
-    def __init__(self, jobs: List[Job], allow_failure: bool = False):
+    def __init__(self, jobs: Union[List[Job], List[str]], allow_failure: bool = False):
         jobs = ensure_list(jobs)
-        if not all(isinstance(job, Job) for job in jobs):
-            raise ValueError("jobs: must contain objects of type Job")
+        if not any([
+            all(isinstance(job, Job) for job in jobs),
+            all(isinstance(job, str) for job in jobs)
+        ]):
+            raise ValueError("jobs: must contain objects of type Job or strings representing Job ids")
         elif len(jobs) < 1:
             raise ValueError("jobs: cannot be empty.")
 
@@ -91,7 +94,7 @@ class Job:
     @classmethod
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
-               depends_on: Dependency = None, timeout=None, id=None, origin=None, meta=None,
+               depends_on=None, timeout=None, id=None, origin=None, meta=None,
                failure_ttl=None, serializer=None, *, on_success=None, on_failure=None):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -151,7 +154,14 @@ class Job:
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            job._dependency_ids = [dep.id for dep in depends_on.dependencies]
+            if isinstance(depends_on, Dependency):
+                depends_on_list = depends_on.dependencies
+            else:
+                depends_on_list = ensure_list(depends_on)
+            job._dependency_ids = [
+                dep.id if isinstance(dep, Job) else dep
+                for dep in depends_on_list
+            ]
 
         return job
 

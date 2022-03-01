@@ -229,8 +229,11 @@ class Worker:
                 )
                 self.ip_address = 'unknown'
             else:
-                self.ip_address = \
-                    [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+                self.ip_address = [
+                    client['addr']
+                    for client in connection.client_list()
+                    if client['name'] == self.name
+                ][0]
         else:
             self.hostname = None
             self.pid = None
@@ -847,9 +850,9 @@ class Worker:
 
             # Unhandled failure: move the job to the failed queue
             self.log.warning((
-                                 'Moving job to FailedJobRegistry '
-                                 '(work-horse terminated unexpectedly; waitpid returned {})'
-                             ).format(ret_val))
+                'Moving job to FailedJobRegistry '
+                '(work-horse terminated unexpectedly; waitpid returned {})'
+            ).format(ret_val))
 
             self.handle_job_failure(
                 job, queue=queue,

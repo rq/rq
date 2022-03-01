@@ -335,9 +335,9 @@ class Queue:
         return job
 
     def setup_dependencies(
-            self,
-            job,
-            pipeline=None
+        self,
+        job,
+        pipeline=None
     ):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
@@ -433,9 +433,9 @@ nd
         )
 
     def enqueue_many(
-            self,
-            job_datas,
-            pipeline=None
+        self,
+        job_datas,
+        pipeline=None
     ):
         """
         Creates multiple jobs (created via `Queue.prepare_data` calls)
