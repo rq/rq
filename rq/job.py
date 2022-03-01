@@ -13,7 +13,6 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import partial
-from typing import List, Union
 from uuid import uuid4
 
 from redis import WatchError
@@ -44,13 +43,13 @@ class JobStatus(str, Enum):
 
 
 class Dependency:
-    def __init__(self, jobs: Union[List[Job], List[str]], allow_failure: bool = False):
+    def __init__(self, jobs, allow_failure: bool = False):
         jobs = ensure_list(jobs)
-        if not any([
-            all(isinstance(job, Job) for job in jobs),
-            all(isinstance(job, str) for job in jobs)
-        ]):
-            raise ValueError("jobs: must contain objects of type Job or strings representing Job ids")
+        if not all(
+            isinstance(job, Job) or isinstance(job, str)
+            for job in jobs
+        ):
+            raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
         elif len(jobs) < 1:
             raise ValueError("jobs: cannot be empty.")
 
