@@ -474,6 +474,14 @@ class TestJob(RQTestCase):
             [("A", "B"), ["A", "B"]],
             [(job_A, job_B), ["A", "B"]],
             [(job_A, "B"), ["A", "B"]],
+            [Dependency("A"), ["A"]],
+            [Dependency(job_A), ["A"]],
+            [Dependency(["A", "B"]), ["A", "B"]],
+            [Dependency([job_A, job_B]), ["A", "B"]],
+            [Dependency(["A", job_B]), ["A", "B"]],
+            [Dependency(("A", "B")), ["A", "B"]],
+            [Dependency((job_A, job_B)), ["A", "B"]],
+            [Dependency((job_A, "B")), ["A", "B"]],
         ]
         for given, expected in cases:
             job = Job.create(func=fixtures.say_hello, depends_on=given)
