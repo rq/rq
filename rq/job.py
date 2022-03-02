@@ -154,7 +154,7 @@ class Job:
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
             if isinstance(depends_on, Dependency):
-                job.dependency_allow_fail = depends_on.allow_failure
+                job.allow_failure = depends_on.allow_failure
                 depends_on_list = depends_on.dependencies
             else:
                 depends_on_list = ensure_list(depends_on)
@@ -431,7 +431,7 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
-        self.dependency_allow_fail = None
+        self.allow_failure = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -589,7 +589,7 @@ class Job:
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
 
-        self.dependency_allow_fail = bool(obj.get('dependency_allow_fail')) if obj.get('dependency_allow_fail') else None
+        self.allow_failure = bool(obj.get('allow_failure')) if obj.get('allow_failure') else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
@@ -669,9 +669,9 @@ class Job:
         if self.ttl:
             obj['ttl'] = self.ttl
 
-        if self.dependency_allow_fail is not None:
+        if self.allow_failure is not None:
             # convert boolean to integer to avoid redis.exception.DataError
-            obj["dependency_allow_fail"] = int(self.dependency_allow_fail)
+            obj["allow_failure"] = int(self.allow_failure)
 
         return obj
 
@@ -1016,7 +1016,7 @@ class Job:
             dependencies_statuses = pipeline.execute()
 
         return all(
-            status.decode() == JobStatus.FINISHED or self.dependency_allow_fail
+            status.decode() == JobStatus.FINISHED or self.allow_failure
             for status
             in dependencies_statuses
             if status

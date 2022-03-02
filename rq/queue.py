@@ -330,7 +330,7 @@ class Queue:
             job.retry_intervals = retry.intervals
 
         if isinstance(depends_on, Dependency):
-            job.dependency_allow_fail = depends_on.allow_failure
+            job.allow_failure = depends_on.allow_failure
 
         return job
 
