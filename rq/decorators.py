@@ -17,7 +17,8 @@ class job:  # noqa
     def __init__(self, queue, connection=None, timeout=None,
                  result_ttl=DEFAULT_RESULT_TTL, ttl=None,
                  queue_class=None, depends_on=None, at_front=None, meta=None,
-                 description=None, failure_ttl=None, retry=None):
+                 description=None, failure_ttl=None, retry=None, on_failure=None, 
+                 on_success=None):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
         ``queue`` argument that can be either a ``Queue`` instance or a string
@@ -41,6 +42,8 @@ class job:  # noqa
         self.description = description
         self.failure_ttl = failure_ttl
         self.retry = retry
+        self.on_success = on_success
+        self.on_failure = on_failure
 
     def __call__(self, f):
         @wraps(f)
@@ -65,6 +68,6 @@ class job:  # noqa
                                       timeout=self.timeout, result_ttl=self.result_ttl,
                                       ttl=self.ttl, depends_on=depends_on, job_id=job_id, at_front=at_front,
                                       meta=self.meta, description=self.description, failure_ttl=self.failure_ttl,
-                                      retry=self.retry)
+                                      retry=self.retry, on_failure=self.on_failure, on_success=self.on_success)
         f.delay = delay
         return f

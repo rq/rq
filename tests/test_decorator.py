@@ -152,6 +152,43 @@ class TestDecorator(RQTestCase):
         self.assertEqual(baz_job.dependency, bar_job)
         self.assertEqual(baz_job.dependency.id, bar_job.id)
 
+    def test_decorator_accepts_on_failure_function_as_argument(self):
+        """Ensure that passing in on_failure function to the decorator sets the
+        correct on_failure function on the job.
+        """ 
+        # Only functions and builtins are supported as callback
+        @job('default', on_failure=Job.fetch)
+        def foo():
+            return 'Foo'
+        with self.assertRaises(ValueError):
+            result = foo.delay()
+
+        @job('default', on_failure=print)
+        def hello():
+            return 'Hello'
+        result = hello.delay()
+        result_job = Job.fetch(id=result.id, connection=self.testconn)
+        self.assertEqual(result_job.failure_callback, print)
+
+
+    def test_decorator_accepts_on_success_function_as_argument(self):
+        """Ensure that passing in on_failure function to the decorator sets the
+        correct on_success function on the job.
+        """
+        # Only functions and builtins are supported as callback
+        @job('default', on_failure=Job.fetch)
+        def foo():
+            return 'Foo'
+        with self.assertRaises(ValueError):
+            result = foo.delay()
+            
+        @job('default', on_success=print)
+        def hello():
+            return 'Hello'
+        result = hello.delay()
+        result_job = Job.fetch(id=result.id, connection=self.testconn)
+        self.assertEqual(result_job.success_callback, print)
+
     @mock.patch('rq.queue.resolve_connection')
     def test_decorator_connection_laziness(self, resolve_connection):
         """Ensure that job decorator resolve connection in `lazy` way """
