@@ -33,7 +33,7 @@ from tests.fixtures import (
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
-from rq.job import Job, JobStatus, Retry
+from rq.job import Job, JobStatus, Dependency, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
@@ -472,7 +472,7 @@ class TestWorker(RQTestCase):
 
         worker = Worker([queue])
 
-        # If job if configured to retry, it will be put back in the queue
+        # If job is configured to retry, it will be put back in the queue
         # and not put in the FailedJobRegistry.
         # This is the original execution
         queue.empty()
@@ -497,9 +497,6 @@ class TestWorker(RQTestCase):
         self.assertEqual([], queue.job_ids)
         # If a job is no longer retries, it's put in FailedJobRegistry
         self.assertTrue(job in registry)
-
-    def test_handle_dependency_allow_failure(self):
-        assert False, "Test to be defined"
 
     def test_total_working_time(self):
         """worker.total_working_time is stored properly"""
@@ -703,17 +700,36 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_failed, True)
 
     def test_job_dependency(self):
-        """Enqueue dependent jobs only if their parents don't fail"""
+        """Enqueue dependent jobs only when appropriate"""
         q = Queue()
         w = Worker([q])
+
+        # enqueue dependent job when parent successfully finishes
         parent_job = q.enqueue(say_hello, result_ttl=0)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
         job = Job.fetch(job.id)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
+        # don't enqueue dependent job when parent fails
         parent_job = q.enqueue(div_by_zero)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
+
+        # enqueue dependent job when Dependency.allow_failure=True
+        parent_job = q.enqueue(div_by_zero)
+        dependency = Dependency(jobs=parent_job, allow_failure=True)
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+        w.work(burst=True)
+        job = Job.fetch(job.id)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+        # don't enqueue dependent job when Dependency.allow_failure=False
+        parent_job = q.enqueue(div_by_zero)
+        dependency = Dependency(jobs=parent_job, allow_failure=False)
+        job = q.enqueue_call(say_hello, depends_on=dependency)
         w.work(burst=True)
         job = Job.fetch(job.id)
         self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
