@@ -155,8 +155,32 @@ baz_job = queue.enqueue(baz, depends_on=[foo_job, bar_job])
 ```
 
 The ability to handle job dependencies allows you to split a big job into
-several smaller ones. A job that is dependent on another is enqueued only when
+several smaller ones. By default, a job that is dependent on another is enqueued only when
 its dependency finishes *successfully*.
+
+_New in 1.11.0._
+
+If you want a job's dependencies to execute regardless if the job completes or fails, RQ provides
+the `Dependency` class that will allow you to dictate how to handle job failures.
+
+The `Dependency(jobs=...)` parameter accepts:
+- a string representing a single job id
+- a Job object
+- an iteratable of job id strings and/or Job objects
+
+Example:
+
+```python
+from redis import Redis
+from rq.job import Dependency
+from rq import Queue
+
+queue = Queue(connection=Redis())
+job_1 = queue.enqueue(div_by_zero, on_success=report_success, on_failure=report_failure)
+dependency = Dependency(jobs=[job_1], allow_failure=True)  # allow_failure defaults to False
+job_2 = queue.enqueue(say_hello, depends_on=dependency, on_success=report_success, on_failure=report_failure)
+# job_2 will execute even though its dependency (job_1) fails
+```
 
 
 ## Job Callbacks
