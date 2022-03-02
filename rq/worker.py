@@ -1192,8 +1192,6 @@ class Worker:
 
 
 class SimpleWorker(Worker):
-    death_penalty_class = TimerDeathPenalty
-
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
         self.set_state(WorkerStatus.BUSY)
