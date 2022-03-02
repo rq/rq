@@ -589,6 +589,7 @@ class Job:
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
 
+        self.dependency_allow_fail = bool(obj.get('dependency_allow_fail')) if obj.get('dependency_allow_fail') else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
