@@ -79,7 +79,7 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
 
 
-class CrossPlatformDeathPenalty(BaseDeathPenalty):
+class TimerDeathPenalty(BaseDeathPenalty):
     def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
         super().__init__(timeout, exception, **kwargs)
         self._timer = None
