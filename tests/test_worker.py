@@ -498,6 +498,9 @@ class TestWorker(RQTestCase):
         # If a job is no longer retries, it's put in FailedJobRegistry
         self.assertTrue(job in registry)
 
+    def test_handle_dependency_allow_failure(self):
+        assert False, "Test to be defined"
+
     def test_total_working_time(self):
         """worker.total_working_time is stored properly"""
         queue = Queue()
