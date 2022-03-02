@@ -1016,7 +1016,8 @@ class Job:
             dependencies_statuses = pipeline.execute()
 
         return all(
-            status.decode() == JobStatus.FINISHED or self.allow_failure
+            status.decode() == JobStatus.FINISHED
+            or (status.decode() in (JobStatus.FAILED, JobStatus.STOPPED) and self.allow_failure)
             for status
             in dependencies_statuses
             if status
