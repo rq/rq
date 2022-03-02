@@ -669,7 +669,8 @@ class Job:
             obj['ttl'] = self.ttl
 
         if self.dependency_allow_fail is not None:
-            obj["dependency_allow_fail"] = self.dependency_allow_fail
+            # convert boolean to integer to avoid redis.exception.DataError
+            obj["dependency_allow_fail"] = int(self.dependency_allow_fail)
 
         return obj
 
