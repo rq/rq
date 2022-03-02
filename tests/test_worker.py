@@ -701,29 +701,31 @@ class TestWorker(RQTestCase):
 
     def test_job_dependency(self):
         """Enqueue dependent jobs only when appropriate"""
-        q = Queue()
-        w = Worker([q])
+        q = Queue(connection=self.testconn)
+        w = SimpleWorker([q], connection=q.connection)
 
         # enqueue dependent job when parent successfully finishes
-        parent_job = q.enqueue(say_hello, result_ttl=0)
+        parent_job = q.enqueue(say_hello)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
-        job = Job.fetch(job.id)
+        job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
         # don't enqueue dependent job when parent fails
         parent_job = q.enqueue(div_by_zero)
         job = q.enqueue_call(say_hello, depends_on=parent_job)
         w.work(burst=True)
-        job = Job.fetch(job.id)
+        job = Job.fetch(job.id, connection=self.testconn)
         self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
+
+        q.empty()
 
         # enqueue dependent job when Dependency.allow_failure=True
         parent_job = q.enqueue(div_by_zero)
         dependency = Dependency(jobs=parent_job, allow_failure=True)
         job = q.enqueue_call(say_hello, depends_on=dependency)
         w.work(burst=True)
-        job = Job.fetch(job.id)
+        job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
         # don't enqueue dependent job when Dependency.allow_failure=False
@@ -731,7 +733,7 @@ class TestWorker(RQTestCase):
         dependency = Dependency(jobs=parent_job, allow_failure=False)
         job = q.enqueue_call(say_hello, depends_on=dependency)
         w.work(burst=True)
-        job = Job.fetch(job.id)
+        job = Job.fetch(job.id, connection=self.testconn)
         self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_get_current_job(self):
