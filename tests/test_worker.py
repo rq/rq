@@ -720,6 +720,14 @@ class TestWorker(RQTestCase):
 
         q.empty()
 
+        # don't enqueue dependent job when Dependency.allow_failure=False (the default)
+        parent_job = q.enqueue(div_by_zero)
+        dependency = Dependency(jobs=parent_job)
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+        w.work(burst=True)
+        job = Job.fetch(job.id, connection=self.testconn)
+        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
+
         # enqueue dependent job when Dependency.allow_failure=True
         parent_job = q.enqueue(div_by_zero)
         dependency = Dependency(jobs=parent_job, allow_failure=True)
@@ -727,14 +735,6 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
         job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
-        # don't enqueue dependent job when Dependency.allow_failure=False
-        parent_job = q.enqueue(div_by_zero)
-        dependency = Dependency(jobs=parent_job, allow_failure=False)
-        job = q.enqueue_call(say_hello, depends_on=dependency)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""
