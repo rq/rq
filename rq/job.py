@@ -588,8 +588,7 @@ class Job:
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
-
-        self.allow_failure = bool(obj.get('allow_failure')) if obj.get('allow_failure') else None
+        self.allow_failure = bool(int(obj.get('allow_failure'))) if obj.get('allow_failure') else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
@@ -759,7 +758,7 @@ class Job:
                     continue
                 else:
                     # if the pipeline comes from the caller, we re-raise the
-                    # exception as it it the responsibility of the caller to
+                    # exception as it is the responsibility of the caller to
                     # handle it
                     raise
 
@@ -987,14 +986,14 @@ class Job:
                 for _id in dependencies]
 
     def dependencies_are_met(self, exclude_job_id=None, pipeline=None):
-        """Returns a boolean indicating if all of this jobs dependencies are _FINISHED_
+        """Returns a boolean indicating if all of this job's dependencies are _FINISHED_
 
         If a pipeline is passed, all dependencies are WATCHed.
 
         `exclude` allows us to exclude some job id from the status check. This is useful
         when enqueueing the dependents of a _successful_ job -- that status of
         `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
-        method is _called_ in the _stack_ of it's dependents are being enqueued.
+        method is _called_ in the _stack_ of its dependents are being enqueued.
         """
 
         connection = pipeline if pipeline is not None else self.connection
