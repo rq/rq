@@ -91,7 +91,7 @@ class TimerDeathPenalty(BaseDeathPenalty):
 
     def handle_death_penalty(self, signum, frame):
         raise self._exception(
-            f"Task exceeded maximum timeout value ({self._timeout} seconds)"
+            "Task exceeded maximum timeout value ({0} seconds)".format(self._timeout)
         )
 
     def setup_death_penalty(self):
