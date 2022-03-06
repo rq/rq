@@ -1,3 +1,4 @@
+import rq.defaults
 from rq import Queue, SimpleWorker
 from rq.timeouts import JobTimeoutException, TimerDeathPenalty
 from tests import RQTestCase
@@ -13,7 +14,8 @@ class TestTimeouts(RQTestCase):
         """Ensure TimerDeathPenalty works correctly."""
         q = Queue('foo')
         # make sure death_penalty_class persists
-        w = TimerBasedWorker(q, timeout=3)
+        rq.defaults.CALLBACK_TIMEOUT = 3
+        w = TimerBasedWorker([q])
         self.assertIsNotNone(w)
         self.assertEqual(w.death_penalty_class, TimerDeathPenalty)
 
