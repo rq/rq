@@ -638,7 +638,9 @@ class Queue:
                     )
                 ]
 
-                pipe.multi()
+                # only invoke .multi() if all dependent jobs' allow_failure are False-y
+                if not all([job.allow_failure for job in jobs_to_enqueue]):
+                    pipe.multi()
 
                 for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
