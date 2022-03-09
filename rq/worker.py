@@ -978,6 +978,12 @@ class Worker:
                                                         job_class=self.job_class, serializer=job.serializer)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline)
+                try:
+                    pipeline.execute()
+                except Exception:
+                    # Ensure that custom exception handlers are called
+                    # even if Redis is down
+                    pass
 
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
