@@ -5,7 +5,7 @@ layout: docs
 
 ## Workers inside unit tests
 
-You may wish to include your RQ tasks inside unit tests. However many frameworks (such as Django) use in-memory databases which do not play nicely with the default `fork()` behaviour of RQ.
+You may wish to include your RQ tasks inside unit tests. However, many frameworks (such as Django) use in-memory databases, which do not play nicely with the default `fork()` behaviour of RQ.
 
 Therefore, you must use the SimpleWorker class to avoid fork();
 
@@ -19,6 +19,25 @@ worker = SimpleWorker([queue], connection=queue.connection)
 worker.work(burst=True)  # Runs enqueued job
 # Check for result...
 ```
+
+
+## Testing on Windows
+
+If you are testing on a Windows machine you can use the approach above, but with a slight tweak.
+You will need to subclass SimpleWorker to override the default timeout mechanism of the worker.
+Reason: Windows OS does not implement some underlying signals utilized by the default SimpleWorker.
+
+To subclass SimpleWorker for Windows you can do the following:
+
+```python
+from rq import SimpleWorker
+from rq.timeouts import TimerDeathPenalty
+
+class WindowsSimpleWorker(SimpleWorker):
+    death_penalty_class = TimerDeathPenalty
+```
+
+Now you can use WindowsSimpleWorker for running tasks on Windows.
 
 
 ## Running Jobs in unit tests
