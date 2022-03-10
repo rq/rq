@@ -738,7 +738,7 @@ class TestWorker(RQTestCase):
 
         # only enqueue dependent job when all dependencies have finished/failed
         first_parent_job = q.enqueue(div_by_zero)
-        second_parent_job = q.enqueue(long_running_job, args=(5,))
+        second_parent_job = q.enqueue(say_hello)
         dependencies = Dependency(jobs=[first_parent_job, second_parent_job], allow_failure=True)
         job = q.enqueue_call(say_hello, depends_on=dependencies)
         w.work(burst=True, max_jobs=1)
