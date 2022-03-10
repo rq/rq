@@ -48,6 +48,7 @@ class Dependency:
         if not all(
             isinstance(job, Job) or isinstance(job, str)
             for job in jobs
+            if job
         ):
             raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
         elif len(jobs) < 1:

@@ -452,6 +452,14 @@ class TestJob(RQTestCase):
         Job.fetch(job.id, connection=self.testconn)
         self.assertTrue(job.allow_failure)
 
+    def test_dependency_parameter_constraints(self):
+        """Ensures the proper constraints are in place for values passed in as job references."""
+        dep_job = Job.create(func=fixtures.say_hello)
+        # raise error on empty jobs
+        self.assertRaises(ValueError, Dependency, jobs=[])
+        # raise error on non-str/Job value in jobs iterable
+        self.assertRaises(ValueError, Dependency, jobs=[dep_job, 1])
+
     def test_multiple_dependencies_are_accepted_and_persisted(self):
         """Ensure job._dependency_ids accepts different input formats, and
         is set and restored properly"""
