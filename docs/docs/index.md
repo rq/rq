@@ -176,9 +176,9 @@ from rq.job import Dependency
 from rq import Queue
 
 queue = Queue(connection=Redis())
-job_1 = queue.enqueue(div_by_zero, on_success=report_success, on_failure=report_failure)
+job_1 = queue.enqueue(div_by_zero)
 dependency = Dependency(jobs=[job_1], allow_failure=True)  # allow_failure defaults to False
-job_2 = queue.enqueue(say_hello, depends_on=dependency, on_success=report_success, on_failure=report_failure)
+job_2 = queue.enqueue(say_hello, depends_on=dependency)
 # job_2 will execute even though its dependency (job_1) fails
 ```
 
