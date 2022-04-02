@@ -45,7 +45,7 @@ Whenever a dequeue is requested, an RQ worker does two things:
 * It starts executing the function call.
 * If the job succeeds, its return value is written to the `result` hash key and
   the hash itself is expired after 500 seconds; or
-* If the job failes, the exception information is written to the `exc_info`
+* If the job fails, the exception information is written to the `exc_info`
   hash key and the job ID is pushed onto the `failed` queue.
 
 
