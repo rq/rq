@@ -699,59 +699,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
 
-    def test_job_dependency(self):
-        """Enqueue dependent jobs only when appropriate"""
-        q = Queue(connection=self.testconn)
-        w = SimpleWorker([q], connection=q.connection)
-
-        # enqueue dependent job when parent successfully finishes
-        parent_job = q.enqueue(say_hello)
-        job = q.enqueue_call(say_hello, depends_on=parent_job)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
-        # don't enqueue dependent job when parent fails
-        parent_job = q.enqueue(div_by_zero)
-        job = q.enqueue_call(say_hello, depends_on=parent_job)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
-
-        q.empty()
-
-        # don't enqueue dependent job when Dependency.allow_failure=False (the default)
-        parent_job = q.enqueue(div_by_zero)
-        dependency = Dependency(jobs=parent_job)
-        job = q.enqueue_call(say_hello, depends_on=dependency)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
-
-        # enqueue dependent job when Dependency.allow_failure=True
-        parent_job = q.enqueue(div_by_zero)
-        dependency = Dependency(jobs=parent_job, allow_failure=True)
-        job = q.enqueue_call(say_hello, depends_on=dependency)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
-        # only enqueue dependent job when all dependencies have finished/failed
-        first_parent_job = q.enqueue(div_by_zero)
-        second_parent_job = q.enqueue(say_hello)
-        dependencies = Dependency(jobs=[first_parent_job, second_parent_job], allow_failure=True)
-        job = q.enqueue_call(say_hello, depends_on=dependencies)
-        w.work(burst=True, max_jobs=1)
-        self.assertEqual(first_parent_job.get_status(), JobStatus.FAILED)
-        self.assertEqual(second_parent_job.get_status(), JobStatus.QUEUED)
-        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
-        w.work(burst=True, max_jobs=1)
-        self.assertEqual(second_parent_job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(job.get_status(), JobStatus.QUEUED)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""
         q = Queue()

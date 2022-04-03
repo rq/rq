@@ -890,19 +890,27 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         dependency = queue.enqueue(fixtures.raise_exc)
         dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+        print('# Post enqueue', self.testconn.smembers(dependency.dependents_key))
+        self.assertTrue(dependency.dependent_ids)
 
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(1, len(queue.deferred_job_registry))
         w = Worker([queue])
         w.work(burst=True, max_jobs=1)
+        self.assertTrue(dependency.dependent_ids)
+        print('# Post work', self.testconn.smembers(dependency.dependents_key))
         dependency.refresh()
         dependent.refresh()
         self.assertEqual(0, len(queue.get_jobs()))
         self.assertEqual(1, len(queue.deferred_job_registry))
         self.assertEqual(1, len(queue.failed_job_registry))
+
+        print('# Pre cancel', self.testconn.smembers(dependency.dependents_key))
         cancel_job(dependency.id, enqueue_dependents=True)
         dependency.refresh()
         dependent.refresh()
+        print('#Post cancel', self.testconn.smembers(dependency.dependents_key))
+
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))
         self.assertEqual(0, len(queue.failed_job_registry))
@@ -1144,14 +1152,13 @@ class TestJob(RQTestCase):
 
     def test_dependencies_are_met_at_execution_time(self):
         queue = Queue(connection=self.testconn)
-
+        queue.empty()
         queue.enqueue(fixtures.say_hello, job_id="A")
         queue.enqueue(fixtures.say_hello, job_id="B")
         job_C = queue.enqueue(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
 
         w = Worker([queue])
         w.work(burst=True)
-
         assert job_C.result
 
     def test_execution_order_with_sole_dependency(self):
