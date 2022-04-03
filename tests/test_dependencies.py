@@ -5,7 +5,26 @@ from rq import Queue, SimpleWorker
 from rq.job import Job, JobStatus, Dependency
 
 
-class TestWorker(RQTestCase):
+class TestDependencies(RQTestCase):
+
+    def test_allow_failure_is_persisted(self):
+        """Ensure that job.allow_failure is properly set
+        when providing Dependency object to depends_on."""
+        dep_job = Job.create(func=say_hello)
+
+        # default to False, maintaining current behavior
+        job = Job.create(func=say_hello, depends_on=Dependency([dep_job]))
+        job.save()
+        Job.fetch(job.id, connection=self.testconn)
+        self.assertFalse(job.allow_failure)
+
+        job = Job.create(func=say_hello, depends_on=Dependency([dep_job], allow_failure=True))
+        job.save()
+        job = Job.fetch(job.id, connection=self.testconn)
+        self.assertTrue(job.allow_failure)
+
+        jobs = Job.fetch_many([job.id], connection=self.testconn)
+        self.assertTrue(jobs[0].allow_failure)
 
     def test_job_dependency(self):
         """Enqueue dependent jobs only when appropriate"""
@@ -18,28 +37,33 @@ class TestWorker(RQTestCase):
         # w.work(burst=True)
         # job = Job.fetch(job.id, connection=self.testconn)
         # self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        q.empty()
-        # don't enqueue dependent job when parent fails
-        parent_job = q.enqueue(div_by_zero)
-        job = q.enqueue_call(say_hello, depends_on=parent_job)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
+        # q.empty()
+        # # don't enqueue dependent job when parent fails
+        # parent_job = q.enqueue(div_by_zero)
+        # job = q.enqueue_call(say_hello, depends_on=parent_job)
+        # w.work(burst=True)
+        # job = Job.fetch(job.id, connection=self.testconn)
+        # self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
-        q.empty()
+        # q.empty()
 
-        # don't enqueue dependent job when Dependency.allow_failure=False (the default)
-        parent_job = q.enqueue(div_by_zero)
-        dependency = Dependency(jobs=parent_job)
-        job = q.enqueue_call(say_hello, depends_on=dependency)
-        w.work(burst=True)
-        job = Job.fetch(job.id, connection=self.testconn)
-        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
+        # # don't enqueue dependent job when Dependency.allow_failure=False (the default)
+        # parent_job = q.enqueue(div_by_zero)
+        # dependency = Dependency(jobs=parent_job)
+        # job = q.enqueue_call(say_hello, depends_on=dependency)
+        # w.work(burst=True)
+        # job = Job.fetch(job.id, connection=self.testconn)
+        # self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
         # enqueue dependent job when Dependency.allow_failure=True
         parent_job = q.enqueue(div_by_zero)
         dependency = Dependency(jobs=parent_job, allow_failure=True)
         job = q.enqueue_call(say_hello, depends_on=dependency)
+
+        job = Job.fetch(job.id, connection=self.testconn)
+        self.assertTrue(job.allow_failure)
+        print('#####Dependent job ID', job.id)
+
         w.work(burst=True)
         job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)

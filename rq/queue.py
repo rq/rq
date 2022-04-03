@@ -616,10 +616,9 @@ class Queue:
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         dependents_key = job.dependents_key
-        print(self.connection.smembers(dependents_key))
-        
+
         while True:
-            print('LOOP')
+
             try:
                 # if a pipeline is passed, the caller is responsible for calling WATCH
                 # to ensure all jobs are enqueued
@@ -629,9 +628,10 @@ class Queue:
                 dependent_job_ids = {as_text(_id)
                                      for _id in pipe.smembers(dependents_key)}
 
-                # There's no dependents                
+                # There's no dependents
                 if not dependent_job_ids:
                     return
+                print('Found dependents', dependent_job_ids)
 
                 jobs_to_enqueue = [
                     dependent_job for dependent_job
@@ -644,10 +644,9 @@ class Queue:
                         pipeline=pipe,
                     )
                 ]
-                # print(jobs_to_enqueue)
-                # # only invoke .multi() if all dependent jobs' allow_failure are False-y
-                # if not all([job.allow_failure for job in jobs_to_enqueue]):
-                #     pipe.multi()
+
+                print('Jobs to enqueue', jobs_to_enqueue)
+                pipe.multi()
 
                 for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
@@ -662,9 +661,8 @@ class Queue:
                         queue.enqueue_job(dependent, pipeline=pipe)
 
                 # Only delete dependents_key if all dependents have been enqueued
-                enqueued_job_ids = [job.id for job in jobs_to_enqueue]
-                for job_id in enqueued_job_ids:
-                    pipe.srem(dependents_key, job_id)
+                for job in jobs_to_enqueue:
+                    pipe.srem(dependents_key, job.id)
                 # pipe.delete(dependents_key)
                 # pipe.srem(dependents_key, *enqueued_job_ids)
 

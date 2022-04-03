@@ -997,7 +997,7 @@ class Job:
         `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
         method is _called_ in the _stack_ of its dependents are being enqueued.
         """
-        print('Dependencies are met')
+        print('Checking if dependencies are met', self.id, self.allow_failure)
         connection = pipeline if pipeline is not None else self.connection
 
         if pipeline is not None:
@@ -1017,6 +1017,10 @@ class Job:
                 pass
             elif parent_job._status == JobStatus.FAILED and not self.allow_failure:
                 return False
+
+            # If the only dependency is parent job, dependency has been met
+            if not dependencies_ids:
+                return True
 
         print('Dependency IDs', dependencies_ids)
         with connection.pipeline() as pipeline:

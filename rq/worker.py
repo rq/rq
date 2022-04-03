@@ -950,7 +950,6 @@ class Worker:
         print(f'handle job failure {job.id}')
         self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
-            print('create pipeline')
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
                     job.origin,
@@ -995,9 +994,9 @@ class Worker:
             else:
                 # if dependencies are inserted after enqueue_dependents
                 # a WatchError is thrown by execute()
-                pipeline.watch(job.dependents_key)
+                # pipeline.watch(job.dependents_key)
                 # enqueue_dependents calls multi() on the pipeline!
-                queue.enqueue_dependents(job, pipeline=pipeline)
+                queue.enqueue_dependents(job)
 
             try:
                 pipeline.execute()
@@ -1102,7 +1101,7 @@ class Worker:
                     )
                     exc_info = sys.exc_info()
                     exc_string = ''.join(traceback.format_exception(*exc_info))
-            print('Calling handle failure')
+
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.handle_exception(job, *exc_info)

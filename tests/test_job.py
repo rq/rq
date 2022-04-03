@@ -436,22 +436,6 @@ class TestJob(RQTestCase):
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
-    def test_allow_failure_is_persisted(self):
-        """Ensure that job.allow_failure is properly set
-        when providing Dependency object to depends_on."""
-        dep_job = Job.create(func=fixtures.say_hello)
-
-        # default to False, maintaining current behavior
-        job = Job.create(func=fixtures.say_hello, depends_on=Dependency([dep_job]))
-        job.save()
-        Job.fetch(job.id, connection=self.testconn)
-        self.assertFalse(job.allow_failure)
-
-        job = Job.create(func=fixtures.say_hello, depends_on=Dependency([dep_job], allow_failure=True))
-        job.save()
-        Job.fetch(job.id, connection=self.testconn)
-        self.assertTrue(job.allow_failure)
-
     def test_dependency_parameter_constraints(self):
         """Ensures the proper constraints are in place for values passed in as job references."""
         dep_job = Job.create(func=fixtures.say_hello)
@@ -1157,6 +1141,7 @@ class TestJob(RQTestCase):
         queue.enqueue(fixtures.say_hello, job_id="B")
         job_C = queue.enqueue(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
 
+        job_C.dependencies_are_met()
         w = Worker([queue])
         w.work(burst=True)
         assert job_C.result

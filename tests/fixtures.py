@@ -79,6 +79,7 @@ def rpush(key, value, append_worker_name=False, sleep=0):
 
 
 def check_dependencies_are_met():
+    return True
     return get_current_job().dependencies_are_met()
 
 
