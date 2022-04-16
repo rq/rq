@@ -991,15 +991,14 @@ class Worker:
 
             if retry:
                 job.retry(queue, pipeline)
+                enqueue_dependents = False
             else:
-                # if dependencies are inserted after enqueue_dependents
-                # a WatchError is thrown by execute()
-                # pipeline.watch(job.dependents_key)
-                # enqueue_dependents calls multi() on the pipeline!
-                queue.enqueue_dependents(job)
+                enqueue_dependents = True
 
             try:
                 pipeline.execute()
+                if enqueue_dependents:
+                    queue.enqueue_dependents(job)
             except Exception:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down

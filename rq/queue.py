@@ -611,7 +611,6 @@ class Queue:
         If you pass a pipeline, only MULTI is called. The rest is up to the
         caller.
         """
-        print('Enqueue dependents')
         from .registry import DeferredJobRegistry
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
@@ -630,7 +629,7 @@ class Queue:
 
                 # There's no dependents
                 if not dependent_job_ids:
-                    return
+                    break
                 print('Found dependents', dependent_job_ids)
 
                 jobs_to_enqueue = [
@@ -645,8 +644,10 @@ class Queue:
                     )
                 ]
 
-                print('Jobs to enqueue', jobs_to_enqueue)
                 pipe.multi()
+
+                if not jobs_to_enqueue:
+                    break
 
                 for dependent in jobs_to_enqueue:
                     registry = DeferredJobRegistry(dependent.origin,
@@ -661,13 +662,11 @@ class Queue:
                         queue.enqueue_job(dependent, pipeline=pipe)
 
                 # Only delete dependents_key if all dependents have been enqueued
-                for job in jobs_to_enqueue:
-                    pipe.srem(dependents_key, job.id)
-                # pipe.delete(dependents_key)
-                # pipe.srem(dependents_key, *enqueued_job_ids)
-
-                # Otherwise we save the remaining job dependents
-                # enqueued_job_ids = {job.id for job in jobs_to_enqueue}
+                if len(jobs_to_enqueue) == len(dependent_job_ids):
+                    pipe.delete(dependents_key)
+                else:
+                    enqueued_job_ids = [job.id for job in jobs_to_enqueue]
+                    pipe.srem(dependents_key, *enqueued_job_ids)
 
                 if pipeline is None:
                     pipe.execute()
@@ -680,8 +679,6 @@ class Queue:
                     # exception as it it the responsibility of the caller to
                     # handle it
                     raise
-        print(self.connection.smembers(dependents_key))
-        print('End enqueue_dependents')
 
     def pop_job_id(self):
         """Pops a given job ID from this Redis queue."""
