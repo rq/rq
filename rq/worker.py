@@ -19,9 +19,10 @@ from uuid import uuid4
 from random import shuffle
 
 try:
-    from signal import SIGKILL
+    from signal import SIGKILL, SIGTERM
 except ImportError:
     from signal import SIGTERM as SIGKILL
+    SIGTERM = SIGKILL
 
 import redis.exceptions
 
@@ -86,6 +87,23 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
     except ValueError:
         return 'SIG_UNKNOWN'
+
+
+def pid_exists(pid):
+    '''Check whether a process with pid exists.'''
+    if pid < 0: return False
+    try:
+        # try sending a signal
+        os.kill(pid, 0) 
+    except ProcessLookupError:
+        # process does not exist
+        return False
+    except PermissionError:
+        # operation not permitted (process exists)
+        return True
+    else:
+        # no error, signal sent (process exists)
+        return True
 
 
 class WorkerStatus(str, Enum):
@@ -421,13 +439,32 @@ class Worker:
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
-    def kill_horse(self, sig=SIGKILL):
+    def kill_horse(self, sig=SIGTERM, timeout=5.0):
         """
         Kill the horse but catch "No such process" error has the horse could already be dead.
         """
         try:
-            os.killpg(os.getpgid(self.horse_pid), sig)
+            # ask to terminate gracefully
+            pgid = os.getpgid(self.horse_pid)
+            os.killpg(pgid, sig)
+
+            # polling as this method might be running from a thread
+            # in which case we can't use UnixSignalDeathPenalty
+            start = time.time()
+            while True:
+                # process already died
+                if not pid_exists(self.horse_pid):
+                    break
+
+                # timer expired, kill process
+                if time.time() - start > timeout:
+                    os.killpg(pgid, SIGKILL)
+                    break
+
+                time.sleep(0.1)
+
             self.log.info('Killed horse pid %s', self.horse_pid)
+
         except OSError as e:
             if e.errno == errno.ESRCH:
                 # "No such process" is fine with us

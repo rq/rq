@@ -70,7 +70,7 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
         an exception after the timeout amount (expressed in seconds).
         """
         signal.signal(signal.SIGALRM, self.handle_death_penalty)
-        signal.alarm(self._timeout)
+        signal.alarm(int(self._timeout))
 
     def cancel_death_penalty(self):
         """Removes the death penalty alarm and puts back the system into
