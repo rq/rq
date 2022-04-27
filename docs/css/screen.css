@@ -86,6 +86,7 @@ header a:hover
 .subnav a
 {
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .container
