@@ -15,6 +15,7 @@ value, traceback).
 ```python
 from redis import Redis
 from rq import Queue
+from rq.job import Job
 from rq.registry import FailedJobRegistry
 
 redis = Redis()
