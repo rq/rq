@@ -52,7 +52,12 @@ def get_redis_from_config(settings, connection_class=Redis):
         password = settings['SENTINEL'].get('PASSWORD', None)
         db = settings['SENTINEL'].get('DB', 0)
         master_name = settings['SENTINEL'].get('MASTER_NAME', 'mymaster')
-        sn = Sentinel(instances, socket_timeout=socket_timeout, password=password, db=db)
+        ssl = settings['SENTINEL'].get('SSL', False)
+        arguments = {'password': password, 'ssl': ssl}
+        sn = Sentinel(
+            instances, socket_timeout=socket_timeout, password=password,
+            db=db, ssl=ssl, sentinel_kwargs=arguments
+        )
         return sn.master_for(master_name)
 
     ssl = settings.get('REDIS_SSL', False)
