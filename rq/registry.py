@@ -110,7 +110,7 @@ class BaseRegistry:
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
-    def requeue(self, job_or_id):
+    def requeue(self, job_or_id, at_front=False):
         """Requeues the job with the given job ID."""
         if isinstance(job_or_id, self.job_class):
             job = job_or_id
@@ -130,7 +130,7 @@ class BaseRegistry:
             job.ended_at = None
             job.exc_info = ''
             job.save()
-            job = queue.enqueue_job(job, pipeline=pipeline)
+            job = queue.enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
         return job
 
