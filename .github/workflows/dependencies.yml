@@ -18,7 +18,7 @@ jobs:
         redis-py-version: [3.5.0]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
@@ -53,7 +53,7 @@ jobs:
         redis-version: [3, 4, 5, 6]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
