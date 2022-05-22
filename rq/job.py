@@ -734,9 +734,9 @@ class Job:
                     # handle it
                     raise
 
-    def requeue(self):
+    def requeue(self, at_front=False):
         """Requeues job."""
-        return self.failed_job_registry.requeue(self)
+        return self.failed_job_registry.requeue(self, at_front=at_front)
 
     def _remove_from_registries(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
