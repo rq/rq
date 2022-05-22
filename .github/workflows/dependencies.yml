@@ -76,7 +76,7 @@ jobs:
     - name: Test with pytest
       run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
 
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: dependencies-error
         path: log.txt
