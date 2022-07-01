@@ -630,7 +630,6 @@ class Queue:
                 # There's no dependents
                 if not dependent_job_ids:
                     break
-                print('Found dependents', dependent_job_ids)
 
                 jobs_to_enqueue = [
                     dependent_job for dependent_job
