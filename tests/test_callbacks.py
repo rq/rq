@@ -1,4 +1,5 @@
 from datetime import timedelta
+from uuid import uuid4
 
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save_result, say_hello
@@ -59,7 +60,13 @@ class SyncJobCallback(RQTestCase):
             job.result
         )
 
-        job = queue.enqueue(div_by_zero, on_success=save_result)
+        # Callback is not executed when job fails
+        job_id = str(uuid4())
+        try:
+            job = queue.enqueue(div_by_zero, on_success=save_result, job_id=job_id)
+        except TypeError:
+            pass
+        job = Job.fetch(id=job_id)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.testconn.exists('success_callback:%s' % job.id))
 
@@ -67,14 +74,31 @@ class SyncJobCallback(RQTestCase):
         """queue.enqueue* methods with on_failure is persisted correctly"""
         queue = Queue(is_async=False)
 
-        job = queue.enqueue(div_by_zero, on_failure=save_exception)
+        job_id = str(uuid4())
+        try:
+            job = queue.enqueue(div_by_zero, on_failure=save_exception, job_id=job_id)
+        except:
+            pass
+        job = Job.fetch(id=job_id)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertIn('div_by_zero',
                       self.testconn.get('failure_callback:%s' % job.id).decode())
 
-        job = queue.enqueue(div_by_zero, on_success=save_result)
+        # If there's no failure callback, exception should be raised
+        job_id = str(uuid4())
+        with self.assertRaises(TypeError):
+            job = queue.enqueue(div_by_zero, on_success=save_result, job_id=job_id)
+        job = Job.fetch(id=job_id)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.testconn.exists('failure_callback:%s' % job.id))
+
+        # If failure callback is specified, exception is raised after callback is executed
+        job_id = str(uuid4())
+        with self.assertRaises(TypeError):
+            job = queue.enqueue(div_by_zero, on_failure=save_exception, job_id=job_id)
+        job = Job.fetch(id=job_id)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertTrue(self.testconn.exists('failure_callback:%s' % job.id))
 
 
 class WorkerCallbackTestCase(RQTestCase):
