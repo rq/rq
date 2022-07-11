@@ -41,7 +41,7 @@ class TestRQCli(RQTestCase):
 
     """Test rq_cli script"""
     def setUp(self):
-        super(TestRQCli, self).setUp()
+        super().setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
         self.connection = Redis.from_url(self.redis_url)

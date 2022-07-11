@@ -23,7 +23,7 @@ class CustomJob(Job):
 class TestRegistry(RQTestCase):
 
     def setUp(self):
-        super(TestRegistry, self).setUp()
+        super().setUp()
         self.registry = StartedJobRegistry(connection=self.testconn)
 
     def test_init(self):
@@ -270,7 +270,7 @@ class TestRegistry(RQTestCase):
 class TestFinishedJobRegistry(RQTestCase):
 
     def setUp(self):
-        super(TestFinishedJobRegistry, self).setUp()
+        super().setUp()
         self.registry = FinishedJobRegistry(connection=self.testconn)
 
     def test_key(self):
@@ -318,7 +318,7 @@ class TestFinishedJobRegistry(RQTestCase):
 class TestDeferredRegistry(RQTestCase):
 
     def setUp(self):
-        super(TestDeferredRegistry, self).setUp()
+        super().setUp()
         self.registry = DeferredJobRegistry(connection=self.testconn)
 
     def test_key(self):

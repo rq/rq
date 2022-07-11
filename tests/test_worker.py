@@ -1250,7 +1250,7 @@ def schedule_access_self():
 @pytest.mark.skipif(sys.platform == 'darwin', reason='Fails on OS X')
 class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
-        super(TestWorkerSubprocess, self).setUp()
+        super().setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 
@@ -1282,7 +1282,7 @@ class TestWorkerSubprocess(RQTestCase):
 @skipIf('pypy' in sys.version.lower(), 'these tests often fail on pypy')
 class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def setUp(self):
-        super(HerokuWorkerShutdownTestCase, self).setUp()
+        super().setUp()
         self.sandbox = '/tmp/rq_shutdown/'
         os.makedirs(self.sandbox)
 
@@ -1368,7 +1368,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 class TestExceptionHandlerMessageEncoding(RQTestCase):
 
     def setUp(self):
-        super(TestExceptionHandlerMessageEncoding, self).setUp()
+        super().setUp()
         self.worker = Worker("foo")
         self.worker._exc_handlers = []
         # Mimic how exception info is actually passed forwards

@@ -21,7 +21,7 @@ class FakeSentry:
 class TestSentry(RQTestCase):
 
     def setUp(self):
-        super(TestSentry, self).setUp()
+        super().setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 

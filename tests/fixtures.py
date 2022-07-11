@@ -147,7 +147,7 @@ class UnicodeStringObject:
         return u'é'
 
 
-class ClassWithAStaticMethod(object):
+class ClassWithAStaticMethod:
     @staticmethod
     def static_method():
         return u"I'm a static method"

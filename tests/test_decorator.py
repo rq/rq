@@ -12,7 +12,7 @@ from tests.fixtures import decorated_job
 class TestDecorator(RQTestCase):
 
     def setUp(self):
-        super(TestDecorator, self).setUp()
+        super().setUp()
 
     def test_decorator_preserves_functionality(self):
         """Ensure that a decorated function's functionality is still preserved.
