@@ -1,6 +1,6 @@
 from rq.utils import ceildiv
 from tests import RQTestCase
-from mock.mock import patch
+from unittest.mock import patch
 
 from rq import Queue, Worker
 from rq.worker_registration import (clean_worker_registry, get_keys, register,

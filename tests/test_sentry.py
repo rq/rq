@@ -11,7 +11,7 @@ from rq.worker import SimpleWorker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
 
-import mock
+from unittest import mock
 from click.testing import CliRunner
 
 
