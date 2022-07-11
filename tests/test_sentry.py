@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import read_config_file
