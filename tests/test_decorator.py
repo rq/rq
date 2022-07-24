@@ -1,4 +1,5 @@
-import mock
+from unittest import mock
+
 from redis import Redis
 
 from rq.decorators import job

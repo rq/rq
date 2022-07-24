@@ -1,6 +1,6 @@
 import re
 import datetime
-import mock
+from unittest import mock
 
 from redis import Redis
 

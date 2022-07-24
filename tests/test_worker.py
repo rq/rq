@@ -16,8 +16,8 @@ from unittest import skipIf
 
 import redis.exceptions
 import pytest
-import mock
-from mock import Mock
+from unittest import mock
+from unittest.mock import Mock
 
 from tests import RQTestCase, slow
 from tests.fixtures import (
