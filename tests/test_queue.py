@@ -5,7 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 import json
 from datetime import datetime, timedelta, timezone
 from rq.serializers import DefaultSerializer, JSONSerializer
-from mock.mock import patch
+from unittest.mock import patch
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
