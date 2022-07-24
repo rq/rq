@@ -772,7 +772,7 @@ class Job:
                                             serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_failed:
+        elif self.is_failed or self.is_stopped:
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
         elif self.is_canceled:

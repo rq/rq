@@ -621,6 +621,15 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.STOPPED,
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job.save()
+        registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
         job = Job.create(func=fixtures.say_hello, status=JobStatus.FINISHED,
                          connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
