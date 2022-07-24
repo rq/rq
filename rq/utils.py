@@ -1,12 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 Miscellaneous helper functions.
 
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
 import calendar
 import datetime
@@ -102,7 +99,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
     def __init__(self, exclude=None, *args, **kwargs):
         self.exclude = exclude
-        super(ColorizingStreamHandler, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     @property
     def is_tty(self):

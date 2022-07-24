@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 from unittest import mock
+
 from redis import Redis
 
 from rq.decorators import job
@@ -16,7 +13,7 @@ from tests.fixtures import decorated_job
 class TestDecorator(RQTestCase):
 
     def setUp(self):
-        super(TestDecorator, self).setUp()
+        super().setUp()
 
     def test_decorator_preserves_functionality(self):
         """Ensure that a decorated function's functionality is still preserved.

@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
 # flake8: noqa
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
 from .connections import (Connection, get_current_connection, pop_connection,
                           push_connection, use_connection)

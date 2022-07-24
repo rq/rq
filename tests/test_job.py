@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 from rq.serializers import JSONSerializer
 import time

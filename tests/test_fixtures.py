@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 from rq import Queue
 
 from tests import RQTestCase, fixtures
