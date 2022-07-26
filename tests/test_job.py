@@ -1188,3 +1188,33 @@ class TestJob(RQTestCase):
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
         self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
+
+    def test_capture_stdout_and_stderr(self):
+        queue = Queue(connection=self.testconn)
+        worker = Worker(queue)
+
+        job = queue.enqueue(fixtures.log, capture_stdout=True)
+
+        self.assertTrue(job.capture_stdout)
+        self.assertFalse(job.capture_stderr)
+
+        with self.assertRaises(AttributeError):
+            job.stderr
+
+        self.assertEqual(job.stdout, '')
+        worker.work(True)
+        job.refresh()
+        self.assertEqual(job.stdout, 'Output\n')
+
+        job = queue.enqueue(fixtures.log, capture_stderr=True)
+
+        self.assertFalse(job.capture_stdout)
+        self.assertTrue(job.capture_stderr)
+
+        with self.assertRaises(AttributeError):
+            job.stdout
+
+        self.assertEqual(job.stderr, '')
+        worker.work(True)
+        job.refresh()
+        self.assertEqual(job.stderr, 'Error\n')

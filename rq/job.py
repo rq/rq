@@ -3,6 +3,7 @@ import json
 import pickle
 import warnings
 import zlib
+import sys
 
 import asyncio
 from collections.abc import Iterable
@@ -10,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import partial
 from uuid import uuid4
+from io import StringIO
 
 from redis import WatchError
 
@@ -41,6 +43,25 @@ class JobStatus(str, Enum):
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
 UNEVALUATED = object()
+
+
+class _SteamCapture:
+    def __init__(self, original):
+        self.strio = StringIO()
+        self.original = original
+
+    def write(self, s):
+        self.strio.write(s)
+        return self.original.write(s)
+
+    def getvalue(self):
+        return self.strio.getvalue()
+
+    def setvalue(self, value):
+        self.strio = StringIO(value)
+
+    def __getattr__(self, attr):
+        return getattr(self.original, attr)
 
 
 def cancel_job(job_id, connection=None, serializer=None, enqueue_dependents=False):
@@ -75,7 +96,8 @@ class Job:
     def create(cls, func, args=None, kwargs=None, connection=None,
                result_ttl=None, ttl=None, status=None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
-               failure_ttl=None, serializer=None, *, on_success=None, on_failure=None):
+               failure_ttl=None, serializer=None, *, on_success=None, on_failure=None,
+               capture_stdout=False, capture_stderr=False):
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
         """
@@ -131,6 +153,11 @@ class Job:
         job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
+
+        if capture_stdout:
+            job._stdout = _SteamCapture(sys.stdout)
+        if capture_stderr:
+            job._stderr = _SteamCapture(sys.stderr)
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
@@ -331,6 +358,26 @@ class Job:
         self._kwargs = value
         self._data = UNEVALUATED
 
+    @property
+    def stdout(self):
+        if self._stdout is None:
+            raise AttributeError('job.stdout is not available if capture_stdout is False.')
+        return self._stdout.getvalue()
+
+    @property
+    def stderr(self):
+        if self._stderr is None:
+            raise AttributeError('job.stderr is not available if capture_stderr is False.')
+        return self._stderr.getvalue()
+
+    @property
+    def capture_stdout(self):
+        return self._stdout is not None
+
+    @property
+    def capture_stderr(self):
+        return self._stderr is not None
+
     @classmethod
     def exists(cls, job_id, connection=None):
         """Returns whether a job hash exists for the given job ID."""
@@ -404,6 +451,8 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
+        self._stdout = None
+        self._stderr = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -576,6 +625,13 @@ class Job:
                 # Fallback to uncompressed string
                 self.exc_info = as_text(raw_exc_info)
 
+        if obj.get('stdout') is not None:
+            self._stdout = _SteamCapture(sys.stdout)
+            self._stdout.setvalue(as_text(zlib.decompress(obj.get('stdout'))))
+        if obj.get('stderr') is not None:
+            self._stderr = _SteamCapture(sys.stderr)
+            self._stderr.setvalue(as_text(zlib.decompress(obj.get('stderr'))))
+
     # Persistence
     def refresh(self):  # noqa
         """Overwrite the current instance's properties with the values in the
@@ -639,6 +695,10 @@ class Job:
             obj['meta'] = self.serializer.dumps(self.meta)
         if self.ttl:
             obj['ttl'] = self.ttl
+        if self.capture_stdout:
+            obj['stdout'] = zlib.compress(self.stdout.encode('utf-8'))
+        if self.capture_stderr:
+            obj['stderr'] = zlib.compress(self.stderr.encode('utf-8'))
 
         return obj
 
