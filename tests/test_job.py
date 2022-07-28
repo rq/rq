@@ -813,7 +813,7 @@ class TestJob(RQTestCase):
         self.assertNotIn(job, registry)
 
     def test_create_and_cancel_job_fails_already_canceled(self):
-        """Ensure job.cancel() fails on already canceld job"""
+        """Ensure job.cancel() fails on already canceled job"""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello, job_id='fake_job_id')
         self.assertEqual(1, len(queue.get_jobs()))

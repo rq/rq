@@ -319,7 +319,7 @@ job = queue.enqueue(foo_job, failure_ttl=300)  # 5 minutes in seconds
 ```
 
 
-### Requeueing Failed Jobs
+### Requeuing Failed Jobs
 
 If you need to manually requeue failed jobs, here's how to do it:
 
@@ -342,9 +342,9 @@ Starting from version 1.5.0, RQ also allows you to [automatically retry
 failed jobs](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
 
 
-### Requeueing Failed Jobs via CLI
+### Requeuing Failed Jobs via CLI
 
-RQ also provides a CLI tool that makes requeueing failed jobs easy.
+RQ also provides a CLI tool that makes requeuing failed jobs easy.
 
 ```console
 # This will requeue foo_job_id and bar_job_id from myqueue's failed job registry

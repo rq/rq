@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 This file contains all jobs that are used in tests.  Each of these test
-fixtures has a slighty different characteristics.
+fixtures has a slightly different characteristics.
 """
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
