@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import uuid
 import sys
 import warnings
@@ -598,6 +594,7 @@ class Queue:
             job.set_status(JobStatus.FAILED)
             if job.failure_callback:
                 job.failure_callback(job, self.connection, *sys.exc_info())
+            raise
         else:
             if job.success_callback:
                 job.success_callback(job, self.connection, job.result)

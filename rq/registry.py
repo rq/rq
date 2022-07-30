@@ -264,7 +264,7 @@ class ScheduledJobRegistry(BaseRegistry):
     key_template = 'rq:scheduled:{0}'
 
     def __init__(self, *args, **kwargs):
-        super(ScheduledJobRegistry, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # The underlying implementation of get_jobs_to_enqueue() is
         # the same as get_expired_job_ids, but get_expired_job_ids() doesn't
         # make sense in this context

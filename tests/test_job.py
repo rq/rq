@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import json
 from rq.serializers import JSONSerializer
 import time
@@ -631,6 +629,15 @@ class TestJob(RQTestCase):
     def test_job_delete_removes_itself_from_registries(self):
         """job.delete() should remove itself from job registries"""
         job = Job.create(func=fixtures.say_hello, status=JobStatus.FAILED,
+                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job.save()
+        registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
+        registry.add(job, 500)
+
+        job.delete()
+        self.assertFalse(job in registry)
+
+        job = Job.create(func=fixtures.say_hello, status=JobStatus.STOPPED,
                          connection=self.testconn, origin='default', serializer=JSONSerializer)
         job.save()
         registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)

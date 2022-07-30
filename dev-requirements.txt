@@ -1,5 +1,4 @@
 codecov
-mock
 psutil
 pytest
 pytest-cov

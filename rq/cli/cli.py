@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
 """
 RQ command line tool
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
 from functools import update_wrapper
 import os

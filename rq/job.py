@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import inspect
 import json
 import pickle
@@ -806,7 +802,7 @@ class Job:
                                             serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_failed:
+        elif self.is_failed or self.is_stopped:
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
         elif self.is_canceled:

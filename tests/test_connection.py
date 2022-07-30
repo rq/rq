@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 from redis import Redis
 
 from rq import Connection, Queue, use_connection, get_current_connection, pop_connection
