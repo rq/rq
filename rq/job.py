@@ -714,13 +714,12 @@ class Job:
         You can enqueue the jobs dependents optionally, 
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
-        print('Canceling job')
         if self.is_canceled:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
         from .registry import CanceledJobRegistry
         from .queue import Queue
         pipe = pipeline or self.connection.pipeline()
-        print(self.connection.smembers(self.dependents_key))
+
         while True:
             try:
                 q = Queue(
@@ -988,12 +987,11 @@ class Job:
 
         If a pipeline is passed, all dependencies are WATCHed.
 
-        `exclude` allows us to exclude some job id from the status check. This is useful
-        when enqueueing the dependents of a _successful_ job -- that status of
+        `parent_job` allows us to directly pass parent_job for the status check.
+        This is useful when enqueueing the dependents of a _successful_ job -- that status of
         `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
         method is _called_ in the _stack_ of its dependents are being enqueued.
         """
-        print('Checking if dependencies are met', self.id, self.allow_failure)
         connection = pipeline if pipeline is not None else self.connection
 
         if pipeline is not None:
@@ -1008,7 +1006,6 @@ class Job:
             # If parent job is not finished, we should only continue
             # if this job allows parent job to fail
             dependencies_ids.discard(parent_job.id)
-            print(parent_job.id, parent_job._status)
             if parent_job._status == JobStatus.CANCELED:
                 pass
             elif parent_job._status == JobStatus.FAILED and not self.allow_failure:
@@ -1018,17 +1015,17 @@ class Job:
             if not dependencies_ids:
                 return True
 
-        print('Dependency IDs', dependencies_ids)
         with connection.pipeline() as pipeline:
             for key in dependencies_ids:
                 pipeline.hget(self.key_for(key), 'status')
 
             dependencies_statuses = pipeline.execute()
 
-        allowed_statuses = [JobStatus.FINISHED]
         if self.allow_failure:
-            allowed_statuses.append(JobStatus.FAILED)
-        print('Return Dependencies are met!!!')
+            allowed_statuses = [JobStatus.FINISHED, JobStatus.FAILED]
+        else:
+            allowed_statuses = [JobStatus.FINISHED]
+
         return all(
             status.decode() in allowed_statuses
             for status

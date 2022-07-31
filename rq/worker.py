@@ -943,7 +943,6 @@ class Worker:
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
         """
-        print(f'handle job failure {job.id}')
         self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
@@ -999,11 +998,10 @@ class Worker:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
-        print('FINISHED HANDLE ERROR')
 
     def handle_job_success(self, job, queue, started_job_registry):
         self.log.debug('Handling successful execution of job %s', job.id)
-        print(f'Handle job success {job.id}')
+
         with self.connection.pipeline() as pipeline:
             while True:
                 try:
