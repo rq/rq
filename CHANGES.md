@@ -1,3 +1,13 @@
+### RQ 1.11 (2022-07-31)
+* Allow jobs to be enqueued even when their dependencies fail via `Dependency(allow_failure=True)`. Thanks @mattchan-tencent, @caffeinatedMike and @selwin!
+* When stopped jobs are deleted, they should also be removed from FailedJobRegistry. Thanks @selwin!
+* `job.requeue()` now supports `at_front()` argument. Thanks @buroa!
+* Added ssl support for sentinel connections. Thanks @nevious!
+* `SimpleWorker` now works better on Windows. Thanks @caffeinatedMike!
+* Added `on_failure` and `on_success` arguments to @job decorator. Thanks @nepta1998!
+* Fixed a bug in dependency handling. Thanks @th3hamm0r!
+* Minor fixes and optimizations by @xavfernandez, @olaure, @kusaku.
+
 ### RQ 1.10.1 (2021-12-07)
 * **BACKWARDS INCOMPATIBLE**: synchronous execution of jobs now correctly mimics async job execution. Exception is no longer raised when a job fails, job status will now be correctly set to `FAILED` and failure callbacks are now properly called when job is run synchronously. Thanks @ericman93!
 * Fixes a bug that could cause job keys to be left over when `result_ttl=0`. Thanks @selwin!
