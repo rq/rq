@@ -594,7 +594,6 @@ class Queue:
             job.set_status(JobStatus.FAILED)
             if job.failure_callback:
                 job.failure_callback(job, self.connection, *sys.exc_info())
-            raise
         else:
             if job.success_callback:
                 job.success_callback(job, self.connection, job.result)
