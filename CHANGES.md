@@ -1,4 +1,5 @@
 ### RQ 1.11 (2022-07-31)
+* This will be the last RQ version that supports Python 3.5.
 * Allow jobs to be enqueued even when their dependencies fail via `Dependency(allow_failure=True)`. Thanks @mattchan-tencent, @caffeinatedMike and @selwin!
 * When stopped jobs are deleted, they should also be removed from FailedJobRegistry. Thanks @selwin!
 * `job.requeue()` now supports `at_front()` argument. Thanks @buroa!
