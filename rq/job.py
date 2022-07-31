@@ -151,7 +151,7 @@ class Job:
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
             if isinstance(depends_on, Dependency):
-                job.allow_failure = depends_on.allow_failure
+                job.allow_dependency_failures = depends_on.allow_failure
                 depends_on_list = depends_on.dependencies
             else:
                 depends_on_list = ensure_list(depends_on)
@@ -428,7 +428,7 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
-        self.allow_failure = None
+        self.allow_dependency_failures = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -585,7 +585,7 @@ class Job:
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
-        self.allow_failure = bool(int(obj.get('allow_failure'))) if obj.get('allow_failure') else None
+        self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get('allow_dependency_failures') else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
@@ -665,9 +665,9 @@ class Job:
         if self.ttl:
             obj['ttl'] = self.ttl
 
-        if self.allow_failure is not None:
+        if self.allow_dependency_failures is not None:
             # convert boolean to integer to avoid redis.exception.DataError
-            obj["allow_failure"] = int(self.allow_failure)
+            obj["allow_dependency_failures"] = int(self.allow_dependency_failures)
 
         return obj
 
@@ -1008,7 +1008,7 @@ class Job:
             dependencies_ids.discard(parent_job.id)
             if parent_job._status == JobStatus.CANCELED:
                 pass
-            elif parent_job._status == JobStatus.FAILED and not self.allow_failure:
+            elif parent_job._status == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False
 
             # If the only dependency is parent job, dependency has been met
@@ -1021,7 +1021,7 @@ class Job:
 
             dependencies_statuses = pipeline.execute()
 
-        if self.allow_failure:
+        if self.allow_dependency_failures:
             allowed_statuses = [JobStatus.FINISHED, JobStatus.FAILED]
         else:
             allowed_statuses = [JobStatus.FINISHED]
