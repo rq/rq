@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 
-import mock
+from unittest import mock
 from rq import Queue
 from rq.exceptions import NoSuchJobError
 from rq.job import Job, Retry

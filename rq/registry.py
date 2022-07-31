@@ -110,7 +110,7 @@ class BaseRegistry:
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
-    def requeue(self, job_or_id):
+    def requeue(self, job_or_id, at_front=False):
         """Requeues the job with the given job ID."""
         if isinstance(job_or_id, self.job_class):
             job = job_or_id
@@ -130,7 +130,7 @@ class BaseRegistry:
             job.ended_at = None
             job.exc_info = ''
             job.save()
-            job = queue.enqueue_job(job, pipeline=pipeline)
+            job = queue.enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
         return job
 
@@ -264,7 +264,7 @@ class ScheduledJobRegistry(BaseRegistry):
     key_template = 'rq:scheduled:{0}'
 
     def __init__(self, *args, **kwargs):
-        super(ScheduledJobRegistry, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # The underlying implementation of get_jobs_to_enqueue() is
         # the same as get_expired_job_ids, but get_expired_job_ids() doesn't
         # make sense in this context

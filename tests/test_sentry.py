@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import read_config_file
@@ -11,7 +7,7 @@ from rq.worker import SimpleWorker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
 
-import mock
+from unittest import mock
 from click.testing import CliRunner
 
 
@@ -25,7 +21,7 @@ class FakeSentry:
 class TestSentry(RQTestCase):
 
     def setUp(self):
-        super(TestSentry, self).setUp()
+        super().setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 

@@ -129,6 +129,6 @@ heaviness of Celery or other AMQP-based queueing implementations.
 [d]: http://python-rq.org/
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html
-[1]: http://www.celeryproject.org/
+[1]: http://docs.celeryq.dev/
 [2]: https://github.com/resque/resque
 [3]: https://github.com/fengsp/flask-snippets/blob/1f65833a4291c5b833b195a09c365aa815baea4e/utilities/rq.py

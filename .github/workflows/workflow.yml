@@ -17,15 +17,15 @@ jobs:
         redis-py-version: [3.5.0]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4.1.0
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Start Redis
-      uses: supercharge/redis-github-action@1.1.0
+      uses: supercharge/redis-github-action@1.4.0
       with:
         redis-version: ${{ matrix.redis-version }}
 
@@ -41,6 +41,6 @@ jobs:
         RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml

@@ -125,7 +125,7 @@ with q.connection.pipeline() as pipe:
     [
       Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
       Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
-    ]
+    ],
     pipeline=pipe
   )
   pipe.execute()

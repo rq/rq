@@ -14,7 +14,7 @@ To setup RQ on [Heroku][1], first add it to your
 Create a file called `run-worker.py` with the following content (assuming you
 are using [Redis To Go][2] with Heroku):
 
-{% highlight python %}
+```python
 import os
 import urlparse
 from redis import Redis
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     with Connection(conn):
         worker = Worker(map(Queue, listen))
         worker.work()
-{% endhighlight %}
+```
 
 Then, add the command to your `Procfile`:
 
@@ -43,13 +43,13 @@ Then, add the command to your `Procfile`:
 
 Now, all you have to do is spin up a worker:
 
-{% highlight console %}
+```console
 $ heroku scale worker=1
-{% endhighlight %}
+```
 
 If you are using [Heroku Redis][5]) you might need to change the Redis connection as follows:
 
-{% highlight console %}
+```console
 conn = redis.Redis(
     host=host,
     password=password,
@@ -57,16 +57,16 @@ conn = redis.Redis(
     ssl=True,
     ssl_cert_reqs=None
 )
-{% endhighlight %}
+```
 
 and for using the cli:
 
-{% highlight console %}
+```console
 rq info --config rq_conf
-{% endhighlight %}{% endhighlight %}
+``````
 
 Where the rq_conf.py file looks like:
-{% highlight console %}
+```console
 REDIS_HOST = "host"
 REDIS_PORT = port
 REDIS_PASSWORD = "password"
@@ -74,7 +74,7 @@ REDIS_SSL = True
 REDIS_SSL_CA_CERTS = None
 REDIS_DB = 0
 REDIS_SSL_CERT_REQS = None
-{% endhighlight %}{% endhighlight %}
+``````
 
 ## Putting RQ under foreman
 

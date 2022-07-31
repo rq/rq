@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import inspect
 import json
 import pickle
@@ -485,7 +481,8 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
 
         if watch and self._dependency_ids:
-            connection.watch(*self._dependency_ids)
+            connection.watch(*[self.key_for(dependency_id)
+                               for dependency_id in self._dependency_ids])
 
         jobs = [job
                 for job in self.fetch_many(self._dependency_ids, connection=self.connection, serializer=self.serializer)
@@ -743,9 +740,9 @@ class Job:
                     # handle it
                     raise
 
-    def requeue(self):
+    def requeue(self, at_front=False):
         """Requeues job."""
-        return self.failed_job_registry.requeue(self)
+        return self.failed_job_registry.requeue(self, at_front=at_front)
 
     def _remove_from_registries(self, pipeline=None, remove_from_queue=True):
         if remove_from_queue:
@@ -785,7 +782,7 @@ class Job:
                                             serializer=self.serializer)
             registry.remove(self, pipeline=pipeline)
 
-        elif self.is_failed:
+        elif self.is_failed or self.is_stopped:
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
         elif self.is_canceled:
@@ -802,7 +799,7 @@ class Job:
 
         connection = pipeline if pipeline is not None else self.connection
 
-        self._remove_from_registries(pipeline=pipeline, remove_from_queue=True)
+        self._remove_from_registries(pipeline=pipeline, remove_from_queue=remove_from_queue)
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
@@ -980,7 +977,8 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
 
         if pipeline is not None:
-            connection.watch(*self.dependency_ids)
+            connection.watch(*[self.key_for(dependency_id)
+                               for dependency_id in self._dependency_ids])
 
         dependencies_ids = {_id.decode()
                             for _id in connection.smembers(self.dependencies_key)}

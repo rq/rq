@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import errno
 import logging
 import os
@@ -41,7 +37,8 @@ from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .results import Result
 from .scheduler import RQScheduler
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
+from .timeouts import (JobTimeoutException, HorseMonitorTimeoutException,
+                       UnixSignalDeathPenalty, TimerDeathPenalty)
 from .utils import (backend_class, ensure_list, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
@@ -924,7 +921,6 @@ class Worker:
         """
 
         with self.connection.pipeline() as pipeline:
-            self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
 
@@ -1198,10 +1194,11 @@ class Worker:
 
 
 class SimpleWorker(Worker):
-
     def execute_job(self, job, queue):
         """Execute job in same thread/process, do not fork()"""
-        return self.perform_job(job, queue)
+        self.set_state(WorkerStatus.BUSY)
+        self.perform_job(job, queue)
+        self.set_state(WorkerStatus.IDLE)
 
     def get_heartbeat_ttl(self, job):
         # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.

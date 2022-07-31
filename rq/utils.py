@@ -1,12 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 Miscellaneous helper functions.
 
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
 import calendar
 import datetime
@@ -22,6 +19,7 @@ from redis.exceptions import ResponseError
 from .compat import as_text, is_python_version, string_types
 from .exceptions import TimeoutFormatError
 
+logger = logging.getLogger(__name__)
 
 class _Colorizer:
     def __init__(self):
@@ -101,7 +99,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
     def __init__(self, exclude=None, *args, **kwargs):
         self.exclude = exclude
-        super(ColorizingStreamHandler, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     @property
     def is_tty(self):
@@ -141,7 +139,7 @@ def import_attribute(name):
             module = importlib.import_module(module_name)
             break
         except ImportError:
-            logging.warning("Import error for '%s'" % module_name, exc_info=True)
+            logger.warning("Import error for '%s'" % module_name, exc_info=True)
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:

@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import uuid
 import sys
 import warnings
@@ -343,6 +339,7 @@ class Queue:
         # something else has modified either the set of dependencies or the
         # status of one of them. In this case, we simply retry.
         if len(job._dependency_ids) > 0:
+            orig_status = job.get_status(refresh=False)
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
             while True:
                 try:
@@ -360,6 +357,8 @@ class Queue:
 
                     for dependency in dependencies:
                         if dependency.get_status(refresh=False) != JobStatus.FINISHED:
+                            # NOTE: If the following code changes local variables, those values probably have
+                            # to be set back to their original values in the handling of WatchError below!
                             job.set_status(JobStatus.DEFERRED, pipeline=pipe)
                             job.register_dependency(pipeline=pipe)
                             job.save(pipeline=pipe)
@@ -370,6 +369,11 @@ class Queue:
                     break
                 except WatchError:
                     if pipeline is None:
+                        # The call to job.set_status(JobStatus.DEFERRED, pipeline=pipe) above has changed the
+                        # internal "_status". We have to reset it to its original value (probably QUEUED), so
+                        # if during the next run no unfinished dependencies exist anymore, the job gets
+                        # enqueued correctly by enqueue_call().
+                        job._status = orig_status
                         continue
                     else:
                         # if pipeline comes from caller, re-raise to them
@@ -587,6 +591,7 @@ nd
             job.set_status(JobStatus.FAILED)
             if job.failure_callback:
                 job.failure_callback(job, self.connection, *sys.exc_info())
+            raise
         else:
             if job.success_callback:
                 job.success_callback(job, self.connection, job.result)

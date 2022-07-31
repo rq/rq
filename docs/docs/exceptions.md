@@ -15,6 +15,7 @@ value, traceback).
 ```python
 from redis import Redis
 from rq import Queue
+from rq.job import Job
 from rq.registry import FailedJobRegistry
 
 redis = Redis()
@@ -91,12 +92,12 @@ def my_handler(job, *exc_info):
     # do custom things here
 ```
 
-{% highlight python %}
+```python
 from exception_handlers import foo_handler
 
 w = Worker([q], exception_handlers=[foo_handler],
            disable_default_exception_handler=True)
-{% endhighlight %}
+```
 
 
 ## Chaining Exception Handlers
