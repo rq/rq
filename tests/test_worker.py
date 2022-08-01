@@ -29,7 +29,7 @@ from tests.fixtures import (
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
-from rq.job import Job, JobStatus, Retry
+from rq.job import Job, JobStatus, Dependency, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
 from rq.suspension import resume, suspend
@@ -474,7 +474,7 @@ class TestWorker(RQTestCase):
 
         worker = Worker([queue])
 
-        # If job if configured to retry, it will be put back in the queue
+        # If job is configured to retry, it will be put back in the queue
         # and not put in the FailedJobRegistry.
         # This is the original execution
         queue.empty()
@@ -700,22 +700,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_queued, False)
         self.assertEqual(job.is_finished, False)
         self.assertEqual(job.is_failed, True)
-
-    def test_job_dependency(self):
-        """Enqueue dependent jobs only if their parents don't fail"""
-        q = Queue()
-        w = Worker([q])
-        parent_job = q.enqueue(say_hello, result_ttl=0)
-        job = q.enqueue_call(say_hello, depends_on=parent_job)
-        w.work(burst=True)
-        job = Job.fetch(job.id)
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
-        parent_job = q.enqueue(div_by_zero)
-        job = q.enqueue_call(say_hello, depends_on=parent_job)
-        w.work(burst=True)
-        job = Job.fetch(job.id)
-        self.assertNotEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_get_current_job(self):
         """Ensure worker.get_current_job() works properly"""

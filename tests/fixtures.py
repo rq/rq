@@ -1,6 +1,6 @@
 """
 This file contains all jobs that are used in tests.  Each of these test
-fixtures has a slighty different characteristics.
+fixtures has a slightly different characteristics.
 """
 
 import os
