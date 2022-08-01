@@ -9,7 +9,7 @@ from redis import WatchError
 
 from rq.compat import as_text
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus, cancel_job, get_current_job
+from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
@@ -446,6 +446,14 @@ class TestJob(RQTestCase):
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.description, "tests.fixtures.say_hello('Lionel')")
 
+    def test_dependency_parameter_constraints(self):
+        """Ensures the proper constraints are in place for values passed in as job references."""
+        dep_job = Job.create(func=fixtures.say_hello)
+        # raise error on empty jobs
+        self.assertRaises(ValueError, Dependency, jobs=[])
+        # raise error on non-str/Job value in jobs iterable
+        self.assertRaises(ValueError, Dependency, jobs=[dep_job, 1])
+
     def test_multiple_dependencies_are_accepted_and_persisted(self):
         """Ensure job._dependency_ids accepts different input formats, and
         is set and restored properly"""
@@ -468,6 +476,14 @@ class TestJob(RQTestCase):
             [("A", "B"), ["A", "B"]],
             [(job_A, job_B), ["A", "B"]],
             [(job_A, "B"), ["A", "B"]],
+            [Dependency("A"), ["A"]],
+            [Dependency(job_A), ["A"]],
+            [Dependency(["A", "B"]), ["A", "B"]],
+            [Dependency([job_A, job_B]), ["A", "B"]],
+            [Dependency(["A", job_B]), ["A", "B"]],
+            [Dependency(("A", "B")), ["A", "B"]],
+            [Dependency((job_A, job_B)), ["A", "B"]],
+            [Dependency((job_A, "B")), ["A", "B"]],
         ]
         for given, expected in cases:
             job = Job.create(func=fixtures.say_hello, depends_on=given)
@@ -832,7 +848,7 @@ class TestJob(RQTestCase):
         self.assertNotIn(job, registry)
 
     def test_create_and_cancel_job_fails_already_canceled(self):
-        """Ensure job.cancel() fails on already canceld job"""
+        """Ensure job.cancel() fails on already canceled job"""
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(fixtures.say_hello, job_id='fake_job_id')
         self.assertEqual(1, len(queue.get_jobs()))
@@ -877,19 +893,27 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.testconn)
         dependency = queue.enqueue(fixtures.raise_exc)
         dependent = queue.enqueue(fixtures.say_hello, depends_on=dependency)
+        print('# Post enqueue', self.testconn.smembers(dependency.dependents_key))
+        self.assertTrue(dependency.dependent_ids)
 
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(1, len(queue.deferred_job_registry))
         w = Worker([queue])
         w.work(burst=True, max_jobs=1)
+        self.assertTrue(dependency.dependent_ids)
+        print('# Post work', self.testconn.smembers(dependency.dependents_key))
         dependency.refresh()
         dependent.refresh()
         self.assertEqual(0, len(queue.get_jobs()))
         self.assertEqual(1, len(queue.deferred_job_registry))
         self.assertEqual(1, len(queue.failed_job_registry))
+
+        print('# Pre cancel', self.testconn.smembers(dependency.dependents_key))
         cancel_job(dependency.id, enqueue_dependents=True)
         dependency.refresh()
         dependent.refresh()
+        print('#Post cancel', self.testconn.smembers(dependency.dependents_key))
+
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))
         self.assertEqual(0, len(queue.failed_job_registry))
@@ -1131,14 +1155,14 @@ class TestJob(RQTestCase):
 
     def test_dependencies_are_met_at_execution_time(self):
         queue = Queue(connection=self.testconn)
-
+        queue.empty()
         queue.enqueue(fixtures.say_hello, job_id="A")
         queue.enqueue(fixtures.say_hello, job_id="B")
         job_C = queue.enqueue(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
 
+        job_C.dependencies_are_met()
         w = Worker([queue])
         w.work(burst=True)
-
         assert job_C.result
 
     def test_execution_order_with_sole_dependency(self):

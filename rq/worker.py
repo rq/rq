@@ -18,7 +18,7 @@ try:
     from signal import SIGKILL
 except ImportError:
     from signal import SIGTERM as SIGKILL
-
+from contextlib import suppress
 import redis.exceptions
 
 from . import worker_registration
@@ -53,7 +53,6 @@ except ImportError:
 green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
-
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +225,11 @@ class Worker:
                 )
                 self.ip_address = 'unknown'
             else:
-                self.ip_address = [client['addr'] for client in connection.client_list() if client['name'] == self.name][0]
+                self.ip_address = [
+                    client['addr']
+                    for client in connection.client_list()
+                    if client['name'] == self.name
+                ][0]
         else:
             self.hostname = None
             self.pid = None
@@ -971,6 +974,8 @@ class Worker:
                                                         job_class=self.job_class, serializer=job.serializer)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline)
+                with suppress(redis.exceptions.ConnectionError):
+                    pipeline.execute()
 
             self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
@@ -981,9 +986,14 @@ class Worker:
 
             if retry:
                 job.retry(queue, pipeline)
+                enqueue_dependents = False
+            else:
+                enqueue_dependents = True
 
             try:
                 pipeline.execute()
+                if enqueue_dependents:
+                    queue.enqueue_dependents(job)
             except Exception:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
@@ -991,6 +1001,7 @@ class Worker:
 
     def handle_job_success(self, job, queue, started_job_registry):
         self.log.debug('Handling successful execution of job %s', job.id)
+
         with self.connection.pipeline() as pipeline:
             while True:
                 try:
@@ -1252,6 +1263,7 @@ class RoundRobinWorker(Worker):
     """
     Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
     """
+
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
         self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]

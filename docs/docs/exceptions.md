@@ -108,7 +108,7 @@ The handler can indicate this by returning a boolean. `False` means stop
 processing exceptions, `True` means continue and fall through to the next
 exception handler on the stack.
 
-It's important to know for implementors that, by default, when the handler
+It's important to know for implementers that, by default, when the handler
 doesn't have an explicit return value (thus `None`), this will be interpreted
 as `True` (i.e.  continue with the next handler).
 

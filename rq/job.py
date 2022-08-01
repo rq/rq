@@ -38,6 +38,22 @@ class JobStatus(str, Enum):
     CANCELED = 'canceled'
 
 
+class Dependency:
+    def __init__(self, jobs, allow_failure: bool = False):
+        jobs = ensure_list(jobs)
+        if not all(
+            isinstance(job, Job) or isinstance(job, str)
+            for job in jobs
+            if job
+        ):
+            raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
+        elif len(jobs) < 1:
+            raise ValueError("jobs: cannot be empty.")
+
+        self.dependencies = jobs
+        self.allow_failure = allow_failure
+
+
 # Sentinel value to mark that some of our lazily evaluated properties have not
 # yet been evaluated.
 UNEVALUATED = object()
@@ -136,8 +152,16 @@ class Job:
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep
-                                   for dep in ensure_list(depends_on)]
+            if isinstance(depends_on, Dependency):
+                job.allow_dependency_failures = depends_on.allow_failure
+                depends_on_list = depends_on.dependencies
+            else:
+                depends_on_list = ensure_list(depends_on)
+            job._dependency_ids = [
+                dep.id if isinstance(dep, Job) else dep
+                for dep in depends_on_list
+            ]
+
         return job
 
     def get_position(self):
@@ -407,6 +431,7 @@ class Job:
         self.retry_intervals = None
         self.redis_server_version = None
         self.last_heartbeat = None
+        self.allow_dependency_failures = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -564,7 +589,7 @@ class Job:
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
-
+        self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get('allow_dependency_failures') else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
@@ -646,6 +671,10 @@ class Job:
         if self.ttl:
             obj['ttl'] = self.ttl
 
+        if self.allow_dependency_failures is not None:
+            # convert boolean to integer to avoid redis.exception.DataError
+            obj["allow_dependency_failures"] = int(self.allow_dependency_failures)
+
         return obj
 
     def save(self, pipeline=None, include_meta=True):
@@ -691,12 +720,12 @@ class Job:
         You can enqueue the jobs dependents optionally, 
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
-
         if self.is_canceled:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
         from .registry import CanceledJobRegistry
         from .queue import Queue
         pipe = pipeline or self.connection.pipeline()
+
         while True:
             try:
                 q = Queue(
@@ -705,6 +734,8 @@ class Job:
                     job_class=self.__class__,
                     serializer=self.serializer
                 )
+
+                self.set_status(JobStatus.CANCELED, pipeline=pipe)
                 if enqueue_dependents:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
@@ -715,13 +746,11 @@ class Job:
                     remove_from_queue=True
                 )
 
-                self.set_status(JobStatus.CANCELED, pipeline=pipe)
-
                 registry = CanceledJobRegistry(
                     self.origin,
                     self.connection,
                     job_class=self.__class__,
-                    serializer=self.serializer                    
+                    serializer=self.serializer
                 )
                 registry.add(self, pipeline=pipe)
                 if pipeline is None:
@@ -732,7 +761,7 @@ class Job:
                     continue
                 else:
                     # if the pipeline comes from the caller, we re-raise the
-                    # exception as it it the responsibility of the caller to
+                    # exception as it is the responsibility of the caller to
                     # handle it
                     raise
 
@@ -959,17 +988,16 @@ class Job:
         return [Job.key_for(_id.decode())
                 for _id in dependencies]
 
-    def dependencies_are_met(self, exclude_job_id=None, pipeline=None):
-        """Returns a boolean indicating if all of this jobs dependencies are _FINISHED_
+    def dependencies_are_met(self, parent_job=None, pipeline=None):
+        """Returns a boolean indicating if all of this job's dependencies are _FINISHED_
 
         If a pipeline is passed, all dependencies are WATCHed.
 
-        `exclude` allows us to exclude some job id from the status check. This is useful
-        when enqueueing the dependents of a _successful_ job -- that status of
+        `parent_job` allows us to directly pass parent_job for the status check.
+        This is useful when enqueueing the dependents of a _successful_ job -- that status of
         `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
-        method is _called_ in the _stack_ of it's dependents are being enqueued.
+        method is _called_ in the _stack_ of its dependents are being enqueued.
         """
-
         connection = pipeline if pipeline is not None else self.connection
 
         if pipeline is not None:
@@ -979,8 +1007,19 @@ class Job:
         dependencies_ids = {_id.decode()
                             for _id in connection.smembers(self.dependencies_key)}
 
-        if exclude_job_id:
-            dependencies_ids.discard(exclude_job_id)
+        if parent_job:
+            # If parent job is canceled, no need to check for status
+            # If parent job is not finished, we should only continue
+            # if this job allows parent job to fail
+            dependencies_ids.discard(parent_job.id)
+            if parent_job._status == JobStatus.CANCELED:
+                pass
+            elif parent_job._status == JobStatus.FAILED and not self.allow_dependency_failures:
+                return False
+
+            # If the only dependency is parent job, dependency has been met
+            if not dependencies_ids:
+                return True
 
         with connection.pipeline() as pipeline:
             for key in dependencies_ids:
@@ -988,8 +1027,13 @@ class Job:
 
             dependencies_statuses = pipeline.execute()
 
+        if self.allow_dependency_failures:
+            allowed_statuses = [JobStatus.FINISHED, JobStatus.FAILED]
+        else:
+            allowed_statuses = [JobStatus.FINISHED]
+
         return all(
-            status.decode() == JobStatus.FINISHED
+            status.decode() in allowed_statuses
             for status
             in dependencies_statuses
             if status
