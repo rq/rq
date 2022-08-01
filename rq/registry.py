@@ -371,7 +371,7 @@ class CanceledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue):
-    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
+    """Cleans StartedJobRegistry, FinishedJobRegistry, FailedJobRegistry, and DeferredJobRegistry of a queue."""
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,
                                    job_class=queue.job_class,
@@ -384,6 +384,12 @@ def clean_registries(queue):
     registry.cleanup()
 
     registry = FailedJobRegistry(name=queue.name,
+                                 connection=queue.connection,
+                                 job_class=queue.job_class,
+                                 serializer=queue.serializer)
+    registry.cleanup()
+
+    registry = DeferredJobRegistry(name=queue.name,
                                  connection=queue.connection,
                                  job_class=queue.job_class,
                                  serializer=queue.serializer)
