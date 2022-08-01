@@ -59,6 +59,8 @@ The keyword arguments accepted by `create()` are:
 * `ttl` specifies the maximum queued time (in seconds) of the job before it's discarded.
   This argument defaults to `None` (infinite TTL).
 * `failure_ttl` specifies how long (in seconds) failed jobs are kept (defaults to 1 year)
+* `deferred_ttl` specifies how long deferred jobs (jobs have have `depends_on` set) wait 
+  before being considered failed. Defaults to infinite.
 * `depends_on` specifies another job (or job id) that must complete before this
   job will be queued.
 * `id` allows you to manually specify this job's id

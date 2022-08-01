@@ -301,6 +301,13 @@ class TestQueue(RQTestCase):
         job.refresh()
         self.assertEqual(job.failure_ttl, 10)
 
+    def test_enqueue_with_deferred_ttl(self):
+        """enqueue() properly sets job.deferred_ttl"""
+        q = Queue()
+        job = q.enqueue(say_hello, deferred_ttl=10)
+        job.refresh()
+        self.assertEqual(job.deferred_ttl, 10)
+
     def test_job_timeout(self):
         """Timeout can be passed via job_timeout argument"""
         queue = Queue()

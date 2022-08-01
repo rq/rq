@@ -69,6 +69,8 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `ttl` specifies the maximum queued time (in seconds) of the job before it's discarded.
   This argument defaults to `None` (infinite TTL).
 * `failure_ttl` specifies how long failed jobs are kept (defaults to 1 year)
+* `deferred_ttl` specifies how long deferred jobs (jobs have have `depends_on` set) wait 
+  before being considered failed. Defaults to infinite.
 * `depends_on` specifies another job (or list of jobs) that must complete before this
   job will be queued.
 * `job_id` allows you to manually specify this job's `job_id`

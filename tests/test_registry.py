@@ -332,6 +332,24 @@ class TestDeferredRegistry(RQTestCase):
                    self.testconn.zrange(self.registry.key, 0, -1)]
         self.assertEqual(job_ids, [job.id])
 
+    def test_add_with_deferred_ttl(self):
+        """Job TTL defaults to +inf"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        key = self.registry.key
+
+        self.registry.add(job)
+        score = self.testconn.zscore(key, job.id)
+        self.assertEqual(score, float('inf'))
+
+        timestamp = current_timestamp()
+        ttl = 5
+        self.registry.add(job, ttl=ttl)
+        score = self.testconn.zscore(key, job.id)
+        self.assertLess(score, timestamp + ttl + 2)
+        self.assertGreater(score, timestamp + ttl - 2)
+
     def test_register_dependency(self):
         """Ensure job creation and deletion works with DeferredJobRegistry."""
         queue = Queue(connection=self.testconn)
@@ -345,6 +363,25 @@ class TestDeferredRegistry(RQTestCase):
         job2.delete()
         self.assertEqual(registry.get_job_ids(), [])
 
+    def test_cleanup_moves_jobs_to_failed_job_registry(self):
+        """Moving expired jobs to FailedJobRegistry."""
+        queue = Queue(connection=self.testconn)
+        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        self.testconn.zadd(self.registry.key, {job.id: 2})
+
+        # Job has not been moved to FailedJobRegistry
+        self.registry.cleanup(1)
+        self.assertNotIn(job, failed_job_registry)
+        self.assertIn(job, self.registry)
+
+        self.registry.cleanup()
+        self.assertIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertTrue(job.exc_info)  # explanation is written to exc_info
 
 class TestFailedJobRegistry(RQTestCase):
 
