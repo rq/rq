@@ -217,7 +217,7 @@ class TestRegistry(RQTestCase):
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
 
-        # Make sure 
+        # Make sure
 
     def test_clean_registries(self):
         """clean_registries() cleans Started and Finished job registries."""

@@ -711,7 +711,7 @@ class Job:
         without worrying about the internals required to implement job
         cancellation.
 
-        You can enqueue the jobs dependents optionally, 
+        You can enqueue the jobs dependents optionally,
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
         if self.is_canceled:

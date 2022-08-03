@@ -36,8 +36,7 @@ from .queue import Queue
 from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
-from .timeouts import (JobTimeoutException, HorseMonitorTimeoutException,
-                       UnixSignalDeathPenalty, TimerDeathPenalty)
+from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, get_version,
                     make_colorizer, utcformat, utcnow, utcparse)
 from .version import VERSION
