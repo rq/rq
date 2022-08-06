@@ -106,7 +106,7 @@ class TestDecorator(RQTestCase):
 
         bar_job = bar.delay()
 
-        self.assertEqual(foo_job._dependency_ids,[])
+        self.assertEqual(foo_job._dependency_ids, [])
         self.assertIsNone(foo_job._dependency_id)
 
         self.assertEqual(foo_job.dependency, None)
@@ -143,8 +143,8 @@ class TestDecorator(RQTestCase):
         self.assertIsNone(foo_job._dependency_id)
         self.assertIsNone(bar_job._dependency_id)
 
-        self.assertEqual(foo_job._dependency_ids,[])
-        self.assertEqual(bar_job._dependency_ids,[])
+        self.assertEqual(foo_job._dependency_ids, [])
+        self.assertEqual(bar_job._dependency_ids, [])
         self.assertEqual(baz_job._dependency_id, bar_job.id)
         self.assertEqual(baz_job.dependency, bar_job)
         self.assertEqual(baz_job.dependency.id, bar_job.id)
@@ -152,7 +152,7 @@ class TestDecorator(RQTestCase):
     def test_decorator_accepts_on_failure_function_as_argument(self):
         """Ensure that passing in on_failure function to the decorator sets the
         correct on_failure function on the job.
-        """ 
+        """
         # Only functions and builtins are supported as callback
         @job('default', on_failure=Job.fetch)
         def foo():
@@ -167,7 +167,6 @@ class TestDecorator(RQTestCase):
         result_job = Job.fetch(id=result.id, connection=self.testconn)
         self.assertEqual(result_job.failure_callback, print)
 
-
     def test_decorator_accepts_on_success_function_as_argument(self):
         """Ensure that passing in on_failure function to the decorator sets the
         correct on_success function on the job.
@@ -178,7 +177,7 @@ class TestDecorator(RQTestCase):
             return 'Foo'
         with self.assertRaises(ValueError):
             result = foo.delay()
-            
+
         @job('default', on_success=print)
         def hello():
             return 'Hello'

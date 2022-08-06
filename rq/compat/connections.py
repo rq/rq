@@ -1,8 +1,3 @@
-from functools import partial
-
-from redis import Redis
-
-
 def fix_return_type(func):
     # deliberately no functools.wraps() call here, since the function being
     # wrapped is a partial, which has no module

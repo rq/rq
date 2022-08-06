@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
-from rq.serializers import DefaultSerializer, JSONSerializer
+from rq.serializers import JSONSerializer
 from unittest.mock import patch
 
 from rq import Retry, Queue

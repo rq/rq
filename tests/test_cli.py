@@ -406,7 +406,7 @@ class TestRQCli(RQTestCase):
         runner = CliRunner()
         job = q.enqueue(say_hello)
         runner.invoke(main, ['worker', '-u', self.redis_url,
-                            '--serializer rq.serializer.JSONSerializer'])
+                             '--serializer rq.serializer.JSONSerializer'])
         self.assertIn(job.id, q.job_ids)
 
     def test_cli_enqueue(self):
@@ -439,7 +439,7 @@ class TestRQCli(RQTestCase):
         self.assertTrue(queue.is_empty())
 
         runner = CliRunner()
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '-S', 'rq.serializers.JSONSerializer',  'tests.fixtures.say_hello'])
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '-S', 'rq.serializers.JSONSerializer', 'tests.fixtures.say_hello'])
         self.assert_normal_execution(result)
 
         prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
