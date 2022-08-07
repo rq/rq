@@ -1119,40 +1119,6 @@ class TestJob(RQTestCase):
                 pipeline.touch(Job.key_for(dependent_job.id))
                 pipeline.execute()
 
-    def test_can_enqueue_job_if_dependency_is_deleted(self):
-        queue = Queue(connection=self.testconn)
-
-        dependency_job = queue.enqueue(fixtures.say_hello, result_ttl=0)
-
-        w = Worker([queue])
-        w.work(burst=True)
-
-        assert queue.enqueue(fixtures.say_hello, depends_on=dependency_job)
-
-    def test_dependents_are_met_if_dependency_is_deleted(self):
-        queue = Queue(connection=self.testconn)
-
-        dependency_job = queue.enqueue(fixtures.say_hello, result_ttl=0)
-        dependent_job = queue.enqueue(fixtures.say_hello, depends_on=dependency_job)
-
-        w = Worker([queue])
-        w.work(burst=True, max_jobs=1)
-
-        assert dependent_job.dependencies_are_met()
-        assert dependent_job.get_status() == JobStatus.QUEUED
-
-    def test_dependencies_are_met_at_execution_time(self):
-        queue = Queue(connection=self.testconn)
-        queue.empty()
-        queue.enqueue(fixtures.say_hello, job_id="A")
-        queue.enqueue(fixtures.say_hello, job_id="B")
-        job_C = queue.enqueue(fixtures.check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
-
-        job_C.dependencies_are_met()
-        w = Worker([queue])
-        w.work(burst=True)
-        assert job_C.result
-
     def test_execution_order_with_sole_dependency(self):
         queue = Queue(connection=self.testconn)
         key = 'test_job:job_order'

@@ -602,7 +602,7 @@ class Queue:
 
         return job
 
-    def enqueue_dependents(self, job, pipeline=None):
+    def enqueue_dependents(self, job, pipeline=None, exclude_job_id=None):
         """Enqueues all jobs in the given job's dependents set and clears it.
 
         When called without a pipeline, this method uses WATCH/MULTI/EXEC.
@@ -638,6 +638,7 @@ class Queue:
                     ) if dependent_job and dependent_job.dependencies_are_met(
                         parent_job=job,
                         pipeline=pipe,
+                        exclude_job_id=exclude_job_id,
                     )
                 ]
 
