@@ -104,7 +104,10 @@ class TestDependencies(RQTestCase):
         job = queue.enqueue(say_hello)
         job.set_status(JobStatus.CANCELED)
         dependent_job = queue.enqueue(say_hello, depends_on=job)
+        # dependencies_are_met() should return False, whether or not
+        # parent_job is provided
         self.assertFalse(dependent_job.dependencies_are_met(job))
+        self.assertFalse(dependent_job.dependencies_are_met())
 
     def test_can_enqueue_job_if_dependency_is_deleted(self):
         queue = Queue(connection=self.testconn)
