@@ -1,7 +1,7 @@
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, say_hello
+from tests.fixtures import check_dependencies_are_met, div_by_zero, say_hello
 
-from rq import Queue, SimpleWorker
+from rq import Queue, SimpleWorker, Worker
 from rq.job import Job, JobStatus, Dependency
 
 
@@ -97,3 +97,45 @@ class TestDependencies(RQTestCase):
         w.work(burst=True)
         job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_dependencies_are_met_if_parent_is_canceled(self):
+        """When parent job is canceled, it should be treated as failed"""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        job.set_status(JobStatus.CANCELED)
+        dependent_job = queue.enqueue(say_hello, depends_on=job)
+        self.assertFalse(dependent_job.dependencies_are_met(job))
+
+    def test_can_enqueue_job_if_dependency_is_deleted(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(say_hello, result_ttl=0)
+
+        w = Worker([queue])
+        w.work(burst=True)
+
+        assert queue.enqueue(say_hello, depends_on=dependency_job)
+
+    def test_dependencies_are_met_if_dependency_is_deleted(self):
+        queue = Queue(connection=self.testconn)
+
+        dependency_job = queue.enqueue(say_hello, result_ttl=0)
+        dependent_job = queue.enqueue(say_hello, depends_on=dependency_job)
+
+        w = Worker([queue])
+        w.work(burst=True, max_jobs=1)
+
+        assert dependent_job.dependencies_are_met()
+        assert dependent_job.get_status() == JobStatus.QUEUED
+
+    def test_dependencies_are_met_at_execution_time(self):
+        queue = Queue(connection=self.testconn)
+        queue.empty()
+        queue.enqueue(say_hello, job_id="A")
+        queue.enqueue(say_hello, job_id="B")
+        job_c = queue.enqueue(check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
+
+        job_c.dependencies_are_met()
+        w = Worker([queue])
+        w.work(burst=True)
+        assert job_c.result
