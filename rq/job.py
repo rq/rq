@@ -734,7 +734,7 @@ class Job:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
-                    q.enqueue_dependents(self, pipeline=pipeline)
+                    q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
                 self._remove_from_registries(
                     pipeline=pipe,
                     remove_from_queue=True
@@ -982,7 +982,7 @@ class Job:
         return [Job.key_for(_id.decode())
                 for _id in dependencies]
 
-    def dependencies_are_met(self, parent_job=None, pipeline=None):
+    def dependencies_are_met(self, parent_job=None, pipeline=None, exclude_job_id=None):
         """Returns a boolean indicating if all of this job's dependencies are _FINISHED_
 
         If a pipeline is passed, all dependencies are WATCHed.
@@ -1000,6 +1000,11 @@ class Job:
 
         dependencies_ids = {_id.decode()
                             for _id in connection.smembers(self.dependencies_key)}
+
+        if exclude_job_id:
+            dependencies_ids.discard(exclude_job_id)        
+            if parent_job.id == exclude_job_id:
+                parent_job = None
 
         if parent_job:
             # If parent job is canceled, treat dependency as failed
