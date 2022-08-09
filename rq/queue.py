@@ -648,16 +648,22 @@ class Queue:
                     break
 
                 for dependent in jobs_to_enqueue:
+                    if dependent.enqueue_at_front is not None:
+                        enqueue_at_front = dependent.enqueue_at_front
+                    else:
+                        enqueue_at_front = False
+
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,
                                                    job_class=self.job_class,
                                                    serializer=self.serializer)
                     registry.remove(dependent, pipeline=pipe)
+
                     if dependent.origin == self.name:
-                        self.enqueue_job(dependent, pipeline=pipe)
+                        self.enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
                     else:
                         queue = self.__class__(name=dependent.origin, connection=self.connection)
-                        queue.enqueue_job(dependent, pipeline=pipe)
+                        queue.enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
 
                 # Only delete dependents_key if all dependents have been enqueued
                 if len(jobs_to_enqueue) == len(dependent_job_ids):
