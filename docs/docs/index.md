@@ -168,6 +168,8 @@ The `Dependency(jobs=...)` parameter accepts:
 - a Job object
 - an iteratable of job id strings and/or Job objects
 
+In addition, the `Dependency` class can be configured to enqueue the dependents at the front of the queue.
+
 Example:
 
 ```python
@@ -177,9 +179,17 @@ from rq import Queue
 
 queue = Queue(connection=Redis())
 job_1 = queue.enqueue(div_by_zero)
-dependency = Dependency(jobs=[job_1], allow_failure=True)  # allow_failure defaults to False
+dependency = Dependency(
+    jobs=[job_1],
+    allow_failure=True,    # allow_failure defaults to False
+    enqueue_at_front=True  # enqueue_at_front defaults to False  
+)
 job_2 = queue.enqueue(say_hello, depends_on=dependency)
-# job_2 will execute even though its dependency (job_1) fails
+
+"""
+  job_2 will execute even though its dependency (job_1) fails,
+  and it will be enqueued at the front of the queue.
+"""
 ```
 
 
