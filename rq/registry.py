@@ -1,7 +1,12 @@
+from __future__ import annotations
+import typing as t
 import calendar
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
+
+if t.TYPE_CHECKING:
+    from redis import Redis
 
 from .compat import as_text
 from .connections import resolve_connection
@@ -21,7 +26,7 @@ class BaseRegistry:
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection=None, job_class=None,
+    def __init__(self, name='default', connection: t.Optional['Redis'] = None, job_class: t.Optional[t.Type['Job']] = None,
                  queue=None, serializer=None):
         if queue:
             self.name = queue.name
@@ -61,7 +66,7 @@ class BaseRegistry:
         self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job, ttl=0, pipeline=None, xx=False):
+    def add(self, job: 'Job', ttl=0, pipeline: t.Optional['Redis'] = None, xx: bool = False):
         """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf"""
         score = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
@@ -71,7 +76,7 @@ class BaseRegistry:
 
         return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
-    def remove(self, job, pipeline=None, delete_job=False):
+    def remove(self, job: 'Job', pipeline: t.Optional['Redis'] = None, delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`"""
         connection = pipeline if pipeline is not None else self.connection
         job_id = job.id if isinstance(job, self.job_class) else job
@@ -105,12 +110,12 @@ class BaseRegistry:
         """Returns Queue object associated with this registry."""
         return Queue(self.name, connection=self.connection, serializer=self.serializer)
 
-    def get_expiration_time(self, job):
+    def get_expiration_time(self, job: 'Job'):
         """Returns job's expiration time."""
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
-    def requeue(self, job_or_id, at_front=False):
+    def requeue(self, job_or_id: t.Union['Job', str], at_front: bool = False):
         """Requeues the job with the given job ID."""
         if isinstance(job_or_id, self.job_class):
             job = job_or_id
@@ -221,7 +226,7 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job, ttl=None, exc_string='', pipeline=None):
+    def add(self, job: 'Job', ttl=None, exc_string='', pipeline: t.Optional['Redis'] = None):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
@@ -270,7 +275,7 @@ class ScheduledJobRegistry(BaseRegistry):
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
 
-    def schedule(self, job, scheduled_datetime, pipeline=None):
+    def schedule(self, job: 'Job', scheduled_datetime, pipeline: t.Optional['Redis'] = None):
         """
         Adds job to registry, scored by its execution time (in UTC).
         If datetime has no tzinfo, it will assume localtimezone.
@@ -295,7 +300,7 @@ class ScheduledJobRegistry(BaseRegistry):
         implemented in BaseRegistry."""
         pass
 
-    def remove_jobs(self, timestamp=None, pipeline=None):
+    def remove_jobs(self, timestamp=None, pipeline: t.Optional['Redis'] = None):
         """Remove jobs whose timestamp is in the past from registry."""
         connection = pipeline if pipeline is not None else self.connection
         score = timestamp if timestamp is not None else current_timestamp()
@@ -307,7 +312,7 @@ class ScheduledJobRegistry(BaseRegistry):
         return [as_text(job_id) for job_id in
                 self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)]
 
-    def get_scheduled_time(self, job_or_id):
+    def get_scheduled_time(self, job_or_id: t.Union['Job', str]):
         """Returns datetime (UTC) at which job is scheduled to be enqueued"""
         if isinstance(job_or_id, self.job_class):
             job_id = job_or_id.id

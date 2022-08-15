@@ -1,3 +1,11 @@
+from __future__ import annotations
+import typing as t
+
+if t.TYPE_CHECKING:
+    from redis import Redis
+    from .worker import Worker
+    from .queue import Queue
+
 from .compat import as_text
 
 from rq.utils import split_list
@@ -7,7 +15,7 @@ REDIS_WORKER_KEYS = 'rq:workers'
 MAX_KEYS = 1000
 
 
-def register(worker, pipeline=None):
+def register(worker: 'Worker', pipeline: t.Optional['Redis'] = None):
     """Store worker key in Redis so we can easily discover active workers."""
     connection = pipeline if pipeline is not None else worker.connection
     connection.sadd(worker.redis_workers_keys, worker.key)
@@ -16,7 +24,7 @@ def register(worker, pipeline=None):
         connection.sadd(redis_key, worker.key)
 
 
-def unregister(worker, pipeline=None):
+def unregister(worker: 'Worker', pipeline: t.Optional['Redis'] = None):
     """Remove worker key from Redis."""
     if pipeline is None:
         connection = worker.connection.pipeline()
@@ -32,10 +40,10 @@ def unregister(worker, pipeline=None):
         connection.execute()
 
 
-def get_keys(queue=None, connection=None):
+def get_keys(queue: t.Optional[t.Type['Queue']]=None, connection: t.Optional['Redis'] = None):
     """Returnes a list of worker keys for a queue"""
     if queue is None and connection is None:
-        raise ValueError('"queue" or "connection" argument is required')
+        raise ValueError(''Queue' or "connection" argument is required')
 
     if queue:
         redis = queue.connection

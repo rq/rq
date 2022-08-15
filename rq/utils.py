@@ -11,8 +11,12 @@ import importlib
 import logging
 import numbers
 import sys
-
+import datetime as dt
+import typing as t
 from collections.abc import Iterable
+
+if t.TYPE_CHECKING:
+    from redis import Redis
 
 from redis.exceptions import ResponseError
 
@@ -73,7 +77,7 @@ class _Colorizer:
 colorizer = _Colorizer()
 
 
-def make_colorizer(color):
+def make_colorizer(color: str):
     """Creates a function that colorizes text with the given color.
 
     For example:
@@ -121,7 +125,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         return message
 
 
-def import_attribute(name):
+def import_attribute(name: str):
     """Return an attribute from a dotted path name (e.g. "path.to.func")."""
     name_bits = name.split('.')
     module_name_bits, attribute_bits = name_bits[:-1], [name_bits[-1]]
@@ -168,11 +172,11 @@ def utcnow():
 _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
-def utcformat(dt):
+def utcformat(dt: dt.datetime):
     return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
-def utcparse(string):
+def utcparse(string: str):
     try:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
@@ -180,7 +184,7 @@ def utcparse(string):
         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
-def first(iterable, default=None, key=None):
+def first(iterable: t.Iterable, default=None, key=None):
     """
     Return first element of `iterable` that evaluates true, else return None
     (or an optional default value).
@@ -219,12 +223,12 @@ def first(iterable, default=None, key=None):
     return default
 
 
-def is_nonstring_iterable(obj):
+def is_nonstring_iterable(obj: t.Any) -> bool:
     """Returns whether the obj is an iterable, but not a string"""
     return isinstance(obj, Iterable) and not isinstance(obj, string_types)
 
 
-def ensure_list(obj):
+def ensure_list(obj: t.Any) -> t.Iterable:
     """
     When passed an iterable of objects, does nothing, otherwise, it returns
     a list with just that object in it.
@@ -232,7 +236,7 @@ def ensure_list(obj):
     return obj if is_nonstring_iterable(obj) else [obj]
 
 
-def current_timestamp():
+def current_timestamp() -> int:
     """Returns current UTC timestamp"""
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
 
@@ -247,14 +251,14 @@ def backend_class(holder, default_name, override=None):
         return override
 
 
-def str_to_date(date_str):
+def str_to_date(date_str: t.Optional[str]) -> t.Union[dt.datetime, t.Any]:
     if not date_str:
         return
     else:
         return utcparse(date_str.decode())
 
 
-def parse_timeout(timeout):
+def parse_timeout(timeout: t.Any):
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
@@ -272,7 +276,7 @@ def parse_timeout(timeout):
     return timeout
 
 
-def get_version(connection):
+def get_version(connection: 'Redis'):
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
@@ -303,7 +307,7 @@ def truncate_long_string(data, max_length=None):
     return (data[:max_length] + '...') if len(data) > max_length else data
 
 
-def get_call_string(func_name, args, kwargs, max_length=None):
+def get_call_string(func_name: str, args: t.Any, kwargs: t.Any, max_length=None):
     """Returns a string representation of the call, formatted as a regular
     Python function invocation statement. If max_length is not None, truncate
     arguments with representation longer than max_length.

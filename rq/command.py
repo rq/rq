@@ -1,6 +1,13 @@
+from __future__ import annotations
+
 import json
 import os
 import signal
+import typing as t
+
+if t.TYPE_CHECKING:
+    from redis import Redis
+    from .worker import Worker
 
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job
@@ -9,7 +16,7 @@ from rq.job import Job
 PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
 
 
-def send_command(connection, worker_name, command, **kwargs):
+def send_command(connection: 'Redis', worker_name: str, command, **kwargs):
     """Use connection' pubsub mechanism to send a command"""
     payload = {'command': command}
     if kwargs:
@@ -22,17 +29,17 @@ def parse_payload(payload):
     return json.loads(payload.get('data').decode())
 
 
-def send_shutdown_command(connection, worker_name):
+def send_shutdown_command(connection: 'Redis', worker_name: str):
     """Send shutdown command"""
     send_command(connection, worker_name, 'shutdown')
 
 
-def send_kill_horse_command(connection, worker_name):
+def send_kill_horse_command(connection: 'Redis', worker_name: str):
     """Tell worker to kill it's horse"""
     send_command(connection, worker_name, 'kill-horse')
 
 
-def send_stop_job_command(connection, job_id, serializer=None):
+def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
     """Instruct a worker to stop a job"""
     job = Job.fetch(job_id, connection=connection, serializer=serializer)
     if not job.worker_name:
@@ -50,14 +57,14 @@ def handle_command(worker, payload):
         handle_kill_worker_command(worker, payload)
 
 
-def handle_shutdown_command(worker):
+def handle_shutdown_command(worker: 'Worker'):
     """Perform shutdown command"""
     worker.log.info('Received shutdown command, sending SIGINT signal.')
     pid = os.getpid()
     os.kill(pid, signal.SIGINT)
 
 
-def handle_kill_worker_command(worker, payload):
+def handle_kill_worker_command(worker: 'Worker', payload):
     """Stops work horse"""
     worker.log.info('Received kill horse command.')
     if worker.horse_pid:
@@ -67,7 +74,7 @@ def handle_kill_worker_command(worker, payload):
         worker.log.info('Worker is not working, kill horse command ignored')
 
 
-def handle_stop_job_command(worker, payload):
+def handle_stop_job_command(worker: 'Worker', payload):
     """Handles stop job command"""
     job_id = payload.get('job_id')
     worker.log.debug('Received command to stop job %s', job_id)

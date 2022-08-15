@@ -8,6 +8,10 @@ import sys
 import time
 import traceback
 import warnings
+import typing as t
+
+if t.TYPE_CHECKING:
+    from redis import Redis
 
 from datetime import timedelta
 from enum import Enum
@@ -106,7 +110,14 @@ class Worker:
     max_connection_wait_time = 60.0
 
     @classmethod
-    def all(cls, connection=None, job_class=None, queue_class=None, queue=None, serializer=None):
+    def all(
+        cls,
+        connection: t.Optional['Redis'] = None,
+        job_class: t.Type['Job'] = None,
+        queue_class: t.Optional[t.Type['Queue']] = None,
+        queue: t.Optional['Queue'] = None,
+        serializer=None
+    ) -> t.List['Worker']:
         """Returns an iterable of all Workers.
         """
         if queue:
@@ -123,18 +134,18 @@ class Worker:
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection=None, queue=None):
+    def all_keys(cls, connection: t.Optional['Redis'] = None, queue=None):
         return [as_text(key)
                 for key in get_keys(queue=queue, connection=connection)]
 
     @classmethod
-    def count(cls, connection=None, queue=None):
+    def count(cls, connection: t.Optional['Redis'] = None, queue=None):
         """Returns the number of workers by queue or connection"""
         return len(get_keys(queue=queue, connection=connection))
 
     @classmethod
-    def find_by_key(cls, worker_key, connection=None, job_class=None,
-                    queue_class=None, serializer=None):
+    def find_by_key(cls, worker_key: str, connection: t.Optional['Redis'] = None, job_class: t.Type['Job'] = None,
+                    queue_class: t.Type['Queue']=None, serializer=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -157,13 +168,13 @@ class Worker:
 
         return worker
 
-    def __init__(self, queues, name=None, default_result_ttl=DEFAULT_RESULT_TTL,
-                 connection=None, exc_handler=None, exception_handlers=None,
-                 default_worker_ttl=DEFAULT_WORKER_TTL, job_class=None,
-                 queue_class=None, log_job_description=True,
+    def __init__(self, queues, name: t.Optional[str] = None, default_result_ttl=DEFAULT_RESULT_TTL,
+                 connection: t.Optional['Redis'] = None, exc_handler=None, exception_handlers=None,
+                 default_worker_ttl=DEFAULT_WORKER_TTL, job_class: t.Type['Job'] = None,
+                 queue_class=None, log_job_description: bool = True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
-                 disable_default_exception_handler=False,
-                 prepare_for_work=True, serializer=None):  # noqa
+                 disable_default_exception_handler: bool = False,
+                 prepare_for_work: bool = True, serializer=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -360,7 +371,7 @@ class Worker:
         if death_timestamp is not None:
             return utcparse(as_text(death_timestamp))
 
-    def set_state(self, state, pipeline=None):
+    def set_state(self, state, pipeline: t.Optional['Redis'] = None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'state', state)
@@ -386,12 +397,12 @@ class Worker:
 
     state = property(_get_state, _set_state)
 
-    def set_current_job_working_time(self, current_job_working_time, pipeline=None):
+    def set_current_job_working_time(self, current_job_working_time, pipeline: t.Optional['Redis'] = None):
         self.current_job_working_time = current_job_working_time
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
-    def set_current_job_id(self, job_id, pipeline=None):
+    def set_current_job_id(self, job_id: str, pipeline: t.Optional['Redis'] = None):
         connection = pipeline if pipeline is not None else self.connection
 
         if job_id is None:
@@ -399,7 +410,7 @@ class Worker:
         else:
             connection.hset(self.key, 'current_job', job_id)
 
-    def get_current_job_id(self, pipeline=None):
+    def get_current_job_id(self, pipeline: t.Optional['Redis'] = None):
         connection = pipeline if pipeline is not None else self.connection
         return as_text(connection.hget(self.key, 'current_job'))
 
@@ -545,8 +556,8 @@ class Worker:
     def reorder_queues(self, reference_queue):
         pass
 
-    def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
+    def work(self, burst: bool = False, logging_level: str = "INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
+             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler: bool = False):
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
@@ -693,7 +704,7 @@ class Worker:
         self.heartbeat()
         return result
 
-    def heartbeat(self, timeout=None, pipeline=None):
+    def heartbeat(self, timeout=None, pipeline: t.Optional['Redis'] = None):
         """Specifies a new worker timeout, typically by extending the
         expiration time of the worker, effectively making this a "heartbeat"
         to not expire the worker until the timeout passes.
@@ -751,11 +762,11 @@ class Worker:
                                             job_class=self.job_class, serializer=self.serializer)
                            for queue in queues.split(',')]
 
-    def increment_failed_job_count(self, pipeline=None):
+    def increment_failed_job_count(self, pipeline: t.Optional['Redis'] = None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
 
-    def increment_successful_job_count(self, pipeline=None):
+    def increment_successful_job_count(self, pipeline: t.Optional['Redis'] = None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
 
@@ -763,7 +774,7 @@ class Worker:
         pipeline.hincrbyfloat(self.key, 'total_working_time',
                               job_execution_time.total_seconds())
 
-    def fork_work_horse(self, job, queue):
+    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
         """
         child_pid = os.fork()
@@ -777,14 +788,14 @@ class Worker:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
-    def get_heartbeat_ttl(self, job):
+    def get_heartbeat_ttl(self, job: 'Job'):
         if job.timeout and job.timeout > 0:
             remaining_execution_time = job.timeout - self.current_job_working_time
             return min(remaining_execution_time, self.job_monitoring_interval) + 60
         else:
             return self.job_monitoring_interval + 60
 
-    def monitor_work_horse(self, job, queue):
+    def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
         failed
@@ -855,7 +866,7 @@ class Worker:
                            "(waitpid returned %s)" % ret_val
             )
 
-    def execute_job(self, job, queue):
+    def execute_job(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
         The worker will wait for the work horse and make sure it executes
         within the given timeout bounds, or will end the work horse with
@@ -866,7 +877,7 @@ class Worker:
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def maintain_heartbeats(self, job):
+    def maintain_heartbeats(self, job: 'Job'):
         """Updates worker and job's last heartbeat field. If job was
         enqueued with `result_ttl=0`, a race condition could happen where this heartbeat
         arrives after job has been deleted, leaving a job key that contains only
@@ -887,7 +898,7 @@ class Worker:
             if results[2] == 1:
                 self.connection.delete(job.key)
 
-    def main_work_horse(self, job, queue):
+    def main_work_horse(self, job: 'Job', queue: 'Queue'):
         """This is the entry point of the newly spawned work horse."""
         # After fork()'ing, always assure we are generating random sequences
         # that are different from the worker.
@@ -915,7 +926,7 @@ class Worker:
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job):
+    def prepare_job_execution(self, job: 'Job'):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -934,7 +945,7 @@ class Worker:
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_failure(self, job, queue, started_job_registry=None,
+    def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None,
                            exc_string=''):
         """Handles the failure or an executing job by:
             1. Setting the job status to failed
@@ -998,7 +1009,7 @@ class Worker:
                 # even if Redis is down
                 pass
 
-    def handle_job_success(self, job, queue, started_job_registry):
+    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry):
         self.log.debug('Handling successful execution of job %s', job.id)
 
         with self.connection.pipeline() as pipeline:
@@ -1038,7 +1049,7 @@ class Worker:
                 except redis.exceptions.WatchError:
                     continue
 
-    def execute_success_callback(self, job, result):
+    def execute_success_callback(self, job: 'Job', result):
         """Executes success_callback with timeout"""
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
@@ -1050,7 +1061,7 @@ class Worker:
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *sys.exc_info())
 
-    def perform_job(self, job, queue):
+    def perform_job(self, job: 'Job', queue: 'Queue'):
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
@@ -1118,7 +1129,7 @@ class Worker:
 
         return True
 
-    def handle_exception(self, job, *exc_info):
+    def handle_exception(self, job: 'Job', *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
         exc_string = ''.join(traceback.format_exception(*exc_info))
 
@@ -1198,13 +1209,13 @@ class Worker:
 
 
 class SimpleWorker(Worker):
-    def execute_job(self, job, queue):
+    def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
         self.set_state(WorkerStatus.BUSY)
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def get_heartbeat_ttl(self, job):
+    def get_heartbeat_ttl(self, job: 'Job'):
         # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
         # # We should just stick to DEFAULT_WORKER_TTL.
         if job.timeout == -1:

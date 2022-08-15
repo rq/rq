@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-
+import typing as t
 from redis import Redis
 
 from .local import LocalStack, release_local
@@ -10,7 +10,7 @@ class NoRedisConnectionException(Exception):
 
 
 @contextmanager
-def Connection(connection=None):  # noqa
+def Connection(connection: t.Optional['Redis'] = None):  # noqa
     if connection is None:
         connection = Redis()
     push_connection(connection)
@@ -33,7 +33,7 @@ def pop_connection():
     return _connection_stack.pop()
 
 
-def use_connection(redis=None):
+def use_connection(redis: t.Optional['Redis'] = None):
     """Clears the stack and uses the given connection.  Protects against mixed
     use of use_connection() and stacked connection contexts.
     """
@@ -53,7 +53,7 @@ def get_current_connection():
     return _connection_stack.top
 
 
-def resolve_connection(connection=None):
+def resolve_connection(connection: t.Optional['Redis'] = None) -> 'Redis':
     """Convenience function to resolve the given or the current connection.
     Raises an exception if it cannot resolve a connection now.
     """

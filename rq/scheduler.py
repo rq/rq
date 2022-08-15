@@ -122,7 +122,7 @@ class RQScheduler:
 
         return successful_locks
 
-    def prepare_registries(self, queue_names=None):
+    def prepare_registries(self, queue_names: str = None):
         """Prepare scheduled job registries for use"""
         self._scheduled_job_registries = []
         if not queue_names:
@@ -133,7 +133,7 @@ class RQScheduler:
             )
 
     @classmethod
-    def get_locking_key(cls, name):
+    def get_locking_key(cls, name: str):
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
 
