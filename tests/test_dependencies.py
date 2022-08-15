@@ -112,7 +112,14 @@ class TestDependencies(RQTestCase):
             depends_on=Dependency(jobs=[parent_job],enqueue_at_front=True)
         )
         w.work(burst=True, max_jobs=1)
-        self.assertEqual(q.job_ids, ['fake_job_id_2', 'fake_job_id_1'])
+        w.work(burst=True, max_jobs=1)
+
+        job_1 = Job.fetch(job_1.id, connection=self.testconn)
+        job_2 = Job.fetch(job_2.id, connection=self.testconn)
+
+        self.assertEqual(job_1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job_2.get_status(), JobStatus.FINISHED)
+
 
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""
