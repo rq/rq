@@ -648,17 +648,13 @@ class Queue:
                     break
 
                 for dependent in jobs_to_enqueue:
-                    if dependent.enqueue_at_front is not None:
-                        enqueue_at_front = dependent.enqueue_at_front
-                    else:
-                        enqueue_at_front = False
-
                     registry = DeferredJobRegistry(dependent.origin,
                                                    self.connection,
                                                    job_class=self.job_class,
                                                    serializer=self.serializer)
                     registry.remove(dependent, pipeline=pipe)
 
+                    enqueue_at_front = dependent.meta.get("enqueue_at_front", False)
                     if dependent.origin == self.name:
                         self.enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
                     else:

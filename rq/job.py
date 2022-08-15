@@ -152,7 +152,7 @@ class Job:
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
             if isinstance(depends_on, Dependency):
-                job.enqueue_at_front = depends_on.enqueue_at_front
+                job.meta["enqueue_at_front"] = depends_on.enqueue_at_front
                 job.allow_dependency_failures = depends_on.allow_failure
                 depends_on_list = depends_on.dependencies
             else:
@@ -431,7 +431,6 @@ class Job:
         self.redis_server_version = None
         self.last_heartbeat = None
         self.allow_dependency_failures = None
-        self.enqueue_at_front = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
