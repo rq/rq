@@ -167,8 +167,7 @@ The `Dependency(jobs=...)` parameter accepts:
 - a string representing a single job id
 - a Job object
 - an iteratable of job id strings and/or Job objects
-
-In addition, the `Dependency` class can be configured to enqueue the dependents at the front of the queue.
+- `enqueue_at_front` boolean parameter to put dependents at the front when they are enqueued
 
 Example:
 
@@ -279,10 +278,10 @@ There are two options:
 
 #### Arguments:
 
-| | plain text | json | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
-|-|-|-|-|
-| keyword | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]` |
-| no keyword | `[value]` | `:[value]` | `%[value]` |
+|            | plain text      | json             | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
+| ---------- | --------------- | ---------------- | --------------------------------------------------------------------------- |
+| keyword    | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]`                                                            |
+| no keyword | `[value]`       | `:[value]`       | `%[value]`                                                                  |
 
 Where `[key]` is the keyword and `[value]` is the value which is parsed with the corresponding
 parsing method.
