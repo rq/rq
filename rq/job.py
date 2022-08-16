@@ -2,6 +2,7 @@ from __future__ import annotations
 import inspect
 import json
 import pickle
+import sys
 import warnings
 import zlib
 import typing as t
@@ -426,12 +427,11 @@ class Job:
         self.ttl = None
         self.worker_name = None
         self._status = None
-        self._dependency_ids = []
+        self._dependency_ids: list[str] = []
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left = None
-        # retry_intervals is a list of int e.g [60, 120, 240]
-        self.retry_intervals = None
+        self.retry_intervals: list[int] = None
         self.redis_server_version = None
         self.last_heartbeat = None
         self.allow_dependency_failures = None
@@ -446,7 +446,6 @@ class Job:
                                        self.id,
                                        self.description)
 
-    # Job equality
     def __eq__(self, other):  # noqa
         return isinstance(other, self.__class__) and self.id == other.id
 
@@ -482,7 +481,7 @@ class Job:
         return (cls.redis_job_namespace_prefix + job_id).encode('utf-8')
 
     @classmethod
-    def dependents_key_for(cls, job_id):
+    def dependents_key_for(cls, job_id: str):
         """The Redis key that is used to store job dependents hash under."""
         return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
 
@@ -765,7 +764,7 @@ class Job:
                     # handle it
                     raise
 
-    def requeue(self, at_front=False):
+    def requeue(self, at_front: bool = False):
         """Requeues job."""
         return self.failed_job_registry.requeue(self, at_front=at_front)
 
@@ -855,7 +854,7 @@ class Job:
             assert self is _job_stack.pop()
         return self._result
 
-    def prepare_for_execution(self, worker_name, pipeline: 'Pipeline'):
+    def prepare_for_execution(self, worker_name: str, pipeline: 'Pipeline'):
         """Set job metadata before execution begins"""
         self.worker_name = worker_name
         self.last_heartbeat = utcnow()
@@ -880,14 +879,14 @@ class Job:
             return coro_result
         return result
 
-    def get_ttl(self, default_ttl=None):
+    def get_ttl(self, default_ttl: t.Optional[int] = None):
         """Returns ttl for a job that determines how long a job will be
         persisted. In the future, this method will also be responsible
         for determining ttl for repeated jobs.
         """
         return default_ttl if self.ttl is None else self.ttl
 
-    def get_result_ttl(self, default_ttl=None):
+    def get_result_ttl(self, default_ttl: t.Optional[int] = None):
         """Returns ttl for a job that determines how long a jobs result will
         be persisted. In the future, this method will also be responsible
         for determining ttl for repeated jobs.
@@ -901,7 +900,7 @@ class Job:
         """
         return get_call_string(self.func_name, self.args, self.kwargs, max_length=75)
 
-    def cleanup(self, ttl=None, pipeline: t.Optional['Pipeline'] = None, remove_from_queue: bool = True):
+    def cleanup(self, ttl: t.Optional[int] = None, pipeline: t.Optional['Pipeline'] = None, remove_from_queue: bool = True):
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
         result depends on the value of ttl:
