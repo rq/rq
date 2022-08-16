@@ -12,6 +12,7 @@ import typing as t
 
 if t.TYPE_CHECKING:
     from redis import Redis
+    from redis.client import Pipeline
 
 from datetime import timedelta
 from enum import Enum
@@ -371,7 +372,7 @@ class Worker:
         if death_timestamp is not None:
             return utcparse(as_text(death_timestamp))
 
-    def set_state(self, state, pipeline: t.Optional['Redis'] = None):
+    def set_state(self, state, pipeline: t.Optional['Pipeline'] = None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'state', state)
@@ -397,12 +398,12 @@ class Worker:
 
     state = property(_get_state, _set_state)
 
-    def set_current_job_working_time(self, current_job_working_time, pipeline: t.Optional['Redis'] = None):
+    def set_current_job_working_time(self, current_job_working_time, pipeline: t.Optional['Pipeline'] = None):
         self.current_job_working_time = current_job_working_time
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
-    def set_current_job_id(self, job_id: str, pipeline: t.Optional['Redis'] = None):
+    def set_current_job_id(self, job_id: str, pipeline: t.Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
 
         if job_id is None:
@@ -410,7 +411,7 @@ class Worker:
         else:
             connection.hset(self.key, 'current_job', job_id)
 
-    def get_current_job_id(self, pipeline: t.Optional['Redis'] = None):
+    def get_current_job_id(self, pipeline: t.Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
         return as_text(connection.hget(self.key, 'current_job'))
 
@@ -704,7 +705,7 @@ class Worker:
         self.heartbeat()
         return result
 
-    def heartbeat(self, timeout=None, pipeline: t.Optional['Redis'] = None):
+    def heartbeat(self, timeout=None, pipeline: t.Optional['Pipeline'] = None):
         """Specifies a new worker timeout, typically by extending the
         expiration time of the worker, effectively making this a "heartbeat"
         to not expire the worker until the timeout passes.
@@ -762,11 +763,11 @@ class Worker:
                                             job_class=self.job_class, serializer=self.serializer)
                            for queue in queues.split(',')]
 
-    def increment_failed_job_count(self, pipeline: t.Optional['Redis'] = None):
+    def increment_failed_job_count(self, pipeline: t.Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
 
-    def increment_successful_job_count(self, pipeline: t.Optional['Redis'] = None):
+    def increment_successful_job_count(self, pipeline: t.Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
 

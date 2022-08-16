@@ -47,7 +47,7 @@ def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
     send_command(connection, job.worker_name, 'stop-job', job_id=job_id)
 
 
-def handle_command(worker, payload):
+def handle_command(worker: 'Worker', payload):
     """Parses payload and routes commands"""
     if payload['command'] == 'stop-job':
         handle_stop_job_command(worker, payload)

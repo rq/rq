@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 if t.TYPE_CHECKING:
     from redis import Redis
+    from redis.client import Pipeline
 
 from .compat import as_text
 from .connections import resolve_connection
@@ -66,7 +67,7 @@ class BaseRegistry:
         self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job: 'Job', ttl=0, pipeline: t.Optional['Redis'] = None, xx: bool = False):
+    def add(self, job: 'Job', ttl=0, pipeline: t.Optional['Pipeline'] = None, xx: bool = False):
         """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf"""
         score = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
@@ -76,7 +77,7 @@ class BaseRegistry:
 
         return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
-    def remove(self, job: 'Job', pipeline: t.Optional['Redis'] = None, delete_job: bool = False):
+    def remove(self, job: 'Job', pipeline: t.Optional['Pipeline'] = None, delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`"""
         connection = pipeline if pipeline is not None else self.connection
         job_id = job.id if isinstance(job, self.job_class) else job
@@ -226,7 +227,7 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job: 'Job', ttl=None, exc_string='', pipeline: t.Optional['Redis'] = None):
+    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
@@ -275,7 +276,7 @@ class ScheduledJobRegistry(BaseRegistry):
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
 
-    def schedule(self, job: 'Job', scheduled_datetime, pipeline: t.Optional['Redis'] = None):
+    def schedule(self, job: 'Job', scheduled_datetime, pipeline: t.Optional['Pipeline'] = None):
         """
         Adds job to registry, scored by its execution time (in UTC).
         If datetime has no tzinfo, it will assume localtimezone.
@@ -300,7 +301,7 @@ class ScheduledJobRegistry(BaseRegistry):
         implemented in BaseRegistry."""
         pass
 
-    def remove_jobs(self, timestamp=None, pipeline: t.Optional['Redis'] = None):
+    def remove_jobs(self, timestamp=None, pipeline: t.Optional['Pipeline'] = None):
         """Remove jobs whose timestamp is in the past from registry."""
         connection = pipeline if pipeline is not None else self.connection
         score = timestamp if timestamp is not None else current_timestamp()

@@ -1,4 +1,10 @@
 from functools import wraps
+import typing as t
+
+if t.TYPE_CHECKING:
+    from redis import Redis
+    from .worker import Worker
+    from .queue import Queue
 
 from rq.compat import string_types
 
@@ -10,9 +16,9 @@ from .utils import backend_class
 class job:  # noqa
     queue_class = Queue
 
-    def __init__(self, queue, connection=None, timeout=None,
+    def __init__(self, queue: 'Queue', connection: t.Optional['Redis'] = None, timeout=None,
                  result_ttl=DEFAULT_RESULT_TTL, ttl=None,
-                 queue_class=None, depends_on=None, at_front=None, meta=None,
+                 queue_class=None, depends_on: t.Optional[list[t.Any]] = None, at_front: t.Optional[bool] = None, meta=None,
                  description=None, failure_ttl=None, retry=None, on_failure=None,
                  on_success=None):
         """A decorator that adds a ``delay`` method to the decorated function,

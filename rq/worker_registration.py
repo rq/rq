@@ -3,6 +3,7 @@ import typing as t
 
 if t.TYPE_CHECKING:
     from redis import Redis
+    from redis.client import Pipeline
     from .worker import Worker
     from .queue import Queue
 
@@ -15,7 +16,7 @@ REDIS_WORKER_KEYS = 'rq:workers'
 MAX_KEYS = 1000
 
 
-def register(worker: 'Worker', pipeline: t.Optional['Redis'] = None):
+def register(worker: 'Worker', pipeline: t.Optional['Pipeline'] = None):
     """Store worker key in Redis so we can easily discover active workers."""
     connection = pipeline if pipeline is not None else worker.connection
     connection.sadd(worker.redis_workers_keys, worker.key)
@@ -24,7 +25,7 @@ def register(worker: 'Worker', pipeline: t.Optional['Redis'] = None):
         connection.sadd(redis_key, worker.key)
 
 
-def unregister(worker: 'Worker', pipeline: t.Optional['Redis'] = None):
+def unregister(worker: 'Worker', pipeline: t.Optional['Pipeline'] = None):
     """Remove worker key from Redis."""
     if pipeline is None:
         connection = worker.connection.pipeline()
@@ -40,22 +41,22 @@ def unregister(worker: 'Worker', pipeline: t.Optional['Redis'] = None):
         connection.execute()
 
 
-def get_keys(queue: t.Optional[t.Type['Queue']]=None, connection: t.Optional['Redis'] = None):
+def get_keys(queue: t.Optional['Queue'] = None, connection: t.Optional['Redis'] = None):
     """Returnes a list of worker keys for a queue"""
     if queue is None and connection is None:
-        raise ValueError(''Queue' or "connection" argument is required')
+        raise ValueError('"Queue" or "connection" argument is required')
 
     if queue:
         redis = queue.connection
         redis_key = WORKERS_BY_QUEUE_KEY % queue.name
     else:
-        redis = connection
+        redis = connection # type: ignore
         redis_key = REDIS_WORKER_KEYS
 
     return {as_text(key) for key in redis.smembers(redis_key)}
 
 
-def clean_worker_registry(queue):
+def clean_worker_registry(queue: 'Queue'):
     """Delete invalid worker keys in registry"""
     keys = list(get_keys(queue))
 

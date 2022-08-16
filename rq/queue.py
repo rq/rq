@@ -10,6 +10,7 @@ from redis import WatchError
 
 if t.TYPE_CHECKING:
     from redis import Redis
+    from redis.client import Pipeline
 
 from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
@@ -263,7 +264,7 @@ class Queue:
         from rq.registry import CanceledJobRegistry
         return CanceledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
-    def remove(self, job_or_id: t.Union['Job', str], pipeline: t.Optional['Redis'] = None):
+    def remove(self, job_or_id: t.Union['Job', str], pipeline: t.Optional['Pipeline'] = None):
         """Removes Job from queue, accepts either a Job instance or ID."""
         job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
@@ -287,7 +288,7 @@ class Queue:
             if self.job_class.exists(job_id, self.connection):
                 self.connection.rpush(self.key, job_id)
 
-    def push_job_id(self, job_id: str, pipeline: t.Optional['Redis'] = None, at_front=False):
+    def push_job_id(self, job_id: str, pipeline: t.Optional['Pipeline'] = None, at_front=False):
         """Pushes a job ID on the corresponding Redis queue.
         'at_front' allows you to push the job onto the front instead of the back of the queue"""
         connection = pipeline if pipeline is not None else self.connection
@@ -334,7 +335,7 @@ class Queue:
 
         return job
 
-    def setup_dependencies(self, job: 'Job', pipeline: t.Optional['Redis'] = None):
+    def setup_dependencies(self, job: 'Job', pipeline: t.Optional['Pipeline'] = None):
         # If a _dependent_ job depends on any unfinished job, register all the
         # _dependent_ job's dependencies instead of enqueueing it.
         #
@@ -427,7 +428,7 @@ class Queue:
             at_front, meta, retry, on_success, on_failure
         )
 
-    def enqueue_many(self, job_datas, pipeline: t.Optional['Redis'] = None) -> list[Job]:
+    def enqueue_many(self, job_datas, pipeline: t.Optional['Pipeline'] = None) -> list[Job]:
         """
         Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
@@ -532,7 +533,7 @@ class Queue:
 
         return self.schedule_job(job, datetime, pipeline=pipeline)
 
-    def schedule_job(self, job: 'Job', datetime: datetime, pipeline: t.Optional['Redis'] = None):
+    def schedule_job(self, job: 'Job', datetime: datetime, pipeline: t.Optional['Pipeline'] = None):
         """Puts job on ScheduledJobRegistry"""
         from .registry import ScheduledJobRegistry
         registry = ScheduledJobRegistry(queue=self)
@@ -552,7 +553,7 @@ class Queue:
         return self.enqueue_at(datetime.now(timezone.utc) + time_delta,
                                func, *args, **kwargs)
 
-    def enqueue_job(self, job: 'Job', pipeline: t.Optional['Redis'] = None, at_front: bool = False) -> Job:
+    def enqueue_job(self, job: 'Job', pipeline: t.Optional['Pipeline'] = None, at_front: bool = False) -> Job:
         """Enqueues a job for delayed execution.
 
         If Queue is instantiated with is_async=False, job is executed immediately.
@@ -598,7 +599,7 @@ class Queue:
 
         return job
 
-    def enqueue_dependents(self, job: 'Job', pipeline: t.Optional['Redis'] = None, exclude_job_id=None):
+    def enqueue_dependents(self, job: 'Job', pipeline: t.Optional['Pipeline'] = None, exclude_job_id=None):
         """Enqueues all jobs in the given job's dependents set and clears it.
 
         When called without a pipeline, this method uses WATCH/MULTI/EXEC.

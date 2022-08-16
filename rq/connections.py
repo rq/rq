@@ -23,7 +23,7 @@ def Connection(connection: t.Optional['Redis'] = None):  # noqa
             'Check your Redis connection setup.'
 
 
-def push_connection(redis):
+def push_connection(redis: 'Redis'):
     """Pushes the given connection on the stack."""
     _connection_stack.push(redis)
 

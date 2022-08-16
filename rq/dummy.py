@@ -10,7 +10,7 @@ def do_nothing():
     pass
 
 
-def sleep(secs):
+def sleep(secs: int):
     time.sleep(secs)
 
 
