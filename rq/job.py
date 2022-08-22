@@ -46,14 +46,14 @@ class JobStatus(str, Enum):
 
 class Dependency:
     def __init__(self, jobs: t.List['Job'], allow_failure: bool = False):
-        jobs = ensure_list(jobs)
+        dependent_jobs = ensure_list(jobs)
         if not all(
             isinstance(job, Job) or isinstance(job, str)
-            for job in jobs
+            for job in dependent_jobs
             if job
         ):
             raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
-        elif len(jobs) < 1:
+        elif len(dependent_jobs) < 1:
             raise ValueError("jobs: cannot be empty.")
 
         self.dependencies = jobs
@@ -415,24 +415,24 @@ class Job:
         self._failure_callback = UNEVALUATED
         self.description = None
         self.origin = None
-        self.enqueued_at = None
-        self.started_at = None
-        self.ended_at = None
+        self.enqueued_at: t.Optional[datetime] = None
+        self.started_at: t.Optional[datetime] = None
+        self.ended_at: t.Optional[datetime] = None
         self._result = None
         self.exc_info = None
         self.timeout = None
-        self.result_ttl = None
-        self.failure_ttl = None
-        self.ttl = None
-        self.worker_name = None
+        self.result_ttl: t.Optional[int] = None
+        self.failure_ttl: t.Optional[int] = None
+        self.ttl: t.Optional[int] = None
+        self.worker_name: t.Optional[str] = None
         self._status = None
         self._dependency_ids: t.List[str] = []
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left = None
-        self.retry_intervals: t.List[int] = None
+        self.retry_intervals: t.Optional[t.List[int]]= None
         self.redis_server_version = None
-        self.last_heartbeat = None
+        self.last_heartbeat: t.Optional[datetime] = None
         self.allow_dependency_failures = None
 
     def __repr__(self):  # noqa  # pragma: no cover
@@ -466,7 +466,7 @@ class Job:
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 
-    def heartbeat(self, timestamp, ttl, pipeline: t.Optional['Pipeline'] = None, xx: bool = False):
+    def heartbeat(self, timestamp: datetime, ttl: int, pipeline: t.Optional['Pipeline'] = None, xx: bool = False):
         self.last_heartbeat = timestamp
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))

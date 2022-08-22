@@ -241,7 +241,7 @@ def is_nonstring_iterable(obj: t.Any) -> bool:
     return isinstance(obj, Iterable) and not isinstance(obj, string_types)
 
 
-def ensure_list(obj: t.Any) -> t.Iterable:
+def ensure_list(obj: t.Any) -> t.List:
     """
     When passed an iterable of objects, does nothing, otherwise, it returns
     a list with just that object in it.
