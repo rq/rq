@@ -65,8 +65,8 @@ class StopRequested(Exception):
     pass
 
 
-def compact(l):
-    return [x for x in l if x is not None]
+def compact(a_list):
+    return [x for x in a_list if x is not None]
 
 
 _signames = dict((getattr(signal, signame), signame)
@@ -135,18 +135,18 @@ class Worker:
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection: t.Optional['Redis'] = None, queue=None):
+    def all_keys(cls, connection: t.Optional['Redis'] = None, queue: t.Optional['Queue'] = None):
         return [as_text(key)
                 for key in get_keys(queue=queue, connection=connection)]
 
     @classmethod
-    def count(cls, connection: t.Optional['Redis'] = None, queue=None):
+    def count(cls, connection: t.Optional['Redis'] = None, queue: t.Optional['Queue'] = None):
         """Returns the number of workers by queue or connection"""
         return len(get_keys(queue=queue, connection=connection))
 
     @classmethod
     def find_by_key(cls, worker_key: str, connection: t.Optional['Redis'] = None, job_class: t.Type['Job'] = None,
-                    queue_class: t.Type['Queue']=None, serializer=None):
+                    queue_class: t.Type['Queue'] = None, serializer=None):
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.

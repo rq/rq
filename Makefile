@@ -5,7 +5,7 @@ clean:
 	rm -rf build/ dist/
 
 test:
-	./run_tests_in_docker.sh
+	docker build -f tests/Dockerfile . -t rqtest && docker run -it --rm rqtest
 
 release: clean
 	# Check if latest tag is the current head we're releasing

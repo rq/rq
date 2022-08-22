@@ -1,4 +1,3 @@
-from __future__ import annotations
 import inspect
 import json
 import pickle
@@ -46,7 +45,7 @@ class JobStatus(str, Enum):
 
 
 class Dependency:
-    def __init__(self, jobs: list['Job'], allow_failure: bool = False):
+    def __init__(self, jobs: t.List['Job'], allow_failure: bool = False):
         jobs = ensure_list(jobs)
         if not all(
             isinstance(job, Job) or isinstance(job, str)
@@ -248,7 +247,7 @@ class Job:
         return job
 
     @property
-    def dependent_ids(self) -> list[str]:
+    def dependent_ids(self) -> t.List[str]:
         """Returns a list of ids of jobs whose execution depends on this
         job's successful execution."""
         return list(map(as_text, self.connection.smembers(self.dependents_key)))
@@ -378,7 +377,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: list[str], connection: 'Redis', serializer=None):
+    def fetch_many(cls, job_ids: t.List[str], connection: 'Redis', serializer=None):
         """
         Bulk version of Job.fetch
 
@@ -390,7 +389,7 @@ class Job:
                 pipeline.hgetall(cls.key_for(job_id))
             results = pipeline.execute()
 
-        jobs: list[t.Optional['Job']] = []
+        jobs: t.List[t.Optional['Job']] = []
         for i, job_id in enumerate(job_ids):
             if results[i]:
                 job = cls(job_id, connection=connection, serializer=serializer)
@@ -427,11 +426,11 @@ class Job:
         self.ttl = None
         self.worker_name = None
         self._status = None
-        self._dependency_ids: list[str] = []
+        self._dependency_ids: t.List[str] = []
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left = None
-        self.retry_intervals: list[int] = None
+        self.retry_intervals: t.List[int] = None
         self.redis_server_version = None
         self.last_heartbeat = None
         self.allow_dependency_failures = None
@@ -590,7 +589,11 @@ class Job:
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
-        self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get('allow_dependency_failures') else None
+        self.allow_dependency_failures = (
+            bool(int(obj.get('allow_dependency_failures')))
+            if obj.get('allow_dependency_failures')
+            else None
+        )
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
@@ -900,7 +903,8 @@ class Job:
         """
         return get_call_string(self.func_name, self.args, self.kwargs, max_length=75)
 
-    def cleanup(self, ttl: t.Optional[int] = None, pipeline: t.Optional['Pipeline'] = None, remove_from_queue: bool = True):
+    def cleanup(self, ttl: t.Optional[int] = None, pipeline: t.Optional['Pipeline'] = None,
+                remove_from_queue: bool = True):
         """Prepare job for eventual deletion (if needed). This method is usually
         called after successful execution. How long we persist the job and its
         result depends on the value of ttl:
@@ -987,7 +991,8 @@ class Job:
         return [Job.key_for(_id.decode())
                 for _id in dependencies]
 
-    def dependencies_are_met(self, parent_job: t.Optional['Job'] = None, pipeline: t.Optional['Pipeline'] = None, exclude_job_id: str = None):
+    def dependencies_are_met(self, parent_job: t.Optional['Job'] = None,
+                             pipeline: t.Optional['Pipeline'] = None, exclude_job_id: str = None):
         """Returns a boolean indicating if all of this job's dependencies are _FINISHED_
 
         If a pipeline is passed, all dependencies are WATCHed.
@@ -1007,7 +1012,7 @@ class Job:
                             for _id in connection.smembers(self.dependencies_key)}
 
         if exclude_job_id:
-            dependencies_ids.discard(exclude_job_id)        
+            dependencies_ids.discard(exclude_job_id)
             if parent_job.id == exclude_job_id:
                 parent_job = None
 

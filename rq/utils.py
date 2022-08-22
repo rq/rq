@@ -80,14 +80,15 @@ colorizer = _Colorizer()
 def make_colorizer(color: str):
     """Creates a function that colorizes text with the given color.
 
-    For example:
+    For example::
 
-        green = make_colorizer('darkgreen')
-        red = make_colorizer('red')
+        ..codeblock::python
 
-    Then, you can use:
-
-        print "It's either " + green('OK') + ' or ' + red('Oops')
+            >>> green = make_colorizer('darkgreen')
+            >>> red = make_colorizer('red')
+            >>>
+            >>> # You can then use:
+            >>> print("It's either " + green('OK') + ' or ' + red('Oops'))
     """
     def inner(text):
         return colorizer.colorize(color, text)
@@ -292,7 +293,7 @@ def ceildiv(a, b):
     return -(-a // b)
 
 
-def split_list(a_list, segment_size):
+def split_list(a_list: t.List[t.Any], segment_size: int):
     """
     Splits a list into multiple smaller lists having size `segment_size`
     """
@@ -300,7 +301,7 @@ def split_list(a_list, segment_size):
         yield a_list[i:i + segment_size]
 
 
-def truncate_long_string(data, max_length=None):
+def truncate_long_string(data: str, max_length: t.Optional[int] = None):
     """Truncate arguments with representation longer than max_length"""
     if max_length is None:
         return data

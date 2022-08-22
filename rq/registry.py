@@ -1,4 +1,3 @@
-from __future__ import annotations
 import typing as t
 import calendar
 from rq.serializers import resolve_serializer
@@ -27,8 +26,8 @@ class BaseRegistry:
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection: t.Optional['Redis'] = None, job_class: t.Optional[t.Type['Job']] = None,
-                 queue=None, serializer=None):
+    def __init__(self, name='default', connection: t.Optional['Redis'] = None,
+                 job_class: t.Optional[t.Type['Job']] = None, queue=None, serializer=None):
         if queue:
             self.name = queue.name
             self.connection = resolve_connection(queue.connection)

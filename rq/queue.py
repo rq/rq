@@ -1,4 +1,3 @@
-from __future__ import annotations
 import uuid
 import sys
 import warnings
@@ -59,7 +58,8 @@ class Queue:
                 if rq_key]
 
     @classmethod
-    def from_queue_key(cls, queue_key, connection: t.Optional['Redis'] = None, job_class: t.Optional[t.Type['Job']] = None, serializer=None):
+    def from_queue_key(cls, queue_key, connection: t.Optional['Redis'] = None,
+                       job_class: t.Optional[t.Type['Job']] = None, serializer=None):
         """Returns a Queue instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
         Redis keys.
@@ -213,12 +213,12 @@ class Queue:
         return compact([self.fetch_job(job_id) for job_id in job_ids])
 
     @property
-    def job_ids(self) -> list[str]:
+    def job_ids(self) -> t.List[str]:
         """Returns a list of all job IDS in the queue."""
         return self.get_job_ids()
 
     @property
-    def jobs(self) -> list['Job']:
+    def jobs(self) -> t.List['Job']:
         """Returns a list of all (valid) jobs in the queue."""
         return self.get_jobs()
 
@@ -428,7 +428,7 @@ class Queue:
             at_front, meta, retry, on_success, on_failure
         )
 
-    def enqueue_many(self, job_datas, pipeline: t.Optional['Pipeline'] = None) -> list[Job]:
+    def enqueue_many(self, job_datas, pipeline: t.Optional['Pipeline'] = None) -> t.List[Job]:
         """
         Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
@@ -710,7 +710,8 @@ class Queue:
             return None
 
     @classmethod
-    def dequeue_any(cls, queues, timeout, connection: t.Optional['Redis'] = None, job_class: t.Optional[t.Type['Job']] = None, serializer=None):
+    def dequeue_any(cls, queues, timeout, connection: t.Optional['Redis'] = None,
+                    job_class: t.Optional[t.Type['Job']] = None, serializer=None):
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 

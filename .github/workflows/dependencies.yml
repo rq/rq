@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.5", "3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: [3.5.0]
 
@@ -49,7 +49,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.5", "3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10"]
         redis-version: [3, 4, 5, 6, 7]
 
     steps:
@@ -68,7 +68,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install git+https://github.com/andymccurdy/redis-py
+        pip install git+https://github.com/redis/redis-py
         pip install git+https://github.com/pallets/click
         pip install -r dev-requirements.txt
         pip install -e .

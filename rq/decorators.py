@@ -4,7 +4,7 @@ import typing as t
 if t.TYPE_CHECKING:
     from redis import Redis
     from .worker import Worker
-    from .queue import Queue
+    from .job import Retry
 
 from rq.compat import string_types
 
@@ -18,19 +18,23 @@ class job:  # noqa
 
     def __init__(self, queue: 'Queue', connection: t.Optional['Redis'] = None, timeout=None,
                  result_ttl=DEFAULT_RESULT_TTL, ttl=None,
-                 queue_class=None, depends_on: t.Optional[list[t.Any]] = None, at_front: t.Optional[bool] = None, meta=None,
-                 description=None, failure_ttl=None, retry=None, on_failure=None,
+                 queue_class=None, depends_on: t.Optional[t.List[t.Any]] = None, at_front: t.Optional[bool] = None,
+                 meta=None, description=None, failure_ttl=None, retry: t.Optional['Retry'] = None, on_failure=None,
                  on_success=None):
-        """A decorator that adds a ``delay`` method to the decorated function,
+        """
+        A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
         ``queue`` argument that can be either a ``Queue`` instance or a string
-        denoting the queue name.  For example:
+        denoting the queue name.  For example::
 
-            @job(queue='default')
-            def simple_add(x, y):
-                return x + y
+            ..codeblock:python::
 
-            simple_add.delay(1, 2) # Puts simple_add function into queue
+                >>> @job(queue='default')
+                >>> def simple_add(x, y):
+                >>>    return x + y
+                >>> ...
+                >>> # Puts `simple_add` function into queue
+                >>> simple_add.delay(1, 2)
         """
         self.queue = queue
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
