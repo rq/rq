@@ -3,7 +3,6 @@ import typing as t
 
 if t.TYPE_CHECKING:
     from redis import Redis
-    from .worker import Worker
     from .job import Retry
 
 from rq.compat import string_types

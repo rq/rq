@@ -127,18 +127,30 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
 
 def import_attribute(name: str):
-    """Return an attribute from a dotted path name (e.g. "path.to.func")."""
+    """Returns an attribute from a dotted path name. Example: `path.to.func`.
+
+    When the attribute we look for is a staticmethod, module name in its
+    dotted path is not the last-before-end word
+
+    E.g.: package_a.package_b.module_a.ClassA.my_static_method
+
+    Thus we remove the bits from the end of the name until we can import it
+    Sometimes the failure during importing is due to a genuine coding error in the imported module
+    In this case, the exception is logged as a warning for ease of debugging.
+    The above logic will apply anyways regardless of the cause of the import error.
+
+    Args:
+        name (str): The name (reference) to the path.
+
+    Raises:
+        ValueError: If no module is found or invalid attribute name.
+
+    Returns:
+        t.Any: An attribute (normally a Callable)
+    """
     name_bits = name.split('.')
     module_name_bits, attribute_bits = name_bits[:-1], [name_bits[-1]]
     module = None
-    # When the attribute we look for is a staticmethod, module name in its
-    # dotted path is not the last-before-end word
-    # E.g.: package_a.package_b.module_a.ClassA.my_static_method
-    # Thus we remove the bits from the end of the name until we can import it
-    #
-    # Sometimes the failure during importing is due to a genuine coding error in the imported module
-    # In this case, the exception is logged as a warning for ease of debugging.
-    # The above logic will apply anyways regardless of the cause of the import error.
     while len(module_name_bits):
         try:
             module_name = '.'.join(module_name_bits)
@@ -281,6 +293,9 @@ def get_version(connection: 'Redis'):
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
+
+    Args:
+        connection (Redis): The Redis connection.
     """
     try:
         return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3])
@@ -294,32 +309,54 @@ def ceildiv(a, b):
 
 
 def split_list(a_list: t.List[t.Any], segment_size: int):
-    """
-    Splits a list into multiple smaller lists having size `segment_size`
+    """Splits a list into multiple smaller lists having size `segment_size`
+
+    Args:
+        a_list (t.List[t.Any]): A list to split
+        segment_size (int): The segment size to split into
+
+    Yields:
+        list: The splitted listed
     """
     for i in range(0, len(a_list), segment_size):
         yield a_list[i:i + segment_size]
 
 
-def truncate_long_string(data: str, max_length: t.Optional[int] = None):
-    """Truncate arguments with representation longer than max_length"""
+def truncate_long_string(data: str, max_length: t.Optional[int] = None) -> str:
+    """Truncate arguments with representation longer than max_length
+
+    Args:
+        data (str): The data to truncate
+        max_length (t.Optional[int], optional): The max length. Defaults to None.
+    """
     if max_length is None:
         return data
     return (data[:max_length] + '...') if len(data) > max_length else data
 
 
-def get_call_string(func_name: str, args: t.Any, kwargs: t.Any, max_length=None):
-    """Returns a string representation of the call, formatted as a regular
+def get_call_string(func_name: t.Optional[str], args: t.Any, kwargs: t.Dict[t.Any, t.Any],
+                    max_length: t.Optional[int] = None) -> t.Optional[str]:
+    """
+    Returns a string representation of the call, formatted as a regular
     Python function invocation statement. If max_length is not None, truncate
     arguments with representation longer than max_length.
+
+    Args:
+        func_name (str): The funtion name
+        args (t.Any): The function arguments
+        kwargs (t.Dict[t.Any, t.Any]): The function kwargs
+        max_length (int, optional): The max length. Defaults to None.
+
+    Returns:
+        str: A String representation of the function call.
     """
     if func_name is None:
         return None
 
     arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
 
-    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
-    arg_list += sorted(kwargs)
+    list_kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
+    arg_list += sorted(list_kwargs)
     args = ', '.join(arg_list)
 
     return '{0}({1})'.format(func_name, args)

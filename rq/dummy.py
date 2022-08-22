@@ -23,7 +23,7 @@ def div_by_zero():
     1 / 0
 
 
-def fib(n):
+def fib(n: int):
     if n <= 1:
         return 1
     else:
