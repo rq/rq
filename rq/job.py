@@ -1,7 +1,6 @@
 import inspect
 import json
 import pickle
-import sys
 import warnings
 import zlib
 import typing as t
@@ -45,7 +44,7 @@ class JobStatus(str, Enum):
 
 
 class Dependency:
-    def __init__(self, jobs: t.List['Job'], allow_failure: bool = False):
+    def __init__(self, jobs: t.List[t.Union['Job', str]], allow_failure: bool = False):
         dependent_jobs = ensure_list(jobs)
         if not all(
             isinstance(job, Job) or isinstance(job, str)
@@ -56,7 +55,7 @@ class Dependency:
         elif len(dependent_jobs) < 1:
             raise ValueError("jobs: cannot be empty.")
 
-        self.dependencies = jobs
+        self.dependencies = dependent_jobs
         self.allow_failure = allow_failure
 
 
@@ -430,10 +429,10 @@ class Job:
         self.meta = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left = None
-        self.retry_intervals: t.Optional[t.List[int]]= None
+        self.retry_intervals: t.Optional[t.List[int]] = None
         self.redis_server_version = None
         self.last_heartbeat: t.Optional[datetime] = None
-        self.allow_dependency_failures = None
+        self.allow_dependency_failures: t.Optional[bool] = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
