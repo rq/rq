@@ -721,7 +721,7 @@ class Job:
         without worrying about the internals required to implement job
         cancellation.
 
-        You can enqueue the jobs dependents optionally, 
+        You can enqueue the jobs dependents optionally,
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
         """
         if self.is_canceled:
@@ -744,7 +744,7 @@ class Job:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
-                    q.enqueue_dependents(self, pipeline=pipeline)
+                    q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
                 self._remove_from_registries(
                     pipeline=pipe,
                     remove_from_queue=True
@@ -992,7 +992,7 @@ class Job:
         return [Job.key_for(_id.decode())
                 for _id in dependencies]
 
-    def dependencies_are_met(self, parent_job=None, pipeline=None):
+    def dependencies_are_met(self, parent_job=None, pipeline=None, exclude_job_id=None):
         """Returns a boolean indicating if all of this job's dependencies are _FINISHED_
 
         If a pipeline is passed, all dependencies are WATCHed.
@@ -1011,13 +1011,18 @@ class Job:
         dependencies_ids = {_id.decode()
                             for _id in connection.smembers(self.dependencies_key)}
 
+        if exclude_job_id:
+            dependencies_ids.discard(exclude_job_id)        
+            if parent_job.id == exclude_job_id:
+                parent_job = None
+
         if parent_job:
-            # If parent job is canceled, no need to check for status
+            # If parent job is canceled, treat dependency as failed
             # If parent job is not finished, we should only continue
             # if this job allows parent job to fail
             dependencies_ids.discard(parent_job.id)
             if parent_job._status == JobStatus.CANCELED:
-                pass
+                return False
             elif parent_job._status == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False
 

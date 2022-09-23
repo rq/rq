@@ -23,7 +23,7 @@ def compact(lst):
 class EnqueueData(namedtuple('EnqueueData', ["func", "args", "kwargs", "timeout",
                                              "result_ttl", "ttl", "failure_ttl",
                                              "description", "job_id",
-                                             "at_front", "meta", "retry"])):
+                                             "at_front", "meta", "retry", "on_success", "on_failure"])):
     """Helper type to use when calling enqueue_many
     NOTE: Does not support `depends_on` yet.
     """
@@ -417,14 +417,14 @@ class Queue:
     def prepare_data(func, args=None, kwargs=None, timeout=None,
                      result_ttl=None, ttl=None, failure_ttl=None,
                      description=None, job_id=None,
-                     at_front=False, meta=None, retry=None):
+                     at_front=False, meta=None, retry=None, on_success=None, on_failure=None):
         # Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         # And can keep this logic within EnqueueData
         return EnqueueData(
             func, args, kwargs, timeout,
             result_ttl, ttl, failure_ttl,
             description, job_id,
-            at_front, meta, retry
+            at_front, meta, retry, on_success, on_failure
         )
 
     def enqueue_many(
@@ -446,7 +446,9 @@ class Queue:
                     depends_on=None,
                     job_id=job_data.job_id, meta=job_data.meta, status=JobStatus.QUEUED,
                     timeout=job_data.timeout,
-                    retry=job_data.retry
+                    retry=job_data.retry,
+                    on_success=job_data.on_success,
+                    on_failure=job_data.on_failure
                 ),
                 pipeline=pipe,
                 at_front=job_data.at_front
@@ -600,7 +602,7 @@ class Queue:
 
         return job
 
-    def enqueue_dependents(self, job, pipeline=None):
+    def enqueue_dependents(self, job, pipeline=None, exclude_job_id=None):
         """Enqueues all jobs in the given job's dependents set and clears it.
 
         When called without a pipeline, this method uses WATCH/MULTI/EXEC.
@@ -636,6 +638,7 @@ class Queue:
                     ) if dependent_job and dependent_job.dependencies_are_met(
                         parent_job=job,
                         pipeline=pipe,
+                        exclude_job_id=exclude_job_id,
                     )
                 ]
 

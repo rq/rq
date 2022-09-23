@@ -16,10 +16,11 @@ from collections.abc import Iterable
 
 from redis.exceptions import ResponseError
 
-from .compat import as_text, is_python_version, string_types
+from .compat import as_text, string_types
 from .exceptions import TimeoutFormatError
 
 logger = logging.getLogger(__name__)
+
 
 class _Colorizer:
     def __init__(self):
@@ -282,7 +283,7 @@ def get_version(connection):
     This function also correctly handles 4 digit redis server versions.
     """
     try:
-        return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3]) 
+        return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3])
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
         return (5, 0, 9)
 

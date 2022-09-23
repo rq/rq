@@ -29,7 +29,7 @@ from tests.fixtures import (
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text, PY2
-from rq.job import Job, JobStatus, Dependency, Retry
+from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
 from rq.suspension import resume, suspend

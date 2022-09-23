@@ -13,7 +13,7 @@ class job:  # noqa
     def __init__(self, queue, connection=None, timeout=None,
                  result_ttl=DEFAULT_RESULT_TTL, ttl=None,
                  queue_class=None, depends_on=None, at_front=None, meta=None,
-                 description=None, failure_ttl=None, retry=None, on_failure=None, 
+                 description=None, failure_ttl=None, retry=None, on_failure=None,
                  on_success=None):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required

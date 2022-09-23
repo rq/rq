@@ -11,7 +11,6 @@ from ast import literal_eval
 from shutil import get_terminal_size
 
 import click
-import redis
 from redis import Redis
 from redis.sentinel import Sentinel
 from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,

@@ -95,7 +95,7 @@ class TestScheduledJobRegistry(RQTestCase):
         with mock_tz, mock_day, mock_atz:
             registry.schedule(job, datetime(2019, 1, 1))
             self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                                1546300800 + 18000)  # 2019-01-01 UTC in Unix timestamp
+                             1546300800 + 18000)  # 2019-01-01 UTC in Unix timestamp
 
             # second, time.daylight != 0 (in DST)
             # mock the sitatuoin for American/New_York not in DST (UTC - 4)
@@ -316,7 +316,7 @@ class TestWorker(RQTestCase):
 
         p.start()
         queue.enqueue_at(
-            datetime(2019, 1, 1, tzinfo=timezone.utc), 
+            datetime(2019, 1, 1, tzinfo=timezone.utc),
             say_hello, meta={'foo': 'bar'}
         )
         worker.work(burst=False, with_scheduler=True)
@@ -324,6 +324,7 @@ class TestWorker(RQTestCase):
         self.assertIsNotNone(worker.scheduler)
         registry = FinishedJobRegistry(queue=queue)
         self.assertEqual(len(registry), 1)
+
 
 class TestQueue(RQTestCase):
 
