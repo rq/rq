@@ -167,6 +167,7 @@ The `Dependency(jobs=...)` parameter accepts:
 - a string representing a single job id
 - a Job object
 - an iteratable of job id strings and/or Job objects
+- `enqueue_at_front` boolean parameter to put dependents at the front when they are enqueued
 
 Example:
 
@@ -177,9 +178,17 @@ from rq import Queue
 
 queue = Queue(connection=Redis())
 job_1 = queue.enqueue(div_by_zero)
-dependency = Dependency(jobs=[job_1], allow_failure=True)  # allow_failure defaults to False
+dependency = Dependency(
+    jobs=[job_1],
+    allow_failure=True,    # allow_failure defaults to False
+    enqueue_at_front=True  # enqueue_at_front defaults to False  
+)
 job_2 = queue.enqueue(say_hello, depends_on=dependency)
-# job_2 will execute even though its dependency (job_1) fails
+
+"""
+  job_2 will execute even though its dependency (job_1) fails,
+  and it will be enqueued at the front of the queue.
+"""
 ```
 
 
@@ -269,10 +278,10 @@ There are two options:
 
 #### Arguments:
 
-| | plain text | json | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
-|-|-|-|-|
-| keyword | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]` |
-| no keyword | `[value]` | `:[value]` | `%[value]` |
+|            | plain text      | json             | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
+| ---------- | --------------- | ---------------- | --------------------------------------------------------------------------- |
+| keyword    | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]`                                                            |
+| no keyword | `[value]`       | `:[value]`       | `%[value]`                                                                  |
 
 Where `[key]` is the keyword and `[value]` is the value which is parsed with the corresponding
 parsing method.
