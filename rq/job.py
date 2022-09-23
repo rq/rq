@@ -998,6 +998,7 @@ class Job:
         This is useful when enqueueing the dependents of a _successful_ job -- that status of
         `FINISHED` may not be yet set in redis, but said job is indeed _done_ and this
         method is _called_ in the _stack_ of its dependents are being enqueued.
+        `exclude_job_id` allows us to exclude certain job IDs from being checked.
         """
         connection = pipeline if pipeline is not None else self.connection
 
