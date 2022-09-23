@@ -319,6 +319,10 @@ $ rq worker -w 'path.to.GeventWorker'
 
 ## Round Robin and Random strategies for dequeuing jobs from queues
 
+The default worker considers the order of queues as their priority order, 
+and if a task is pending in a higher priority queue 
+it will be selected before any other in queues with lower priority.
+
 In certain circumstances it can be useful that a when a worker is listening to multiple queues, 
 say `q1`,`q2`,`q3`, the jobs are dequeued using a Round Robin strategy. That is, the 1st
 dequeued job is taken from `q1`, the 2nd from `q2`, the 3rd from `q3`, the 4th

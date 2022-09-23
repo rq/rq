@@ -39,7 +39,7 @@ class JobStatus(str, Enum):
 
 
 class Dependency:
-    def __init__(self, jobs, allow_failure: bool = False):
+    def __init__(self, jobs, allow_failure: bool = False, enqueue_at_front: bool = False):
         jobs = ensure_list(jobs)
         if not all(
             isinstance(job, Job) or isinstance(job, str)
@@ -52,6 +52,7 @@ class Dependency:
 
         self.dependencies = jobs
         self.allow_failure = allow_failure
+        self.enqueue_at_front = enqueue_at_front
 
 
 # Sentinel value to mark that some of our lazily evaluated properties have not
@@ -151,6 +152,7 @@ class Job:
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
             if isinstance(depends_on, Dependency):
+                job.enqueue_at_front = depends_on.enqueue_at_front
                 job.allow_dependency_failures = depends_on.allow_failure
                 depends_on_list = depends_on.dependencies
             else:
@@ -429,6 +431,7 @@ class Job:
         self.redis_server_version = None
         self.last_heartbeat = None
         self.allow_dependency_failures = None
+        self.enqueue_at_front = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
@@ -586,6 +589,7 @@ class Job:
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
         self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get('allow_dependency_failures') else None
+        self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
 
@@ -668,6 +672,9 @@ class Job:
         if self.allow_dependency_failures is not None:
             # convert boolean to integer to avoid redis.exception.DataError
             obj["allow_dependency_failures"] = int(self.allow_dependency_failures)
+
+        if self.enqueue_at_front is not None:
+            obj["enqueue_at_front"] = int(self.enqueue_at_front)
 
         return obj
 

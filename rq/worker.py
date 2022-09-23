@@ -219,16 +219,24 @@ class Worker:
                 connection.client_setname(self.name)
             except redis.exceptions.ResponseError:
                 warnings.warn(
-                    'CLIENT command not supported, setting ip_address to unknown',
+                    'CLIENT SETNAME command not supported, setting ip_address to unknown',
                     Warning
                 )
                 self.ip_address = 'unknown'
             else:
-                self.ip_address = [
+                client_adresses = [
                     client['addr']
                     for client in connection.client_list()
                     if client['name'] == self.name
-                ][0]
+                ]
+                if len(client_adresses) > 0:
+                    self.ip_address = client_adresses[0]
+                else:
+                    warnings.warn(
+                        'CLIENT LIST command not supported, setting ip_address to unknown',
+                        Warning
+                    )
+                    self.ip_address = 'unknown'
         else:
             self.hostname = None
             self.pid = None
@@ -832,7 +840,7 @@ class Worker:
 
         if job_status is None:  # Job completed and its ttl has expired
             return
-        elif job_status == JobStatus.STOPPED:
+        elif self._stopped_job_id == job.id:
             # Work-horse killed deliberately
             self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
             self.handle_job_failure(
