@@ -8,7 +8,8 @@ on:
 
 
 permissions:
-  contents: read # to fetch code (actions/checkout)
+  contents: read write # to fetch code (actions/checkout)
+  packages: write
 
 jobs:
   push:
