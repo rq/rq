@@ -194,7 +194,7 @@ class Worker:
                   if isinstance(q, string_types) else q
                   for q in ensure_list(queues)]
 
-        self.name = name or uuid4().hex
+        self.name: str = name or uuid4().hex
         self.queues = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
@@ -204,21 +204,21 @@ class Worker:
         self.default_worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
 
-        self._state = 'starting'
-        self._is_horse = False
-        self._horse_pid = 0
-        self._stop_requested = False
+        self._state: str = 'starting'
+        self._is_horse: bool = False
+        self._horse_pid: int = 0
+        self._stop_requested: bool = False
         self._stopped_job_id = None
 
         self.log = logger
         self.log_job_description = log_job_description
         self.last_cleaned_at = None
-        self.successful_job_count = 0
-        self.failed_job_count = 0
-        self.total_working_time = 0
-        self.current_job_working_time = 0
+        self.successful_job_count: int = 0
+        self.failed_job_count: int = 0
+        self.total_working_time: int = 0
+        self.current_job_working_time: int = 0
         self.birth_date = None
-        self.scheduler = None
+        self.scheduler: t.Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
 
@@ -411,7 +411,7 @@ class Worker:
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
-    def set_current_job_id(self, job_id: str, pipeline: t.Optional['Pipeline'] = None):
+    def set_current_job_id(self, job_id: t.Optional[str] = None, pipeline: t.Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
 
         if job_id is None:

@@ -435,7 +435,7 @@ class Job:
         self.redis_server_version = None
         self.last_heartbeat: t.Optional[datetime] = None
         self.allow_dependency_failures: t.Optional[bool] = None
-        self.enqueue_at_front = None
+        self.enqueue_at_front: t.Optional[bool] = None
 
     def __repr__(self):  # noqa  # pragma: no cover
         return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
