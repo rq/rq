@@ -98,6 +98,25 @@ class TestDependencies(RQTestCase):
         job = Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
+        # Test dependant is enqueued at front
+        q.empty()
+        parent_job = q.enqueue(say_hello)
+        q.enqueue(
+            say_hello,
+            job_id='fake_job_id_1',
+            depends_on=Dependency(jobs=[parent_job])
+        )
+        q.enqueue(
+            say_hello,
+            job_id='fake_job_id_2',
+            depends_on=Dependency(jobs=[parent_job],enqueue_at_front=True)
+        )
+        #q.enqueue(say_hello) # This is a filler job that will act as a separator for jobs, one will be enqueued at front while the other one at the end of the queue
+        w.work(burst=True, max_jobs=1)
+
+        self.assertEqual(q.job_ids, ["fake_job_id_2", "fake_job_id_1"])
+
+
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""
         queue = Queue(connection=self.testconn)

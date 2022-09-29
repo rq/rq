@@ -184,7 +184,7 @@ class RQScheduler:
                        ", ".join(self.acquired_locks))
         if len(self._queue_names) > 1:
             with self.connection.pipeline() as pipeline:
-                for name in self._queue_names:
+                for name in self._acquired_locks:
                     key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 60)
                 pipeline.execute()

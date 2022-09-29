@@ -852,7 +852,7 @@ class Worker:
 
         if job_status is None:  # Job completed and its ttl has expired
             return
-        elif job_status == JobStatus.STOPPED:
+        elif self._stopped_job_id == job.id:
             # Work-horse killed deliberately
             self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
             self.handle_job_failure(

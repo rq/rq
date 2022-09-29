@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
 
 
+permissions:
+  contents: read write # to fetch code (actions/checkout)
+  packages: write
+
 jobs:
   push:
     if: github.repository == 'rq/rq'
