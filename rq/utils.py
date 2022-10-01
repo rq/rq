@@ -11,8 +11,12 @@ import importlib
 import logging
 import numbers
 import sys
-
+import datetime as dt
+import typing as t
 from collections.abc import Iterable
+
+if t.TYPE_CHECKING:
+    from redis import Redis
 
 from redis.exceptions import ResponseError
 
@@ -73,17 +77,18 @@ class _Colorizer:
 colorizer = _Colorizer()
 
 
-def make_colorizer(color):
+def make_colorizer(color: str):
     """Creates a function that colorizes text with the given color.
 
-    For example:
+    For example::
 
-        green = make_colorizer('darkgreen')
-        red = make_colorizer('red')
+        ..codeblock::python
 
-    Then, you can use:
-
-        print "It's either " + green('OK') + ' or ' + red('Oops')
+            >>> green = make_colorizer('darkgreen')
+            >>> red = make_colorizer('red')
+            >>>
+            >>> # You can then use:
+            >>> print("It's either " + green('OK') + ' or ' + red('Oops'))
     """
     def inner(text):
         return colorizer.colorize(color, text)
@@ -121,19 +126,31 @@ class ColorizingStreamHandler(logging.StreamHandler):
         return message
 
 
-def import_attribute(name):
-    """Return an attribute from a dotted path name (e.g. "path.to.func")."""
+def import_attribute(name: str):
+    """Returns an attribute from a dotted path name. Example: `path.to.func`.
+
+    When the attribute we look for is a staticmethod, module name in its
+    dotted path is not the last-before-end word
+
+    E.g.: package_a.package_b.module_a.ClassA.my_static_method
+
+    Thus we remove the bits from the end of the name until we can import it
+    Sometimes the failure during importing is due to a genuine coding error in the imported module
+    In this case, the exception is logged as a warning for ease of debugging.
+    The above logic will apply anyways regardless of the cause of the import error.
+
+    Args:
+        name (str): The name (reference) to the path.
+
+    Raises:
+        ValueError: If no module is found or invalid attribute name.
+
+    Returns:
+        t.Any: An attribute (normally a Callable)
+    """
     name_bits = name.split('.')
     module_name_bits, attribute_bits = name_bits[:-1], [name_bits[-1]]
     module = None
-    # When the attribute we look for is a staticmethod, module name in its
-    # dotted path is not the last-before-end word
-    # E.g.: package_a.package_b.module_a.ClassA.my_static_method
-    # Thus we remove the bits from the end of the name until we can import it
-    #
-    # Sometimes the failure during importing is due to a genuine coding error in the imported module
-    # In this case, the exception is logged as a warning for ease of debugging.
-    # The above logic will apply anyways regardless of the cause of the import error.
     while len(module_name_bits):
         try:
             module_name = '.'.join(module_name_bits)
@@ -168,11 +185,11 @@ def utcnow():
 _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
-def utcformat(dt):
+def utcformat(dt: dt.datetime):
     return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
-def utcparse(string):
+def utcparse(string: str):
     try:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
@@ -180,7 +197,7 @@ def utcparse(string):
         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
-def first(iterable, default=None, key=None):
+def first(iterable: t.Iterable, default=None, key=None):
     """
     Return first element of `iterable` that evaluates true, else return None
     (or an optional default value).
@@ -219,12 +236,12 @@ def first(iterable, default=None, key=None):
     return default
 
 
-def is_nonstring_iterable(obj):
+def is_nonstring_iterable(obj: t.Any) -> bool:
     """Returns whether the obj is an iterable, but not a string"""
     return isinstance(obj, Iterable) and not isinstance(obj, string_types)
 
 
-def ensure_list(obj):
+def ensure_list(obj: t.Any) -> t.List:
     """
     When passed an iterable of objects, does nothing, otherwise, it returns
     a list with just that object in it.
@@ -232,7 +249,7 @@ def ensure_list(obj):
     return obj if is_nonstring_iterable(obj) else [obj]
 
 
-def current_timestamp():
+def current_timestamp() -> int:
     """Returns current UTC timestamp"""
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
 
@@ -247,14 +264,14 @@ def backend_class(holder, default_name, override=None):
         return override
 
 
-def str_to_date(date_str):
+def str_to_date(date_str: t.Optional[str]) -> t.Union[dt.datetime, t.Any]:
     if not date_str:
         return
     else:
         return utcparse(date_str.decode())
 
 
-def parse_timeout(timeout):
+def parse_timeout(timeout: t.Any):
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
@@ -272,10 +289,13 @@ def parse_timeout(timeout):
     return timeout
 
 
-def get_version(connection):
+def get_version(connection: 'Redis'):
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
+
+    Args:
+        connection (Redis): The Redis connection.
     """
     try:
         return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3])
@@ -288,33 +308,55 @@ def ceildiv(a, b):
     return -(-a // b)
 
 
-def split_list(a_list, segment_size):
-    """
-    Splits a list into multiple smaller lists having size `segment_size`
+def split_list(a_list: t.List[t.Any], segment_size: int):
+    """Splits a list into multiple smaller lists having size `segment_size`
+
+    Args:
+        a_list (t.List[t.Any]): A list to split
+        segment_size (int): The segment size to split into
+
+    Yields:
+        list: The splitted listed
     """
     for i in range(0, len(a_list), segment_size):
         yield a_list[i:i + segment_size]
 
 
-def truncate_long_string(data, max_length=None):
-    """Truncate arguments with representation longer than max_length"""
+def truncate_long_string(data: str, max_length: t.Optional[int] = None) -> str:
+    """Truncate arguments with representation longer than max_length
+
+    Args:
+        data (str): The data to truncate
+        max_length (t.Optional[int], optional): The max length. Defaults to None.
+    """
     if max_length is None:
         return data
     return (data[:max_length] + '...') if len(data) > max_length else data
 
 
-def get_call_string(func_name, args, kwargs, max_length=None):
-    """Returns a string representation of the call, formatted as a regular
+def get_call_string(func_name: t.Optional[str], args: t.Any, kwargs: t.Dict[t.Any, t.Any],
+                    max_length: t.Optional[int] = None) -> t.Optional[str]:
+    """
+    Returns a string representation of the call, formatted as a regular
     Python function invocation statement. If max_length is not None, truncate
     arguments with representation longer than max_length.
+
+    Args:
+        func_name (str): The funtion name
+        args (t.Any): The function arguments
+        kwargs (t.Dict[t.Any, t.Any]): The function kwargs
+        max_length (int, optional): The max length. Defaults to None.
+
+    Returns:
+        str: A String representation of the function call.
     """
     if func_name is None:
         return None
 
     arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
 
-    kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
-    arg_list += sorted(kwargs)
+    list_kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
+    arg_list += sorted(list_kwargs)
     args = ', '.join(arg_list)
 
     return '{0}({1})'.format(func_name, args)
