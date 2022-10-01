@@ -1027,8 +1027,13 @@ class Worker:
                     # if dependencies are inserted after enqueue_dependents
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
-                    # enqueue_dependents calls multi() on the pipeline!
+                    # enqueue_dependents might call multi() on the pipeline
                     queue.enqueue_dependents(job, pipeline=pipeline)
+
+                    if not pipeline.explicit_transaction:
+                        # enqueue_dependents didn't call multi after all!
+                        # We have to do it ourselves to make sure everything runs in a transaction
+                        pipeline.multi()
 
                     self.set_current_job_id(None, pipeline=pipeline)
                     self.increment_successful_job_count(pipeline=pipeline)
