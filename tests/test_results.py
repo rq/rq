@@ -26,13 +26,10 @@ class TestScheduledJobRegistry(RQTestCase):
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
 
-        import time
-        time.sleep(1)
         # Check job with None return value
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=None)
         result = Result.get_latest(job.id, self.connection)
         self.assertIsNone(result.return_value)
-        time.sleep(1)
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=2)
         result = Result.get_latest(job.id, self.connection)
         self.assertEqual(result.return_value, 2)
@@ -50,14 +47,18 @@ class TestScheduledJobRegistry(RQTestCase):
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
 
-    def test_all(self):
+    def test_getting_results(self):
         """Check getting all execution results"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         result_1 = Result.create_failure(job, ttl=10, exc_string='exception')
         result_2 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
         result_3 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
-        result = Result.get_latest(job, self.connection)
-        results = Result.all(job, self.connection)
 
-        self.assertEqual(result_3, results[0])
+        # Result.get_latest() returns the latest result
+        result = Result.get_latest(job, self.connection)
+        self.assertEqual(result, result_3)
+
+        # Result.all() returns all results, newest first
+        results = Result.all(job, self.connection)
+        self.assertEqual(results, [result_3, result_2, result_1])
