@@ -1,3 +1,11 @@
+### RQ 1.11.1 (2022-09-25)
+* `queue.enqueue_many()` now supports `on_success` and on `on_failure` arguments. Thanks @y4n9squared!
+* You can now pass `enqueue_at_front` to `Dependency()` objects to put dependent jobs at the front when they are enqueued. Thanks @jtfidje!
+* Fixed a bug where workers may wrongly acquire scheduler locks. Thanks @milesjwinter!
+* Jobs should not be enqueued if any one of it's dependencies is canceled. Thanks @selwin!
+* Fixed a bug when handling jobs that have been stopped. Thanks @ronlut!
+* Fixed a bug in handling Redis connections that don't allow `SETNAME` command. Thanks @yilmaz-burak!
+
 ### RQ 1.11 (2022-07-31)
 * This will be the last RQ version that supports Python 3.5.
 * Allow jobs to be enqueued even when their dependencies fail via `Dependency(allow_failure=True)`. Thanks @mattchan-tencent, @caffeinatedMike and @selwin!

@@ -28,7 +28,7 @@ from tests.fixtures import (
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
-from rq.compat import as_text, PY2
+from rq.compat import as_text
 from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
@@ -68,22 +68,6 @@ class TestWorker(RQTestCase):
         w = Worker(iter(['foo', 'bar']))
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
-
-        # Also accept byte strings in Python 2
-        if PY2:
-            # With single byte string argument
-            w = Worker(b'foo')
-            self.assertEqual(w.queues[0].name, 'foo')
-
-            # With list of byte strings
-            w = Worker([b'foo', b'bar'])
-            self.assertEqual(w.queues[0].name, 'foo')
-            self.assertEqual(w.queues[1].name, 'bar')
-
-            # With iterable of byte strings
-            w = Worker(iter([b'foo', b'bar']))
-            self.assertEqual(w.queues[0].name, 'foo')
-            self.assertEqual(w.queues[1].name, 'bar')
 
         # With single Queue
         w = Worker(Queue('foo'))
