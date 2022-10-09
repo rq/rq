@@ -420,7 +420,7 @@ class TestWorker(RQTestCase):
 
     def test_statistics(self):
         """Successful and failed job counts are saved properly"""
-        queue = Queue()
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(div_by_zero)
         worker = Worker([queue])
         worker.register_birth()

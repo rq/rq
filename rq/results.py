@@ -46,6 +46,9 @@ class Result(object):
         except AttributeError:
             return False
 
+    def __bool__(self):
+        return bool(self.id)
+
     @classmethod
     def create(cls, job, type, ttl, return_value=None, exc_string=None, pipeline=None):        
         result = cls(job_id=job.id, type=type, connection=job.connection,

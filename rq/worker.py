@@ -9,6 +9,7 @@ import time
 import traceback
 import warnings
 import typing as t
+from xml.etree.ElementInclude import include
 
 if t.TYPE_CHECKING:
     from redis import Redis
@@ -956,7 +957,7 @@ class Worker:
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None,
-                           exc_string='', save_exc_to_job: bool = False):
+                           exc_string='', _save_exc_to_job: bool = False):
         """
         Handles the failure or an executing job by:
             1. Setting the job status to failed
@@ -995,7 +996,8 @@ class Worker:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                         job_class=self.job_class, serializer=job.serializer)
                 failed_job_registry.add(job, ttl=job.failure_ttl,
-                                        exc_string=exc_string, pipeline=pipeline)
+                                        exc_string=exc_string, pipeline=pipeline,
+                                        _save_exc_to_job=_save_exc_to_job)
                 Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
@@ -1023,7 +1025,7 @@ class Worker:
                 pass
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry,
-                           save_result_to_job: bool = False):
+                           _save_result_to_job: bool = False):
         self.log.debug('Handling successful execution of job %s', job.id)
 
         with self.connection.pipeline() as pipeline:
@@ -1051,8 +1053,9 @@ class Worker:
                         self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         job.worker_name = None
-                        # Don't clobber the user's meta dictionary!
-                        job.save(pipeline=pipeline, include_meta=False)
+                        # Don't clobber user's meta dictionary!
+                        job.save(pipeline=pipeline, include_meta=False,
+                                 include_result=_save_result_to_job)
 
                         Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
                                       ttl=result_ttl, pipeline=pipeline)

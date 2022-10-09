@@ -164,7 +164,7 @@ class BaseRegistry:
                           job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
-            job.exc_info = ''
+            job._exc_info = ''
             job.save()
             job = queue.enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
@@ -215,7 +215,7 @@ class StartedJobRegistry(BaseRegistry):
 
                     else:
                         job.set_status(JobStatus.FAILED)
-                        job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
+                        job._exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
@@ -261,7 +261,7 @@ class FailedJobRegistry(BaseRegistry):
         self.connection.zremrangebyscore(self.key, 0, score)
 
     def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None,
-            save_exc_to_job: bool = False):
+            _save_exc_to_job: bool = False):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
@@ -275,8 +275,8 @@ class FailedJobRegistry(BaseRegistry):
         else:
             p = self.connection.pipeline()
 
-        job.exc_info = exc_string
-        job.save(pipeline=p, include_meta=False)
+        job._exc_info = exc_string
+        job.save(pipeline=p, include_meta=False, include_result=_save_exc_to_job)
         job.cleanup(ttl=ttl, pipeline=p)
         p.zadd(self.key, {job.id: score})
 
