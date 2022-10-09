@@ -181,7 +181,7 @@ class TestWorker(RQTestCase):
         )
         expected_result = 'Hi there, Frank!'
         self.assertEqual(job.result, expected_result)
-        self.assertEqual(Result.get_latest(job.id, connection=self.testconn).return_value, expected_result)
+        self.assertEqual(Result.get_latest(job).return_value, expected_result)
         self.assertIsNone(job.worker_name)
 
     def test_job_times(self):
@@ -383,7 +383,7 @@ class TestWorker(RQTestCase):
         # to the failed queue
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertTrue(job.exc_info)  # should contain exc_info
-        result = Result.get_latest(job.id, connection=self.connection)
+        result = Result.get_latest(job)
         self.assertEqual(result.exc_string, job.exc_info)
         self.assertEqual(result.type, Result.Type.FAILED)
 

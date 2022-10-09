@@ -956,12 +956,14 @@ class Worker:
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None,
-                           exc_string=''):
-        """Handles the failure or an executing job by:
+                           exc_string='', save_exc_to_job: bool = False):
+        """
+        Handles the failure or an executing job by:
             1. Setting the job status to failed
             2. Removing the job from StartedJobRegistry
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
+        `save_exc_to_job` should only be used for testing purposes
         """
         self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
@@ -1020,7 +1022,8 @@ class Worker:
                 # even if Redis is down
                 pass
 
-    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry):
+    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry,
+                           save_result_to_job: bool = False):
         self.log.debug('Handling successful execution of job %s', job.id)
 
         with self.connection.pipeline() as pipeline:

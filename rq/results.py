@@ -1,11 +1,13 @@
-import calendar
 import json
+from typing import Any, Optional
 import zlib
 
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from enum import Enum
 from uuid import uuid4
+
+from redis import Redis
 
 from .job import Job
 from .serializers import resolve_serializer
@@ -23,7 +25,9 @@ class Result(object):
         FAILED = 2
         STOPPED = 3
 
-    def __init__(self, job_id, type, connection, id=None, created_at=None, return_value=None, exc_string=None, serializer=None):
+    def __init__(self, job_id: str, type: Type, connection: Redis, id: Optional[str] = None,
+                 created_at: Optional[datetime] = None, return_value: Optional[Any] = None,
+                 exc_string: Optional[str] = None, serializer=None):
         self.return_value = return_value
         self.exc_string = exc_string
         self.type = type
@@ -58,16 +62,24 @@ class Result(object):
         return result
 
     @classmethod
-    def all(cls, job, connection, serializer=None):
+    def all(cls, job: Job, serializer=None):
         """Returns all results for job"""
-        job_id = job.id if isinstance(job, Job) else job
-        response = connection.zrange(cls.get_key(job_id), 0, 50, desc=True, withscores=True)
+        response = job.connection.zrange(cls.get_key(job.id), 0, 50, desc=True, withscores=True)
         results = []
-        print(response)
         for payload in response:
-            results.append(cls.restore(job_id, payload, connection=connection, serializer=serializer))
+            results.append(cls.restore(job.id, payload, connection=job.connection, serializer=serializer))
 
         return results
+
+    @classmethod
+    def count(cls, job: Job) -> int:
+        """Returns the number of job results"""
+        return job.connection.zcard(cls.get_key(job.id))
+
+    @classmethod
+    def delete_all(cls, job: Job) -> None:
+        """Delete all job results"""
+        job.connection.delete(cls.get_key(job.id))
 
     @classmethod
     def restore(cls, job_id, payload, connection, serializer=None):
@@ -92,34 +104,15 @@ class Result(object):
                       exc_string=exc_string)
 
     @classmethod
-    def get_latest(cls, job, connection, serializer=None):
+    def get_latest(cls, job: Job, serializer=None):
         """Returns the latest result for given job instance or ID"""
-        job_id = job.id if isinstance(job, Job) else job
-        response = connection.zrevrangebyscore(cls.get_key(job_id), '+inf', '-inf',
-                                               start=0, num=1, withscores=True)
+        response = job.connection.zrevrangebyscore(cls.get_key(job.id), '+inf', '-inf',
+                                                   start=0, num=1, withscores=True)
         if not response:
             return None
 
         data, timestamp = response[0]
-        return cls.restore(job_id, response[0], connection=connection, serializer=serializer)
-        # result_data = json.loads(result_data)
-        # created_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-
-        # if result_data:
-        #     serializer = resolve_serializer(serializer)
-        #     return_value = result_data.get('return_value')
-        #     if return_value is not None:
-        #         return_value = serializer.loads(b64decode(return_value))
-
-        #     exc_string = result_data.get('exc_string')
-        #     if exc_string:
-        #         exc_string = zlib.decompress(b64decode(exc_string)).decode()
-
-        #     return Result(job_id, Result.Type(result_data['type']), connection=connection,
-        #                   id=result_data['id'],
-        #                   created_at=created_at,
-        #                   return_value=return_value,
-        #                   exc_string=exc_string)
+        return cls.restore(job.id, response[0], connection=job.connection, serializer=serializer)
 
     @classmethod
     def get_key(cls, job_id):

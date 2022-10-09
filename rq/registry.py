@@ -105,7 +105,7 @@ class BaseRegistry:
             job_instance.delete()
         return result
 
-    def get_expired_job_ids(self, timestamp: t.Optional[datetime] = None):
+    def get_expired_job_ids(self, timestamp: t.Optional[float] = None):
         """Returns job ids whose score are less than current timestamp.
 
         Returns ids for jobs with an expiry time earlier than timestamp,
@@ -182,7 +182,7 @@ class StartedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: t.Optional[datetime] = None):
+    def cleanup(self, timestamp: t.Optional[float] = None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -233,7 +233,7 @@ class FinishedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:finished:{0}'
 
-    def cleanup(self, timestamp: t.Optional[datetime] = None):
+    def cleanup(self, timestamp: t.Optional[float] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -250,7 +250,7 @@ class FailedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:failed:{0}'
 
-    def cleanup(self, timestamp: t.Optional[datetime] = None):
+    def cleanup(self, timestamp: t.Optional[float] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -260,7 +260,8 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None):
+    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None,
+            save_exc_to_job: bool = False):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.

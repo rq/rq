@@ -13,11 +13,11 @@ class TestScheduledJobRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
-        result = Result.get_latest(job.id, self.connection)
+        result = Result.get_latest(job)
         self.assertIsNone(result)
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
-        result = Result.get_latest(job.id, self.connection)
+        result = Result.get_latest(job)
         self.assertEqual(result.return_value, 1)
         self.assertEqual(job.get_latest_result().return_value, 1)
 
@@ -28,10 +28,10 @@ class TestScheduledJobRegistry(RQTestCase):
 
         # Check job with None return value
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=None)
-        result = Result.get_latest(job.id, self.connection)
+        result = Result.get_latest(job)
         self.assertIsNone(result.return_value)
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=2)
-        result = Result.get_latest(job.id, self.connection)
+        result = Result.get_latest(job)
         self.assertEqual(result.return_value, 2)
 
     def test_create_failure(self):
@@ -39,7 +39,7 @@ class TestScheduledJobRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         Result.create_failure(job, ttl=10, exc_string='exception')
-        result = Result.get_latest(job.id, self.connection)
+        result = Result.get_latest(job)
         self.assertEqual(result.exc_string, 'exception')
 
         # Check that ttl is properly set
@@ -56,9 +56,32 @@ class TestScheduledJobRegistry(RQTestCase):
         result_3 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
 
         # Result.get_latest() returns the latest result
-        result = Result.get_latest(job, self.connection)
+        result = Result.get_latest(job)
         self.assertEqual(result, result_3)
 
         # Result.all() returns all results, newest first
-        results = Result.all(job, self.connection)
+        results = Result.all(job)
         self.assertEqual(results, [result_3, result_2, result_1])
+
+    def test_count(self):
+        """Result.count(job) returns number of results"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        self.assertEqual(Result.count(job), 0)
+        Result.create_failure(job, ttl=10, exc_string='exception')
+        self.assertEqual(Result.count(job), 1)
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        self.assertEqual(Result.count(job), 2)
+
+    def test_delete_all(self):
+        """Result.delete_all(job) deletes all results from Redis"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        Result.create_failure(job, ttl=10, exc_string='exception')
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        Result.delete_all(job)
+        self.assertEqual(Result.count(job), 0)
+
+    def test_job_result_fallback(self):
+        """Changes to job.result handling should be backwards compatible."""
+        

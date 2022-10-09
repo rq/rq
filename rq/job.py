@@ -551,12 +551,12 @@ class Job:
     def results(self):
         """Returns all Result objects"""
         from .results import Result
-        return Result.all(self, self.connection)
+        return Result.all(self)
 
     def get_latest_result(self):
         """Returns the latest Result object"""
         from .results import Result
-        return Result.get_latest(self, self.connection)
+        return Result.get_latest(self)
 
     def restore(self, raw_data):
         """Overwrite properties with the provided values stored in Redis"""
@@ -630,7 +630,7 @@ class Job:
             raise NoSuchJobError('No such job: {0}'.format(self.key))
         self.restore(data)
 
-    def to_dict(self, include_meta: bool = True) -> dict:
+    def to_dict(self, include_meta: bool = True, include_result: bool = True) -> dict:
         """
         Returns a serialization of the current job instance
 
@@ -659,7 +659,7 @@ class Job:
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
 
-        if self._result is not None:
+        if self._result is not None and include_result:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
             except:  # noqa
@@ -691,7 +691,8 @@ class Job:
 
         return obj
 
-    def save(self, pipeline: t.Optional['Pipeline'] = None, include_meta: bool = True):
+    def save(self, pipeline: t.Optional['Pipeline'] = None, include_meta: bool = True,
+             include_result=True):
         """
         Dumps the current job instance to its corresponding Redis key.
 
@@ -704,7 +705,7 @@ class Job:
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
 
-        mapping = self.to_dict(include_meta=include_meta)
+        mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
 
         if self.get_redis_server_version() >= (4, 0, 0):
             connection.hset(key, mapping=mapping)
