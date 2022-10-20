@@ -47,9 +47,9 @@ class Dependency:
     def __init__(self, jobs: t.List[t.Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
         dependent_jobs = ensure_list(jobs)
         if not all(
-            isinstance(job, Job) or isinstance(job, str)
-            for job in dependent_jobs
-            if job
+                isinstance(job, Job) or isinstance(job, str)
+                for job in dependent_jobs
+                if job
         ):
             raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
         elif len(dependent_jobs) < 1:
@@ -136,14 +136,20 @@ class Job:
         job._kwargs = kwargs
 
         if on_success:
-            if not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
+            if isinstance(on_success, string_types):
+                job._success_callback_name = as_text(on_success)
+            elif not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
                 raise ValueError('on_success callback must be a function')
-            job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
+            else:
+                job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
 
         if on_failure:
-            if not inspect.isfunction(on_failure) and not inspect.isbuiltin(on_failure):
+            if isinstance(on_failure, string_types):
+                job._failure_callback_name = as_text(on_failure)
+            elif not inspect.isfunction(on_failure) and not inspect.isbuiltin(on_failure):
                 raise ValueError('on_failure callback must be a function')
-            job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
+            else:
+                job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -591,7 +597,8 @@ class Job:
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
-        self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get('allow_dependency_failures') else None
+        self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get(
+            'allow_dependency_failures') else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
