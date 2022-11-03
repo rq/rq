@@ -562,6 +562,7 @@ class Queue:
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
+        job.redis_server_version = self.get_redis_server_version()
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
 
         job.origin = self.name
