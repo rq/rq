@@ -97,7 +97,7 @@ class Job:
     # Job construction
     @classmethod
     def create(cls, func: t.Callable[..., t.Any], args=None, kwargs=None, connection: Optional['Redis'] = None,
-               result_ttl=None, ttl=None, status: JobStatus=None, description=None,
+               result_ttl=None, ttl=None, status: JobStatus = None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
                failure_ttl=None, serializer=None, *, on_success=None, on_failure=None) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
@@ -380,7 +380,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None):
+    def fetch_many(cls, job_ids: t.Iterable[str], connection: 'Redis', serializer=None):
         """
         Bulk version of Job.fetch
 
@@ -635,7 +635,8 @@ class Job:
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
                                 else [dep_id.decode()] if dep_id else [])
-        self.allow_dependency_failures = bool(int(obj.get('allow_dependency_failures'))) if obj.get('allow_dependency_failures') else None
+        allow_failures = obj.get('allow_dependency_failures')
+        self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
@@ -819,11 +820,12 @@ class Job:
         return self.failed_job_registry.requeue(self, at_front=at_front)
 
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
+        from .registry import BaseRegistry
         if remove_from_queue:
             from .queue import Queue
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
-
+        registry: BaseRegistry
         if self.is_finished:
             from .registry import FinishedJobRegistry
             registry = FinishedJobRegistry(self.origin,
@@ -1060,7 +1062,7 @@ class Job:
 
         if exclude_job_id:
             dependencies_ids.discard(exclude_job_id)
-            if parent_job.id == exclude_job_id:
+            if parent_job and parent_job.id == exclude_job_id:
                 parent_job = None
 
         if parent_job:
