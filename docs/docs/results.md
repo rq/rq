@@ -120,3 +120,35 @@ _New in version 1.12.0._
 
 If a job is executed multiple times, you can access its execution history by calling
 `job.results()`. RQ will store up to 10 latest execution results.
+
+Calling `job.latest_result()` will return the latest `Result` object, which has the
+following attributes:
+* `type` - an enum of `SUCCESSFUL`, `FAILED` or `STOPPED`
+* `created_at` - the time at which result is created
+* `return_value` - job's return value, only present if result type is `SUCCESSFUL`
+* `exc_string` - the exception raised by job, only present if result type is `FAILED`
+* `job_id`
+
+```python
+job = Job.fetch(id='my_id', connection=redis)
+result = job.latest_result()  #  returns Result(id=uid, type=SUCCESSFUL)
+print(result.return_value)  # if type is `SUCCESSFUL`
+print(result.exc_string)  # if type is `FAILED`
+```
+
+Alternatively, you can also use `job.return_value()` as a shortcut to accessing
+the return value of the latest result. Note that `job.return_value` will only
+return a not-`None` object if the latest result is a successful execution.
+
+```python
+job = Job.fetch(id='my_id', connection=redis)
+print(job.return_value())  # Shortcut for job.latest_result().return_value
+```
+
+To access multiple results, use `job.results()`.
+
+```python
+job = Job.fetch(id='my_id', connection=redis)
+for result in job.results(): 
+    print(result.created_at)
+```
