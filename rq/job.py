@@ -422,7 +422,7 @@ class Job:
         self.ended_at: Optional[datetime] = None
         self._result = None
         self._exc_info = None
-        self.timeout = None
+        self.timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None

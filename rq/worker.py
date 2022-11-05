@@ -254,7 +254,7 @@ class Worker:
         else:
             self.hostname = None
             self.pid = None
-            self.ip_address = None
+            self.ip_address = 'unknown'
 
         if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
@@ -825,7 +825,7 @@ class Worker:
                 self.set_current_job_working_time((utcnow() - job.started_at).total_seconds())
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):
+                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
                     self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
@@ -1045,7 +1045,7 @@ class Worker:
                     self.set_current_job_id(None, pipeline=pipeline)
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(
-                        job.ended_at - job.started_at, pipeline
+                        job.ended_at - job.started_at, pipeline  # type: ignore
                     )
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
