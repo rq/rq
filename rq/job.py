@@ -15,7 +15,8 @@ from typing import Any, List, Optional
 from uuid import uuid4
 
 if t.TYPE_CHECKING:
-    from rq.queue import Queue
+    from .results import Result
+    from .queue import Queue
     from redis import Redis
     from redis.client import Pipeline
 
@@ -422,7 +423,7 @@ class Job:
         self.ended_at: Optional[datetime] = None
         self._result = None
         self._exc_info = None
-        self.timeout: Optional[int] = None
+        self.timeout: Optional[float] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
