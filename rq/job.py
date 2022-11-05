@@ -15,7 +15,6 @@ from typing import Any, List, Optional
 from uuid import uuid4
 
 if t.TYPE_CHECKING:
-    from .results import Result
     from rq.queue import Queue
     from redis import Redis
     from redis.client import Pipeline
@@ -97,7 +96,7 @@ class Job:
     # Job construction
     @classmethod
     def create(cls, func: t.Callable[..., t.Any], args=None, kwargs=None, connection: Optional['Redis'] = None,
-               result_ttl=None, ttl=None, status=None, description=None,
+               result_ttl=None, ttl=None, status: JobStatus=None, description=None,
                depends_on=None, timeout=None, id=None, origin=None, meta=None,
                failure_ttl=None, serializer=None, *, on_success=None, on_failure=None) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
@@ -380,7 +379,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: t.List[str], connection: 'Redis', serializer=None):
+    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None):
         """
         Bulk version of Job.fetch
 
@@ -911,9 +910,9 @@ class Job:
         self.started_at = self.last_heartbeat
         self._status = JobStatus.STARTED
         mapping = {
-            'last_heartbeat': utcformat(self.last_heartbeat),
+            'last_heartbeat': utcformat(self.last_heartbeat),  # type: ignore
             'status': self._status,
-            'started_at': utcformat(self.started_at),
+            'started_at': utcformat(self.started_at),  # type: ignore
             'worker_name': worker_name
         }
         if self.get_redis_server_version() >= (4, 0, 0):

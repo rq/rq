@@ -9,7 +9,6 @@ import time
 import traceback
 import warnings
 import typing as t
-from xml.etree.ElementInclude import include
 
 if t.TYPE_CHECKING:
     from redis import Redis
@@ -19,6 +18,7 @@ from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
+from typing import Callable, List, Optional
 
 try:
     from signal import SIGKILL
@@ -200,7 +200,7 @@ class Worker:
         self.queues = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
-        self._exc_handlers = []
+        self._exc_handlers: List[Callable] = []
 
         self.default_result_ttl = default_result_ttl
         self.default_worker_ttl = default_worker_ttl
@@ -227,8 +227,8 @@ class Worker:
         self.disable_default_exception_handler = disable_default_exception_handler
 
         if prepare_for_work:
-            self.hostname = socket.gethostname()
-            self.pid = os.getpid()
+            self.hostname: Optional[str] = socket.gethostname()
+            self.pid: Optional[int] = os.getpid()
             try:
                 connection.client_setname(self.name)
             except redis.exceptions.ResponseError:
