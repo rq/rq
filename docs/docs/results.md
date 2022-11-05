@@ -11,19 +11,19 @@ solving a problem, but are getting back a few in return.
 
 Python functions may have return values, so jobs can have them, too.  If a job
 returns a non-`None` return value, the worker will write that return value back
-to the job's Redis hash under the `result` key.  The job's Redis hash itself
+to the job's Redis hash under the `result` key. The job's Redis hash itself
 will expire after 500 seconds by default after the job is finished.
 
 The party that enqueued the job gets back a `Job` instance as a result of the
-enqueueing itself.  Such a `Job` object is a proxy object that is tied to the
+enqueueing itself. Such a `Job` object is a proxy object that is tied to the
 job's ID, to be able to poll for results.
 
 
-**On the return value's TTL**
+### Return Value TTL
 Return values are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
-From RQ >= 0.3.1, The TTL value of the job result can be specified using the
+The TTL value of the job result can be specified using the
 `result_ttl` keyword argument to `enqueue()` and `enqueue_call()` calls.  It
 can also be used to disable the expiry altogether.  You then are responsible
 for cleaning up jobs yourself, though, so be careful to use that.
@@ -113,3 +113,10 @@ low.enqueue(really_really_slow, job_timeout=3600)  # 1 hr
 
 Individual jobs can still specify an alternative timeout, as workers will
 respect these.
+
+
+## Job Results
+_New in version 1.12.0._
+
+If a job is executed multiple times, you can access its execution history by calling
+`job.results()`. RQ will store up to 10 latest execution results.

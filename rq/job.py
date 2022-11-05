@@ -543,6 +543,18 @@ class Job:
 
         return self._exc_info
 
+    def return_value(self, refresh=False) -> Any:
+        """Returns the return value of the latest execution, if it was successful"""
+        from .results import Result
+        if refresh:
+            self._cached_result = None
+
+        if not self._cached_result:
+            self._cached_result = self.latest_result()
+
+        if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
+            return self._cached_result.return_value
+
     @property
     def result(self) -> Any:
         """Returns the return value of the job.
@@ -561,7 +573,7 @@ class Job:
         seconds by default).
         """
 
-        warnings.warn("job.result is deprecated, use job.latest_result() instead.",
+        warnings.warn("job.result is deprecated, use job.return_value instead.",
                       DeprecationWarning)
 
         from .results import Result
@@ -578,9 +590,6 @@ class Job:
                 # cache the result
                 self._result = self.serializer.loads(rv)
         return self._result
-
-    """Backwards-compatibility accessor property `return_value`."""
-    return_value = result
 
     def results(self) -> List['Result']:
         """Returns all Result objects"""

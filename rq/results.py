@@ -8,6 +8,7 @@ from enum import Enum
 from uuid import uuid4
 
 from redis import Redis
+from redis.client import Pipeline
 
 from .job import Job
 from .serializers import resolve_serializer
@@ -38,7 +39,7 @@ class Result(object):
         self.id = id
 
     def __repr__(self):
-        return f'Result(id={self.id})'
+        return f'Result(id={self.id}, type={self.Type(self.type).name})'
 
     def __eq__(self, other):
         try:
@@ -55,6 +56,7 @@ class Result(object):
                      id=uuid4().hex, return_value=return_value,
                      exc_string=exc_string, serializer=job.serializer)
         result.save(ttl=ttl, pipeline=pipeline)
+        cls.trim(job, pipeline=pipeline)
         return result
 
     @classmethod
@@ -62,12 +64,13 @@ class Result(object):
         result = cls(job_id=job.id, type=cls.Type.FAILED, connection=job.connection,
                      id=uuid4().hex, exc_string=exc_string, serializer=job.serializer)
         result.save(ttl=ttl, pipeline=pipeline)
+        cls.trim(job, pipeline=pipeline)
         return result
 
     @classmethod
     def all(cls, job: Job, serializer=None):
         """Returns all results for job"""
-        response = job.connection.zrange(cls.get_key(job.id), 0, 50, desc=True, withscores=True)
+        response = job.connection.zrange(cls.get_key(job.id), 0, 10, desc=True, withscores=True)
         results = []
         for payload in response:
             results.append(cls.restore(job.id, payload, connection=job.connection, serializer=serializer))
@@ -78,6 +81,12 @@ class Result(object):
     def count(cls, job: Job) -> int:
         """Returns the number of job results"""
         return job.connection.zcard(cls.get_key(job.id))
+
+    @classmethod
+    def trim(cls, job: Job, length: int = 10, pipeline: Optional[Pipeline] = None) -> int:
+        """Trims the results to length"""
+        connection = pipeline if pipeline is not None else job.connection
+        return connection.zremrangebyrank(cls.get_key(job.id), 0, -1 * (length + 1))
 
     @classmethod
     def delete_all(cls, job: Job) -> None:

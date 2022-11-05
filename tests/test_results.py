@@ -53,10 +53,40 @@ class TestScheduledJobRegistry(RQTestCase):
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
 
+    def test_trim(self):
+        """Result.trim() only keeps the last X results"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        Result.create_failure(job, ttl=10, exc_string='')
+        result_2 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        result_3 = Result.create_failure(job, ttl=10, exc_string='')
+        result_4 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        Result.trim(job=job, length=3)
+        self.assertEqual(Result.all(job), [result_4, result_3, result_2])
+        Result.trim(job=job, length=2)
+        self.assertEqual(Result.all(job), [result_4, result_3])
+
+    def test_result_max_length(self):
+        """Only the latest 10 results will be kept"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        for _ in range(12):
+            Result.create_failure(job, ttl=10, exc_string='')
+        self.assertEqual(Result.count(job), 10)
+
+        for _ in range(12):
+            Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        self.assertEqual(Result.count(job), 10)
+
     def test_getting_results(self):
         """Check getting all execution results"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
+
+        # latest_result() returns None when there's no result
+        self.assertIsNone(job.latest_result())
+
         result_1 = Result.create_failure(job, ttl=10, exc_string='exception')
         result_2 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
         result_3 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
@@ -64,10 +94,12 @@ class TestScheduledJobRegistry(RQTestCase):
         # Result.get_latest() returns the latest result
         result = Result.get_latest(job)
         self.assertEqual(result, result_3)
+        self.assertEqual(job.latest_result(), result_3)
 
-        # Result.all() returns all results, newest first
+        # Result.all() and job.results() returns all results, newest first
         results = Result.all(job)
         self.assertEqual(results, [result_3, result_2, result_1])
+        self.assertEqual(job.results(), [result_3, result_2, result_1])
 
     def test_count(self):
         """Result.count(job) returns number of results"""
@@ -163,3 +195,18 @@ class TestScheduledJobRegistry(RQTestCase):
         Result.delete_all(job)
         job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job.exc_info, 'Error')
+
+    def test_job_return_value(self):
+        """Test job.return_value"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        # Returns None when there's no result
+        self.assertIsNone(job.return_value())
+
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        self.assertEqual(job.return_value(), 1)
+
+        # Returns None if latest result is a failure
+        Result.create_failure(job, ttl=10, exc_string='exception')
+        self.assertIsNone(job.return_value(refresh=True))
