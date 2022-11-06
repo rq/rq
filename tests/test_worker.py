@@ -385,9 +385,10 @@ class TestWorker(RQTestCase):
         # to the failed queue
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertTrue(job.exc_info)  # should contain exc_info
-        result = Result.fetch_latest(job)
-        self.assertEqual(result.exc_string, job.exc_info)
-        self.assertEqual(result.type, Result.Type.FAILED)
+        if job.supports_redis_streams:
+            result = Result.fetch_latest(job)
+            self.assertEqual(result.exc_string, job.exc_info)
+            self.assertEqual(result.type, Result.Type.FAILED)
 
     def test_horse_fails(self):
         """Tests that job status is set to FAILED even if horse unexpectedly fails"""
