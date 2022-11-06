@@ -535,11 +535,13 @@ class Job:
                       DeprecationWarning)
 
         from .results import Result
-        if not self._cached_result:
-            self._cached_result = self.latest_result()
 
-        if self._cached_result and self._cached_result.type == Result.Type.FAILED:
-            return self._cached_result.exc_string
+        if self.supports_redis_streams:
+            if not self._cached_result:
+                self._cached_result = self.latest_result()
+
+            if self._cached_result and self._cached_result.type == Result.Type.FAILED:
+                return self._cached_result.exc_string
 
         return self._exc_info
 
@@ -549,11 +551,12 @@ class Job:
         if refresh:
             self._cached_result = None
 
-        if not self._cached_result:
-            self._cached_result = self.latest_result()
+        if self.supports_redis_streams:
+            if not self._cached_result:
+                self._cached_result = self.latest_result()
 
-        if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
-            return self._cached_result.return_value
+            if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
+                return self._cached_result.return_value
 
     @property
     def result(self) -> Any:
@@ -577,11 +580,13 @@ class Job:
                       DeprecationWarning)
 
         from .results import Result
-        if not self._cached_result:
-            self._cached_result = self.latest_result()
 
-        if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
-            return self._cached_result.return_value
+        if self.supports_redis_streams:
+            if not self._cached_result:
+                self._cached_result = self.latest_result()
+
+            if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
+                return self._cached_result.return_value
 
         # Fallback to old behavior of getting result from job hash
         if self._result is None:
@@ -755,6 +760,11 @@ class Job:
             connection.hset(key, mapping=mapping)
         else:
             connection.hmset(key, mapping)
+
+    @property
+    def supports_redis_streams(self) -> bool:
+        """Only supported by Redis server >= 5.0 is required."""
+        return not self.get_redis_server_version() >= (5, 0, 0)
 
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
