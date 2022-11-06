@@ -1,7 +1,7 @@
 import unittest
 
 from datetime import timedelta
-from mock import patch, PropertyMock
+from unittest.mock import patch, PropertyMock
 
 from redis import Redis
 
