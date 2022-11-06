@@ -1006,7 +1006,8 @@ class Worker:
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline,
                                         _save_exc_to_job=_save_exc_to_job)
-                Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
+                if self.supports_redis_streams:
+                    Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
@@ -1067,9 +1068,9 @@ class Worker:
                         # Don't clobber user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False,
                                  include_result=include_result)
-
-                        Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
-                                      ttl=result_ttl, pipeline=pipeline)
+                        if self.supports_redis_streams:
+                            Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
+                                          ttl=result_ttl, pipeline=pipeline)
 
                         finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)

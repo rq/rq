@@ -181,7 +181,9 @@ class TestWorker(RQTestCase):
         )
         expected_result = 'Hi there, Frank!'
         self.assertEqual(job.result, expected_result)
-        self.assertEqual(Result.fetch_latest(job).return_value, expected_result)
+        # Only run if Redis server supports streams
+        if job.supports_redis_streams:
+            self.assertEqual(Result.fetch_latest(job).return_value, expected_result)
         self.assertIsNone(job.worker_name)
 
     def test_job_times(self):
