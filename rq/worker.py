@@ -293,6 +293,11 @@ class Worker:
         return PUBSUB_CHANNEL_TEMPLATE % self.name
 
     @property
+    def supports_redis_streams(self) -> bool:
+        """Only supported by Redis server >= 5.0 is required."""
+        return self.get_redis_server_version() >= (5, 0, 0)
+
+    @property
     def horse_pid(self):
         """The horse's process ID.  Only available in the worker.  Will return
         0 in the horse part of the fork.
@@ -957,7 +962,7 @@ class Worker:
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None,
-                           exc_string='', _save_exc_to_job: bool = False):
+                           exc_string=''):
         """
         Handles the failure or an executing job by:
             1. Setting the job status to failed
@@ -995,6 +1000,9 @@ class Worker:
             if not self.disable_default_exception_handler and not retry:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                         job_class=self.job_class, serializer=job.serializer)
+                # Exception should be saved in job hash if server
+                # doesn't support Redis streams
+                _save_exc_to_job = not self.supports_redis_streams
                 failed_job_registry.add(job, ttl=job.failure_ttl,
                                         exc_string=exc_string, pipeline=pipeline,
                                         _save_exc_to_job=_save_exc_to_job)
@@ -1024,8 +1032,7 @@ class Worker:
                 # even if Redis is down
                 pass
 
-    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry,
-                           _save_result_to_job: bool = False):
+    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         self.log.debug('Handling successful execution of job %s', job.id)
 
         with self.connection.pipeline() as pipeline:
@@ -1053,9 +1060,13 @@ class Worker:
                         self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
                         job.worker_name = None
+
+                        # Result should be saved in job hash only if server
+                        # doesn't support Redis streams
+                        include_result = not self.supports_redis_streams
                         # Don't clobber user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False,
-                                 include_result=_save_result_to_job)
+                                 include_result=include_result)
 
                         Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
                                       ttl=result_ttl, pipeline=pipeline)
