@@ -19,11 +19,11 @@ class TestScheduledJobRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
-        result = Result.get_latest(job)
+        result = Result.fetch_latest(job)
         self.assertIsNone(result)
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
-        result = Result.get_latest(job)
+        result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 1)
         self.assertEqual(job.latest_result().return_value, 1)
 
@@ -34,10 +34,10 @@ class TestScheduledJobRegistry(RQTestCase):
 
         # Check job with None return value
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=None)
-        result = Result.get_latest(job)
+        result = Result.fetch_latest(job)
         self.assertIsNone(result.return_value)
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=2)
-        result = Result.get_latest(job)
+        result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 2)
 
     def test_create_failure(self):
@@ -45,39 +45,13 @@ class TestScheduledJobRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         Result.create_failure(job, ttl=10, exc_string='exception')
-        result = Result.get_latest(job)
+        result = Result.fetch_latest(job)
         self.assertEqual(result.exc_string, 'exception')
 
         # Check that ttl is properly set
         key = get_key(job.id)
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
-
-    def test_trim(self):
-        """Result.trim() only keeps the last X results"""
-        queue = Queue(connection=self.connection)
-        job = queue.enqueue(say_hello)
-
-        Result.create_failure(job, ttl=10, exc_string='')
-        result_2 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
-        result_3 = Result.create_failure(job, ttl=10, exc_string='')
-        result_4 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
-        Result.trim(job=job, length=3)
-        self.assertEqual(Result.all(job), [result_4, result_3, result_2])
-        Result.trim(job=job, length=2)
-        self.assertEqual(Result.all(job), [result_4, result_3])
-
-    def test_result_max_length(self):
-        """Only the latest 10 results will be kept"""
-        queue = Queue(connection=self.connection)
-        job = queue.enqueue(say_hello)
-        for _ in range(12):
-            Result.create_failure(job, ttl=10, exc_string='')
-        self.assertEqual(Result.count(job), 10)
-
-        for _ in range(12):
-            Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
-        self.assertEqual(Result.count(job), 10)
 
     def test_getting_results(self):
         """Check getting all execution results"""
@@ -91,8 +65,8 @@ class TestScheduledJobRegistry(RQTestCase):
         result_2 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
         result_3 = Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
 
-        # Result.get_latest() returns the latest result
-        result = Result.get_latest(job)
+        # Result.fetch_latest() returns the latest result
+        result = Result.fetch_latest(job)
         self.assertEqual(result, result_3)
         self.assertEqual(job.latest_result(), result_3)
 

@@ -599,7 +599,7 @@ class Job:
     def latest_result(self) -> Optional['Result']:
         """Returns the latest Result object"""
         from .results import Result
-        return Result.get_latest(self, serializer=self.serializer)
+        return Result.fetch_latest(self, serializer=self.serializer)
 
     def restore(self, raw_data):
         """Overwrite properties with the provided values stored in Redis"""
