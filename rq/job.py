@@ -764,7 +764,7 @@ class Job:
     @property
     def supports_redis_streams(self) -> bool:
         """Only supported by Redis server >= 5.0 is required."""
-        return not self.get_redis_server_version() >= (5, 0, 0)
+        return self.get_redis_server_version() >= (5, 0, 0)
 
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
