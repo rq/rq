@@ -1,3 +1,4 @@
+import contextlib
 import errno
 import logging
 import os
@@ -175,7 +176,8 @@ class Worker:
                  queue_class=None, log_job_description: bool = True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler: bool = False,
-                 prepare_for_work: bool = True, serializer=None):  # noqa
+                 prepare_for_work: bool = True, serializer=None,
+                 workhorse_terminated_handler=None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
@@ -199,6 +201,7 @@ class Worker:
         self.validate_queues()
         self._ordered_queues = self.queues[:]
         self._exc_handlers = []
+        self._workhorse_terminated_handler = workhorse_terminated_handler
 
         self.default_result_ttl = default_result_ttl
         self.default_worker_ttl = default_worker_ttl
@@ -457,14 +460,10 @@ class Worker:
         """
         A waiting the end of the horse process and recycling resources.
         """
-        pid = None
-        stat = None
-        try:
-            pid, stat = os.waitpid(self.horse_pid, 0)
-        except ChildProcessError:
-            # ChildProcessError: [Errno 10] No child processes
-            pass
-        return pid, stat
+        pid = stat = rusage = None
+        with contextlib.suppress(ChildProcessError):  # ChildProcessError: [Errno 10] No child processes
+            pid, stat, rusage = os.wait4(self.horse_pid, 0)
+        return pid, stat, rusage
 
     def request_force_stop(self, signum, frame):
         """Terminates the application (cold shutdown).
@@ -815,7 +814,7 @@ class Worker:
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
-                    retpid, ret_val = self.wait_for_horse()
+                    retpid, ret_val, rusage = self.wait_for_horse()
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
@@ -864,15 +863,14 @@ class Worker:
                 job.ended_at = utcnow()
 
             # Unhandled failure: move the job to the failed queue
-            self.log.warning((
-                'Moving job to FailedJobRegistry '
-                '(work-horse terminated unexpectedly; waitpid returned {})'
-            ).format(ret_val))
+            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if os.WIFSIGNALED(ret_val) else ""
+            exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
+            self.log.warning('Moving job to FailedJobRegistry ({})'.format(exc_string))
 
+            self.handle_workhorse_terminated(job, retpid, ret_val, rusage)
             self.handle_job_failure(
                 job, queue=queue,
-                exc_string="Work-horse was terminated unexpectedly "
-                           "(waitpid returned %s)" % ret_val
+                exc_string=exc_string
             )
 
     def execute_job(self, job: 'Job', queue: 'Queue'):
@@ -1069,11 +1067,12 @@ class Worker:
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
 
-    def execute_failure_callback(self, job):
+    def execute_failure_callback(self, job, exc_info=None):
         """Executes failure_callback with timeout"""
+        exc_info = exc_info or sys.exc_info()
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.failure_callback(job, self.connection, *sys.exc_info())
+            job.failure_callback(job, self.connection, *exc_info)
 
     def perform_job(self, job: 'Job', queue: 'Queue'):
         """Performs the actual work of a job.  Will/should only be called
@@ -1184,6 +1183,12 @@ class Worker:
     def pop_exc_handler(self):
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
+
+    def handle_workhorse_terminated(self, job, retpid, ret_val, rusage):
+        if self._workhorse_terminated_handler is None:
+            return
+
+        self._workhorse_terminated_handler(job, retpid, ret_val, rusage)
 
     def __eq__(self, other):
         """Equality does not take the database/connection into account"""
