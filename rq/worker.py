@@ -863,7 +863,7 @@ class Worker:
                 job.ended_at = utcnow()
 
             # Unhandled failure: move the job to the failed queue
-            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if os.WIFSIGNALED(ret_val) else ""
+            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ""
             exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
             self.log.warning('Moving job to FailedJobRegistry ({})'.format(exc_string))
 
