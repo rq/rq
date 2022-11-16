@@ -971,7 +971,6 @@ class Worker:
                     job_class=self.job_class,
                     serializer=self.serializer
                 )
-            job.worker_name = None
 
             # check whether a job was stopped intentionally and set the job
             # status appropriately if it was this job.
@@ -1045,7 +1044,6 @@ class Worker:
                     if result_ttl != 0:
                         self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        job.worker_name = None
                         # Don't clobber the user's meta dictionary!
                         job.save(pipeline=pipeline, include_meta=False)
 
