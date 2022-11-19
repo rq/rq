@@ -132,8 +132,10 @@ following attributes:
 ```python
 job = Job.fetch(id='my_id', connection=redis)
 result = job.latest_result()  #  returns Result(id=uid, type=SUCCESSFUL)
-print(result.return_value)  # if type is `SUCCESSFUL`
-print(result.exc_string)  # if type is `FAILED`
+if result == result.Type.SUCCESSFUL: 
+    print(result.return_value) 
+else: 
+    print(result.exc_string)
 ```
 
 Alternatively, you can also use `job.return_value()` as a shortcut to accessing
@@ -150,5 +152,5 @@ To access multiple results, use `job.results()`.
 ```python
 job = Job.fetch(id='my_id', connection=redis)
 for result in job.results(): 
-    print(result.created_at)
+    print(result.created_at, result.type)
 ```

@@ -97,7 +97,6 @@ class Result(object):
             int(result_id.split('-')[0]) / 1000, tz=timezone.utc
         )
         payload = decode_redis_hash(payload)
-        print(payload)
         # data, timestamp = payload
         # result_data = json.loads(data)
         # created_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
