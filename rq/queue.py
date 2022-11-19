@@ -15,7 +15,7 @@ from .compat import as_text, string_types, total_ordering
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
-from .job import Job, JobStatus, Dependency
+from .job import Job, JobStatus
 from .serializers import resolve_serializer
 from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
 
@@ -559,6 +559,7 @@ class Queue:
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
+        job.redis_server_version = self.get_redis_server_version()
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
 
         job.origin = self.name

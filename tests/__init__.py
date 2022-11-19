@@ -50,6 +50,7 @@ class RQTestCase(unittest.TestCase):
 
         # Store the connection (for sanity checking)
         cls.testconn = testconn
+        cls.connection = testconn
 
         # Shut up logging
         logging.disable(logging.ERROR)
