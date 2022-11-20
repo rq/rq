@@ -15,7 +15,7 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp
+from .utils import current_timestamp, parse_names
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
@@ -41,6 +41,7 @@ class RQScheduler:
         self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
+
         # Copy the connection kwargs before mutating them in order to not change the arguments
         # used by the current connection pool to create new connections
         self._connection_kwargs = connection.connection_pool.connection_kwargs.copy()
@@ -241,14 +242,3 @@ def run(scheduler):
         )
         raise
     scheduler.log.info("Scheduler with PID %s has stopped", os.getpid())
-
-
-def parse_names(queues_or_names):
-    """Given a list of strings or queues, returns queue names"""
-    names = []
-    for queue_or_name in queues_or_names:
-        if isinstance(queue_or_name, Queue):
-            names.append(queue_or_name.name)
-        else:
-            names.append(str(queue_or_name))
-    return names

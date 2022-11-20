@@ -13,10 +13,13 @@ import numbers
 import sys
 import datetime as dt
 import typing as t
+
 from collections.abc import Iterable
+from typing import List, Union
 
 if t.TYPE_CHECKING:
     from redis import Redis
+    from .queue import Queue
 
 from redis.exceptions import ResponseError
 
@@ -365,3 +368,16 @@ def get_call_string(func_name: t.Optional[str], args: t.Any, kwargs: t.Dict[t.An
     args = ', '.join(arg_list)
 
     return '{0}({1})'.format(func_name, args)
+
+
+def parse_names(queues_or_names: List[Union[str, 'Queue']]) -> List[str]:
+    """Given a list of strings or queues, returns queue names"""
+    from .queue import Queue
+
+    names = []
+    for queue_or_name in queues_or_names:
+        if isinstance(queue_or_name, Queue):
+            names.append(queue_or_name.name)
+        else:
+            names.append(str(queue_or_name))
+    return names
