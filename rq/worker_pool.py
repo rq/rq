@@ -19,6 +19,7 @@ from .worker import Worker
 class WorkerData(NamedTuple):
     name: str
     pid: int
+    process: Process
 
 
 def check_pid(pid: int) -> bool:
@@ -99,13 +100,9 @@ class Pool:
         worker_datas = list(self.worker_dict.values())
 
         for data in worker_datas:
-            try:
-                # To immediately detect that the worker is dead, we need to
-                # call waitpid twice. The first waitpid() will return the
-                os.waitpid(data.pid, os.WNOHANG)
-                os.waitpid(data.pid, os.WNOHANG)
+            if data.process.is_alive():
                 self.log.debug(f'Worker {data.name} is alive')
-            except ChildProcessError:
+            else:
                 self.log.debug(f'Worker {data.name} is dead')
                 self.worker_dict.pop(data.name)
 
@@ -136,7 +133,7 @@ class Pool:
             name=f'Worker {name} (Pool {self.name})'
         )
         process.start()
-        worker_data = WorkerData(name=name, pid=process.pid)  # type: ignore
+        worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
         self.worker_dict[name] = worker_data
 
         if count:
