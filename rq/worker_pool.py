@@ -1,5 +1,7 @@
+import errno
 import logging
 import os
+import signal
 import time
 import traceback
 
@@ -22,21 +24,12 @@ class WorkerData(NamedTuple):
     process: Process
 
 
-def check_pid(pid: int) -> bool:
-    """ Check For the existence of a unix pid. """
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    else:
-        return True
-
-
 class Pool:
 
     class Status(Enum):
-        STARTED = 1
-        STOPPED = 2
+        INITIATED = 1
+        STARTED = 2
+        STOPPED = 3
 
     def __init__(self, queues: List[Union[str, Queue]], connection: Redis,
                  num_workers: int = 1, *args, **kwargs):
@@ -48,6 +41,7 @@ class Pool:
         self.name: str = uuid4().hex
         self._burst: bool = True
         self._sleep: int = 0
+        self.status: self.Status = self.Status.INITIATED
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: Dict[str, WorkerData] = {}
@@ -78,21 +72,23 @@ class Pool:
         """Returns a list of Queue objects"""
         return [Queue(name, connection=self.connection) for name in self._queue_names]
 
-    # def spawn_worker(self, queues: List[Queue], count: Optional[int] = None):
-    #     """Instantiate a worker and adds it to worker list"""
-    #     worker = Worker(self.queues, connection=self.connection)
-    #     self._workers.append(worker)
-    #     if count:
-    #         self.log.debug(f'Spawned worker number {count}: {worker.name}')
-    #     else:
-    #         self.log.debug(f'Spawned worker {worker.name}')
+    def _install_signal_handlers(self):
+        """Installs signal handlers for handling SIGINT and SIGTERM
+        gracefully.
+        """
+        signal.signal(signal.SIGINT, self.request_stop)
+        signal.signal(signal.SIGTERM, self.request_stop)
 
-    # def spawn_workers(self):
-    #     """Instantiate workers"""
-    #     self.log.info(f'Spawning {self.num_workers} workers')
-    #     queues = self.queues
-    #     for i in range(self.num_workers):
-    #         self.spawn_worker(queues, i + 1)
+    def request_stop(self, signum=None, frame=None):
+        """Toggle self._stop_requested that's checked on every loop"""
+        self.log.info('Received SIGINT/SIGTERM, shutting down...')
+        self.status = self.Status.STOPPED
+        self.stop_workers()
+        signal.signal(signal.SIGINT, self.request_force_stop)
+        signal.signal(signal.SIGTERM, self.request_force_stop)
+
+    def request_force_stop(self, signum, frame):
+        pass
 
     def reap_workers(self):
         """Removes dead workers from worker_dict"""
@@ -118,7 +114,7 @@ class Pool:
             delta = self.num_workers - len(self.worker_dict)
             if delta:
                 for i in range(delta):
-                    self.start_worker(burst=self._burst, sleep =self._sleep)
+                    self.start_worker(burst=self._burst, sleep=self._sleep)
 
     def start_worker(self, count: Optional[int] = None, burst: bool = True, sleep: int = 0):
         """
@@ -150,9 +146,34 @@ class Pool:
         for i in range(self.num_workers):
             self.start_worker(i + 1, burst=burst, sleep=sleep)
 
+    def stop_worker(self, pid: int, sig=signal.SIGINT):
+        """
+        Send stop signal to worker and catch "No such process" error if the worker is already dead.
+        """
+        try:
+            os.kill(pid, sig)
+            self.log.info('Sent a stop worker pid %s', pid)
+        except OSError as e:
+            if e.errno == errno.ESRCH:
+                # "No such process" is fine with us
+                self.log.debug('Horse already dead')
+            else:
+                raise
+
+    def stop_workers(self):
+        """Send SIGINT to all workers"""
+        self.log.info('Sending stop signal to %s workers', len(self.worker_dict))
+        worker_datas = list(self.worker_dict.values())
+        for data in worker_datas:
+            self.stop_worker(data.pid)
+
     def start(self):
-        self.log.debug(f'Starting worker pool {self.name}...')
-        self.spawn_workers()
+        self.log.debug(f'Starting worker pool {self.name} with pid {os.getpid()}...')
+        self.status = self.Status.INITIATED
+        self.start_workers(burst=self._burst)
+        self._install_signal_handlers()
+        time.sleep(10)
+        self.log.debug(f'Stopping {self.name}...')
 
     def stop(self):
         pass
