@@ -1059,8 +1059,6 @@ class Worker:
                     if result_ttl != 0:
                         self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        # Don't clobber the user's meta dictionary!
-                        job.save(pipeline=pipeline, include_meta=False)
                         # Result should be saved in job hash only if server
                         # doesn't support Redis streams
                         include_result = not self.supports_redis_streams
