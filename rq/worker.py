@@ -980,7 +980,6 @@ class Worker:
                     job_class=self.job_class,
                     serializer=self.serializer
                 )
-            job.worker_name = None
 
             # check whether a job was stopped intentionally and set the job
             # status appropriately if it was this job.
@@ -1060,8 +1059,6 @@ class Worker:
                     if result_ttl != 0:
                         self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        job.worker_name = None
-
                         # Result should be saved in job hash only if server
                         # doesn't support Redis streams
                         include_result = not self.supports_redis_streams
@@ -1071,7 +1068,6 @@ class Worker:
                         if self.supports_redis_streams:
                             Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
                                           ttl=result_ttl, pipeline=pipeline)
-
                         finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)
 

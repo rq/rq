@@ -379,7 +379,6 @@ class TestWorker(RQTestCase):
         # Check the job
         job = Job.fetch(job.id)
         self.assertEqual(job.origin, q.name)
-        self.assertIsNone(job.worker_name)  # Worker name is cleared after failures
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
