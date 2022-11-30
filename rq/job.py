@@ -138,14 +138,20 @@ class Job:
         job._kwargs = kwargs
 
         if on_success:
-            if not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
-                raise ValueError('on_success callback must be a function')
-            job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
+            if inspect.isfunction(on_success) or inspect.isbuiltin(on_success):
+                job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
+            elif isinstance(on_success, string_types):
+                job._success_callback_name = as_text(on_success)
+            else:
+                raise ValueError('on_success callback must be a function or a string but got: {0}'.format(on_failure))
 
         if on_failure:
-            if not inspect.isfunction(on_failure) and not inspect.isbuiltin(on_failure):
-                raise ValueError('on_failure callback must be a function')
-            job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
+            if inspect.isfunction(on_failure) or inspect.isbuiltin(on_failure):
+                job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
+            elif isinstance(on_failure, string_types):
+                job._failure_callback_name = as_text(on_failure)
+            else:
+                raise ValueError('on_failure callback must be a function or a string but got: {0}'.format(on_failure))
 
         # Extra meta data
         job.description = description or job.get_call_string()

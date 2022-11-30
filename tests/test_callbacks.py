@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save_result, say_hello
+from tests.fixtures import div_by_zero, do_nothing, erroneous_callback, save_exception, save_result, say_hello
 
 from rq import Queue, Worker
 from rq.job import Job, JobStatus, UNEVALUATED
@@ -28,6 +28,9 @@ class QueueCallbackTestCase(RQTestCase):
         job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.success_callback, print)
 
+        job = queue.enqueue(say_hello, on_success="tests.fixtures.do_nothing")
+        self.assertEqual(job.success_callback, do_nothing)
+
     def test_enqueue_with_failure_callback(self):
         """queue.enqueue* methods with on_failure is persisted correctly"""
         queue = Queue(connection=self.testconn)
@@ -45,6 +48,9 @@ class QueueCallbackTestCase(RQTestCase):
 
         job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.failure_callback, print)
+
+        job = queue.enqueue(say_hello, on_failure="tests.fixtures.do_nothing")
+        self.assertEqual(job.failure_callback, do_nothing)
 
 
 class SyncJobCallback(RQTestCase):
