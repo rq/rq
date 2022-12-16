@@ -527,7 +527,8 @@ class Queue:
                               failure_ttl=failure_ttl, description=description,
                               depends_on=depends_on, job_id=job_id, meta=meta, retry=retry,
                               on_success=on_success, on_failure=on_failure)
-
+        if at_front:
+            job.enqueue_at_front = True
         return self.schedule_job(job, datetime, pipeline=pipeline)
 
     def schedule_job(self, job: 'Job', datetime: datetime, pipeline: t.Optional['Pipeline'] = None):
