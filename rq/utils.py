@@ -303,7 +303,14 @@ def get_version(connection: 'Redis'):
         connection (Redis): The Redis connection.
     """
     try:
-        return tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3])
+        # Getting the connection info for each job tanks performance, we can cache it on the connection object
+        if not getattr(connection, "__rq_redis_server_version", None):
+            setattr(
+                connection,
+                "__rq_redis_server_version",
+                tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3])
+            )
+        return getattr(connection, "__rq_redis_server_version")
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
         return (5, 0, 9)
 
