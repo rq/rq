@@ -816,7 +816,7 @@ class Worker:
         failed
         """
 
-        ret_val = None
+        retpid = ret_val = rusage = None
         job.started_at = utcnow()
         while True:
             try:
