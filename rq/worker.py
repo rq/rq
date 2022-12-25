@@ -3,6 +3,7 @@ import errno
 import logging
 import os
 import random
+import resource
 import signal
 import socket
 import sys
@@ -179,7 +180,7 @@ class Worker:
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler: bool = False,
                  prepare_for_work: bool = True, serializer=None,
-                 workhorse_terminated_handler=None):  # noqa
+                 workhorse_terminated_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None):  # noqa
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
