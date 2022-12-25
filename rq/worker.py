@@ -19,6 +19,7 @@ from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
+from typing import Callable, List, Optional
 
 try:
     from signal import SIGKILL
@@ -40,6 +41,7 @@ from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
+from .results import Result
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
@@ -200,7 +202,7 @@ class Worker:
         self.queues = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
-        self._exc_handlers = []
+        self._exc_handlers: List[Callable] = []
         self._workhorse_terminated_handler = workhorse_terminated_handler
 
         self.default_result_ttl = default_result_ttl
@@ -228,8 +230,8 @@ class Worker:
         self.disable_default_exception_handler = disable_default_exception_handler
 
         if prepare_for_work:
-            self.hostname = socket.gethostname()
-            self.pid = os.getpid()
+            self.hostname: Optional[str] = socket.gethostname()
+            self.pid: Optional[int] = os.getpid()
             try:
                 connection.client_setname(self.name)
             except redis.exceptions.ResponseError:
@@ -255,7 +257,7 @@ class Worker:
         else:
             self.hostname = None
             self.pid = None
-            self.ip_address = None
+            self.ip_address = 'unknown'
 
         if isinstance(exception_handlers, (list, tuple)):
             for handler in exception_handlers:
@@ -292,6 +294,11 @@ class Worker:
     def pubsub_channel_name(self):
         """Returns the worker's Redis hash key."""
         return PUBSUB_CHANNEL_TEMPLATE % self.name
+
+    @property
+    def supports_redis_streams(self) -> bool:
+        """Only supported by Redis server >= 5.0 is required."""
+        return self.get_redis_server_version() >= (5, 0, 0)
 
     @property
     def horse_pid(self):
@@ -822,7 +829,7 @@ class Worker:
                 self.set_current_job_working_time((utcnow() - job.started_at).total_seconds())
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):
+                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
                     self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
@@ -954,11 +961,13 @@ class Worker:
 
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None,
                            exc_string=''):
-        """Handles the failure or an executing job by:
+        """
+        Handles the failure or an executing job by:
             1. Setting the job status to failed
             2. Removing the job from StartedJobRegistry
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
+        `save_exc_to_job` should only be used for testing purposes
         """
         self.log.debug('Handling failed execution of job %s', job.id)
         with self.connection.pipeline() as pipeline:
@@ -969,7 +978,6 @@ class Worker:
                     job_class=self.job_class,
                     serializer=self.serializer
                 )
-            job.worker_name = None
 
             # check whether a job was stopped intentionally and set the job
             # status appropriately if it was this job.
@@ -989,8 +997,14 @@ class Worker:
             if not self.disable_default_exception_handler and not retry:
                 failed_job_registry = FailedJobRegistry(job.origin, job.connection,
                                                         job_class=self.job_class, serializer=job.serializer)
+                # Exception should be saved in job hash if server
+                # doesn't support Redis streams
+                _save_exc_to_job = not self.supports_redis_streams
                 failed_job_registry.add(job, ttl=job.failure_ttl,
-                                        exc_string=exc_string, pipeline=pipeline)
+                                        exc_string=exc_string, pipeline=pipeline,
+                                        _save_exc_to_job=_save_exc_to_job)
+                if self.supports_redis_streams:
+                    Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
@@ -1016,7 +1030,7 @@ class Worker:
                 # even if Redis is down
                 pass
 
-    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry):
+    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         self.log.debug('Handling successful execution of job %s', job.id)
 
         with self.connection.pipeline() as pipeline:
@@ -1036,17 +1050,22 @@ class Worker:
                     self.set_current_job_id(None, pipeline=pipeline)
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(
-                        job.ended_at - job.started_at, pipeline
+                        job.ended_at - job.started_at, pipeline  # type: ignore
                     )
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         self.log.debug('Setting job %s status to finished', job.id)
                         job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        job.worker_name = None
-                        # Don't clobber the user's meta dictionary!
-                        job.save(pipeline=pipeline, include_meta=False)
-
+                        # Result should be saved in job hash only if server
+                        # doesn't support Redis streams
+                        include_result = not self.supports_redis_streams
+                        # Don't clobber user's meta dictionary!
+                        job.save(pipeline=pipeline, include_meta=False,
+                                 include_result=include_result)
+                        if self.supports_redis_streams:
+                            Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
+                                          ttl=result_ttl, pipeline=pipeline)
                         finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)
 

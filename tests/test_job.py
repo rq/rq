@@ -298,7 +298,7 @@ class TestJob(RQTestCase):
         exception_string = 'Some exception'
 
         job = Job.create(func=fixtures.say_hello, args=('Lionel',))
-        job.exc_info = exception_string
+        job._exc_info = exception_string
         job.save()
 
         # exc_info is stored in compressed format

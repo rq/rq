@@ -104,7 +104,7 @@ class RQScheduler:
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set()
         pid = os.getpid()
-        self.log.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
+        self.log.debug("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
             if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=self.interval + 60):
                 successful_locks.add(name)

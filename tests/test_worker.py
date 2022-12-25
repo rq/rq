@@ -31,6 +31,7 @@ from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.compat import as_text
 from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
+from rq.results import Result
 from rq.suspension import resume, suspend
 from rq.utils import utcnow
 from rq.version import VERSION
@@ -178,7 +179,11 @@ class TestWorker(RQTestCase):
             w.work(burst=True), True,
             'Expected at least some work done.'
         )
-        self.assertEqual(job.result, 'Hi there, Frank!')
+        expected_result = 'Hi there, Frank!'
+        self.assertEqual(job.result, expected_result)
+        # Only run if Redis server supports streams
+        if job.supports_redis_streams:
+            self.assertEqual(Result.fetch_latest(job).return_value, expected_result)
         self.assertIsNone(job.worker_name)
 
     def test_job_times(self):
@@ -374,12 +379,15 @@ class TestWorker(RQTestCase):
         # Check the job
         job = Job.fetch(job.id)
         self.assertEqual(job.origin, q.name)
-        self.assertIsNone(job.worker_name)  # Worker name is cleared after failures
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
         self.assertEqual(str(job.enqueued_at), enqueued_at_date)
         self.assertTrue(job.exc_info)  # should contain exc_info
+        if job.supports_redis_streams:
+            result = Result.fetch_latest(job)
+            self.assertEqual(result.exc_string, job.exc_info)
+            self.assertEqual(result.type, Result.Type.FAILED)
 
     def test_horse_fails(self):
         """Tests that job status is set to FAILED even if horse unexpectedly fails"""
@@ -414,7 +422,7 @@ class TestWorker(RQTestCase):
 
     def test_statistics(self):
         """Successful and failed job counts are saved properly"""
-        queue = Queue()
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(div_by_zero)
         worker = Worker([queue])
         worker.register_birth()
