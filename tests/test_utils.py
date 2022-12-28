@@ -1,5 +1,6 @@
 import re
 import datetime
+from unittest.mock import Mock
 
 from redis import Redis
 
@@ -84,6 +85,15 @@ class TestUtils(RQTestCase):
             def info(*args):
                 return {'redis_version': '3.0.7.9'}
         self.assertEqual(get_version(DummyRedis()), (3, 0, 7))
+
+    def test_get_redis_version_gets_cached(self):
+        """Ensure get_version works properly"""
+        # Parses 3 digit version numbers correctly
+        redis = Mock(spec=['info'])
+        redis.info = Mock(return_value={'redis_version': '4.0.8'})
+        self.assertEqual(get_version(redis), (4, 0, 8))
+        self.assertEqual(get_version(redis), (4, 0, 8))
+        redis.info.assert_called_once()
 
     def test_ceildiv_even(self):
         """When a number is evenly divisible by another ceildiv returns the quotient"""
