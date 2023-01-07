@@ -1164,7 +1164,6 @@ class Worker:
 
     def handle_exception(self, job: 'Job', *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-        exc_string = ''.join(traceback.format_exception(*exc_info))
 
         # If the job cannot be deserialized, it will raise when func_name or
         # the other properties are accessed, which will stop exceptions from
@@ -1182,7 +1181,8 @@ class Worker:
         extra.update({'queue': job.origin, 'job_id': job.id})
 
         # func_name
-        self.log.error(exc_string, exc_info=True, extra=extra)
+        self.log.error(f'[Job {job.id}]: exception raised while executing ({job.func_name})',
+                        exc_info=True, extra=extra)
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
