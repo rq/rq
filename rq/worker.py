@@ -181,7 +181,7 @@ class Worker:
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
-
+        
         self.redis_server_version = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
@@ -948,17 +948,20 @@ class Worker:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-
+        self.log.debug(f"Preparing for execution of Job ID {job.id}")
         with self.connection.pipeline() as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
+            self.log.debug(f"Set Current Job ID & Working Time")
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
+            self.log.debug(f"Got Heartbeat. Current TTL is {heartbeat_ttl}")
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
+            self.log.debug(f"Job preparation finished.")
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
@@ -1100,17 +1103,24 @@ class Worker:
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
+        self.log.debug("Starting process to perform a job...")
         push_connection(self.connection)
+        self.log.debug("Connection pushed.")
 
         started_job_registry = queue.started_job_registry
+        self.log.debug("Started Job Registry set.")
 
         try:
+            self.log.debug("Preparing for execution...")
             self.prepare_job_execution(job)
 
+            self.log.debug("Preparing for execution...")
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
+                self.log.debug("Performing Job...")
                 rv = job.perform()
+                self.log.debug("Performing Job... Finished.")
 
             job.ended_at = utcnow()
 
@@ -1119,18 +1129,22 @@ class Worker:
             job._result = rv
 
             if job.success_callback:
+                self.log.debug("Running Success Callbacks.")
                 self.execute_success_callback(job, rv)
 
+            self.log.debug("Handling succesful job.")
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except:  # NOQA
+            self.log.debug("Job Execution failed.")
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
             if job.failure_callback:
                 try:
+                    self.log.debug("Running Failure Callbacks.")
                     self.execute_failure_callback(job)
                 except:  # noqa
                     self.log.error(
@@ -1140,8 +1154,10 @@ class Worker:
                     exc_info = sys.exc_info()
                     exc_string = ''.join(traceback.format_exception(*exc_info))
 
+            self.log.debug("Handling Job Failure.")
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
+            self.log.debug("Handling Exception.")
             self.handle_exception(job, *exc_info)
             return False
 
