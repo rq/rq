@@ -182,8 +182,8 @@ class Worker:
                  disable_default_exception_handler: bool = False,
                  prepare_for_work: bool = True, serializer=None):  # noqa
         
-
-        self.connection = self._set_connection(connection, default_worker_ttl)
+        connection = self._set_connection(connection, default_worker_ttl)
+        self.connection = connection
         self.redis_server_version = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
@@ -275,9 +275,13 @@ class Worker:
         """
         if connection is None:
             connection = get_current_connection()    
-        retry = RedisRetry(RedisBackoff, 3)
-        connection.config_set("socket_timeout", default_worker_ttl - 5)
+        retry = RedisRetry(RedisBackoff(), 3)
+        timeout = default_worker_ttl - 5
+        keepalive = default_worker_ttl - 10
+        connection.socket_timeout = timeout
         connection.set_retry(retry)
+        connection.socket_connect_timeout = timeout
+        connection.socket_keepalive = keepalive
         return connection
 
     def get_redis_server_version(self):
@@ -664,6 +668,7 @@ class Worker:
                     if max_retry > retry_num:
                         break
                     retry_num += 1
+                    time.sleep(retry_num ** 3)
                     continue
 
                 except StopRequested:
