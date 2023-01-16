@@ -695,7 +695,7 @@ class Worker:
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
-                self.log.debug(f"Dequed job ID {result[1]} on queue {result[0]}")
+                self.log.debug(f"Dequeued job ID {result[1]} on queue {result[0]}")
                 if result is not None:
 
                     job, queue = result
