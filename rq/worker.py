@@ -1089,12 +1089,14 @@ class Worker:
 
     def execute_success_callback(self, job: 'Job', result):
         """Executes success_callback with timeout"""
+        self.log.debug("Running Success Callbacks.")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
 
     def execute_failure_callback(self, job):
         """Executes failure_callback with timeout"""
+        self.log.debug("Running Failure Callbacks.")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *sys.exc_info())
@@ -1114,13 +1116,12 @@ class Worker:
             self.log.debug("Preparing for execution...")
             self.prepare_job_execution(job)
 
-            self.log.debug("Preparing for execution...")
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 self.log.debug("Performing Job...")
                 rv = job.perform()
-                self.log.debug("Performing Job... Finished.")
+                self.log.debug(f"Finished performing Job ID {job.id}")
 
             job.ended_at = utcnow()
 
@@ -1129,10 +1130,8 @@ class Worker:
             job._result = rv
 
             if job.success_callback:
-                self.log.debug("Running Success Callbacks.")
                 self.execute_success_callback(job, rv)
 
-            self.log.debug("Handling succesful job.")
             self.handle_job_success(job=job,
                                     queue=queue,
                                     started_job_registry=started_job_registry)
@@ -1144,7 +1143,6 @@ class Worker:
 
             if job.failure_callback:
                 try:
-                    self.log.debug("Running Failure Callbacks.")
                     self.execute_failure_callback(job)
                 except:  # noqa
                     self.log.error(
@@ -1154,7 +1152,6 @@ class Worker:
                     exc_info = sys.exc_info()
                     exc_string = ''.join(traceback.format_exception(*exc_info))
 
-            self.log.debug("Handling Job Failure.")
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
             self.log.debug("Handling Exception.")
