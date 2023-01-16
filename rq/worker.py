@@ -20,6 +20,7 @@ from uuid import uuid4
 from random import shuffle
 from typing import Callable, List, Optional
 from redis.retry import Retry as RedisRetry
+from redis.exceptions import TimeoutError
 from redis.backoff import ExponentialBackoff as RedisBackoff
 
 try:
@@ -624,7 +625,8 @@ class Worker:
                     self.scheduler.start()
 
         self._install_signal_handlers()
-
+        retry_num = 0
+        max_retry = 3
         try:
             while True:
                 try:
@@ -657,6 +659,12 @@ class Worker:
                                 self.key, completed_jobs
                             )
                             break
+
+                except TimeoutError:
+                    if max_retry > retry_num:
+                        break
+                    retry_num += 1
+                    continue
 
                 except StopRequested:
                     break
