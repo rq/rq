@@ -181,10 +181,8 @@ class Worker:
                  disable_default_exception_handler: bool = False,
                  prepare_for_work: bool = True, serializer=None):  # noqa
         
-        if connection is None:
-            connection = get_current_connection()
-        connection = self._configure_connection(connection, default_worker_ttl)
-        self.connection = connection
+
+        self.connection = self._set_connection(connection, default_worker_ttl)
         self.redis_server_version = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
@@ -265,7 +263,7 @@ class Worker:
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
-    def _configure_connection(self, connection: Optional['Redis'], default_worker_ttl: int):
+    def _set_connection(self, connection: Optional['Redis'], default_worker_ttl: int) -> 'Redis':
         """Improves the reliability of the Worker's connection to the Queue.
         Will set an ExponentialBackoff logic to the connection error's, and 
         set a `socket_timout` in case the `BLPOP` command hangs (or any other command).
@@ -273,7 +271,9 @@ class Worker:
         Args:
             connection (Optional[Redis]): The Redis Connection.
             default_worker_ttl (int): The Default Worker TTL
-        """        
+        """
+        if connection is None:
+            connection = get_current_connection()    
         retry = RedisRetry(RedisBackoff, 3)
         connection.config_set("socket_timeout", default_worker_ttl - 5)
         connection.set_retry(retry)
