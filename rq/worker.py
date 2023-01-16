@@ -19,6 +19,8 @@ from enum import Enum
 from uuid import uuid4
 from random import shuffle
 from typing import Callable, List, Optional
+from redis.retry import Retry as RedisRetry
+from redis.backoff import ExponentialBackoff as RedisBackoff
 
 try:
     from signal import SIGKILL
@@ -178,10 +180,11 @@ class Worker:
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler: bool = False,
                  prepare_for_work: bool = True, serializer=None):  # noqa
+        
         if connection is None:
             connection = get_current_connection()
+        connection = self._configure_connection(connection, default_worker_ttl)
         self.connection = connection
-
         self.redis_server_version = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
@@ -261,6 +264,20 @@ class Worker:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
+
+    def _configure_connection(self, connection: Optional['Redis'], default_worker_ttl: int):
+        """Improves the reliability of the Worker's connection to the Queue.
+        Will set an ExponentialBackoff logic to the connection error's, and 
+        set a `socket_timout` in case the `BLPOP` command hangs (or any other command).
+
+        Args:
+            connection (Optional[Redis]): The Redis Connection.
+            default_worker_ttl (int): The Default Worker TTL
+        """        
+        retry = RedisRetry(RedisBackoff, 3)
+        connection.config_set("socket_timeout", default_worker_ttl - 5)
+        connection.set_retry(retry)
+        return connection
 
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
