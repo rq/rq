@@ -690,10 +690,12 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
+                self.log.debug(f"Dequeing jobs on queues {self._ordered_queues} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
+                self.log.debug(f"Dequed job ID {result[1]} on queue {result[0]}")
                 if result is not None:
 
                     job, queue = result
