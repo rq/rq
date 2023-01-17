@@ -60,7 +60,7 @@ green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rq.worker")
 
 
 class StopRequested(Exception):
