@@ -690,12 +690,12 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                self.log.debug(f"Dequeing jobs on queues {self._ordered_queues} and timeout {timeout}")
+                self.log.debug(f"Dequeueing jobs on queues {self._ordered_queues} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
-                self.log.debug(f"Dequeued job ID {result[1]} on queue {result[0]}")
+                self.log.debug(f"Dequeued job {result[1]} from {result[0]}")
                 if result is not None:
 
                     job, queue = result
@@ -1089,14 +1089,14 @@ class Worker:
 
     def execute_success_callback(self, job: 'Job', result):
         """Executes success_callback with timeout"""
-        self.log.debug("Running Success Callbacks.")
+        self.log.debug(f"Running success callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
 
     def execute_failure_callback(self, job):
         """Executes failure_callback with timeout"""
-        self.log.debug("Running Failure Callbacks.")
+        self.log.debug(f"Running Failure Callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *sys.exc_info())
@@ -1105,15 +1105,12 @@ class Worker:
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
         """
-        self.log.debug("Starting process to perform a job...")
         push_connection(self.connection)
-        self.log.debug("Connection pushed.")
 
         started_job_registry = queue.started_job_registry
         self.log.debug("Started Job Registry set.")
 
         try:
-            self.log.debug("Preparing for execution...")
             self.prepare_job_execution(job)
 
             job.started_at = utcnow()
@@ -1136,7 +1133,7 @@ class Worker:
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except:  # NOQA
-            self.log.debug("Job Execution failed.")
+            self.log.debug(f"Job {job.id} raised an exception.")
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
@@ -1154,7 +1151,6 @@ class Worker:
 
             self.handle_job_failure(job=job, exc_string=exc_string, queue=queue,
                                     started_job_registry=started_job_registry)
-            self.log.debug("Handling Exception.")
             self.handle_exception(job, *exc_info)
             return False
 
@@ -1179,7 +1175,7 @@ class Worker:
 
     def handle_exception(self, job: 'Job', *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-
+        self.log.debug(f"Handling exception for {job.id}.")
         exc_string = ''.join(traceback.format_exception(*exc_info))
 
         # If the job cannot be deserialized, it will raise when func_name or
