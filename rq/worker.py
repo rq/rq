@@ -20,7 +20,6 @@ from uuid import uuid4
 from random import shuffle
 from typing import Callable, List, Optional
 from redis.retry import Retry as RedisRetry
-from redis.exceptions import TimeoutError
 from redis.backoff import ExponentialBackoff as RedisBackoff
 
 try:
@@ -278,10 +277,10 @@ class Worker:
         retry = RedisRetry(RedisBackoff(), 3)
         timeout = default_worker_ttl - 5
         keepalive = default_worker_ttl - 10
-        connection.socket_timeout = timeout
         connection.set_retry(retry)
-        connection.socket_connect_timeout = timeout
-        connection.socket_keepalive = keepalive
+        connection.connection_pool.connection_kwargs.update({"socket_timeout": timeout})
+        connection.connection_pool.connection_kwargs.update({"socket_connect_timeout": timeout})
+        connection.connection_pool.connection_kwargs.update({"socket_keepalive": keepalive})
         return connection
 
     def get_redis_server_version(self):
@@ -664,7 +663,7 @@ class Worker:
                             )
                             break
 
-                except TimeoutError:
+                except redis.exceptions.TimeoutError:
                     if max_retry > retry_num:
                         break
                     retry_num += 1

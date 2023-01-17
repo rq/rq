@@ -57,7 +57,7 @@ def use_connection(redis: t.Optional['Redis'] = None):
     push_connection(redis)
 
 
-def get_current_connection():
+def get_current_connection() -> 'Redis':
     """
     Returns the current Redis connection (i.e. the topmost on the
     connection stack).
