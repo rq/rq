@@ -271,7 +271,7 @@ class Worker:
         """
         if connection is None:
             connection = get_current_connection()
-        timeout = None if self.burst else max(1, default_worker_ttl - 15) + 5
+        timeout = max(1, default_worker_ttl - 15) + 20
         timeout_config = {"socket_timeout": timeout}
         connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
