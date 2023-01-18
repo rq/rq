@@ -79,7 +79,7 @@ class Queue:
         return cls(name, connection=connection, job_class=job_class, serializer=serializer)
 
     def __init__(self, name='default', default_timeout=None, connection: t.Optional['Redis'] = None,
-                 is_async=True, job_class=None, serializer=None, debug=False, **kwargs):
+                 is_async=True, job_class=None, serializer=None, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
@@ -87,7 +87,6 @@ class Queue:
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger
-        self.debug_mode = debug
 
         if 'async' in kwargs:
             self._is_async = kwargs['async']
@@ -306,9 +305,6 @@ class Queue:
     def push_job_id(self, job_id: str, pipeline: t.Optional['Pipeline'] = None, at_front=False):
         """Pushes a job ID on the corresponding Redis queue.
         'at_front' allows you to push the job onto the front instead of the back of the queue"""
-        self.log.debug(f"Pushing job {blue(job_id)} into the queue {green(self.name)}.")
-        if self.debug_mode:
-            self.log.debug(f"Current job count for queue {green(self.name)} is {self.count}.")
         connection = pipeline if pipeline is not None else self.connection
         if at_front:
             result = connection.lpush(self.key, job_id)
