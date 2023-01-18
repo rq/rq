@@ -79,7 +79,7 @@ class Queue:
         return cls(name, connection=connection, job_class=job_class, serializer=serializer)
 
     def __init__(self, name='default', default_timeout=None, connection: t.Optional['Redis'] = None,
-                 is_async=True, job_class=None, serializer=None, **kwargs):
+                 is_async=True, job_class=None, serializer=None, debug=False, **kwargs):
         self.connection = resolve_connection(connection)
         prefix = self.redis_queue_namespace_prefix
         self.name = name
@@ -87,6 +87,7 @@ class Queue:
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger
+        self.debug_mode = debug
 
         if 'async' in kwargs:
             self._is_async = kwargs['async']
@@ -305,13 +306,15 @@ class Queue:
     def push_job_id(self, job_id: str, pipeline: t.Optional['Pipeline'] = None, at_front=False):
         """Pushes a job ID on the corresponding Redis queue.
         'at_front' allows you to push the job onto the front instead of the back of the queue"""
-        self.log.debug(f"Pushing job {blue(job_id)} into the queue {green(self.name)}, current job count {self.count}")
+        self.log.debug(f"Pushing job {blue(job_id)} into the queue {green(self.name)}.")
+        if self.debug_mode:
+            self.log.debug(f"Current job count for queue {green(self.name)} is {self.count}.")
         connection = pipeline if pipeline is not None else self.connection
         if at_front:
             result = connection.lpush(self.key, job_id)
         else:
             result = connection.rpush(self.key, job_id)
-        self.log.debug(f"Pushed job {blue(job_id)} into the queue {green(self.name)}, total job count after pushing job: {result}")
+        self.log.debug(f"Pushed job {blue(job_id)} into {green(self.name)}, {result} job(s) are in queue.")
 
     def create_job(self, func: t.Callable[..., t.Any], args=None, kwargs=None, timeout=None,
                    result_ttl=None, ttl=None, failure_ttl=None,
@@ -698,7 +701,7 @@ class Queue:
         return as_text(self.connection.lpop(self.key))
 
     @classmethod
-    def lpop(cls, queue_keys, timeout, connection: t.Optional['Redis'] = None):
+    def lpop(cls, queue_keys, timeout: int, connection: t.Optional['Redis'] = None):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -715,7 +718,7 @@ class Queue:
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
-            logger.debug(f"Starting blocking pop operation for queues {green(queue_keys)} with timeout of {timeout}")
+            logger.debug(f"Starting BLPOP operation for queues {green(queue_keys)} with timeout of {timeout}")
             result = connection.blpop(queue_keys, timeout)
             if result is None:
                 logger.debug(f"BLPOP Timeout, no jobs found on queues {green(queue_keys)}")

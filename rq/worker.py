@@ -1096,7 +1096,7 @@ class Worker:
 
     def execute_failure_callback(self, job):
         """Executes failure_callback with timeout"""
-        self.log.debug(f"Running Failure Callbacks for {job.id}")
+        self.log.debug(f"Running failure callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *sys.exc_info())
