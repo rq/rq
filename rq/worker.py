@@ -19,8 +19,6 @@ from enum import Enum
 from uuid import uuid4
 from random import shuffle
 from typing import Callable, List, Optional
-from redis.retry import Retry as RedisRetry
-from redis.backoff import ExponentialBackoff as RedisBackoff
 
 try:
     from signal import SIGKILL
@@ -264,23 +262,18 @@ class Worker:
             self.push_exc_handler(exception_handlers)
 
     def _set_connection(self, connection: Optional['Redis'], default_worker_ttl: int) -> 'Redis':
-        """Improves the reliability of the Worker's connection to the Queue.
-        Will set an ExponentialBackoff logic to the connection error's, and 
-        set a `socket_timout` in case the `BLPOP` command hangs (or any other command).
+        """Configures the Redis connection to have a socket timeout.
+        This should timouet the connection in case any specific command hangs at any given time (eg. BLPOP)
 
         Args:
             connection (Optional[Redis]): The Redis Connection.
             default_worker_ttl (int): The Default Worker TTL
         """
         if connection is None:
-            connection = get_current_connection()    
-        retry = RedisRetry(RedisBackoff(), 3)
-        timeout = default_worker_ttl - 5
-        keepalive = default_worker_ttl - 10
-        connection.set_retry(retry)
-        connection.connection_pool.connection_kwargs.update({"socket_timeout": timeout})
-        connection.connection_pool.connection_kwargs.update({"socket_connect_timeout": timeout})
-        connection.connection_pool.connection_kwargs.update({"socket_keepalive": keepalive})
+            connection = get_current_connection()
+        timeout = None if self.burst else max(1, default_worker_ttl - 15) + 5
+        timeout_config = {"socket_timeout": timeout}
+        connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
 
     def get_redis_server_version(self):
@@ -628,8 +621,6 @@ class Worker:
                     self.scheduler.start()
 
         self._install_signal_handlers()
-        retry_num = 0
-        max_retry = 3
         try:
             while True:
                 try:
@@ -664,11 +655,8 @@ class Worker:
                             break
 
                 except redis.exceptions.TimeoutError:
-                    if max_retry > retry_num:
-                        break
-                    retry_num += 1
-                    time.sleep(retry_num ** 3)
-                    continue
+                    self.log.error(f"Worker {self.key}: Redis connection timeout, quitting...")
+                    break
 
                 except StopRequested:
                     break
