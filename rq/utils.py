@@ -20,7 +20,6 @@ if t.TYPE_CHECKING:
 
 from redis.exceptions import ResponseError
 
-from .utils import as_text
 from .exceptions import TimeoutFormatError
 
 logger = logging.getLogger(__name__)
