@@ -18,7 +18,7 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from rq.compat import as_text, decode_redis_hash, string_types
+from rq.utils import as_text, decode_redis_hash
 from .connections import resolve_connection
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
@@ -125,7 +125,7 @@ class Job:
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
             job._func_name = '{0}.{1}'.format(func.__module__, func.__qualname__)
-        elif isinstance(func, string_types):
+        elif isinstance(func, str):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
             job._instance = func
@@ -464,7 +464,7 @@ class Job:
 
     def set_id(self, value: str):
         """Sets a job ID for the given job."""
-        if not isinstance(value, string_types):
+        if not isinstance(value, str):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
         self._id = value
 

@@ -8,7 +8,7 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from .compat import as_text
+from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError

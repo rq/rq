@@ -28,7 +28,7 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .compat import as_text, string_types, text_type
+from .utils import as_text
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (CALLBACK_TIMEOUT, DEFAULT_RESULT_TTL,
@@ -191,7 +191,7 @@ class Worker:
         queues = [self.queue_class(name=q,
                                    connection=connection,
                                    job_class=self.job_class, serializer=self.serializer)
-                  if isinstance(q, string_types) else q
+                  if isinstance(q, str) else q
                   for q in ensure_list(queues)]
 
         self.name: str = name or uuid4().hex
@@ -1129,7 +1129,7 @@ class Worker:
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:
-            log_result = "{0!r}".format(as_text(text_type(rv)))
+            log_result = "{0!r}".format(as_text(str(rv)))
             self.log.debug('Result: %s', yellow(log_result))
 
         if self.log_result_lifespan:

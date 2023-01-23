@@ -6,7 +6,7 @@ if t.TYPE_CHECKING:
     from .worker import Worker
     from .queue import Queue
 
-from .compat import as_text
+from .utils import as_text
 
 from rq.utils import split_list
 

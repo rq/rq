@@ -12,11 +12,11 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from .compat import as_text, string_types
+from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
-from .job import Job, JobStatus, Dependency
+from .job import Job, JobStatus
 from .serializers import resolve_serializer
 from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
 
@@ -86,7 +86,7 @@ class Queue:
 
         # override class attribute job_class if one was passed
         if job_class is not None:
-            if isinstance(job_class, string_types):
+            if isinstance(job_class, str):
                 job_class = import_attribute(job_class)
             self.job_class = job_class
 
@@ -473,7 +473,7 @@ class Queue:
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
         """
-        if not isinstance(f, string_types) and f.__module__ == '__main__':
+        if not isinstance(f, str) and f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed '
                              'by workers')
 

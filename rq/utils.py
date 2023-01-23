@@ -20,7 +20,7 @@ if t.TYPE_CHECKING:
 
 from redis.exceptions import ResponseError
 
-from .compat import as_text, string_types
+from .utils import as_text
 from .exceptions import TimeoutFormatError
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,21 @@ class ColorizingStreamHandler(logging.StreamHandler):
             message = '\n'.join(parts)
 
         return message
+
+
+def as_text(v):
+    if v is None:
+        return None
+    elif isinstance(v, bytes):
+        return v.decode('utf-8')
+    elif isinstance(v, str):
+        return v
+    else:
+        raise ValueError('Unknown type %r' % type(v))
+
+
+def decode_redis_hash(h):
+    return dict((as_text(k), h[k]) for k in h)
 
 
 def import_attribute(name: str):
@@ -238,7 +253,7 @@ def first(iterable: t.Iterable, default=None, key=None):
 
 def is_nonstring_iterable(obj: t.Any) -> bool:
     """Returns whether the obj is an iterable, but not a string"""
-    return isinstance(obj, Iterable) and not isinstance(obj, string_types)
+    return isinstance(obj, Iterable) and not isinstance(obj, str)
 
 
 def ensure_list(obj: t.Any) -> t.List:
@@ -258,7 +273,7 @@ def backend_class(holder, default_name, override=None):
     """Get a backend class using its default attribute name or an override"""
     if override is None:
         return getattr(holder, default_name)
-    elif isinstance(override, string_types):
+    elif isinstance(override, str):
         return import_attribute(override)
     else:
         return override
