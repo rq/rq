@@ -720,7 +720,7 @@ class Queue:
                 logger.debug(f"BLPOP Timeout, no jobs found on queues {green(queue_keys)}")
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
-            logger.debug(f"Found job {blue(job_id)} on queue {green(queue_key)}")
+            logger.debug(f"Dequeued job {blue(job_id)} from queue {green(queue_key)}")
             return queue_key, job_id
         else:  # non-blocking variant
             for queue_key in queue_keys:
