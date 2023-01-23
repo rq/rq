@@ -37,13 +37,11 @@ class RQScheduler:
 
     def __init__(self, queues, connection, interval=1, logging_level=logging.INFO,
                  date_format=DEFAULT_LOGGING_DATE_FORMAT,
-                 log_format=DEFAULT_LOGGING_FORMAT,
-                 fallback_period=DEFAULT_SCHEDULER_FALLBACK_PERIOD, serializer=None):
+                 log_format=DEFAULT_LOGGING_FORMAT, serializer=None):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
-        self.fallback_period = fallback_period
         # Copy the connection kwargs before mutating them in order to not change the arguments
         # used by the current connection pool to create new connections
         self._connection_kwargs = connection.connection_pool.connection_kwargs.copy()
@@ -101,7 +99,7 @@ class RQScheduler:
             return False
         if not self.lock_acquisition_time:
             return True
-        return (datetime.now() - self.lock_acquisition_time).total_seconds() > self.fallback_period
+        return (datetime.now() - self.lock_acquisition_time).total_seconds() > DEFAULT_SCHEDULER_FALLBACK_PERIOD
 
     def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
