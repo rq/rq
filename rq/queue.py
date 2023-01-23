@@ -4,6 +4,7 @@ import warnings
 import typing as t
 from collections import namedtuple
 from datetime import datetime, timezone
+from functools import total_ordering
 
 from redis import WatchError
 
@@ -11,7 +12,7 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from .compat import as_text, string_types, total_ordering
+from .compat import as_text, string_types
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
