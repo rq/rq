@@ -2,6 +2,7 @@ import uuid
 import sys
 import warnings
 import typing as t
+import logging
 from collections import namedtuple
 from datetime import datetime, timezone
 
@@ -17,7 +18,14 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
 from .serializers import resolve_serializer
-from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow
+from .utils import backend_class, get_version, import_attribute, make_colorizer, parse_timeout, utcnow
+
+
+green = make_colorizer('darkgreen')
+yellow = make_colorizer('darkyellow')
+blue = make_colorizer('darkblue')
+
+logger = logging.getLogger("rq.queue")
 
 
 def compact(lst):
@@ -78,6 +86,7 @@ class Queue:
         self._key = '{0}{1}'.format(prefix, name)
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
+        self.log = logger
 
         if 'async' in kwargs:
             self._is_async = kwargs['async']
@@ -204,8 +213,13 @@ class Queue:
             end = offset + (length - 1)
         else:
             end = length
-        return [as_text(job_id) for job_id in
-                self.connection.lrange(self.key, start, end)]
+        job_ids = [
+            as_text(job_id)
+            for job_id
+            in self.connection.lrange(self.key, start, end)
+        ]
+        self.log.debug(f"Getting jobs for queue {green(self.name)}: {len(job_ids)} found.")
+        return job_ids
 
     def get_jobs(self, offset: int = 0, length: int = -1):
         """Returns a slice of jobs in the queue."""
@@ -293,9 +307,10 @@ class Queue:
         'at_front' allows you to push the job onto the front instead of the back of the queue"""
         connection = pipeline if pipeline is not None else self.connection
         if at_front:
-            connection.lpush(self.key, job_id)
+            result = connection.lpush(self.key, job_id)
         else:
-            connection.rpush(self.key, job_id)
+            result = connection.rpush(self.key, job_id)
+        self.log.debug(f"Pushed job {blue(job_id)} into {green(self.name)}, {result} job(s) are in queue.")
 
     def create_job(self, func: t.Callable[..., t.Any], args=None, kwargs=None, timeout=None,
                    result_ttl=None, ttl=None, failure_ttl=None,
@@ -682,7 +697,7 @@ class Queue:
         return as_text(self.connection.lpop(self.key))
 
     @classmethod
-    def lpop(cls, queue_keys, timeout, connection: t.Optional['Redis'] = None):
+    def lpop(cls, queue_keys, timeout: int, connection: t.Optional['Redis'] = None):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -699,10 +714,13 @@ class Queue:
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
+            logger.debug(f"Starting BLPOP operation for queues {green(queue_keys)} with timeout of {timeout}")
             result = connection.blpop(queue_keys, timeout)
             if result is None:
+                logger.debug(f"BLPOP Timeout, no jobs found on queues {green(queue_keys)}")
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
+            logger.debug(f"Dequeued job {blue(job_id)} from queue {green(queue_key)}")
             return queue_key, job_id
         else:  # non-blocking variant
             for queue_key in queue_keys:

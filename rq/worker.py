@@ -60,7 +60,7 @@ green = make_colorizer('darkgreen')
 yellow = make_colorizer('darkyellow')
 blue = make_colorizer('darkblue')
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rq.worker")
 
 
 class StopRequested(Exception):
@@ -181,7 +181,7 @@ class Worker:
         if connection is None:
             connection = get_current_connection()
         self.connection = connection
-
+        
         self.redis_server_version = None
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
@@ -690,10 +690,12 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
+                self.log.debug(f"Dequeueing jobs on queues {self._ordered_queues} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(self._ordered_queues, timeout,
                                                       connection=self.connection,
                                                       job_class=self.job_class,
                                                       serializer=self.serializer)
+                self.log.debug(f"Dequeued job {result[1]} from {result[0]}")
                 if result is not None:
 
                     job, queue = result
@@ -946,7 +948,7 @@ class Worker:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-
+        self.log.debug(f"Preparing for execution of Job ID {job.id}")
         with self.connection.pipeline() as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
@@ -957,6 +959,7 @@ class Worker:
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
+            self.log.debug(f"Job preparation finished.")
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
@@ -1084,12 +1087,14 @@ class Worker:
 
     def execute_success_callback(self, job: 'Job', result):
         """Executes success_callback with timeout"""
+        self.log.debug(f"Running success callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
 
     def execute_failure_callback(self, job):
         """Executes failure_callback with timeout"""
+        self.log.debug(f"Running failure callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *sys.exc_info())
@@ -1101,6 +1106,7 @@ class Worker:
         push_connection(self.connection)
 
         started_job_registry = queue.started_job_registry
+        self.log.debug("Started Job Registry set.")
 
         try:
             self.prepare_job_execution(job)
@@ -1108,7 +1114,9 @@ class Worker:
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
+                self.log.debug("Performing Job...")
                 rv = job.perform()
+                self.log.debug(f"Finished performing Job ID {job.id}")
 
             job.ended_at = utcnow()
 
@@ -1123,6 +1131,7 @@ class Worker:
                                     queue=queue,
                                     started_job_registry=started_job_registry)
         except:  # NOQA
+            self.log.debug(f"Job {job.id} raised an exception.")
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
@@ -1164,7 +1173,7 @@ class Worker:
 
     def handle_exception(self, job: 'Job', *exc_info):
         """Walks the exception handler stack to delegate exception handling."""
-
+        self.log.debug(f"Handling exception for {job.id}.")
         exc_string = ''.join(traceback.format_exception(*exc_info))
 
         # If the job cannot be deserialized, it will raise when func_name or
