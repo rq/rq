@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from rq.serializers import JSONSerializer
 
-from rq.compat import as_text
+from rq.utils import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job, JobStatus, requeue_job

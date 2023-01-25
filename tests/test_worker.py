@@ -28,7 +28,7 @@ from tests.fixtures import (
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
-from rq.compat import as_text
+from rq.utils import as_text
 from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.suspension import resume, suspend

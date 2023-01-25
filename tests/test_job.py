@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from redis import WatchError
 
-from rq.compat import as_text
+from rq.utils import as_text
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job
 from rq.queue import Queue
