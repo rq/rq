@@ -20,13 +20,13 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from rq.utils import as_text, decode_redis_hash
 from .connections import resolve_connection
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow, ensure_list, get_call_string)
+                    utcformat, utcnow, ensure_list, get_call_string, as_text,
+                    decode_redis_hash)
 
 # Serialize pickle dumps using the highest pickle protocol (binary, default
 # uses ascii)
