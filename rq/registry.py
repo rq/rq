@@ -105,7 +105,7 @@ class BaseRegistry:
             job_instance.delete()
         return result
 
-    def get_expired_job_ids(self, timestamp: t.Optional[datetime] = None):
+    def get_expired_job_ids(self, timestamp: t.Optional[float] = None):
         """Returns job ids whose score are less than current timestamp.
 
         Returns ids for jobs with an expiry time earlier than timestamp,
@@ -164,7 +164,7 @@ class BaseRegistry:
                           job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
-            job.exc_info = ''
+            job._exc_info = ''
             job.save()
             job = queue.enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
@@ -182,7 +182,7 @@ class StartedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: t.Optional[datetime] = None):
+    def cleanup(self, timestamp: t.Optional[float] = None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -215,7 +215,7 @@ class StartedJobRegistry(BaseRegistry):
 
                     else:
                         job.set_status(JobStatus.FAILED)
-                        job.exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
+                        job._exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
@@ -233,7 +233,7 @@ class FinishedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:finished:{0}'
 
-    def cleanup(self, timestamp: t.Optional[datetime] = None):
+    def cleanup(self, timestamp: t.Optional[float] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -250,7 +250,7 @@ class FailedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:failed:{0}'
 
-    def cleanup(self, timestamp: t.Optional[datetime] = None):
+    def cleanup(self, timestamp: t.Optional[float] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -260,7 +260,8 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None):
+    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None,
+            _save_exc_to_job: bool = False):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
@@ -274,8 +275,8 @@ class FailedJobRegistry(BaseRegistry):
         else:
             p = self.connection.pipeline()
 
-        job.exc_info = exc_string
-        job.save(pipeline=p, include_meta=False)
+        job._exc_info = exc_string
+        job.save(pipeline=p, include_meta=False, include_result=_save_exc_to_job)
         job.cleanup(ttl=ttl, pipeline=p)
         p.zadd(self.key, {job.id: score})
 
@@ -315,13 +316,7 @@ class ScheduledJobRegistry(BaseRegistry):
         If datetime has no tzinfo, it will assume localtimezone.
         """
         # If datetime has no timezone, assume server's local timezone
-        # if we're on Python 3. If we're on Python 2.7, raise an
-        # exception since Python < 3.2 has no builtin `timezone` class
         if not scheduled_datetime.tzinfo:
-            try:
-                from datetime import timezone
-            except ImportError:
-                raise ValueError('datetime object with no timezone')
             tz = timezone(timedelta(seconds=-(time.timezone if time.daylight == 0 else time.altzone)))
             scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
 

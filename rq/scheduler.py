@@ -9,7 +9,8 @@ from multiprocessing import Process
 
 from redis import SSLConnection, UnixDomainSocketConnection
 
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .defaults import (DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT,
+                       DEFAULT_SCHEDULER_FALLBACK_PERIOD)
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -98,13 +99,13 @@ class RQScheduler:
             return False
         if not self.lock_acquisition_time:
             return True
-        return (datetime.now() - self.lock_acquisition_time).total_seconds() > 600
+        return (datetime.now() - self.lock_acquisition_time).total_seconds() > DEFAULT_SCHEDULER_FALLBACK_PERIOD
 
     def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set()
         pid = os.getpid()
-        self.log.info("Trying to acquire locks for %s", ", ".join(self._queue_names))
+        self.log.debug("Trying to acquire locks for %s", ", ".join(self._queue_names))
         for name in self._queue_names:
             if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=self.interval + 60):
                 successful_locks.add(name)
@@ -162,7 +163,7 @@ class RQScheduler:
                 )
                 for job in jobs:
                     if job is not None:
-                        queue.enqueue_job(job, pipeline=pipeline)
+                        queue.enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
                         registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
         self._status = self.Status.STARTED

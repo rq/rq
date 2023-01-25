@@ -39,11 +39,11 @@ q = Queue(connection=redis_conn)  # no args implies the default queue
 
 # Delay execution of count_words_at_url('http://nvie.com')
 job = q.enqueue(count_words_at_url, 'http://nvie.com')
-print(job.result)   # => None
+print(job.result)   # => None  # Changed to job.return_value() in RQ >= 1.12.0
 
 # Now, wait a while, until the worker is finished
 time.sleep(2)
-print(job.result)   # => 889
+print(job.result)   # => 889  # Changed to job.return_value() in RQ >= 1.12.0
 ```
 
 If you want to put the work on a specific queue, simply specify its name:
@@ -377,7 +377,7 @@ def add(x, y):
 
 job = add.delay(3, 4)
 time.sleep(1)
-print(job.result)
+print(job.result)  # Changed to job.return_value() in RQ >= 1.12.0
 ```
 
 
