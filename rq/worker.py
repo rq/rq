@@ -952,12 +952,10 @@ class Worker:
         with self.connection.pipeline() as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
-            self.log.debug(f"Set Current Job ID & Working Time")
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
-            self.log.debug(f"Heartbeat set with TTL of {heartbeat_ttl}")
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
