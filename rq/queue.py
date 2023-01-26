@@ -5,6 +5,7 @@ import typing as t
 import logging
 from collections import namedtuple
 from datetime import datetime, timezone
+from functools import total_ordering
 
 from redis import WatchError
 
@@ -12,7 +13,7 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from .compat import as_text, string_types, total_ordering
+from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
@@ -94,7 +95,7 @@ class Queue:
 
         # override class attribute job_class if one was passed
         if job_class is not None:
-            if isinstance(job_class, string_types):
+            if isinstance(job_class, str):
                 job_class = import_attribute(job_class)
             self.job_class = job_class
 
@@ -487,7 +488,7 @@ class Queue:
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
         """
-        if not isinstance(f, string_types) and f.__module__ == '__main__':
+        if not isinstance(f, str) and f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed '
                              'by workers')
 

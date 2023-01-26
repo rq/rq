@@ -1,16 +1,12 @@
-import json
 from typing import Any, Optional
 import zlib
 
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from enum import Enum
-from uuid import uuid4
-
 from redis import Redis
-from redis.client import Pipeline
 
-from .compat import decode_redis_hash
+from .utils import decode_redis_hash
 from .job import Job
 from .serializers import resolve_serializer
 from .utils import now
