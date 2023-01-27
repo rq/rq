@@ -2,7 +2,6 @@ from functools import partial
 import pickle
 import json
 
-from .compat import string_types
 from .utils import import_attribute
 
 
@@ -30,7 +29,7 @@ def resolve_serializer(serializer: str):
     if not serializer:
         return DefaultSerializer
 
-    if isinstance(serializer, string_types):
+    if isinstance(serializer, str):
         serializer = import_attribute(serializer)
 
     default_serializer_methods = ('dumps', 'loads')
