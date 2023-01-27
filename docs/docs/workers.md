@@ -116,7 +116,6 @@ A simple implementation example:
 
 ```python
 #!/usr/bin/env python
-import sys
 from rq import Connection, Worker
 
 # Preload libraries
