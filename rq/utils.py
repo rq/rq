@@ -125,7 +125,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         return message
 
 
-def compact(lst: list[t.Any]) -> list[t.Any]:
+def compact(lst: t.List[t.Any]) -> t.List[t.Any]:
     """Excludes `None` values from a list-like object.
 
     Args:
