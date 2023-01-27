@@ -14,7 +14,6 @@ from multiprocessing import Process
 from redis import Redis
 from rq import Connection, get_current_job, get_current_connection, Queue
 from rq.decorators import job
-from rq.compat import text_type
 from rq.worker import HerokuWorker, Worker
 
 
@@ -36,7 +35,7 @@ async def say_hello_async(name=None):
 
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
-    return text_type(say_hello(name))  # noqa
+    return str(say_hello(name))  # noqa
 
 
 def do_nothing():

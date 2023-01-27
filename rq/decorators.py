@@ -5,8 +5,6 @@ if t.TYPE_CHECKING:
     from redis import Redis
     from .job import Retry
 
-from rq.compat import string_types
-
 from .defaults import DEFAULT_RESULT_TTL
 from .queue import Queue
 from .utils import backend_class
@@ -53,7 +51,7 @@ class job:  # noqa
     def __call__(self, f):
         @wraps(f)
         def delay(*args, **kwargs):
-            if isinstance(self.queue, string_types):
+            if isinstance(self.queue, str):
                 queue = self.queue_class(name=self.queue,
                                          connection=self.connection)
             else:
