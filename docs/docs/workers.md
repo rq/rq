@@ -122,12 +122,9 @@ from rq import Connection, Worker
 # Preload libraries
 import library_that_you_want_preloaded
 
-# Provide queue names to listen to as arguments to this script,
-# similar to rq worker
+# Provide the worker with the list of queues (str) to listen to.
 with Connection():
-    qs = sys.argv[1:] or ['default']
-
-    w = Worker(qs)
+    w = Worker(['default'])
     w.work()
 ```
 
