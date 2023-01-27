@@ -45,7 +45,7 @@ from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, get_version,
-                    make_colorizer, utcformat, utcnow, utcparse)
+                    make_colorizer, utcformat, utcnow, utcparse, compact)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
 from .serializers import resolve_serializer
@@ -66,9 +66,6 @@ logger = logging.getLogger("rq.worker")
 class StopRequested(Exception):
     pass
 
-
-def compact(a_list):
-    return [x for x in a_list if x is not None]
 
 
 _signames = dict((getattr(signal, signame), signame)
