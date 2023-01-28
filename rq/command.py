@@ -1,9 +1,10 @@
 import json
 import os
 import signal
-import typing as t
 
-if t.TYPE_CHECKING:
+from typing import TYPE_CHECKING, Dict, Any
+
+if TYPE_CHECKING:
     from redis import Redis
     from .worker import Worker
 
@@ -28,7 +29,7 @@ def send_command(connection: 'Redis', worker_name: str, command, **kwargs):
     connection.publish(PUBSUB_CHANNEL_TEMPLATE % worker_name, json.dumps(payload))
 
 
-def parse_payload(payload: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+def parse_payload(payload: Dict[Any, Any]) -> Dict[Any, Any]:
     """
     Returns a dict of command data
 
@@ -75,12 +76,12 @@ def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
     send_command(connection, job.worker_name, 'stop-job', job_id=job_id)
 
 
-def handle_command(worker: 'Worker', payload: t.Dict[t.Any, t.Any]):
+def handle_command(worker: 'Worker', payload: Dict[Any, Any]):
     """Parses payload and routes commands
 
     Args:
         worker (Worker): The worker to use
-        payload (t.Dict[t.Any, t.Any]): The Payload
+        payload (Dict[Any, Any]): The Payload
     """
     if payload['command'] == 'stop-job':
         handle_stop_job_command(worker, payload)
@@ -101,13 +102,13 @@ def handle_shutdown_command(worker: 'Worker'):
     os.kill(pid, signal.SIGINT)
 
 
-def handle_kill_worker_command(worker: 'Worker', payload: t.Dict[t.Any, t.Any]):
+def handle_kill_worker_command(worker: 'Worker', payload: Dict[Any, Any]):
     """
     Stops work horse
 
     Args:
         worker (Worker): The worker to stop
-        payload (t.Dict[t.Any, t.Any]): The payload.
+        payload (Dict[Any, Any]): The payload.
     """
 
     worker.log.info('Received kill horse command.')
@@ -118,12 +119,12 @@ def handle_kill_worker_command(worker: 'Worker', payload: t.Dict[t.Any, t.Any]):
         worker.log.info('Worker is not working, kill horse command ignored')
 
 
-def handle_stop_job_command(worker: 'Worker', payload: t.Dict[t.Any, t.Any]):
+def handle_stop_job_command(worker: 'Worker', payload: Dict[Any, Any]):
     """Handles stop job command.
 
     Args:
         worker (Worker): The worker to use
-        payload (t.Dict[t.Any, t.Any]): The payload.
+        payload (Dict[Any, Any]): The payload.
     """
     job_id = payload.get('job_id')
     worker.log.debug('Received command to stop job %s', job_id)
