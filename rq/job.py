@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 from .connections import resolve_connection
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
-from .serializers import SerializerProtocol, resolve_serializer
+from .serializers import resolve_serializer
 from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
                     utcformat, utcnow, ensure_list, get_call_string, as_text,
                     decode_redis_hash)
@@ -89,7 +89,7 @@ or a direct callable (function/method).
 
 
 def cancel_job(job_id: str, connection: Optional['Redis'] = None,
-                serializer: Optional[SerializerProtocol] = None, enqueue_dependents: bool = False):
+                serializer=None, enqueue_dependents: bool = False):
     """Cancels the job with the given job ID, preventing execution.
     Use with caution. This will discard any job info (i.e. it can't be requeued later).
 
@@ -122,7 +122,7 @@ def get_current_job(connection: Optional['Redis'] = None, job_class: Optional['J
     return _job_stack.top
 
 
-def requeue_job(job_id: str, connection: 'Redis', serializer: Optional[SerializerProtocol] = None) -> 'Job':
+def requeue_job(job_id: str, connection: 'Redis', serializer=None) -> 'Job':
     """Fetches a Job by ID and requeues it using the `requeue()` method.
 
     Args:
@@ -149,7 +149,7 @@ class Job:
                depends_on: Optional[JobDependencyType] = None,
                timeout: Optional[int] = None, id: Optional[str] = None,
                origin=None, meta: Optional[Dict[str, Any]] = None,
-               failure_ttl: Optional[int] = None, serializer: Optional[SerializerProtocol] = None, *,
+               failure_ttl: Optional[int] = None, serializer=None, *,
                on_success: Optional[Callable[..., Any]] = None,
                on_failure: Optional[Callable[..., Any]] = None) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
@@ -520,7 +520,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer: Optional[SerializerProtocol] = None) -> List['Job']:
+    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List['Job']:
         """
         Bulk version of Job.fetch
 
@@ -528,9 +528,9 @@ class Job:
         the returned list will be None.
 
         Args:
-            job_ids (Iterable[str]): 
-            connection (Redis): 
-            serializer (SerializerProtocol): 
+            job_ids (Iterable[str]): A list of job ids.
+            connection (Redis): Redis connection
+            serializer (Callable): A serializer
         
         Returns:
             jobs (list[Job]): A list of Jobs instances.
@@ -552,7 +552,7 @@ class Job:
 
         return jobs
 
-    def __init__(self, id: Optional[str] = None, connection: Optional['Redis'] = None, serializer: Optional[SerializerProtocol] = None):
+    def __init__(self, id: Optional[str] = None, connection: Optional['Redis'] = None, serializer=None):
         self.connection = resolve_connection(connection)
         self._id = id
         self.created_at = utcnow()
