@@ -348,6 +348,33 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(queue), 1)
         self.assertEqual(len(registry), 0)
 
+    def test_enqueue_at_at_front(self):
+        """queue.enqueue_at() accepts at_front argument. When true, job will be put at position 0
+            of the queue when the time comes for the job to be scheduled"""
+        queue = Queue(connection=self.testconn)
+        registry = ScheduledJobRegistry(queue=queue)
+        scheduler = RQScheduler([queue], connection=self.testconn)
+        scheduler.acquire_locks()
+        # Jobs created using enqueue_at is put in the ScheduledJobRegistry
+        # job_first should be enqueued first
+        job_first = queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
+        # job_second will be enqueued second, but "at_front"
+        job_second = queue.enqueue_at(datetime(2019, 1, 2, tzinfo=timezone.utc), say_hello, at_front=True)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 2)
+
+        # enqueue_at set job status to "scheduled"
+        self.assertTrue(job_first.get_status() == 'scheduled')
+        self.assertTrue(job_second.get_status() == 'scheduled')
+
+        # After enqueue_scheduled_jobs() is called, the registry is empty
+        # and job is enqueued
+        scheduler.enqueue_scheduled_jobs()
+        self.assertEqual(len(queue), 2)
+        self.assertEqual(len(registry), 0)
+        self.assertEqual(0, queue.get_job_position(job_second.id))
+        self.assertEqual(1, queue.get_job_position(job_first.id))
+
     def test_enqueue_in(self):
         """queue.enqueue_in() schedules job correctly"""
         queue = Queue(connection=self.testconn)
