@@ -1,8 +1,19 @@
 from functools import partial
 import pickle
 import json
+from typing import Optional, Protocol, Union
 
 from .utils import import_attribute
+
+
+class SerializerProtocol(Protocol):
+    @staticmethod
+    def dumps(s, *args, **kwargs):
+        pass
+
+    @staticmethod
+    def loads(s, *args, **kwargs):
+        pass
 
 
 class DefaultSerializer:
@@ -20,11 +31,17 @@ class JSONSerializer():
         return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
-def resolve_serializer(serializer: str):
+def resolve_serializer(serializer: Optional[Union[str, SerializerProtocol]] = None) -> SerializerProtocol:
     """This function checks the user defined serializer for ('dumps', 'loads') methods
     It returns a default pickle serializer if not found else it returns a MySerializer
     The returned serializer objects implement ('dumps', 'loads') methods
-    Also accepts a string path to serializer that will be loaded as the serializer
+    Also accepts a string path to serializer that will be loaded as the serializer.
+
+    Args:
+        serializer (Union[str, SerializerProtocol]): The serializer to resolve.
+    
+    Returns:
+        serializer (SerializerProtocol): An object that implements the SerializerProtocol
     """
     if not serializer:
         return DefaultSerializer
