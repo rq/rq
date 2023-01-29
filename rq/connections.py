@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import typing as t
+import warnings
 from redis import Redis
 
 from .local import LocalStack, release_local
@@ -23,7 +24,9 @@ def Connection(connection: t.Optional['Redis'] = None):  # noqa
 
     Args:
         connection (Optional[Redis], optional): A Redis Connection instance. Defaults to None.
-    """    
+    """
+    warnings.warn("The Conneciton context manager is deprecated. Use the `connection` parameter instead.",
+                    DeprecationWarning)
     if connection is None:
         connection = Redis()
     push_connection(connection)
