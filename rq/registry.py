@@ -336,7 +336,7 @@ class ScheduledJobRegistry(BaseRegistry):
         return connection.zremrangebyscore(self.key, 0, score)
 
     def get_jobs_to_schedule(self, timestamp: t.Optional[datetime] = None, chunk_size: int = 1000):
-        """Remove jobs whose timestamp is in the past from registry."""
+        """Get's a list of job IDs that should be scheduled."""
         score = timestamp if timestamp is not None else current_timestamp()
         return [as_text(job_id) for job_id in
                 self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)]

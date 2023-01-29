@@ -19,7 +19,7 @@ from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
 from .serializers import resolve_serializer
-from .utils import backend_class, get_version, import_attribute, make_colorizer, parse_timeout, utcnow
+from .utils import backend_class, get_version, import_attribute, make_colorizer, parse_timeout, utcnow, compact
 
 
 green = make_colorizer('darkgreen')
@@ -28,9 +28,6 @@ blue = make_colorizer('darkblue')
 
 logger = logging.getLogger("rq.queue")
 
-
-def compact(lst):
-    return [item for item in lst if item is not None]
 
 
 class EnqueueData(namedtuple('EnqueueData', ["func", "args", "kwargs", "timeout",
