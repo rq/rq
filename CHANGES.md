@@ -1,3 +1,12 @@
+### RQ 1.12.0 (2023-01-15)
+* RQ now stores multiple job execution results. This feature is only available on Redis >= 5.0 Redis Streams. Please refer to [the docs](https://python-rq.org/docs/results/) for more info. Thanks @selwin! 
+* Improve performance when enqueueing many jobs at once. Thanks @rggjan!
+* Redis server version is now cached in connection object. Thanks @odarbelaeze!
+* Properly handle `at_front` argument when jobs are scheduled. Thanks @gabriels1234!
+* Add type hints to RQ's code base. Thanks @lowercase00!
+* Fixed a bug where exceptions are logged twice. Thanks @selwin!
+* Don't delete `job.worker_name` after job is finished. Thanks @eswolinsky3241!
+
 ### RQ 1.11.1 (2022-09-25)
 * `queue.enqueue_many()` now supports `on_success` and on `on_failure` arguments. Thanks @y4n9squared!
 * You can now pass `enqueue_at_front` to `Dependency()` objects to put dependent jobs at the front when they are enqueued. Thanks @jtfidje!
