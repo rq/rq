@@ -118,7 +118,7 @@ class RQScheduler:
         # If auto_start is requested and scheduler is not started,
         # run self.start()
         if self._acquired_locks and auto_start:
-            if not self._process:
+            if not self._process or not self._process.is_alive():
                 self.start()
 
         return successful_locks

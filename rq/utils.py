@@ -125,6 +125,18 @@ class ColorizingStreamHandler(logging.StreamHandler):
         return message
 
 
+def compact(lst: t.List[t.Any]) -> t.List[t.Any]:
+    """Excludes `None` values from a list-like object.
+
+    Args:
+        lst (list): A list (or list-like) oject
+
+    Returns:
+        object (list): The list without None values
+    """    
+    return [item for item in lst if item is not None]
+
+
 def as_text(v):
     if v is None:
         return None

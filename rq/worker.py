@@ -32,7 +32,7 @@ from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
 from .utils import as_text
 from .connections import get_current_connection, push_connection, pop_connection
 
-from .defaults import (CALLBACK_TIMEOUT, DEFAULT_RESULT_TTL,
+from .defaults import (CALLBACK_TIMEOUT, DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_RESULT_TTL,
                        DEFAULT_WORKER_TTL, DEFAULT_JOB_MONITORING_INTERVAL,
                        DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT)
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
@@ -45,7 +45,7 @@ from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import (backend_class, ensure_list, get_version,
-                    make_colorizer, utcformat, utcnow, utcparse)
+                    make_colorizer, utcformat, utcnow, utcparse, compact)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
 from .serializers import resolve_serializer
@@ -66,9 +66,6 @@ logger = logging.getLogger("rq.worker")
 class StopRequested(Exception):
     pass
 
-
-def compact(a_list):
-    return [x for x in a_list if x is not None]
 
 
 _signames = dict((getattr(signal, signame), signame)
@@ -549,7 +546,7 @@ class Worker:
         """
         # No need to try to start scheduler on first run
         if self.last_cleaned_at:
-            if self.scheduler and not self.scheduler._process:
+            if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
 
@@ -1243,7 +1240,7 @@ class Worker:
         """Maintenance tasks should run on first startup or every 10 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(minutes=10):
+        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL):
             return True
         return False
 

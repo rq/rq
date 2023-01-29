@@ -63,6 +63,12 @@ when using multiple schedulers
 """
 
 
+DEFAULT_MAINTENANCE_TASK_INTERVAL = 10 * 60
+""" The interval to run maintenance tasks
+in seconds. Defaults to 10 minutes.
+"""
+
+
 CALLBACK_TIMEOUT = 60
 """ The timeout period in seconds for Callback functions
 Means that Functions used in `success_callback` and `failure_callback`
