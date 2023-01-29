@@ -116,15 +116,15 @@ A simple implementation example:
 
 ```python
 #!/usr/bin/env python
-from rq import Connection, Worker
+from redis import Redis
+from rq import Worker
 
 # Preload libraries
 import library_that_you_want_preloaded
 
 # Provide the worker with the list of queues (str) to listen to.
-with Connection():
-    w = Worker(['default'])
-    w.work()
+w = Worker(['default'], connection=Redis())
+w.work()
 ```
 
 
