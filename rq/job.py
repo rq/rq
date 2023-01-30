@@ -8,8 +8,10 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from redis import WatchError
-from typing import (Any, List, Optional, TypeVar, TYPE_CHECKING, Dict, Tuple, Callable, Union, Iterable)
+from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, List,
+                    Optional, Tuple, Union)
 from uuid import uuid4
+
 
 if TYPE_CHECKING:
     from .results import Result
@@ -18,12 +20,14 @@ if TYPE_CHECKING:
     from redis.client import Pipeline
 
 from .connections import resolve_connection
-from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
+from .exceptions import (DeserializationError, InvalidJobOperation,
+                         NoSuchJobError)
 from .local import LocalStack
 from .serializers import resolve_serializer
-from .utils import (get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow, ensure_list, get_call_string, as_text,
-                    decode_redis_hash)
+from .types import FunctionReferenceType, JobDependencyType
+from .utils import (as_text, decode_redis_hash, ensure_list, get_call_string,
+                    get_version, import_attribute, parse_timeout, str_to_date,
+                    utcformat, utcnow)
 
 
 class JobStatus(str, Enum):
@@ -72,19 +76,6 @@ class Dependency:
 UNEVALUATED = object()
 """Sentinel value to mark that some of our lazily evaluated properties have not
 yet been evaluated.
-"""
-
-
-JobDependencyType = TypeVar('JobDependencyType', 'Dependency', 'Job', str, List[Union['Dependency', 'Job']])
-"""Custom type definition for a job dependencies.
-A simple helper definition for the `depends_on` parameter when creating a job.
-"""
-
-
-FunctionReferenceType = TypeVar('FunctionReferenceType', str, Callable[..., Any])
-"""Custom type definition for what a `func` is in the context of a job.
-A `func` can be a string with the function import path (eg.: `myfile.mymodule.myfunc`)
-or a direct callable (function/method).
 """
 
 
@@ -1385,8 +1376,7 @@ class Job:
             connection.watch(*[self.key_for(dependency_id)
                                for dependency_id in self._dependency_ids])
 
-        saved_job_dependents = connection.smembers(self.dependencies_key)
-        dependencies_ids = {_id.decode() for _id in saved_job_dependents}
+        dependencies_ids = {_id.decode() for _id in connection.smembers(self.dependencies_key)}
 
         if exclude_job_id:
             dependencies_ids.discard(exclude_job_id)
