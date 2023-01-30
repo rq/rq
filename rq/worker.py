@@ -1369,7 +1369,7 @@ class Worker:
                         job.save(pipeline=pipeline, include_meta=False,
                                  include_result=include_result)
                         if self.supports_redis_streams:
-                            Result.create(job, ResulType.SUCCESSFUL, return_value=job._result,
+                            Result.create(job, Result.Type.SUCCESSFUL, return_value=job._result,
                                           ttl=result_ttl, pipeline=pipeline)
                         finished_job_registry = queue.finished_job_registry
                         finished_job_registry.add(job, result_ttl, pipeline)
