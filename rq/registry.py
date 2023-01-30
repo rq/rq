@@ -2,7 +2,7 @@ import calendar
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Optional, Type, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -26,8 +26,8 @@ class BaseRegistry:
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection: Optional['Redis'] = None,
-                 job_class: Optional[Type['Job']] = None, queue=None, serializer=None):
+    def __init__(self, name: str = 'default', connection: Optional['Redis'] = None,
+                 job_class: Optional[Type['Job']] = None, queue: Optional['Queue'] = None, serializer: Any = None):
         if queue:
             self.name = queue.name
             self.connection = resolve_connection(queue.connection)

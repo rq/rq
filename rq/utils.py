@@ -138,17 +138,17 @@ def compact(lst: List[Any]) -> List[Any]:
     return [item for item in lst if item is not None]
 
 
-def as_text(v):
-    """_summary_
+def as_text(v: Union[bytes, str]) -> Optional[str]:
+    """Converts a bytes value to a string using `utf-8`.
 
     Args:
-        v (_type_): _description_
+        v (Union[bytes, str]): The value (bytes or string)
 
     Raises:
-        ValueError: _description_
+        ValueError: If the value is not bytes or string
 
     Returns:
-        _type_: _description_
+        value (Optional[str]): Either the decoded string or None
     """    
     if v is None:
         return None

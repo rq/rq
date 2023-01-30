@@ -3,7 +3,7 @@ import sys
 import warnings
 import logging
 from collections import namedtuple
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from functools import total_ordering
 from typing import TYPE_CHECKING, Dict, List, Any, Callable, Optional, Tuple, Type, Union
 from redis import WatchError
@@ -18,6 +18,7 @@ from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
+from .types import FunctionReferenceType, JobDependencyType
 from .serializers import resolve_serializer
 from .utils import backend_class, get_version, import_attribute, make_colorizer, parse_timeout, utcnow, compact
 
@@ -175,7 +176,15 @@ class Queue:
         return lock_acquired
 
     def empty(self):
-        """Removes all messages on the queue."""
+        """Removes all messages on the queue.
+        This is currently being done using a Lua script,
+        which iterates all queue messages and deletes the jobs and it's dependents.
+        It registers the Lua script and calls it.
+        Even though is currently being returned, this is not strictly necessary.
+
+        Returns:
+            script (...): The Lua Script is called.
+        """        
         script = """
             local prefix = "{0}"
             local q = KEYS[1]
@@ -198,7 +207,9 @@ class Queue:
 
     def delete(self, delete_jobs: bool = True):
         """Deletes the queue.
-        If delete_jobs is true it removes all the associated messages on the queue first.
+        
+        Args:
+            delete_jobs (bool): If true, removes all the associated messages on the queue first.
         """
         if delete_jobs:
             self.empty()
@@ -221,7 +232,17 @@ class Queue:
         """Returns whether the current queue is async."""
         return bool(self._is_async)
 
-    def fetch_job(self, job_id: str):
+    def fetch_job(self, job_id: str) -> Optional['Job']:
+        """Fetch a single job by Job ID.
+        If the job key is not found, will run the `remove` method, to exclude the key.
+        If the job has the same name as as the current job origin, returns the Job
+
+        Args:
+            job_id (str): The Job ID
+
+        Returns:
+            job (Optional[Job]): The job if found
+        """        
         try:
             job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
         except NoSuchJobError:
@@ -230,7 +251,7 @@ class Queue:
             if job.origin == self.name:
                 return job
 
-    def get_job_position(self, job_or_id: Union['Job', str]):
+    def get_job_position(self, job_or_id: Union['Job', str]) -> Optional[int]: 
         """Returns the position of a job within the queue
 
         Using Redis before 6.0.6 and redis-py before 3.5.4 has a complexity of
@@ -239,7 +260,7 @@ class Queue:
         handling job positions within Redis c implementation.
 
         Args:
-            job_or_id (Union[Job, str]): _description_
+            job_or_id (Union[Job, str]): The Job instance or Job ID
 
         Returns:
             _type_: _description_
@@ -257,12 +278,12 @@ class Queue:
             return self.job_ids.index(job_id)
         return None
 
-    def get_job_ids(self, offset: int = 0, length: int = -1):
+    def get_job_ids(self, offset: int = 0, length: int = -1) -> List[str]:
         """Returns a slice of job IDs in the queue.
 
         Args:
-            offset (int, optional): _description_. Defaults to 0.
-            length (int, optional): _description_. Defaults to -1.
+            offset (int, optional): The offset. Defaults to 0.
+            length (int, optional): The slice length. Defaults to -1 (last element).
 
         Returns:
             _type_: _description_
@@ -280,12 +301,12 @@ class Queue:
         self.log.debug(f"Getting jobs for queue {green(self.name)}: {len(job_ids)} found.")
         return job_ids
 
-    def get_jobs(self, offset: int = 0, length: int = -1):
+    def get_jobs(self, offset: int = 0, length: int = -1) -> List['Job']:
         """Returns a slice of jobs in the queue.
 
         Args:
-            offset (int, optional): _description_. Defaults to 0.
-            length (int, optional): _description_. Defaults to -1.
+            offset (int, optional): The offset. Defaults to 0.
+            length (int, optional): The slice length. Defaults to -1.
 
         Returns:
             _type_: _description_
@@ -349,8 +370,8 @@ class Queue:
         """Removes Job from queue, accepts either a Job instance or ID.
 
         Args:
-            job_or_id (Union[Job, str]): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
+            job_or_id (Union[Job, str]): The Job instance or Job ID string.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
             _type_: _description_
@@ -377,14 +398,14 @@ class Queue:
             if self.job_class.exists(job_id, self.connection):
                 self.connection.rpush(self.key, job_id)
 
-    def push_job_id(self, job_id: str, pipeline: Optional['Pipeline'] = None, at_front=False):
+    def push_job_id(self, job_id: str, pipeline: Optional['Pipeline'] = None, at_front: bool = False):
         """Pushes a job ID on the corresponding Redis queue.
         'at_front' allows you to push the job onto the front instead of the back of the queue
 
         Args:
-            job_id (str): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
-            at_front (bool, optional): _description_. Defaults to False.
+            job_id (str): The Job ID
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline to use. Defaults to None.
+            at_front (bool, optional): Whether to push the job to front of the queue. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
         if at_front:
@@ -393,36 +414,37 @@ class Queue:
             result = connection.rpush(self.key, job_id)
         self.log.debug(f"Pushed job {blue(job_id)} into {green(self.name)}, {result} job(s) are in queue.")
 
-    def create_job(self, func: Callable[..., Any], args=None, kwargs=None, timeout=None,
-                   result_ttl=None, ttl=None, failure_ttl=None,
-                   description=None, depends_on=None, job_id=None,
-                   meta=None, status=JobStatus.QUEUED, retry=None, *,
-                   on_success=None, on_failure=None) -> Job:
+    def create_job(self, func: 'FunctionReferenceType', args: Union[Tuple, List, None] = None, kwargs: Optional[Dict] = None,
+                    timeout: Optional[int] = None, result_ttl: Optional[int] = None, ttl: Optional[int] = None,
+                    failure_ttl: Optional[int] = None, description: Optional[str] = None, depends_on: Optional['JobDependencyType']=None,
+                    job_id: Optional[str] = None, meta: Optional[Dict] = None, status: JobStatus = JobStatus.QUEUED,
+                    retry: Optional['Retry'] = None, *, on_success: Optional[Callable] = None,
+                    on_failure: Optional[Callable] = None) -> Job:
         """Creates a job based on parameters given
 
         Args:
-            func (Callable[..., Any]): _description_
-            args (_type_, optional): _description_. Defaults to None.
-            kwargs (_type_, optional): _description_. Defaults to None.
-            timeout (_type_, optional): _description_. Defaults to None.
-            result_ttl (_type_, optional): _description_. Defaults to None.
-            ttl (_type_, optional): _description_. Defaults to None.
-            failure_ttl (_type_, optional): _description_. Defaults to None.
-            description (_type_, optional): _description_. Defaults to None.
-            depends_on (_type_, optional): _description_. Defaults to None.
-            job_id (_type_, optional): _description_. Defaults to None.
-            meta (_type_, optional): _description_. Defaults to None.
-            status (_type_, optional): _description_. Defaults to JobStatus.QUEUED.
-            retry (_type_, optional): _description_. Defaults to None.
-            on_success (_type_, optional): _description_. Defaults to None.
-            on_failure (_type_, optional): _description_. Defaults to None.
+            func (FunctionReferenceType): The function referce: a callable or the path.
+            args (Union[Tuple, List, None], optional): The `*args` to pass to the function. Defaults to None.
+            kwargs (Optional[Dict], optional): The `**kwargs` to pass to the function. Defaults to None.
+            timeout (Optional[int], optional): Function timeout. Defaults to None.
+            result_ttl (Optional[int], optional): Result time to live. Defaults to None.
+            ttl (Optional[int], optional): Time to live. Defaults to None.
+            failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.
+            description (Optional[str], optional): The description. Defaults to None.
+            depends_on (Optional[JobDependencyType], optional): The job dependencies. Defaults to None.
+            job_id (Optional[str], optional): Job ID. Defaults to None.
+            meta (Optional[Dict], optional): Job metadata. Defaults to None.
+            status (JobStatus, optional): Job status. Defaults to JobStatus.QUEUED.
+            retry (Optional[Retry], optional): The Retry Object. Defaults to None.
+            on_success (Optional[Callable], optional): On success callable. Defaults to None.
+            on_failure (Optional[Callable], optional): On failure callable. Defaults to None.
 
         Raises:
-            ValueError: _description_
-            ValueError: _description_
+            ValueError: If the timeout is 0
+            ValueError: If the job TTL is 0 or negative
 
         Returns:
-            Job: _description_
+            Job: The created job
         """
         timeout = parse_timeout(timeout)
 
@@ -453,7 +475,7 @@ class Queue:
 
         return job
 
-    def setup_dependencies(self, job: 'Job', pipeline: Optional['Pipeline'] = None):
+    def setup_dependencies(self, job: 'Job', pipeline: Optional['Pipeline'] = None) -> 'Job':
         """If a _dependent_ job depends on any unfinished job, register all the
         _dependent_ job's dependencies instead of enqueueing it.
 
@@ -463,11 +485,11 @@ class Queue:
         status of one of them. In this case, we simply retry.
 
         Args:
-            job (Job): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
+            job (Job): The job
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
-            _type_: _description_
+            job (Job): The Job
         """
         if len(job._dependency_ids) > 0:
             orig_status = job.get_status(refresh=False)
@@ -513,9 +535,9 @@ class Queue:
             pipeline.multi()  # Ensure pipeline in multi mode before returning to caller
         return job
 
-    def enqueue_call(self, func: Callable[..., Any], args: Union[Tuple, List, None] = None, kwargs: Optional[Dict] = None,
+    def enqueue_call(self, func: 'FunctionReferenceType', args: Union[Tuple, List, None] = None, kwargs: Optional[Dict] = None,
                      timeout: Optional[int] = None, result_ttl: Optional[int] = None, ttl: Optional[int] = None,
-                     failure_ttl: Optional[int] = None, description=None, depends_on=None,
+                     failure_ttl: Optional[int] = None, description: Optional[str] = None, depends_on: Optional['JobDependencyType'] = None,
                      job_id: Optional[str] = None, at_front: bool = False, meta: Optional[Dict] = None,
                      retry: Optional['Retry'] = None, on_success: Optional[Callable[..., Any]] = None,
                      on_failure: Optional[Callable[..., Any]] = None, pipeline: Optional['Pipeline'] = None) -> Job:
@@ -526,26 +548,27 @@ class Queue:
         contain options for RQ itself.
 
         Args:
-            func (Callable[..., Any]): _description_
-            args (_type_, optional): _description_. Defaults to None.
-            kwargs (_type_, optional): _description_. Defaults to None.
-            timeout (_type_, optional): _description_. Defaults to None.
-            result_ttl (_type_, optional): _description_. Defaults to None.
-            ttl (_type_, optional): _description_. Defaults to None.
-            failure_ttl (_type_, optional): _description_. Defaults to None.
-            description (_type_, optional): _description_. Defaults to None.
-            depends_on (_type_, optional): _description_. Defaults to None.
-            job_id (str, optional): _description_. Defaults to None.
-            at_front (bool, optional): _description_. Defaults to False.
-            meta (_type_, optional): _description_. Defaults to None.
-            retry (_type_, optional): _description_. Defaults to None.
-            on_success (_type_, optional): _description_. Defaults to None.
-            on_failure (_type_, optional): _description_. Defaults to None.
-            pipeline (_type_, optional): _description_. Defaults to None.
+            func (FunctionReferenceType): The reference to the function
+            args (Union[Tuple, List, None], optional): THe `*args` to pass to the function. Defaults to None.
+            kwargs (Optional[Dict], optional): THe `**kwargs` to pass to the function. Defaults to None.
+            timeout (Optional[int], optional): Function timeout. Defaults to None.
+            result_ttl (Optional[int], optional): Result time to live. Defaults to None.
+            ttl (Optional[int], optional): Time to live. Defaults to None.
+            failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.
+            description (Optional[str], optional): The job description. Defaults to None.
+            depends_on (Optional[JobDependencyType], optional): The job dependencies. Defaults to None.
+            job_id (Optional[str], optional): The job ID. Defaults to None.
+            at_front (bool, optional): Whether to enqueue the job at the front. Defaults to False.
+            meta (Optional[Dict], optional): Metadata to attach to the job. Defaults to None.
+            retry (Optional[Retry], optional): Retry object. Defaults to None.
+            on_success (Optional[Callable[..., Any]], optional): Callable for on success. Defaults to None.
+            on_failure (Optional[Callable[..., Any]], optional): Callable for on failure. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
-            Job: _description_
-        """
+            Job: The enqueued Job
+        """                     
+
         job = self.create_job(
             func, args=args, kwargs=kwargs, result_ttl=result_ttl, ttl=ttl,
             failure_ttl=failure_ttl, description=description, depends_on=depends_on,
@@ -563,31 +586,32 @@ class Queue:
         return job
 
     @staticmethod
-    def prepare_data(func, args=None, kwargs=None, timeout=None,
-                     result_ttl=None, ttl=None, failure_ttl=None,
-                     description=None, job_id=None,
-                     at_front=False, meta=None, retry=None, on_success=None, on_failure=None) -> EnqueueData:
+    def prepare_data(func: 'FunctionReferenceType', args: Union[Tuple, List, None] = None, kwargs: Optional[Dict] = None,
+                     timeout: Optional[int] = None, result_ttl: Optional[int] = None, ttl: Optional[int] = None,
+                     failure_ttl: Optional[int] = None, description: Optional[str] = None, job_id: Optional[str] = None,
+                     at_front: bool = False, meta: Optional[Dict] = None, retry: Optional['Retry'] = None,
+                     on_success: Optional[Callable] = None, on_failure: Optional[Callable] = None) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
 
         Args:
-            func (_type_): _description_
-            args (_type_, optional): _description_. Defaults to None.
-            kwargs (_type_, optional): _description_. Defaults to None.
-            timeout (_type_, optional): _description_. Defaults to None.
-            result_ttl (_type_, optional): _description_. Defaults to None.
-            ttl (_type_, optional): _description_. Defaults to None.
-            failure_ttl (_type_, optional): _description_. Defaults to None.
-            description (_type_, optional): _description_. Defaults to None.
-            job_id (_type_, optional): _description_. Defaults to None.
-            at_front (bool, optional): _description_. Defaults to False.
-            meta (_type_, optional): _description_. Defaults to None.
-            retry (_type_, optional): _description_. Defaults to None.
-            on_success (_type_, optional): _description_. Defaults to None.
-            on_failure (_type_, optional): _description_. Defaults to None.
+            func (FunctionReferenceType): The reference to the function
+            args (Union[Tuple, List, None], optional): THe `*args` to pass to the function. Defaults to None.
+            kwargs (Optional[Dict], optional): THe `**kwargs` to pass to the function. Defaults to None.
+            timeout (Optional[int], optional): Function timeout. Defaults to None.
+            result_ttl (Optional[int], optional): Result time to live. Defaults to None.
+            ttl (Optional[int], optional): Time to live. Defaults to None.
+            failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.
+            description (Optional[str], optional): The job description. Defaults to None.
+            job_id (Optional[str], optional): The job ID. Defaults to None.
+            at_front (bool, optional): Whether to enqueue the job at the front. Defaults to False.
+            meta (Optional[Dict], optional): Metadata to attach to the job. Defaults to None.
+            retry (Optional[Retry], optional): Retry object. Defaults to None.
+            on_success (Optional[Callable[..., Any]], optional): Callable for on success. Defaults to None.
+            on_failure (Optional[Callable[..., Any]], optional): Callable for on failure. Defaults to None.
 
         Returns:
-            EnqueueData: _description_
+            EnqueueData: The EnqueueData
         """
         return EnqueueData(
             func, args, kwargs, timeout,
@@ -596,16 +620,16 @@ class Queue:
             at_front, meta, retry, on_success, on_failure
         )
 
-    def enqueue_many(self, job_datas, pipeline: Optional['Pipeline'] = None) -> List[Job]:
+    def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
 
         Args:
-            job_datas (_type_): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
+            job_datas (List['EnqueueData']): A List of job data
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
-            List[Job]: _description_
+            List[Job]: A list of enqueued jobs
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         jobs = [
@@ -631,10 +655,10 @@ class Queue:
         return jobs
 
     def run_job(self, job: 'Job') -> Job:
-        """_summary_
+        """Run the job
 
         Args:
-            job (Job): _description_
+            job (Job): The job to run
 
         Returns:
             Job: _description_
@@ -646,7 +670,7 @@ class Queue:
         return job
 
     @classmethod
-    def parse_args(cls, f: Union[Callable[..., Any], str], *args, **kwargs):
+    def parse_args(cls, f: 'FunctionReferenceType', *args, **kwargs):
         """
         Parses arguments passed to `queue.enqueue()` and `queue.enqueue_at()`
 
@@ -656,6 +680,11 @@ class Queue:
         * A reference to an object's instance method
         * A string, representing the location of a function (must be
           meaningful to the import context of the workers)
+
+        Args:
+            f (FunctionReferenceType): The function reference
+            args (*args): function args
+            kwargs (*kwargs): function kargs
         """
         if not isinstance(f, str) and f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed '
@@ -686,14 +715,17 @@ class Queue:
                 depends_on, job_id, at_front, meta, retry, on_success, on_failure,
                 pipeline, args, kwargs)
 
-    def enqueue(self, f, *args, **kwargs):
-        """Creates a job to represent the delayed function call and enqueues it
+    def enqueue(self, f: 'FunctionReferenceType', *args, **kwargs) -> 'Job':
+        """Creates a job to represent the delayed function call and enqueues it.
+        Receives the same parameters accepted by the `enqueue_call` method.
 
         Args:
-            f (_type_): _description_
+            f (FunctionReferenceType): The function reference
+            args (*args): function args
+            kwargs (*kwargs): function kargs
 
         Returns:
-            _type_: _description_
+            job (Job): The created Job
         """
         (f, timeout, description, result_ttl, ttl, failure_ttl,
          depends_on, job_id, at_front, meta, retry, on_success,
@@ -753,15 +785,15 @@ class Queue:
             pipe.execute()
         return job
 
-    def enqueue_in(self, time_delta, func, *args, **kwargs):
+    def enqueue_in(self, time_delta: timedelta, func: 'FunctionReferenceType', *args, **kwargs) -> 'Job':
         """Schedules a job to be executed in a given `timedelta` object
 
         Args:
-            time_delta (_type_): _description_
-            func (_type_): _description_
+            time_delta (timedelta): The timedelta object
+            func (FunctionReferenceType): The function reference
 
         Returns:
-            _type_: _description_
+            job (Job): The enqueued Job
         """
         return self.enqueue_at(datetime.now(timezone.utc) + time_delta,
                                func, *args, **kwargs)
@@ -772,12 +804,12 @@ class Queue:
         If Queue is instantiated with is_async=False, job is executed immediately.
 
         Args:
-            job (Job): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
-            at_front (bool, optional): _description_. Defaults to False.
+            job (Job): The job to enqueue
+            pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
 
         Returns:
-            Job: _description_
+            Job: The enqued job
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
@@ -806,13 +838,13 @@ class Queue:
         return job
 
     def run_sync(self, job: 'Job') -> 'Job':
-        """_summary_
+        """Run a job synchronously, meaning on the same process the method was called. 
 
         Args:
-            job (Job): _description_
+            job (Job): The job to run
 
         Returns:
-            Job: _description_
+            Job: The job instance
         """        
         with self.connection.pipeline() as pipeline:
             job.prepare_for_execution('sync', pipeline)
@@ -837,9 +869,9 @@ class Queue:
         caller.
 
         Args:
-            job (Job): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
-            exclude_job_id (_type_, optional): _description_. Defaults to None.
+            job (Job): The Job to enqueue the dependents
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            exclude_job_id (Optional[str], optional): Whether to exclude the job id. Defaults to None.
         """
         from .registry import DeferredJobRegistry
 
@@ -913,11 +945,11 @@ class Queue:
                     # handle it
                     raise
 
-    def pop_job_id(self):
+    def pop_job_id(self) -> Optional[str]:
         """Pops a given job ID from this Redis queue.
 
         Returns:
-            _type_: _description_
+            job_id (str): The job id
         """
         return as_text(self.connection.lpop(self.key))
 
@@ -941,8 +973,8 @@ class Queue:
             connection (Optional[Redis], optional): _description_. Defaults to None.
 
         Raises:
-            ValueError: _description_
-            DequeueTimeout: _description_
+            ValueError: If timeout of 0 was passed
+            DequeueTimeout: BLPOP Timeout
 
         Returns:
             _type_: _description_
@@ -967,8 +999,8 @@ class Queue:
             return None
 
     @classmethod
-    def dequeue_any(cls, queues: List[str], timeout: int, connection: Optional['Redis'] = None,
-                    job_class: Optional['Job'] = None, serializer: Any = None):
+    def dequeue_any(cls, queues: List['Queue'], timeout: int, connection: Optional['Redis'] = None,
+                    job_class: Optional['Job'] = None, serializer: Any = None) -> Tuple['Job', 'Queue']:
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -980,17 +1012,17 @@ class Queue:
         See the documentation of cls.lpop for the interpretation of timeout.
 
         Args:
-            queues (_type_): _description_
-            timeout (_type_): _description_
-            connection (Optional[Redis], optional): _description_. Defaults to None.
-            job_class (Optional[Job], optional): _description_. Defaults to None.
-            serializer (_type_, optional): _description_. Defaults to None.
+            queues (List[Queue]): List of queue objects
+            timeout (int): Timeout for the LPOP
+            connection (Optional[Redis], optional): Redis Connection. Defaults to None.
+            job_class (Optional[Job], optional): The job classification. Defaults to None.
+            serializer (Any, optional): Serializer to use. Defaults to None.
 
         Raises:
-            e: _description_
+            e: Any exception
 
         Returns:
-            _type_: _description_
+            job, queue (Tuple[Job, Queue]): A tuple of Job, Queue
         """
         job_class: Job = backend_class(cls, 'job_class', override=job_class)
 

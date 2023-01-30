@@ -15,12 +15,17 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
     """The context manager for handling connections in a clean way.
     It will push the connection to the LocalStack, and pop the connection
     when leaving the context
-    Example:
-        ..codeblock:python::
 
-            with Connection():
-                w = Worker()
-                w.work()
+    Example:
+
+    ..codeblock:python::
+
+        with Connection():
+            w = Worker()
+            w.work()
+
+    This method is deprecated on version 1.12.0 and will be removed in the future.
+    Pass the connection to the worker explicitly to handle Redis Connections.
 
     Args:
         connection (Optional[Redis], optional): A Redis Connection instance. Defaults to None.
@@ -41,7 +46,7 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
 
 def push_connection(redis: 'Redis'):
     """
-    Pushes the given connection on the stack.
+    Pushes the given connection to the stack.
 
     Args:
         redis (Redis): A Redis connection
