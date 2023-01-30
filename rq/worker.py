@@ -271,7 +271,7 @@ class Worker:
             connection = get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
-            timeout = max(1, default_worker_ttl - 15) + 20
+            timeout = self.default_timeout + 10
             timeout_config = {"socket_timeout": timeout}
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
@@ -322,6 +322,10 @@ class Worker:
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
+
+    @property
+    def default_timeout(self):
+        return max(1, self.default_worker_ttl - 15)
 
     def procline(self, message):
         """Changes the current procname for the process.
@@ -633,7 +637,7 @@ class Worker:
                         self.log.info('Worker %s: stopping on request', self.key)
                         break
 
-                    timeout = None if burst else max(1, self.default_worker_ttl - 15)
+                    timeout = None if burst else self.default_timeout
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
