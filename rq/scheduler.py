@@ -38,6 +38,17 @@ class RQScheduler:
     def __init__(self, queues, connection, interval=1, logging_level=logging.INFO,
                  date_format=DEFAULT_LOGGING_DATE_FORMAT,
                  log_format=DEFAULT_LOGGING_FORMAT, serializer=None):
+        """_summary_
+
+        Args:
+            queues (_type_): _description_
+            connection (_type_): _description_
+            interval (int, optional): _description_. Defaults to 1.
+            logging_level (_type_, optional): _description_. Defaults to logging.INFO.
+            date_format (_type_, optional): _description_. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
+            log_format (_type_, optional): _description_. Defaults to DEFAULT_LOGGING_FORMAT.
+            serializer (_type_, optional): _description_. Defaults to None.
+        """                 
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set()
         self._scheduled_job_registries = []
@@ -102,6 +113,14 @@ class RQScheduler:
         return (datetime.now() - self.lock_acquisition_time).total_seconds() > DEFAULT_SCHEDULER_FALLBACK_PERIOD
 
     def acquire_locks(self, auto_start=False):
+        """_summary_
+
+        Args:
+            auto_start (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """        
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set()
         pid = os.getpid()
@@ -124,6 +143,11 @@ class RQScheduler:
         return successful_locks
 
     def prepare_registries(self, queue_names: str = None):
+        """_summary_
+
+        Args:
+            queue_names (str, optional): _description_. Defaults to None.
+        """        
         """Prepare scheduled job registries for use"""
         self._scheduled_job_registries = []
         if not queue_names:
@@ -135,10 +159,20 @@ class RQScheduler:
 
     @classmethod
     def get_locking_key(cls, name: str):
+        """_summary_
+
+        Args:
+            name (str): _description_
+
+        Returns:
+            _type_: _description_
+        """        
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
 
     def enqueue_scheduled_jobs(self):
+        """_summary_
+        """        
         """Enqueue jobs whose timestamp is in the past"""
         self._status = self.Status.WORKING
 
@@ -169,6 +203,8 @@ class RQScheduler:
         self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):
+        """_summary_
+        """        
         """Installs signal handlers for handling SIGINT and SIGTERM
         gracefully.
         """
@@ -176,10 +212,18 @@ class RQScheduler:
         signal.signal(signal.SIGTERM, self.request_stop)
 
     def request_stop(self, signum=None, frame=None):
+        """_summary_
+
+        Args:
+            signum (_type_, optional): _description_. Defaults to None.
+            frame (_type_, optional): _description_. Defaults to None.
+        """        
         """Toggle self._stop_requested that's checked on every loop"""
         self._stop_requested = True
 
     def heartbeat(self):
+        """_summary_
+        """        
         """Updates the TTL on scheduler keys and the locks"""
         self.log.debug("Scheduler sending heartbeat to %s",
                        ", ".join(self.acquired_locks))
@@ -194,18 +238,27 @@ class RQScheduler:
             self.connection.expire(key, self.interval + 60)
 
     def stop(self):
+        """_summary_
+        """        
         self.log.info("Scheduler stopping, releasing locks for %s...",
                       ','.join(self._queue_names))
         self.release_locks()
         self._status = self.Status.STOPPED
 
     def release_locks(self):
+        """_summary_
+        """        
         """Release acquired locks"""
         keys = [self.get_locking_key(name) for name in self._queue_names]
         self.connection.delete(*keys)
         self._acquired_locks = set()
 
     def start(self):
+        """_summary_
+
+        Returns:
+            _type_: _description_
+        """        
         self._status = self.Status.STARTED
         # Redis instance can't be pickled across processes so we need to
         # clean this up before forking
@@ -215,6 +268,8 @@ class RQScheduler:
         return self._process
 
     def work(self):
+        """_summary_
+        """        
         self._install_signal_handlers()
 
         while True:
@@ -231,6 +286,11 @@ class RQScheduler:
 
 
 def run(scheduler):
+    """_summary_
+
+    Args:
+        scheduler (_type_): _description_
+    """    
     scheduler.log.info("Scheduler for %s started with PID %s",
                        ','.join(scheduler._queue_names), os.getpid())
     try:
@@ -245,6 +305,14 @@ def run(scheduler):
 
 
 def parse_names(queues_or_names):
+    """_summary_
+
+    Args:
+        queues_or_names (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """    
     """Given a list of strings or queues, returns queue names"""
     names = []
     for queue_or_name in queues_or_names:

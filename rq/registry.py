@@ -1,10 +1,10 @@
-import typing as t
 import calendar
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Optional, Type, Union
 
-if t.TYPE_CHECKING:
+if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
@@ -26,8 +26,8 @@ class BaseRegistry:
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name='default', connection: t.Optional['Redis'] = None,
-                 job_class: t.Optional[t.Type['Job']] = None, queue=None, serializer=None):
+    def __init__(self, name='default', connection: Optional['Redis'] = None,
+                 job_class: Optional[Type['Job']] = None, queue=None, serializer=None):
         if queue:
             self.name = queue.name
             self.connection = resolve_connection(queue.connection)
@@ -50,7 +50,7 @@ class BaseRegistry:
             self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
         )
 
-    def __contains__(self, item: t.Union[str, 'Job']):
+    def __contains__(self, item: Union[str, 'Job']):
         """
         Returns a boolean indicating registry contains the given
         job instance or job id.
@@ -64,19 +64,26 @@ class BaseRegistry:
         return self.connection.zscore(self.key, job_id) is not None
 
     @property
-    def count(self):
-        """Returns the number of jobs in this registry"""
+    def count(self) -> int:
+        """Returns the number of jobs in this registry
+
+        Returns:
+            int: _description_
+        """
         self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job: 'Job', ttl=0, pipeline: t.Optional['Pipeline'] = None, xx: bool = False):
+    def add(self, job: 'Job', ttl=0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
         """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
             job (Job): The Job to add
             ttl (int, optional): The time to live. Defaults to 0.
-            pipeline (t.Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             xx (bool, optional): .... Defaults to False.
+
+        Returns:
+            result (int): The ZADD command result
         """
         score = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
@@ -86,12 +93,12 @@ class BaseRegistry:
 
         return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
-    def remove(self, job: 'Job', pipeline: t.Optional['Pipeline'] = None, delete_job: bool = False):
+    def remove(self, job: 'Job', pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`
 
         Args:
             job (Job): The Job to remove from the registry
-            pipeline (t.Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
@@ -105,7 +112,7 @@ class BaseRegistry:
             job_instance.delete()
         return result
 
-    def get_expired_job_ids(self, timestamp: t.Optional[float] = None):
+    def get_expired_job_ids(self, timestamp: Optional[float] = None):
         """Returns job ids whose score are less than current timestamp.
 
         Returns ids for jobs with an expiry time earlier than timestamp,
@@ -113,11 +120,19 @@ class BaseRegistry:
         time if unspecified.
         """
         score = timestamp if timestamp is not None else current_timestamp()
-        return [as_text(job_id) for job_id in
-                self.connection.zrangebyscore(self.key, 0, score)]
+        expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
+        return [as_text(job_id) for job_id in expired_jobs]
 
     def get_job_ids(self, start: int = 0, end: int = -1):
-        """Returns list of all job ids."""
+        """Returns list of all job ids.
+
+        Args:
+            start (int, optional): _description_. Defaults to 0.
+            end (int, optional): _description_. Defaults to -1.
+
+        Returns:
+            _type_: _description_
+        """
         self.cleanup()
         return [as_text(job_id) for job_id in
                 self.connection.zrange(self.key, start, end)]
@@ -135,11 +150,11 @@ class BaseRegistry:
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
-    def requeue(self, job_or_id: t.Union['Job', str], at_front: bool = False) -> 'Job':
+    def requeue(self, job_or_id: Union['Job', str], at_front: bool = False) -> 'Job':
         """Requeues the job with the given job ID.
 
         Args:
-            job_or_id (t.Union[&#39;Job&#39;, str]): The Job or the Job ID
+            job_or_id (Union[&#39;Job&#39;, str]): The Job or the Job ID
             at_front (bool, optional): If the Job should be put at the front of the queue. Defaults to False.
 
         Raises:
@@ -182,7 +197,7 @@ class StartedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: t.Optional[float] = None):
+    def cleanup(self, timestamp: Optional[float] = None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -233,7 +248,7 @@ class FinishedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:finished:{0}'
 
-    def cleanup(self, timestamp: t.Optional[float] = None):
+    def cleanup(self, timestamp: Optional[float] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -250,7 +265,7 @@ class FailedJobRegistry(BaseRegistry):
     """
     key_template = 'rq:failed:{0}'
 
-    def cleanup(self, timestamp: t.Optional[float] = None):
+    def cleanup(self, timestamp: Optional[float] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -260,7 +275,7 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: t.Optional['Pipeline'] = None,
+    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: Optional['Pipeline'] = None,
             _save_exc_to_job: bool = False):
         """
         Adds a job to a registry with expiry time of now + ttl.
@@ -310,7 +325,7 @@ class ScheduledJobRegistry(BaseRegistry):
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
 
-    def schedule(self, job: 'Job', scheduled_datetime, pipeline: t.Optional['Pipeline'] = None):
+    def schedule(self, job: 'Job', scheduled_datetime, pipeline: Optional['Pipeline'] = None):
         """
         Adds job to registry, scored by its execution time (in UTC).
         If datetime has no tzinfo, it will assume localtimezone.
@@ -329,20 +344,46 @@ class ScheduledJobRegistry(BaseRegistry):
         implemented in BaseRegistry."""
         pass
 
-    def remove_jobs(self, timestamp: t.Optional[datetime] = None, pipeline: t.Optional['Pipeline'] = None):
-        """Remove jobs whose timestamp is in the past from registry."""
+    def remove_jobs(self, timestamp: Optional[datetime] = None, pipeline: Optional['Pipeline'] = None):
+        """Remove jobs whose timestamp is in the past from registry.
+
+        Args:
+            timestamp (Optional[datetime], optional): _description_. Defaults to None.
+            pipeline (Optional[&#39;Pipeline&#39;], optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         connection = pipeline if pipeline is not None else self.connection
         score = timestamp if timestamp is not None else current_timestamp()
         return connection.zremrangebyscore(self.key, 0, score)
 
-    def get_jobs_to_schedule(self, timestamp: t.Optional[datetime] = None, chunk_size: int = 1000):
-        """Get's a list of job IDs that should be scheduled."""
-        score = timestamp if timestamp is not None else current_timestamp()
-        return [as_text(job_id) for job_id in
-                self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)]
+    def get_jobs_to_schedule(self, timestamp: Optional[datetime] = None, chunk_size: int = 1000):
+        """Get's a list of job IDs that should be scheduled.
 
-    def get_scheduled_time(self, job_or_id: t.Union['Job', str]):
-        """Returns datetime (UTC) at which job is scheduled to be enqueued"""
+        Args:
+            timestamp (Optional[datetime], optional): _description_. Defaults to None.
+            chunk_size (int, optional): _description_. Defaults to 1000.
+
+        Returns:
+            _type_: _description_
+        """
+        score = timestamp if timestamp is not None else current_timestamp()
+        jobs_to_schedule = self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)
+        return [as_text(job_id) for job_id in jobs_to_schedule]
+
+    def get_scheduled_time(self, job_or_id: Union['Job', str]):
+        """Returns datetime (UTC) at which job is scheduled to be enqueued
+
+        Args:
+            job_or_id (Union[&#39;Job&#39;, str]): _description_
+
+        Raises:
+            NoSuchJobError: _description_
+
+        Returns:
+            _type_: _description_
+        """
         if isinstance(job_or_id, self.job_class):
             job_id = job_or_id.id
         else:
@@ -358,7 +399,15 @@ class ScheduledJobRegistry(BaseRegistry):
 class CanceledJobRegistry(BaseRegistry):
     key_template = 'rq:canceled:{0}'
 
-    def get_expired_job_ids(self, timestamp: t.Optional[datetime] = None):
+    def get_expired_job_ids(self, timestamp: Optional[datetime] = None):
+        """_summary_
+
+        Args:
+            timestamp (Optional[datetime], optional): _description_. Defaults to None.
+
+        Raises:
+            NotImplementedError: _description_
+        """        
         raise NotImplementedError
 
     def cleanup(self):
@@ -369,7 +418,11 @@ class CanceledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue):
-    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue."""
+    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue.
+
+    Args:
+        queue (_type_): _description_
+    """
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,
                                    job_class=queue.job_class,

@@ -26,6 +26,12 @@ class BaseDeathPenalty:
     """Base class to setup job timeouts."""
 
     def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
+        """_summary_
+
+        Args:
+            timeout (_type_): _description_
+            exception (_type_, optional): _description_. Defaults to JobTimeoutException.
+        """        
         self._timeout = timeout
         self._exception = exception
 
@@ -58,6 +64,15 @@ class BaseDeathPenalty:
 class UnixSignalDeathPenalty(BaseDeathPenalty):
 
     def handle_death_penalty(self, signum, frame):
+        """_summary_
+
+        Args:
+            signum (_type_): _description_
+            frame (_type_): _description_
+
+        Raises:
+            self._exception: _description_
+        """        
         raise self._exception('Task exceeded maximum timeout value '
                               '({0} seconds)'.format(self._timeout))
 
@@ -78,6 +93,12 @@ class UnixSignalDeathPenalty(BaseDeathPenalty):
 
 class TimerDeathPenalty(BaseDeathPenalty):
     def __init__(self, timeout, exception=JobTimeoutException, **kwargs):
+        """_summary_
+
+        Args:
+            timeout (_type_): _description_
+            exception (_type_, optional): _description_. Defaults to JobTimeoutException.
+        """        
         super().__init__(timeout, exception, **kwargs)
         self._target_thread_id = threading.current_thread().ident
         self._timer = None
@@ -92,13 +113,21 @@ class TimerDeathPenalty(BaseDeathPenalty):
         self._exception.__init__ = init_with_message
 
     def new_timer(self):
-        """Returns a new timer since timers can only be used once."""
+        """Returns a new timer since timers can only be used once.
+
+        Returns:
+            _type_: _description_
+        """
         return threading.Timer(self._timeout, self.handle_death_penalty)
 
     def handle_death_penalty(self):
         """Raises an asynchronous exception in another thread.
 
         Reference http://docs.python.org/c-api/init.html#PyThreadState_SetAsyncExc for more info.
+
+        Raises:
+            ValueError: _description_
+            SystemError: _description_
         """
         ret = ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_long(self._target_thread_id), ctypes.py_object(self._exception)
@@ -110,11 +139,13 @@ class TimerDeathPenalty(BaseDeathPenalty):
             raise SystemError("PyThreadState_SetAsyncExc failed")
 
     def setup_death_penalty(self):
-        """Starts the timer."""
+        """Starts the timer.
+        """
         self._timer = self.new_timer()
         self._timer.start()
 
     def cancel_death_penalty(self):
-        """Cancels the timer."""
+        """Cancels the timer.
+        """
         self._timer.cancel()
         self._timer = None
