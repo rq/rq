@@ -2,9 +2,9 @@ name: Test rq
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -15,35 +15,35 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: [3.5.0]
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4.5.0
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4.5.0
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Start Redis
-      uses: supercharge/redis-github-action@1.4.0
-      with:
-        redis-version: ${{ matrix.redis-version }}
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.4.0
+        with:
+          redis-version: ${{ matrix.redis-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install redis==${{ matrix.redis-py-version }}
-        pip install -r requirements.txt -r dev-requirements.txt
-        pip install -e .
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install redis==${{ matrix.redis-py-version }}
+          pip install -r requirements.txt -r dev-requirements.txt
+          pip install -e .
 
-    - name: Test with pytest
-      run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
+      - name: Test with pytest
+        run: |
+          RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml

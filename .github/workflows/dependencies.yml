@@ -3,7 +3,7 @@ name: Dependencies
 on:
   schedule:
     # View https://docs.github.com/en/actions/reference/events-that-trigger-workflows#schedule
-    - cron: '0 12 * * *'
+    - cron: "0 12 * * *"
   workflow_dispatch:
 
 jobs:
@@ -13,33 +13,33 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: [3.5.0]
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4.5.0
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4.5.0
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Start Redis
-      uses: supercharge/redis-github-action@1.4.0
-      with:
-        redis-version: ${{ matrix.redis-version }}
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.4.0
+        with:
+          redis-version: ${{ matrix.redis-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install redis==${{ matrix.redis-py-version }}
-        pip install -r requirements.txt -r dev-requirements.txt
-        pip install -e .
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install redis==${{ matrix.redis-py-version }}
+          pip install -r requirements.txt -r dev-requirements.txt
+          pip install -e .
 
-    - name: Test with pytest
-      run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --durations=5
+      - name: Test with pytest
+        run: |
+          RUN_SLOW_TESTS_TOO=1 pytest --durations=5
 
   dependency-build:
     name: Check development branches of dependencies
@@ -49,38 +49,38 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10"]
+        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4.5.0
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4.5.0
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Start Redis
-      uses: supercharge/redis-github-action@1.4.0
-      with:
-        redis-version: ${{ matrix.redis-version }}
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.4.0
+        with:
+          redis-version: ${{ matrix.redis-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install git+https://github.com/redis/redis-py
-        pip install git+https://github.com/pallets/click
-        pip install -r dev-requirements.txt
-        pip install -e .
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install git+https://github.com/redis/redis-py
+          pip install git+https://github.com/pallets/click
+          pip install -r dev-requirements.txt
+          pip install -e .
 
-    - name: Test with pytest
-      run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
+      - name: Test with pytest
+        run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
 
-    - uses: actions/upload-artifact@v3
-      with:
-        name: dependencies-error
-        path: log.txt
-      if: failure()
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dependencies-error
+          path: log.txt
+        if: failure()
 
   issue:
     name: Create failure issue
@@ -90,20 +90,20 @@ jobs:
     needs: dependency-build
 
     steps:
-    - uses: actions/download-artifact@v3
-      with:
-        name: dependencies-error
-        path: .
+      - uses: actions/download-artifact@v3
+        with:
+          name: dependencies-error
+          path: .
 
-    - name: Create failure issue
-      run: |
-        if [[ "$(curl --url https://api.github.com/repos/${{ github.repository }}/issues?creator=github-actions --request GET)" != *"\""* ]]
-          then curl --request POST \
-                    --url https://api.github.com/repos/${{ github.repository }}/issues \
-                    --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
-                    --header 'content-type: application/json' \
-                    --data "{
-                        \"title\": \"RQ maybe may not work with dependencies in the future\",
-                        \"body\": \"This issue was automatically created by the GitHub Action workflow **${{ github.workflow }}**. \n\n View log: \n\n \`\`\` \n $(cat log.txt | while read line; do echo -n "$line\n"; done | sed -r 's/"/\\"/g') \n \`\`\`\"
-                      }"
-        fi
+      - name: Create failure issue
+        run: |
+          if [[ "$(curl --url https://api.github.com/repos/${{ github.repository }}/issues?creator=github-actions --request GET)" != *"\""* ]]
+            then curl --request POST \
+                      --url https://api.github.com/repos/${{ github.repository }}/issues \
+                      --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+                      --header 'content-type: application/json' \
+                      --data "{
+                          \"title\": \"RQ maybe may not work with dependencies in the future\",
+                          \"body\": \"This issue was automatically created by the GitHub Action workflow **${{ github.workflow }}**. \n\n View log: \n\n \`\`\` \n $(cat log.txt | while read line; do echo -n "$line\n"; done | sed -r 's/"/\\"/g') \n \`\`\`\"
+                        }"
+          fi
