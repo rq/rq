@@ -15,9 +15,16 @@ from rq.job import Job
 PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
 
 
-def send_command(connection: 'Redis', worker_name: str, command, **kwargs):
+def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
     """
-    Use connection' pubsub mechanism to send a command
+    Sends a command to a worker.
+    A command is just a string, availble commands are:
+        - `shutdown`: Shuts down a worker
+        - `kill-horse`: Command for the worker to kill the current working horse
+        - `stop-job`: A command for the worker to stop the currently running job
+    
+    The command string will be parsed into a dictionary and send to a PubSub Topic.
+    Workers listen to the PubSub, and `handle` the specific command.
 
     Args:
         connection (Redis): A Redis Connection
@@ -41,7 +48,7 @@ def parse_payload(payload: Dict[Any, Any]) -> Dict[Any, Any]:
 
 def send_shutdown_command(connection: 'Redis', worker_name: str):
     """
-    Sends a shutdown command to the pubsub topic.
+    Sends a command to shutdown a worker.
 
     Args:
         connection (Redis): A Redis Connection
@@ -77,7 +84,7 @@ def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
 
 
 def handle_command(worker: 'Worker', payload: Dict[Any, Any]):
-    """Parses payload and routes commands
+    """Parses payload and routes commands to the worker.
 
     Args:
         worker (Worker): The worker to use
