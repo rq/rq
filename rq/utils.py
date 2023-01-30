@@ -148,11 +148,20 @@ def as_text(v):
         raise ValueError('Unknown type %r' % type(v))
 
 
-def decode_redis_hash(h):
+def decode_redis_hash(h) -> t.Dict[str, t.Any]:
+    """Decodes the Redis hash, ensuring that keys are strings
+    Most importantly, decodes bytes strings, ensuring the dict has str keys.
+
+    Args:
+        h (Dict[Any, Any]): The Redis hash
+
+    Returns:
+        Dict[str, t.Any]: The decoded Redis data (Dictionary)
+    """    
     return dict((as_text(k), h[k]) for k in h)
 
 
-def import_attribute(name: str):
+def import_attribute(name: str) -> t.Callable[..., t.Any]:
     """Returns an attribute from a dotted path name. Example: `path.to.func`.
 
     When the attribute we look for is a staticmethod, module name in its
@@ -216,11 +225,11 @@ def now():
 _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
-def utcformat(dt: dt.datetime):
+def utcformat(dt: dt.datetime) -> str:
     return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
-def utcparse(string: str):
+def utcparse(string: str) -> dt.datetime:
     try:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
@@ -320,13 +329,16 @@ def parse_timeout(timeout: t.Any):
     return timeout
 
 
-def get_version(connection: 'Redis'):
+def get_version(connection: 'Redis') -> t.Tuple[int, int, int]:
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
 
     Args:
         connection (Redis): The Redis connection.
+    
+    Returns:
+        version (Tuple[int, int, int]): A tuple representing the semantic versioning format (eg. (5, 0, 9))
     """
     try:
         # Getting the connection info for each job tanks performance, we can cache it on the connection object
@@ -366,6 +378,9 @@ def truncate_long_string(data: str, max_length: t.Optional[int] = None) -> str:
     Args:
         data (str): The data to truncate
         max_length (t.Optional[int], optional): The max length. Defaults to None.
+    
+    Returns:
+        truncated (str): The truncated string
     """
     if max_length is None:
         return data
