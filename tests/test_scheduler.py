@@ -11,6 +11,7 @@ from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp
 from rq.worker import Worker
+from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 
 from tests import RQTestCase, find_empty_redis_database, ssl_test
 
@@ -139,7 +140,7 @@ class TestScheduler(RQTestCase):
         # scheduler.should_reacquire_locks always returns False if
         # scheduler.acquired_locks and scheduler._queue_names are the same
         self.assertFalse(scheduler.should_reacquire_locks)
-        scheduler.lock_acquisition_time = datetime.now() - timedelta(minutes=16)
+        scheduler.lock_acquisition_time = datetime.now() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL+6)
         self.assertFalse(scheduler.should_reacquire_locks)
 
         scheduler._queue_names = set(['default', 'foo'])
@@ -176,11 +177,24 @@ class TestScheduler(RQTestCase):
             self.assertEqual(mocked.call_count, 1)
 
         # If process has started, scheduler.start() won't be called
+        running_process = mock.MagicMock()
+        running_process.is_alive.return_value = True
         scheduler = RQScheduler(['auto-start2'], self.testconn)
-        scheduler._process = 1
+        scheduler._process = running_process
         with mock.patch.object(scheduler, 'start') as mocked:
             scheduler.acquire_locks(auto_start=True)
             self.assertEqual(mocked.call_count, 0)
+            self.assertEqual(running_process.is_alive.call_count, 1)
+
+        # If the process has stopped for some reason, the scheduler should restart
+        scheduler = RQScheduler(['auto-start3'], self.testconn)
+        stopped_process = mock.MagicMock()
+        stopped_process.is_alive.return_value = False
+        scheduler._process = stopped_process
+        with mock.patch.object(scheduler, 'start') as mocked:
+            scheduler.acquire_locks(auto_start=True)
+            self.assertEqual(mocked.call_count, 1)
+            self.assertEqual(stopped_process.is_alive.call_count, 1)
 
     def test_heartbeat(self):
         """Test that heartbeat updates locking keys TTL"""
@@ -272,14 +286,31 @@ class TestWorker(RQTestCase):
         worker.run_maintenance_tasks()
         self.assertEqual(mocked.call_count, 0)
 
+        # if scheduler object exists and it's a first start, acquire locks should not run
         worker.last_cleaned_at = None
         worker.scheduler = RQScheduler([queue], connection=self.testconn)
         worker.run_maintenance_tasks()
         self.assertEqual(mocked.call_count, 0)
 
+        # the scheduler exists and it's NOT a first start, since the process doesn't exists,
+        # should call acquire_locks to start the process
         worker.last_cleaned_at = datetime.now()
         worker.run_maintenance_tasks()
         self.assertEqual(mocked.call_count, 1)
+
+        # the scheduler exists, the process exists, but the process is not alive
+        running_process = mock.MagicMock()
+        running_process.is_alive.return_value = False
+        worker.scheduler._process = running_process
+        worker.run_maintenance_tasks()
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(running_process.is_alive.call_count, 1)
+
+        # the scheduler exists, the process exits, and it is alive. acquire_locks shouldn't run
+        running_process.is_alive.return_value = True
+        worker.run_maintenance_tasks()
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(running_process.is_alive.call_count, 2)
 
     def test_work(self):
         queue = Queue(connection=self.testconn)
