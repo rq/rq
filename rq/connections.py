@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import typing as t
+import warnings
 from redis import Redis
 
 from .local import LocalStack, release_local
@@ -11,6 +12,21 @@ class NoRedisConnectionException(Exception):
 
 @contextmanager
 def Connection(connection: t.Optional['Redis'] = None):  # noqa
+    """The context manager for handling connections in a clean way.
+    It will push the connection to the LocalStack, and pop the connection
+    when leaving the context
+    Example:
+        ..codeblock:python::
+
+            with Connection():
+                w = Worker()
+                w.work()
+
+    Args:
+        connection (Optional[Redis], optional): A Redis Connection instance. Defaults to None.
+    """
+    warnings.warn("The Conneciton context manager is deprecated. Use the `connection` parameter instead.",
+                    DeprecationWarning)
     if connection is None:
         connection = Redis()
     push_connection(connection)
@@ -33,9 +49,12 @@ def push_connection(redis: 'Redis'):
     _connection_stack.push(redis)
 
 
-def pop_connection():
+def pop_connection() -> 'Redis':
     """
     Pops the topmost connection from the stack.
+
+    Returns:
+        redis (Redis): A Redis connection
     """
     return _connection_stack.pop()
 
@@ -61,6 +80,9 @@ def get_current_connection() -> 'Redis':
     """
     Returns the current Redis connection (i.e. the topmost on the
     connection stack).
+
+    Returns:
+        Redis: A Redis Connection
     """
     return _connection_stack.top
 
