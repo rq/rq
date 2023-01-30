@@ -2,7 +2,7 @@ import calendar
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -348,17 +348,14 @@ class ScheduledJobRegistry(BaseRegistry):
         """Remove jobs whose timestamp is in the past from registry.
 
         Args:
-            timestamp (Optional[datetime], optional): _description_. Defaults to None.
-            pipeline (Optional[&#39;Pipeline&#39;], optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
+            timestamp (Optional[datetime], optional): The timestamp. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The Redis pipeline. Defaults to None.
         """
         connection = pipeline if pipeline is not None else self.connection
         score = timestamp if timestamp is not None else current_timestamp()
         return connection.zremrangebyscore(self.key, 0, score)
 
-    def get_jobs_to_schedule(self, timestamp: Optional[datetime] = None, chunk_size: int = 1000):
+    def get_jobs_to_schedule(self, timestamp: Optional[datetime] = None, chunk_size: int = 1000) -> List[str]:
         """Get's a list of job IDs that should be scheduled.
 
         Args:
@@ -366,23 +363,23 @@ class ScheduledJobRegistry(BaseRegistry):
             chunk_size (int, optional): _description_. Defaults to 1000.
 
         Returns:
-            _type_: _description_
+            jobs (List[str]): A list of Job ids
         """
         score = timestamp if timestamp is not None else current_timestamp()
         jobs_to_schedule = self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)
         return [as_text(job_id) for job_id in jobs_to_schedule]
 
-    def get_scheduled_time(self, job_or_id: Union['Job', str]):
+    def get_scheduled_time(self, job_or_id: Union['Job', str]) -> datetime:
         """Returns datetime (UTC) at which job is scheduled to be enqueued
 
         Args:
-            job_or_id (Union[&#39;Job&#39;, str]): _description_
+            job_or_id (Union[Job, str]): The Job instance or Job ID
 
         Raises:
-            NoSuchJobError: _description_
+            NoSuchJobError: If the job was not found
 
         Returns:
-            _type_: _description_
+            datetime (datetime): The scheduled time as datetime object
         """
         if isinstance(job_or_id, self.job_class):
             job_id = job_or_id.id
@@ -399,15 +396,7 @@ class ScheduledJobRegistry(BaseRegistry):
 class CanceledJobRegistry(BaseRegistry):
     key_template = 'rq:canceled:{0}'
 
-    def get_expired_job_ids(self, timestamp: Optional[datetime] = None):
-        """_summary_
-
-        Args:
-            timestamp (Optional[datetime], optional): _description_. Defaults to None.
-
-        Raises:
-            NotImplementedError: _description_
-        """        
+    def get_expired_job_ids(self, timestamp: Optional[datetime] = None):  
         raise NotImplementedError
 
     def cleanup(self):
@@ -417,11 +406,11 @@ class CanceledJobRegistry(BaseRegistry):
         pass
 
 
-def clean_registries(queue):
+def clean_registries(queue: 'Queue'):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue.
 
     Args:
-        queue (_type_): _description_
+        queue (Queue): The queue to clean
     """
     registry = FinishedJobRegistry(name=queue.name,
                                    connection=queue.connection,

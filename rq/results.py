@@ -25,19 +25,7 @@ class Result(object):
 
     def __init__(self, job_id: str, type: Type, connection: Redis, id: Optional[str] = None,
                  created_at: Optional[datetime] = None, return_value: Optional[Any] = None,
-                 exc_string: Optional[str] = None, serializer=None):
-        """_summary_
-
-        Args:
-            job_id (str): _description_
-            type (Type): _description_
-            connection (Redis): _description_
-            id (Optional[str], optional): _description_. Defaults to None.
-            created_at (Optional[datetime], optional): _description_. Defaults to None.
-            return_value (Optional[Any], optional): _description_. Defaults to None.
-            exc_string (Optional[str], optional): _description_. Defaults to None.
-            serializer (_type_, optional): _description_. Defaults to None.
-        """                 
+                 exc_string: Optional[str] = None, serializer=None):              
         self.return_value = return_value
         self.exc_string = exc_string
         self.type = type
@@ -61,19 +49,6 @@ class Result(object):
 
     @classmethod
     def create(cls, job, type, ttl, return_value=None, exc_string=None, pipeline=None):
-        """_summary_
-
-        Args:
-            job (_type_): _description_
-            type (_type_): _description_
-            ttl (_type_): _description_
-            return_value (_type_, optional): _description_. Defaults to None.
-            exc_string (_type_, optional): _description_. Defaults to None.
-            pipeline (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """        
         result = cls(job_id=job.id, type=type, connection=job.connection,
                      return_value=return_value,
                      exc_string=exc_string, serializer=job.serializer)
@@ -82,17 +57,6 @@ class Result(object):
 
     @classmethod
     def create_failure(cls, job, ttl, exc_string, pipeline=None):
-        """_summary_
-
-        Args:
-            job (_type_): _description_
-            ttl (_type_): _description_
-            exc_string (_type_): _description_
-            pipeline (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """        
         result = cls(job_id=job.id, type=cls.Type.FAILED, connection=job.connection,
                      exc_string=exc_string, serializer=job.serializer)
         result.save(ttl=ttl, pipeline=pipeline)
@@ -100,15 +64,6 @@ class Result(object):
 
     @classmethod
     def all(cls, job: Job, serializer=None):
-        """_summary_
-
-        Args:
-            job (Job): _description_
-            serializer (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """        
         """Returns all results for job"""
         # response = job.connection.zrange(cls.get_key(job.id), 0, 10, desc=True, withscores=True)
         response = job.connection.xrevrange(cls.get_key(job.id), '+', '-')
@@ -123,41 +78,16 @@ class Result(object):
 
     @classmethod
     def count(cls, job: Job) -> int:
-        """_summary_
-
-        Args:
-            job (Job): _description_
-
-        Returns:
-            int: _description_
-        """        
         """Returns the number of job results"""
         return job.connection.xlen(cls.get_key(job.id))
 
     @classmethod
     def delete_all(cls, job: Job) -> None:
-        """_summary_
-
-        Args:
-            job (Job): _description_
-        """        
         """Delete all job results"""
         job.connection.delete(cls.get_key(job.id))
 
     @classmethod
     def restore(cls, job_id: str, result_id: str, payload: dict, connection: Redis, serializer=None) -> 'Result':
-        """_summary_
-
-        Args:
-            job_id (str): _description_
-            result_id (str): _description_
-            payload (dict): _description_
-            connection (Redis): _description_
-            serializer (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            Result: _description_
-        """        
         """Create a Result object from given Redis payload"""
         created_at = datetime.fromtimestamp(
             int(result_id.split('-')[0]) / 1000, tz=timezone.utc
@@ -184,11 +114,6 @@ class Result(object):
 
     @classmethod
     def fetch(cls, job: Job, serializer=None) -> Optional['Result']:
-        """_summary_
-
-        Returns:
-            _type_: _description_
-        """        
         """Fetch a result that matches a given job ID. The current sorted set
         based implementation does not allow us to fetch a given key by ID
         so we need to iterate through results, deserialize the payload and
@@ -201,11 +126,6 @@ class Result(object):
 
     @classmethod
     def fetch_latest(cls, job: Job, serializer=None) -> Optional['Result']:
-        """_summary_
-
-        Returns:
-            _type_: _description_
-        """        
         """Returns the latest result for given job instance or ID"""
         # response = job.connection.zrevrangebyscore(cls.get_key(job.id), '+inf', '-inf',
         #                                           start=0, num=1, withscores=True)
@@ -219,26 +139,9 @@ class Result(object):
 
     @classmethod
     def get_key(cls, job_id):
-        """_summary_
-
-        Args:
-            job_id (_type_): _description_
-
-        Returns:
-            _type_: _description_
-        """        
         return 'rq:results:%s' % job_id
 
     def save(self, ttl, pipeline=None):
-        """_summary_
-
-        Args:
-            ttl (_type_): _description_
-            pipeline (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """        
         """Save result data to Redis"""
         key = self.get_key(self.job_id)
 
@@ -253,11 +156,6 @@ class Result(object):
         return self.id
 
     def serialize(self):
-        """_summary_
-
-        Returns:
-            _type_: _description_
-        """        
         data = {'type': self.type.value}
 
         if self.exc_string is not None:

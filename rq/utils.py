@@ -226,19 +226,11 @@ def import_attribute(name: str) -> Callable[..., Any]:
 
 
 def utcnow():
-    """_summary_
-
-    Returns:
-        _type_: _description_
-    """    
     return datetime.datetime.utcnow()
 
 
 def now():
     """Return now in UTC
-
-    Returns:
-        _type_: _description_
     """
     return datetime.datetime.now(datetime.timezone.utc)
 
@@ -247,26 +239,10 @@ _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
 def utcformat(dt: dt.datetime) -> str:
-    """_summary_
-
-    Args:
-        dt (dt.datetime): _description_
-
-    Returns:
-        str: _description_
-    """    
     return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
 def utcparse(string: str) -> dt.datetime:
-    """_summary_
-
-    Args:
-        string (str): _description_
-
-    Returns:
-        dt.datetime: _description_
-    """    
     try:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
@@ -373,14 +349,6 @@ def backend_class(holder, default_name, override=None):
 
 
 def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
-    """_summary_
-
-    Args:
-        date_str (Optional[str]): _description_
-
-    Returns:
-        Union[dt.datetime, Any]: _description_
-    """    
     if not date_str:
         return
     else:
@@ -389,15 +357,6 @@ def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
 
 def parse_timeout(timeout: Any):
     """Transfer all kinds of timeout format to an integer representing seconds
-
-    Args:
-        timeout (Any): _description_
-
-    Raises:
-        TimeoutFormatError: _description_
-
-    Returns:
-        _type_: _description_
     """
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
