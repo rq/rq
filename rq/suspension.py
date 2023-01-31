@@ -1,6 +1,6 @@
-import typing as t
+from typing import TYPE_CHECKING, Optional
 
-if t.TYPE_CHECKING:
+if TYPE_CHECKING:
     from redis import Redis
     from rq.worker import Worker
 
@@ -8,30 +8,30 @@ if t.TYPE_CHECKING:
 WORKERS_SUSPENDED = 'rq:suspended'
 
 
-def is_suspended(connection: 'Redis', worker: t.Optional['Worker'] = None):
+def is_suspended(connection: 'Redis', worker: Optional['Worker'] = None):
     """Checks whether a Worker is suspendeed on a given connection
+    PS: pipeline returns a list of responses
+    Ref: https://github.com/andymccurdy/redis-py#pipelines
 
     Args:
         connection (Redis): The Redis Connection
-        worker (t.Optional[Worker], optional): The Worker. Defaults to None.
+        worker (Optional[Worker], optional): The Worker. Defaults to None.
     """
     with connection.pipeline() as pipeline:
         if worker is not None:
             worker.heartbeat(pipeline=pipeline)
         pipeline.exists(WORKERS_SUSPENDED)
-        # pipeline returns a list of responses
-        # https://github.com/andymccurdy/redis-py#pipelines
         return pipeline.execute()[-1]
 
 
-def suspend(connection: 'Redis', ttl: int = None):
+def suspend(connection: 'Redis', ttl: Optional[int] = None):
     """
     Suspends.
     TTL of 0 will invalidate right away.
 
     Args:
         connection (Redis): The Redis connection to use..
-        ttl (int): time to live in seconds. Defaults to `None`
+        ttl (Optional[int], optional): time to live in seconds. Defaults to `None`
     """
     connection.set(WORKERS_SUSPENDED, 1)
     if ttl is not None:

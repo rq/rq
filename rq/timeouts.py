@@ -92,7 +92,8 @@ class TimerDeathPenalty(BaseDeathPenalty):
         self._exception.__init__ = init_with_message
 
     def new_timer(self):
-        """Returns a new timer since timers can only be used once."""
+        """Returns a new timer since timers can only be used once.
+        """
         return threading.Timer(self._timeout, self.handle_death_penalty)
 
     def handle_death_penalty(self):
@@ -110,11 +111,13 @@ class TimerDeathPenalty(BaseDeathPenalty):
             raise SystemError("PyThreadState_SetAsyncExc failed")
 
     def setup_death_penalty(self):
-        """Starts the timer."""
+        """Starts the timer.
+        """
         self._timer = self.new_timer()
         self._timer.start()
 
     def cancel_death_penalty(self):
-        """Cancels the timer."""
+        """Cancels the timer.
+        """
         self._timer.cancel()
         self._timer = None
