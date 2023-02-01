@@ -293,7 +293,7 @@ class Worker:
             connection = get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
-            timeout = self.default_timeout + 10
+            timeout = self._get_timeout(default_worker_ttl) + 10
             timeout_config = {"socket_timeout": timeout}
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
@@ -345,9 +345,11 @@ class Worker:
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
 
-    @property
-    def default_timeout(self):
-        return max(1, self.default_worker_ttl - 15)
+    def _get_timeout(self, worker_ttl: Optional[int] = None) -> int:
+        timeout = DEFAULT_WORKER_TTL
+        if worker_ttl:
+            timeout = worker_ttl
+        return max(1, timeout - 15)
 
     def procline(self, message):
         """Changes the current procname for the process.

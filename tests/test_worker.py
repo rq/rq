@@ -1054,7 +1054,7 @@ class TestWorker(RQTestCase):
         q = Queue()
         _ = Worker([q])
         connection_kwargs = q.connection.connection_pool.connection_kwargs
-        self.assertEqual(connection_kwargs["socket_timeout"], 425)
+        self.assertEqual(connection_kwargs["socket_timeout"], 415)
 
     def test_worker_version(self):
         q = Queue()
