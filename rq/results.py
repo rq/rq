@@ -25,7 +25,7 @@ class Result(object):
 
     def __init__(self, job_id: str, type: Type, connection: Redis, id: Optional[str] = None,
                  created_at: Optional[datetime] = None, return_value: Optional[Any] = None,
-                 exc_string: Optional[str] = None, serializer=None):
+                 exc_string: Optional[str] = None, serializer=None):              
         self.return_value = return_value
         self.exc_string = exc_string
         self.type = type

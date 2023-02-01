@@ -12,10 +12,11 @@ import logging
 import numbers
 import sys
 import datetime as dt
-import typing as t
 from collections.abc import Iterable
+from typing import TYPE_CHECKING, Dict, List, Optional, Any, Callable, Tuple, Union
 
-if t.TYPE_CHECKING:
+
+if TYPE_CHECKING:
     from redis import Redis
 
 from redis.exceptions import ResponseError
@@ -125,7 +126,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
         return message
 
 
-def compact(lst: t.List[t.Any]) -> t.List[t.Any]:
+def compact(lst: List[Any]) -> List[Any]:
     """Excludes `None` values from a list-like object.
 
     Args:
@@ -137,7 +138,18 @@ def compact(lst: t.List[t.Any]) -> t.List[t.Any]:
     return [item for item in lst if item is not None]
 
 
-def as_text(v):
+def as_text(v: Union[bytes, str]) -> Optional[str]:
+    """Converts a bytes value to a string using `utf-8`.
+
+    Args:
+        v (Union[bytes, str]): The value (bytes or string)
+
+    Raises:
+        ValueError: If the value is not bytes or string
+
+    Returns:
+        value (Optional[str]): Either the decoded string or None
+    """    
     if v is None:
         return None
     elif isinstance(v, bytes):
@@ -148,7 +160,7 @@ def as_text(v):
         raise ValueError('Unknown type %r' % type(v))
 
 
-def decode_redis_hash(h) -> t.Dict[str, t.Any]:
+def decode_redis_hash(h) -> Dict[str, Any]:
     """Decodes the Redis hash, ensuring that keys are strings
     Most importantly, decodes bytes strings, ensuring the dict has str keys.
 
@@ -156,12 +168,12 @@ def decode_redis_hash(h) -> t.Dict[str, t.Any]:
         h (Dict[Any, Any]): The Redis hash
 
     Returns:
-        Dict[str, t.Any]: The decoded Redis data (Dictionary)
+        Dict[str, Any]: The decoded Redis data (Dictionary)
     """    
     return dict((as_text(k), h[k]) for k in h)
 
 
-def import_attribute(name: str) -> t.Callable[..., t.Any]:
+def import_attribute(name: str) -> Callable[..., Any]:
     """Returns an attribute from a dotted path name. Example: `path.to.func`.
 
     When the attribute we look for is a staticmethod, module name in its
@@ -181,7 +193,7 @@ def import_attribute(name: str) -> t.Callable[..., t.Any]:
         ValueError: If no module is found or invalid attribute name.
 
     Returns:
-        t.Any: An attribute (normally a Callable)
+        Any: An attribute (normally a Callable)
     """
     name_bits = name.split('.')
     module_name_bits, attribute_bits = name_bits[:-1], [name_bits[-1]]
@@ -218,7 +230,8 @@ def utcnow():
 
 
 def now():
-    """Return now in UTC"""
+    """Return now in UTC
+    """
     return datetime.datetime.now(datetime.timezone.utc)
 
 
@@ -237,9 +250,8 @@ def utcparse(string: str) -> dt.datetime:
         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
-def first(iterable: t.Iterable, default=None, key=None):
-    """
-    Return first element of `iterable` that evaluates true, else return None
+def first(iterable: Iterable, default=None, key=None):
+    """Return first element of `iterable` that evaluates true, else return None
     (or an optional default value).
 
     >>> first([0, False, None, [], (), 42])
@@ -263,6 +275,13 @@ def first(iterable: t.Iterable, default=None, key=None):
     >>> first([1, 1, 3, 4, 5], key=lambda x: x % 2 == 0)
     4
 
+    Args:
+        iterable (t.Iterable): _description_
+        default (_type_, optional): _description_. Defaults to None.
+        key (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
     """
     if key is None:
         for el in iterable:
@@ -276,26 +295,51 @@ def first(iterable: t.Iterable, default=None, key=None):
     return default
 
 
-def is_nonstring_iterable(obj: t.Any) -> bool:
-    """Returns whether the obj is an iterable, but not a string"""
+def is_nonstring_iterable(obj: Any) -> bool:
+    """Returns whether the obj is an iterable, but not a string
+
+    Args:
+        obj (Any): _description_
+
+    Returns:
+        bool: _description_
+    """
     return isinstance(obj, Iterable) and not isinstance(obj, str)
 
 
-def ensure_list(obj: t.Any) -> t.List:
-    """
-    When passed an iterable of objects, does nothing, otherwise, it returns
+def ensure_list(obj: Any) -> List:
+    """When passed an iterable of objects, does nothing, otherwise, it returns
     a list with just that object in it.
+
+    Args:
+        obj (Any): _description_
+
+    Returns:
+        List: _description_
     """
     return obj if is_nonstring_iterable(obj) else [obj]
 
 
 def current_timestamp() -> int:
-    """Returns current UTC timestamp"""
+    """Returns current UTC timestamp
+
+    Returns:
+        int: _description_
+    """
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
 
 
 def backend_class(holder, default_name, override=None):
-    """Get a backend class using its default attribute name or an override"""
+    """Get a backend class using its default attribute name or an override
+
+    Args:
+        holder (_type_): _description_
+        default_name (_type_): _description_
+        override (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
     if override is None:
         return getattr(holder, default_name)
     elif isinstance(override, str):
@@ -304,15 +348,16 @@ def backend_class(holder, default_name, override=None):
         return override
 
 
-def str_to_date(date_str: t.Optional[str]) -> t.Union[dt.datetime, t.Any]:
+def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
     if not date_str:
         return
     else:
         return utcparse(date_str.decode())
 
 
-def parse_timeout(timeout: t.Any):
-    """Transfer all kinds of timeout format to an integer representing seconds"""
+def parse_timeout(timeout: Any):
+    """Transfer all kinds of timeout format to an integer representing seconds
+    """
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
             timeout = int(timeout)
@@ -329,7 +374,7 @@ def parse_timeout(timeout: t.Any):
     return timeout
 
 
-def get_version(connection: 'Redis') -> t.Tuple[int, int, int]:
+def get_version(connection: 'Redis') -> Tuple[int, int, int]:
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
@@ -354,15 +399,23 @@ def get_version(connection: 'Redis') -> t.Tuple[int, int, int]:
 
 
 def ceildiv(a, b):
-    """Ceiling division. Returns the ceiling of the quotient of a division operation"""
+    """Ceiling division. Returns the ceiling of the quotient of a division operation
+
+    Args:
+        a (_type_): _description_
+        b (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     return -(-a // b)
 
 
-def split_list(a_list: t.List[t.Any], segment_size: int):
+def split_list(a_list: List[Any], segment_size: int):
     """Splits a list into multiple smaller lists having size `segment_size`
 
     Args:
-        a_list (t.List[t.Any]): A list to split
+        a_list (List[Any]): A list to split
         segment_size (int): The segment size to split into
 
     Yields:
@@ -372,12 +425,12 @@ def split_list(a_list: t.List[t.Any], segment_size: int):
         yield a_list[i:i + segment_size]
 
 
-def truncate_long_string(data: str, max_length: t.Optional[int] = None) -> str:
+def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
     """Truncate arguments with representation longer than max_length
 
     Args:
         data (str): The data to truncate
-        max_length (t.Optional[int], optional): The max length. Defaults to None.
+        max_length (Optional[int], optional): The max length. Defaults to None.
     
     Returns:
         truncated (str): The truncated string
@@ -387,8 +440,8 @@ def truncate_long_string(data: str, max_length: t.Optional[int] = None) -> str:
     return (data[:max_length] + '...') if len(data) > max_length else data
 
 
-def get_call_string(func_name: t.Optional[str], args: t.Any, kwargs: t.Dict[t.Any, t.Any],
-                    max_length: t.Optional[int] = None) -> t.Optional[str]:
+def get_call_string(func_name: Optional[str], args: Any, kwargs: Dict[Any, Any],
+                    max_length: Optional[int] = None) -> Optional[str]:
     """
     Returns a string representation of the call, formatted as a regular
     Python function invocation statement. If max_length is not None, truncate
@@ -396,8 +449,8 @@ def get_call_string(func_name: t.Optional[str], args: t.Any, kwargs: t.Dict[t.An
 
     Args:
         func_name (str): The funtion name
-        args (t.Any): The function arguments
-        kwargs (t.Dict[t.Any, t.Any]): The function kwargs
+        args (Any): The function arguments
+        kwargs (Dict[Any, Any]): The function kwargs
         max_length (int, optional): The max length. Defaults to None.
 
     Returns:

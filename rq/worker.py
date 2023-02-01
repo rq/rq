@@ -8,9 +8,11 @@ import sys
 import time
 import traceback
 import warnings
-import typing as t
 
-if t.TYPE_CHECKING:
+
+from typing import TYPE_CHECKING, Type, List, Dict, Any
+
+if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
@@ -112,13 +114,16 @@ class Worker:
     @classmethod
     def all(
         cls,
-        connection: t.Optional['Redis'] = None,
-        job_class: t.Type['Job'] = None,
-        queue_class: t.Optional[t.Type['Queue']] = None,
-        queue: t.Optional['Queue'] = None,
+        connection: Optional['Redis'] = None,
+        job_class: Optional[Type['Job']] = None,
+        queue_class: Optional[Type['Queue']] = None,
+        queue: Optional['Queue'] = None,
         serializer=None
-    ) -> t.List['Worker']:
+    ) -> List['Worker']:
         """Returns an iterable of all Workers.
+
+        Returns:
+            workers (List[Worker]): A list of workers
         """
         if queue:
             connection = queue.connection
@@ -134,18 +139,35 @@ class Worker:
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection: t.Optional['Redis'] = None, queue: t.Optional['Queue'] = None):
+    def all_keys(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None) -> List[str]:
+        """List of worker keys
+
+        Args:
+            connection (Optional[Redis], optional): A Redis Connection. Defaults to None.
+            queue (Optional[Queue], optional): The Queue. Defaults to None.
+
+        Returns:
+            list_keys (List[str]): A list of worker keys
+        """        
         return [as_text(key)
                 for key in get_keys(queue=queue, connection=connection)]
 
     @classmethod
-    def count(cls, connection: t.Optional['Redis'] = None, queue: t.Optional['Queue'] = None):
-        """Returns the number of workers by queue or connection"""
+    def count(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None):
+        """Returns the number of workers by queue or connection
+
+        Args:
+            connection (Optional[&#39;Redis&#39;], optional): _description_. Defaults to None.
+            queue (Optional[&#39;Queue&#39;], optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         return len(get_keys(queue=queue, connection=connection))
 
     @classmethod
-    def find_by_key(cls, worker_key: str, connection: t.Optional['Redis'] = None, job_class: t.Type['Job'] = None,
-                    queue_class: t.Type['Queue'] = None, serializer=None):
+    def find_by_key(cls, worker_key: str, connection: Optional['Redis'] = None, job_class: Type['Job'] = None,
+                    queue_class: Type['Queue'] = None, serializer=None):              
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -168,9 +190,9 @@ class Worker:
 
         return worker
 
-    def __init__(self, queues, name: t.Optional[str] = None, default_result_ttl=DEFAULT_RESULT_TTL,
-                 connection: t.Optional['Redis'] = None, exc_handler=None, exception_handlers=None,
-                 default_worker_ttl=DEFAULT_WORKER_TTL, job_class: t.Type['Job'] = None,
+    def __init__(self, queues, name: Optional[str] = None, default_result_ttl=DEFAULT_RESULT_TTL,
+                 connection: Optional['Redis'] = None, exc_handler=None, exception_handlers=None,
+                 default_worker_ttl=DEFAULT_WORKER_TTL, job_class: Type['Job'] = None,
                  queue_class=None, log_job_description: bool = True,
                  job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
                  disable_default_exception_handler: bool = False,
@@ -216,7 +238,7 @@ class Worker:
         self.total_working_time: int = 0
         self.current_job_working_time: int = 0
         self.birth_date = None
-        self.scheduler: t.Optional[RQScheduler] = None
+        self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
 
@@ -405,7 +427,7 @@ class Worker:
         if death_timestamp is not None:
             return utcparse(as_text(death_timestamp))
 
-    def set_state(self, state, pipeline: t.Optional['Pipeline'] = None):
+    def set_state(self, state, pipeline: Optional['Pipeline'] = None):
         self._state = state
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'state', state)
@@ -431,12 +453,12 @@ class Worker:
 
     state = property(_get_state, _set_state)
 
-    def set_current_job_working_time(self, current_job_working_time, pipeline: t.Optional['Pipeline'] = None):
+    def set_current_job_working_time(self, current_job_working_time, pipeline: Optional['Pipeline'] = None):
         self.current_job_working_time = current_job_working_time
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
-    def set_current_job_id(self, job_id: t.Optional[str] = None, pipeline: t.Optional['Pipeline'] = None):
+    def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
 
         if job_id is None:
@@ -444,7 +466,7 @@ class Worker:
         else:
             connection.hset(self.key, 'current_job', job_id)
 
-    def get_current_job_id(self, pipeline: t.Optional['Pipeline'] = None):
+    def get_current_job_id(self, pipeline: Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
         return as_text(connection.hget(self.key, 'current_job'))
 
@@ -743,7 +765,7 @@ class Worker:
         self.heartbeat()
         return result
 
-    def heartbeat(self, timeout=None, pipeline: t.Optional['Pipeline'] = None):
+    def heartbeat(self, timeout=None, pipeline: Optional['Pipeline'] = None):
         """Specifies a new worker timeout, typically by extending the
         expiration time of the worker, effectively making this a "heartbeat"
         to not expire the worker until the timeout passes.
@@ -801,11 +823,11 @@ class Worker:
                                             job_class=self.job_class, serializer=self.serializer)
                            for queue in queues.split(',')]
 
-    def increment_failed_job_count(self, pipeline: t.Optional['Pipeline'] = None):
+    def increment_failed_job_count(self, pipeline: Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
 
-    def increment_successful_job_count(self, pipeline: t.Optional['Pipeline'] = None):
+    def increment_successful_job_count(self, pipeline: Optional['Pipeline'] = None):
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
 
@@ -986,7 +1008,7 @@ class Worker:
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None,
-                           exc_string=''):
+                           exc_string=''):              
         """
         Handles the failure or an executing job by:
             1. Setting the job status to failed

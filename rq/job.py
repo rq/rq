@@ -556,8 +556,8 @@ class Job:
         self._success_callback = UNEVALUATED
         self._failure_callback_name = None
         self._failure_callback = UNEVALUATED
-        self.description = None
-        self.origin = None
+        self.description: Optional[str] = None
+        self.origin: Optional[str] = None
         self.enqueued_at: Optional[datetime] = None
         self.started_at: Optional[datetime] = None
         self.ended_at: Optional[datetime] = None
@@ -570,9 +570,9 @@ class Job:
         self.worker_name: Optional[str] = None
         self._status = None
         self._dependency_ids: List[str] = []
-        self.meta = {}
+        self.meta: Optional[Dict] = {}
         self.serializer = resolve_serializer(serializer)
-        self.retries_left = None
+        self.retries_left: Optional[int] = None
         self.retry_intervals: Optional[List[int]] = None
         self.redis_server_version: Optional[Tuple[int, int, int]] = None
         self.last_heartbeat: Optional[datetime] = None
