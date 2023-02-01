@@ -661,7 +661,7 @@ class Worker:
                         self.log.info('Worker %s: stopping on request', self.key)
                         break
 
-                    timeout = None if burst else self.default_timeout
+                    timeout = None if burst else self._get_timeout()
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
