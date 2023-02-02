@@ -1,3 +1,4 @@
+import traceback
 import uuid
 import sys
 import warnings
@@ -855,6 +856,8 @@ class Queue:
             job.set_status(JobStatus.FAILED)
             if job.failure_callback:
                 job.failure_callback(job, self.connection, *sys.exc_info())
+            exc_info = sys.exc_info()
+            job._exc_info = ''.join(traceback.format_exception(*exc_info))
         else:
             if job.success_callback:
                 job.success_callback(job, self.connection, job.result)
