@@ -23,11 +23,18 @@ class BaseRegistry:
     Each job is stored as a key in the registry, scored by expiration time
     (unix timestamp).
     """
+
     job_class = Job
     key_template = 'rq:registry:{0}'
 
-    def __init__(self, name: str = 'default', connection: Optional['Redis'] = None,
-                 job_class: Optional[Type['Job']] = None, queue: Optional['Queue'] = None, serializer: Any = None):
+    def __init__(
+        self,
+        name: str = 'default',
+        connection: Optional['Redis'] = None,
+        job_class: Optional[Type['Job']] = None,
+        queue: Optional['Queue'] = None,
+        serializer: Any = None,
+    ):
         if queue:
             self.name = queue.name
             self.connection = resolve_connection(queue.connection)
@@ -46,8 +53,8 @@ class BaseRegistry:
 
     def __eq__(self, other):
         return (
-            self.name == other.name and
-            self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
+            self.name == other.name
+            and self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
         )
 
     def __contains__(self, item: Union[str, 'Job']):
@@ -134,8 +141,7 @@ class BaseRegistry:
             _type_: _description_
         """
         self.cleanup()
-        return [as_text(job_id) for job_id in
-                self.connection.zrange(self.key, start, end)]
+        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
 
     def get_queue(self):
         """Returns Queue object associated with this registry."""
@@ -175,8 +181,7 @@ class BaseRegistry:
             raise InvalidJobOperation
 
         with self.connection.pipeline() as pipeline:
-            queue = Queue(job.origin, connection=self.connection,
-                          job_class=self.job_class, serializer=serializer)
+            queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
             job._exc_info = ''
@@ -195,6 +200,7 @@ class StartedJobRegistry(BaseRegistry):
     Jobs are added to registry right before they are executed and removed
     right after completion (success or failure).
     """
+
     key_template = 'rq:wip:{0}'
 
     def cleanup(self, timestamp: Optional[float] = None):
@@ -216,9 +222,7 @@ class StartedJobRegistry(BaseRegistry):
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
                     try:
-                        job = self.job_class.fetch(job_id,
-                                                   connection=self.connection,
-                                                   serializer=self.serializer)
+                        job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
                     except NoSuchJobError:
                         continue
 
@@ -246,6 +250,7 @@ class FinishedJobRegistry(BaseRegistry):
     Registry of jobs that have been completed. Jobs are added to this
     registry after they have successfully completed for monitoring purposes.
     """
+
     key_template = 'rq:finished:{0}'
 
     def cleanup(self, timestamp: Optional[float] = None):
@@ -263,6 +268,7 @@ class FailedJobRegistry(BaseRegistry):
     """
     Registry of containing failed jobs.
     """
+
     key_template = 'rq:failed:{0}'
 
     def cleanup(self, timestamp: Optional[float] = None):
@@ -275,8 +281,14 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, job: 'Job', ttl=None, exc_string: str = '', pipeline: Optional['Pipeline'] = None,
-            _save_exc_to_job: bool = False):
+    def add(
+        self,
+        job: 'Job',
+        ttl=None,
+        exc_string: str = '',
+        pipeline: Optional['Pipeline'] = None,
+        _save_exc_to_job: bool = False,
+    ):
         """
         Adds a job to a registry with expiry time of now + ttl.
         `ttl` defaults to DEFAULT_FAILURE_TTL if not specified.
@@ -303,6 +315,7 @@ class DeferredJobRegistry(BaseRegistry):
     """
     Registry of deferred jobs (waiting for another job to finish).
     """
+
     key_template = 'rq:deferred:{0}'
 
     def cleanup(self):
@@ -316,6 +329,7 @@ class ScheduledJobRegistry(BaseRegistry):
     """
     Registry of scheduled jobs.
     """
+
     key_template = 'rq:scheduled:{0}'
 
     def __init__(self, *args, **kwargs):
@@ -396,7 +410,7 @@ class ScheduledJobRegistry(BaseRegistry):
 class CanceledJobRegistry(BaseRegistry):
     key_template = 'rq:canceled:{0}'
 
-    def get_expired_job_ids(self, timestamp: Optional[datetime] = None):  
+    def get_expired_job_ids(self, timestamp: Optional[datetime] = None):
         raise NotImplementedError
 
     def cleanup(self):
@@ -412,19 +426,16 @@ def clean_registries(queue: 'Queue'):
     Args:
         queue (Queue): The queue to clean
     """
-    registry = FinishedJobRegistry(name=queue.name,
-                                   connection=queue.connection,
-                                   job_class=queue.job_class,
-                                   serializer=queue.serializer)
+    registry = FinishedJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    )
     registry.cleanup()
-    registry = StartedJobRegistry(name=queue.name,
-                                  connection=queue.connection,
-                                  job_class=queue.job_class,
-                                  serializer=queue.serializer)
+    registry = StartedJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    )
     registry.cleanup()
 
-    registry = FailedJobRegistry(name=queue.name,
-                                 connection=queue.connection,
-                                 job_class=queue.job_class,
-                                 serializer=queue.serializer)
+    registry = FailedJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    )
     registry.cleanup()
