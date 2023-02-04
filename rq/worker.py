@@ -760,10 +760,9 @@ class Worker:
                     job_class=self.job_class,
                     serializer=self.serializer,
                 )
-                self.log.debug(f"Dequeued job {result[1]} from {result[0]}")
                 if result is not None:
-
                     job, queue = result
+                    self.log.debug(f"Dequeued job {job} from {queue}")
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
