@@ -1155,14 +1155,13 @@ class Queue:
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
-            colored_queues = [green(queue) for queue in queue_keys]
+            colored_queues = ''.join(map(str, [green(str(queue)) for queue in queue_keys]))
             logger.debug(f"Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}")
             result = connection.blpop(queue_keys, timeout)
             if result is None:
                 logger.debug(f"BLPOP Timeout, no jobs found on queues {colored_queues}")
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
-            logger.debug(f"Dequeued job {blue(job_id.decode('utf-8'))} from queue {green(queue_key.decode('utf-8'))}")
             return queue_key, job_id
         else:  # non-blocking variant
             for queue_key in queue_keys:
