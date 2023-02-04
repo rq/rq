@@ -607,6 +607,19 @@ class TestWorker(RQTestCase):
         # Should not have created evidence of execution
         self.assertEqual(os.path.exists(SENTINEL_FILE), False)
 
+    def test_max_idle_time(self):
+        q = Queue()
+        w = Worker([q])
+        q.enqueue(say_hello, args=('Frank',))
+        result = w.dequeue_job_and_maintain_ttl(1)
+        assert result is not None
+
+        result = w.dequeue_job_and_maintain_ttl(None)
+        assert result is None
+
+        result = w.dequeue_job_and_maintain_ttl(0.01, max_idle_time=0.01)
+        assert result is None
+
     @slow  # noqa
     def test_timeouts(self):
         """Worker kills jobs after timeout."""

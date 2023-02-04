@@ -1126,7 +1126,7 @@ class Queue:
         return as_text(self.connection.lpop(self.key))
 
     @classmethod
-    def lpop(cls, queue_keys: List[str], timeout: int, connection: Optional['Redis'] = None):
+    def lpop(cls, queue_keys: List[str], timeout: Optional[int], connection: Optional['Redis'] = None):
         """Helper method.  Intermediate method to abstract away from some
         Redis API details, where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -1141,7 +1141,7 @@ class Queue:
 
         Args:
             queue_keys (_type_): _description_
-            timeout (int): _description_
+            timeout (Optional[int]): _description_
             connection (Optional[Redis], optional): _description_. Defaults to None.
 
         Raises:
@@ -1175,7 +1175,7 @@ class Queue:
     def dequeue_any(
         cls,
         queues: List['Queue'],
-        timeout: int,
+        timeout: Optional[int],
         connection: Optional['Redis'] = None,
         job_class: Optional['Job'] = None,
         serializer: Any = None,
@@ -1192,7 +1192,7 @@ class Queue:
 
         Args:
             queues (List[Queue]): List of queue objects
-            timeout (int): Timeout for the LPOP
+            timeout (Optional[int]): Timeout for the LPOP
             connection (Optional[Redis], optional): Redis Connection. Defaults to None.
             job_class (Optional[Job], optional): The job classification. Defaults to None.
             serializer (Any, optional): Serializer to use. Defaults to None.
