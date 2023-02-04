@@ -11,7 +11,7 @@ class DefaultSerializer:
     loads = pickle.loads
 
 
-class JSONSerializer():
+class JSONSerializer:
     @staticmethod
     def dumps(*args, **kwargs):
         return json.dumps(*args, **kwargs).encode('utf-8')
@@ -29,7 +29,7 @@ def resolve_serializer(serializer=None):
 
     Args:
         serializer (Callable): The serializer to resolve.
-    
+
     Returns:
         serializer (Callable): An object that implements the SerializerProtocol
     """

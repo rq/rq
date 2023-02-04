@@ -30,8 +30,9 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
     Args:
         connection (Optional[Redis], optional): A Redis Connection instance. Defaults to None.
     """
-    warnings.warn("The Conneciton context manager is deprecated. Use the `connection` parameter instead.",
-                    DeprecationWarning)
+    warnings.warn(
+        "The Conneciton context manager is deprecated. Use the `connection` parameter instead.", DeprecationWarning
+    )
     if connection is None:
         connection = Redis()
     push_connection(connection)
@@ -39,9 +40,9 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
         yield
     finally:
         popped = pop_connection()
-        assert popped == connection, \
-            'Unexpected Redis connection was popped off the stack. ' \
-            'Check your Redis connection setup.'
+        assert popped == connection, (
+            'Unexpected Redis connection was popped off the stack. ' 'Check your Redis connection setup.'
+        )
 
 
 def push_connection(redis: 'Redis'):
@@ -72,8 +73,7 @@ def use_connection(redis: Optional['Redis'] = None):
     Args:
         redis (Optional[Redis], optional): A Redis Connection. Defaults to None.
     """
-    assert len(_connection_stack) <= 1, \
-        'You should not mix Connection contexts with use_connection()'
+    assert len(_connection_stack) <= 1, 'You should not mix Connection contexts with use_connection()'
     release_local(_connection_stack)
 
     if redis is None:
@@ -118,5 +118,4 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
 
 _connection_stack = LocalStack()
 
-__all__ = ['Connection', 'get_current_connection', 'push_connection',
-           'pop_connection', 'use_connection']
+__all__ = ['Connection', 'get_current_connection', 'push_connection', 'pop_connection', 'use_connection']

@@ -41,10 +41,8 @@ class _Colorizer:
         self.codes["blink"] = esc + "05m"
         self.codes["overline"] = esc + "06m"
 
-        dark_colors = ["black", "darkred", "darkgreen", "brown", "darkblue",
-                       "purple", "teal", "lightgray"]
-        light_colors = ["darkgray", "red", "green", "yellow", "blue",
-                        "fuchsia", "turquoise", "white"]
+        dark_colors = ["black", "darkred", "darkgreen", "brown", "darkblue", "purple", "teal", "lightgray"]
+        light_colors = ["darkgray", "red", "green", "yellow", "blue", "fuchsia", "turquoise", "white"]
 
         x = 30
         for d, l in zip(dark_colors, light_colors):
@@ -90,8 +88,10 @@ def make_colorizer(color: str):
             >>> # You can then use:
             >>> print("It's either " + green('OK') + ' or ' + red('Oops'))
     """
+
     def inner(text):
         return colorizer.colorize(color, text)
+
     return inner
 
 
@@ -134,7 +134,7 @@ def compact(lst: List[Any]) -> List[Any]:
 
     Returns:
         object (list): The list without None values
-    """    
+    """
     return [item for item in lst if item is not None]
 
 
@@ -149,7 +149,7 @@ def as_text(v: Union[bytes, str]) -> Optional[str]:
 
     Returns:
         value (Optional[str]): Either the decoded string or None
-    """    
+    """
     if v is None:
         return None
     elif isinstance(v, bytes):
@@ -169,7 +169,7 @@ def decode_redis_hash(h) -> Dict[str, Any]:
 
     Returns:
         Dict[str, Any]: The decoded Redis data (Dictionary)
-    """    
+    """
     return dict((as_text(k), h[k]) for k in h)
 
 
@@ -230,8 +230,7 @@ def utcnow():
 
 
 def now():
-    """Return now in UTC
-    """
+    """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)
 
 
@@ -356,8 +355,7 @@ def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
 
 
 def parse_timeout(timeout: Any):
-    """Transfer all kinds of timeout format to an integer representing seconds
-    """
+    """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
             timeout = int(timeout)
@@ -367,9 +365,11 @@ def parse_timeout(timeout: Any):
             try:
                 timeout = int(digit) * unit_second[unit]
             except (ValueError, KeyError):
-                raise TimeoutFormatError('Timeout must be an integer or a string representing an integer, or '
-                                         'a string with format: digits + unit, unit can be "d", "h", "m", "s", '
-                                         'such as "1h", "23m".')
+                raise TimeoutFormatError(
+                    'Timeout must be an integer or a string representing an integer, or '
+                    'a string with format: digits + unit, unit can be "d", "h", "m", "s", '
+                    'such as "1h", "23m".'
+                )
 
     return timeout
 
@@ -381,7 +381,7 @@ def get_version(connection: 'Redis') -> Tuple[int, int, int]:
 
     Args:
         connection (Redis): The Redis connection.
-    
+
     Returns:
         version (Tuple[int, int, int]): A tuple representing the semantic versioning format (eg. (5, 0, 9))
     """
@@ -391,7 +391,7 @@ def get_version(connection: 'Redis') -> Tuple[int, int, int]:
             setattr(
                 connection,
                 "__rq_redis_server_version",
-                tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3])
+                tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3]),
             )
         return getattr(connection, "__rq_redis_server_version")
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
@@ -422,7 +422,7 @@ def split_list(a_list: List[Any], segment_size: int):
         list: The splitted listed
     """
     for i in range(0, len(a_list), segment_size):
-        yield a_list[i:i + segment_size]
+        yield a_list[i : i + segment_size]
 
 
 def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
@@ -431,7 +431,7 @@ def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
     Args:
         data (str): The data to truncate
         max_length (Optional[int], optional): The max length. Defaults to None.
-    
+
     Returns:
         truncated (str): The truncated string
     """
@@ -440,8 +440,9 @@ def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
     return (data[:max_length] + '...') if len(data) > max_length else data
 
 
-def get_call_string(func_name: Optional[str], args: Any, kwargs: Dict[Any, Any],
-                    max_length: Optional[int] = None) -> Optional[str]:
+def get_call_string(
+    func_name: Optional[str], args: Any, kwargs: Dict[Any, Any], max_length: Optional[int] = None
+) -> Optional[str]:
     """
     Returns a string representation of the call, formatted as a regular
     Python function invocation statement. If max_length is not None, truncate

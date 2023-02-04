@@ -13,12 +13,23 @@ from .utils import backend_class
 class job:  # noqa
     queue_class = Queue
 
-    def __init__(self, queue: Union['Queue', str], connection: Optional['Redis'] = None, timeout: Optional[int] = None,
-                 result_ttl: int = DEFAULT_RESULT_TTL, ttl: Optional[int] = None,
-                 queue_class: Optional['Queue'] = None, depends_on: Optional[List[Any]] = None, at_front: Optional[bool] = None,
-                 meta: Optional[Dict[Any, Any]] = None, description: Optional[str] = None, failure_ttl: Optional[int] = None,
-                 retry: Optional['Retry'] = None, on_failure: Optional[Callable[..., Any]] = None,
-                 on_success: Optional[Callable[..., Any]] = None):
+    def __init__(
+        self,
+        queue: Union['Queue', str],
+        connection: Optional['Redis'] = None,
+        timeout: Optional[int] = None,
+        result_ttl: int = DEFAULT_RESULT_TTL,
+        ttl: Optional[int] = None,
+        queue_class: Optional['Queue'] = None,
+        depends_on: Optional[List[Any]] = None,
+        at_front: Optional[bool] = None,
+        meta: Optional[Dict[Any, Any]] = None,
+        description: Optional[str] = None,
+        failure_ttl: Optional[int] = None,
+        retry: Optional['Retry'] = None,
+        on_failure: Optional[Callable[..., Any]] = None,
+        on_success: Optional[Callable[..., Any]] = None,
+    ):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
         ``queue`` argument that can be either a ``Queue`` instance or a string
@@ -68,8 +79,7 @@ class job:  # noqa
         @wraps(f)
         def delay(*args, **kwargs):
             if isinstance(self.queue, str):
-                queue = self.queue_class(name=self.queue,
-                                         connection=self.connection)
+                queue = self.queue_class(name=self.queue, connection=self.connection)
             else:
                 queue = self.queue
 
@@ -83,10 +93,23 @@ class job:  # noqa
             if not at_front:
                 at_front = self.at_front
 
-            return queue.enqueue_call(f, args=args, kwargs=kwargs,
-                                      timeout=self.timeout, result_ttl=self.result_ttl,
-                                      ttl=self.ttl, depends_on=depends_on, job_id=job_id, at_front=at_front,
-                                      meta=self.meta, description=self.description, failure_ttl=self.failure_ttl,
-                                      retry=self.retry, on_failure=self.on_failure, on_success=self.on_success)
+            return queue.enqueue_call(
+                f,
+                args=args,
+                kwargs=kwargs,
+                timeout=self.timeout,
+                result_ttl=self.result_ttl,
+                ttl=self.ttl,
+                depends_on=depends_on,
+                job_id=job_id,
+                at_front=at_front,
+                meta=self.meta,
+                description=self.description,
+                failure_ttl=self.failure_ttl,
+                retry=self.retry,
+                on_failure=self.on_failure,
+                on_success=self.on_success,
+            )
+
         f.delay = delay
         return f

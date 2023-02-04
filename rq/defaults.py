@@ -88,4 +88,3 @@ DEFAULT_LOGGING_FORMAT = '%(asctime)s %(message)s'
 Uses Python's default attributes as defined
 https://docs.python.org/3/library/logging.html#logrecord-attributes
 """
-

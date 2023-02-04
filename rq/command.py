@@ -22,7 +22,7 @@ def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
         - `shutdown`: Shuts down a worker
         - `kill-horse`: Command for the worker to kill the current working horse
         - `stop-job`: A command for the worker to stop the currently running job
-    
+
     The command string will be parsed into a dictionary and send to a PubSub Topic.
     Workers listen to the PubSub, and `handle` the specific command.
 

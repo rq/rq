@@ -13,8 +13,7 @@ from shutil import get_terminal_size
 import click
 from redis import Redis
 from redis.sentinel import Sentinel
-from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
-                         DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS)
+from rq.defaults import DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS, DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS
 from rq.logutils import setup_loghandlers
 from rq.utils import import_attribute, parse_timeout
 from rq.worker import WorkerStatus
@@ -27,16 +26,14 @@ yellow = partial(click.style, fg='yellow')
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
     settings = importlib.import_module(module)
-    return dict([(k, v)
-                 for k, v in settings.__dict__.items()
-                 if k.upper() == k])
+    return dict([(k, v) for k, v in settings.__dict__.items() if k.upper() == k])
 
 
 def get_redis_from_config(settings, connection_class=Redis):
     """Returns a StrictRedis instance from a dictionary of settings.
-       To use redis sentinel, you must specify a dictionary in the configuration file.
-       Example of a dictionary with keys without values:
-       SENTINEL = {'INSTANCES':, 'SOCKET_TIMEOUT':, 'PASSWORD':,'DB':, 'MASTER_NAME':}
+    To use redis sentinel, you must specify a dictionary in the configuration file.
+    Example of a dictionary with keys without values:
+    SENTINEL = {'INSTANCES':, 'SOCKET_TIMEOUT':, 'PASSWORD':,'DB':, 'MASTER_NAME':}
     """
     if settings.get('REDIS_URL') is not None:
         return connection_class.from_url(settings['REDIS_URL'])
@@ -50,8 +47,7 @@ def get_redis_from_config(settings, connection_class=Redis):
         ssl = settings['SENTINEL'].get('SSL', False)
         arguments = {'password': password, 'ssl': ssl}
         sn = Sentinel(
-            instances, socket_timeout=socket_timeout, password=password,
-            db=db, ssl=ssl, sentinel_kwargs=arguments
+            instances, socket_timeout=socket_timeout, password=password, db=db, ssl=ssl, sentinel_kwargs=arguments
         )
         return sn.master_for(master_name)
 
@@ -168,9 +164,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
         for queue in queue_dict:
             if queue_dict[queue]:
                 queues_str = ", ".join(
-                    sorted(
-                        map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queue_dict[queue])
-                    )
+                    sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queue_dict[queue]))
                 )
             else:
                 queues_str = '–'
@@ -188,6 +182,7 @@ def show_both(queues, raw, by_queue, queue_class, worker_class):
     if not raw:
         click.echo('')
         import datetime
+
         click.echo('Updated: %s' % datetime.datetime.now())
 
 
@@ -233,14 +228,14 @@ def parse_function_arg(argument, arg_pos):
         if index > 0:
             if ':' in argument and argument.index(':') + 1 == index:  # keyword, json
                 mode = ParsingMode.JSON
-                keyword = argument[:index - 1]
+                keyword = argument[: index - 1]
             elif '%' in argument and argument.index('%') + 1 == index:  # keyword, literal_eval
                 mode = ParsingMode.LITERAL_EVAL
-                keyword = argument[:index - 1]
+                keyword = argument[: index - 1]
             else:  # keyword, text
                 mode = ParsingMode.PLAIN_TEXT
                 keyword = argument[:index]
-            value = argument[index + 1:]
+            value = argument[index + 1 :]
         else:  # no keyword, text
             mode = ParsingMode.PLAIN_TEXT
             value = argument
@@ -261,9 +256,11 @@ def parse_function_arg(argument, arg_pos):
         try:
             value = literal_eval(value)
         except Exception:
-            raise click.BadParameter('Unable to eval %s as Python object. See '
-                                     'https://docs.python.org/3/library/ast.html#ast.literal_eval'
-                                     % (keyword or '%s. non keyword argument' % arg_pos))
+            raise click.BadParameter(
+                'Unable to eval %s as Python object. See '
+                'https://docs.python.org/3/library/ast.html#ast.literal_eval'
+                % (keyword or '%s. non keyword argument' % arg_pos)
+            )
 
     return keyword, value
 
@@ -294,9 +291,19 @@ def parse_schedule(schedule_in, schedule_at):
 
 class CliConfig:
     """A helper class to be used with click commands, to handle shared options"""
-    def __init__(self, url=None, config=None, worker_class=DEFAULT_WORKER_CLASS,
-                 job_class=DEFAULT_JOB_CLASS, queue_class=DEFAULT_QUEUE_CLASS,
-                 connection_class=DEFAULT_CONNECTION_CLASS, path=None, *args, **kwargs):
+
+    def __init__(
+        self,
+        url=None,
+        config=None,
+        worker_class=DEFAULT_WORKER_CLASS,
+        job_class=DEFAULT_JOB_CLASS,
+        queue_class=DEFAULT_QUEUE_CLASS,
+        connection_class=DEFAULT_CONNECTION_CLASS,
+        path=None,
+        *args,
+        **kwargs
+    ):
         self._connection = None
         self.url = url
         self.config = config
@@ -331,9 +338,7 @@ class CliConfig:
                 self._connection = self.connection_class.from_url(self.url)
             elif self.config:
                 settings = read_config_file(self.config) if self.config else {}
-                self._connection = get_redis_from_config(settings,
-                                                         self.connection_class)
+                self._connection = get_redis_from_config(settings, self.connection_class)
             else:
-                self._connection = get_redis_from_config(os.environ,
-                                                         self.connection_class)
+                self._connection = get_redis_from_config(os.environ, self.connection_class)
         return self._connection
