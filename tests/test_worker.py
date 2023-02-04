@@ -1056,6 +1056,14 @@ class TestWorker(RQTestCase):
         connection_kwargs = q.connection.connection_pool.connection_kwargs
         self.assertEqual(connection_kwargs["socket_timeout"], 415)
 
+    def test_worker_ttl_param_resolves_timeout(self):
+        """Ensures the worker_ttl param is being considered in the timeout, takes into account 15 seconds gap (hard coded)"""
+        q = Queue()
+        w = Worker([q])
+        self.assertEqual(w._get_timeout(), 405)
+        w = Worker([q], default_worker_ttl=500)
+        self.assertEqual(w._get_timeout(), 485)
+
     def test_worker_version(self):
         q = Queue()
         w = Worker([q])

@@ -366,7 +366,7 @@ class Worker:
         return self._is_horse
 
     def _get_timeout(self, worker_ttl: Optional[int] = None) -> int:
-        timeout = DEFAULT_WORKER_TTL
+        timeout = getattr(self, "default_worker_ttl", DEFAULT_WORKER_TTL)
         if worker_ttl:
             timeout = worker_ttl
         return max(1, timeout - 15)
