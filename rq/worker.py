@@ -691,7 +691,7 @@ class Worker:
                     if result is None:
                         if burst:
                             self.log.info("Worker %s: done, quitting", self.key)
-                        elif max_idle_time:
+                        elif max_idle_time is not None:
                             self.log.info("Worker %s: idle for %d seconds, quitting", self.key, max_idle_time)
                         break
 
