@@ -8,8 +8,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from redis import WatchError
-from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, List,
-                    Optional, Tuple, Union)
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 from uuid import uuid4
 
 
@@ -20,18 +19,27 @@ if TYPE_CHECKING:
     from redis.client import Pipeline
 
 from .connections import resolve_connection
-from .exceptions import (DeserializationError, InvalidJobOperation,
-                         NoSuchJobError)
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import (as_text, decode_redis_hash, ensure_list, get_call_string,
-                    get_version, import_attribute, parse_timeout, str_to_date,
-                    utcformat, utcnow)
+from .utils import (
+    as_text,
+    decode_redis_hash,
+    ensure_list,
+    get_call_string,
+    get_version,
+    import_attribute,
+    parse_timeout,
+    str_to_date,
+    utcformat,
+    utcnow,
+)
 
 
 class JobStatus(str, Enum):
-    """The Status of Job within its lifecycle at any given time. """
+    """The Status of Job within its lifecycle at any given time."""
+
     QUEUED = 'queued'
     FINISHED = 'finished'
     FAILED = 'failed'
@@ -57,13 +65,9 @@ class Dependency:
 
         Raises:
             ValueError: If the `jobs` param has anything different than `str` or `Job` class or the job list is empty
-        """        
+        """
         dependent_jobs = ensure_list(jobs)
-        if not all(
-            isinstance(job, Job) or isinstance(job, str)
-            for job in dependent_jobs
-            if job
-        ):
+        if not all(isinstance(job, Job) or isinstance(job, str) for job in dependent_jobs if job):
             raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
         elif len(dependent_jobs) < 1:
             raise ValueError("jobs: cannot be empty.")
@@ -79,8 +83,7 @@ yet been evaluated.
 """
 
 
-def cancel_job(job_id: str, connection: Optional['Redis'] = None,
-                serializer=None, enqueue_dependents: bool = False):
+def cancel_job(job_id: str, connection: Optional['Redis'] = None, serializer=None, enqueue_dependents: bool = False):
     """Cancels the job with the given job ID, preventing execution.
     Use with caution. This will discard any job info (i.e. it can't be requeued later).
 
@@ -103,13 +106,11 @@ def get_current_job(connection: Optional['Redis'] = None, job_class: Optional['J
 
     Returns:
         job (Optional[Job]): The current Job running
-    """    
+    """
     if connection:
-        warnings.warn("connection argument for get_current_job is deprecated.",
-                      DeprecationWarning)
+        warnings.warn("connection argument for get_current_job is deprecated.", DeprecationWarning)
     if job_class:
-        warnings.warn("job_class argument for get_current_job is deprecated.",
-                      DeprecationWarning)
+        warnings.warn("job_class argument for get_current_job is deprecated.", DeprecationWarning)
     return _job_stack.top
 
 
@@ -123,26 +124,38 @@ def requeue_job(job_id: str, connection: 'Redis', serializer=None) -> 'Job':
 
     Returns:
         Job: The requeued Job object.
-    """    
+    """
     job = Job.fetch(job_id, connection=connection, serializer=serializer)
     return job.requeue()
 
 
 class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data."""
+
     redis_job_namespace_prefix = 'rq:job:'
 
     @classmethod
-    def create(cls, func: FunctionReferenceType, args: Union[List[Any], Optional[Tuple]] = None,
-               kwargs: Optional[Dict[str, Any]] = None, connection: Optional['Redis'] = None,
-               result_ttl: Optional[int] = None, ttl: Optional[int] = None,
-               status: Optional[JobStatus] = None, description: Optional[str] =None,
-               depends_on: Optional[JobDependencyType] = None,
-               timeout: Optional[int] = None, id: Optional[str] = None,
-               origin=None, meta: Optional[Dict[str, Any]] = None,
-               failure_ttl: Optional[int] = None, serializer=None, *,
-               on_success: Optional[Callable[..., Any]] = None,
-               on_failure: Optional[Callable[..., Any]] = None) -> 'Job':
+    def create(
+        cls,
+        func: FunctionReferenceType,
+        args: Union[List[Any], Optional[Tuple]] = None,
+        kwargs: Optional[Dict[str, Any]] = None,
+        connection: Optional['Redis'] = None,
+        result_ttl: Optional[int] = None,
+        ttl: Optional[int] = None,
+        status: Optional[JobStatus] = None,
+        description: Optional[str] = None,
+        depends_on: Optional[JobDependencyType] = None,
+        timeout: Optional[int] = None,
+        id: Optional[str] = None,
+        origin=None,
+        meta: Optional[Dict[str, Any]] = None,
+        failure_ttl: Optional[int] = None,
+        serializer=None,
+        *,
+        on_success: Optional[Callable[..., Any]] = None,
+        on_failure: Optional[Callable[..., Any]] = None
+    ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
 
@@ -185,7 +198,7 @@ class Job:
 
         Returns:
             Job: A job instance.
-        """               
+        """
         if args is None:
             args = ()
         if kwargs is None:
@@ -247,10 +260,7 @@ class Job:
                 depends_on_list = depends_on.dependencies
             else:
                 depends_on_list = ensure_list(depends_on)
-            job._dependency_ids = [
-                dep.id if isinstance(dep, Job) else dep
-                for dep in depends_on_list
-            ]
+            job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
         return job
 
@@ -259,8 +269,9 @@ class Job:
 
         Returns:
             position (Optional[int]): The position
-        """        
+        """
         from .queue import Queue
+
         if self.origin:
             q = Queue(name=self.origin, connection=self.connection)
             return q.get_job_position(self._id)
@@ -274,7 +285,7 @@ class Job:
 
         Returns:
             status (JobStatus): The Job Status
-        """        
+        """
         if refresh:
             self._status = as_text(self.connection.hget(self.key, 'status'))
         return self._status
@@ -285,7 +296,7 @@ class Job:
         Args:
             status (JobStatus): The Job Status to be set
             pipeline (Optional[Pipeline], optional): Optional Redis Pipeline to use. Defaults to None.
-        """        
+        """
         self._status = status
         connection: 'Redis' = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
@@ -298,7 +309,7 @@ class Job:
 
         Returns:
             meta (Dict): The dictionary of metadata
-        """        
+        """
         if refresh:
             meta = self.connection.hget(self.key, 'meta')
             self.meta = self.serializer.loads(meta) if meta else {}
@@ -401,7 +412,7 @@ class Job:
 
         Raises:
             DeserializationError: Cathes any deserialization error (since serializers are generic)
-        """        
+        """
         try:
             self._func_name, self._instance, self._args, self._kwargs = self.serializer.loads(self.data)
         except Exception as e:
@@ -522,7 +533,7 @@ class Job:
             job_ids (Iterable[str]): A list of job ids.
             connection (Redis): Redis connection
             serializer (Callable): A serializer
-        
+
         Returns:
             jobs (list[Job]): A list of Jobs instances.
         """
@@ -556,8 +567,8 @@ class Job:
         self._success_callback = UNEVALUATED
         self._failure_callback_name = None
         self._failure_callback = UNEVALUATED
-        self.description = None
-        self.origin = None
+        self.description: Optional[str] = None
+        self.origin: Optional[str] = None
         self.enqueued_at: Optional[datetime] = None
         self.started_at: Optional[datetime] = None
         self.ended_at: Optional[datetime] = None
@@ -570,9 +581,9 @@ class Job:
         self.worker_name: Optional[str] = None
         self._status = None
         self._dependency_ids: List[str] = []
-        self.meta = {}
+        self.meta: Optional[Dict] = {}
         self.serializer = resolve_serializer(serializer)
-        self.retries_left = None
+        self.retries_left: Optional[int] = None
         self.retry_intervals: Optional[List[int]] = None
         self.redis_server_version: Optional[Tuple[int, int, int]] = None
         self.last_heartbeat: Optional[datetime] = None
@@ -580,17 +591,14 @@ class Job:
         self.enqueue_at_front: Optional[bool] = None
 
         from .results import Result
+
         self._cached_result: Optional[Result] = None
 
     def __repr__(self):  # noqa  # pragma: no cover
-        return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__,
-                                                      self._id,
-                                                      self.enqueued_at)
+        return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__, self._id, self.enqueued_at)
 
     def __str__(self):
-        return '<{0} {1}: {2}>'.format(self.__class__.__name__,
-                                       self.id,
-                                       self.description)
+        return '<{0} {1}: {2}>'.format(self.__class__.__name__, self.id, self.description)
 
     def __eq__(self, other):  # noqa
         return isinstance(other, self.__class__) and self.id == other.id
@@ -612,7 +620,7 @@ class Job:
 
     def set_id(self, value: str) -> None:
         """Sets a job ID for the given job
-        
+
         Args:
             value (str): The value to set as Job ID
         """
@@ -630,7 +638,7 @@ class Job:
             ttl (int): The time to live
             pipeline (Optional[Pipeline], optional): Can receive a Redis' pipeline to use. Defaults to None.
             xx (bool, optional): Only sets the key if already exists. Defaults to False.
-        """        
+        """
         self.last_heartbeat = timestamp
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
@@ -690,14 +698,15 @@ class Job:
 
         Returns:
             jobs (list[Job]): A list of Jobs
-        """        
+        """
         connection = pipeline if pipeline is not None else self.connection
 
         if watch and self._dependency_ids:
-            connection.watch(*[self.key_for(dependency_id)
-                               for dependency_id in self._dependency_ids])
+            connection.watch(*[self.key_for(dependency_id) for dependency_id in self._dependency_ids])
 
-        dependencies_list = self.fetch_many(self._dependency_ids, connection=self.connection, serializer=self.serializer)
+        dependencies_list = self.fetch_many(
+            self._dependency_ids, connection=self.connection, serializer=self.serializer
+        )
         jobs = [job for job in dependencies_list if job]
         return jobs
 
@@ -706,8 +715,7 @@ class Job:
         """
         Get the latest result and returns `exc_info` only if the latest result is a failure.
         """
-        warnings.warn("job.exc_info is deprecated, use job.latest_result() instead.",
-                      DeprecationWarning)
+        warnings.warn("job.exc_info is deprecated, use job.latest_result() instead.", DeprecationWarning)
 
         from .results import Result
 
@@ -730,6 +738,7 @@ class Job:
             result (Optional[Any]): The job return value.
         """
         from .results import Result
+
         if refresh:
             self._cached_result = None
 
@@ -741,7 +750,7 @@ class Job:
 
         if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
             return self._cached_result.return_value
-        
+
         return None
 
     @property
@@ -762,8 +771,7 @@ class Job:
         seconds by default).
         """
 
-        warnings.warn("job.result is deprecated, use job.return_value instead.",
-                      DeprecationWarning)
+        warnings.warn("job.result is deprecated, use job.return_value instead.", DeprecationWarning)
 
         from .results import Result
 
@@ -789,6 +797,7 @@ class Job:
             all_results (List[Result]): A list of 'Result' objects
         """
         from .results import Result
+
         return Result.all(self, serializer=self.serializer)
 
     def latest_result(self) -> Optional['Result']:
@@ -796,9 +805,10 @@ class Job:
 
         Returns:
             result (Result): The Result object
-        """        
+        """
         """Returns the latest Result object"""
         from .results import Result
+
         return Result.fetch_latest(self, serializer=self.serializer)
 
     def restore(self, raw_data) -> Any:
@@ -849,8 +859,7 @@ class Job:
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
-        self._dependency_ids = (json.loads(dep_ids.decode()) if dep_ids
-                                else [dep_id.decode()] if dep_id else [])
+        self._dependency_ids = json.loads(dep_ids.decode()) if dep_ids else [dep_id.decode()] if dep_id else []
         allow_failures = obj.get('allow_dependency_failures')
         self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
@@ -902,7 +911,7 @@ class Job:
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
-            'worker_name': self.worker_name or ''
+            'worker_name': self.worker_name or '',
         }
 
         if self.retries_left is not None:
@@ -948,8 +957,7 @@ class Job:
 
         return obj
 
-    def save(self, pipeline: Optional['Pipeline'] = None, include_meta: bool = True,
-             include_result: bool = True):
+    def save(self, pipeline: Optional['Pipeline'] = None, include_meta: bool = True, include_result: bool = True):
         """Dumps the current job instance to its corresponding Redis key.
 
         Exclude saving the `meta` dictionary by setting
@@ -980,7 +988,7 @@ class Job:
 
     def get_redis_server_version(self) -> Tuple[int, int, int]:
         """Return Redis server version of connection
-        
+
         Returns:
             redis_server_version (Tuple[int, int, int]): The Redis version within a Tuple of integers, eg (5, 0, 9)
         """
@@ -1016,15 +1024,13 @@ class Job:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
         from .registry import CanceledJobRegistry
         from .queue import Queue
+
         pipe = pipeline or self.connection.pipeline()
 
         while True:
             try:
                 q = Queue(
-                    name=self.origin,
-                    connection=self.connection,
-                    job_class=self.__class__,
-                    serializer=self.serializer
+                    name=self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
                 )
 
                 self.set_status(JobStatus.CANCELED, pipeline=pipe)
@@ -1033,16 +1039,10 @@ class Job:
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
                     q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
-                self._remove_from_registries(
-                    pipeline=pipe,
-                    remove_from_queue=True
-                )
+                self._remove_from_registries(pipeline=pipe, remove_from_queue=True)
 
                 registry = CanceledJobRegistry(
-                    self.origin,
-                    self.connection,
-                    job_class=self.__class__,
-                    serializer=self.serializer
+                    self.origin, self.connection, job_class=self.__class__, serializer=self.serializer
                 )
                 registry.add(self, pipeline=pipe)
                 if pipeline is None:
@@ -1070,41 +1070,43 @@ class Job:
 
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
         from .registry import BaseRegistry
+
         if remove_from_queue:
             from .queue import Queue
+
             q = Queue(name=self.origin, connection=self.connection, serializer=self.serializer)
             q.remove(self, pipeline=pipeline)
         registry: BaseRegistry
         if self.is_finished:
             from .registry import FinishedJobRegistry
-            registry = FinishedJobRegistry(self.origin,
-                                           connection=self.connection,
-                                           job_class=self.__class__,
-                                           serializer=self.serializer)
+
+            registry = FinishedJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_deferred:
             from .registry import DeferredJobRegistry
-            registry = DeferredJobRegistry(self.origin,
-                                           connection=self.connection,
-                                           job_class=self.__class__,
-                                           serializer=self.serializer)
+
+            registry = DeferredJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_started:
             from .registry import StartedJobRegistry
-            registry = StartedJobRegistry(self.origin,
-                                          connection=self.connection,
-                                          job_class=self.__class__,
-                                          serializer=self.serializer)
+
+            registry = StartedJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
             from .registry import ScheduledJobRegistry
-            registry = ScheduledJobRegistry(self.origin,
-                                            connection=self.connection,
-                                            job_class=self.__class__,
-                                            serializer=self.serializer)
+
+            registry = ScheduledJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed or self.is_stopped:
@@ -1112,13 +1114,15 @@ class Job:
 
         elif self.is_canceled:
             from .registry import CanceledJobRegistry
-            registry = CanceledJobRegistry(self.origin, connection=self.connection,
-                                           job_class=self.__class__,
-                                           serializer=self.serializer)
+
+            registry = CanceledJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
             registry.remove(self, pipeline=pipeline)
 
-    def delete(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True,
-               delete_dependents: bool = False):
+    def delete(
+        self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True, delete_dependents: bool = False
+    ):
         """Cancels the job and deletes the job hash from Redis. Jobs depending
         on this job can optionally be deleted as well.
 
@@ -1184,7 +1188,7 @@ class Job:
             'last_heartbeat': utcformat(self.last_heartbeat),
             'status': self._status,
             'started_at': utcformat(self.started_at),  # type: ignore
-            'worker_name': worker_name
+            'worker_name': worker_name,
         }
         if self.get_redis_server_version() >= (4, 0, 0):
             pipeline.hset(self.key, mapping=mapping)
@@ -1199,7 +1203,7 @@ class Job:
 
         Returns:
             result (Any): The function result
-        """        
+        """
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
             loop = asyncio.new_event_loop()
@@ -1214,7 +1218,7 @@ class Job:
 
         Args:
             default_ttl (Optional[int]): The default time to live for the job
-        
+
         Returns:
             ttl (int): The time to live
         """
@@ -1227,7 +1231,7 @@ class Job:
 
         Args:
             default_ttl (Optional[int]): The default time to live for the job result
-        
+
         Returns:
             ttl (int): The time to live for the result
         """
@@ -1244,8 +1248,7 @@ class Job:
         call_repr = get_call_string(self.func_name, self.args, self.kwargs, max_length=75)
         return call_repr
 
-    def cleanup(self, ttl: Optional[int] = None, pipeline: Optional['Pipeline'] = None,
-                remove_from_queue: bool = True):
+    def cleanup(self, ttl: Optional[int] = None, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
         """Prepare job for eventual deletion (if needed).
         This method is usually called after successful execution.
         How long we persist the job and its result depends on the value of ttl:
@@ -1271,16 +1274,18 @@ class Job:
     @property
     def started_job_registry(self):
         from .registry import StartedJobRegistry
-        return StartedJobRegistry(self.origin, connection=self.connection,
-                                  job_class=self.__class__,
-                                  serializer=self.serializer)
+
+        return StartedJobRegistry(
+            self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+        )
 
     @property
     def failed_job_registry(self):
         from .registry import FailedJobRegistry
-        return FailedJobRegistry(self.origin, connection=self.connection,
-                                 job_class=self.__class__,
-                                 serializer=self.serializer)
+
+        return FailedJobRegistry(
+            self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+        )
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
@@ -1332,10 +1337,9 @@ class Job:
         """
         from .registry import DeferredJobRegistry
 
-        registry = DeferredJobRegistry(self.origin,
-                                       connection=self.connection,
-                                       job_class=self.__class__,
-                                       serializer=self.serializer)
+        registry = DeferredJobRegistry(
+            self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+        )
         registry.add(self, pipeline=pipeline)
 
         connection = pipeline if pipeline is not None else self.connection
@@ -1348,11 +1352,14 @@ class Job:
     @property
     def dependency_ids(self) -> List[bytes]:
         dependencies = self.connection.smembers(self.dependencies_key)
-        return [Job.key_for(_id.decode())
-                for _id in dependencies]
+        return [Job.key_for(_id.decode()) for _id in dependencies]
 
-    def dependencies_are_met(self, parent_job: Optional['Job'] = None, pipeline: Optional['Pipeline'] = None,
-                             exclude_job_id: Optional[str] = None) -> bool:
+    def dependencies_are_met(
+        self,
+        parent_job: Optional['Job'] = None,
+        pipeline: Optional['Pipeline'] = None,
+        exclude_job_id: Optional[str] = None,
+    ) -> bool:
         """Returns a boolean indicating if all of this job's dependencies are `FINISHED`
 
         If a pipeline is passed, all dependencies are WATCHed.
@@ -1373,8 +1380,7 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
 
         if pipeline is not None:
-            connection.watch(*[self.key_for(dependency_id)
-                               for dependency_id in self._dependency_ids])
+            connection.watch(*[self.key_for(dependency_id) for dependency_id in self._dependency_ids])
 
         dependencies_ids = {_id.decode() for _id in connection.smembers(self.dependencies_key)}
 
@@ -1407,12 +1413,7 @@ class Job:
         if self.allow_dependency_failures:
             allowed_statuses.append(JobStatus.FAILED)
 
-        return all(
-            status.decode() in allowed_statuses
-            for status
-            in dependencies_statuses
-            if status
-        )
+        return all(status.decode() in allowed_statuses for status in dependencies_statuses if status)
 
 
 _job_stack = LocalStack()

@@ -122,6 +122,7 @@ class LocalStack:
 
     def _set__ident_func__(self, value):  # noqa
         object.__setattr__(self._local, '__ident_func__', value)
+
     __ident_func__ = property(_get__ident_func__, _set__ident_func__)
     del _get__ident_func__, _set__ident_func__
 
@@ -131,6 +132,7 @@ class LocalStack:
             if rv is None:
                 raise RuntimeError('object unbound')
             return rv
+
         return LocalProxy(_lookup)
 
     def push(self, obj):
@@ -223,10 +225,7 @@ class LocalManager:
             release_local(local)
 
     def __repr__(self):
-        return '<%s storages: %d>' % (
-            self.__class__.__name__,
-            len(self.locals)
-        )
+        return '<%s storages: %d>' % (self.__class__.__name__, len(self.locals))
 
 
 class LocalProxy:
@@ -264,6 +263,7 @@ class LocalProxy:
     .. versionchanged:: 0.6.1
        The class can be instanciated with a callable as well now.
     """
+
     __slots__ = ('__local', '__dict__', '__name__')
 
     def __init__(self, local, name=None):

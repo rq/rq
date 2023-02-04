@@ -142,3 +142,23 @@ SENTINEL: {'INSTANCES':[('remote.host1.org', 26379), ('remote.host2.org', 26379)
            'DB': 2,
            'MASTER_NAME': 'master'}
 ```
+
+
+### Timeout
+
+To avoid potential issues with hanging Redis commands, specifically the blocking `BLPOP` command,
+RQ automatically sets a `socket_timeout` value that is 10 seconds higher than the `default_worker_ttl`.
+
+If you prefer to manually set the `socket_timeout` value,
+make sure that the value being set is higher than the `default_worker_ttl` (which is 420 by default).
+
+```python
+from redis import Redis
+from rq import Queue
+
+conn = Redis('localhost', 6379, socket_timeout=500)
+q = Queue(connection=conn)
+```
+
+Setting a `socket_timeout` with a lower value than the `default_worker_ttl` will cause a `TimeoutError`
+since it will interrupt the worker while it gets new jobs from the queue.

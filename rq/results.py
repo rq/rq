@@ -17,15 +17,22 @@ def get_key(job_id):
 
 
 class Result(object):
-
     class Type(Enum):
         SUCCESSFUL = 1
         FAILED = 2
         STOPPED = 3
 
-    def __init__(self, job_id: str, type: Type, connection: Redis, id: Optional[str] = None,
-                 created_at: Optional[datetime] = None, return_value: Optional[Any] = None,
-                 exc_string: Optional[str] = None, serializer=None):
+    def __init__(
+        self,
+        job_id: str,
+        type: Type,
+        connection: Redis,
+        id: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        return_value: Optional[Any] = None,
+        exc_string: Optional[str] = None,
+        serializer=None,
+    ):
         self.return_value = return_value
         self.exc_string = exc_string
         self.type = type
@@ -49,16 +56,26 @@ class Result(object):
 
     @classmethod
     def create(cls, job, type, ttl, return_value=None, exc_string=None, pipeline=None):
-        result = cls(job_id=job.id, type=type, connection=job.connection,
-                     return_value=return_value,
-                     exc_string=exc_string, serializer=job.serializer)
+        result = cls(
+            job_id=job.id,
+            type=type,
+            connection=job.connection,
+            return_value=return_value,
+            exc_string=exc_string,
+            serializer=job.serializer,
+        )
         result.save(ttl=ttl, pipeline=pipeline)
         return result
 
     @classmethod
     def create_failure(cls, job, ttl, exc_string, pipeline=None):
-        result = cls(job_id=job.id, type=cls.Type.FAILED, connection=job.connection,
-                     exc_string=exc_string, serializer=job.serializer)
+        result = cls(
+            job_id=job.id,
+            type=cls.Type.FAILED,
+            connection=job.connection,
+            exc_string=exc_string,
+            serializer=job.serializer,
+        )
         result.save(ttl=ttl, pipeline=pipeline)
         return result
 
@@ -70,8 +87,7 @@ class Result(object):
         results = []
         for (result_id, payload) in response:
             results.append(
-                cls.restore(job.id, result_id.decode(), payload,
-                            connection=job.connection, serializer=serializer)
+                cls.restore(job.id, result_id.decode(), payload, connection=job.connection, serializer=serializer)
             )
 
         return results
@@ -89,9 +105,7 @@ class Result(object):
     @classmethod
     def restore(cls, job_id: str, result_id: str, payload: dict, connection: Redis, serializer=None) -> 'Result':
         """Create a Result object from given Redis payload"""
-        created_at = datetime.fromtimestamp(
-            int(result_id.split('-')[0]) / 1000, tz=timezone.utc
-        )
+        created_at = datetime.fromtimestamp(int(result_id.split('-')[0]) / 1000, tz=timezone.utc)
         payload = decode_redis_hash(payload)
         # data, timestamp = payload
         # result_data = json.loads(data)
@@ -106,11 +120,15 @@ class Result(object):
         if exc_string:
             exc_string = zlib.decompress(b64decode(exc_string)).decode()
 
-        return Result(job_id, Result.Type(int(payload['type'])), connection=connection,
-                      id=result_id,
-                      created_at=created_at,
-                      return_value=return_value,
-                      exc_string=exc_string)
+        return Result(
+            job_id,
+            Result.Type(int(payload['type'])),
+            connection=connection,
+            id=result_id,
+            created_at=created_at,
+            return_value=return_value,
+            exc_string=exc_string,
+        )
 
     @classmethod
     def fetch(cls, job: Job, serializer=None) -> Optional['Result']:
@@ -134,8 +152,7 @@ class Result(object):
             return None
 
         result_id, payload = response[0]
-        return cls.restore(job.id, result_id.decode(), payload,
-                           connection=job.connection, serializer=serializer)
+        return cls.restore(job.id, result_id.decode(), payload, connection=job.connection, serializer=serializer)
 
     @classmethod
     def get_key(cls, job_id):

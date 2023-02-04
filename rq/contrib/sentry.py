@@ -4,4 +4,5 @@ def register_sentry(sentry_dsn, **opts):
     """
     import sentry_sdk
     from sentry_sdk.integrations.rq import RqIntegration
+
     sentry_sdk.init(sentry_dsn, integrations=[RqIntegration()], **opts)
