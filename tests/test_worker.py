@@ -634,6 +634,14 @@ class TestWorker(RQTestCase):
         res.refresh()
         self.assertIn('JobTimeoutException', as_text(res.exc_info))
 
+    def test_worker_ttl_param_resolves_timeout(self):
+        """Ensures the worker_ttl param is being considered in the timeout, takes into account 15 seconds gap (hard coded)"""
+        q = Queue()
+        w = Worker([q])
+        self.assertEqual(w.timeout, 405)
+        w = Worker([q], default_worker_ttl=500)
+        self.assertEqual(w.timeout, 485)
+
     def test_worker_sets_result_ttl(self):
         """Ensure that Worker properly sets result_ttl for individual jobs."""
         q = Queue()
