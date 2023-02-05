@@ -653,7 +653,6 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q])
 
-        # Put it on the queue with a timeout value
         res = w.dequeue_job_and_maintain_ttl(None)
         assert res is None
 
