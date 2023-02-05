@@ -228,7 +228,7 @@ class Worker:
     ):  # noqa
 
         self.default_result_ttl = default_result_ttl
-        self.default_worker_ttl = default_worker_ttl
+        self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
 
         connection = self._set_connection(connection)
@@ -312,8 +312,7 @@ class Worker:
             connection = get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
-            timeout = self.timeout + 10
-            timeout_config = {"socket_timeout": timeout}
+            timeout_config = {"socket_timeout": self.connection_timeout}
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
 
@@ -365,8 +364,12 @@ class Worker:
         return self._is_horse
 
     @property
-    def timeout(self) -> int:
-        return max(1, self.default_worker_ttl - 15)
+    def dequeue_timeout(self) -> int:
+        return max(1, self.worker_ttl - 15)
+
+    @property
+    def connection_timeout(self) -> int:
+        return max(1, self.worker_ttl - 15) + 10
 
     def procline(self, message):
         """Changes the current procname for the process.
@@ -406,7 +409,7 @@ class Worker:
                 p.hmset(key, mapping)
 
             worker_registration.register(self, p)
-            p.expire(key, self.default_worker_ttl + 60)
+            p.expire(key, self.worker_ttl + 60)
             p.execute()
 
     def register_death(self):
@@ -681,7 +684,7 @@ class Worker:
                         self.log.info('Worker %s: stopping on request', self.key)
                         break
 
-                    timeout = None if burst else self.timeout
+                    timeout = None if burst else self.dequeue_timeout
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
@@ -791,10 +794,10 @@ class Worker:
         The next heartbeat should come before this time, or the worker will
         die (at least from the monitoring dashboards).
 
-        If no timeout is given, the default_worker_ttl will be used to update
+        If no timeout is given, the worker_ttl will be used to update
         the expiration time of the worker.
         """
-        timeout = timeout or self.default_worker_ttl + 60
+        timeout = timeout or self.worker_ttl + 60
         connection = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))

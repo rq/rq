@@ -609,7 +609,7 @@ class TestWorker(RQTestCase):
 
     @slow  # noqa
     def test_timeouts(self):
-        """Worker kills jobs after timeout."""
+        """Worker kills jobs after dequeue_timeout."""
         sentinel_file = '/tmp/.rq_sentinel'
 
         q = Queue()
@@ -638,9 +638,9 @@ class TestWorker(RQTestCase):
         """Ensures the worker_ttl param is being considered in the timeout, takes into account 15 seconds gap (hard coded)"""
         q = Queue()
         w = Worker([q])
-        self.assertEqual(w.timeout, 405)
+        self.assertEqual(w.dequeue_timeout, 405)
         w = Worker([q], default_worker_ttl=500)
-        self.assertEqual(w.timeout, 485)
+        self.assertEqual(w.dequeue_timeout, 485)
 
     def test_worker_sets_result_ttl(self):
         """Ensure that Worker properly sets result_ttl for individual jobs."""
@@ -756,7 +756,7 @@ class TestWorker(RQTestCase):
                          'PID mismatch, fork() is not supposed to happen here')
 
     def test_simpleworker_heartbeat_ttl(self):
-        """SimpleWorker's key must last longer than job.timeout when working"""
+        """SimpleWorker's key must last longer than job.dequeue_timeout when working"""
         queue = Queue('foo')
 
         worker = SimpleWorker([queue])
