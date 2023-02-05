@@ -752,7 +752,7 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                self.log.debug(f"Dequeueing jobs on queues {self._ordered_queues} and timeout {timeout}")
+                self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,
@@ -760,9 +760,8 @@ class Worker:
                     job_class=self.job_class,
                     serializer=self.serializer,
                 )
-                self.log.debug(f"Dequeued job {result[1]} from {result[0]}")
                 if result is not None:
-
+                    self.log.debug(f"Dequeued job {blue(result[0].id)} from {green(result[1].name)}")
                     job, queue = result
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
