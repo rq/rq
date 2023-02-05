@@ -768,7 +768,6 @@ class Worker:
                 if result is not None:
                     self.log.debug(f"Dequeued job {blue(result[0].id)} from {green(result[1].name)}")
                     job, queue = result
-                    self.log.debug(f"Dequeued job {job} from {queue}")
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
