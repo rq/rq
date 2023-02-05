@@ -1,7 +1,9 @@
-import uuid
-import sys
-import warnings
 import logging
+import sys
+import traceback
+import uuid
+import warnings
+
 from collections import namedtuple
 from datetime import datetime, timezone, timedelta
 from functools import total_ordering
@@ -769,9 +771,11 @@ class Queue:
             Job: _description_
         """
         job.perform()
-        job.set_status(JobStatus.FINISHED)
-        job.save(include_meta=False)
-        job.cleanup(job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL))
+        result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL) 
+        with self.connection.pipeline() as pipeline:
+            job._handle_success(result_ttl=result_ttl, pipeline=pipeline)
+            job.cleanup(result_ttl, pipeline=pipeline)
+            pipeline.execute()
         return job
 
     @classmethod
@@ -1024,12 +1028,17 @@ class Queue:
         try:
             job = self.run_job(job)
         except:  # noqa
-            job.set_status(JobStatus.FAILED)
+            with self.connection.pipeline() as pipeline:
+                job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                exc_string = ''.join(traceback.format_exception(*sys.exc_info()))
+                job._handle_failure(exc_string, pipeline)
+                pipeline.execute()
+
             if job.failure_callback:
-                job.failure_callback(job, self.connection, *sys.exc_info())
+                job.failure_callback(job, self.connection, *sys.exc_info())  # type: ignore
         else:
             if job.success_callback:
-                job.success_callback(job, self.connection, job.result)
+                job.success_callback(job, self.connection, job.return_value())  # type: ignore
 
         return job
 

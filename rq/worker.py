@@ -9,18 +9,15 @@ import time
 import traceback
 import warnings
 
-
-from typing import TYPE_CHECKING, Type, List, Dict, Any
-
-if TYPE_CHECKING:
-    from redis import Redis
-    from redis.client import Pipeline
-
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, TYPE_CHECKING, Type
+
+if TYPE_CHECKING:
+    from redis import Redis
+    from redis.client import Pipeline
 
 try:
     from signal import SIGKILL
@@ -47,8 +44,7 @@ from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentEx
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
-from .results import Result
+from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
@@ -139,7 +135,7 @@ class Worker:
         worker_keys = get_keys(queue=queue, connection=connection)
         workers = [
             cls.find_by_key(
-                as_text(key), connection=connection, job_class=job_class, queue_class=queue_class, serializer=serializer
+                key, connection=connection, job_class=job_class, queue_class=queue_class, serializer=serializer
             )
             for key in worker_keys
         ]
@@ -766,8 +762,8 @@ class Worker:
                     serializer=self.serializer,
                 )
                 if result is not None:
-                    self.log.debug(f"Dequeued job {blue(result[0].id)} from {green(result[1].name)}")
                     job, queue = result
+                    self.log.debug(f"Dequeued job {blue(job.id)} from {green(queue.name)}")
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
@@ -1088,21 +1084,7 @@ class Worker:
             started_job_registry.remove(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
-                failed_job_registry = FailedJobRegistry(
-                    job.origin, job.connection, job_class=self.job_class, serializer=job.serializer
-                )
-                # Exception should be saved in job hash if server
-                # doesn't support Redis streams
-                _save_exc_to_job = not self.supports_redis_streams
-                failed_job_registry.add(
-                    job,
-                    ttl=job.failure_ttl,
-                    exc_string=exc_string,
-                    pipeline=pipeline,
-                    _save_exc_to_job=_save_exc_to_job,
-                )
-                if self.supports_redis_streams:
-                    Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
+                job._handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
@@ -1149,19 +1131,8 @@ class Worker:
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        self.log.debug('Setting job %s status to finished', job.id)
-                        job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        # Result should be saved in job hash only if server
-                        # doesn't support Redis streams
-                        include_result = not self.supports_redis_streams
-                        # Don't clobber user's meta dictionary!
-                        job.save(pipeline=pipeline, include_meta=False, include_result=include_result)
-                        if self.supports_redis_streams:
-                            Result.create(
-                                job, Result.Type.SUCCESSFUL, return_value=job._result, ttl=result_ttl, pipeline=pipeline
-                            )
-                        finished_job_registry = queue.finished_job_registry
-                        finished_job_registry.add(job, result_ttl, pipeline)
+                        self.log.debug(f"Saving job {job.id}'s successful execution result")
+                        job._handle_success(result_ttl, pipeline=pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
