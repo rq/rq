@@ -9,18 +9,15 @@ import time
 import traceback
 import warnings
 
-
-from typing import TYPE_CHECKING, Type, List, Dict, Any
-
-if TYPE_CHECKING:
-    from redis import Redis
-    from redis.client import Pipeline
-
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, TYPE_CHECKING, Type
+
+if TYPE_CHECKING:
+    from redis import Redis
+    from redis.client import Pipeline
 
 try:
     from signal import SIGKILL
@@ -47,8 +44,7 @@ from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentEx
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .registry import FailedJobRegistry, StartedJobRegistry, clean_registries
-from .results import Result
+from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
@@ -139,7 +135,7 @@ class Worker:
         worker_keys = get_keys(queue=queue, connection=connection)
         workers = [
             cls.find_by_key(
-                as_text(key), connection=connection, job_class=job_class, queue_class=queue_class, serializer=serializer
+                key, connection=connection, job_class=job_class, queue_class=queue_class, serializer=serializer
             )
             for key in worker_keys
         ]
@@ -1082,7 +1078,7 @@ class Worker:
             started_job_registry.remove(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
-                job.handle_failure(exc_string, pipeline=pipeline)
+                job._handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
@@ -1130,7 +1126,7 @@ class Worker:
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         self.log.debug(f"Saving job {job.id}'s successful execution result")
-                        job.handle_success(result_ttl, pipeline=pipeline)
+                        job._handle_success(result_ttl, pipeline=pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)

@@ -1286,7 +1286,7 @@ class Job:
         return FailedJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
-    
+
     @property
     def finished_job_registry(self):
         from .registry import FinishedJobRegistry
@@ -1295,7 +1295,7 @@ class Job:
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
 
-    def handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
+    def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
         """Saves and cleanup job after successful execution"""
         # self.log.debug('Setting job %s status to finished', job.id)
         self.set_status(JobStatus.FINISHED, pipeline=pipeline)
@@ -1317,7 +1317,7 @@ class Job:
             finished_job_registry = self.finished_job_registry
             finished_job_registry.add(self, result_ttl, pipeline)
 
-    def handle_failure(self, exc_string: str, pipeline: 'Pipeline'):
+    def _handle_failure(self, exc_string: str, pipeline: 'Pipeline'):
         failed_job_registry = self.failed_job_registry
         # Exception should be saved in job hash if server
         # doesn't support Redis streams
