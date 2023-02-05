@@ -752,7 +752,7 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                self.log.debug(f"Dequeueing jobs on queues {self._ordered_queues} and timeout {timeout}")
+                self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,
@@ -762,7 +762,7 @@ class Worker:
                 )
                 if result is not None:
                     job, queue = result
-                    self.log.debug(f"Dequeued job {job} from {queue}")
+                    self.log.debug(f"Dequeued job {blue(job.id)} from {green(queue.name)}")
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
