@@ -640,8 +640,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         # Put it on the queue with a timeout value
-        res = w.dequeue_job_and_maintain_ttl(None)
-        assert res is None
+        assert self.assertIsNone(w.dequeue_job_and_maintain_ttl(None))
 
     def test_worker_sets_result_ttl(self):
         """Ensure that Worker properly sets result_ttl for individual jobs."""
