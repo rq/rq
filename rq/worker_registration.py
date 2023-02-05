@@ -51,7 +51,7 @@ def unregister(worker: 'Worker', pipeline: Optional['Pipeline'] = None):
         connection.execute()
 
 
-def get_keys(queue: Optional['Queue'] = None, connection: Optional['Redis'] = None) -> Set[Any]:
+def get_keys(queue: Optional['Queue'] = None, connection: Optional['Redis'] = None) -> Set[str]:
     """Returns a list of worker keys for a given queue.
 
     Args:

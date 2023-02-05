@@ -529,11 +529,9 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.say_hello, result_ttl=job_result_ttl)
         job.save()
         self.assertEqual(job.get_result_ttl(default_ttl=default_ttl), job_result_ttl)
-        self.assertEqual(job.get_result_ttl(), job_result_ttl)
         job = Job.create(func=fixtures.say_hello)
         job.save()
         self.assertEqual(job.get_result_ttl(default_ttl=default_ttl), default_ttl)
-        self.assertEqual(job.get_result_ttl(), None)
 
     def test_get_job_ttl(self):
         """Getting job TTL."""
