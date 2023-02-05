@@ -1224,7 +1224,7 @@ class Job:
         """
         return default_ttl if self.ttl is None else self.ttl
 
-    def get_result_ttl(self, default_ttl: Optional[int] = None) -> Optional[int]:
+    def get_result_ttl(self, default_ttl: int) -> int:
         """Returns ttl for a job that determines how long a jobs result will
         be persisted. In the future, this method will also be responsible
         for determining ttl for repeated jobs.
@@ -1286,6 +1286,52 @@ class Job:
         return FailedJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
+    
+    @property
+    def finished_job_registry(self):
+        from .registry import FinishedJobRegistry
+
+        return FinishedJobRegistry(
+            self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+        )
+
+    def handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
+        """Saves and cleanup job after successful execution"""
+        # self.log.debug('Setting job %s status to finished', job.id)
+        self.set_status(JobStatus.FINISHED, pipeline=pipeline)
+        # Result should be saved in job hash only if server
+        # doesn't support Redis streams
+        include_result = not self.supports_redis_streams
+        # Don't clobber user's meta dictionary!
+        self.save(pipeline=pipeline, include_meta=False, include_result=include_result)
+        # Result creation should eventually be moved to job.save() after support
+        # for Redis < 5.0 is dropped. job.save(include_result=...) is used to test
+        # for backward compatibility
+        if self.supports_redis_streams:
+            from .results import Result
+            Result.create(
+                self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline
+            )
+
+        if result_ttl != 0:
+            finished_job_registry = self.finished_job_registry
+            finished_job_registry.add(self, result_ttl, pipeline)
+
+    def handle_failure(self, exc_string: str, pipeline: 'Pipeline'):
+        failed_job_registry = self.failed_job_registry
+        # Exception should be saved in job hash if server
+        # doesn't support Redis streams
+        _save_exc_to_job = not self.supports_redis_streams
+        failed_job_registry.add(
+            self,
+            ttl=self.failure_ttl,
+            exc_string=exc_string,
+            pipeline=pipeline,
+            _save_exc_to_job=_save_exc_to_job,
+        )
+        if self.supports_redis_streams:
+            from .results import Result
+            Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.

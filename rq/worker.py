@@ -1082,21 +1082,7 @@ class Worker:
             started_job_registry.remove(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
-                failed_job_registry = FailedJobRegistry(
-                    job.origin, job.connection, job_class=self.job_class, serializer=job.serializer
-                )
-                # Exception should be saved in job hash if server
-                # doesn't support Redis streams
-                _save_exc_to_job = not self.supports_redis_streams
-                failed_job_registry.add(
-                    job,
-                    ttl=job.failure_ttl,
-                    exc_string=exc_string,
-                    pipeline=pipeline,
-                    _save_exc_to_job=_save_exc_to_job,
-                )
-                if self.supports_redis_streams:
-                    Result.create_failure(job, job.failure_ttl, exc_string=exc_string, pipeline=pipeline)
+                job.handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
@@ -1143,19 +1129,8 @@ class Worker:
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        self.log.debug('Setting job %s status to finished', job.id)
-                        job.set_status(JobStatus.FINISHED, pipeline=pipeline)
-                        # Result should be saved in job hash only if server
-                        # doesn't support Redis streams
-                        include_result = not self.supports_redis_streams
-                        # Don't clobber user's meta dictionary!
-                        job.save(pipeline=pipeline, include_meta=False, include_result=include_result)
-                        if self.supports_redis_streams:
-                            Result.create(
-                                job, Result.Type.SUCCESSFUL, return_value=job._result, ttl=result_ttl, pipeline=pipeline
-                            )
-                        finished_job_registry = queue.finished_job_registry
-                        finished_job_registry.add(job, result_ttl, pipeline)
+                        self.log.debug(f"Saving job {job.id}'s successful execution result")
+                        job.handle_success(result_ttl, pipeline=pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
