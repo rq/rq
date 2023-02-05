@@ -365,7 +365,7 @@ class Worker:
 
     @property
     def connection_timeout(self) -> int:
-        return max(1, self.worker_ttl - 15) + 10
+        return self.dequeue_timeout + 10
 
     def procline(self, message):
         """Changes the current procname for the process.
