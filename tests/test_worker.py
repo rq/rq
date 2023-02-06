@@ -634,6 +634,14 @@ class TestWorker(RQTestCase):
         res.refresh()
         self.assertIn('JobTimeoutException', as_text(res.exc_info))
 
+    def test_dequeue_job_and_maintain_ttl_non_blocking(self):
+        """Not passing a timeout should return immediately with None as a result"""
+        q = Queue()
+        w = Worker([q])
+
+        # Put it on the queue with a timeout value
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(None))
+
     def test_worker_sets_result_ttl(self):
         """Ensure that Worker properly sets result_ttl for individual jobs."""
         q = Queue()
@@ -1048,6 +1056,13 @@ class TestWorker(RQTestCase):
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
+
+    def test_worker_configures_socket_timeout(self):
+        """Ensures that the worker correctly updates Redis client connection to have a socket_timeout"""
+        q = Queue()
+        _ = Worker([q])
+        connection_kwargs = q.connection.connection_pool.connection_kwargs
+        self.assertEqual(connection_kwargs["socket_timeout"], 415)
 
     def test_worker_version(self):
         q = Queue()

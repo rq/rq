@@ -90,7 +90,7 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
         self.assertEqual(
             self.testconn.get('success_callback:%s' % job.id).decode(),
-            job.result
+            job.return_value()
         )
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
