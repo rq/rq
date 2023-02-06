@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import errno
 import logging
 import os
@@ -47,7 +48,7 @@ from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
+from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, TimerDeathPenalty, UnixSignalDeathPenalty
 from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
@@ -1378,3 +1379,212 @@ class RandomWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         shuffle(self._ordered_queues)
+
+
+class ThreadPoolWorker(Worker):
+
+    death_penalty_class = TimerDeathPenalty
+
+    def __init__(self, *args, **kwargs):
+        self.threadpool_size = kwargs.pop('pool_size', 12)
+        self.executor = ThreadPoolExecutor(max_workers=self.threadpool_size)
+        self._idle_threads = self.threadpool_size
+        super(ThreadPoolWorker, self).__init__(*args, **kwargs)
+
+    @property
+    def idle_threads(self):
+        size = self.executor._work_queue.qsize()
+        if size <= self.threadpool_size:
+            return True
+        return False
+
+    def _original_work(
+        self,
+        burst: bool = False,
+        logging_level: str = "INFO",
+        date_format=DEFAULT_LOGGING_DATE_FORMAT,
+        log_format=DEFAULT_LOGGING_FORMAT,
+        max_jobs=None,
+        with_scheduler: bool = False,
+    ):
+        """Starts the work loop.
+
+        Pops and performs all jobs on the current list of queues.  When all
+        queues are empty, block and wait for new jobs to arrive on any of the
+        queues, unless `burst` mode is enabled.
+
+        The return value indicates whether any jobs were processed.
+        """
+        completed_jobs = 0
+        setup_loghandlers(logging_level, date_format, log_format)
+        self.register_birth()
+        self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.subscribe()
+        self.set_state(WorkerStatus.STARTED)
+        qnames = self.queue_names()
+        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+
+        if with_scheduler:
+            # Make scheduler ready.
+            pass
+
+        self._install_signal_handlers()
+        try:
+            while True:
+                try:
+                    self.check_for_suspension(burst)
+
+                    if self.should_run_maintenance_tasks:
+                        self.run_maintenance_tasks()
+
+                    if self._stop_requested:
+                        self.log.info('Worker %s: stopping on request', self.key)
+                        break
+
+                    if not self.idle_threads:
+                        self.log.info('Threadpool is full, waiting...')
+                        time.sleep
+                        break
+
+                    timeout = None if burst else self._get_timeout()
+                    result = self.dequeue_job_and_maintain_ttl(timeout)
+                    if result is None:
+                        if burst:
+                            self.log.info("Worker %s: done, quitting", self.key)
+                        break
+
+                    job, queue = result
+                    self.reorder_queues(reference_queue=queue)
+                    self.execute_job(job, queue)
+                    self.heartbeat()
+
+                    completed_jobs += 1
+                    if max_jobs is not None:
+                        if completed_jobs >= max_jobs:
+                            self.log.info("Worker %s: finished executing %d jobs, quitting", self.key, completed_jobs)
+                            break
+
+                except redis.exceptions.TimeoutError:
+                    self.log.error(f"Worker {self.key}: Redis connection timeout, quitting...")
+                    break
+
+                except StopRequested:
+                    break
+
+                except SystemExit:
+                    # Cold shutdown detected
+                    raise
+
+                except:  # noqa
+                    self.log.error('Worker %s: found an unhandled exception, quitting...', self.key, exc_info=True)
+                    break
+        finally:
+            self.register_death()
+            self.unsubscribe()
+
+        return bool(completed_jobs)
+
+
+    def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
+             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
+        """Starts the work loop.
+        Pops and performs all jobs on the current list of queues.  When all
+        queues are empty, block and wait for new jobs to arrive on any of the
+        queues, unless `burst` mode is enabled.
+        The return value indicates whether any jobs were processed.
+        """
+        setup_loghandlers(logging_level, date_format, log_format)
+        completed_jobs = 0
+        self.register_birth()
+        self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.subscribe()
+        self.set_state(WorkerStatus.STARTED)
+        qnames = self.queue_names()
+        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+
+        try:
+            while True:
+                self.check_for_suspension(burst)
+                if self.should_run_maintenance_tasks:
+                    self.run_maintenance_tasks()
+                if self._stop_requested:
+                    self.log.info("Stopping on request.")
+                    break
+                timeout = None if burst else max(1, self.default_worker_ttl - 60)
+                try:
+                    result = self.dequeue_job(timeout)
+                    if result is None:
+                        if burst:
+                            self.log.info("Worker %s: done. Will finish current running tasks and quit.", self.key)
+                        break
+                except StopRequested:
+                    break
+
+                job, queue = result
+                self.execute_job(job, queue)
+                completed_jobs += 1
+                if max_jobs is not None:
+                    if completed_jobs >= max_jobs:
+                        self.log.info(
+                            "Worker %s: finished executing %d jobs, quitting",
+                            self.key, completed_jobs
+                        )
+                        break
+
+        finally:
+            if not self.is_horse:
+                self.register_death()
+        return self.did_perform_work
+
+    def execute_job(self, job, queue):
+        def job_done(child):
+            self.heartbeat()
+            if job.get_status() == JobStatus.FINISHED:
+                queue.enqueue_dependents(job)
+
+        self.log.info("Executing job %s from %s", blue(job.id), green(queue.name))
+        future = self.executor.submit(self.perform_job, job, queue)
+        return future.add_done_callback(job_done)
+
+    def dequeue_job(self, timeout: Optional[int] = None) -> Optional[tuple[Job, Queue]]:
+        if self._stop_requested:
+            raise StopRequested()
+        result = None
+        while True:
+            if self._stop_requested:
+                raise StopRequested()
+            self.heartbeat()
+            try:
+                result = self.queue_class.dequeue_any(
+                    self.queues, timeout, connection=self.connection
+                )
+                if result is not None:
+                    job, queue = result
+                    self.log.info(
+                        "Found job on queue %s: %s with ID (%s)"
+                        % (green(queue.name), blue(job.description), job.id)
+                    )
+                break
+            except DequeueTimeout:
+                pass
+        self.heartbeat()
+        return result
+
+    def _shutdown(self):
+        """
+        If shutdown is requested in the middle of a job, wait until
+        finish before shutting down and save the request in redis
+        """
+        if self.get_state() == WorkerStatus.BUSY:
+            self._stop_requested = True
+            self.set_shutdown_requested_date()
+            self.log.debug('Stopping after current horse is finished. '
+                           'Press Ctrl+C again for a cold shutdown.')
+            self.executor.shutdown()
+            if self.scheduler:
+                self.stop_scheduler()
+        else:
+            if self.scheduler:
+                self.stop_scheduler()
+            raise StopRequested()
+
