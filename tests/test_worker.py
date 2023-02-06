@@ -612,14 +612,14 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q])
         q.enqueue(say_hello, args=('Frank',))
-        result = w.dequeue_job_and_maintain_ttl(1)
-        assert result is not None
+        self.assertIsNotNone(w.dequeue_job_and_maintain_ttl(1))
 
-        result = w.dequeue_job_and_maintain_ttl(None)
-        assert result is None
+        # idle for 1 second
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=1))
 
-        result = w.dequeue_job_and_maintain_ttl(1, max_idle_time=1)
-        assert result is None
+        with mock.patch.object(Worker, 'heartbeat', wraps=w.heartbeat) as mocked_heartbeat:
+            self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))  # idle for 3 seconds
+            self.assertEqual(4, mocked_heartbeat.call_count)  # one heartbeat before returning the result
 
     @slow  # noqa
     def test_timeouts(self):
