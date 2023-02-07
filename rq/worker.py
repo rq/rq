@@ -1408,7 +1408,7 @@ class ThreadPoolWorker(Worker):
         while 1:
             if self._is_pool_full:
                 continue
-            self.log.info('Found a slot, ready to work')
+            self.log.info('Found idle thread, ready to work')
             break
 
     def work(
@@ -1431,7 +1431,8 @@ class ThreadPoolWorker(Worker):
         completed_jobs = 0
         setup_loghandlers(logging_level, date_format, log_format)
         self.register_birth()
-        self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.log.info("ThreadpoolWorker %s: started, version %s", self.key, VERSION)
+        self.log.warning("*** WARNING: ThreadpoolWorker is in beta and may be unstable. Don't use it in production!")
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
@@ -1455,7 +1456,7 @@ class ThreadPoolWorker(Worker):
                         break
 
                     if self._is_pool_full:
-                        self.log.info('Threadpool is full, waiting for idle workers...')
+                        self.log.info('Threadpool is full, waiting for idle threads...')
                         self._wait_for_slot()
 
                     timeout = None if burst else self._get_timeout()

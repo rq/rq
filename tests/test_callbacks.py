@@ -5,7 +5,7 @@ from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save
 
 from rq import Queue, Worker
 from rq.job import Job, JobStatus, UNEVALUATED
-from rq.worker import SimpleWorker
+from rq.worker import SimpleWorker, ThreadPoolWorker
 
 
 class QueueCallbackTestCase(RQTestCase):
@@ -112,6 +112,60 @@ class WorkerCallbackTestCase(RQTestCase):
         """Test failure callback is executed only when job a fails"""
         queue = Queue(connection=self.testconn)
         worker = SimpleWorker([queue])
+
+        job = queue.enqueue(div_by_zero, on_failure=save_exception)
+
+        # Callback is executed when job is successfully executed
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        job.refresh()
+        print(job.exc_info)
+        self.assertIn('div_by_zero',
+                      self.testconn.get('failure_callback:%s' % job.id).decode())
+
+        job = queue.enqueue(div_by_zero, on_success=save_result)
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertFalse(self.testconn.exists('failure_callback:%s' % job.id))
+
+        # TODO: add test case for error while executing failure callback
+
+
+class ThreadPoolWorkerCallbackTestCase(RQTestCase):
+    def test_success_callback(self):
+        """Test success callback is executed only when job is successful"""
+        queue = Queue(connection=self.testconn)
+        worker = ThreadPoolWorker([queue])
+
+        job = queue.enqueue(say_hello, on_success=save_result)
+
+        # Callback is executed when job is successfully executed
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(
+            self.testconn.get('success_callback:%s' % job.id).decode(),
+            job.return_value()
+        )
+
+        job = queue.enqueue(div_by_zero, on_success=save_result)
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertFalse(self.testconn.exists('success_callback:%s' % job.id))
+
+    def test_erroneous_success_callback(self):
+        """Test exception handling when executing success callback"""
+        queue = Queue(connection=self.testconn)
+        worker = ThreadPoolWorker([queue])
+
+        # If success_callback raises an error, job will is considered as failed
+        job = queue.enqueue(say_hello, on_success=erroneous_callback)
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+
+    def test_failure_callback(self):
+        """Test failure callback is executed only when job a fails"""
+        queue = Queue(connection=self.testconn)
+        worker = ThreadPoolWorker([queue])
 
         job = queue.enqueue(div_by_zero, on_failure=save_exception)
 
