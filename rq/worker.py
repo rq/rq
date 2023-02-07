@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
 import errno
 import logging
 import os
@@ -6,15 +5,18 @@ import random
 import signal
 import socket
 import sys
+import threading
 import time
 import traceback
 import warnings
+
 
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
 from typing import Callable, List, Optional, TYPE_CHECKING, Type
+from concurrent.futures import ThreadPoolExecutor
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -1386,19 +1388,30 @@ class ThreadPoolWorker(Worker):
     death_penalty_class = TimerDeathPenalty
 
     def __init__(self, *args, **kwargs):
-        self.threadpool_size = kwargs.pop('pool_size', 12)
-        self.executor = ThreadPoolExecutor(max_workers=self.threadpool_size)
+        self.threadpool_size = kwargs.pop('pool_size', 24)
+        self.executor = ThreadPoolExecutor(max_workers=self.threadpool_size, thread_name_prefix="rq_workers_")
         self._idle_threads = self.threadpool_size
+        self._lock = threading.Lock()
         super(ThreadPoolWorker, self).__init__(*args, **kwargs)
 
     @property
-    def idle_threads(self):
-        size = self.executor._work_queue.qsize()
-        if size <= self.threadpool_size:
+    def _is_pool_full(self):
+        if self._idle_threads == 0:
             return True
         return False
 
-    def _original_work(
+    def _change_idle_counter(self, operation):
+        with self._lock:
+            self._idle_threads += operation
+
+    def _wait_for_slot(self):
+        while 1:
+            if self._is_pool_full:
+                continue
+            self.log.info('Found a slot, ready to work')
+            break
+
+    def work(
         self,
         burst: bool = False,
         logging_level: str = "INFO",
@@ -1441,10 +1454,9 @@ class ThreadPoolWorker(Worker):
                         self.log.info('Worker %s: stopping on request', self.key)
                         break
 
-                    if not self.idle_threads:
-                        self.log.info('Threadpool is full, waiting...')
-                        time.sleep
-                        break
+                    if self._is_pool_full:
+                        self.log.info('Threadpool is full, waiting for idle workers...')
+                        self._wait_for_slot()
 
                     timeout = None if burst else self._get_timeout()
                     result = self.dequeue_job_and_maintain_ttl(timeout)
@@ -1484,91 +1496,17 @@ class ThreadPoolWorker(Worker):
 
         return bool(completed_jobs)
 
-
-    def work(self, burst=False, logging_level="INFO", date_format=DEFAULT_LOGGING_DATE_FORMAT,
-             log_format=DEFAULT_LOGGING_FORMAT, max_jobs=None, with_scheduler=False):
-        """Starts the work loop.
-        Pops and performs all jobs on the current list of queues.  When all
-        queues are empty, block and wait for new jobs to arrive on any of the
-        queues, unless `burst` mode is enabled.
-        The return value indicates whether any jobs were processed.
-        """
-        setup_loghandlers(logging_level, date_format, log_format)
-        completed_jobs = 0
-        self.register_birth()
-        self.log.info("Worker %s: started, version %s", self.key, VERSION)
-        self.subscribe()
-        self.set_state(WorkerStatus.STARTED)
-        qnames = self.queue_names()
-        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
-
-        try:
-            while True:
-                self.check_for_suspension(burst)
-                if self.should_run_maintenance_tasks:
-                    self.run_maintenance_tasks()
-                if self._stop_requested:
-                    self.log.info("Stopping on request.")
-                    break
-                timeout = None if burst else max(1, self.default_worker_ttl - 60)
-                try:
-                    result = self.dequeue_job(timeout)
-                    if result is None:
-                        if burst:
-                            self.log.info("Worker %s: done. Will finish current running tasks and quit.", self.key)
-                        break
-                except StopRequested:
-                    break
-
-                job, queue = result
-                self.execute_job(job, queue)
-                completed_jobs += 1
-                if max_jobs is not None:
-                    if completed_jobs >= max_jobs:
-                        self.log.info(
-                            "Worker %s: finished executing %d jobs, quitting",
-                            self.key, completed_jobs
-                        )
-                        break
-
-        finally:
-            if not self.is_horse:
-                self.register_death()
-        return self.did_perform_work
-
     def execute_job(self, job, queue):
         def job_done(child):
+            self._change_idle_counter(+1)
             self.heartbeat()
             if job.get_status() == JobStatus.FINISHED:
                 queue.enqueue_dependents(job)
 
         self.log.info("Executing job %s from %s", blue(job.id), green(queue.name))
         future = self.executor.submit(self.perform_job, job, queue)
-        return future.add_done_callback(job_done)
-
-    def dequeue_job(self, timeout: Optional[int] = None) -> Optional[tuple[Job, Queue]]:
-        if self._stop_requested:
-            raise StopRequested()
-        result = None
-        while True:
-            if self._stop_requested:
-                raise StopRequested()
-            self.heartbeat()
-            try:
-                result = self.queue_class.dequeue_any(
-                    self.queues, timeout, connection=self.connection
-                )
-                if result is not None:
-                    job, queue = result
-                    self.log.info(
-                        "Found job on queue %s: %s with ID (%s)"
-                        % (green(queue.name), blue(job.description), job.id)
-                    )
-                break
-            except DequeueTimeout:
-                pass
-        self.heartbeat()
-        return result
+        self._change_idle_counter(-1)
+        future.add_done_callback(job_done)
 
     def _shutdown(self):
         """
