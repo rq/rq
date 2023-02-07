@@ -14,7 +14,7 @@ from rq.results import Result, get_key
 from rq.utils import get_version, utcnow
 from rq.worker import Worker
 
-from .fixtures import say_hello
+from .fixtures import say_hello, div_by_zero
 
 
 @unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
@@ -123,23 +123,25 @@ class TestScheduledJobRegistry(RQTestCase):
         self.assertEqual(job.result, 'Success')
 
         with patch('rq.worker.Worker.supports_redis_streams', new_callable=PropertyMock) as mock:
-            mock.return_value = False
-            worker = Worker([queue])
-            worker.register_birth()
-            job = queue.enqueue(say_hello)
-            job._result = 'Success'
-            job.started_at = utcnow()
-            job.ended_at = job.started_at + timedelta(seconds=0.75)
+            with patch('rq.job.Job.supports_redis_streams', new_callable=PropertyMock) as job_mock:
+                job_mock.return_value = False
+                mock.return_value = False
+                worker = Worker([queue])
+                worker.register_birth()
+                job = queue.enqueue(say_hello)
+                job._result = 'Success'
+                job.started_at = utcnow()
+                job.ended_at = job.started_at + timedelta(seconds=0.75)
 
-            # If `save_result_to_job` = True, result will be saved to job
-            # hash, simulating older versions of RQ
+                # If `save_result_to_job` = True, result will be saved to job
+                # hash, simulating older versions of RQ
 
-            worker.handle_job_success(job, queue, registry)
-            payload = self.connection.hgetall(job.key)
-            self.assertTrue(b'result' in payload.keys())
-            # Delete all new result objects so we only have result stored in job hash,
-            # this should simulate a job that was executed in an earlier RQ version
-            self.assertEqual(job.result, 'Success')
+                worker.handle_job_success(job, queue, registry)
+                payload = self.connection.hgetall(job.key)
+                self.assertTrue(b'result' in payload.keys())
+                # Delete all new result objects so we only have result stored in job hash,
+                # this should simulate a job that was executed in an earlier RQ version
+                self.assertEqual(job.result, 'Success')
 
     def test_job_failed_result_fallback(self):
         """Changes to job.result failure handling should be backwards compatible."""
@@ -164,26 +166,28 @@ class TestScheduledJobRegistry(RQTestCase):
         self.assertEqual(job.exc_info, 'Error')
 
         with patch('rq.worker.Worker.supports_redis_streams', new_callable=PropertyMock) as mock:
-            mock.return_value = False
-            worker = Worker([queue])
-            worker.register_birth()
+            with patch('rq.job.Job.supports_redis_streams', new_callable=PropertyMock) as job_mock:
+                job_mock.return_value = False
+                mock.return_value = False
+                worker = Worker([queue])
+                worker.register_birth()
 
-            job = queue.enqueue(say_hello)
-            job.started_at = utcnow()
-            job.ended_at = job.started_at + timedelta(seconds=0.75)
+                job = queue.enqueue(say_hello)
+                job.started_at = utcnow()
+                job.ended_at = job.started_at + timedelta(seconds=0.75)
 
-            # If `save_result_to_job` = True, result will be saved to job
-            # hash, simulating older versions of RQ
+                # If `save_result_to_job` = True, result will be saved to job
+                # hash, simulating older versions of RQ
 
-            worker.handle_job_failure(job, exc_string='Error', queue=queue,
-                                      started_job_registry=registry)
-            payload = self.connection.hgetall(job.key)
-            self.assertTrue(b'exc_info' in payload.keys())
-            # Delete all new result objects so we only have result stored in job hash,
-            # this should simulate a job that was executed in an earlier RQ version
-            Result.delete_all(job)
-            job = Job.fetch(job.id, connection=self.connection)
-            self.assertEqual(job.exc_info, 'Error')
+                worker.handle_job_failure(job, exc_string='Error', queue=queue,
+                                          started_job_registry=registry)
+                payload = self.connection.hgetall(job.key)
+                self.assertTrue(b'exc_info' in payload.keys())
+                # Delete all new result objects so we only have result stored in job hash,
+                # this should simulate a job that was executed in an earlier RQ version
+                Result.delete_all(job)
+                job = Job.fetch(job.id, connection=self.connection)
+                self.assertEqual(job.exc_info, 'Error')
 
     def test_job_return_value(self):
         """Test job.return_value"""
@@ -199,3 +203,14 @@ class TestScheduledJobRegistry(RQTestCase):
         # Returns None if latest result is a failure
         Result.create_failure(job, ttl=10, exc_string='exception')
         self.assertIsNone(job.return_value(refresh=True))
+
+    def test_job_return_value_sync(self):
+        """Test job.return_value when queue.is_async=False"""
+        queue = Queue(connection=self.connection, is_async=False)
+        job = queue.enqueue(say_hello)
+
+        # Returns None when there's no result
+        self.assertIsNotNone(job.return_value())
+
+        job = queue.enqueue(div_by_zero)
+        self.assertEqual(job.latest_result().type, Result.Type.FAILED)
