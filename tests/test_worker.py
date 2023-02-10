@@ -1103,6 +1103,59 @@ class TestWorker(RQTestCase):
         worker = Worker.find_by_key(w2.key)
         self.assertEqual(worker.python_version, python_version)
 
+    def test_dequeue_random_strategy(self):
+        qs = [Queue('q%d' % i) for i in range(5)]
+
+        for i in range(5):
+            for j in range(3):
+                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
+
+        w = Worker(qs)
+        w.work(burst=True, dequeue_strategy="random")
+
+        start_times = []
+        for i in range(5):
+            for j in range(3):
+                job = Job.fetch('q%d_%d' % (i, j))
+                start_times.append(('q%d_%d' % (i, j), job.started_at))
+        sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
+        sorted_ids = [tup[0] for tup in sorted_by_time]
+        expected_rr = ['q%d_%d' % (i, j) for j in range(3) for i in range(5)]
+        expected_ser = ['q%d_%d' % (i, j) for i in range(5) for j in range(3)]
+
+        self.assertNotEqual(sorted_ids, expected_rr)
+        self.assertNotEqual(sorted_ids, expected_ser)
+        expected_rr.reverse()
+        expected_ser.reverse()
+        self.assertNotEqual(sorted_ids, expected_rr)
+        self.assertNotEqual(sorted_ids, expected_ser)
+        sorted_ids.sort()
+        expected_ser.sort()
+        self.assertEqual(sorted_ids, expected_ser)
+
+    def test_dequeue_round_robin(self):
+        qs = [Queue('q%d' % i) for i in range(5)]
+
+        for i in range(5):
+            for j in range(3):
+                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
+
+        w = Worker(qs)
+        w.work(burst=True, dequeue_strategy="roundrobin")
+
+        start_times = []
+        for i in range(5):
+            for j in range(3):
+                job = Job.fetch('q%d_%d' % (i, j))
+                start_times.append(('q%d_%d' % (i, j), job.started_at))
+        sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
+        sorted_ids = [tup[0] for tup in sorted_by_time]
+        expected = ['q0_0', 'q1_0', 'q2_0', 'q3_0', 'q4_0',
+                    'q0_1', 'q1_1', 'q2_1', 'q3_1', 'q4_1',
+                    'q0_2', 'q1_2', 'q2_2', 'q3_2', 'q4_2']
+
+        self.assertEqual(expected, sorted_ids)
+
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)

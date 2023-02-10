@@ -28,7 +28,7 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .utils import as_text
+from .utils import DequeueStrategy, as_text
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (
@@ -221,6 +221,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
+        dequeue_strategy=DequeueStrategy.Order
     ):  # noqa
 
         self.default_result_ttl = default_result_ttl
@@ -267,6 +268,7 @@ class Worker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
+        self._dequeue_strategy = dequeue_strategy
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -619,7 +621,25 @@ class Worker:
             self.pubsub.close()
 
     def reorder_queues(self, reference_queue):
-        pass
+        """Reorder the queues according to the strategy.
+        As this can be defined both in the `Worker` initialization or in the `work` method,
+        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
+
+        Args:
+            reference_queue (Queue): The queues to reorder
+        """
+        if self._dequeue_strategy not in ["order", "random", "roundrobin"]:
+            self.log.warning("Dequeue strategy %s is not allowed. Use on of `order`, `random` or `rounbrobin` Defaulting to `order`.", self._dequeue_strategy)
+            return
+        if self._dequeue_strategy == DequeueStrategy.Order:
+            return
+        if self._dequeue_strategy == DequeueStrategy.RoundRobin:
+            pos = self._ordered_queues.index(reference_queue)
+            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+            return
+        if self._dequeue_strategy == DequeueStrategy.Random:
+            shuffle(self._ordered_queues)
+            return
 
     def work(
         self,
@@ -629,6 +649,7 @@ class Worker:
         log_format=DEFAULT_LOGGING_FORMAT,
         max_jobs=None,
         with_scheduler: bool = False,
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.Order
     ):
         """Starts the work loop.
 
@@ -646,6 +667,7 @@ class Worker:
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+        self._dequeue_strategy = dequeue_strategy
 
         if with_scheduler:
             self.scheduler = RQScheduler(

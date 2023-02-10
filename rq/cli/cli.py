@@ -5,6 +5,7 @@ RQ command line tool
 from functools import update_wrapper
 import os
 import sys
+import warnings
 
 import click
 from redis.exceptions import ConnectionError
@@ -219,6 +220,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
+@click.option('--dequeue-strategy', '-ds', default="order", help='Sets a custom stratey to dequeue from multiple queues')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(
@@ -244,6 +246,7 @@ def worker(
     log_format,
     date_format,
     serializer,
+    dequeue_strategy,
     **options
 ):
     """Starts an RQ worker."""
@@ -258,6 +261,13 @@ def worker(
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
+
+    is_roundrobin_worker = cli_config.worker_class == "rq.worker.RoundRobinWorker"
+    is_random_worker = cli_config.worker_class == "rq.worker.RandomWorker"
+    if is_roundrobin_worker or is_random_worker:
+        warnings.warn(
+            "The %s worker is deprecated. Use the `dequeue_strategy` argument to set the strategy.", DeprecationWarning
+        )
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
@@ -290,6 +300,7 @@ def worker(
             disable_default_exception_handler=disable_default_exception_handler,
             log_job_description=not disable_job_desc_logging,
             serializer=serializer,
+            dequeue_strategy=dequeue_strategy
         )
 
         # Should we configure Sentry?
