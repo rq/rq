@@ -221,9 +221,8 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        dequeue_strategy=DequeueStrategy.Order
+        dequeue_strategy=DequeueStrategy.Order,
     ):  # noqa
-
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
@@ -574,7 +573,6 @@ class Worker:
         notified = False
 
         while not self._stop_requested and is_suspended(self.connection, self):
-
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
                 self.log.info('Note: There could still be unfinished jobs on the queue')
@@ -629,7 +627,10 @@ class Worker:
             reference_queue (Queue): The queues to reorder
         """
         if self._dequeue_strategy not in ["order", "random", "roundrobin"]:
-            self.log.warning("Dequeue strategy %s is not allowed. Use on of `order`, `random` or `rounbrobin` Defaulting to `order`.", self._dequeue_strategy)
+            self.log.warning(
+                "Dequeue strategy %s is not allowed. Use on of `order`, `random` or `rounbrobin` Defaulting to `order`.",
+                self._dequeue_strategy,
+            )
             return
         if self._dequeue_strategy == DequeueStrategy.Order:
             return
@@ -649,7 +650,7 @@ class Worker:
         log_format=DEFAULT_LOGGING_FORMAT,
         max_jobs=None,
         with_scheduler: bool = False,
-        dequeue_strategy: DequeueStrategy = DequeueStrategy.Order
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.Order,
     ):
         """Starts the work loop.
 
@@ -736,7 +737,6 @@ class Worker:
                     break
         finally:
             if not self.is_horse:
-
                 if self.scheduler:
                     self.stop_scheduler()
 
@@ -763,7 +763,6 @@ class Worker:
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
         while True:
-
             try:
                 self.heartbeat()
 

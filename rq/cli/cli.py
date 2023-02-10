@@ -175,7 +175,6 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
     try:
         with Connection(cli_config.connection):
-
             if queues:
                 qs = list(map(cli_config.queue_class, queues))
             else:
@@ -220,7 +219,9 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
-@click.option('--dequeue-strategy', '-ds', default="order", help='Sets a custom stratey to dequeue from multiple queues')
+@click.option(
+    '--dequeue-strategy', '-ds', default="order", help='Sets a custom stratey to dequeue from multiple queues'
+)
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(
@@ -247,7 +248,7 @@ def worker(
     date_format,
     serializer,
     dequeue_strategy,
-    **options
+    **options,
 ):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
@@ -266,7 +267,8 @@ def worker(
     is_random_worker = cli_config.worker_class == "rq.worker.RandomWorker"
     if is_roundrobin_worker or is_random_worker:
         warnings.warn(
-            "The %s worker is deprecated. Use the `dequeue_strategy` argument to set the strategy.", DeprecationWarning
+            f"The {cli_config.worker_class} worker is deprecated. Use the `dequeue_strategy` argument to set the strategy.",
+            DeprecationWarning,
         )
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
@@ -300,7 +302,7 @@ def worker(
             disable_default_exception_handler=disable_default_exception_handler,
             log_job_description=not disable_job_desc_logging,
             serializer=serializer,
-            dequeue_strategy=dequeue_strategy
+            dequeue_strategy=dequeue_strategy,
         )
 
         # Should we configure Sentry?
@@ -402,7 +404,7 @@ def enqueue(
     serializer,
     function,
     arguments,
-    **options
+    **options,
 ):
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)

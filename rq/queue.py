@@ -771,7 +771,7 @@ class Queue:
             Job: _description_
         """
         job.perform()
-        result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL) 
+        result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL)
         with self.connection.pipeline() as pipeline:
             job._handle_success(result_ttl=result_ttl, pipeline=pipeline)
             job.cleanup(result_ttl, pipeline=pipeline)
@@ -1062,7 +1062,6 @@ class Queue:
         dependents_key = job.dependents_key
 
         while True:
-
             try:
                 # if a pipeline is passed, the caller is responsible for calling WATCH
                 # to ensure all jobs are enqueued
