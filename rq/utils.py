@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class DequeueStrategy(str, Enum):
-    Order = "default"
+    Order = "order"
     RoundRobin = "roundrobin"
     Random = "random"
 
