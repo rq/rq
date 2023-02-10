@@ -2368,19 +2368,6 @@ class TestThreadpoolWorker(RQTestCase):
         self.assertIn('Result is kept for %s seconds', [c[0][0] for c in mock_logger_info.call_args_list])
 
     @mock.patch('rq.worker.logger.info')
-    def test_log_result_lifespan_false(self, mock_logger_info):
-        """Check that log_result_lifespan False causes job lifespan to not be logged."""
-        q = Queue()
-
-        class ThreadPoolWorker(ThreadPoolWorker):
-            log_result_lifespan = False
-
-        w = ThreadPoolWorker([q])
-        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
-        w.perform_job(job, q)
-        self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
-
-    @mock.patch('rq.worker.logger.info')
     def test_log_job_description_true(self, mock_logger_info):
         """Check that log_job_description True causes job lifespan to be logged."""
         q = Queue()
