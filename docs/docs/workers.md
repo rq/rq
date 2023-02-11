@@ -444,3 +444,74 @@ redis = Redis()
 # This will raise an exception if job is invalid or not currently executing
 send_stop_job_command(redis, job_id)
 ```
+
+
+## Concurrency
+_New in version 1.12.2._
+
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
+    <strong>Warning:</strong>
+    <p>
+        This feature is experimental, unstable and may have bugs and/or not function properly.
+        Please do not use this in production.
+    </p>
+</div>
+
+The simplest way of running jobs concurrently is just running multiple workers.
+This will give you the horizontal scalability benefits, and the performance needed for most use cases.
+To run multiple workers just run `rq worker` at two separate terminal windows - you just need to make sure worker names are unique.
+
+As of `v1.12.2`, `rq` now has native support for a `ThreadPoolWorker`, a multithreaded worker based on the `ThreadPoolExecutor` from the `concurrent.futures` library. This custom worker class runs a single worker process, but executes each job in a thread from a `ThreadPool`.
+
+That means that the dequeueing process is always controlled by the main workers' process, and only the task is executed within the thread.
+It also means that `fork()` is not used, which can be a downside or upside depending on the use-case/environment.
+
+The thread-based concurrency model is normally well suited for I/O-bound applications (think of network requests, database operations, file I/O, etc.),
+since the threads will be cooperative between them (yielding execution while waiting), without actually running in parallel.
+
+To run the `ThreadPoolWorker`:
+
+```python
+from redis import Redis
+from rq import Queue, ThreadPoolWorker
+
+q = Queue(connection=Redis())
+w = ThreadPoolWorker([q], connection=q.connection)
+w.work()
+```
+
+As each job is being in run its own thread, waiting operations are done concurrently (not in parallel, even though it may look like it).
+
+```python
+from redis import Redis
+from rq import Queue, ThreadPoolWorker
+
+def my_io_heavy_task(time):
+   time.sleep(time)
+   return
+
+q = Queue(connection=Redis())
+q.enqueue(my_io_heavy_task, 1)
+q.enqueue(my_io_heavy_task, 1)
+
+w = ThreadPoolWorker([q], connection=q.connection)
+w.work(burst=True)
+
+# This will take ~1sec instead of ~2sec when running with the default worker.
+1 > w.total_working_time > 1.1
+```
+
+By default, the number of threads available for `ThreadPoolWorker` will be 5 times the number of CPU cores available (as per the `cpu_count` function from `multiprocessing`) - this is a sane default and the same value used by the `concurrent.futures` library.
+This should be enough in most cases, but you can always customize the pool size according to your specific needs by using the `pool_size` param to the worker.
+
+```python
+w = ThreadPoolWorker([q], connection=q.connection, pool_size=12)
+```
+
+There are relevant limitations to the `ThreadPoolWorker`, here's a non extensive list:
+
+- Dependencies might not behave like expected
+- Job registries may not be reliable (specially with jobs that were timed out)
+- The implementation does not consider thread-safety aspects of the job itself, so make sure your code is thread safe before using this
+-
