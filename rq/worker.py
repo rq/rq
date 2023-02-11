@@ -15,8 +15,8 @@ from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
-from typing import Callable, List, Optional, TYPE_CHECKING, Type
-from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, List, Optional, TYPE_CHECKING, Tuple, Type
+from concurrent.futures import Future, ThreadPoolExecutor
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -1392,6 +1392,7 @@ class ThreadPoolWorker(Worker):
         self.executor = ThreadPoolExecutor(max_workers=self.threadpool_size, thread_name_prefix="rq_workers_")
         self._idle_threads = self.threadpool_size
         self._lock = threading.Lock()
+        self._current_jobs: List[Tuple['Job', 'Future']] = []
         super(ThreadPoolWorker, self).__init__(*args, **kwargs)
 
     @property
@@ -1400,7 +1401,7 @@ class ThreadPoolWorker(Worker):
             return True
         return False
 
-    def _change_idle_counter(self, operation):
+    def __change_idle_counter(self, operation):
         with self._lock:
             self._idle_threads += operation
 
@@ -1463,7 +1464,11 @@ class ThreadPoolWorker(Worker):
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if burst:
+                            has_pending_dependents = self.__check_pending_dependents()
+                            if has_pending_dependents:
+                                continue
                             self.log.info("Worker %s: done, quitting", self.key)
+                            break
                         break
 
                     job, queue = result
@@ -1497,16 +1502,46 @@ class ThreadPoolWorker(Worker):
 
         return bool(completed_jobs)
 
+    def __check_pending_dependents(self) -> bool:
+        """Checks whether any job that's current being executed in the pool has dependents.
+        If there are dependents, appends it to a `pending_dependents` array.
+        If this array has items (> 0), we know something that's currently running must enqueue dependents
+        before we can actually stop a worker (on burst mode, for example).
+        If there are dependents returns True, False otherwise.
+
+        Returns:
+            pending_dependents (bool): Whether any job currently running has dependents.
+        """
+        pending_dependents = []
+        for job, _ in self._current_jobs:
+            if not job.dependents_key:
+                continue
+            pending_dependents.append(job)
+        if len(pending_dependents) > 0:
+            return True
+        return False
+
     def execute_job(self, job, queue):
-        def job_done(child):
-            self._change_idle_counter(+1)
+        def job_done(future: Future):
+            """Callback function that runs after the job (future) is finished.
+            This will update the `idle_counter` object and update the `_current_jobs` array,
+            removing the job that just finished from the list.
+
+            Args:
+                future (Future): The Future object.
+            """
+            self.__change_idle_counter(+1)
             self.heartbeat()
+            job_element = list(filter(lambda x: id(x[1]) == id(future), self._current_jobs))
+            for el in job_element:
+                self._current_jobs.remove(el)
             if job.get_status() == JobStatus.FINISHED:
                 queue.enqueue_dependents(job)
 
         self.log.info("Executing job %s from %s", blue(job.id), green(queue.name))
         future = self.executor.submit(self.perform_job, job, queue)
-        self._change_idle_counter(-1)
+        self._current_jobs.append((job, future))
+        self.__change_idle_counter(-1)
         future.add_done_callback(job_done)
 
     def _shutdown(self):
