@@ -35,14 +35,14 @@ class RQScheduler:
     Status = SchedulerStatus
 
     def __init__(
-        self,
-        queues,
-        connection,
-        interval=1,
-        logging_level=logging.INFO,
-        date_format=DEFAULT_LOGGING_DATE_FORMAT,
-        log_format=DEFAULT_LOGGING_FORMAT,
-        serializer=None,
+            self,
+            queues,
+            connection,
+            interval=1,
+            logging_level=logging.INFO,
+            date_format=DEFAULT_LOGGING_DATE_FORMAT,
+            log_format=DEFAULT_LOGGING_FORMAT,
+            serializer=None,
     ):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks = set()
