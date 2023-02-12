@@ -196,7 +196,7 @@ class Queue:
         return 'rq:clean_registries:%s' % self.name
 
     @property
-    def scheduler_pid(self):
+    def scheduler_pid(self) -> int:
         from rq.scheduler import RQScheduler
         pid = self.connection.get(RQScheduler.get_locking_key(self.name))
         return int(pid.decode()) if pid is not None else None
