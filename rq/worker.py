@@ -36,6 +36,7 @@ from .defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
     DEFAULT_RESULT_TTL,
+    DEFAULT_CPU_THREADS,
     DEFAULT_WORKER_TTL,
     DEFAULT_LOGGING_DATE_FORMAT,
     DEFAULT_LOGGING_FORMAT,
@@ -1391,10 +1392,10 @@ class RandomWorker(Worker):
 
 
 class ThreadPoolWorker(Worker):
-    death_penalty_class = TimerDeathPenalty
+    death_penalty_class = TimerDeathPenalty  # type: ignore
 
     def __init__(self, *args, **kwargs):
-        self.threadpool_size = kwargs.pop('pool_size', 24)
+        self.threadpool_size = kwargs.pop('pool_size', self.default_pool_size)
         self.executor = ThreadPoolExecutor(max_workers=self.threadpool_size, thread_name_prefix="rq_workers_")
         self._idle_threads = self.threadpool_size
         self._lock = threading.Lock()
@@ -1412,6 +1413,18 @@ class ThreadPoolWorker(Worker):
         if self._idle_threads == 0:
             return True
         return False
+
+    @property
+    def default_pool_size(self) -> int:
+        """THe default TheadPool size.
+        By default, each CPU core should run N Threads,
+        where N is the `DEFAULT_CPU_THREADS``
+
+        Returns:
+            cpus (int): Number of CPUs
+        """
+        from multiprocessing import cpu_count
+        return cpu_count() * DEFAULT_CPU_THREADS
 
     def work(
         self,
@@ -1433,7 +1446,9 @@ class ThreadPoolWorker(Worker):
         completed_jobs = 0
         setup_loghandlers(logging_level, date_format, log_format)
         self.register_birth()
-        self.log.info("ThreadPoolWorker %s: started, version %s", self.key, VERSION)
+        self.log.info(
+            "ThreadPoolWorker %s: started with %s threads, version %s", self.key, self.threadpool_size, VERSION
+        )
         self.log.warning("*** WARNING: ThreadPoolWorker is in beta and may be unstable. Don't use it in production!")
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
@@ -1458,7 +1473,7 @@ class ThreadPoolWorker(Worker):
                         break
 
                     if self.is_pool_full:
-                        self.log.info('ThreadPool is full, waiting for idle threads...')
+                        self.log.debug('ThreadPool is full, waiting for idle threads...')
                         self.__wait_for_slot()
 
                     timeout = None if burst else self.dequeue_timeout
@@ -1536,18 +1551,18 @@ class ThreadPoolWorker(Worker):
         with self._lock:
             self._idle_threads += operation
 
-    def __wait_for_slot(self, waiting_period: float = 0.25):
+    def __wait_for_slot(self, wait_interval: float = 0.25):
         """Waits for a free slot in the thread pool.
-        Sleeps for `waiting_period` seconds to avoid high CPU burden on long jobs.
+        Sleeps for `wait_interval` seconds to avoid high CPU burden on long jobs.
 
         Args:
-            waiting_period (float, 0.25): How long to wait between each check. Default to 0.25 second.
+            wait_interval (float, 0.25): How long to wait between each check. Default to 0.25 second.
         """
         while 1:
             if not self.is_pool_full:
-                self.log.info('Found idle thread, ready to work')
+                self.log.debug('Found idle thread, ready to work')
                 break
-            time.sleep(waiting_period)
+            time.sleep(wait_interval)
             continue
 
     def __check_pending_dependents(self) -> bool:

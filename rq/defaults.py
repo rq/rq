@@ -88,3 +88,9 @@ DEFAULT_LOGGING_FORMAT = '%(asctime)s %(message)s'
 Uses Python's default attributes as defined
 https://docs.python.org/3/library/logging.html#logrecord-attributes
 """
+
+
+DEFAULT_CPU_THREADS = 5
+""" The number of threads per core the ThreadPoolWorker will use by default.
+This is the same default used by the `concurrent.futures` module.
+"""
