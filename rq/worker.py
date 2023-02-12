@@ -15,7 +15,6 @@ from enum import Enum
 from uuid import uuid4
 from random import shuffle
 from typing import Callable, List, Optional, TYPE_CHECKING, Tuple, Type
-from concurrent.futures import Future, ThreadPoolExecutor
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -30,14 +29,16 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .utils import as_text
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (
     CALLBACK_TIMEOUT,
+    DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .job import Job, JobStatus
@@ -1049,7 +1050,7 @@ class Worker:
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
-            self.log.debug(f"Job preparation finished.")
+            self.log.debug("Job preparation finished.")
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
