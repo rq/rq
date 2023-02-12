@@ -13,7 +13,7 @@ from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
 from random import shuffle
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Type
+from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Type, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -1004,7 +1004,7 @@ class Worker:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
-    def get_heartbeat_ttl(self, job: 'Job') -> int:
+    def get_heartbeat_ttl(self, job: 'Job') -> Union[float, int]:
         """Get's the TTL for the next heartbeat.
 
         Args:
@@ -1012,7 +1012,7 @@ class Worker:
 
         Returns:
             int: The heartbeat TTL.
-        """        
+        """
         if job.timeout and job.timeout > 0:
             remaining_execution_time = job.timeout - self.current_job_working_time
             return min(remaining_execution_time, self.job_monitoring_interval) + 60
@@ -1141,8 +1141,10 @@ class Worker:
 
     def setup_work_horse_signals(self):
         """Setup signal handing for the newly spawned work horse
+
         Always ignore Ctrl+C in the work horse, as it might abort the
         currently running job.
+
         The main worker catches the Ctrl+C and requests graceful shutdown
         after the current work is done.  When cold shutdown is requested, it
         kills the current job anyway.
@@ -1465,9 +1467,16 @@ class SimpleWorker(Worker):
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def get_heartbeat_ttl(self, job: 'Job'):
-        # "-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
-        # # We should just stick to DEFAULT_WORKER_TTL.
+    def get_heartbeat_ttl(self, job: 'Job') -> Union[float, int]:
+        """-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
+        We should just stick to DEFAULT_WORKER_TTL.
+
+        Args:
+            job (Job): The Job
+
+        Returns:
+            ttl (float | int): TTL
+        """
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
         else:
