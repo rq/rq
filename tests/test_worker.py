@@ -1438,7 +1438,7 @@ class TestRandomWorker(RQTestCase):
         self.assertEqual(sorted_ids, expected_ser)
 
 
-class TestThreadpoolWorker(RQTestCase):
+class TestThreadPoolWorker(RQTestCase):
 
     def test_create_worker(self):
         """ThreadPoolWorker creation using various inputs."""
