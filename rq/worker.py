@@ -1461,7 +1461,7 @@ class ThreadPoolWorker(Worker):
                         self.log.info('ThreadPool is full, waiting for idle threads...')
                         self.__wait_for_slot()
 
-                    timeout = None if burst else self._get_timeout()
+                    timeout = None if burst else self.dequeue_timeout
                     result = self.dequeue_job_and_maintain_ttl(timeout)
                     if result is None:
                         if not burst:
