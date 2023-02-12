@@ -174,7 +174,6 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
     try:
         with Connection(cli_config.connection):
-
             if queues:
                 qs = list(map(cli_config.queue_class, queues))
             else:

@@ -163,7 +163,7 @@ class TestDependencies(RQTestCase):
         assert job_c.result
 
 
-class TestThreadpoolWorkerDependencies(RQTestCase):
+class TestThreadPoolWorkerDependencies(RQTestCase):
 
     def test_job_dependency(self):
         """Enqueue dependent jobs only when appropriate"""
