@@ -121,6 +121,7 @@ def black_hole(job, *exc_info):
 ```
 
 ## Workhorse Termination Handler
+_New in version 1.13.0._
 
 In addition to job exception handler(s), RQ supports registering a handler for unexpected workhorse termination.
 This handler is called when a workhorse is unexpectedly terminated, for example due to OOM.
