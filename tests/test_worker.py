@@ -642,6 +642,16 @@ class TestWorker(RQTestCase):
         # Put it on the queue with a timeout value
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(None))
 
+    def test_worker_ttl_param_resolves_timeout(self):
+        """Ensures the worker_ttl param is being considered in the dequeue_timeout and connection_timeout params, takes into account 15 seconds gap (hard coded)"""
+        q = Queue()
+        w = Worker([q])
+        self.assertEqual(w.dequeue_timeout, 405)
+        self.assertEqual(w.connection_timeout, 415)
+        w = Worker([q], default_worker_ttl=500)
+        self.assertEqual(w.dequeue_timeout, 485)
+        self.assertEqual(w.connection_timeout, 495)
+
     def test_worker_sets_result_ttl(self):
         """Ensure that Worker properly sets result_ttl for individual jobs."""
         q = Queue()

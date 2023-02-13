@@ -1,9 +1,10 @@
 import os
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
-
 from unittest import mock
+
 from rq import Queue
+from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.exceptions import NoSuchJobError
 from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
@@ -11,10 +12,7 @@ from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
-
 from tests import RQTestCase, find_empty_redis_database, ssl_test
-
 from .fixtures import kill_worker, say_hello
 
 
@@ -140,7 +138,7 @@ class TestScheduler(RQTestCase):
         # scheduler.should_reacquire_locks always returns False if
         # scheduler.acquired_locks and scheduler._queue_names are the same
         self.assertFalse(scheduler.should_reacquire_locks)
-        scheduler.lock_acquisition_time = datetime.now() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL+6)
+        scheduler.lock_acquisition_time = datetime.now() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 6)
         self.assertFalse(scheduler.should_reacquire_locks)
 
         scheduler._queue_names = set(['default', 'foo'])
@@ -195,6 +193,12 @@ class TestScheduler(RQTestCase):
             scheduler.acquire_locks(auto_start=True)
             self.assertEqual(mocked.call_count, 1)
             self.assertEqual(stopped_process.is_alive.call_count, 1)
+
+    def test_queue_scheduler_pid(self):
+        queue = Queue(connection=self.testconn)
+        scheduler = RQScheduler([queue, ], connection=self.testconn)
+        scheduler.acquire_locks()
+        assert queue.scheduler_pid == os.getpid()
 
     def test_heartbeat(self):
         """Test that heartbeat updates locking keys TTL"""
