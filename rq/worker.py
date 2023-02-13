@@ -221,7 +221,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        dequeue_strategy=DequeueStrategy.Order,
+        dequeue_strategy=DequeueStrategy.DEFAULT,
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
@@ -618,7 +618,7 @@ class Worker:
             self.pubsub.unsubscribe()
             self.pubsub.close()
 
-    def reorder_queues(self, reference_queue):
+    def reorder_queues(self, reference_queue: 'Queue'):
         """Reorder the queues according to the strategy.
         As this can be defined both in the `Worker` initialization or in the `work` method,
         it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
@@ -626,19 +626,22 @@ class Worker:
         Args:
             reference_queue (Queue): The queues to reorder
         """
-        if self._dequeue_strategy not in ["order", "random", "roundrobin"]:
+        if self._dequeue_strategy is None:
+            self._dequeue_strategy = DequeueStrategy.DEFAULT
+
+        if self._dequeue_strategy not in ["default", "random", "roundrobin"]:
             self.log.warning(
-                "Dequeue strategy %s is not allowed. Use on of `order`, `random` or `rounbrobin` Defaulting to `order`.",
+                "Dequeue strategy %s is not allowed. Use one of `default`, `random` or `rounbrobin`. Using defalt ordering.",
                 self._dequeue_strategy,
             )
             return
-        if self._dequeue_strategy == DequeueStrategy.Order:
+        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
             return
-        if self._dequeue_strategy == DequeueStrategy.RoundRobin:
+        if self._dequeue_strategy == DequeueStrategy.ROUNDROBIN:
             pos = self._ordered_queues.index(reference_queue)
-            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+            self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
             return
-        if self._dequeue_strategy == DequeueStrategy.Random:
+        if self._dequeue_strategy == DequeueStrategy.RANDOM:
             shuffle(self._ordered_queues)
             return
 
@@ -650,7 +653,7 @@ class Worker:
         log_format=DEFAULT_LOGGING_FORMAT,
         max_jobs=None,
         with_scheduler: bool = False,
-        dequeue_strategy: DequeueStrategy = DequeueStrategy.Order,
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
     ):
         """Starts the work loop.
 
@@ -1389,7 +1392,7 @@ class RoundRobinWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
 
 
 class RandomWorker(Worker):

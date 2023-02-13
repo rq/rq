@@ -27,10 +27,10 @@ from .exceptions import TimeoutFormatError
 logger = logging.getLogger(__name__)
 
 
-class DequeueStrategy(str, Enum):
-    Order = "order"
-    RoundRobin = "roundrobin"
-    Random = "random"
+class DequeueStrategy(Enum):
+    DEFAULT = "default"
+    ROUNDROBIN = "roundrobin"
+    RANDOM = "random"
 
 
 class _Colorizer:

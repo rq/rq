@@ -326,6 +326,21 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, args + ['--quiet', '--verbose'])
         self.assertNotEqual(result.exit_code, 0)
 
+    def test_worker_dequeue_strategy(self):
+        """--quiet and --verbose logging options are supported"""
+        runner = CliRunner()
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'random']
+        result = runner.invoke(main, args)
+        self.assert_normal_execution(result)
+
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'roundrobin']
+        result = runner.invoke(main, args)
+        self.assert_normal_execution(result)
+
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'wrong']
+        result = runner.invoke(main, args)
+        self.assertEqual(result.exit_code, 1)
+
     def test_exception_handlers(self):
         """rq worker -u <url> -b --exception-handler <handler>"""
         connection = Redis.from_url(self.redis_url)

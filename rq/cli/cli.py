@@ -219,9 +219,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
-@click.option(
-    '--dequeue-strategy', '-ds', default="order", help='Sets a custom stratey to dequeue from multiple queues'
-)
+@click.option('--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(
@@ -263,13 +261,18 @@ def worker(
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
 
-    is_roundrobin_worker = cli_config.worker_class == "rq.worker.RoundRobinWorker"
-    is_random_worker = cli_config.worker_class == "rq.worker.RandomWorker"
+    worker_name = cli_config.worker_class.__qualname__
+    is_roundrobin_worker = worker_name == "RoundRobinWorker"
+    is_random_worker = worker_name == "RandomWorker"
     if is_roundrobin_worker or is_random_worker:
-        warnings.warn(
-            f"The {cli_config.worker_class} worker is deprecated. Use the `dequeue_strategy` argument to set the strategy.",
-            DeprecationWarning,
-        )
+        strategy_alternative = "random" if worker_name == "RandomWorker" else "roundrobin"
+        msg = f"WARNING: The {worker_name} is deprecated. Use the --dequeue-strategy / -ds option with the {strategy_alternative} argument to set the strategy."
+        warnings.warn(msg, DeprecationWarning)
+        click.secho(msg, fg='yellow')
+
+    if dequeue_strategy not in ["default", "random", "roundrobin"]:
+        click.secho("ERROR: Dequeue Strategy can only be one of `default`, `random` or `roundrobin`.", err=True, fg='red')
+        sys.exit(1)
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
