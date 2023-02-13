@@ -262,9 +262,7 @@ def worker(
             fp.write(str(os.getpid()))
 
     worker_name = cli_config.worker_class.__qualname__
-    is_roundrobin_worker = worker_name == "RoundRobinWorker"
-    is_random_worker = worker_name == "RandomWorker"
-    if is_roundrobin_worker or is_random_worker:
+    if worker_name in ["RoundRobinWorker", "RandomWorker"]:
         strategy_alternative = "random" if worker_name == "RandomWorker" else "roundrobin"
         msg = f"WARNING: The {worker_name} is deprecated. Use the --dequeue-strategy / -ds option with the {strategy_alternative} argument to set the strategy."
         warnings.warn(msg, DeprecationWarning)
