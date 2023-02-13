@@ -27,7 +27,7 @@ from .exceptions import TimeoutFormatError
 logger = logging.getLogger(__name__)
 
 
-class DequeueStrategy(Enum):
+class DequeueStrategy(str, Enum):
     DEFAULT = "default"
     ROUNDROBIN = "roundrobin"
     RANDOM = "random"
