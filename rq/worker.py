@@ -234,7 +234,6 @@ class Worker:
         prepare_for_work: bool = True,
         serializer=None,
     ):  # noqa
-
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
@@ -532,8 +531,7 @@ class Worker:
         return self.job_class.fetch(job_id, self.connection, self.serializer)
 
     def _install_signal_handlers(self):
-        """Installs signal handlers for handling SIGINT and SIGTERM gracefully.
-        """
+        """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
@@ -621,13 +619,11 @@ class Worker:
         self.log.info('Warm shut down requested')
 
     def check_for_suspension(self, burst: bool):
-        """Check to see if workers have been suspended by `rq suspend`
-        """
+        """Check to see if workers have been suspended by `rq suspend`"""
         before_state = None
         notified = False
 
         while not self._stop_requested and is_suspended(self.connection, self):
-
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
                 self.log.info('Note: There could still be unfinished jobs on the queue')
@@ -680,8 +676,68 @@ class Worker:
 
         Args:
             reference_queue (Union[Queue, str]): The queue
-        """        
+        """
         pass
+
+    def bootstrap(
+        self,
+        logging_level: str = "INFO",
+        date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
+        log_format: str = DEFAULT_LOGGING_FORMAT,
+    ):
+        """Bootstraps the worker.
+        Runs the basic tasks that should run when the worker actually starts working.
+        Used so that new workers can focus on the work loop implementation rather
+        than the full bootstraping process.
+
+        Args:
+            logging_level (str, optional): Logging level to use. Defaults to "INFO".
+            date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
+            log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
+        """
+        setup_loghandlers(logging_level, date_format, log_format)
+        self.register_birth()
+        self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.subscribe()
+        self.set_state(WorkerStatus.STARTED)
+        qnames = self.queue_names()
+        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
+
+    def _start_scheduler(
+        self,
+        burst: bool = False,
+        logging_level: str = "INFO",
+        date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
+        log_format: str = DEFAULT_LOGGING_FORMAT,
+    ):
+        """Starts the scheduler process.
+        This is specifically designed to be run by the worker when running the `work()` method.
+        Instanciates the RQScheduler and tries to acquire a lock.
+        If the lock is acquired, start scheduler.
+        If worker is on burst mode just enqueues scheduled jobs and quits,
+        otherwise, starts the scheduler in a separate process.
+
+        Args:
+            burst (bool, optional): Whether to work on burst mode. Defaults to False.
+            logging_level (str, optional): Logging level to use. Defaults to "INFO".
+            date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
+            log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
+        """
+        self.scheduler = RQScheduler(
+            self.queues,
+            connection=self.connection,
+            logging_level=logging_level,
+            date_format=date_format,
+            log_format=log_format,
+            serializer=self.serializer,
+        )
+        self.scheduler.acquire_locks()
+        if self.scheduler.acquired_locks:
+            if burst:
+                self.scheduler.enqueue_scheduled_jobs()
+                self.scheduler.release_locks()
+            else:
+                self.scheduler.start()
 
     def work(
         self,
@@ -711,34 +767,10 @@ class Worker:
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.
         """
-        setup_loghandlers(logging_level, date_format, log_format)
+        self.bootstrap(logging_level, date_format, log_format)
         completed_jobs = 0
-        self.register_birth()
-        self.log.info("Worker %s: started, version %s", self.key, VERSION)
-        self.subscribe()
-        self.set_state(WorkerStatus.STARTED)
-        qnames = self.queue_names()
-        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
-
         if with_scheduler:
-            self.scheduler = RQScheduler(
-                self.queues,
-                connection=self.connection,
-                logging_level=logging_level,
-                date_format=date_format,
-                log_format=log_format,
-                serializer=self.serializer,
-            )
-            self.scheduler.acquire_locks()
-            # If lock is acquired, start scheduler
-            if self.scheduler.acquired_locks:
-                # If worker is run on burst mode, enqueue_scheduled_jobs()
-                # before working. Otherwise, start scheduler in a separate process
-                if burst:
-                    self.scheduler.enqueue_scheduled_jobs()
-                    self.scheduler.release_locks()
-                else:
-                    self.scheduler.start()
+            self._start_scheduler(burst, logging_level, date_format, log_format)
 
         self._install_signal_handlers()
         try:
@@ -787,7 +819,6 @@ class Worker:
                     break
         finally:
             if not self.is_horse:
-
                 if self.scheduler:
                     self.stop_scheduler()
 
@@ -822,7 +853,6 @@ class Worker:
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
         while True:
-
             try:
                 self.heartbeat()
 
@@ -1490,6 +1520,7 @@ class HerokuWorker(Worker):
     * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
     causes the horse to crash `imminent_shutdown_delay` seconds later
     """
+
     imminent_shutdown_delay = 6
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
 
