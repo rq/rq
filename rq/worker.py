@@ -235,7 +235,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        workhorse_terminated_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
+        workhorse_crash_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
     ):  # noqa
 
         self.default_result_ttl = default_result_ttl
@@ -264,7 +264,7 @@ class Worker:
         self.validate_queues()
         self._ordered_queues = self.queues[:]
         self._exc_handlers: List[Callable] = []
-        self._workhorse_terminated_handler = workhorse_terminated_handler
+        self._workhorse_crash_handler = workhorse_crash_handler
 
         self._state: str = 'starting'
         self._is_horse: bool = False
@@ -1083,7 +1083,7 @@ class Worker:
             exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
             self.log.warning(f'Moving job to FailedJobRegistry ({exc_string})')
 
-            self.handle_workhorse_terminated(job, retpid, ret_val, rusage)
+            self.handle_workhorse_crash(job, retpid, ret_val, rusage)
             self.handle_job_failure(
                 job, queue=queue,
                 exc_string=exc_string
@@ -1293,14 +1293,13 @@ class Worker:
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
 
-    def execute_failure_callback(self, job: 'Job', exc_info=None):
+    def execute_failure_callback(self, job: 'Job', *exc_info):
         """Executes failure_callback with timeout
 
         Args:
             job (Job): The Job
         """
         self.log.debug(f"Running failure callbacks for {job.id}")
-        exc_info = exc_info or sys.exc_info()
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *exc_info)
@@ -1348,11 +1347,11 @@ class Worker:
 
             if job.failure_callback:
                 try:
-                    self.execute_failure_callback(job)
+                    self.execute_failure_callback(job, *exc_info)
                 except:  # noqa
-                    self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=True)
                     exc_info = sys.exc_info()
                     exc_string = ''.join(traceback.format_exception(*exc_info))
+                    self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
 
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
@@ -1424,11 +1423,11 @@ class Worker:
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
 
-    def handle_workhorse_terminated(self, job, retpid, ret_val, rusage):
-        if self._workhorse_terminated_handler is None:
+    def handle_workhorse_crash(self, job, retpid, ret_val, rusage):
+        if self._workhorse_crash_handler is None:
             return
 
-        self._workhorse_terminated_handler(job, retpid, ret_val, rusage)
+        self._workhorse_crash_handler(job, retpid, ret_val, rusage)
 
     def __eq__(self, other):
         """Equality does not take the database/connection into account"""

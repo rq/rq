@@ -1224,17 +1224,18 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w.prepare_job_execution(job)
         w.fork_work_horse(job, queue)
         job.timeout = 5
-
+        now = utcnow()
         time.sleep(1)
         with open(sentinel_file) as f:
             subprocess_pid = int(f.read().strip())
         self.assertTrue(psutil.pid_exists(subprocess_pid))
 
-        w.monitor_work_horse(job, queue)
+        with mock.patch.object(w, 'handle_workhorse_crash', wraps=w.handle_workhorse_crash) as mocked:
+            w.monitor_work_horse(job, queue)
+            self.assertEqual(mocked.call_count, 1)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
 
-        now = utcnow()
         self.assertTrue((utcnow() - now).total_seconds() < total_time)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
