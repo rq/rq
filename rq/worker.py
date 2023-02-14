@@ -533,8 +533,7 @@ class Worker:
         return self.job_class.fetch(job_id, self.connection, self.serializer)
 
     def _install_signal_handlers(self):
-        """Installs signal handlers for handling SIGINT and SIGTERM gracefully.
-        """
+        """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
@@ -622,8 +621,7 @@ class Worker:
         self.log.info('Warm shut down requested')
 
     def check_for_suspension(self, burst: bool):
-        """Check to see if workers have been suspended by `rq suspend`
-        """
+        """Check to see if workers have been suspended by `rq suspend`"""
         before_state = None
         notified = False
 
@@ -680,7 +678,7 @@ class Worker:
         it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
 
         Args:
-            reference_queue (Queue): The queues to reorder
+            reference_queue (Union[Queue, str]): The queues to reorder
         """
         if self._dequeue_strategy is None:
             self._dequeue_strategy = DequeueStrategy.DEFAULT
@@ -1508,6 +1506,7 @@ class HerokuWorker(Worker):
     * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
     causes the horse to crash `imminent_shutdown_delay` seconds later
     """
+
     imminent_shutdown_delay = 6
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
 
