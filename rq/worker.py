@@ -557,7 +557,7 @@ class Worker:
             else:
                 raise
 
-    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int]]:
+    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int], Optional[resource.struct_rusage]]:
         """Waits for the horse process to complete.
         Uses `0` as argument as to include "any child in the process group of the current process".
         """
