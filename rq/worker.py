@@ -234,7 +234,6 @@ class Worker:
         prepare_for_work: bool = True,
         serializer=None,
     ):  # noqa
-
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
@@ -532,8 +531,7 @@ class Worker:
         return self.job_class.fetch(job_id, self.connection, self.serializer)
 
     def _install_signal_handlers(self):
-        """Installs signal handlers for handling SIGINT and SIGTERM gracefully.
-        """
+        """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
@@ -621,13 +619,11 @@ class Worker:
         self.log.info('Warm shut down requested')
 
     def check_for_suspension(self, burst: bool):
-        """Check to see if workers have been suspended by `rq suspend`
-        """
+        """Check to see if workers have been suspended by `rq suspend`"""
         before_state = None
         notified = False
 
         while not self._stop_requested and is_suspended(self.connection, self):
-
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
                 self.log.info('Note: There could still be unfinished jobs on the queue')
@@ -680,7 +676,7 @@ class Worker:
 
         Args:
             reference_queue (Union[Queue, str]): The queue
-        """        
+        """
         pass
 
     def work(
@@ -787,7 +783,6 @@ class Worker:
                     break
         finally:
             if not self.is_horse:
-
                 if self.scheduler:
                     self.stop_scheduler()
 
@@ -822,7 +817,6 @@ class Worker:
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
         while True:
-
             try:
                 self.heartbeat()
 
@@ -1490,6 +1484,7 @@ class HerokuWorker(Worker):
     * sends SIGRTMIN to work horses on SIGTERM to the main process which in turn
     causes the horse to crash `imminent_shutdown_delay` seconds later
     """
+
     imminent_shutdown_delay = 6
     frame_properties = ['f_code', 'f_lasti', 'f_lineno', 'f_locals', 'f_trace']
 
