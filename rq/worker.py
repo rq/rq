@@ -764,7 +764,7 @@ class Worker:
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
-            max_idle_time (Optional[int], optional): Worker will exit when idle for more than this value in seconds.
+            max_idle_time (Optional[int], optional): Max seconds for worker to be idle. Defaults to None.
             with_scheduler (bool, optional): Whether to run the scheduler in a separate process. Defaults to False.
 
         Returns:
@@ -844,7 +844,7 @@ class Worker:
                 pass
             self.scheduler._process.join()
 
-    def dequeue_job_and_maintain_ttl(self, timeout: int, max_idle_time: Optional[int] = None) -> Tuple['Job', 'Queue']:
+    def dequeue_job_and_maintain_ttl(self, timeout: Optional[int], max_idle_time: Optional[int] = None) -> Tuple['Job', 'Queue']:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
