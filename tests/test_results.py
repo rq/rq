@@ -225,3 +225,14 @@ class TestScheduledJobRegistry(RQTestCase):
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=-1, return_value=1)
         self.assertEqual(job.return_value(), 1)
+
+    def test_job_return_value_result_ttl_zero(self):
+        """Test job.return_value when queue.result_ttl=0"""
+        queue = Queue(connection=self.connection, result_ttl=0)
+        job = queue.enqueue(say_hello)
+
+        # Returns None when there's no result
+        self.assertIsNone(job.return_value())
+
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=0, return_value=1)
+        self.assertIsNone(job.return_value())
