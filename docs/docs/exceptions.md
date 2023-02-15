@@ -120,7 +120,7 @@ def black_hole(job, *exc_info):
     return False
 ```
 
-## Work Horse Kill Handler
+## Work Horse Killed Handler
 _New in version 1.13.0._
 
 In addition to job exception handler(s), RQ supports registering a handler for unexpected workhorse termination.
