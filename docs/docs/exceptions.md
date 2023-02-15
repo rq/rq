@@ -120,7 +120,7 @@ def black_hole(job, *exc_info):
     return False
 ```
 
-## Workhorse Crash Handler
+## Work Horse Kill Handler
 _New in version 1.13.0._
 
 In addition to job exception handler(s), RQ supports registering a handler for unexpected workhorse termination.
@@ -129,9 +129,9 @@ This handler is called when a workhorse is unexpectedly terminated, for example 
 This is how you set a workhorse termination handler to an RQ worker:
 
 ```python
-from my_handlers import my_workhorse_crash_handler
+from my_handlers import my_work_horse_killed_handler
 
-w = Worker([q], workhorse_crash_handler=my_workhorse_crash_handler)
+w = Worker([q], work_horse_killed_handler=my_work_horse_killed_handler)
 ```
 
 The handler itself is a function that takes the following parameters: `job`,
@@ -140,7 +140,7 @@ The handler itself is a function that takes the following parameters: `job`,
 ```python
 from resource import struct_rusage
 from rq.job import Job
-def my_workhorse_crash_handler(job: Job, retpid: int, ret_val: int, rusage: struct_rusage):
+def my_work_horse_killed_handler(job: Job, retpid: int, ret_val: int, rusage: struct_rusage):
     # do your thing here, for example set job.retries_left to 0 
 
 ```

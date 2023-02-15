@@ -235,7 +235,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        workhorse_crash_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
+        work_horse_killed_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
     ):  # noqa
 
         self.default_result_ttl = default_result_ttl
@@ -264,7 +264,7 @@ class Worker:
         self.validate_queues()
         self._ordered_queues = self.queues[:]
         self._exc_handlers: List[Callable] = []
-        self._workhorse_crash_handler = workhorse_crash_handler
+        self._work_horse_killed_handler = work_horse_killed_handler
 
         self._state: str = 'starting'
         self._is_horse: bool = False
@@ -1083,7 +1083,7 @@ class Worker:
             exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
             self.log.warning(f'Moving job to FailedJobRegistry ({exc_string})')
 
-            self.handle_workhorse_crash(job, retpid, ret_val, rusage)
+            self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(
                 job, queue=queue,
                 exc_string=exc_string
@@ -1423,11 +1423,11 @@ class Worker:
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
 
-    def handle_workhorse_crash(self, job, retpid, ret_val, rusage):
-        if self._workhorse_crash_handler is None:
+    def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
+        if self._work_horse_killed_handler is None:
             return
 
-        self._workhorse_crash_handler(job, retpid, ret_val, rusage)
+        self._work_horse_killed_handler(job, retpid, ret_val, rusage)
 
     def __eq__(self, other):
         """Equality does not take the database/connection into account"""
