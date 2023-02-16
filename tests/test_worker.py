@@ -1224,7 +1224,6 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w.prepare_job_execution(job)
         w.fork_work_horse(job, queue)
         job.timeout = 5
-        now = utcnow()
         time.sleep(1)
         with open(sentinel_file) as f:
             subprocess_pid = int(f.read().strip())
@@ -1236,6 +1235,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
 
+        now = utcnow()
         self.assertTrue((utcnow() - now).total_seconds() < total_time)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
