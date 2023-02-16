@@ -818,13 +818,15 @@ class Worker:
                     self.log.error('Worker %s: found an unhandled exception, quitting...', self.key, exc_info=True)
                     break
         finally:
-            if not self.is_horse:
-                if self.scheduler:
-                    self.stop_scheduler()
-
-                self.register_death()
-                self.unsubscribe()
+            self.teardown()
         return bool(completed_jobs)
+
+    def teardown(self):
+        if not self.is_horse:
+            if self.scheduler:
+                self.stop_scheduler()
+            self.register_death()
+            self.unsubscribe()
 
     def stop_scheduler(self):
         """Ensure scheduler process is stopped
