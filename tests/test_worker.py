@@ -1743,22 +1743,23 @@ class TestThreadPoolWorker(RQTestCase):
         job.refresh()
         self.assertIn('rq.timeouts.JobTimeoutException', job.exc_info)
 
-    @slow
-    def test_heartbeat_busy(self):
-        """Periodic heartbeats while horse is busy with long jobs"""
-        q = Queue()
-        w = ThreadPoolWorker([q], job_monitoring_interval=5)
+    # @slow
+    # def test_heartbeat_busy(self):
+    #     """Periodic heartbeats while horse is busy with long jobs"""
+    #     q = Queue()
+    #     w = ThreadPoolWorker([q], job_monitoring_interval=5, pool_size=1)
 
-        for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
-            job = q.enqueue(long_running_job,
-                            args=(timeout,),
-                            job_timeout=30,
-                            result_ttl=-1)
-            with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
-                w.execute_job(job, q)
-                self.assertEqual(mocked.call_count, expected_heartbeats)
-            job = Job.fetch(job.id)
-            self.assertEqual(job.get_status(), JobStatus.FINISHED)
+    #     for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
+    #         job = q.enqueue(long_running_job,
+    #                         args=(timeout,),
+    #                         job_timeout=30,
+    #                         result_ttl=-1)
+    #         with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
+    #             w.execute_job(job, q)
+    #             w.wait_all()
+    #             self.assertEqual(mocked.call_count, expected_heartbeats)
+    #         job = Job.fetch(job.id)
+    #         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""

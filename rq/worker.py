@@ -9,7 +9,7 @@ import threading
 import time
 import traceback
 import warnings
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
@@ -1638,21 +1638,12 @@ class ThreadPoolWorker(Worker):
 
         The return value indicates whether any jobs were processed.
         """
+        self.bootstrap(logging_level, date_format, log_format)
         completed_jobs = 0
-        setup_loghandlers(logging_level, date_format, log_format)
-        self.register_birth()
-        self.log.info(
-            "ThreadPoolWorker %s: started with %s threads, version %s", self.key, self.threadpool_size, VERSION
-        )
+        self.log.info("ThreadPoolWorker %s: started with %s threads, version %s", self.key, self.threadpool_size, VERSION)
         self.log.warning("*** WARNING: ThreadPoolWorker is in beta and may be unstable. Don't use it in production!")
-        self.subscribe()
-        self.set_state(WorkerStatus.STARTED)
-        qnames = self.queue_names()
-        self.log.info('*** Listening on %s...', green(', '.join(qnames)))
-
         if with_scheduler:
-            # Make scheduler ready.
-            pass
+            self._start_scheduler(burst, logging_level, date_format, log_format)
 
         self._install_signal_handlers()
         try:
@@ -1736,6 +1727,10 @@ class ThreadPoolWorker(Worker):
         self._current_jobs.append((job, future))
         self.__change_idle_counter(-1)
         future.add_done_callback(job_done)
+
+    def wait_all(self, timeout: Optional[int] = None):
+        """ Wait all current jobs """
+        wait([future for _, future in self._current_jobs])
 
     def __change_idle_counter(self, operation: int):
         """Updates the idle threads counter using a lock to make it safe.
