@@ -28,7 +28,6 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .utils import as_text
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (
@@ -48,7 +47,7 @@ from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact
+from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
 from .version import VERSION
 from .serializers import resolve_serializer
 
