@@ -8,12 +8,12 @@ import sys
 import time
 import traceback
 import warnings
-
 from datetime import timedelta
 from enum import Enum
-from uuid import uuid4
 from random import shuffle
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Type, Union
+from typing import (TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type,
+                    Union)
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -23,35 +23,35 @@ try:
     from signal import SIGKILL
 except ImportError:
     from signal import SIGTERM as SIGKILL
+
 from contextlib import suppress
+
 import redis.exceptions
 
 from . import worker_registration
-from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .utils import DequeueStrategy, as_text
-from .connections import get_current_connection, push_connection, pop_connection
-
-from .defaults import (
-    CALLBACK_TIMEOUT,
-    DEFAULT_MAINTENANCE_TASK_INTERVAL,
-    DEFAULT_RESULT_TTL,
-    DEFAULT_WORKER_TTL,
-    DEFAULT_JOB_MONITORING_INTERVAL,
-    DEFAULT_LOGGING_FORMAT,
-    DEFAULT_LOGGING_DATE_FORMAT,
-)
-from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
+from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
+from .connections import (get_current_connection, pop_connection,
+                          push_connection)
+from .defaults import (CALLBACK_TIMEOUT, DEFAULT_JOB_MONITORING_INTERVAL,
+                       DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT,
+                       DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_RESULT_TTL,
+                       DEFAULT_WORKER_TTL)
+from .exceptions import (DequeueTimeout, DeserializationError,
+                         ShutDownImminentException)
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
+from .serializers import resolve_serializer
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact
+from .timeouts import (HorseMonitorTimeoutException, JobTimeoutException,
+                       UnixSignalDeathPenalty)
+from .utils import (DequeueStrategy, as_text, backend_class, compact,
+                    ensure_list, get_version, make_colorizer, utcformat,
+                    utcnow, utcparse)
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
-from .serializers import resolve_serializer
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -704,6 +704,7 @@ class Worker:
         logging_level: str = "INFO",
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
     ):
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
@@ -721,6 +722,7 @@ class Worker:
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
+        self._dequeue_strategy = dequeue_strategy
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
 
     def _start_scheduler(
@@ -788,7 +790,7 @@ class Worker:
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.
         """
-        self.bootstrap(logging_level, date_format, log_format)
+        self.bootstrap(logging_level, date_format, log_format, dequeue_strategy)
         completed_jobs = 0
         if with_scheduler:
             self._start_scheduler(burst, logging_level, date_format, log_format)
