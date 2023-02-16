@@ -169,7 +169,10 @@ class Result(object):
         if pipeline is None:
             self.id = result.decode()
         if ttl is not None:
-            connection.expire(key, ttl)
+            if ttl == -1:
+                connection.persist(key)
+            else:
+                connection.expire(key, ttl)
         return self.id
 
     def serialize(self):
