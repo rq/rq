@@ -53,7 +53,7 @@ from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import DequeueStrategy, backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
+from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
 from .version import VERSION
 from .serializers import resolve_serializer
 
@@ -93,6 +93,12 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
     except ValueError:
         return 'SIG_UNKNOWN'
+
+
+class DequeueStrategy(str, Enum):
+    DEFAULT = "default"
+    ROUNDROBIN = "roundrobin"
+    RANDOM = "random"
 
 
 class WorkerStatus(str, Enum):
