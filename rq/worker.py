@@ -865,11 +865,13 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
+                if timeout is not None and max_idle_time is not None:
+                    timeout = min(timeout, max_idle_time)
+
                 self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
-                dequeue_timeout = min(timeout, max_idle_time)
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
-                    dequeue_timeout,
+                    timeout,
                     connection=self.connection,
                     job_class=self.job_class,
                     serializer=self.serializer,
@@ -886,8 +888,12 @@ class Worker:
                 break
             except DequeueTimeout:
                 if max_idle_time is not None:
-                    if utcnow() - idle_since >= timedelta(seconds=max_idle_time):
+                    idle_for = (utcnow() - idle_since).total_seconds()
+                    idle_time_left = max_idle_time - idle_for
+                    if idle_time_left <= 0:
                         break
+                    else:
+                        max_idle_time = idle_time_left
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error(
                     'Could not connect to Redis instance: %s Retrying in %d seconds...', conn_err, connection_wait_time
