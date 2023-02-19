@@ -30,3 +30,7 @@ class ShutDownImminentException(Exception):
 
 class TimeoutFormatError(Exception):
     pass
+
+
+class JobExpiryError(Exception):
+    pass

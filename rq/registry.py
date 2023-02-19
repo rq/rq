@@ -1,8 +1,13 @@
 import calendar
+import logging
+import traceback
+
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
+
+from .timeouts import JobTimeoutException, UnixSignalDeathPenalty
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -10,11 +15,14 @@ if TYPE_CHECKING:
 
 from .utils import as_text
 from .connections import resolve_connection
-from .defaults import DEFAULT_FAILURE_TTL
-from .exceptions import InvalidJobOperation, NoSuchJobError
+from .defaults import DEFAULT_FAILURE_TTL, CALLBACK_TIMEOUT
+from .exceptions import InvalidJobOperation, NoSuchJobError, JobExpiryError
 from .job import Job, JobStatus
 from .queue import Queue
 from .utils import backend_class, current_timestamp
+
+
+logger = logging.getLogger("rq.registry")
 
 
 class BaseRegistry:
@@ -202,6 +210,7 @@ class StartedJobRegistry(BaseRegistry):
     """
 
     key_template = 'rq:wip:{0}'
+    death_penalty_class = UnixSignalDeathPenalty
 
     def cleanup(self, timestamp: Optional[float] = None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
@@ -233,8 +242,15 @@ class StartedJobRegistry(BaseRegistry):
                         job.retry(queue, pipeline)
 
                     else:
+                        try:
+                            with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+                                job.failure_callback(job, self.connection,
+                                                     JobExpiryError, JobExpiryError(), traceback.extract_stack())
+                        except:  # noqa
+                            logger.exception('Registry %s: error while executing failure callback', self.key)
+
                         job.set_status(JobStatus.FAILED)
-                        job._exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
+                        job._exc_info = "Moved to FailedJobRegistry, due to job expiry, at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
