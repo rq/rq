@@ -866,9 +866,10 @@ class Worker:
                     self.run_maintenance_tasks()
 
                 self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
+                dequeue_timeout = min(timeout, max_idle_time)
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
-                    timeout,
+                    dequeue_timeout,
                     connection=self.connection,
                     job_class=self.job_class,
                     serializer=self.serializer,
