@@ -272,8 +272,35 @@ class RQ:
         worker.refresh()
         return worker
 
-    def get_worker_current_job(self):
-        pass
+    def get_current_job(self, worker: WorkerReference) -> Optional[Job]:
+        """Gets the current job being executed by a worker
+
+        Args:
+            worker (WorkerReference): The worker to get the current job from
+
+        Returns:
+            job (Optional[Job]): The job
+        """
+        _worker = self._get_worker_from_reference(worker)
+        if not _worker:
+            raise Exception("Worker not found")
+        job = _worker.get_current_job()
+        return job
+
+    def get_current_job_id(self, worker: WorkerReference) -> Optional[str]:
+        """Gets the current job id being executed by a worker
+
+        Args:
+            worker (WorkerReference): The worker to get the current job from
+
+        Returns:
+            job (Optional[Job]): The job
+        """
+        _worker = self._get_worker_from_reference(worker)
+        if not _worker:
+            raise Exception("Worker not found")
+        job = _worker.get_current_job_id()
+        return job
 
     def shutdown_worker(self, worker_name: str):
         """Sends a shutdown command to a worker.
@@ -475,6 +502,28 @@ class RQ:
         queue_key = self.queue_namespace + ref
         _queue = Queue.from_queue_key(queue_key, connection=self.conn)
         return _queue
+
+    def _get_worker_from_reference(self, ref: WorkerReference) -> Optional[Worker]:
+        """Get's a Worker instance from a reference.
+        A Reference can be a string with the worker name, or the Worker instance itself.
+
+        Args:
+            ref (WorkerReference): The Worker Reference
+
+        Raises:
+            TypeError: If any other type other than string or Worker is used
+
+        Returns:
+            Worker: The Worker Instance
+        """
+        if isinstance(ref, Worker):
+            if not ref.connection and self._connection:
+                ref.connection = self._connection
+            return ref
+        if not isinstance(ref, str):
+            raise TypeError("Worker reference can only be a `str` or `Worker` type.")
+        _worker = self.get_worker(ref)
+        return _worker
 
     def _get_job_ids_from_registry(
         self, registry: Type[registry.BaseRegistry], queue: QueueReference, offset: int = 0, limit: int = -1
