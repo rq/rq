@@ -226,6 +226,7 @@ class Worker:
         exc_handler=None,
         exception_handlers=None,
         default_worker_ttl=DEFAULT_WORKER_TTL,
+        maintenance_task_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         job_class: Type['Job'] = None,
         queue_class=None,
         log_job_description: bool = True,
@@ -238,6 +239,7 @@ class Worker:
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
+        self.maintenance_task_interval = maintenance_task_interval
 
         connection = self._set_connection(connection)
         self.connection = connection
@@ -1485,7 +1487,7 @@ class Worker:
         """Maintenance tasks should run on first startup or every 10 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL):
+        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_task_interval):
             return True
         return False
 

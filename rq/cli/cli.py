@@ -32,7 +32,7 @@ from rq.defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_FORMAT,
     DEFAULT_LOGGING_DATE_FORMAT,
-    DEFAULT_SERIALIZER_CLASS,
+    DEFAULT_SERIALIZER_CLASS, DEFAULT_MAINTENANCE_TASK_INTERVAL,
 )
 from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
@@ -200,7 +200,13 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
 @click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
-@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Default worker timeout to be used')
+@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Worker timeout to be used')
+@click.option(
+    '--maintenance-task-interval',
+    type=int,
+    default=DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    help='Maintenance task interval (in seconds) to be used'
+)
 @click.option(
     '--job-monitoring-interval',
     type=int,
