@@ -617,9 +617,20 @@ class TestWorker(RQTestCase):
         # idle for 1 second
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=1))
 
-        with mock.patch.object(Worker, 'heartbeat', wraps=w.heartbeat) as mocked_heartbeat:
-            self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))  # idle for 3 seconds
-            self.assertEqual(4, mocked_heartbeat.call_count)  # one heartbeat before returning the result
+        # idle for 3 seconds
+        now = utcnow()
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))
+        self.assertLess((utcnow()-now).total_seconds(), 4)
+
+        # idle for 2 seconds because idle_time is less than timeout
+        now = utcnow()
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(3, max_idle_time=2))
+        self.assertLess((utcnow()-now).total_seconds(), 3)
+
+        # idle for 3 seconds because idle_time is less than two rounds of timeout
+        now = utcnow()
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(2, max_idle_time=3))
+        self.assertLess((utcnow()-now).total_seconds(), 4)
 
     @slow  # noqa
     def test_timeouts(self):
