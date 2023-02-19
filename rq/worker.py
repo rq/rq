@@ -1,6 +1,7 @@
 import contextlib
 import errno
 import logging
+import math
 import os
 import random
 import resource
@@ -890,7 +891,7 @@ class Worker:
             except DequeueTimeout:
                 if max_idle_time is not None:
                     idle_for = (utcnow() - idle_since).total_seconds()
-                    idle_time_left = max_idle_time - idle_for
+                    idle_time_left = math.ceil(max_idle_time - idle_for)
                     if idle_time_left <= 0:
                         break
             except redis.exceptions.ConnectionError as conn_err:
