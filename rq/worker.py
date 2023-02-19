@@ -1,7 +1,9 @@
+import contextlib
 import errno
 import logging
 import os
 import random
+import resource
 import signal
 import socket
 import sys
@@ -28,7 +30,6 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .utils import as_text
 from .connections import get_current_connection, push_connection, pop_connection
 
 from .defaults import (
@@ -48,9 +49,8 @@ from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact
+from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
 from .version import VERSION
-from .worker_registration import clean_worker_registry, get_keys
 from .serializers import resolve_serializer
 
 try:
@@ -132,7 +132,7 @@ class Worker:
         elif connection is None:
             connection = get_current_connection()
 
-        worker_keys = get_keys(queue=queue, connection=connection)
+        worker_keys = worker_registration.get_keys(queue=queue, connection=connection)
         workers = [
             cls.find_by_key(
                 key, connection=connection, job_class=job_class, queue_class=queue_class, serializer=serializer
@@ -152,7 +152,7 @@ class Worker:
         Returns:
             list_keys (List[str]): A list of worker keys
         """
-        return [as_text(key) for key in get_keys(queue=queue, connection=connection)]
+        return [as_text(key) for key in worker_registration.get_keys(queue=queue, connection=connection)]
 
     @classmethod
     def count(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None) -> int:
@@ -165,7 +165,7 @@ class Worker:
         Returns:
             length (int): The queue length.
         """
-        return len(get_keys(queue=queue, connection=connection))
+        return len(worker_registration.get_keys(queue=queue, connection=connection))
 
     @classmethod
     def find_by_key(
@@ -233,6 +233,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
+        work_horse_killed_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
@@ -260,6 +261,7 @@ class Worker:
         self.validate_queues()
         self._ordered_queues = self.queues[:]
         self._exc_handlers: List[Callable] = []
+        self._work_horse_killed_handler = work_horse_killed_handler
 
         self._state: str = 'starting'
         self._is_horse: bool = False
@@ -551,18 +553,14 @@ class Worker:
             else:
                 raise
 
-    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int]]:
+    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int], Optional[resource.struct_rusage]]:
         """Waits for the horse process to complete.
         Uses `0` as argument as to include "any child in the process group of the current process".
         """
-        pid = None
-        stat = None
-        try:
-            pid, stat = os.waitpid(self.horse_pid, 0)
-        except ChildProcessError:
-            # ChildProcessError: [Errno 10] No child processes
-            pass
-        return pid, stat
+        pid = stat = rusage = None
+        with contextlib.suppress(ChildProcessError):  # ChildProcessError: [Errno 10] No child processes
+            pid, stat, rusage = os.wait4(self.horse_pid, 0)
+        return pid, stat, rusage
 
     def request_force_stop(self, signum, frame):
         """Terminates the application (cold shutdown).
@@ -823,13 +821,15 @@ class Worker:
                     self.log.error('Worker %s: found an unhandled exception, quitting...', self.key, exc_info=True)
                     break
         finally:
-            if not self.is_horse:
-                if self.scheduler:
-                    self.stop_scheduler()
-
-                self.register_death()
-                self.unsubscribe()
+            self.teardown()
         return bool(completed_jobs)
+
+    def teardown(self):
+        if not self.is_horse:
+            if self.scheduler:
+                self.stop_scheduler()
+            self.register_death()
+            self.unsubscribe()
 
     def stop_scheduler(self):
         """Ensure scheduler process is stopped
@@ -1067,12 +1067,12 @@ class Worker:
             job (Job): _description_
             queue (Queue): _description_
         """
-        ret_val = None
+        retpid = ret_val = rusage = None
         job.started_at = utcnow()
         while True:
             try:
                 with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
-                    retpid, ret_val = self.wait_for_horse()
+                    retpid, ret_val, rusage = self.wait_for_horse()
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
@@ -1118,14 +1118,14 @@ class Worker:
                 job.ended_at = utcnow()
 
             # Unhandled failure: move the job to the failed queue
-            self.log.warning(
-                ('Moving job to FailedJobRegistry ' '(work-horse terminated unexpectedly; waitpid returned {})').format(
-                    ret_val
-                )
-            )
+            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ""
+            exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
+            self.log.warning(f'Moving job to FailedJobRegistry ({exc_string})')
 
+            self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(
-                job, queue=queue, exc_string="Work-horse was terminated unexpectedly " "(waitpid returned %s)" % ret_val
+                job, queue=queue,
+                exc_string=exc_string
             )
 
     def execute_job(self, job: 'Job', queue: 'Queue'):
@@ -1332,7 +1332,7 @@ class Worker:
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
 
-    def execute_failure_callback(self, job: 'Job'):
+    def execute_failure_callback(self, job: 'Job', *exc_info):
         """Executes failure_callback with timeout
 
         Args:
@@ -1341,7 +1341,7 @@ class Worker:
         self.log.debug(f"Running failure callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.failure_callback(job, self.connection, *sys.exc_info())
+            job.failure_callback(job, self.connection, *exc_info)
 
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
@@ -1386,11 +1386,11 @@ class Worker:
 
             if job.failure_callback:
                 try:
-                    self.execute_failure_callback(job)
+                    self.execute_failure_callback(job, *exc_info)
                 except:  # noqa
-                    self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=True)
                     exc_info = sys.exc_info()
                     exc_string = ''.join(traceback.format_exception(*exc_info))
+                    self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
 
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
@@ -1462,6 +1462,12 @@ class Worker:
         """Pops the latest exception handler off of the exc handler stack."""
         return self._exc_handlers.pop()
 
+    def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
+        if self._work_horse_killed_handler is None:
+            return
+
+        self._work_horse_killed_handler(job, retpid, ret_val, rusage)
+
     def __eq__(self, other):
         """Equality does not take the database/connection into account"""
         if not isinstance(other, self.__class__):
@@ -1480,7 +1486,7 @@ class Worker:
             if queue.acquire_cleaning_lock():
                 self.log.info('Cleaning registries for queue: %s', queue.name)
                 clean_registries(queue)
-                clean_worker_registry(queue)
+                worker_registration.clean_worker_registry(queue)
         self.last_cleaned_at = utcnow()
 
     @property
