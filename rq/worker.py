@@ -858,6 +858,7 @@ class Worker:
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
         idle_since = utcnow()
+        idle_time_left = max_idle_time
         while True:
             try:
                 self.heartbeat()
@@ -865,8 +866,8 @@ class Worker:
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
 
-                if timeout is not None and max_idle_time is not None:
-                    timeout = min(timeout, max_idle_time)
+                if timeout is not None and idle_time_left is not None:
+                    timeout = min(timeout, idle_time_left)
 
                 self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(
@@ -892,8 +893,6 @@ class Worker:
                     idle_time_left = max_idle_time - idle_for
                     if idle_time_left <= 0:
                         break
-                    else:
-                        max_idle_time = idle_time_left
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error(
                     'Could not connect to Redis instance: %s Retrying in %d seconds...', conn_err, connection_wait_time
