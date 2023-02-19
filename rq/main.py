@@ -317,13 +317,16 @@ class RQ:
             status (JobStatus): The job status
         """
         job_key = self._get_job_key(job_id)
-        status = utils.as_text(self.conn.hget(job_key, 'status'))
+        server_status = self.conn.hget(job_key, 'status')
+        if not server_status:
+            raise Exception(f"Job {job_id} not found")
+        status = utils.as_text(server_status)
         return JobStatus(status)
 
     def get_all_jobs(self):
         pass
 
-    def get_queued_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[Job]:
+    def get_queued_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[Job]:
         """Get a list of queued jobs from a given queue reference
 
         Args:
@@ -332,13 +335,13 @@ class RQ:
             limit (int, optional): The limit. Defaults to -1 (no limit).
 
         Returns:
-            list[Job]: The list of jobs
+            List[Job]: The list of jobs
         """
         _queue = self._get_queue_from_reference(queue)
         jobs = _queue.get_jobs(offset, limit)
         return jobs
 
-    def get_queued_jobs_ids(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[str]:
+    def get_queued_jobs_ids(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[str]:
         """Get a list of queued jobs ids from a given queue reference.
 
         Args:
@@ -347,13 +350,13 @@ class RQ:
             limit (int, optional): The limit. Defaults to -1 (no limit).
 
         Returns:
-            list[Job]: The list of jobs
+            List[Job]: The list of jobs
         """
         _queue = self._get_queue_from_reference(queue)
         job_ids = _queue.get_job_ids(offset, limit)
         return job_ids
 
-    def get_deferred_jobs_ids(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[str]:
+    def get_deferred_jobs_ids(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[str]:
         """Get a list of deferred job ids from a given queue.
 
         Args:
@@ -362,12 +365,12 @@ class RQ:
             limit (int, optional): Limit. Defaults to -1 (no limit).
 
         Returns:
-            list[str]: A list of deferred job ids
+            List[str]: A list of deferred job ids
         """
         job_ids = self._get_job_ids_from_registry(registry.DeferredJobRegistry, queue, offset, limit)
         return job_ids
 
-    def get_scheduled_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[str]:
+    def get_scheduled_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[str]:
         """Get a list of scheduled job ids from a given queue.
 
         Args:
@@ -376,12 +379,12 @@ class RQ:
             limit (int, optional): Limit. Defaults to -1 (no limit).
 
         Returns:
-            list[str]: A list of deferred job ids
+            List[str]: A list of deferred job ids
         """
         job_ids = self._get_job_ids_from_registry(registry.ScheduledJobRegistry, queue, offset, limit)
         return job_ids
 
-    def get_started_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[str]:
+    def get_started_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[str]:
         """Get a list of started job ids from a given queue.
 
         Args:
@@ -390,12 +393,12 @@ class RQ:
             limit (int, optional): Limit. Defaults to -1 (no limit).
 
         Returns:
-            list[str]: A list of deferred job ids
+            List[str]: A list of deferred job ids
         """
         job_ids = self._get_job_ids_from_registry(registry.StartedJobRegistry, queue, offset, limit)
         return job_ids
 
-    def get_failed_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[str]:
+    def get_failed_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[str]:
         """Get a list of failed job ids from a given queue.
 
         Args:
@@ -404,12 +407,12 @@ class RQ:
             limit (int, optional): Limit. Defaults to -1 (no limit).
 
         Returns:
-            list[str]: A list of deferred job ids
+            List[str]: A list of deferred job ids
         """
         job_ids = self._get_job_ids_from_registry(registry.FailedJobRegistry, queue, offset, limit)
         return job_ids
 
-    def get_finished_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> list[str]:
+    def get_finished_jobs(self, queue: QueueReference, offset: int = 0, limit: int = -1) -> List[str]:
         """Get a list of finished job ids from a given queue.
 
         Args:
@@ -418,7 +421,7 @@ class RQ:
             limit (int, optional): Limit. Defaults to -1 (no limit).
 
         Returns:
-            list[str]: A list of deferred job ids
+            List[str]: A list of deferred job ids
         """
         job_ids = self._get_job_ids_from_registry(registry.FinishedJobRegistry, queue, offset, limit)
         return job_ids
@@ -475,7 +478,7 @@ class RQ:
 
     def _get_job_ids_from_registry(
         self, registry: Type[registry.BaseRegistry], queue: QueueReference, offset: int = 0, limit: int = -1
-    ) -> list[str]:
+    ) -> List[str]:
         """Get's a list of the Jobs IDs from a given registry.
         This is an internal shortcut to be used by many registries types.
 
@@ -486,7 +489,7 @@ class RQ:
             limit (int, optional): The Limit. Defaults to -1 (no limit).
 
         Returns:
-            list[str]: A list of jobs ids.
+            List[str]: A list of jobs ids.
         """
         _queue = self._get_queue_from_reference(queue)
         _registry = registry(connection=self.conn, queue=_queue)
