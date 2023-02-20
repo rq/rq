@@ -290,7 +290,7 @@ def worker(
             connection=cli_config.connection,
             default_worker_ttl=worker_ttl,
             default_result_ttl=results_ttl,
-            maintenance_task_interval=maintenance_interval,
+            maintenance_interval=maintenance_interval,
             job_monitoring_interval=job_monitoring_interval,
             job_class=cli_config.job_class,
             queue_class=cli_config.queue_class,
