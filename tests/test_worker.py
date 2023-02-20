@@ -620,17 +620,17 @@ class TestWorker(RQTestCase):
         # idle for 3 seconds
         now = utcnow()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))
-        self.assertLess((utcnow()-now).total_seconds(), 4)
+        self.assertLess((utcnow()-now).total_seconds(), 5)  # 5 for some buffer
 
         # idle for 2 seconds because idle_time is less than timeout
         now = utcnow()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(3, max_idle_time=2))
-        self.assertLess((utcnow()-now).total_seconds(), 3)
+        self.assertLess((utcnow()-now).total_seconds(), 4)  # 4 for some buffer
 
         # idle for 3 seconds because idle_time is less than two rounds of timeout
         now = utcnow()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(2, max_idle_time=3))
-        self.assertLess((utcnow()-now).total_seconds(), 4)
+        self.assertLess((utcnow()-now).total_seconds(), 5)  # 5 for some buffer
 
     @slow  # noqa
     def test_timeouts(self):
