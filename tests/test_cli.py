@@ -333,7 +333,7 @@ class TestRQCli(RQTestCase):
         result = runner.invoke(main, args)
         self.assert_normal_execution(result)
 
-        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'roundrobin']
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'round_robin']
         result = runner.invoke(main, args)
         self.assert_normal_execution(result)
 

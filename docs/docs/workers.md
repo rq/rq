@@ -69,7 +69,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
-* `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `order`, `random` or `roundrobin`,  defaults to `order`)
+* `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)
 
 _New in version 1.8.0._
 * `--serializer`: Path to serializer object (e.g "rq.serializers.DefaultSerializer" or "rq.serializers.JSONSerializer")
@@ -324,7 +324,7 @@ To choose the strategy that should be used, `rq` provides the `--dequeue-strateg
 In certain circumstances it can be useful that a when a worker is listening to multiple queues, 
 say `q1`,`q2`,`q3`, the jobs are dequeued using a Round Robin strategy. That is, the 1st
 dequeued job is taken from `q1`, the 2nd from `q2`, the 3rd from `q3`, the 4th
-from `q1`, the 5th from `q2` and so on. To implement this strategy use `-ds roundrobin` argument.
+from `q1`, the 5th from `q2` and so on. To implement this strategy use `-ds round_robin` argument.
 
 In other circumstances, it can be useful to pull jobs from the different queues randomly.
 To implement this strategy use `-ds random` argument.

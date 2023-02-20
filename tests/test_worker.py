@@ -1141,7 +1141,7 @@ class TestWorker(RQTestCase):
                 qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
 
         w = Worker(qs)
-        w.work(burst=True, dequeue_strategy="roundrobin")
+        w.work(burst=True, dequeue_strategy="round_robin")
 
         start_times = []
         for i in range(5):

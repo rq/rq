@@ -292,7 +292,7 @@ class Worker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
-        self._dequeue_strategy = dequeue_strategy
+        self._dequeue_strategy: DequeueStrategy = dequeue_strategy
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -681,7 +681,7 @@ class Worker:
             self.pubsub.unsubscribe()
             self.pubsub.close()
 
-    def reorder_queues(self, reference_queue: 'Queue'):
+    def reorder_queues(self, reference_queue: Optional['Queue'] = None):
         """Reorder the queues according to the strategy.
         As this can be defined both in the `Worker` initialization or in the `work` method,
         it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
@@ -689,10 +689,13 @@ class Worker:
         Args:
             reference_queue (Union[Queue, str]): The queues to reorder
         """
+        if not reference_queue:
+            return
+
         if self._dequeue_strategy is None:
             self._dequeue_strategy = DequeueStrategy.DEFAULT
 
-        if self._dequeue_strategy not in ["default", "random", "round_robin"]:
+        if self._dequeue_strategy not in ("default", "random", "round_robin"):
             self.log.warning(
                 "Dequeue strategy %s is not allowed. Use one of `default`, `random` or `rounbrobin`. Using defalt ordering.",
                 self._dequeue_strategy,

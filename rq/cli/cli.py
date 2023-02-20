@@ -263,13 +263,13 @@ def worker(
 
     worker_name = cli_config.worker_class.__qualname__
     if worker_name in ["RoundRobinWorker", "RandomWorker"]:
-        strategy_alternative = "random" if worker_name == "RandomWorker" else "roundrobin"
+        strategy_alternative = "random" if worker_name == "RandomWorker" else "round_robin"
         msg = f"WARNING: The {worker_name} is deprecated. Use the --dequeue-strategy / -ds option with the {strategy_alternative} argument to set the strategy."
         warnings.warn(msg, DeprecationWarning)
         click.secho(msg, fg='yellow')
 
-    if dequeue_strategy not in ["default", "random", "roundrobin"]:
-        click.secho("ERROR: Dequeue Strategy can only be one of `default`, `random` or `roundrobin`.", err=True, fg='red')
+    if dequeue_strategy not in ("default", "random", "round_robin"):
+        click.secho("ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red')
         sys.exit(1)
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
