@@ -97,7 +97,7 @@ def signal_name(signum):
 
 class DequeueStrategy(str, Enum):
     DEFAULT = "default"
-    ROUNDROBIN = "roundrobin"
+    ROUND_ROBIN = "round_robin"
     RANDOM = "random"
 
 
@@ -692,7 +692,7 @@ class Worker:
         if self._dequeue_strategy is None:
             self._dequeue_strategy = DequeueStrategy.DEFAULT
 
-        if self._dequeue_strategy not in ["default", "random", "roundrobin"]:
+        if self._dequeue_strategy not in ["default", "random", "round_robin"]:
             self.log.warning(
                 "Dequeue strategy %s is not allowed. Use one of `default`, `random` or `rounbrobin`. Using defalt ordering.",
                 self._dequeue_strategy,
@@ -700,7 +700,7 @@ class Worker:
             return
         if self._dequeue_strategy == DequeueStrategy.DEFAULT:
             return
-        if self._dequeue_strategy == DequeueStrategy.ROUNDROBIN:
+        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
             pos = self._ordered_queues.index(reference_queue)
             self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
             return
