@@ -941,7 +941,7 @@ class TestWorker(RQTestCase):
         self.assertTrue(worker.should_run_maintenance_tasks)
 
         # custom maintenance_interval
-        worker = Worker(queue, maintenance_task_interval=10)
+        worker = Worker(queue, maintenance_interval=10)
         self.assertTrue(worker.should_run_maintenance_tasks)
         worker.last_cleaned_at = utcnow()
         self.assertFalse(worker.should_run_maintenance_tasks)
