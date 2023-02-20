@@ -233,7 +233,8 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        work_horse_killed_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
+        work_horse_killed_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None,
+        connection_max_retries: int = -1
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
@@ -280,6 +281,7 @@ class Worker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
+        self.connection_max_retries = connection_max_retries
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -852,6 +854,7 @@ class Worker:
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
+        connection_current_retries = 0
         while True:
             try:
                 self.heartbeat()
@@ -886,8 +889,12 @@ class Worker:
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
                 connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
-            else:
-                connection_wait_time = 1.0
+                if self.connection_max_retries == -1:
+                    continue
+                if connection_current_retries > self.connection_max_retries:
+                    self.log.error('Could not connect to Redis instance: %s. Max retries exceeded.', conn_err)
+                    raise conn_err
+                connection_current_retries += 1
 
         self.heartbeat()
         return result
