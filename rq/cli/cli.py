@@ -202,7 +202,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
 @click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Worker timeout to be used')
 @click.option(
-    '--maintenance-task-interval',
+    '--maintenance-interval',
     type=int,
     default=DEFAULT_MAINTENANCE_TASK_INTERVAL,
     help='Maintenance task interval (in seconds) to be used'
@@ -234,7 +234,7 @@ def worker(
     name,
     results_ttl,
     worker_ttl,
-    maintenance_task_interval,
+    maintenance_interval,
     job_monitoring_interval,
     disable_job_desc_logging,
     verbose,
