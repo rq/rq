@@ -940,7 +940,7 @@ class TestWorker(RQTestCase):
         worker.last_cleaned_at = utcnow() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 100)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
-        # custom maintenance_task_interval
+        # custom maintenance_interval
         worker = Worker(queue, maintenance_task_interval=10)
         self.assertTrue(worker.should_run_maintenance_tasks)
         worker.last_cleaned_at = utcnow()
