@@ -223,6 +223,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
+@click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
 @click.argument('queues', nargs=-1)
@@ -246,6 +247,7 @@ def worker(
     pid,
     disable_default_exception_handler,
     max_jobs,
+    max_idle_time,
     with_scheduler,
     queues,
     log_format,
@@ -317,6 +319,7 @@ def worker(
             date_format=date_format,
             log_format=log_format,
             max_jobs=max_jobs,
+            max_idle_time=max_idle_time,
             with_scheduler=with_scheduler,
         )
     except ConnectionError as e:
