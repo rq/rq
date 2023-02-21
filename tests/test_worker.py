@@ -19,6 +19,7 @@ import pytest
 from unittest import mock
 from unittest.mock import Mock
 
+from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from tests import RQTestCase, slow
 from tests.fixtures import (
     access_self, create_file, create_file_after_timeout, create_file_after_timeout_and_setsid, div_by_zero, do_nothing,
@@ -936,7 +937,15 @@ class TestWorker(RQTestCase):
 
         worker.last_cleaned_at = utcnow()
         self.assertFalse(worker.should_run_maintenance_tasks)
-        worker.last_cleaned_at = utcnow() - timedelta(seconds=3700)
+        worker.last_cleaned_at = utcnow() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 100)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+
+        # custom maintenance_interval
+        worker = Worker(queue, maintenance_interval=10)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+        worker.last_cleaned_at = utcnow()
+        self.assertFalse(worker.should_run_maintenance_tasks)
+        worker.last_cleaned_at = utcnow() - timedelta(seconds=11)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
     def test_worker_calls_clean_registries(self):
