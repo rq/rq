@@ -694,7 +694,7 @@ class Worker:
 
         if self._dequeue_strategy not in ("default", "random", "round_robin"):
             self.log.warning(
-                "Dequeue strategy %s is not allowed. Use one of `default`, `random` or `rounbrobin`. Using defalt ordering.",
+                "Dequeue strategy %s is not allowed. Use one of `default`, `random` or `round_robin`. Using defalt ordering.",
                 self._dequeue_strategy,
             )
             return
