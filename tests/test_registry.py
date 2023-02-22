@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from unittest import mock
+
 from rq.serializers import JSONSerializer
 
 from rq.utils import as_text
@@ -161,7 +163,9 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job, failed_job_registry)
         self.assertIn(job, self.registry)
 
-        self.registry.cleanup()
+        with mock.patch.object(job, '_failure_callback') as mocked:
+            self.registry.cleanup()
+            self.assertEqual(1, mocked.call_count)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()

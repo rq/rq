@@ -242,12 +242,13 @@ class StartedJobRegistry(BaseRegistry):
                         job.retry(queue, pipeline)
 
                     else:
-                        try:
-                            with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-                                job.failure_callback(job, self.connection,
-                                                     JobExpiryError, JobExpiryError(), traceback.extract_stack())
-                        except:  # noqa
-                            logger.exception('Registry %s: error while executing failure callback', self.key)
+                        if job.failure_callback:
+                            try:
+                                with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+                                    job.failure_callback(job, self.connection,
+                                                         JobExpiryError, JobExpiryError(), traceback.extract_stack())
+                            except:  # noqa
+                                logger.exception('Registry %s: error while executing failure callback', self.key)
 
                         job.set_status(JobStatus.FAILED)
                         job._exc_info = "Moved to FailedJobRegistry, due to job expiry, at %s" % datetime.now()
