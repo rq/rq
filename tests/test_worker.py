@@ -19,6 +19,7 @@ import pytest
 from unittest import mock
 from unittest.mock import Mock
 
+from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from tests import RQTestCase, slow
 from tests.fixtures import (
     access_self, create_file, create_file_after_timeout, create_file_after_timeout_and_setsid, div_by_zero, do_nothing,
@@ -607,6 +608,31 @@ class TestWorker(RQTestCase):
         # Should not have created evidence of execution
         self.assertEqual(os.path.exists(SENTINEL_FILE), False)
 
+    @slow
+    def test_max_idle_time(self):
+        q = Queue()
+        w = Worker([q])
+        q.enqueue(say_hello, args=('Frank',))
+        self.assertIsNotNone(w.dequeue_job_and_maintain_ttl(1))
+
+        # idle for 1 second
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=1))
+
+        # idle for 3 seconds
+        now = utcnow()
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))
+        self.assertLess((utcnow()-now).total_seconds(), 5)  # 5 for some buffer
+
+        # idle for 2 seconds because idle_time is less than timeout
+        now = utcnow()
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(3, max_idle_time=2))
+        self.assertLess((utcnow()-now).total_seconds(), 4)  # 4 for some buffer
+
+        # idle for 3 seconds because idle_time is less than two rounds of timeout
+        now = utcnow()
+        self.assertIsNone(w.dequeue_job_and_maintain_ttl(2, max_idle_time=3))
+        self.assertLess((utcnow()-now).total_seconds(), 5)  # 5 for some buffer
+
     @slow  # noqa
     def test_timeouts(self):
         """Worker kills jobs after timeout."""
@@ -639,7 +665,6 @@ class TestWorker(RQTestCase):
         q = Queue()
         w = Worker([q])
 
-        # Put it on the queue with a timeout value
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(None))
 
     def test_worker_ttl_param_resolves_timeout(self):
@@ -936,7 +961,15 @@ class TestWorker(RQTestCase):
 
         worker.last_cleaned_at = utcnow()
         self.assertFalse(worker.should_run_maintenance_tasks)
-        worker.last_cleaned_at = utcnow() - timedelta(seconds=3700)
+        worker.last_cleaned_at = utcnow() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 100)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+
+        # custom maintenance_interval
+        worker = Worker(queue, maintenance_interval=10)
+        self.assertTrue(worker.should_run_maintenance_tasks)
+        worker.last_cleaned_at = utcnow()
+        self.assertFalse(worker.should_run_maintenance_tasks)
+        worker.last_cleaned_at = utcnow() - timedelta(seconds=11)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
     def test_worker_calls_clean_registries(self):
