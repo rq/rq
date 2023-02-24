@@ -660,12 +660,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
         )
-
-        job = self.setup_dependencies(job, pipeline=pipeline)
-        # If we do not depend on an unfinished job, enqueue the job.
-        if job.get_status(refresh=False) != JobStatus.DEFERRED:
-            return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
-        return job
+        return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
 
     @staticmethod
     def prepare_data(
@@ -736,7 +731,7 @@ class Queue:
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         jobs = [
-            self.enqueue_job(
+            self._enqueue_job(
                 self.create_job(
                     job_data.func,
                     args=job_data.args,
@@ -977,7 +972,26 @@ class Queue:
         return self.enqueue_at(datetime.now(timezone.utc) + time_delta, func, *args, **kwargs)
 
     def enqueue_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None, at_front: bool = False) -> Job:
-        """Enqueues a job for delayed execution.
+        """Enqueues a job for delayed execution checking dependencies.
+
+        Args:
+            job (Job): The job to enqueue
+            pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
+
+        Returns:
+            Job: The enqued job
+        """
+        job.origin = self.name
+        job = self.setup_dependencies(job, pipeline=pipeline)
+        # If we do not depend on an unfinished job, enqueue the job.
+        if job.get_status(refresh=False) != JobStatus.DEFERRED:
+            return self._enqueue_job(job, pipeline=pipeline, at_front=at_front)
+        return job
+
+
+    def _enqueue_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None, at_front: bool = False) -> Job:
+        """Enqueues a job for delayed execution without checking dependencies.
 
         If Queue is instantiated with is_async=False, job is executed immediately.
 
@@ -1103,10 +1117,10 @@ class Queue:
                     registry.remove(dependent, pipeline=pipe)
 
                     if dependent.origin == self.name:
-                        self.enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
+                        self._enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
                     else:
                         queue = self.__class__(name=dependent.origin, connection=self.connection)
-                        queue.enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
+                        queue._enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
 
                 # Only delete dependents_key if all dependents have been enqueued
                 if len(jobs_to_enqueue) == len(dependent_job_ids):

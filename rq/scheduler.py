@@ -165,7 +165,7 @@ class RQScheduler:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
                 for job in jobs:
                     if job is not None:
-                        queue.enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
+                        queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
                         registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
         self._status = self.Status.STARTED
