@@ -78,10 +78,12 @@ chance to finish themselves.
 However, workers can be killed forcefully by `kill -9`, which will not give the
 workers a chance to finish the job gracefully or to put the job on the `failed`
 queue.  Therefore, killing a worker forcefully could potentially lead to
-damage.
+damage. Just sayin'.
 
-Just sayin'.
-
+If the worker was killed while a job was running, the job will stay in a zombie
+like state of being worked on, without ever getting finished. `StartedJobRegistry`
+will eventually move it to `FailedJobRegistry` with an `exc_info` value like
+`Moved to FailedJobRegistry at 2023-02-26 23:53:44.867343`.
 
 ## Dealing with Job Timeouts
 
