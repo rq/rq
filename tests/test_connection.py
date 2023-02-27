@@ -1,6 +1,6 @@
 from redis import Redis
 
-from rq import Connection, Queue, use_connection, get_current_connection, pop_connection
+from rq import Connection, Queue, pop_connection
 from rq.connections import NoRedisConnectionException
 
 from tests import find_empty_redis_database, RQTestCase
@@ -40,25 +40,6 @@ class TestConnectionInheritance(RQTestCase):
 
 
 class TestConnectionHelpers(RQTestCase):
-    def test_use_connection(self):
-        """Test function use_connection works as expected."""
-        conn = new_connection()
-        use_connection(conn)
-
-        self.assertEqual(conn, get_current_connection())
-
-        use_connection()
-
-        self.assertNotEqual(conn, get_current_connection())
-
-        use_connection(self.testconn)  # Restore RQTestCase connection
-
-        with self.assertRaises(AssertionError):
-            with Connection(new_connection()):
-                use_connection()
-                with Connection(new_connection()):
-                    use_connection()
-
     def test_resolve_connection_raises_on_no_connection(self):
         """Test function resolve_connection raises if there is no connection."""
         pop_connection()
