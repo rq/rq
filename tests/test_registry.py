@@ -6,7 +6,7 @@ from rq.serializers import JSONSerializer
 
 from rq.utils import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
-from rq.exceptions import InvalidJobOperation, JobExpiryError
+from rq.exceptions import InvalidJobOperation, AbandonedJobError
 from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
 from rq.utils import current_timestamp
@@ -166,7 +166,7 @@ class TestRegistry(RQTestCase):
 
         with mock.patch.object(Job, 'failure_callback', PropertyMock()) as mocked:
             self.registry.cleanup()
-            mocked.return_value.assert_any_call(job, self.testconn, JobExpiryError, ANY, ANY)
+            mocked.return_value.assert_any_call(job, self.testconn, AbandonedJobError, ANY, ANY)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()

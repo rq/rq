@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL, CALLBACK_TIMEOUT
-from .exceptions import InvalidJobOperation, NoSuchJobError, JobExpiryError
+from .exceptions import InvalidJobOperation, NoSuchJobError, AbandonedJobError
 from .job import Job, JobStatus
 from .queue import Queue
 from .utils import backend_class, current_timestamp
@@ -235,6 +235,14 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
+                    if job.failure_callback:
+                        try:
+                            with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+                                job.failure_callback(job, self.connection,
+                                                     AbandonedJobError, AbandonedJobError(), traceback.extract_stack())
+                        except:  # noqa
+                            logger.exception('Registry %s: error while executing failure callback', self.key)
+
                     retry = job.retries_left and job.retries_left > 0
 
                     if retry:
@@ -242,14 +250,6 @@ class StartedJobRegistry(BaseRegistry):
                         job.retry(queue, pipeline)
 
                     else:
-                        if job.failure_callback:
-                            try:
-                                with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-                                    job.failure_callback(job, self.connection,
-                                                         JobExpiryError, JobExpiryError(), traceback.extract_stack())
-                            except:  # noqa
-                                logger.exception('Registry %s: error while executing failure callback', self.key)
-
                         job.set_status(JobStatus.FAILED)
                         job._exc_info = "Moved to FailedJobRegistry, due to job expiry, at %s" % datetime.now()
                         job.save(pipeline=pipeline, include_meta=False)
