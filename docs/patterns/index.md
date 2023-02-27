@@ -18,14 +18,16 @@ are using [Heroku Data For Redis][2] with Heroku):
 import os
 import redis
 from redis import Redis
-from rq import Worker, Queue, Connection
+from rq import Queue, Connection
+from rq.worker import HerokuWorker as Worker
 
 
 listen = ['high', 'default', 'low']
 
 redis_url = os.getenv('REDIS_URL')
 if not redis_url:
-    raise RuntimeError("Set up Heroku Data For Redis first and make sure the app's Redis server config var is named 'REDIS_URL'.")
+    raise RuntimeError("Set up Heroku Data For Redis first, \
+    make sure the its config var is named 'REDIS_URL'.")
     
 conn = redis.from_url(redis_url)
 
