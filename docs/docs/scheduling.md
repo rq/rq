@@ -97,9 +97,8 @@ from redis import Redis
 redis = Redis()
 queue = Queue(connection=redis)
 
-if __name__ == '__main__':
-    worker = Worker(queues=[queue], connection=redis)
-    worker.work(with_scheduler=True)
+worker = Worker(queues=[queue], connection=redis)
+worker.work(with_scheduler=True)
 ```
 
 Only a single scheduler can run for a specific queue at any one time. If you run multiple
