@@ -213,7 +213,7 @@ class StartedJobRegistry(BaseRegistry):
     death_penalty_class = UnixSignalDeathPenalty
 
     def cleanup(self, timestamp: Optional[float] = None):
-        """Remove expired jobs from registry and add them to FailedJobRegistry.
+        """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
