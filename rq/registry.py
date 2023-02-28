@@ -254,7 +254,7 @@ class StartedJobRegistry(BaseRegistry):
                         logger.warning(f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
                                        f'({exc_string})')
                         job.set_status(JobStatus.FAILED)
-                        job._exc_info = f"Moved to FailedJobRegistry, {exc_string}, at {datetime.now()}"
+                        job._exc_info = f"Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}"
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
