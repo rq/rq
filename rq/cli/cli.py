@@ -302,8 +302,7 @@ def worker(
             exception_handlers=exception_handlers or None,
             disable_default_exception_handler=disable_default_exception_handler,
             log_job_description=not disable_job_desc_logging,
-            serializer=serializer,
-            dequeue_strategy=dequeue_strategy,
+            serializer=serializer
         )
 
         # Should we configure Sentry?
@@ -324,6 +323,7 @@ def worker(
             log_format=log_format,
             max_jobs=max_jobs,
             with_scheduler=with_scheduler,
+            dequeue_strategy=dequeue_strategy
         )
     except ConnectionError as e:
         print(e)

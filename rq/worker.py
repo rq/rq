@@ -244,7 +244,6 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        dequeue_strategy=DequeueStrategy.DEFAULT,
         work_horse_killed_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
     ):  # noqa
         self.default_result_ttl = default_result_ttl
@@ -292,7 +291,7 @@ class Worker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
-        self._dequeue_strategy: DequeueStrategy = dequeue_strategy
+        self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -693,11 +692,9 @@ class Worker:
             self._dequeue_strategy = DequeueStrategy.DEFAULT
 
         if self._dequeue_strategy not in ("default", "random", "round_robin"):
-            self.log.warning(
-                "Dequeue strategy %s is not allowed. Use one of `default`, `random` or `round_robin`. Using defalt ordering.",
-                self._dequeue_strategy,
+            raise ValueError(
+                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use one of `default`, `random` or `round_robin`. Using defalt ordering."
             )
-            return
         if self._dequeue_strategy == DequeueStrategy.DEFAULT:
             return
         if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
