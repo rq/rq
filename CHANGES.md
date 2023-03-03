@@ -1,3 +1,15 @@
+### RQ 1.13.0 (2023-02-19)
+* Added `work_horse_killed_handler` argument to `Worker`. Thanks @ronlut!
+* Fixed an issue where results aren't properly persisted on synchronous jobs. Thanks @selwin!
+* Fixed a bug where job results are not properly persisted when `result_ttl` is `-1`. Thanks @sim6!
+* Various documentation and logging fixes. Thanks @lowercase00!
+* Improve Redis connection reliability. Thanks @lowercase00!
+* Scheduler reliability improvements. Thanks @OlegZv and @lowercase00!
+* Fixed a bug where `dequeue_timeout` ignores `worker_ttl`. Thanks @ronlut!
+* Use `job.return_value()` instead of `job.result` when processing callbacks. Thanks @selwin!
+* Various internal refactorings to make `Worker` code more easily extendable. Thanks @lowercase00!
+* RQ's source code is now black formatted. Thanks @aparcar!
+
 ### RQ 1.12.0 (2023-01-15)
 * RQ now stores multiple job execution results. This feature is only available on Redis >= 5.0 Redis Streams. Please refer to [the docs](https://python-rq.org/docs/results/) for more info. Thanks @selwin! 
 * Improve performance when enqueueing many jobs at once. Thanks @rggjan!
