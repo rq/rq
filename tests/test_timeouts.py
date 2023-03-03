@@ -42,3 +42,10 @@ class TestTimeouts(RQTestCase):
         self.assertIn(job, failed_job_registry)
         job.refresh()
         self.assertIn("rq.timeouts.JobTimeoutException", job.exc_info)
+
+        # Test negative timeout doesn't raise JobTimeoutException,
+        # which implies an unintended immediate timeout.
+        job = q.enqueue(thread_friendly_sleep_func, args=(1,), job_timeout=-1)
+        w.work(burst=True)
+        job.refresh()
+        self.assertIn(job, finished_job_registry)

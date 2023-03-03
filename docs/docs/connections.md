@@ -162,3 +162,17 @@ q = Queue(connection=conn)
 
 Setting a `socket_timeout` with a lower value than the `default_worker_ttl` will cause a `TimeoutError`
 since it will interrupt the worker while it gets new jobs from the queue.
+
+
+### Encoding / Decoding
+
+The encoding and decoding of Redis objects occur in multiple locations within the codebase,
+which means that the `decode_responses=True` argument of the Redis connection is not currently supported.
+
+```python
+from redis import Redis
+from rq import Queue
+
+conn = Redis(..., decode_responses=True) # This is not supported
+q = Queue(connection=conn)
+```
