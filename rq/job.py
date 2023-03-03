@@ -1,16 +1,18 @@
 import inspect
 import json
+import logging
 import warnings
 import zlib
 import asyncio
 
-from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from redis import WatchError
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, Type
 from uuid import uuid4
 
+from .defaults import CALLBACK_TIMEOUT
+from .timeouts import JobTimeoutException, BaseDeathPenalty
 
 if TYPE_CHECKING:
     from .results import Result
@@ -35,6 +37,8 @@ from .utils import (
     utcformat,
     utcnow,
 )
+
+logger = logging.getLogger("rq.job")
 
 
 class JobStatus(str, Enum):
@@ -147,6 +151,8 @@ class Job:
         description: Optional[str] = None,
         depends_on: Optional[JobDependencyType] = None,
         timeout: Optional[int] = None,
+        success_callback_timeout: Optional[int] = None,
+        failure_callback_timeout: Optional[int] = None,
         id: Optional[str] = None,
         origin=None,
         meta: Optional[Dict[str, Any]] = None,
@@ -178,6 +184,8 @@ class Job:
                 This accepts a variaty of different arguments including a `Dependency`, a list of `Dependency` or a `Job`
                 list of `Job`. Defaults to None.
             timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job execution. Defaults to None.
+            success_callback_timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job success callback execution. Defaults to 60.
+            failure_callback_timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job failure callback execution. Defaults to 60.
             id (Optional[str], optional): An Optional ID (str) for the Job. Defaults to None.
             origin (Optional[str], optional): The queue of origin. Defaults to None.
             meta (Optional[Dict[str, Any]], optional): Custom metadata about the job, takes a dictioanry. Defaults to None.
@@ -249,6 +257,8 @@ class Job:
         job.failure_ttl = parse_timeout(failure_ttl)
         job.ttl = parse_timeout(ttl)
         job.timeout = parse_timeout(timeout)
+        job.success_callback_timeout = parse_timeout(success_callback_timeout) if success_callback_timeout else CALLBACK_TIMEOUT
+        job.failure_callback_timeout = parse_timeout(failure_callback_timeout) if failure_callback_timeout else CALLBACK_TIMEOUT
         job._status = status
         job.meta = meta or {}
 
@@ -580,6 +590,8 @@ class Job:
         self._result = None
         self._exc_info = None
         self.timeout: Optional[float] = None
+        self.success_callback_timeout: Optional[int] = None
+        self.failure_callback_timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
@@ -860,6 +872,8 @@ class Job:
             except Exception:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
+        self.success_callback_timeout = parse_timeout(obj.get('success_callback_timeout')) if obj.get('timeout') else CALLBACK_TIMEOUT
+        self.failure_callback_timeout = parse_timeout(obj.get('failure_callback_timeout')) if obj.get('timeout') else CALLBACK_TIMEOUT
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
         self._status = obj.get('status').decode() if obj.get('status') else None
@@ -947,6 +961,10 @@ class Job:
             obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
+        if self.success_callback_timeout is not None:
+            obj['success_callback_timeout'] = self.timeout
+        if self.failure_callback_timeout is not None:
+            obj['failure_callback_timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1307,6 +1325,23 @@ class Job:
         return FinishedJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
+
+    def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info, heartbeat=False):
+        """Executes failure_callback with possible timeout
+        """
+        if not self.failure_callback:
+            return
+
+        logger.debug(f"Running failure callbacks for {self.id}")
+        try:
+            if heartbeat:
+                self.heartbeat(utcnow(), self.failure_callback_timeout)
+
+            with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
+                self.failure_callback(self, self.connection, *exc_info)
+        except Exception: # noqa
+            logger.exception(f'Job {self.id}: error while executing failure callback')
+            raise
 
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
         """Saves and cleanup job after successful execution"""

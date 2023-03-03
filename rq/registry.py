@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
 
-from .timeouts import JobTimeoutException, UnixSignalDeathPenalty
+from .timeouts import JobTimeoutException, UnixSignalDeathPenalty, BaseDeathPenalty
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -33,6 +33,7 @@ class BaseRegistry:
     """
 
     job_class = Job
+    death_penalty_class = UnixSignalDeathPenalty
     key_template = 'rq:registry:{0}'
 
     def __init__(
@@ -40,6 +41,7 @@ class BaseRegistry:
         name: str = 'default',
         connection: Optional['Redis'] = None,
         job_class: Optional[Type['Job']] = None,
+        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
         queue: Optional['Queue'] = None,
         serializer: Any = None,
     ):
@@ -54,6 +56,7 @@ class BaseRegistry:
 
         self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
+        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -210,7 +213,6 @@ class StartedJobRegistry(BaseRegistry):
     """
 
     key_template = 'rq:wip:{0}'
-    death_penalty_class = UnixSignalDeathPenalty
 
     def cleanup(self, timestamp: Optional[float] = None):
         """Remove abandoned jobs from registry and add them to FailedJobRegistry.
@@ -235,13 +237,8 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
-                    if job.failure_callback:
-                        try:
-                            with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-                                job.failure_callback(job, self.connection,
-                                                     AbandonedJobError, AbandonedJobError(), traceback.extract_stack())
-                        except:  # noqa
-                            logger.exception('Registry %s: error while executing failure callback', self.key)
+                    job.execute_failure_callback(self.death_penalty_class, AbandonedJobError, AbandonedJobError(),
+                                                 traceback.extract_stack())
 
                     retry = job.retries_left and job.retries_left > 0
 
