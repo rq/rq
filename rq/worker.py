@@ -40,7 +40,7 @@ from .defaults import (
     DEFAULT_WORKER_TTL,
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_FORMAT,
-    DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_DEATH_PENALTY_CLASS,
+    DEFAULT_LOGGING_DATE_FORMAT,
 )
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
@@ -101,7 +101,7 @@ class WorkerStatus(str, Enum):
 class Worker:
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
-    death_penalty_class = DEFAULT_DEATH_PENALTY_CLASS
+    death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
