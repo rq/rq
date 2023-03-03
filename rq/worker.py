@@ -693,7 +693,7 @@ class Worker:
 
         if self._dequeue_strategy not in ("default", "random", "round_robin"):
             raise ValueError(
-                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use one of `default`, `random` or `round_robin`. Using defalt ordering."
+                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
             )
         if self._dequeue_strategy == DequeueStrategy.DEFAULT:
             return
