@@ -32,5 +32,5 @@ class TimeoutFormatError(Exception):
     pass
 
 
-class JobExpiryError(Exception):
+class AbandonedJobError(Exception):
     pass

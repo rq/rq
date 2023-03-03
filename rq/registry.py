@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL, CALLBACK_TIMEOUT
-from .exceptions import InvalidJobOperation, NoSuchJobError, JobExpiryError
+from .exceptions import InvalidJobOperation, NoSuchJobError, AbandonedJobError
 from .job import Job, JobStatus
 from .queue import Queue
 from .utils import backend_class, current_timestamp
@@ -213,7 +213,7 @@ class StartedJobRegistry(BaseRegistry):
     death_penalty_class = UnixSignalDeathPenalty
 
     def cleanup(self, timestamp: Optional[float] = None):
-        """Remove expired jobs from registry and add them to FailedJobRegistry.
+        """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
@@ -235,6 +235,14 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
+                    if job.failure_callback:
+                        try:
+                            with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
+                                job.failure_callback(job, self.connection,
+                                                     AbandonedJobError, AbandonedJobError(), traceback.extract_stack())
+                        except:  # noqa
+                            logger.exception('Registry %s: error while executing failure callback', self.key)
+
                     retry = job.retries_left and job.retries_left > 0
 
                     if retry:
@@ -242,16 +250,11 @@ class StartedJobRegistry(BaseRegistry):
                         job.retry(queue, pipeline)
 
                     else:
-                        if job.failure_callback:
-                            try:
-                                with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-                                    job.failure_callback(job, self.connection,
-                                                         JobExpiryError, JobExpiryError(), traceback.extract_stack())
-                            except:  # noqa
-                                logger.exception('Registry %s: error while executing failure callback', self.key)
-
+                        exc_string = f"due to {AbandonedJobError.__name__}"
+                        logger.warning(f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
+                                       f'({exc_string})')
                         job.set_status(JobStatus.FAILED)
-                        job._exc_info = "Moved to FailedJobRegistry, due to job expiry, at %s" % datetime.now()
+                        job._exc_info = f"Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}"
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
