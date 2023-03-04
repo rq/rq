@@ -11,12 +11,12 @@ import sys
 import time
 import traceback
 import warnings
-
 from datetime import timedelta
 from enum import Enum
-from uuid import uuid4
 from random import shuffle
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Type, Union
+from typing import (TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type,
+                    Union)
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -26,7 +26,9 @@ try:
     from signal import SIGKILL
 except ImportError:
     from signal import SIGTERM as SIGKILL
+
 from contextlib import suppress
+
 import redis.exceptions
 
 from . import worker_registration
@@ -43,16 +45,19 @@ from .defaults import (
     DEFAULT_LOGGING_DATE_FORMAT,
 )
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
+
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
+from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
 from .version import VERSION
 from .serializers import resolve_serializer
+
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -89,6 +94,12 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
     except ValueError:
         return 'SIG_UNKNOWN'
+
+
+class DequeueStrategy(str, Enum):
+    DEFAULT = "default"
+    ROUND_ROBIN = "round_robin"
+    RANDOM = "random"
 
 
 class WorkerStatus(str, Enum):
@@ -283,6 +294,7 @@ class Worker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
+        self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -671,20 +683,36 @@ class Worker:
             self.pubsub.unsubscribe()
             self.pubsub.close()
 
-    def reorder_queues(self, reference_queue):
-        """Method placeholder to workers that implement some reordering strategy.
-        `pass` here means that the queue will remain with the same job order.
+    def reorder_queues(self, reference_queue: 'Queue'):
+        """Reorder the queues according to the strategy.
+        As this can be defined both in the `Worker` initialization or in the `work` method,
+        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
 
         Args:
-            reference_queue (Union[Queue, str]): The queue
+            reference_queue (Union[Queue, str]): The queues to reorder
         """
-        pass
+        if self._dequeue_strategy is None:
+            self._dequeue_strategy = DequeueStrategy.DEFAULT
+
+        if self._dequeue_strategy not in ("default", "random", "round_robin"):
+            raise ValueError(
+                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
+            )
+        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
+            return
+        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
+            pos = self._ordered_queues.index(reference_queue)
+            self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
+            return
+        if self._dequeue_strategy == DequeueStrategy.RANDOM:
+            shuffle(self._ordered_queues)
+            return
 
     def bootstrap(
         self,
         logging_level: str = "INFO",
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
-        log_format: str = DEFAULT_LOGGING_FORMAT,
+        log_format: str = DEFAULT_LOGGING_FORMAT
     ):
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
@@ -749,6 +777,7 @@ class Worker:
         max_jobs: Optional[int] = None,
         max_idle_time: Optional[int] = None,
         with_scheduler: bool = False,
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
     ) -> bool:
         """Starts the work loop.
 
@@ -767,11 +796,13 @@ class Worker:
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
             max_idle_time (Optional[int], optional): Max seconds for worker to be idle. Defaults to None.
             with_scheduler (bool, optional): Whether to run the scheduler in a separate process. Defaults to False.
+            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs. Defaults to DequeueStrategy.DEFAULT
 
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.
         """
         self.bootstrap(logging_level, date_format, log_format)
+        self._dequeue_strategy = dequeue_strategy
         completed_jobs = 0
         if with_scheduler:
             self._start_scheduler(burst, logging_level, date_format, log_format)
@@ -1588,7 +1619,7 @@ class RoundRobinWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
 
 
 class RandomWorker(Worker):

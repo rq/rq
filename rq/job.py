@@ -1322,9 +1322,8 @@ class Job:
         # for backward compatibility
         if self.supports_redis_streams:
             from .results import Result
-            Result.create(
-                self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline
-            )
+
+            Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1344,6 +1343,7 @@ class Job:
         )
         if self.supports_redis_streams:
             from .results import Result
+
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
     def get_retry_interval(self) -> int:

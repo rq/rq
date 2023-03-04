@@ -1067,7 +1067,6 @@ class Queue:
         dependents_key = job.dependents_key
 
         while True:
-
             try:
                 # if a pipeline is passed, the caller is responsible for calling WATCH
                 # to ensure all jobs are enqueued

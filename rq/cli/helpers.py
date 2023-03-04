@@ -100,7 +100,6 @@ def state_symbol(state):
 
 
 def show_queues(queues, raw, by_queue, queue_class, worker_class):
-
     num_jobs = 0
     termwidth = get_terminal_size().columns
     chartwidth = min(20, termwidth - 20)
@@ -141,7 +140,6 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             workers.add(worker)
 
     if not by_queue:
-
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
             name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
