@@ -1326,6 +1326,22 @@ class Job:
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
 
+    def execute_success_callback(self, death_penalty_class: Type[BaseDeathPenalty], result: Any):
+        """Executes success_callback for a job.
+        with timeout .
+
+        Args:
+            death_penalty_class (Type[BaseDeathPenalty]): The penalty class to use for timeout
+            result (Any): The job's result.
+        """
+        if not self.success_callback:
+            return
+
+        logger.debug(f"Running success callbacks for {self.id}")
+        self.heartbeat(utcnow(), self.success_callback_timeout)
+        with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
+            self.success_callback(self, self.connection, result)
+
     def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info, heartbeat=False):
         """Executes failure_callback with possible timeout
         """

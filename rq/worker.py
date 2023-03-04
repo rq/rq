@@ -1329,19 +1329,6 @@ class Worker:
                 except redis.exceptions.WatchError:
                     continue
 
-    def execute_success_callback(self, job: 'Job', result: Any):
-        """Executes success_callback for a job.
-        with timeout .
-
-        Args:
-            job (Job): The Job
-            result (Any): The job's result.
-        """
-        self.log.debug(f"Running success callbacks for {job.id}")
-        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
-        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.success_callback(job, self.connection, result)
-
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -1373,8 +1360,7 @@ class Worker:
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            if job.success_callback:
-                self.execute_success_callback(job, rv)
+            job.execute_success_callback(self.death_penalty_class, rv)
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
