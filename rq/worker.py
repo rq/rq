@@ -1346,6 +1346,9 @@ class Worker:
         Args:
             job (Job): The Job
         """
+        if not job.failure_callback:
+            return
+
         self.log.debug(f"Running failure callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
@@ -1392,13 +1395,12 @@ class Worker:
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
-            if job.failure_callback:
-                try:
-                    self.execute_failure_callback(job, *exc_info)
-                except:  # noqa
-                    exc_info = sys.exc_info()
-                    exc_string = ''.join(traceback.format_exception(*exc_info))
-                    self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
+            try:
+                self.execute_failure_callback(job, *exc_info)
+            except:  # noqa
+                exc_info = sys.exc_info()
+                exc_string = ''.join(traceback.format_exception(*exc_info))
+                self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
 
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
