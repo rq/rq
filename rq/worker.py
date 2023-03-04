@@ -709,8 +709,7 @@ class Worker:
         self,
         logging_level: str = "INFO",
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
-        log_format: str = DEFAULT_LOGGING_FORMAT,
-        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
+        log_format: str = DEFAULT_LOGGING_FORMAT
     ):
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
@@ -728,7 +727,6 @@ class Worker:
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
-        self._dequeue_strategy = dequeue_strategy
         self.log.info('*** Listening on %s...', green(', '.join(qnames)))
 
     def _start_scheduler(
@@ -792,11 +790,13 @@ class Worker:
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
             with_scheduler (bool, optional): Whether to run the scheduler in a separate process. Defaults to False.
+            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs. Defaults to DequeueStrategy.DEFAULT
 
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.
         """
-        self.bootstrap(logging_level, date_format, log_format, dequeue_strategy)
+        self.bootstrap(logging_level, date_format, log_format)
+        self._dequeue_strategy = dequeue_strategy
         completed_jobs = 0
         if with_scheduler:
             self._start_scheduler(burst, logging_level, date_format, log_format)
