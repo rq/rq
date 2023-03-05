@@ -254,12 +254,17 @@ class Job:
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            if isinstance(depends_on, Dependency):
-                job.enqueue_at_front = depends_on.enqueue_at_front
-                job.allow_dependency_failures = depends_on.allow_failure
-                depends_on_list = depends_on.dependencies
-            else:
-                depends_on_list = ensure_list(depends_on)
+            depends_on = ensure_list(depends_on)
+            depends_on_list = []
+            for depends_on_item in depends_on:
+                if isinstance(depends_on_item, Dependency):
+                    # If a Dependency has enqueue_at_front or allow_failure set to True, these behaviors are used for
+                    # all dependencies.
+                    job.enqueue_at_front = job.enqueue_at_front or depends_on_item.enqueue_at_front
+                    job.allow_dependency_failures = job.allow_dependency_failures or depends_on_item.allow_failure
+                    depends_on_list.extend(depends_on_item.dependencies)
+                else:
+                    depends_on_list.extend(ensure_list(depends_on_item))
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
         return job
@@ -1317,9 +1322,8 @@ class Job:
         # for backward compatibility
         if self.supports_redis_streams:
             from .results import Result
-            Result.create(
-                self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline
-            )
+
+            Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1339,6 +1343,7 @@ class Job:
         )
         if self.supports_redis_streams:
             from .results import Result
+
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
     def get_retry_interval(self) -> int:

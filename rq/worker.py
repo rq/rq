@@ -1,6 +1,7 @@
 import contextlib
 import errno
 import logging
+import math
 import os
 import random
 import resource
@@ -11,12 +12,14 @@ import threading
 import time
 import traceback
 import warnings
+
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from datetime import timedelta
 from enum import Enum
-from uuid import uuid4
 from random import shuffle
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Type, Union
+from typing import (TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type,
+                    Union)
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -26,7 +29,9 @@ try:
     from signal import SIGKILL
 except ImportError:
     from signal import SIGTERM as SIGKILL
+
 from contextlib import suppress
+
 import redis.exceptions
 
 from . import worker_registration
@@ -43,7 +48,8 @@ from .defaults import (
     DEFAULT_LOGGING_DATE_FORMAT,
     DEFAULT_LOGGING_FORMAT,
 )
-from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
+
+from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -65,6 +71,7 @@ from .utils import (
 )
 from .version import VERSION
 from .worker_registration import clean_worker_registry, get_keys
+
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -101,6 +108,12 @@ def signal_name(signum):
         return 'SIG_UNKNOWN'
     except ValueError:
         return 'SIG_UNKNOWN'
+
+
+class DequeueStrategy(str, Enum):
+    DEFAULT = "default"
+    ROUND_ROBIN = "round_robin"
+    RANDOM = "random"
 
 
 class WorkerStatus(str, Enum):
@@ -239,6 +252,7 @@ class Worker:
         exc_handler=None,
         exception_handlers=None,
         default_worker_ttl=DEFAULT_WORKER_TTL,
+        maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         job_class: Type['Job'] = None,
         queue_class=None,
         log_job_description: bool = True,
@@ -251,6 +265,7 @@ class Worker:
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
+        self.maintenance_interval = maintenance_interval
 
         connection = self._set_connection(connection)
         self.connection = connection
@@ -293,6 +308,7 @@ class Worker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub = None
         self.pubsub_thread = None
+        self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -681,20 +697,36 @@ class Worker:
             self.pubsub.unsubscribe()
             self.pubsub.close()
 
-    def reorder_queues(self, reference_queue):
-        """Method placeholder to workers that implement some reordering strategy.
-        `pass` here means that the queue will remain with the same job order.
+    def reorder_queues(self, reference_queue: 'Queue'):
+        """Reorder the queues according to the strategy.
+        As this can be defined both in the `Worker` initialization or in the `work` method,
+        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
 
         Args:
-            reference_queue (Union[Queue, str]): The queue
+            reference_queue (Union[Queue, str]): The queues to reorder
         """
-        pass
+        if self._dequeue_strategy is None:
+            self._dequeue_strategy = DequeueStrategy.DEFAULT
+
+        if self._dequeue_strategy not in ("default", "random", "round_robin"):
+            raise ValueError(
+                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
+            )
+        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
+            return
+        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
+            pos = self._ordered_queues.index(reference_queue)
+            self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
+            return
+        if self._dequeue_strategy == DequeueStrategy.RANDOM:
+            shuffle(self._ordered_queues)
+            return
 
     def bootstrap(
         self,
         logging_level: str = "INFO",
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
-        log_format: str = DEFAULT_LOGGING_FORMAT,
+        log_format: str = DEFAULT_LOGGING_FORMAT
     ):
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
@@ -757,13 +789,16 @@ class Worker:
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
         max_jobs: Optional[int] = None,
+        max_idle_time: Optional[int] = None,
         with_scheduler: bool = False,
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
     ) -> bool:
         """Starts the work loop.
 
         Pops and performs all jobs on the current list of queues.  When all
         queues are empty, block and wait for new jobs to arrive on any of the
         queues, unless `burst` mode is enabled.
+        If `max_idle_time` is provided, worker will die when it's idle for more than the provided value.
 
         The return value indicates whether any jobs were processed.
 
@@ -773,12 +808,15 @@ class Worker:
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
+            max_idle_time (Optional[int], optional): Max seconds for worker to be idle. Defaults to None.
             with_scheduler (bool, optional): Whether to run the scheduler in a separate process. Defaults to False.
+            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs. Defaults to DequeueStrategy.DEFAULT
 
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.
         """
         self.bootstrap(logging_level, date_format, log_format)
+        self._dequeue_strategy = dequeue_strategy
         completed_jobs = 0
         if with_scheduler:
             self._start_scheduler(burst, logging_level, date_format, log_format)
@@ -797,10 +835,12 @@ class Worker:
                         break
 
                     timeout = None if burst else self.dequeue_timeout
-                    result = self.dequeue_job_and_maintain_ttl(timeout)
+                    result = self.dequeue_job_and_maintain_ttl(timeout, max_idle_time)
                     if result is None:
                         if burst:
                             self.log.info("Worker %s: done, quitting", self.key)
+                        elif max_idle_time is not None:
+                            self.log.info("Worker %s: idle for %d seconds, quitting", self.key, max_idle_time)
                         break
 
                     job, queue = result
@@ -852,7 +892,7 @@ class Worker:
                 pass
             self.scheduler._process.join()
 
-    def dequeue_job_and_maintain_ttl(self, timeout: int) -> Tuple['Job', 'Queue']:
+    def dequeue_job_and_maintain_ttl(self, timeout: Optional[int], max_idle_time: Optional[int] = None) -> Tuple['Job', 'Queue']:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
@@ -865,12 +905,17 @@ class Worker:
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
+        idle_since = utcnow()
+        idle_time_left = max_idle_time
         while True:
             try:
                 self.heartbeat()
 
                 if self.should_run_maintenance_tasks:
                     self.run_maintenance_tasks()
+
+                if timeout is not None and idle_time_left is not None:
+                    timeout = min(timeout, idle_time_left)
 
                 self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
                 result = self.queue_class.dequeue_any(
@@ -891,7 +936,11 @@ class Worker:
 
                 break
             except DequeueTimeout:
-                pass
+                if max_idle_time is not None:
+                    idle_for = (utcnow() - idle_since).total_seconds()
+                    idle_time_left = math.ceil(max_idle_time - idle_for)
+                    if idle_time_left <= 0:
+                        break
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error(
                     'Could not connect to Redis instance: %s Retrying in %d seconds...', conn_err, connection_wait_time
@@ -1342,6 +1391,9 @@ class Worker:
         Args:
             job (Job): The Job
         """
+        if not job.failure_callback:
+            return
+
         self.log.debug(f"Running failure callbacks for {job.id}")
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
@@ -1388,13 +1440,12 @@ class Worker:
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
-            if job.failure_callback:
-                try:
-                    self.execute_failure_callback(job, *exc_info)
-                except:  # noqa
-                    exc_info = sys.exc_info()
-                    exc_string = ''.join(traceback.format_exception(*exc_info))
-                    self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
+            try:
+                self.execute_failure_callback(job, *exc_info)
+            except:  # noqa
+                exc_info = sys.exc_info()
+                exc_string = ''.join(traceback.format_exception(*exc_info))
+                self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
 
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
@@ -1498,7 +1549,7 @@ class Worker:
         """Maintenance tasks should run on first startup or every 10 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL):
+        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_interval):
             return True
         return False
 
@@ -1582,7 +1633,7 @@ class RoundRobinWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
 
 
 class RandomWorker(Worker):

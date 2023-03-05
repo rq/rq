@@ -69,6 +69,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
+* `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)
 
 _New in version 1.8.0._
 * `--serializer`: Path to serializer object (e.g "rq.serializers.DefaultSerializer" or "rq.serializers.JSONSerializer")
@@ -317,19 +318,21 @@ $ rq worker -w 'path.to.GeventWorker'
 
 The default worker considers the order of queues as their priority order, 
 and if a task is pending in a higher priority queue 
-it will be selected before any other in queues with lower priority.
+it will be selected before any other in queues with lower priority (the `default` behavior).
+To choose the strategy that should be used, `rq` provides the `--dequeue-strategy / -ds` option.
 
 In certain circumstances it can be useful that a when a worker is listening to multiple queues, 
 say `q1`,`q2`,`q3`, the jobs are dequeued using a Round Robin strategy. That is, the 1st
 dequeued job is taken from `q1`, the 2nd from `q2`, the 3rd from `q3`, the 4th
-from `q1`, the 5th from `q2` and so on. The custom worker class `rq.worker.RoundRobinWorker`
-implements this strategy. 
+from `q1`, the 5th from `q2` and so on. To implement this strategy use `-ds round_robin` argument.
 
-In some other circumstances, when a worker is listening to multiple queues, it can be useful
-to pull jobs from the different queues randomly. The custom class `rq.worker.RandomWorker`
-implements this strategy. In fact, whenever a job is pulled from any queue, the list of queues is
+In other circumstances, it can be useful to pull jobs from the different queues randomly.
+To implement this strategy use `-ds random` argument.
+In fact, whenever a job is pulled from any queue with the `random` strategy, the list of queues is
 shuffled, so that no queue has more priority than the other ones.
 
+Deprecation Warning: Those strategies were formely being implemented by using the custom classes `rq.worker.RoundRobinWorker`
+and `rq.worker.RandomWorker`. As the `--dequeue-strategy` argument allows for this option to be used with any worker, those worker classes are deprecated and will be removed from future versions. 
 
 ## Custom Job and Queue Classes
 

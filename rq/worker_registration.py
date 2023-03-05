@@ -86,7 +86,6 @@ def clean_worker_registry(queue: 'Queue'):
     keys = list(get_keys(queue))
 
     with queue.connection.pipeline() as pipeline:
-
         for key in keys:
             pipeline.exists(key)
         results = pipeline.execute()
