@@ -830,7 +830,6 @@ class Worker:
                         break
 
                     job, queue = result
-                    self.reorder_queues(reference_queue=queue)
                     self.execute_job(job, queue)
                     self.heartbeat()
 
@@ -938,6 +937,9 @@ class Worker:
                 connection_wait_time = 1.0
 
         self.heartbeat()
+        if result:
+            _, queue = result
+            self.reorder_queues(reference_queue=queue)
         return result
 
     def heartbeat(self, timeout: Optional[int] = None, pipeline: Optional['Pipeline'] = None):
