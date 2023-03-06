@@ -27,7 +27,7 @@ listen = ['high', 'default', 'low']
 redis_url = os.getenv('REDIS_URL')
 if not redis_url:
     raise RuntimeError("Set up Heroku Data For Redis first, \
-    make sure the its config var is named 'REDIS_URL'.")
+    make sure its config var is named 'REDIS_URL'.")
     
 conn = redis.from_url(redis_url)
 
