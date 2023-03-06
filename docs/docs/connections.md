@@ -138,7 +138,7 @@ automatic restart option allows workers and RQ to have a fault-tolerant connecti
 ```python
 SENTINEL: {
     'INSTANCES':[('remote.host1.org', 26379), ('remote.host2.org', 26379), ('remote.host3.org', 26379)],
-    'MASTER_NAME': 'master'
+    'MASTER_NAME': 'master',
     'DB': 2,
     'USERNAME': 'redis-user',
     'PASSWORD': 'redis-secret',
