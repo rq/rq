@@ -912,6 +912,7 @@ class Worker:
                 )
                 if result is not None:
                     job, queue = result
+                    self.reorder_queues(reference_queue=queue)
                     self.log.debug(f"Dequeued job {blue(job.id)} from {green(queue.name)}")
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
@@ -937,9 +938,6 @@ class Worker:
                 connection_wait_time = 1.0
 
         self.heartbeat()
-        if result:
-            _, queue = result
-            self.reorder_queues(reference_queue=queue)
         return result
 
     def heartbeat(self, timeout: Optional[int] = None, pipeline: Optional['Pipeline'] = None):
