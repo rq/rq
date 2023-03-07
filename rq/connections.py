@@ -3,7 +3,7 @@ from typing import Optional
 import warnings
 from redis import Redis
 
-from .local import LocalStack, release_local
+from .local import LocalStack
 
 
 class NoRedisConnectionException(Exception):
@@ -65,22 +65,6 @@ def pop_connection() -> 'Redis':
     return _connection_stack.pop()
 
 
-def use_connection(redis: Optional['Redis'] = None):
-    """
-    Clears the stack and uses the given connection.  Protects against mixed
-    use of use_connection() and stacked connection contexts.
-
-    Args:
-        redis (Optional[Redis], optional): A Redis Connection. Defaults to None.
-    """
-    assert len(_connection_stack) <= 1, 'You should not mix Connection contexts with use_connection()'
-    release_local(_connection_stack)
-
-    if redis is None:
-        redis = Redis()
-    push_connection(redis)
-
-
 def get_current_connection() -> 'Redis':
     """
     Returns the current Redis connection (i.e. the topmost on the
@@ -118,4 +102,4 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
 
 _connection_stack = LocalStack()
 
-__all__ = ['Connection', 'get_current_connection', 'push_connection', 'pop_connection', 'use_connection']
+__all__ = ['Connection', 'get_current_connection', 'push_connection', 'pop_connection']
