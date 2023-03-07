@@ -902,7 +902,7 @@ class Worker:
                 if timeout is not None and idle_time_left is not None:
                     timeout = min(timeout, idle_time_left)
 
-                self.log.debug('Dequeueing jobs on queues %s and timeout %s', green(qnames), timeout)
+                self.log.debug('Dequeueing jobs on queues %s and timeout %d', green(qnames), timeout)
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,
@@ -1157,7 +1157,7 @@ class Worker:
                 job.ended_at = utcnow()
 
             # Unhandled failure: move the job to the failed queue
-            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ""
+            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ''
             exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
             self.log.warning('Moving job to FailedJobRegistry (%s)', exc_string)
 
