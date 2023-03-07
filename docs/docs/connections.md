@@ -136,11 +136,21 @@ Using this setting in conjunction with the systemd or docker containers with the
 automatic restart option allows workers and RQ to have a fault-tolerant connection to the redis.
 
 ```python
-SENTINEL: {'INSTANCES':[('remote.host1.org', 26379), ('remote.host2.org', 26379), ('remote.host3.org', 26379)],
-           'SOCKET_TIMEOUT': None,
-           'PASSWORD': 'secret',
-           'DB': 2,
-           'MASTER_NAME': 'master'}
+SENTINEL: {
+    'INSTANCES':[('remote.host1.org', 26379), ('remote.host2.org', 26379), ('remote.host3.org', 26379)],
+    'MASTER_NAME': 'master',
+    'DB': 2,
+    'USERNAME': 'redis-user',
+    'PASSWORD': 'redis-secret',
+    'SOCKET_TIMEOUT': None,
+    'CONNECTION_KWARGS': {  # Eventual addition Redis connection arguments
+        'ssl_ca_path': None,
+    },
+    'SENTINEL_KWARGS': {    # Eventual Sentinels connections arguments
+        'username': 'sentinel-user',
+        'password': 'sentinel-secret',
+    },
+}
 ```
 
 
