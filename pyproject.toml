@@ -1,16 +1,16 @@
 [build-system]
-requires = ['setuptools> = 60.0.0', 'wheel']
+requires = ['setuptools>=60.0.0', 'wheel']
 build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'rq'
 version = '1.13.0'
-authors = [{name = 'Vincent Driessen', email = 'vincent@3rdcloud.com'}],
-maintainers = [],
-description = 'RQ is a simple, lightweight, library for creating background jobs, and processing them.',
-readme = 'README.md,
+authors = [{name = 'Vincent Driessen', email = 'vincent@3rdcloud.com'}]
+maintainers = []
+description = 'RQ is a simple, lightweight, library for creating background jobs, and processing them.'
+readme = 'README.md'
 license = {file = 'LICENSE'}
-requires-python = '>=3.6.2',
+requires-python = '>=3.6.2'
 classifiers = [
     # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
     # 'Development Status :: 1 - Planning',
@@ -44,7 +44,7 @@ classifiers = [
     'Topic :: System :: Systems Administration',
     'Topic :: System :: Monitoring',
 ]
-dependency = [
+dependencies = [
     'redis>=3.0.0,<4',
     'click>=3.0,<4',
 ]
