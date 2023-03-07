@@ -726,7 +726,7 @@ class Worker:
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self.register_birth()
-        self.log.info("Worker %s: started, version %s", self.key, VERSION)
+        self.log.info('Worker %s: started, version %s', self.key, VERSION)
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
@@ -824,9 +824,9 @@ class Worker:
                     result = self.dequeue_job_and_maintain_ttl(timeout, max_idle_time)
                     if result is None:
                         if burst:
-                            self.log.info("Worker %s: done, quitting", self.key)
+                            self.log.info('Worker %s: done, quitting', self.key)
                         elif max_idle_time is not None:
-                            self.log.info("Worker %s: idle for %d seconds, quitting", self.key, max_idle_time)
+                            self.log.info('Worker %s: idle for %d seconds, quitting', self.key, max_idle_time)
                         break
 
                     job, queue = result
@@ -836,11 +836,11 @@ class Worker:
                     completed_jobs += 1
                     if max_jobs is not None:
                         if completed_jobs >= max_jobs:
-                            self.log.info("Worker %s: finished executing %d jobs, quitting", self.key, completed_jobs)
+                            self.log.info('Worker %s: finished executing %d jobs, quitting', self.key, completed_jobs)
                             break
 
                 except redis.exceptions.TimeoutError:
-                    self.log.error(f"Worker {self.key}: Redis connection timeout, quitting...")
+                    self.log.error('Worker %s: Redis connection timeout, quitting...', self.key)
                     break
 
                 except StopRequested:
@@ -902,7 +902,7 @@ class Worker:
                 if timeout is not None and idle_time_left is not None:
                     timeout = min(timeout, idle_time_left)
 
-                self.log.debug(f"Dequeueing jobs on queues {green(qnames)} and timeout {timeout}")
+                self.log.debug('Dequeueing jobs on queues %s and timeout %s', green(qnames), timeout)
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,
@@ -913,7 +913,7 @@ class Worker:
                 if result is not None:
                     job, queue = result
                     self.reorder_queues(reference_queue=queue)
-                    self.log.debug(f"Dequeued job {blue(job.id)} from {green(queue.name)}")
+                    self.log.debug('Dequeued job %s from %s', blue(job.id), green(queue.name))
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
@@ -1151,7 +1151,7 @@ class Worker:
         elif self._stopped_job_id == job.id:
             # Work-horse killed deliberately
             self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
-            self.handle_job_failure(job, queue=queue, exc_string="Job stopped by user, work-horse terminated.")
+            self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             if not job.ended_at:
                 job.ended_at = utcnow()
@@ -1159,7 +1159,7 @@ class Worker:
             # Unhandled failure: move the job to the failed queue
             signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ""
             exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
-            self.log.warning(f'Moving job to FailedJobRegistry ({exc_string})')
+            self.log.warning('Moving job to FailedJobRegistry (%s)', exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(
@@ -1234,7 +1234,7 @@ class Worker:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-        self.log.debug(f"Preparing for execution of Job ID {job.id}")
+        self.log.debug('Preparing for execution of Job ID %s', job.id)
         with self.connection.pipeline() as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
@@ -1245,7 +1245,7 @@ class Worker:
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             pipeline.execute()
-            self.log.debug(f"Job preparation finished.")
+            self.log.debug('Job preparation finished.')
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
@@ -1345,7 +1345,7 @@ class Worker:
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        self.log.debug(f"Saving job {job.id}'s successful execution result")
+                        self.log.debug('Saving job %s\'s successful execution result', job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
@@ -1366,7 +1366,7 @@ class Worker:
             job (Job): The Job
             result (Any): The job's result.
         """
-        self.log.debug(f"Running success callbacks for {job.id}")
+        self.log.debug('Running success callbacks for %s', job.id)
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.success_callback(job, self.connection, result)
@@ -1380,7 +1380,7 @@ class Worker:
         if not job.failure_callback:
             return
 
-        self.log.debug(f"Running failure callbacks for {job.id}")
+        self.log.debug('Running failure callbacks for %s', job.id)
         job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
         with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
             job.failure_callback(job, self.connection, *exc_info)
@@ -1398,7 +1398,7 @@ class Worker:
         """
         push_connection(self.connection)
         started_job_registry = queue.started_job_registry
-        self.log.debug("Started Job Registry set.")
+        self.log.debug('Started Job Registry set.')
 
         try:
             self.prepare_job_execution(job)
@@ -1406,9 +1406,9 @@ class Worker:
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
-                self.log.debug("Performing Job...")
+                self.log.debug('Performing Job...')
                 rv = job.perform()
-                self.log.debug(f"Finished performing Job ID {job.id}")
+                self.log.debug('Finished performing Job ID %s', job.id)
 
             job.ended_at = utcnow()
 
@@ -1421,7 +1421,7 @@ class Worker:
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
-            self.log.debug(f"Job {job.id} raised an exception.")
+            self.log.debug('Job %s raised an exception.', job.id)
             job.ended_at = utcnow()
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
@@ -1444,8 +1444,7 @@ class Worker:
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:
-            log_result = "{0!r}".format(as_text(str(rv)))
-            self.log.debug('Result: %s', yellow(log_result))
+            self.log.debug('Result: %r', yellow(as_text(str(rv))))
 
         if self.log_result_lifespan:
             result_ttl = job.get_result_ttl(self.default_result_ttl)
@@ -1464,7 +1463,7 @@ class Worker:
         the other properties are accessed, which will stop exceptions from
         being properly logged, so we guard against it here.
         """
-        self.log.debug(f"Handling exception for {job.id}.")
+        self.log.debug('Handling exception for %s.', job.id)
         exc_string = ''.join(traceback.format_exception(*exc_info))
         try:
             extra = {
@@ -1481,7 +1480,9 @@ class Worker:
         extra.update({'queue': job.origin, 'job_id': job.id})
 
         # func_name
-        self.log.error(f'[Job {job.id}]: exception raised while executing ({func_name})\n' + exc_string, extra=extra)
+        self.log.error(
+            '[Job %s]: exception raised while executing (%s)\n' + exc_string, job.id, func_name, extra=extra
+        )
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)

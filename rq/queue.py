@@ -336,7 +336,7 @@ class Queue:
         else:
             end = length
         job_ids = [as_text(job_id) for job_id in self.connection.lrange(self.key, start, end)]
-        self.log.debug(f"Getting jobs for queue {green(self.name)}: {len(job_ids)} found.")
+        self.log.debug('Getting jobs for queue %s: %d found.', green(self.name), len(job_ids))
         return job_ids
 
     def get_jobs(self, offset: int = 0, length: int = -1) -> List['Job']:
@@ -455,7 +455,7 @@ class Queue:
             result = connection.lpush(self.key, job_id)
         else:
             result = connection.rpush(self.key, job_id)
-        self.log.debug(f"Pushed job {blue(job_id)} into {green(self.name)}, {result} job(s) are in queue.")
+        self.log.debug('Pushed job %s into %s, %s job(s) are in queue.', blue(job_id), green(self.name), result)
 
     def create_job(
             self,
