@@ -830,7 +830,6 @@ class Worker:
                         break
 
                     job, queue = result
-                    self.reorder_queues(reference_queue=queue)
                     self.execute_job(job, queue)
                     self.heartbeat()
 
@@ -913,6 +912,7 @@ class Worker:
                 )
                 if result is not None:
                     job, queue = result
+                    self.reorder_queues(reference_queue=queue)
                     self.log.debug(f"Dequeued job {blue(job.id)} from {green(queue.name)}")
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
