@@ -16,7 +16,7 @@ def get_key(job_id):
     return 'rq:results:%s' % job_id
 
 
-class Result(object):
+class Result:
     class Type(Enum):
         SUCCESSFUL = 1
         FAILED = 2

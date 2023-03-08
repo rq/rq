@@ -166,9 +166,6 @@ class Queue:
     def __len__(self):
         return self.count
 
-    def __nonzero__(self):
-        return True
-
     def __bool__(self):
         return True
 
