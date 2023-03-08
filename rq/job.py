@@ -1377,7 +1377,7 @@ class Job:
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
         else:
-            queue.enqueue_job(self, pipeline=pipeline)
+            queue._enqueue_job(self, pipeline=pipeline)
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they
