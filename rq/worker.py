@@ -4,7 +4,6 @@ import logging
 import math
 import os
 import random
-import resource
 import signal
 import socket
 import sys
@@ -19,6 +18,10 @@ from typing import (TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type,
 from uuid import uuid4
 
 if TYPE_CHECKING:
+    try:
+        from resource import struct_rusage
+    except ImportError:
+        pass
     from redis import Redis
     from redis.client import Pipeline
 
@@ -246,7 +249,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        work_horse_killed_handler: Optional[Callable[[Job, int, int, resource.struct_rusage], None]] = None
+        work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
@@ -568,7 +571,7 @@ class Worker:
             else:
                 raise
 
-    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int], Optional[resource.struct_rusage]]:
+    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
         """Waits for the horse process to complete.
         Uses `0` as argument as to include "any child in the process group of the current process".
         """
