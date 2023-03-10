@@ -184,8 +184,6 @@ class Job:
                 This accepts a variaty of different arguments including a `Dependency`, a list of `Dependency` or a `Job`
                 list of `Job`. Defaults to None.
             timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job execution. Defaults to None.
-            success_callback_timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job success callback execution. Defaults to 60.
-            failure_callback_timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job failure callback execution. Defaults to 60.
             id (Optional[str], optional): An Optional ID (str) for the Job. Defaults to None.
             origin (Optional[str], optional): The queue of origin. Defaults to None.
             meta (Optional[Dict[str, Any]], optional): Custom metadata about the job, takes a dictioanry. Defaults to None.
@@ -243,12 +241,16 @@ class Job:
 
         if on_success:
             if not isinstance(on_success, Callback):
+                warnings.warn('Passing a `Callable` `on_success` is deprecated, pass `Callback` instead',
+                              DeprecationWarning)
                 on_success = Callback(on_success)  # backward compatibility
             job._success_callback_name = on_success.name
             job.success_callback_timeout = on_success.timeout
 
         if on_failure:
             if not isinstance(on_failure, Callback):
+                warnings.warn('Passing a `Callable` `on_failure` is deprecated, pass `Callback` instead',
+                              DeprecationWarning)
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
             job.failure_callback_timeout = on_failure.timeout
