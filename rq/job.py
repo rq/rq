@@ -1373,9 +1373,8 @@ class Job:
         # for backward compatibility
         if self.supports_redis_streams:
             from .results import Result
-            Result.create(
-                self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline
-            )
+
+            Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1395,6 +1394,7 @@ class Job:
         )
         if self.supports_redis_streams:
             from .results import Result
+
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
     def get_retry_interval(self) -> int:
@@ -1428,7 +1428,7 @@ class Job:
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
         else:
-            queue.enqueue_job(self, pipeline=pipeline)
+            queue._enqueue_job(self, pipeline=pipeline)
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they

@@ -34,21 +34,27 @@ def get_redis_from_config(settings, connection_class=Redis):
     """Returns a StrictRedis instance from a dictionary of settings.
     To use redis sentinel, you must specify a dictionary in the configuration file.
     Example of a dictionary with keys without values:
-    SENTINEL = {'INSTANCES':, 'SOCKET_TIMEOUT':, 'PASSWORD':,'DB':, 'MASTER_NAME':}
+    SENTINEL = {'INSTANCES':, 'SOCKET_TIMEOUT':, 'USERNAME':, 'PASSWORD':, 'DB':, 'MASTER_NAME':, 'SENTINEL_KWARGS':}
     """
     if settings.get('REDIS_URL') is not None:
         return connection_class.from_url(settings['REDIS_URL'])
 
     elif settings.get('SENTINEL') is not None:
         instances = settings['SENTINEL'].get('INSTANCES', [('localhost', 26379)])
-        socket_timeout = settings['SENTINEL'].get('SOCKET_TIMEOUT', None)
-        password = settings['SENTINEL'].get('PASSWORD', None)
-        db = settings['SENTINEL'].get('DB', 0)
         master_name = settings['SENTINEL'].get('MASTER_NAME', 'mymaster')
-        ssl = settings['SENTINEL'].get('SSL', False)
-        arguments = {'password': password, 'ssl': ssl}
+        
+        connection_kwargs = {
+            'db': settings['SENTINEL'].get('DB', 0),
+            'username': settings['SENTINEL'].get('USERNAME', None),
+            'password': settings['SENTINEL'].get('PASSWORD', None),
+            'socket_timeout': settings['SENTINEL'].get('SOCKET_TIMEOUT', None),
+            'ssl': settings['SENTINEL'].get('SSL', False),
+        }
+        connection_kwargs.update(settings['SENTINEL'].get('CONNECTION_KWARGS', {}))
+        sentinel_kwargs = settings['SENTINEL'].get('SENTINEL_KWARGS', {})
+        
         sn = Sentinel(
-            instances, socket_timeout=socket_timeout, password=password, db=db, ssl=ssl, sentinel_kwargs=arguments
+            instances, sentinel_kwargs=sentinel_kwargs, **connection_kwargs
         )
         return sn.master_for(master_name)
 
@@ -101,7 +107,6 @@ def state_symbol(state):
 
 
 def show_queues(queues, raw, by_queue, queue_class, worker_class):
-
     num_jobs = 0
     termwidth = get_terminal_size().columns
     chartwidth = min(20, termwidth - 20)
@@ -142,7 +147,6 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             workers.add(worker)
 
     if not by_queue:
-
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
             name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)

@@ -96,7 +96,6 @@ def make_colorizer(color: str):
 
 
 class ColorizingStreamHandler(logging.StreamHandler):
-
     levels = {
         logging.WARNING: make_colorizer('darkyellow'),
         logging.ERROR: make_colorizer('darkred'),

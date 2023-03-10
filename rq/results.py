@@ -16,7 +16,7 @@ def get_key(job_id):
     return 'rq:results:%s' % job_id
 
 
-class Result(object):
+class Result:
     class Type(Enum):
         SUCCESSFUL = 1
         FAILED = 2
@@ -85,7 +85,7 @@ class Result(object):
         # response = job.connection.zrange(cls.get_key(job.id), 0, 10, desc=True, withscores=True)
         response = job.connection.xrevrange(cls.get_key(job.id), '+', '-')
         results = []
-        for (result_id, payload) in response:
+        for result_id, payload in response:
             results.append(
                 cls.restore(job.id, result_id.decode(), payload, connection=job.connection, serializer=serializer)
             )
