@@ -1,4 +1,6 @@
 import json
+
+from rq.defaults import CALLBACK_TIMEOUT
 from rq.serializers import JSONSerializer
 import time
 import queue
@@ -9,7 +11,7 @@ from redis import WatchError
 
 from rq.utils import as_text
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job
+from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job, Callback
 from rq.queue import Queue
 from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
                          FinishedJobRegistry, StartedJobRegistry,
@@ -209,9 +211,9 @@ class TestJob(RQTestCase):
 
         # ... and no other keys are stored
         self.assertEqual(
-            set(self.testconn.hkeys(job.key)),
             {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
-             b'worker_name', b'success_callback_name', b'failure_callback_name'}
+             b'worker_name'},
+            set(self.testconn.hkeys(job.key))
         )
 
         self.assertEqual(job.last_heartbeat, None)
@@ -240,6 +242,42 @@ class TestJob(RQTestCase):
         self.assertEqual(stored_job._dependency_ids, [parent_job.id])
         self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
+
+    def test_persistence_of_callbacks(self):
+        """Storing jobs with success and/or failure callbacks."""
+        job = Job.create(func=fixtures.some_calculation,
+                         on_success=Callback(fixtures.say_hello, timeout=10),
+                         on_failure=fixtures.say_pid)  # deprecated callable
+        job.save()
+        stored_job = Job.fetch(job.id)
+
+        self.assertEqual(fixtures.say_hello, stored_job.success_callback)
+        self.assertEqual(10, stored_job.success_callback_timeout)
+        self.assertEqual(fixtures.say_pid, stored_job.failure_callback)
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+
+        # None(s)
+        job = Job.create(func=fixtures.some_calculation,
+                         on_failure=None)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertIsNone(stored_job.success_callback)
+        self.assertIsNone(stored_job.success_callback_timeout)
+        self.assertIsNone(stored_job.failure_callback)
+        self.assertIsNone(stored_job.failure_callback_timeout)
+
+        # old-format backward compatibility
+        job = Job.create(func=fixtures.some_calculation)
+        job.save()
+
+        self.testconn.hset(job.key, 'success_callback_name', 'f1')
+        self.testconn.hset(job.key, 'failure_callback_name', 'f2')
+        job.refresh()
+
+        self.assertEqual('f1', job._success_callback_name)
+        self.assertIsNone(job.success_callback_timeout)
+        self.assertEqual('f2', job._failure_callback_name)
+        self.assertIsNone(job.failure_callback_timeout)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
