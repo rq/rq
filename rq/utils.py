@@ -349,7 +349,7 @@ def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
         return utcparse(date_str.decode())
 
 
-def parse_timeout(timeout: Any):
+def parse_timeout(timeout: Any) -> int:
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:

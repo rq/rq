@@ -159,8 +159,8 @@ class Job:
         failure_ttl: Optional[int] = None,
         serializer=None,
         *,
-        on_success: Optional[Callable[..., Any]] = None,
-        on_failure: Optional[Callable[..., Any]] = None
+        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -242,14 +242,16 @@ class Job:
         job._kwargs = kwargs
 
         if on_success:
-            if not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
-                raise ValueError('on_success callback must be a function')
-            job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
+            if not isinstance(on_success, Callback):
+                on_success = Callback(on_success)  # backward compatibility
+            job._success_callback_name = on_success.name
+            job.success_callback_timeout = on_success.timeout
 
         if on_failure:
-            if not inspect.isfunction(on_failure) and not inspect.isbuiltin(on_failure):
-                raise ValueError('on_failure callback must be a function')
-            job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
+            if not isinstance(on_failure, Callback):
+                on_failure = Callback(on_failure)  # backward compatibility
+            job._failure_callback_name = on_failure.name
+            job.failure_callback_timeout = on_failure.timeout
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -257,8 +259,6 @@ class Job:
         job.failure_ttl = parse_timeout(failure_ttl)
         job.ttl = parse_timeout(ttl)
         job.timeout = parse_timeout(timeout)
-        job.success_callback_timeout = parse_timeout(success_callback_timeout) if success_callback_timeout else CALLBACK_TIMEOUT
-        job.failure_callback_timeout = parse_timeout(failure_callback_timeout) if failure_callback_timeout else CALLBACK_TIMEOUT
         job._status = status
         job.meta = meta or {}
 
@@ -872,17 +872,23 @@ class Job:
             except Exception:
                 self._result = "Unserializable return value"
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
-        self.success_callback_timeout = parse_timeout(obj.get('success_callback_timeout')) if obj.get('timeout') else CALLBACK_TIMEOUT
-        self.failure_callback_timeout = parse_timeout(obj.get('failure_callback_timeout')) if obj.get('timeout') else CALLBACK_TIMEOUT
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
         self._status = obj.get('status').decode() if obj.get('status') else None
 
-        if obj.get('success_callback_name'):
+        if obj.get('success_callback_name'):  # backward compatibility
             self._success_callback_name = obj.get('success_callback_name').decode()
+        elif 'success_callback' in obj:
+            success_callback = json.loads(obj.get('success_callback').decode())
+            self._success_callback_name = success_callback['name']
+            self.success_callback_timeout = success_callback.get('timeout', CALLBACK_TIMEOUT)
 
-        if obj.get('failure_callback_name'):
+        if obj.get('failure_callback_name'):  # backward compatibility
             self._failure_callback_name = obj.get('failure_callback_name').decode()
+        elif 'failure_callback' in obj:
+            failure_callback = json.loads(obj.get('failure_callback').decode())
+            self._failure_callback_name = failure_callback['name']
+            self.failure_callback_timeout = failure_callback.get('timeout', CALLBACK_TIMEOUT)
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
@@ -933,14 +939,18 @@ class Job:
         obj = {
             'created_at': utcformat(self.created_at or utcnow()),
             'data': zlib.compress(self.data),
-            'success_callback_name': self._success_callback_name if self._success_callback_name else '',
-            'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
             'worker_name': self.worker_name or '',
         }
 
+        if self._success_callback_name:
+            obj['success_callback'] = json.dumps(dict(name=self._success_callback_name,
+                                                      timeout=self.success_callback_timeout)).encode('utf-8')
+        if self._failure_callback_name:
+            obj['failure_callback'] = json.dumps(dict(name=self._failure_callback_name,
+                                                      timeout=self.failure_callback_timeout)).encode('utf-8')
         if self.retries_left is not None:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
@@ -961,10 +971,6 @@ class Job:
             obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
-        if self.success_callback_timeout is not None:
-            obj['success_callback_timeout'] = self.timeout
-        if self.failure_callback_timeout is not None:
-            obj['failure_callback_timeout'] = self.timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1558,3 +1564,16 @@ class Retry:
 
         self.max = max
         self.intervals = intervals
+
+
+class Callback:
+    def __init__(self, func: Callable[..., Any], timeout: Optional[Any] = None):
+        if not inspect.isfunction(func) and not inspect.isbuiltin(func):
+            raise ValueError('Callback func must be a function')
+
+        self.func = func
+        self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
+
+    @property
+    def name(self) -> str:
+        return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)
