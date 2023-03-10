@@ -1356,7 +1356,7 @@ class Job:
         if not self.failure_callback:
             return
 
-        logger.debug(f"Running failure callbacks for {self.id}")
+        logger.debug('Running failure callbacks for %s', self.id)
         try:
             if heartbeat:
                 self.heartbeat(utcnow(), self.failure_callback_timeout)
