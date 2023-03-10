@@ -1337,7 +1337,7 @@ class Job:
         if not self.success_callback:
             return
 
-        logger.debug(f"Running success callbacks for {self.id}")
+        logger.debug('Running success callbacks for %s', self.id)
         self.heartbeat(utcnow(), self.success_callback_timeout)
         with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
             self.success_callback(self, self.connection, result)
