@@ -41,9 +41,9 @@ class BaseRegistry:
         name: str = 'default',
         connection: Optional['Redis'] = None,
         job_class: Optional[Type['Job']] = None,
-        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
         queue: Optional['Queue'] = None,
         serializer: Any = None,
+        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
     ):
         if queue:
             self.name = queue.name

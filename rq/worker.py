@@ -268,7 +268,7 @@ class Worker:
 
         queues = [
             self.queue_class(name=q, connection=connection, job_class=self.job_class,
-                             death_penalty_class=self.death_penalty_class, serializer=self.serializer)
+                             serializer=self.serializer, death_penalty_class=self.death_penalty_class,)
             if isinstance(q, str)
             else q
             for q in ensure_list(queues)
@@ -912,8 +912,8 @@ class Worker:
                     timeout,
                     connection=self.connection,
                     job_class=self.job_class,
-                    death_penalty_class=self.death_penalty_class,
                     serializer=self.serializer,
+                    death_penalty_class=self.death_penalty_class,
                 )
                 if result is not None:
                     job, queue = result
