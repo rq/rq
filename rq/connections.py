@@ -32,7 +32,7 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
         connection (Optional[Redis], optional): A Redis Connection instance. Defaults to None.
     """
     warnings.warn(
-        "The Conneciton context manager is deprecated. Use the `connection` parameter instead.",
+        "The Connection context manager is deprecated. Use the `connection` parameter instead.",
         DeprecationWarning,
     )
     if connection is None:
