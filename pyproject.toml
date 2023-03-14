@@ -46,18 +46,18 @@ classifiers = [
     'Topic :: System :: Monitoring',
 ]
 dependencies = [
-    'redis>=3.0.0,<4',
-    'click>=3.0,<4',
+    'redis>=3.5.0',
+    'click>=5.0.0',
 ]
 
 [project.optional-dependencies]
 dev = [
     'build',
-    'codecov>=2,<3',
-    'psutil>=5,<6',
-    'pytest>=7,<8',
-    'pytest-cov>=4,<5',
-    'sentry-sdk>=1,<2',
+    'codecov',
+    'psutil',
+    'pytest',
+    'pytest-cov',
+    'sentry-sdk',
 ]
 
 [project.scripts]
