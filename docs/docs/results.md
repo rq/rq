@@ -82,6 +82,8 @@ damage. Just sayin'.
 
 If the worker gets killed while a job is running, it will eventually end up in
 `FailedJobRegistry` because a cleanup task will raise an `AbandonedJobError`.
+Before 0.14 the behavor was the same, but the cleanup task raised a
+`Moved to FailedJobRegistry at` error message instead.
 
 ## Dealing with Job Timeouts
 
