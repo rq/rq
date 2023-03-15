@@ -194,7 +194,7 @@ class BaseRegistry:
             job.ended_at = None
             job._exc_info = ''
             job.save()
-            job = queue.enqueue_job(job, pipeline=pipeline, at_front=at_front)
+            job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
         return job
 
