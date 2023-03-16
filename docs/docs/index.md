@@ -213,7 +213,7 @@ To configure callback timeouts, use RQ's
 ```python
 from rq import Callback
 queue.enqueue(say_hello, 
-              on_success=Callback(report_success),  # default callback timeout (30 seconds) 
+              on_success=Callback(report_success),  # default callback timeout (60 seconds) 
               on_failure=Callback(report_failure, timeout=10))  # 10 seconds timeout
 ```
 

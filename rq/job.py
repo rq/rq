@@ -878,11 +878,11 @@ class Job:
 
         if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
-            self.success_callback_timeout = obj.get('success_callback_timeout', CALLBACK_TIMEOUT)
+            self.success_callback_timeout = int(obj.get('success_callback_timeout', CALLBACK_TIMEOUT))
 
         if obj.get('failure_callback_name'):
             self._failure_callback_name = obj.get('failure_callback_name').decode()
-            self.failure_callback_timeout = obj.get('failure_callback_timeout', CALLBACK_TIMEOUT)
+            self.failure_callback_timeout = int(obj.get('failure_callback_timeout', CALLBACK_TIMEOUT))
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
