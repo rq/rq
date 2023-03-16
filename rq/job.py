@@ -151,8 +151,6 @@ class Job:
         description: Optional[str] = None,
         depends_on: Optional[JobDependencyType] = None,
         timeout: Optional[int] = None,
-        success_callback_timeout: Optional[int] = None,
-        failure_callback_timeout: Optional[int] = None,
         id: Optional[str] = None,
         origin=None,
         meta: Optional[Dict[str, Any]] = None,
@@ -878,19 +876,13 @@ class Job:
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
         self._status = obj.get('status').decode() if obj.get('status') else None
 
-        if obj.get('success_callback_name'):  # backward compatibility
+        if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
-        elif 'success_callback' in obj:
-            success_callback = json.loads(obj.get('success_callback').decode())
-            self._success_callback_name = success_callback['name']
-            self.success_callback_timeout = success_callback.get('timeout', CALLBACK_TIMEOUT)
+            self.success_callback_timeout = obj.get('success_callback_timeout', CALLBACK_TIMEOUT)
 
-        if obj.get('failure_callback_name'):  # backward compatibility
+        if obj.get('failure_callback_name'):
             self._failure_callback_name = obj.get('failure_callback_name').decode()
-        elif 'failure_callback' in obj:
-            failure_callback = json.loads(obj.get('failure_callback').decode())
-            self._failure_callback_name = failure_callback['name']
-            self.failure_callback_timeout = failure_callback.get('timeout', CALLBACK_TIMEOUT)
+            self.failure_callback_timeout = obj.get('failure_callback_timeout', CALLBACK_TIMEOUT)
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
@@ -941,18 +933,14 @@ class Job:
         obj = {
             'created_at': utcformat(self.created_at or utcnow()),
             'data': zlib.compress(self.data),
+            'success_callback_name': self._success_callback_name if self._success_callback_name else '',
+            'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
             'worker_name': self.worker_name or '',
         }
 
-        if self._success_callback_name:
-            obj['success_callback'] = json.dumps(dict(name=self._success_callback_name,
-                                                      timeout=self.success_callback_timeout)).encode('utf-8')
-        if self._failure_callback_name:
-            obj['failure_callback'] = json.dumps(dict(name=self._failure_callback_name,
-                                                      timeout=self.failure_callback_timeout)).encode('utf-8')
         if self.retries_left is not None:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
@@ -973,6 +961,10 @@ class Job:
             obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
+        if self.success_callback_timeout is not None:
+            obj['success_callback_timeout'] = self.success_callback_timeout
+        if self.failure_callback_timeout is not None:
+            obj['failure_callback_timeout'] = self.failure_callback_timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
