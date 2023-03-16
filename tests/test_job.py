@@ -212,7 +212,7 @@ class TestJob(RQTestCase):
         # ... and no other keys are stored
         self.assertEqual(
             {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
-             b'worker_name'},
+             b'worker_name', b'success_callback_name', b'failure_callback_name'},
             set(self.testconn.hkeys(job.key))
         )
 
@@ -265,19 +265,6 @@ class TestJob(RQTestCase):
         self.assertIsNone(stored_job.success_callback_timeout)
         self.assertIsNone(stored_job.failure_callback)
         self.assertIsNone(stored_job.failure_callback_timeout)
-
-        # old-format backward compatibility
-        job = Job.create(func=fixtures.some_calculation)
-        job.save()
-
-        self.testconn.hset(job.key, 'success_callback_name', 'f1')
-        self.testconn.hset(job.key, 'failure_callback_name', 'f2')
-        job.refresh()
-
-        self.assertEqual('f1', job._success_callback_name)
-        self.assertIsNone(job.success_callback_timeout)
-        self.assertEqual('f2', job._failure_callback_name)
-        self.assertIsNone(job.failure_callback_timeout)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
