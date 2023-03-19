@@ -243,7 +243,7 @@ class Job:
                               DeprecationWarning)
                 on_success = Callback(on_success)  # backward compatibility
             job._success_callback_name = on_success.name
-            job.success_callback_timeout = on_success.timeout
+            job._success_callback_timeout = on_success.timeout
 
         if on_failure:
             if not isinstance(on_failure, Callback):
@@ -251,7 +251,7 @@ class Job:
                               DeprecationWarning)
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
-            job.failure_callback_timeout = on_failure.timeout
+            job._failure_callback_timeout = on_failure.timeout
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -412,6 +412,13 @@ class Job:
         return self._success_callback
 
     @property
+    def success_callback_timeout(self) -> int:
+        if self._success_callback_timeout is None:
+            return CALLBACK_TIMEOUT
+
+        return self._success_callback_timeout
+
+    @property
     def failure_callback(self):
         if self._failure_callback is UNEVALUATED:
             if self._failure_callback_name:
@@ -420,6 +427,13 @@ class Job:
                 self._failure_callback = None
 
         return self._failure_callback
+
+    @property
+    def failure_callback_timeout(self) -> int:
+        if self._failure_callback_timeout is None:
+            return CALLBACK_TIMEOUT
+
+        return self._failure_callback_timeout
 
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
@@ -590,8 +604,8 @@ class Job:
         self._result = None
         self._exc_info = None
         self.timeout: Optional[float] = None
-        self.success_callback_timeout: Optional[int] = None
-        self.failure_callback_timeout: Optional[int] = None
+        self._success_callback_timeout: Optional[int] = None
+        self._failure_callback_timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
@@ -878,11 +892,15 @@ class Job:
 
         if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
-            self.success_callback_timeout = int(obj.get('success_callback_timeout', CALLBACK_TIMEOUT))
+
+        if 'success_callback_timeout' in obj:
+            self._success_callback_timeout = int(obj.get('success_callback_timeout'))
 
         if obj.get('failure_callback_name'):
             self._failure_callback_name = obj.get('failure_callback_name').decode()
-            self.failure_callback_timeout = int(obj.get('failure_callback_timeout', CALLBACK_TIMEOUT))
+
+        if 'failure_callback_timeout' in obj:
+            self._failure_callback_timeout = int(obj.get('failure_callback_timeout'))
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
@@ -961,10 +979,10 @@ class Job:
             obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
-        if self.success_callback_timeout is not None:
-            obj['success_callback_timeout'] = self.success_callback_timeout
-        if self.failure_callback_timeout is not None:
-            obj['failure_callback_timeout'] = self.failure_callback_timeout
+        if self._success_callback_timeout is not None:
+            obj['success_callback_timeout'] = self._success_callback_timeout
+        if self._failure_callback_timeout is not None:
+            obj['failure_callback_timeout'] = self._failure_callback_timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1338,11 +1356,10 @@ class Job:
             return
 
         logger.debug('Running success callbacks for %s', self.id)
-        self.heartbeat(utcnow(), self.success_callback_timeout)
         with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
             self.success_callback(self, self.connection, result)
 
-    def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info, heartbeat=False):
+    def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info):
         """Executes failure_callback with possible timeout
         """
         if not self.failure_callback:
@@ -1350,9 +1367,6 @@ class Job:
 
         logger.debug('Running failure callbacks for %s', self.id)
         try:
-            if heartbeat:
-                self.heartbeat(utcnow(), self.failure_callback_timeout)
-
             with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.failure_callback(self, self.connection, *exc_info)
         except Exception: # noqa

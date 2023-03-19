@@ -1394,6 +1394,7 @@ class Worker:
             # to use the same exc handling when pickling fails
             job._result = rv
 
+            job.heartbeat(utcnow(), job.success_callback_timeout)
             job.execute_success_callback(self.death_penalty_class, rv)
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
@@ -1404,7 +1405,8 @@ class Worker:
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
             try:
-                job.execute_failure_callback(self.death_penalty_class, *exc_info, heartbeat=True)
+                job.heartbeat(utcnow(), job.failure_callback_timeout)
+                job.execute_failure_callback(self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
