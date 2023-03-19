@@ -262,9 +262,9 @@ class TestJob(RQTestCase):
         job.save()
         stored_job = Job.fetch(job.id)
         self.assertIsNone(stored_job.success_callback)
-        self.assertIsNone(stored_job.success_callback_timeout)
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.success_callback_timeout)
         self.assertIsNone(stored_job.failure_callback)
-        self.assertIsNone(stored_job.failure_callback_timeout)
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
