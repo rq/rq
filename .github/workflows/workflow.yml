@@ -52,6 +52,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        sudo apt purge python3-setuptools
         pip install --upgrade pip
         pip install redis==${{ matrix.redis-py-version }}
         pip install -e .[dev]
