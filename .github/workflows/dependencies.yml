@@ -66,6 +66,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        sudo apt purge python3-setuptools
         pip install --upgrade pip
         pip install git+https://github.com/redis/redis-py
         pip install git+https://github.com/pallets/click
