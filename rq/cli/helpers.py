@@ -13,7 +13,8 @@ from shutil import get_terminal_size
 import click
 from redis import Redis
 from redis.sentinel import Sentinel
-from rq.defaults import DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS, DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS
+from rq.defaults import DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS, DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS, \
+    DEFAULT_DEATH_PENALTY_CLASS
 from rq.logutils import setup_loghandlers
 from rq.utils import import_attribute, parse_timeout
 from rq.worker import WorkerStatus
@@ -302,6 +303,7 @@ class CliConfig:
         config=None,
         worker_class=DEFAULT_WORKER_CLASS,
         job_class=DEFAULT_JOB_CLASS,
+        death_penalty_class=DEFAULT_DEATH_PENALTY_CLASS,
         queue_class=DEFAULT_QUEUE_CLASS,
         connection_class=DEFAULT_CONNECTION_CLASS,
         path=None,
@@ -324,6 +326,11 @@ class CliConfig:
             self.job_class = import_attribute(job_class)
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--job-class')
+
+        try:
+            self.death_penalty_class = import_attribute(death_penalty_class)
+        except (ImportError, AttributeError) as exc:
+            raise click.BadParameter(str(exc), param_hint='--death-penalty-class')
 
         try:
             self.queue_class = import_attribute(queue_class)
