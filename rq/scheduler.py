@@ -240,14 +240,3 @@ def run(scheduler):
         scheduler.log.error('Scheduler [PID %s] raised an exception.\n%s', os.getpid(), traceback.format_exc())
         raise
     scheduler.log.info('Scheduler with PID %d has stopped', os.getpid())
-
-
-def parse_names(queues_or_names) -> List[str]:
-    """Given a list of strings or queues, returns queue names"""
-    names = []
-    for queue_or_name in queues_or_names:
-        if isinstance(queue_or_name, Queue):
-            names.append(queue_or_name.name)
-        else:
-            names.append(str(queue_or_name))
-    return names

@@ -13,6 +13,8 @@ from uuid import uuid4
 from redis import Redis
 from redis import SSLConnection, UnixDomainSocketConnection
 
+from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .logutils import setup_loghandlers
 from .queue import Queue
 from .utils import parse_names
 from .worker import Worker
@@ -24,18 +26,21 @@ class WorkerData(NamedTuple):
     process: Process
 
 
-class Pool:
+# logger = logging.getLogger("rq.worker")
 
+
+class Pool:
     class Status(Enum):
         INITIATED = 1
         STARTED = 2
         STOPPED = 3
 
-    def __init__(self, queues: List[Union[str, Queue]], connection: Redis,
-                 num_workers: int = 1, *args, **kwargs):
+    def __init__(self, queues: List[Union[str, Queue]], connection: Redis, num_workers: int = 1, *args, **kwargs):
         self.num_workers: int = num_workers
         self._workers: List[Worker] = []
+        setup_loghandlers('INFO', DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log: logging.Logger = logging.getLogger(__name__)
+        # self.log: logging.Logger = logger
         self._queue_names: Set[str] = set(parse_names(queues))
         self.connection = connection
         self.name: str = uuid4().hex
@@ -63,9 +68,7 @@ class Pool:
             # the key is necessary.
             # `path` is not left in the dictionary as that keyword argument is
             # not expected by `redis.client.Redis` and would raise an exception.
-            self._connection_kwargs['unix_socket_path'] = self._connection_kwargs.pop(
-                'path'
-            )
+            self._connection_kwargs['unix_socket_path'] = self._connection_kwargs.pop('path')
 
     @property
     def queues(self) -> List[Queue]:
@@ -126,7 +129,7 @@ class Pool:
             target=run_worker,
             args=(uuid4().hex, self._queue_names, self._connection_class, self._connection_kwargs),
             kwargs={'sleep': sleep, 'burst': burst},
-            name=f'Worker {name} (Pool {self.name})'
+            name=f'Worker {name} (Pool {self.name})',
         )
         process.start()
         worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
@@ -168,19 +171,31 @@ class Pool:
             self.stop_worker(data.pid)
 
     def start(self):
-        self.log.debug(f'Starting worker pool {self.name} with pid {os.getpid()}...')
+        self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
         self.status = self.Status.INITIATED
         self.start_workers(burst=self._burst)
         self._install_signal_handlers()
+        while True:
+            if self.status == self.Status.STOPPED:
+                self.log.info(f'Worker pool {self.name} with pid %d is stopped, breaking from loop...', os.getpid())
+                break
+            self.check_workers()
+            time.sleep(1)
         time.sleep(10)
-        self.log.debug(f'Stopping {self.name}...')
+        self.log.info(f'Stopping worker pool {self.name}...')
 
     def stop(self):
         pass
 
 
-def run_worker(worker_name: str, queue_names: List[str],
-               connection_class, connection_kwargs: dict, burst: bool = True, sleep: int = 0):
+def run_worker(
+    worker_name: str,
+    queue_names: List[str],
+    connection_class,
+    connection_kwargs: dict,
+    burst: bool = True,
+    sleep: int = 0,
+):
     connection = connection_class(**connection_kwargs)
     queues = [Queue(name, connection=connection) for name in queue_names]
     worker = Worker(queues, name=worker_name, connection=connection)
@@ -189,9 +204,6 @@ def run_worker(worker_name: str, queue_names: List[str],
         time.sleep(sleep)
         worker.work(burst=burst)
     except:  # noqa
-        worker.log.error(
-            'Worker [PID %s] raised an exception.\n%s',
-            os.getpid(), traceback.format_exc()
-        )
+        worker.log.error('Worker [PID %s] raised an exception.\n%s', os.getpid(), traceback.format_exc())
         raise
     worker.log.info("Worker with PID %s has stopped", os.getpid())
