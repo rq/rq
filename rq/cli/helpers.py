@@ -124,9 +124,13 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
         count = counts[q]
         if not raw:
             chart = green('|' + '█' * int(ratio * count))
-            line = '%-12s %s %d' % (q.name, chart, count)
+            line = '%-12s %s %d, %d executing, %d finished, %d failed' \
+                    % (q.name, chart, count, q.started_job_registry.count,  \
+                       q.finished_job_registry.count, q.failed_job_registry.count)
         else:
-            line = 'queue %s %d' % (q.name, count)
+            line = 'queue %s %d, %d executing, %d finished, %d failed' \
+                    % (q.name, count, q.started_job_registry.count, \
+                    q.finished_job_registry.count, q.failed_job_registry.count)
         click.echo(line)
 
         num_jobs += count
@@ -151,9 +155,15 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             queue_names = ', '.join(worker.queue_names())
             name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
             if not raw:
-                click.echo('%s: %s %s' % (name, state_symbol(worker.get_state()), queue_names))
+                line = '%s: %s %s. jobs: %d finished, %d failed' \
+                        % (name, state_symbol(worker.get_state()), queue_names, \
+                           worker.successful_job_count, worker.failed_job_count)
+                click.echo(line)
             else:
-                click.echo('worker %s %s %s' % (name, worker.get_state(), queue_names))
+                line = 'worker %s %s %s. jobs: %d finished, %d failed' \
+                       % (name, worker.get_state(), queue_names,\
+                        worker.successful_job_count, worker.failed_job_count)
+                click.echo(line)
 
     else:
         # Display workers by queue
