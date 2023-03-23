@@ -13,8 +13,7 @@ import warnings
 from datetime import timedelta
 from enum import Enum
 from random import shuffle
-from typing import (TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type,
-                    Union)
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -57,7 +56,17 @@ from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
+from .utils import (
+    backend_class,
+    ensure_list,
+    get_version,
+    make_colorizer,
+    utcformat,
+    utcnow,
+    utcparse,
+    compact,
+    as_text,
+)
 from .version import VERSION
 from .serializers import resolve_serializer
 
@@ -249,7 +258,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None
+        work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
@@ -267,8 +276,13 @@ class Worker:
         self.serializer = resolve_serializer(serializer)
 
         queues = [
-            self.queue_class(name=q, connection=connection, job_class=self.job_class,
-                             serializer=self.serializer, death_penalty_class=self.death_penalty_class,)
+            self.queue_class(
+                name=q,
+                connection=connection,
+                job_class=self.job_class,
+                serializer=self.serializer,
+                death_penalty_class=self.death_penalty_class,
+            )
             if isinstance(q, str)
             else q
             for q in ensure_list(queues)
@@ -706,7 +720,7 @@ class Worker:
             return
         if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
             pos = self._ordered_queues.index(reference_queue)
-            self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
+            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
             return
         if self._dequeue_strategy == DequeueStrategy.RANDOM:
             shuffle(self._ordered_queues)
@@ -716,7 +730,7 @@ class Worker:
         self,
         logging_level: str = "INFO",
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
-        log_format: str = DEFAULT_LOGGING_FORMAT
+        log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
@@ -772,6 +786,12 @@ class Worker:
             else:
                 self.scheduler.start()
 
+    def wait_for_processing_unit(self):
+        """Wait for a processing unit to be available.
+        This is used to limit the number of jobs that can be processed at the same time.
+        """
+        return
+
     def work(
         self,
         burst: bool = False,
@@ -781,7 +801,7 @@ class Worker:
         max_jobs: Optional[int] = None,
         max_idle_time: Optional[int] = None,
         with_scheduler: bool = False,
-        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
     ) -> bool:
         """Starts the work loop.
 
@@ -814,6 +834,12 @@ class Worker:
         self._install_signal_handlers()
         try:
             while True:
+                self.wait_for_processing_unit()
+
+                if max_jobs is not None:
+                    if completed_jobs >= max_jobs:
+                        self.log.info('Worker %s: finished executing %d jobs, quitting', self.key, completed_jobs)
+                        break
                 try:
                     self.check_for_suspension(burst)
 
@@ -836,12 +862,7 @@ class Worker:
                     job, queue = result
                     self.execute_job(job, queue)
                     self.heartbeat()
-
                     completed_jobs += 1
-                    if max_jobs is not None:
-                        if completed_jobs >= max_jobs:
-                            self.log.info('Worker %s: finished executing %d jobs, quitting', self.key, completed_jobs)
-                            break
 
                 except redis.exceptions.TimeoutError:
                     self.log.error('Worker %s: Redis connection timeout, quitting...', self.key)
@@ -881,7 +902,9 @@ class Worker:
                 pass
             self.scheduler._process.join()
 
-    def dequeue_job_and_maintain_ttl(self, timeout: Optional[int], max_idle_time: Optional[int] = None) -> Tuple['Job', 'Queue']:
+    def dequeue_job_and_maintain_ttl(
+        self, timeout: Optional[int], max_idle_time: Optional[int] = None
+    ) -> Tuple['Job', 'Queue']:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
@@ -1167,10 +1190,7 @@ class Worker:
             self.log.warning('Moving job to FailedJobRegistry (%s)', exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
-            self.handle_job_failure(
-                job, queue=queue,
-                exc_string=exc_string
-            )
+            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
 
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -1458,9 +1478,7 @@ class Worker:
         extra.update({'queue': job.origin, 'job_id': job.id})
 
         # func_name
-        self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n' + exc_string, job.id, func_name, extra=extra
-        )
+        self.log.error('[Job %s]: exception raised while executing (%s)\n' + exc_string, job.id, func_name, extra=extra)
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
@@ -1598,7 +1616,7 @@ class RoundRobinWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
+        self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
 
 
 class RandomWorker(Worker):
