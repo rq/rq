@@ -1,16 +1,18 @@
 import inspect
 import json
+import logging
 import warnings
 import zlib
 import asyncio
 
-from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from redis import WatchError
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, Type
 from uuid import uuid4
 
+from .defaults import CALLBACK_TIMEOUT
+from .timeouts import JobTimeoutException, BaseDeathPenalty
 
 if TYPE_CHECKING:
     from .results import Result
@@ -35,6 +37,8 @@ from .utils import (
     utcformat,
     utcnow,
 )
+
+logger = logging.getLogger("rq.job")
 
 
 class JobStatus(str, Enum):
@@ -153,8 +157,8 @@ class Job:
         failure_ttl: Optional[int] = None,
         serializer=None,
         *,
-        on_success: Optional[Callable[..., Any]] = None,
-        on_failure: Optional[Callable[..., Any]] = None
+        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -234,14 +238,20 @@ class Job:
         job._kwargs = kwargs
 
         if on_success:
-            if not inspect.isfunction(on_success) and not inspect.isbuiltin(on_success):
-                raise ValueError('on_success callback must be a function')
-            job._success_callback_name = '{0}.{1}'.format(on_success.__module__, on_success.__qualname__)
+            if not isinstance(on_success, Callback):
+                warnings.warn('Passing a `Callable` `on_success` is deprecated, pass `Callback` instead',
+                              DeprecationWarning)
+                on_success = Callback(on_success)  # backward compatibility
+            job._success_callback_name = on_success.name
+            job._success_callback_timeout = on_success.timeout
 
         if on_failure:
-            if not inspect.isfunction(on_failure) and not inspect.isbuiltin(on_failure):
-                raise ValueError('on_failure callback must be a function')
-            job._failure_callback_name = '{0}.{1}'.format(on_failure.__module__, on_failure.__qualname__)
+            if not isinstance(on_failure, Callback):
+                warnings.warn('Passing a `Callable` `on_failure` is deprecated, pass `Callback` instead',
+                              DeprecationWarning)
+                on_failure = Callback(on_failure)  # backward compatibility
+            job._failure_callback_name = on_failure.name
+            job._failure_callback_timeout = on_failure.timeout
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -254,12 +264,17 @@ class Job:
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            if isinstance(depends_on, Dependency):
-                job.enqueue_at_front = depends_on.enqueue_at_front
-                job.allow_dependency_failures = depends_on.allow_failure
-                depends_on_list = depends_on.dependencies
-            else:
-                depends_on_list = ensure_list(depends_on)
+            depends_on = ensure_list(depends_on)
+            depends_on_list = []
+            for depends_on_item in depends_on:
+                if isinstance(depends_on_item, Dependency):
+                    # If a Dependency has enqueue_at_front or allow_failure set to True, these behaviors are used for
+                    # all dependencies.
+                    job.enqueue_at_front = job.enqueue_at_front or depends_on_item.enqueue_at_front
+                    job.allow_dependency_failures = job.allow_dependency_failures or depends_on_item.allow_failure
+                    depends_on_list.extend(depends_on_item.dependencies)
+                else:
+                    depends_on_list.extend(ensure_list(depends_on_item))
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
         return job
@@ -397,6 +412,13 @@ class Job:
         return self._success_callback
 
     @property
+    def success_callback_timeout(self) -> int:
+        if self._success_callback_timeout is None:
+            return CALLBACK_TIMEOUT
+
+        return self._success_callback_timeout
+
+    @property
     def failure_callback(self):
         if self._failure_callback is UNEVALUATED:
             if self._failure_callback_name:
@@ -405,6 +427,13 @@ class Job:
                 self._failure_callback = None
 
         return self._failure_callback
+
+    @property
+    def failure_callback_timeout(self) -> int:
+        if self._failure_callback_timeout is None:
+            return CALLBACK_TIMEOUT
+
+        return self._failure_callback_timeout
 
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
@@ -575,6 +604,8 @@ class Job:
         self._result = None
         self._exc_info = None
         self.timeout: Optional[float] = None
+        self._success_callback_timeout: Optional[int] = None
+        self._failure_callback_timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
@@ -862,8 +893,14 @@ class Job:
         if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
 
+        if 'success_callback_timeout' in obj:
+            self._success_callback_timeout = int(obj.get('success_callback_timeout'))
+
         if obj.get('failure_callback_name'):
             self._failure_callback_name = obj.get('failure_callback_name').decode()
+
+        if 'failure_callback_timeout' in obj:
+            self._failure_callback_timeout = int(obj.get('failure_callback_timeout'))
 
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
@@ -942,6 +979,10 @@ class Job:
             obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
             obj['timeout'] = self.timeout
+        if self._success_callback_timeout is not None:
+            obj['success_callback_timeout'] = self._success_callback_timeout
+        if self._failure_callback_timeout is not None:
+            obj['failure_callback_timeout'] = self._failure_callback_timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1303,6 +1344,35 @@ class Job:
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
 
+    def execute_success_callback(self, death_penalty_class: Type[BaseDeathPenalty], result: Any):
+        """Executes success_callback for a job.
+        with timeout .
+
+        Args:
+            death_penalty_class (Type[BaseDeathPenalty]): The penalty class to use for timeout
+            result (Any): The job's result.
+        """
+        if not self.success_callback:
+            return
+
+        logger.debug('Running success callbacks for %s', self.id)
+        with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
+            self.success_callback(self, self.connection, result)
+
+    def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info):
+        """Executes failure_callback with possible timeout
+        """
+        if not self.failure_callback:
+            return
+
+        logger.debug('Running failure callbacks for %s', self.id)
+        try:
+            with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
+                self.failure_callback(self, self.connection, *exc_info)
+        except Exception: # noqa
+            logger.exception(f'Job {self.id}: error while executing failure callback')
+            raise
+
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
         """Saves and cleanup job after successful execution"""
         # self.log.debug('Setting job %s status to finished', job.id)
@@ -1317,9 +1387,8 @@ class Job:
         # for backward compatibility
         if self.supports_redis_streams:
             from .results import Result
-            Result.create(
-                self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline
-            )
+
+            Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1339,6 +1408,7 @@ class Job:
         )
         if self.supports_redis_streams:
             from .results import Result
+
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
     def get_retry_interval(self) -> int:
@@ -1372,7 +1442,7 @@ class Job:
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
         else:
-            queue.enqueue_job(self, pipeline=pipeline)
+            queue._enqueue_job(self, pipeline=pipeline)
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they
@@ -1502,3 +1572,16 @@ class Retry:
 
         self.max = max
         self.intervals = intervals
+
+
+class Callback:
+    def __init__(self, func: Callable[..., Any], timeout: Optional[Any] = None):
+        if not inspect.isfunction(func) and not inspect.isbuiltin(func):
+            raise ValueError('Callback func must be a function')
+
+        self.func = func
+        self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
+
+    @property
+    def name(self) -> str:
+        return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)

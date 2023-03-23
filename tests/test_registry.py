@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
+from unittest import mock
+from unittest.mock import PropertyMock, ANY
+
 from rq.serializers import JSONSerializer
 
 from rq.utils import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
-from rq.exceptions import InvalidJobOperation
+from rq.exceptions import InvalidJobOperation, AbandonedJobError
 from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
 from rq.utils import current_timestamp
@@ -161,7 +164,9 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job, failed_job_registry)
         self.assertIn(job, self.registry)
 
-        self.registry.cleanup()
+        with mock.patch.object(Job, 'execute_failure_callback') as mocked:
+            self.registry.cleanup()
+            mocked.assert_called_once_with(queue.death_penalty_class, AbandonedJobError, ANY, ANY)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()

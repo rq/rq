@@ -110,10 +110,14 @@ class TimerDeathPenalty(BaseDeathPenalty):
 
     def setup_death_penalty(self):
         """Starts the timer."""
+        if self._timeout <= 0:
+            return
         self._timer = self.new_timer()
         self._timer.start()
 
     def cancel_death_penalty(self):
         """Cancels the timer."""
+        if self._timeout <= 0:
+            return
         self._timer.cancel()
         self._timer = None

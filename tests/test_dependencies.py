@@ -117,6 +117,37 @@ class TestDependencies(RQTestCase):
         self.assertEqual(q.job_ids, ["fake_job_id_2", "fake_job_id_1"])
 
 
+    def test_dependency_list_in_depends_on(self):
+        """Enqueue with Dependency list in depends_on"""
+        q = Queue(connection=self.testconn)
+        w = SimpleWorker([q], connection=q.connection)
+
+        # enqueue dependent job when parent successfully finishes
+        parent_job1 = q.enqueue(say_hello)
+        parent_job2 = q.enqueue(say_hello)
+        job = q.enqueue_call(say_hello, depends_on=[Dependency([parent_job1]), Dependency([parent_job2])])
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+
+    def test_enqueue_job_dependency(self):
+        """Enqueue via Queue.enqueue_job() with depencency"""
+        q = Queue(connection=self.testconn)
+        w = SimpleWorker([q], connection=q.connection)
+
+        # enqueue dependent job when parent successfully finishes
+        parent_job = Job.create(say_hello)
+        parent_job.save()
+        job = Job.create(say_hello, depends_on=parent_job)
+        q.enqueue_job(job)
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+        q.enqueue_job(parent_job)
+        w.work(burst=True)
+        self.assertEqual(parent_job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""
         queue = Queue(connection=self.testconn)

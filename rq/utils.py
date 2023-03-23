@@ -96,7 +96,6 @@ def make_colorizer(color: str):
 
 
 class ColorizingStreamHandler(logging.StreamHandler):
-
     levels = {
         logging.WARNING: make_colorizer('darkyellow'),
         logging.ERROR: make_colorizer('darkred'),
@@ -182,10 +181,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
     E.g.: package_a.package_b.module_a.ClassA.my_static_method
 
     Thus we remove the bits from the end of the name until we can import it
-    Sometimes the failure during importing is due to a genuine coding error in the imported module
-    In this case, the exception is logged as a warning for ease of debugging.
-    The above logic will apply anyways regardless of the cause of the import error.
-
+    
     Args:
         name (str): The name (reference) to the path.
 
@@ -204,7 +200,6 @@ def import_attribute(name: str) -> Callable[..., Any]:
             module = importlib.import_module(module_name)
             break
         except ImportError:
-            logger.warning("Import error for '%s'" % module_name, exc_info=True)
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
@@ -354,7 +349,7 @@ def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
         return utcparse(date_str.decode())
 
 
-def parse_timeout(timeout: Any):
+def parse_timeout(timeout: Union[int, float, str]) -> int:
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
