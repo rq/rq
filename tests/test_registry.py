@@ -164,9 +164,9 @@ class TestRegistry(RQTestCase):
         self.assertNotIn(job, failed_job_registry)
         self.assertIn(job, self.registry)
 
-        with mock.patch.object(Job, 'failure_callback', PropertyMock()) as mocked:
+        with mock.patch.object(Job, 'execute_failure_callback') as mocked:
             self.registry.cleanup()
-            mocked.return_value.assert_any_call(job, self.testconn, AbandonedJobError, ANY, ANY)
+            mocked.assert_called_once_with(queue.death_penalty_class, AbandonedJobError, ANY, ANY)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()

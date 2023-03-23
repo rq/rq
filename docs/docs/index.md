@@ -202,6 +202,21 @@ If you want to execute a function whenever a job completes or fails, RQ provides
 queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure)
 ```
 
+### Callback Class and Callback Timeouts
+
+_New in version 1.14.0_
+
+RQ lets you configure the method and timeout for each callback - success and failure.   
+To configure callback timeouts, use RQ's
+`Callback` object that accepts `func` and `timeout` arguments. For example:
+
+```python
+from rq import Callback
+queue.enqueue(say_hello, 
+              on_success=Callback(report_success),  # default callback timeout (60 seconds) 
+              on_failure=Callback(report_failure, timeout=10))  # 10 seconds timeout
+```
+
 ### Success Callback
 
 Success callbacks must be a function that accepts `job`, `connection` and `result` arguments.

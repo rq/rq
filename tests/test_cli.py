@@ -5,6 +5,7 @@ from uuid import uuid4
 import os
 import json
 
+from click import BadParameter
 from click.testing import CliRunner
 from redis import Redis
 
@@ -14,6 +15,7 @@ from rq.cli.helpers import read_config_file, CliConfig, parse_function_arg, pars
 from rq.job import Job
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
+from rq.timeouts import UnixSignalDeathPenalty
 from rq.worker import Worker, WorkerStatus
 from rq.scheduler import RQScheduler
 
@@ -117,6 +119,23 @@ class TestRQCli(RQTestCase):
             cli_config.connection.connection_pool.connection_kwargs['host'],
             'testhost.example.com',
         )
+
+    def test_death_penalty_class(self):
+        cli_config = CliConfig()
+
+        self.assertEqual(
+            UnixSignalDeathPenalty,
+            cli_config.death_penalty_class
+        )
+
+        cli_config = CliConfig(death_penalty_class='rq.job.Job')
+        self.assertEqual(
+            Job,
+            cli_config.death_penalty_class
+        )
+
+        with self.assertRaises(BadParameter):
+            CliConfig(death_penalty_class='rq.abcd')
 
     def test_empty_nothing(self):
         """rq empty -u <url>"""

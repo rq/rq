@@ -88,3 +88,9 @@ DEFAULT_LOGGING_FORMAT = '%(asctime)s %(message)s'
 Uses Python's default attributes as defined
 https://docs.python.org/3/library/logging.html#logrecord-attributes
 """
+
+
+DEFAULT_DEATH_PENALTY_CLASS = 'rq.timeouts.UnixSignalDeathPenalty'
+""" The path for the default Death Penalty class to use.
+Defaults to the `UnixSignalDeathPenalty` class within the `rq.timeouts` module
+"""

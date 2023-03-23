@@ -123,9 +123,9 @@ class Worker:
     log_result_lifespan = True
     # `log_job_description` is used to toggle logging an entire jobs description.
     log_job_description = True
-    # factor to increase connection_wait_time incase of continous connection failures.
+    # factor to increase connection_wait_time in case of continuous connection failures.
     exponential_backoff_factor = 2.0
-    # Max Wait time (in seconds) after which exponential_backoff_factor wont be applicable.
+    # Max Wait time (in seconds) after which exponential_backoff_factor won't be applicable.
     max_connection_wait_time = 60.0
 
     @classmethod
@@ -267,7 +267,8 @@ class Worker:
         self.serializer = resolve_serializer(serializer)
 
         queues = [
-            self.queue_class(name=q, connection=connection, job_class=self.job_class, serializer=self.serializer)
+            self.queue_class(name=q, connection=connection, job_class=self.job_class,
+                             serializer=self.serializer, death_penalty_class=self.death_penalty_class,)
             if isinstance(q, str)
             else q
             for q in ensure_list(queues)
@@ -912,6 +913,7 @@ class Worker:
                     connection=self.connection,
                     job_class=self.job_class,
                     serializer=self.serializer,
+                    death_penalty_class=self.death_penalty_class,
                 )
                 if result is not None:
                     job, queue = result
@@ -1113,7 +1115,7 @@ class Worker:
         job.started_at = utcnow()
         while True:
             try:
-                with UnixSignalDeathPenalty(self.job_monitoring_interval, HorseMonitorTimeoutException):
+                with self.death_penalty_class(self.job_monitoring_interval, HorseMonitorTimeoutException):
                     retpid, ret_val, rusage = self.wait_for_horse()
                 break
             except HorseMonitorTimeoutException:
@@ -1361,33 +1363,6 @@ class Worker:
                 except redis.exceptions.WatchError:
                     continue
 
-    def execute_success_callback(self, job: 'Job', result: Any):
-        """Executes success_callback for a job.
-        with timeout .
-
-        Args:
-            job (Job): The Job
-            result (Any): The job's result.
-        """
-        self.log.debug('Running success callbacks for %s', job.id)
-        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
-        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.success_callback(job, self.connection, result)
-
-    def execute_failure_callback(self, job: 'Job', *exc_info):
-        """Executes failure_callback with timeout
-
-        Args:
-            job (Job): The Job
-        """
-        if not job.failure_callback:
-            return
-
-        self.log.debug('Running failure callbacks for %s', job.id)
-        job.heartbeat(utcnow(), CALLBACK_TIMEOUT)
-        with self.death_penalty_class(CALLBACK_TIMEOUT, JobTimeoutException, job_id=job.id):
-            job.failure_callback(job, self.connection, *exc_info)
-
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -1419,8 +1394,8 @@ class Worker:
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            if job.success_callback:
-                self.execute_success_callback(job, rv)
+            job.heartbeat(utcnow(), job.success_callback_timeout)
+            job.execute_success_callback(self.death_penalty_class, rv)
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
@@ -1430,11 +1405,11 @@ class Worker:
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
             try:
-                self.execute_failure_callback(job, *exc_info)
+                job.heartbeat(utcnow(), job.failure_callback_timeout)
+                job.execute_failure_callback(self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
-                self.log.error('Worker %s: error while executing failure callback', self.key, exc_info=exc_info)
 
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry

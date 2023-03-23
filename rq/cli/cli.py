@@ -105,7 +105,8 @@ def empty(cli_config, all, queues, serializer, **options):
 
     if all:
         queues = cli_config.queue_class.all(
-            connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
+            connection=cli_config.connection, job_class=cli_config.job_class,
+            death_penalty_class=cli_config.death_penalty_class, serializer=serializer
         )
     else:
         queues = [
