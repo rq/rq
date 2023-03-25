@@ -1,3 +1,4 @@
+import contextlib
 import errno
 import logging
 import os
@@ -16,6 +17,7 @@ from redis import SSLConnection, UnixDomainSocketConnection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .logutils import setup_loghandlers
 from .queue import Queue
+from .timeouts import HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import parse_names
 from .worker import Worker
 
@@ -86,12 +88,17 @@ class Pool:
         """Toggle self._stop_requested that's checked on every loop"""
         self.log.info('Received SIGINT/SIGTERM, shutting down...')
         self.status = self.Status.STOPPED
-        self.stop_workers()
-        signal.signal(signal.SIGINT, self.request_force_stop)
-        signal.signal(signal.SIGTERM, self.request_force_stop)
+        # self.stop_workers()
+        # signal.signal(signal.SIGINT, self.request_force_stop)
+        # signal.signal(signal.SIGTERM, self.request_force_stop)
 
-    def request_force_stop(self, signum, frame):
-        pass
+    # def request_force_stop(self, signum, frame):
+    #     pass
+
+    def all_workers_have_stopped(self) -> bool:
+        """Returns True if all workers have stopped."""
+        self.reap_workers()
+        return bool(self.worker_dict)
 
     def reap_workers(self):
         """Removes dead workers from worker_dict"""
@@ -99,8 +106,19 @@ class Pool:
         worker_datas = list(self.worker_dict.values())
 
         for data in worker_datas:
+            with contextlib.suppress(HorseMonitorTimeoutException):
+                with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
+                    # with contextlib.suppress(ChildProcessError):
+                        try:
+                            os.wait4(data.process.pid, 0)
+                        except ChildProcessError as e:
+                            # Process is dead
+                            self.log.info(f'Worker %s is dead', data.name)
+                            self.worker_dict.pop(data.name)
+                            continue
+
             if data.process.is_alive():
-                self.log.debug(f'Worker {data.name} is alive')
+                self.log.debug(f'Worker %s with pid %d is alive', data.name, data.pid)
             else:
                 self.log.debug(f'Worker {data.name} is dead')
                 self.worker_dict.pop(data.name)
@@ -136,9 +154,9 @@ class Pool:
         self.worker_dict[name] = worker_data
 
         if count:
-            self.log.debug(f'Spawned worker number {count}: {name}')
+            self.log.debug(f'Spawned worker %d: %s with PID %d', count, name, process.pid)
         else:
-            self.log.debug(f'Spawned worker {name}')
+            self.log.debug(f'Spawned worker: %s with PID %d', name, process.pid)
 
     def start_workers(self, burst: bool = True, sleep: int = 0):
         """
@@ -149,13 +167,13 @@ class Pool:
         for i in range(self.num_workers):
             self.start_worker(i + 1, burst=burst, sleep=sleep)
 
-    def stop_worker(self, pid: int, sig=signal.SIGINT):
+    def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):
         """
         Send stop signal to worker and catch "No such process" error if the worker is already dead.
         """
         try:
-            os.kill(pid, sig)
-            self.log.info('Sent a stop worker pid %s', pid)
+            os.kill(worker_data.pid, sig)
+            self.log.info('Sent shutdown command to worker with %s', worker_data.pid)
         except OSError as e:
             if e.errno == errno.ESRCH:
                 # "No such process" is fine with us
@@ -167,22 +185,30 @@ class Pool:
         """Send SIGINT to all workers"""
         self.log.info('Sending stop signal to %s workers', len(self.worker_dict))
         worker_datas = list(self.worker_dict.values())
-        for data in worker_datas:
-            self.stop_worker(data.pid)
+        for worker_data in worker_datas:
+            self.stop_worker(worker_data)
 
-    def start(self):
+    def start(self, burst: bool = False, logging_level: str = "INFO"):
+        self._burst = burst
+        setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
         self.status = self.Status.INITIATED
         self.start_workers(burst=self._burst)
         self._install_signal_handlers()
         while True:
             if self.status == self.Status.STOPPED:
-                self.log.info(f'Worker pool {self.name} with pid %d is stopped, breaking from loop...', os.getpid())
-                break
-            self.check_workers()
-            time.sleep(1)
-        time.sleep(10)
-        self.log.info(f'Stopping worker pool {self.name}...')
+                if self.all_workers_have_stopped():
+                    self.log.info(f'All workers have stopped, exiting...')
+                    break
+                else:
+                    self.log.info(f'Waiting for workers to shutdown...')
+                    time.sleep(1)
+                    continue
+            else:
+                self.check_workers()
+                time.sleep(2)
+        # time.sleep(5)
+        # self.log.info(f'Stopping worker pool {self.name}...')
 
     def stop(self):
         pass
