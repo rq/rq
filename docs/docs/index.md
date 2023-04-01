@@ -111,8 +111,8 @@ You can also enqueue multiple jobs in bulk with `queue.enqueue_many()` and `Queu
 ```python
 jobs = q.enqueue_many(
   [
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
   ]
 )
 ```
@@ -123,8 +123,8 @@ which will enqueue all the jobs in a single redis `pipeline` which you can optio
 with q.connection.pipeline() as pipe:
   jobs = q.enqueue_many(
     [
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+      Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+      Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
     ],
     pipeline=pipe
   )
