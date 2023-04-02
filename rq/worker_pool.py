@@ -33,7 +33,7 @@ class WorkerData(NamedTuple):
 
 class Pool:
     class Status(Enum):
-        INITIATED = 1
+        IDLE = 1
         STARTED = 2
         STOPPED = 3
 
@@ -48,7 +48,7 @@ class Pool:
         self.name: str = uuid4().hex
         self._burst: bool = True
         self._sleep: int = 0
-        self.status: self.Status = self.Status.INITIATED
+        self.status: self.Status = self.Status.IDLE  # type: ignore
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: Dict[str, WorkerData] = {}
@@ -106,22 +106,27 @@ class Pool:
         worker_datas = list(self.worker_dict.values())
 
         for data in worker_datas:
-            with contextlib.suppress(HorseMonitorTimeoutException):
-                with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
-                    # with contextlib.suppress(ChildProcessError):
-                        try:
-                            os.wait4(data.process.pid, 0)
-                        except ChildProcessError as e:
-                            # Process is dead
-                            self.log.info(f'Worker %s is dead', data.name)
-                            self.worker_dict.pop(data.name)
-                            continue
-
+            data.process.join(0.1)
             if data.process.is_alive():
-                self.log.debug(f'Worker %s with pid %d is alive', data.name, data.pid)
+                self.log.info('Worker %s with pid %d is alive', data.name, data.pid)
             else:
-                self.log.debug(f'Worker {data.name} is dead')
+                self.log.info(f'Worker {data.name} is dead')
                 self.worker_dict.pop(data.name)
+
+            # I'm still not sure why this is sometimes needed, temporarily commenting
+            # this out until I can figure it out.
+            # with contextlib.suppress(HorseMonitorTimeoutException):
+            #     with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
+            #         try:
+            #             # If wait4 returns, the process is dead
+            #             os.wait4(data.process.pid, 0)  # type: ignore
+            #             self.log.info('Worker %s is dead', data.name)
+            #             self.worker_dict.pop(data.name)
+            #         except ChildProcessError:
+            #             # Process is dead
+            #             self.log.info('Worker %s is dead', data.name)
+            #             self.worker_dict.pop(data.name)
+            #             continue
 
     def check_workers(self, respawn: bool = True) -> None:
         """
@@ -135,9 +140,9 @@ class Pool:
             delta = self.num_workers - len(self.worker_dict)
             if delta:
                 for i in range(delta):
-                    self.start_worker(burst=self._burst, sleep=self._sleep)
+                    self.start_worker(burst=self._burst, _sleep=self._sleep)
 
-    def start_worker(self, count: Optional[int] = None, burst: bool = True, sleep: int = 0):
+    def start_worker(self, count: Optional[int] = None, burst: bool = True, _sleep: float = 0):
         """
         Starts a worker and adds the data to worker_datas.
         * sleep: waits for X seconds before creating worker, for testing purposes
@@ -145,8 +150,8 @@ class Pool:
         name = uuid4().hex
         process = Process(
             target=run_worker,
-            args=(uuid4().hex, self._queue_names, self._connection_class, self._connection_kwargs),
-            kwargs={'sleep': sleep, 'burst': burst},
+            args=(name, self._queue_names, self._connection_class, self._connection_kwargs),
+            kwargs={'sleep': _sleep, 'burst': burst},
             name=f'Worker {name} (Pool {self.name})',
         )
         process.start()
@@ -154,18 +159,18 @@ class Pool:
         self.worker_dict[name] = worker_data
 
         if count:
-            self.log.debug(f'Spawned worker %d: %s with PID %d', count, name, process.pid)
+            self.log.debug('Spawned worker %d: %s with PID %d', count, name, process.pid)
         else:
-            self.log.debug(f'Spawned worker: %s with PID %d', name, process.pid)
+            self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
-    def start_workers(self, burst: bool = True, sleep: int = 0):
+    def start_workers(self, burst: bool = True, _sleep: float = 0):
         """
         Run the workers
-        * sleep: waits for X seconds before creating worker, for testing purposes
+        * sleep: waits for X seconds before creating worker, only for testing purposes
         """
         self.log.debug(f'Spawning {self.num_workers} workers')
         for i in range(self.num_workers):
-            self.start_worker(i + 1, burst=burst, sleep=sleep)
+            self.start_worker(i + 1, burst=burst, _sleep=_sleep)
 
     def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):
         """
@@ -192,16 +197,16 @@ class Pool:
         self._burst = burst
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
-        self.status = self.Status.INITIATED
+        self.status = self.Status.IDLE
         self.start_workers(burst=self._burst)
         self._install_signal_handlers()
         while True:
             if self.status == self.Status.STOPPED:
                 if self.all_workers_have_stopped():
-                    self.log.info(f'All workers have stopped, exiting...')
+                    self.log.info('All workers stopped, exiting...')
                     break
                 else:
-                    self.log.info(f'Waiting for workers to shutdown...')
+                    self.log.info('Waiting for workers to shutdown...')
                     time.sleep(1)
                     continue
             else:
