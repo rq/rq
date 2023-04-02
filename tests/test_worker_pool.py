@@ -1,3 +1,7 @@
+import os
+import signal
+
+from multiprocessing import Process
 from time import sleep
 
 from tests import RQTestCase
@@ -5,6 +9,11 @@ from tests.fixtures import _send_shutdown_command
 
 from rq.queue import Queue
 from rq.worker_pool import Pool
+
+
+def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
+    sleep(time_to_wait)
+    os.kill(pid, signal.SIGTERM)
 
 
 class TestWorkerPool(RQTestCase):
@@ -58,4 +67,17 @@ class TestWorkerPool(RQTestCase):
         sleep(0.2)
         pool.reap_workers()
         self.assertEqual(len(pool.worker_dict.keys()), 1)
+        pool.stop_workers()
+
+    def test_start(self):
+        """Test start()"""
+        pool = Pool(['default'], connection=self.connection, num_workers=2)
+
+        p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        p.start()
+        pool.start()
+        self.assertEqual(pool.status, pool.Status.STOPPED)
+
+        self.assertTrue(pool.all_workers_have_stopped())
+        # We need this line so the test doesn't hang
         pool.stop_workers()

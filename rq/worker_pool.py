@@ -1,4 +1,3 @@
-import contextlib
 import errno
 import logging
 import os
@@ -17,7 +16,6 @@ from redis import SSLConnection, UnixDomainSocketConnection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .timeouts import HorseMonitorTimeoutException, UnixSignalDeathPenalty
 from .utils import parse_names
 from .worker import Worker
 
@@ -26,9 +24,6 @@ class WorkerData(NamedTuple):
     name: str
     pid: int
     process: Process
-
-
-# logger = logging.getLogger("rq.worker")
 
 
 class Pool:
@@ -88,12 +83,6 @@ class Pool:
         """Toggle self._stop_requested that's checked on every loop"""
         self.log.info('Received SIGINT/SIGTERM, shutting down...')
         self.status = self.Status.STOPPED
-        # self.stop_workers()
-        # signal.signal(signal.SIGINT, self.request_force_stop)
-        # signal.signal(signal.SIGTERM, self.request_force_stop)
-
-    # def request_force_stop(self, signum, frame):
-    #     pass
 
     def all_workers_have_stopped(self) -> bool:
         """Returns True if all workers have stopped."""
