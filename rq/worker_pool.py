@@ -1,9 +1,9 @@
+import contextlib
 import errno
 import logging
 import os
 import signal
 import time
-import traceback
 
 from enum import Enum
 from multiprocessing import Process
@@ -12,6 +12,8 @@ from uuid import uuid4
 
 from redis import Redis
 from redis import SSLConnection, UnixDomainSocketConnection
+
+from rq.timeouts import HorseMonitorTimeoutException, UnixSignalDeathPenalty
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .logutils import setup_loghandlers
@@ -83,11 +85,13 @@ class Pool:
         """Toggle self._stop_requested that's checked on every loop"""
         self.log.info('Received SIGINT/SIGTERM, shutting down...')
         self.status = self.Status.STOPPED
+        self.stop_workers()
 
     def all_workers_have_stopped(self) -> bool:
         """Returns True if all workers have stopped."""
         self.reap_workers()
-        return bool(self.worker_dict)
+        # `bool(self.worker_dict)` sometimes returns True even if the dict is empty
+        return len(self.worker_dict) == 0
 
     def reap_workers(self):
         """Removes dead workers from worker_dict"""
@@ -97,25 +101,30 @@ class Pool:
         for data in worker_datas:
             data.process.join(0.1)
             if data.process.is_alive():
-                self.log.info('Worker %s with pid %d is alive', data.name, data.pid)
+                self.log.debug('Worker %s with pid %d is alive', data.name, data.pid)
             else:
-                self.log.info(f'Worker {data.name} is dead')
-                self.worker_dict.pop(data.name)
+                self.handle_dead_worker(data)
 
             # I'm still not sure why this is sometimes needed, temporarily commenting
             # this out until I can figure it out.
-            # with contextlib.suppress(HorseMonitorTimeoutException):
-            #     with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
-            #         try:
-            #             # If wait4 returns, the process is dead
-            #             os.wait4(data.process.pid, 0)  # type: ignore
-            #             self.log.info('Worker %s is dead', data.name)
-            #             self.worker_dict.pop(data.name)
-            #         except ChildProcessError:
-            #             # Process is dead
-            #             self.log.info('Worker %s is dead', data.name)
-            #             self.worker_dict.pop(data.name)
-            #             continue
+            with contextlib.suppress(HorseMonitorTimeoutException):
+                with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
+                    try:
+                        # If wait4 returns, the process is dead
+                        os.wait4(data.process.pid, 0)  # type: ignore
+                        self.handle_dead_worker(data)
+                    except ChildProcessError:
+                        # Process is dead
+                        self.handle_dead_worker(data)
+                        continue
+
+    def handle_dead_worker(self, worker_data: WorkerData):
+        """
+        Handle a dead worker
+        """
+        self.log.info('Worker %s with pid %d is dead', worker_data.name, worker_data.pid)
+        with contextlib.suppress(KeyError):
+            self.worker_dict.pop(worker_data.name)
 
     def check_workers(self, respawn: bool = True) -> None:
         """
@@ -125,7 +134,7 @@ class Pool:
         self.reap_workers()
         # If we have less number of workers than num_workers,
         # respawn the difference
-        if respawn:
+        if respawn and self.status != self.Status.STOPPED:
             delta = self.num_workers - len(self.worker_dict)
             if delta:
                 for i in range(delta):
@@ -140,7 +149,7 @@ class Pool:
         process = Process(
             target=run_worker,
             args=(name, self._queue_names, self._connection_class, self._connection_kwargs),
-            kwargs={'sleep': _sleep, 'burst': burst},
+            kwargs={'_sleep': _sleep, 'burst': burst},
             name=f'Worker {name} (Pool {self.name})',
         )
         process.start()
@@ -214,16 +223,11 @@ def run_worker(
     connection_class,
     connection_kwargs: dict,
     burst: bool = True,
-    sleep: int = 0,
+    _sleep: int = 0,
 ):
     connection = connection_class(**connection_kwargs)
     queues = [Queue(name, connection=connection) for name in queue_names]
     worker = Worker(queues, name=worker_name, connection=connection)
     worker.log.info("Starting worker started with PID %s", os.getpid())
-    try:
-        time.sleep(sleep)
-        worker.work(burst=burst)
-    except:  # noqa
-        worker.log.error('Worker [PID %s] raised an exception.\n%s', os.getpid(), traceback.format_exc())
-        raise
-    worker.log.info("Worker with PID %s has stopped", os.getpid())
+    time.sleep(_sleep)
+    worker.work(burst=burst)

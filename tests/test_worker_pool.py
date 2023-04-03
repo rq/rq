@@ -27,8 +27,9 @@ class TestWorkerPool(RQTestCase):
     def test_spawn_workers(self):
         """Test spawning workers"""
         pool = Pool(['default', 'foo'], connection=self.connection, num_workers=2)
-        pool.start_workers(burst=True, _sleep=1)
+        pool.start_workers(burst=False)
         self.assertEqual(len(pool.worker_dict.keys()), 2)
+        pool.stop_workers()
 
     def test_check_workers(self):
         """Test check_workers()"""
@@ -77,7 +78,6 @@ class TestWorkerPool(RQTestCase):
         p.start()
         pool.start()
         self.assertEqual(pool.status, pool.Status.STOPPED)
-
         self.assertTrue(pool.all_workers_have_stopped())
         # We need this line so the test doesn't hang
         pool.stop_workers()
