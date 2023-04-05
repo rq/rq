@@ -5,10 +5,10 @@ from multiprocessing import Process
 from time import sleep
 
 from tests import RQTestCase
-from tests.fixtures import _send_shutdown_command
+from tests.fixtures import _send_shutdown_command, say_hello
 
 from rq.queue import Queue
-from rq.worker_pool import Pool
+from rq.worker_pool import run_worker, Pool
 
 
 def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
@@ -81,3 +81,13 @@ class TestWorkerPool(RQTestCase):
         self.assertTrue(pool.all_workers_have_stopped())
         # We need this line so the test doesn't hang
         pool.stop_workers()
+
+    def test_run_worker(self):
+        """Ensure run_worker() properly spawns a Worker"""
+        queue = Queue('foo')
+        queue.enqueue(say_hello)
+        run_worker(
+            'test-worker', ['foo'], self.connection.__class__, self.connection.connection_pool.connection_kwargs.copy()
+        )
+        # Worker should have processed the job
+        self.assertEqual(len(queue), 0)
