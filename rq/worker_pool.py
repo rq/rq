@@ -108,16 +108,16 @@ class Pool:
 
             # I'm still not sure why this is sometimes needed, temporarily commenting
             # this out until I can figure it out.
-            # with contextlib.suppress(HorseMonitorTimeoutException):
-            #     with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
-            #         try:
-            #             # If wait4 returns, the process is dead
-            #             os.wait4(data.process.pid, 0)  # type: ignore
-            #             self.handle_dead_worker(data)
-            #         except ChildProcessError:
-            #             # Process is dead
-            #             self.handle_dead_worker(data)
-            #             continue
+            with contextlib.suppress(HorseMonitorTimeoutException):
+                with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
+                    try:
+                        # If wait4 returns, the process is dead
+                        os.wait4(data.process.pid, 0)  # type: ignore
+                        self.handle_dead_worker(data)
+                    except ChildProcessError:
+                        # Process is dead
+                        self.handle_dead_worker(data)
+                        continue
 
     def handle_dead_worker(self, worker_data: WorkerData):
         """
