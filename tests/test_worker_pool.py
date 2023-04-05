@@ -70,14 +70,14 @@ class TestWorkerPool(RQTestCase):
         self.assertEqual(len(pool.worker_dict.keys()), 1)
         pool.stop_workers()
 
-    # def test_start(self):
-    #     """Test start()"""
-    #     pool = Pool(['default'], connection=self.connection, num_workers=2)
+    def test_start(self):
+        """Test start()"""
+        pool = Pool(['default'], connection=self.connection, num_workers=2)
 
-    #     p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
-    #     p.start()
-    #     pool.start()
-    #     self.assertEqual(pool.status, pool.Status.STOPPED)
-    #     self.assertTrue(pool.all_workers_have_stopped())
-    #     # We need this line so the test doesn't hang
-    #     pool.stop_workers()
+        p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        p.start()
+        pool.start()
+        self.assertEqual(pool.status, pool.Status.STOPPED)
+        self.assertTrue(pool.all_workers_have_stopped())
+        # We need this line so the test doesn't hang
+        pool.stop_workers()
