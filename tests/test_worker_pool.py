@@ -53,22 +53,22 @@ class TestWorkerPool(RQTestCase):
 
     #     pool.stop_workers()
 
-    # def test_reap_workers(self):
-    #     """Dead workers are removed from worker_dict"""
-    #     pool = Pool(['default'], connection=self.connection, num_workers=2)
-    #     pool.start_workers(burst=False)
+    def test_reap_workers(self):
+        """Dead workers are removed from worker_dict"""
+        pool = Pool(['default'], connection=self.connection, num_workers=2)
+        pool.start_workers(burst=False)
 
-    #     # There should be two workers
-    #     pool.reap_workers()
-    #     self.assertEqual(len(pool.worker_dict.keys()), 2)
+        # There should be two workers
+        pool.reap_workers()
+        self.assertEqual(len(pool.worker_dict.keys()), 2)
 
-    #     worker_data = list(pool.worker_dict.values())[0]
-    #     _send_shutdown_command(worker_data.name, self.connection.connection_pool.connection_kwargs.copy(), delay=0)
-    #     # 1 worker should be dead since we sent a shutdown command
-    #     sleep(0.2)
-    #     pool.reap_workers()
-    #     self.assertEqual(len(pool.worker_dict.keys()), 1)
-    #     pool.stop_workers()
+        worker_data = list(pool.worker_dict.values())[0]
+        _send_shutdown_command(worker_data.name, self.connection.connection_pool.connection_kwargs.copy(), delay=0)
+        # 1 worker should be dead since we sent a shutdown command
+        sleep(0.2)
+        pool.reap_workers()
+        self.assertEqual(len(pool.worker_dict.keys()), 1)
+        pool.stop_workers()
 
     # def test_start(self):
     #     """Test start()"""
