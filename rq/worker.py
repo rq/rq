@@ -206,7 +206,7 @@ class Worker:
             worker_key (str): The worker key
             connection (Optional[Redis], optional): Redis connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class if custom class is being used. Defaults to None.
-            queue_class (Optional[Type[Queue]], optional): The queue class if a custom class is being used. Defaults to None.
+            queue_class (Optional[Type[Queue]]): The queue class if a custom class is being used. Defaults to None.
             serializer (Any, optional): The serializer to use. Defaults to None.
 
         Raises:
@@ -249,8 +249,8 @@ class Worker:
         exception_handlers=None,
         default_worker_ttl=DEFAULT_WORKER_TTL,
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
-        job_class: Type['Job'] = None,
-        queue_class=None,
+        job_class: Optional[Type['Job']] = None,
+        queue_class: Optional[Type['Queue']] = None,
         log_job_description: bool = True,
         job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
         disable_default_exception_handler: bool = False,
@@ -1101,7 +1101,7 @@ class Worker:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
-    def get_heartbeat_ttl(self, job: 'Job') -> Union[float, int]:
+    def get_heartbeat_ttl(self, job: 'Job') -> int:
         """Get's the TTL for the next heartbeat.
 
         Args:
@@ -1541,7 +1541,7 @@ class SimpleWorker(Worker):
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def get_heartbeat_ttl(self, job: 'Job') -> Union[float, int]:
+    def get_heartbeat_ttl(self, job: 'Job') -> int:
         """-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
         We should just stick to DEFAULT_WORKER_TTL.
 
@@ -1549,7 +1549,7 @@ class SimpleWorker(Worker):
             job (Job): The Job
 
         Returns:
-            ttl (float | int): TTL
+            ttl (int): TTL
         """
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
