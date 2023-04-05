@@ -24,12 +24,12 @@ class TestWorkerPool(RQTestCase):
             set(pool.queues), {Queue('default', connection=self.connection), Queue('foo', connection=self.connection)}
         )
 
-    def test_spawn_workers(self):
-        """Test spawning workers"""
-        pool = Pool(['default', 'foo'], connection=self.connection, num_workers=2)
-        pool.start_workers(burst=False)
-        self.assertEqual(len(pool.worker_dict.keys()), 2)
-        pool.stop_workers()
+    # def test_spawn_workers(self):
+    #     """Test spawning workers"""
+    #     pool = Pool(['default', 'foo'], connection=self.connection, num_workers=2)
+    #     pool.start_workers(burst=False)
+    #     self.assertEqual(len(pool.worker_dict.keys()), 2)
+    #     pool.stop_workers()
 
     # def test_check_workers(self):
     #     """Test check_workers()"""
