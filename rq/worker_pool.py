@@ -104,6 +104,7 @@ class Pool:
                 self.log.debug('Worker %s with pid %d is alive', data.name, data.pid)
             else:
                 self.handle_dead_worker(data)
+                continue
 
             # I'm still not sure why this is sometimes needed, temporarily commenting
             # this out until I can figure it out.
