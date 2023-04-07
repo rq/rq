@@ -424,7 +424,7 @@ class Worker:
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname('rq: {0}'.format(message))
+        setprocname(f'rq:worker:{self.name}: {message}')
 
     def register_birth(self):
         """Registers its own birth."""
