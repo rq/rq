@@ -5,3 +5,6 @@ omit =
     rq/contrib/legacy.py
     rq/dummy.py
     rq/local.py
+
+exclude_lines =
+    if TYPE_CHECKING:
