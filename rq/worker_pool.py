@@ -85,7 +85,7 @@ class Pool:
         """Toggle self._stop_requested that's checked on every loop"""
         self.log.info('Received SIGINT/SIGTERM, shutting down...')
         self.status = self.Status.STOPPED
-        self.stop_workers()
+        # self.stop_workers()
 
     def all_workers_have_stopped(self) -> bool:
         """Returns True if all workers have stopped."""
@@ -108,16 +108,16 @@ class Pool:
 
             # I'm still not sure why this is sometimes needed, temporarily commenting
             # this out until I can figure it out.
-            with contextlib.suppress(HorseMonitorTimeoutException):
-                with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
-                    try:
-                        # If wait4 returns, the process is dead
-                        os.wait4(data.process.pid, 0)  # type: ignore
-                        self.handle_dead_worker(data)
-                    except ChildProcessError:
-                        # Process is dead
-                        self.handle_dead_worker(data)
-                        continue
+            # with contextlib.suppress(HorseMonitorTimeoutException):
+            #     with UnixSignalDeathPenalty(1, HorseMonitorTimeoutException):
+            #         try:
+            #             # If wait4 returns, the process is dead
+            #             os.wait4(data.process.pid, 0)  # type: ignore
+            #             self.handle_dead_worker(data)
+            #         except ChildProcessError:
+            #             # Process is dead
+            #             self.handle_dead_worker(data)
+            #             continue
 
     def handle_dead_worker(self, worker_data: WorkerData):
         """
@@ -156,11 +156,7 @@ class Pool:
         process.start()
         worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
         self.worker_dict[name] = worker_data
-
-        if count:
-            self.log.debug('Spawned worker %d: %s with PID %d', count, name, process.pid)
-        else:
-            self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
+        self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
     def start_workers(self, burst: bool = True, _sleep: float = 0):
         """

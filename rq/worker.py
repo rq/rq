@@ -742,7 +742,7 @@ class Worker:
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self.register_birth()
-        self.log.info('Worker %s: started, version %s', self.key, VERSION)
+        self.log.info('Worker %s started with PID %d, version %s', self.key, os.getpid(), VERSION)
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
