@@ -1,2 +1,6 @@
 ignore:
   - "*/tests/*"
+
+coverage:
+  exclude_lines:
+    - "if TYPE_CHECKING:"
