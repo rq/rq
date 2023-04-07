@@ -85,7 +85,7 @@ class Pool:
         """Toggle self._stop_requested that's checked on every loop"""
         self.log.info('Received SIGINT/SIGTERM, shutting down...')
         self.status = self.Status.STOPPED
-        # self.stop_workers()
+        self.stop_workers()
 
     def all_workers_have_stopped(self) -> bool:
         """Returns True if all workers have stopped."""
