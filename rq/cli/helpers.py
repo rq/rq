@@ -2,7 +2,8 @@ import sys
 import importlib
 import time
 import os
-from functools import partial
+
+from functools import partial, update_wrapper
 from enum import Enum
 
 from datetime import datetime, timezone, timedelta
@@ -13,8 +14,15 @@ from shutil import get_terminal_size
 import click
 from redis import Redis
 from redis.sentinel import Sentinel
-from rq.defaults import DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS, DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS, \
-    DEFAULT_DEATH_PENALTY_CLASS
+
+from rq.defaults import (
+    DEFAULT_CONNECTION_CLASS,
+    DEFAULT_DEATH_PENALTY_CLASS,
+    DEFAULT_JOB_CLASS,
+    DEFAULT_QUEUE_CLASS,
+    DEFAULT_WORKER_CLASS,
+    DEFAULT_SERIALIZER_CLASS,
+)
 from rq.logutils import setup_loghandlers
 from rq.utils import import_attribute, parse_timeout
 from rq.worker import WorkerStatus
@@ -42,7 +50,7 @@ def get_redis_from_config(settings, connection_class=Redis):
     elif settings.get('SENTINEL') is not None:
         instances = settings['SENTINEL'].get('INSTANCES', [('localhost', 26379)])
         master_name = settings['SENTINEL'].get('MASTER_NAME', 'mymaster')
-        
+
         connection_kwargs = {
             'db': settings['SENTINEL'].get('DB', 0),
             'username': settings['SENTINEL'].get('USERNAME', None),
@@ -52,10 +60,8 @@ def get_redis_from_config(settings, connection_class=Redis):
         }
         connection_kwargs.update(settings['SENTINEL'].get('CONNECTION_KWARGS', {}))
         sentinel_kwargs = settings['SENTINEL'].get('SENTINEL_KWARGS', {})
-        
-        sn = Sentinel(
-            instances, sentinel_kwargs=sentinel_kwargs, **connection_kwargs
-        )
+
+        sn = Sentinel(instances, sentinel_kwargs=sentinel_kwargs, **connection_kwargs)
         return sn.master_for(master_name)
 
     ssl = settings.get('REDIS_SSL', False)
@@ -124,13 +130,22 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
         count = counts[q]
         if not raw:
             chart = green('|' + '█' * int(ratio * count))
-            line = '%-12s %s %d, %d executing, %d finished, %d failed' \
-                    % (q.name, chart, count, q.started_job_registry.count,  \
-                       q.finished_job_registry.count, q.failed_job_registry.count)
+            line = '%-12s %s %d, %d executing, %d finished, %d failed' % (
+                q.name,
+                chart,
+                count,
+                q.started_job_registry.count,
+                q.finished_job_registry.count,
+                q.failed_job_registry.count,
+            )
         else:
-            line = 'queue %s %d, %d executing, %d finished, %d failed' \
-                    % (q.name, count, q.started_job_registry.count, \
-                    q.finished_job_registry.count, q.failed_job_registry.count)
+            line = 'queue %s %d, %d executing, %d finished, %d failed' % (
+                q.name,
+                count,
+                q.started_job_registry.count,
+                q.finished_job_registry.count,
+                q.failed_job_registry.count,
+            )
         click.echo(line)
 
         num_jobs += count
@@ -155,14 +170,22 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             queue_names = ', '.join(worker.queue_names())
             name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
             if not raw:
-                line = '%s: %s %s. jobs: %d finished, %d failed' \
-                        % (name, state_symbol(worker.get_state()), queue_names, \
-                           worker.successful_job_count, worker.failed_job_count)
+                line = '%s: %s %s. jobs: %d finished, %d failed' % (
+                    name,
+                    state_symbol(worker.get_state()),
+                    queue_names,
+                    worker.successful_job_count,
+                    worker.failed_job_count,
+                )
                 click.echo(line)
             else:
-                line = 'worker %s %s %s. jobs: %d finished, %d failed' \
-                       % (name, worker.get_state(), queue_names,\
-                        worker.successful_job_count, worker.failed_job_count)
+                line = 'worker %s %s %s. jobs: %d finished, %d failed' % (
+                    name,
+                    worker.get_state(),
+                    queue_names,
+                    worker.successful_job_count,
+                    worker.failed_job_count,
+                )
                 click.echo(line)
 
     else:
@@ -318,7 +341,7 @@ class CliConfig:
         connection_class=DEFAULT_CONNECTION_CLASS,
         path=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         self._connection = None
         self.url = url
@@ -363,3 +386,41 @@ class CliConfig:
             else:
                 self._connection = get_redis_from_config(os.environ, self.connection_class)
         return self._connection
+
+
+shared_options = [
+    click.option('--url', '-u', envvar='RQ_REDIS_URL', help='URL describing Redis connection details.'),
+    click.option('--config', '-c', envvar='RQ_CONFIG', help='Module containing RQ settings.'),
+    click.option(
+        '--worker-class', '-w', envvar='RQ_WORKER_CLASS', default=DEFAULT_WORKER_CLASS, help='RQ Worker class to use'
+    ),
+    click.option('--job-class', '-j', envvar='RQ_JOB_CLASS', default=DEFAULT_JOB_CLASS, help='RQ Job class to use'),
+    click.option('--queue-class', envvar='RQ_QUEUE_CLASS', default=DEFAULT_QUEUE_CLASS, help='RQ Queue class to use'),
+    click.option(
+        '--connection-class',
+        envvar='RQ_CONNECTION_CLASS',
+        default=DEFAULT_CONNECTION_CLASS,
+        help='Redis client class to use',
+    ),
+    click.option('--path', '-P', default=['.'], help='Specify the import path.', multiple=True),
+    click.option(
+        '--serializer',
+        '-S',
+        default=DEFAULT_SERIALIZER_CLASS,
+        help='Path to serializer, defaults to rq.serializers.DefaultSerializer',
+    ),
+]
+
+
+def pass_cli_config(func):
+    # add all the shared options to the command
+    for option in shared_options:
+        func = option(func)
+
+    # pass the cli config object into the command
+    def wrapper(*args, **kwargs):
+        ctx = click.get_current_context()
+        cli_config = CliConfig(**kwargs)
+        return ctx.invoke(func, cli_config, *args[1:], **kwargs)
+
+    return update_wrapper(wrapper, func)
