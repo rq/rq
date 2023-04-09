@@ -6,6 +6,8 @@ import os
 import sys
 import warnings
 
+from typing import List
+
 import click
 from redis.exceptions import ConnectionError
 
@@ -21,6 +23,8 @@ from rq.cli.helpers import (
     parse_schedule,
     pass_cli_config,
 )
+
+# from rq.cli.pool import pool
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (
     DEFAULT_RESULT_TTL,
@@ -34,6 +38,7 @@ from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
 from rq.utils import import_attribute, get_call_string, make_colorizer
 from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
+from rq.worker_pool import Pool
 from rq.worker_registration import clean_worker_registry
 from rq.job import JobStatus
 
@@ -426,3 +431,139 @@ def enqueue(
 
     if not quiet:
         click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))
+
+
+@main.command()
+@click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
+@click.option('--logging-level', type=str, default="INFO", help='Set logging level')
+@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
+@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
+@click.option('--name', '-n', help='Specify a different name')
+@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
+@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Worker timeout to be used')
+@click.option(
+    '--maintenance-interval',
+    type=int,
+    default=DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    help='Maintenance task interval (in seconds) to be used',
+)
+@click.option(
+    '--job-monitoring-interval',
+    type=int,
+    default=DEFAULT_JOB_MONITORING_INTERVAL,
+    help='Default job monitoring interval to be used',
+)
+@click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
+@click.option('--verbose', '-v', is_flag=True, help='Show more output')
+@click.option('--quiet', '-q', is_flag=True, help='Show less output')
+@click.option('--sentry-ca-certs', envvar='RQ_SENTRY_CA_CERTS', help='Path to CRT file for Sentry DSN')
+@click.option('--sentry-debug', envvar='RQ_SENTRY_DEBUG', help='Enable debug')
+@click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
+@click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
+@click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
+@click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
+@click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
+@click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
+@click.option(
+    '--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues'
+)
+@click.argument('queues', nargs=-1)
+@pass_cli_config
+def worker_pool(
+    cli_config,
+    burst: bool,
+    logging_level,
+    name,
+    results_ttl,
+    worker_ttl,
+    maintenance_interval,
+    job_monitoring_interval,
+    disable_job_desc_logging,
+    verbose,
+    quiet,
+    sentry_ca_certs,
+    sentry_debug,
+    sentry_dsn,
+    max_jobs,
+    max_idle_time,
+    queues,
+    log_format,
+    date_format,
+    serializer,
+    dequeue_strategy,
+    **options,
+):
+    """Starts a RQ worker pool"""
+    settings = read_config_file(cli_config.config) if cli_config.config else {}
+    # Worker specific default arguments
+    queue_names: List[str] = queues or settings.get('QUEUES', ['default'])
+    sentry_ca_certs = sentry_ca_certs or settings.get('SENTRY_CA_CERTS')
+    sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
+    sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
+
+    worker_name = cli_config.worker_class.__qualname__
+    if worker_name in ["RoundRobinWorker", "RandomWorker"]:
+        strategy_alternative = "random" if worker_name == "RandomWorker" else "round_robin"
+        msg = f"WARNING: {worker_name} is deprecated. Use `--dequeue-strategy {strategy_alternative}` instead."
+        warnings.warn(msg, DeprecationWarning)
+        click.secho(msg, fg='yellow')
+
+    if dequeue_strategy not in ("default", "random", "round_robin"):
+        click.secho(
+            "ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red'
+        )
+        sys.exit(1)
+
+    setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
+
+    pool = Pool(queue_names, connection=cli_config.connection, num_workers=2)
+    pool.start(burst=burst, logging_level=logging_level)
+
+    queues = [
+        cli_config.queue_class(
+            queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
+        )
+        for queue in queues
+    ]
+    worker = cli_config.worker_class(
+        queues,
+        name=name,
+        connection=cli_config.connection,
+        default_worker_ttl=worker_ttl,
+        default_result_ttl=results_ttl,
+        maintenance_interval=maintenance_interval,
+        job_monitoring_interval=job_monitoring_interval,
+        job_class=cli_config.job_class,
+        queue_class=cli_config.queue_class,
+        log_job_description=not disable_job_desc_logging,
+        serializer=serializer,
+    )
+
+    # Should we configure Sentry?
+    if sentry_dsn:
+        sentry_opts = {"ca_certs": sentry_ca_certs, "debug": sentry_debug}
+        from rq.contrib.sentry import register_sentry
+
+        register_sentry(sentry_dsn, **sentry_opts)
+
+    # if --verbose or --quiet, override --logging_level
+    # if verbose or quiet:
+    #     logging_level = None
+    # try:
+    #     worker.work(
+    #         burst=burst,
+    #         logging_level=logging_level,
+    #         date_format=date_format,
+    #         log_format=log_format,
+    #         max_jobs=max_jobs,
+    #         max_idle_time=max_idle_time,
+    #         with_scheduler=True,
+    #         dequeue_strategy=dequeue_strategy,
+    #     )
+    # except ConnectionError as e:
+    #     print(e)
+    #     sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

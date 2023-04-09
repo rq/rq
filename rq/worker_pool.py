@@ -141,7 +141,13 @@ class Pool:
                 for i in range(delta):
                     self.start_worker(burst=self._burst, _sleep=self._sleep)
 
-    def start_worker(self, count: Optional[int] = None, burst: bool = True, _sleep: float = 0):
+    def start_worker(
+        self,
+        count: Optional[int] = None,
+        burst: bool = True,
+        _sleep: float = 0,
+        logging_level: str = "INFO",
+    ):
         """
         Starts a worker and adds the data to worker_datas.
         * sleep: waits for X seconds before creating worker, for testing purposes
@@ -150,7 +156,7 @@ class Pool:
         process = Process(
             target=run_worker,
             args=(name, self._queue_names, self._connection_class, self._connection_kwargs),
-            kwargs={'_sleep': _sleep, 'burst': burst},
+            kwargs={'_sleep': _sleep, 'burst': burst, 'logging_level': logging_level},
             name=f'Worker {name} (Pool {self.name})',
         )
         process.start()
@@ -158,14 +164,14 @@ class Pool:
         self.worker_dict[name] = worker_data
         self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
-    def start_workers(self, burst: bool = True, _sleep: float = 0):
+    def start_workers(self, burst: bool = True, _sleep: float = 0, logging_level: str = "INFO"):
         """
         Run the workers
         * sleep: waits for X seconds before creating worker, only for testing purposes
         """
         self.log.debug(f'Spawning {self.num_workers} workers')
         for i in range(self.num_workers):
-            self.start_worker(i + 1, burst=burst, _sleep=_sleep)
+            self.start_worker(i + 1, burst=burst, _sleep=_sleep, logging_level=logging_level)
 
     def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):
         """
@@ -193,7 +199,7 @@ class Pool:
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
         self.status = self.Status.IDLE
-        self.start_workers(burst=self._burst)
+        self.start_workers(burst=self._burst, logging_level=logging_level)
         self._install_signal_handlers()
         while True:
             if self.status == self.Status.STOPPED:
@@ -220,6 +226,7 @@ def run_worker(
     connection_class,
     connection_kwargs: dict,
     burst: bool = True,
+    logging_level: str = "INFO",
     _sleep: int = 0,
 ):
     connection = connection_class(**connection_kwargs)
@@ -227,4 +234,4 @@ def run_worker(
     worker = Worker(queues, name=worker_name, connection=connection)
     worker.log.info("Starting worker started with PID %s", os.getpid())
     time.sleep(_sleep)
-    worker.work(burst=burst)
+    worker.work(burst=burst, logging_level=logging_level)

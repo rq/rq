@@ -10,7 +10,7 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
@@ -292,6 +292,7 @@ class Worker:
         self._ordered_queues = self.queues[:]
         self._exc_handlers: List[Callable] = []
         self._work_horse_killed_handler = work_horse_killed_handler
+        self._shutdown_requested_date: Optional[datetime] = None
 
         self._state: str = 'starting'
         self._is_horse: bool = False
@@ -473,7 +474,7 @@ class Worker:
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""
-        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(utcnow()))
+        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
 
     @property
     def shutdown_requested_date(self):
@@ -603,6 +604,14 @@ class Worker:
         Raises:
             SystemExit: SystemExit
         """
+        # When worker is run through a worker pool, it may receive duplicate signals
+        # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
+        # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
+        # we ignore it.
+        if (utcnow() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
+            self.log.debug('Shutdown signal ignored, received twice in less than 1 second')
+            return
+
         self.log.warning('Cold shut down')
 
         # Take down the horse with the worker
@@ -621,6 +630,7 @@ class Worker:
             frame (Any): Frame
         """
         self.log.debug('Got signal %s', signal_name(signum))
+        self._shutdown_requested_date = utcnow()
 
         signal.signal(signal.SIGINT, self.request_force_stop)
         signal.signal(signal.SIGTERM, self.request_force_stop)
@@ -645,7 +655,7 @@ class Worker:
             raise StopRequested()
 
     def handle_warm_shutdown_request(self):
-        self.log.info('Warm shut down requested')
+        self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
 
     def check_for_suspension(self, burst: bool):
         """Check to see if workers have been suspended by `rq suspend`"""
@@ -978,9 +988,7 @@ class Worker:
         connection = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
-        self.log.debug(
-            'Sent heartbeat to prevent worker timeout. ' 'Next one should arrive within %s seconds.', timeout
-        )
+        self.log.debug('Sent heartbeat to prevent worker timeout. ' 'Next one should arrive in %s seconds.', timeout)
 
     def refresh(self):
         """Refreshes the worker data.
