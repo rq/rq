@@ -37,6 +37,7 @@ setup(
                 'jobs, and processing them.',
     long_description=__doc__,
     packages=find_packages(exclude=['tests', 'tests.*']),
+    package_data = {"rq": ["py.typed"]},
     include_package_data=True,
     zip_safe=False,
     platforms='any',
