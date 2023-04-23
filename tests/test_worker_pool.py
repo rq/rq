@@ -3,9 +3,10 @@ import signal
 
 from multiprocessing import Process
 from time import sleep
+from rq.job import JobStatus
 
 from tests import RQTestCase
-from tests.fixtures import _send_shutdown_command, say_hello
+from tests.fixtures import _send_shutdown_command, long_running_job, say_hello
 
 from rq.queue import Queue
 from rq.worker_pool import run_worker, Pool
@@ -79,6 +80,25 @@ class TestWorkerPool(RQTestCase):
         pool.start()
         self.assertEqual(pool.status, pool.Status.STOPPED)
         self.assertTrue(pool.all_workers_have_stopped())
+        # We need this line so the test doesn't hang
+        pool.stop_workers()
+
+    def test_pool_ignores_consecutive_shutdown_signals(self):
+        """If two shutdown signals are sent within one second, only the first one is processed"""
+        # Send two shutdown signals within one second while the worker is
+        # working on a long running job. The job should still complete (not killed)
+        pool = Pool(['foo'], connection=self.connection, num_workers=2)
+
+        process_1 = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        process_1.start()
+        process_2 = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        process_2.start()
+
+        queue = Queue('foo')
+        job = queue.enqueue(long_running_job, 1)
+        pool.start(burst=True)
+
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
         # We need this line so the test doesn't hang
         pool.stop_workers()
 
