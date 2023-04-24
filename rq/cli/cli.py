@@ -501,13 +501,6 @@ def worker_pool(
     sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
 
-    worker_name = cli_config.worker_class.__qualname__
-    if worker_name in ["RoundRobinWorker", "RandomWorker"]:
-        strategy_alternative = "random" if worker_name == "RandomWorker" else "round_robin"
-        msg = f"WARNING: {worker_name} is deprecated. Use `--dequeue-strategy {strategy_alternative}` instead."
-        warnings.warn(msg, DeprecationWarning)
-        click.secho(msg, fg='yellow')
-
     if dequeue_strategy not in ("default", "random", "round_robin"):
         click.secho(
             "ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red'
@@ -518,26 +511,7 @@ def worker_pool(
 
     pool = Pool(queue_names, connection=cli_config.connection, num_workers=2)
     pool.start(burst=burst, logging_level=logging_level)
-
-    queues = [
-        cli_config.queue_class(
-            queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
-        )
-        for queue in queues
-    ]
-    worker = cli_config.worker_class(
-        queues,
-        name=name,
-        connection=cli_config.connection,
-        default_worker_ttl=worker_ttl,
-        default_result_ttl=results_ttl,
-        maintenance_interval=maintenance_interval,
-        job_monitoring_interval=job_monitoring_interval,
-        job_class=cli_config.job_class,
-        queue_class=cli_config.queue_class,
-        log_job_description=not disable_job_desc_logging,
-        serializer=serializer,
-    )
+    pool.stop_workers()  # This line is needed so workers don't hang during CI
 
     # Should we configure Sentry?
     if sentry_dsn:
@@ -545,24 +519,6 @@ def worker_pool(
         from rq.contrib.sentry import register_sentry
 
         register_sentry(sentry_dsn, **sentry_opts)
-
-    # if --verbose or --quiet, override --logging_level
-    # if verbose or quiet:
-    #     logging_level = None
-    # try:
-    #     worker.work(
-    #         burst=burst,
-    #         logging_level=logging_level,
-    #         date_format=date_format,
-    #         log_format=log_format,
-    #         max_jobs=max_jobs,
-    #         max_idle_time=max_idle_time,
-    #         with_scheduler=True,
-    #         dequeue_strategy=dequeue_strategy,
-    #     )
-    # except ConnectionError as e:
-    #     print(e)
-    #     sys.exit(1)
 
 
 if __name__ == '__main__':  # pragma: no cover
