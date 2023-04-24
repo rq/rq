@@ -511,7 +511,6 @@ def worker_pool(
 
     pool = Pool(queue_names, connection=cli_config.connection, num_workers=2)
     pool.start(burst=burst, logging_level=logging_level)
-    pool.stop_workers()  # This line is needed so workers don't hang during CI
 
     # Should we configure Sentry?
     if sentry_dsn:

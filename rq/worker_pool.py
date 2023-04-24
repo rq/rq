@@ -74,6 +74,11 @@ class Pool:
         """Returns a list of Queue objects"""
         return [Queue(name, connection=self.connection) for name in self._queue_names]
 
+    @property
+    def number_of_active_workers(self) -> int:
+        """Returns a list of Queue objects"""
+        return len(self.worker_dict)
+
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
         gracefully.
@@ -91,7 +96,7 @@ class Pool:
         """Returns True if all workers have stopped."""
         self.reap_workers()
         # `bool(self.worker_dict)` sometimes returns True even if the dict is empty
-        return len(self.worker_dict) == 0
+        return self.number_of_active_workers == 0
 
     def reap_workers(self):
         """Removes dead workers from worker_dict"""
@@ -196,6 +201,7 @@ class Pool:
 
     def start(self, burst: bool = False, logging_level: str = "INFO"):
         self._burst = burst
+        respawn = not burst  # Don't respawn workers if burst mode is on
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
         self.status = self.Status.IDLE
@@ -211,8 +217,12 @@ class Pool:
                     time.sleep(1)
                     continue
             else:
-                self.check_workers()
-                time.sleep(2)
+                self.check_workers(respawn=respawn)
+                if burst and self.number_of_active_workers == 0:
+                    self.log.info('All workers stopped, exiting...')
+                    break
+
+                time.sleep(1)
         # time.sleep(5)
         # self.log.info(f'Stopping worker pool {self.name}...')
 
