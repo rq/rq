@@ -501,12 +501,6 @@ def worker_pool(
     sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
 
-    if dequeue_strategy not in ("default", "random", "round_robin"):
-        click.secho(
-            "ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red'
-        )
-        sys.exit(1)
-
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     pool = Pool(queue_names, connection=cli_config.connection, num_workers=2)
@@ -520,5 +514,5 @@ def worker_pool(
         register_sentry(sentry_dsn, **sentry_opts)
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == '__main__':
     main()
