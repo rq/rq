@@ -6,10 +6,11 @@ import traceback
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
-from typing import List
+from typing import List, Set
 
-from redis import SSLConnection, UnixDomainSocketConnection
+from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection
 
+from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
 from .job import Job
 from .logutils import setup_loghandlers
@@ -38,7 +39,7 @@ class RQScheduler:
     def __init__(
         self,
         queues,
-        connection,
+        connection: Redis,
         interval=1,
         logging_level=logging.INFO,
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
@@ -46,28 +47,10 @@ class RQScheduler:
         serializer=None,
     ):
         self._queue_names = set(parse_names(queues))
-        self._acquired_locks = set()
-        self._scheduled_job_registries = []
+        self._acquired_locks: Set[str] = set()
+        self._scheduled_job_registries: List[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
-
-        # Copy the connection kwargs before mutating them in order to not change the arguments
-        # used by the current connection pool to create new connections
-        self._connection_kwargs = connection.connection_pool.connection_kwargs.copy()
-        # Redis does not accept parser_class argument which is sometimes present
-        # on connection_pool kwargs, for example when hiredis is used
-        self._connection_kwargs.pop('parser_class', None)
-        self._connection_class = connection.__class__  # client
-        connection_class = connection.connection_pool.connection_class
-        if issubclass(connection_class, SSLConnection):
-            self._connection_kwargs['ssl'] = True
-        if issubclass(connection_class, UnixDomainSocketConnection):
-            # The connection keyword arguments are obtained from
-            # `UnixDomainSocketConnection`, which expects `path`, but passed to
-            # `redis.client.Redis`, which expects `unix_socket_path`, renaming
-            # the key is necessary.
-            # `path` is not left in the dictionary as that keyword argument is
-            # not expected by `redis.client.Redis` and would raise an exception.
-            self._connection_kwargs['unix_socket_path'] = self._connection_kwargs.pop('path')
+        self._connection_class, self._pool_class, self._connection_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
 
         self._connection = None
@@ -87,7 +70,9 @@ class RQScheduler:
     def connection(self):
         if self._connection:
             return self._connection
-        self._connection = self._connection_class(**self._connection_kwargs)
+        self._connection = self._connection_class(
+            connection_pool=ConnectionPool(connection_class=self._pool_class, **self._connection_kwargs)
+        )
         return self._connection
 
     @property

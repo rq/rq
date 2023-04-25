@@ -1,4 +1,6 @@
 import os
+import redis
+
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from unittest import mock
@@ -14,6 +16,17 @@ from rq.utils import current_timestamp
 from rq.worker import Worker
 from tests import RQTestCase, find_empty_redis_database, ssl_test
 from .fixtures import kill_worker, say_hello
+
+
+class CustomRedisConnection(redis.Connection):
+    """Custom redis connection with a custom arg, used in test_custom_connection_pool"""
+
+    def __init__(self, *args, custom_arg=None, **kwargs):
+        self.custom_arg = custom_arg
+        super().__init__(*args, **kwargs)
+
+    def get_custom_arg(self):
+        return self.custom_arg
 
 
 class TestScheduledJobRegistry(RQTestCase):
@@ -425,3 +438,34 @@ class TestQueue(RQTestCase):
         job = queue.enqueue_in(timedelta(seconds=30), say_hello, retry=Retry(3, [2]))
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [2])
+
+    def test_custom_connection_pool(self):
+        """Connection pool customizing. Ensure that we can properly set a
+        custom connection pool class and pass extra arguments"""
+        custom_conn = redis.Redis(
+            connection_pool=redis.ConnectionPool(
+                connection_class=CustomRedisConnection,
+                db=4,
+                custom_arg="foo",
+            )
+        )
+
+        queue = Queue(connection=custom_conn)
+        scheduler = RQScheduler([queue], connection=custom_conn)
+
+        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+
+        self.assertEqual(scheduler_connection.__class__, CustomRedisConnection)
+        self.assertEqual(scheduler_connection.get_custom_arg(), "foo")
+
+    def test_no_custom_connection_pool(self):
+        """Connection pool customizing must not interfere if we're using a standard
+        connection (non-pooled)"""
+        standard_conn = redis.Redis(db=5)
+
+        queue = Queue(connection=standard_conn)
+        scheduler = RQScheduler([queue], connection=standard_conn)
+
+        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+
+        self.assertEqual(scheduler_connection.__class__, redis.Connection)
