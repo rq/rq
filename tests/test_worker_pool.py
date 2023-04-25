@@ -5,7 +5,7 @@ from multiprocessing import Process
 from time import sleep
 from rq.job import JobStatus
 
-from tests import RQTestCase
+from tests import TestCase
 from tests.fixtures import _send_shutdown_command, long_running_job, say_hello
 
 from rq.queue import Queue
@@ -17,7 +17,7 @@ def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
     os.kill(pid, signal.SIGTERM)
 
 
-class TestWorkerPool(RQTestCase):
+class TestWorkerPool(TestCase):
     def test_queues(self):
         """Test queue parsing"""
         pool = WorkerPool(['default', 'foo'], connection=self.connection)
