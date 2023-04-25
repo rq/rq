@@ -6,6 +6,7 @@ omit =
     rq/dummy.py
     rq/local.py
     rq/tests/*
+    tests/*
 
 [report]
 exclude_lines =
