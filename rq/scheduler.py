@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
 
-from redis import Redis, SSLConnection, UnixDomainSocketConnection
+from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
@@ -49,7 +49,11 @@ class RQScheduler:
         self._acquired_locks = set()
         self._scheduled_job_registries = []
         self.lock_acquisition_time = None
-        self._connection_class, self._connection_kwargs = parse_connection(connection)
+        (
+            self._connection_class,
+            self._connection_pool_class,
+            self._connection_kwargs,
+        ) = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
 
         self._connection = None
@@ -69,7 +73,12 @@ class RQScheduler:
     def connection(self):
         if self._connection:
             return self._connection
-        self._connection = self._connection_class(**self._connection_kwargs)
+        self._connection = self._connection_class(
+            connection_pool=ConnectionPool(
+                connection_class=self._connection_pool_class,
+                **self._connection_kwargs
+            )
+        )
         return self._connection
 
     @property

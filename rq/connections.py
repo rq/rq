@@ -2,7 +2,7 @@ import warnings
 from contextlib import contextmanager
 from typing import Any, Optional, Tuple, Type
 
-from redis import Redis, SSLConnection, UnixDomainSocketConnection
+from redis import Connection as RedisConnection, Redis, SSLConnection, UnixDomainSocketConnection
 
 from .local import LocalStack
 
@@ -117,15 +117,15 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
     return connection
 
 
-def parse_connection(connection: Redis) -> Tuple[Type[Redis], dict]:
+def parse_connection(connection: Redis) -> Tuple[Type[Redis], Type[RedisConnection], dict]:
     connection_kwargs = connection.connection_pool.connection_kwargs.copy()
     # Redis does not accept parser_class argument which is sometimes present
     # on connection_pool kwargs, for example when hiredis is used
     connection_kwargs.pop('parser_class', None)
-    connection_class = connection.connection_pool.connection_class
-    if issubclass(connection_class, SSLConnection):
+    connection_pool_class = connection.connection_pool.connection_class
+    if issubclass(connection_pool_class, SSLConnection):
         connection_kwargs['ssl'] = True
-    if issubclass(connection_class, UnixDomainSocketConnection):
+    if issubclass(connection_pool_class, UnixDomainSocketConnection):
         # The connection keyword arguments are obtained from
         # `UnixDomainSocketConnection`, which expects `path`, but passed to
         # `redis.client.Redis`, which expects `unix_socket_path`, renaming
@@ -134,7 +134,7 @@ def parse_connection(connection: Redis) -> Tuple[Type[Redis], dict]:
         # not expected by `redis.client.Redis` and would raise an exception.
         connection_kwargs['unix_socket_path'] = connection_kwargs.pop('path')
 
-    return connection.__class__, connection_kwargs
+    return connection.__class__, connection_pool_class, connection_kwargs
 
 
 _connection_stack = LocalStack()
