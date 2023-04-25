@@ -503,7 +503,7 @@ def worker_pool(
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
-    pool = Pool(queue_names, connection=cli_config.connection, num_workers=2)
+    pool = Pool(queue_names, connection=cli_config.connection, size=2)
     pool.start(burst=burst, logging_level=logging_level)
 
     # Should we configure Sentry?

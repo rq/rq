@@ -34,8 +34,8 @@ class Pool:
         STARTED = 2
         STOPPED = 3
 
-    def __init__(self, queues: List[Union[str, Queue]], connection: Redis, num_workers: int = 1, *args, **kwargs):
-        self.num_workers: int = num_workers
+    def __init__(self, queues: List[Union[str, Queue]], connection: Redis, size: int = 1, *args, **kwargs):
+        self.size: int = size
         self._workers: List[Worker] = []
         setup_loghandlers('INFO', DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log: logging.Logger = logging.getLogger(__name__)
@@ -138,10 +138,10 @@ class Pool:
         """
         self.log.debug('Checking worker processes')
         self.reap_workers()
-        # If we have less number of workers than num_workers,
+        # If we have less number of workers than size,
         # respawn the difference
         if respawn and self.status != self.Status.STOPPED:
-            delta = self.num_workers - len(self.worker_dict)
+            delta = self.size - len(self.worker_dict)
             if delta:
                 for i in range(delta):
                     self.start_worker(burst=self._burst, _sleep=self._sleep)
@@ -174,8 +174,8 @@ class Pool:
         Run the workers
         * sleep: waits for X seconds before creating worker, only for testing purposes
         """
-        self.log.debug(f'Spawning {self.num_workers} workers')
-        for i in range(self.num_workers):
+        self.log.debug(f'Spawning {self.size} workers')
+        for i in range(self.size):
             self.start_worker(i + 1, burst=burst, _sleep=_sleep, logging_level=logging_level)
 
     def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):

@@ -27,14 +27,14 @@ class TestWorkerPool(RQTestCase):
 
     # def test_spawn_workers(self):
     #     """Test spawning workers"""
-    #     pool = Pool(['default', 'foo'], connection=self.connection, num_workers=2)
+    #     pool = Pool(['default', 'foo'], connection=self.connection, size=2)
     #     pool.start_workers(burst=False)
     #     self.assertEqual(len(pool.worker_dict.keys()), 2)
     #     pool.stop_workers()
 
     def test_check_workers(self):
         """Test check_workers()"""
-        pool = Pool(['default'], connection=self.connection, num_workers=2)
+        pool = Pool(['default'], connection=self.connection, size=2)
         pool.start_workers(burst=False)
 
         # There should be two workers
@@ -56,7 +56,7 @@ class TestWorkerPool(RQTestCase):
 
     def test_reap_workers(self):
         """Dead workers are removed from worker_dict"""
-        pool = Pool(['default'], connection=self.connection, num_workers=2)
+        pool = Pool(['default'], connection=self.connection, size=2)
         pool.start_workers(burst=False)
 
         # There should be two workers
@@ -73,7 +73,7 @@ class TestWorkerPool(RQTestCase):
 
     def test_start(self):
         """Test start()"""
-        pool = Pool(['default'], connection=self.connection, num_workers=2)
+        pool = Pool(['default'], connection=self.connection, size=2)
 
         p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
         p.start()
@@ -87,7 +87,7 @@ class TestWorkerPool(RQTestCase):
         """If two shutdown signals are sent within one second, only the first one is processed"""
         # Send two shutdown signals within one second while the worker is
         # working on a long running job. The job should still complete (not killed)
-        pool = Pool(['foo'], connection=self.connection, num_workers=2)
+        pool = Pool(['foo'], connection=self.connection, size=2)
 
         process_1 = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
         process_1.start()
