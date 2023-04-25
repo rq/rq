@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
+from types import FrameType
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -594,7 +595,7 @@ class Worker:
             pid, stat, rusage = os.wait4(self.horse_pid, 0)
         return pid, stat, rusage
 
-    def request_force_stop(self, signum, frame):
+    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
         """Terminates the application (cold shutdown).
 
         Args:

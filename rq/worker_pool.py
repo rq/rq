@@ -223,11 +223,6 @@ class Pool:
                     break
 
                 time.sleep(1)
-        # time.sleep(5)
-        # self.log.info(f'Stopping worker pool {self.name}...')
-
-    def stop(self):
-        pass
 
 
 def run_worker(

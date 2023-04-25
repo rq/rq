@@ -1128,6 +1128,20 @@ class TestWorker(RQTestCase):
         expected_ser.sort()
         self.assertEqual(sorted_ids, expected_ser)
 
+    def test_request_force_stop_ignores_consecutive_signals(self):
+        """Ignore signals sent within 1 second of the last signal"""
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+        worker._horse_pid = 1
+        worker._shutdown_requested_date = utcnow()
+        with mock.patch.object(worker, 'kill_horse') as mocked:
+            worker.request_force_stop(1, frame=None)
+            self.assertEqual(mocked.call_count, 0)
+        # If signal is sent a few seconds after, kill_horse() is called
+        worker._shutdown_requested_date = utcnow() - timedelta(seconds=2)
+        with mock.patch.object(worker, 'kill_horse') as mocked:
+            self.assertRaises(SystemExit, worker.request_force_stop, 1, frame=None)
+
     def test_dequeue_round_robin(self):
         qs = [Queue('q%d' % i) for i in range(5)]
 
