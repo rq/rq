@@ -28,7 +28,7 @@ class WorkerData(NamedTuple):
     process: Process
 
 
-class Pool:
+class WorkerPool:
     class Status(Enum):
         IDLE = 1
         STARTED = 2
@@ -162,7 +162,7 @@ class Pool:
             target=run_worker,
             args=(name, self._queue_names, self._connection_class, self._connection_kwargs),
             kwargs={'_sleep': _sleep, 'burst': burst, 'logging_level': logging_level},
-            name=f'Worker {name} (Pool {self.name})',
+            name=f'Worker {name} (WorkerPool {self.name})',
         )
         process.start()
         worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore

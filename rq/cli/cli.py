@@ -38,7 +38,7 @@ from rq.exceptions import InvalidJobOperationError
 from rq.registry import FailedJobRegistry, clean_registries
 from rq.utils import import_attribute, get_call_string, make_colorizer
 from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
-from rq.worker_pool import Pool
+from rq.worker_pool import WorkerPool
 from rq.worker_registration import clean_worker_registry
 from rq.job import JobStatus
 
@@ -503,7 +503,7 @@ def worker_pool(
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
-    pool = Pool(queue_names, connection=cli_config.connection, num_workers=2)
+    pool = WorkerPool(queue_names, connection=cli_config.connection, num_workers=2)
     pool.start(burst=burst, logging_level=logging_level)
 
     # Should we configure Sentry?
