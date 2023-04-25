@@ -1,6 +1,7 @@
-from redis import Redis
+from redis import ConnectionPool, Redis, UnixDomainSocketConnection
 
 from rq import Connection, Queue
+from rq.connections import parse_connection
 from tests import RQTestCase, find_empty_redis_database
 from tests.fixtures import do_nothing
 
@@ -35,3 +36,12 @@ class TestConnectionInheritance(RQTestCase):
         job2 = q2.enqueue(do_nothing)
         self.assertEqual(q1.connection, job1.connection)
         self.assertEqual(q2.connection, job2.connection)
+
+    def test_parse_connection(self):
+        """Test parsing `ssl` and UnixDomainSocketConnection"""
+        _, _, kwargs = parse_connection(Redis(ssl=True))
+        self.assertTrue(kwargs['ssl'])
+        path = '/tmp/redis.sock'
+        pool = ConnectionPool(connection_class=UnixDomainSocketConnection, path=path)
+        _, _, kwargs = parse_connection(Redis(connection_pool=pool))
+        self.assertTrue(kwargs['unix_socket_path'], path)
