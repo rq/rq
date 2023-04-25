@@ -1,8 +1,8 @@
 import warnings
 from contextlib import contextmanager
-from typing import Optional
+from typing import Any, Optional, Tuple, Type
 
-from redis import Redis
+from redis import Redis, SSLConnection, UnixDomainSocketConnection
 
 from .local import LocalStack
 
@@ -42,10 +42,9 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
         yield
     finally:
         popped = pop_connection()
-        assert popped == connection, (
-            'Unexpected Redis connection was popped off the stack. '
-            'Check your Redis connection setup.'
-        )
+        assert (
+            popped == connection
+        ), 'Unexpected Redis connection was popped off the stack. Check your Redis connection setup.'
 
 
 def push_connection(redis: 'Redis'):
@@ -118,8 +117,27 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
     return connection
 
 
+def parse_connection(connection: Redis) -> Tuple[Type[Redis], dict]:
+    connection_kwargs = connection.connection_pool.connection_kwargs.copy()
+    # Redis does not accept parser_class argument which is sometimes present
+    # on connection_pool kwargs, for example when hiredis is used
+    connection_kwargs.pop('parser_class', None)
+    connection_class = connection.connection_pool.connection_class
+    if issubclass(connection_class, SSLConnection):
+        connection_kwargs['ssl'] = True
+    if issubclass(connection_class, UnixDomainSocketConnection):
+        # The connection keyword arguments are obtained from
+        # `UnixDomainSocketConnection`, which expects `path`, but passed to
+        # `redis.client.Redis`, which expects `unix_socket_path`, renaming
+        # the key is necessary.
+        # `path` is not left in the dictionary as that keyword argument is
+        # not expected by `redis.client.Redis` and would raise an exception.
+        connection_kwargs['unix_socket_path'] = connection_kwargs.pop('path')
+
+    return connection.__class__, connection_kwargs
+
+
 _connection_stack = LocalStack()
 
 
 __all__ = ['Connection', 'get_current_connection', 'push_connection', 'pop_connection']
-
