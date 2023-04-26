@@ -41,9 +41,6 @@ class _Colorizer:
         else:
             self.notty = True
 
-    def reset_color(self):
-        return self.codes["reset"]
-
     def colorize(self, color_key, text):
         if self.notty:
             return text
@@ -99,11 +96,9 @@ class ColorizingStreamHandler(logging.StreamHandler):
     def format(self, record):
         message = logging.StreamHandler.format(self, record)
         if self.is_tty:
-            colorize = self.levels.get(record.levelno, lambda x: x)
-
             # Don't colorize any traceback
             parts = message.split('\n', 1)
-            parts[0] = " ".join([parts[0].split(" ", 1)[0], colorize(parts[0].split(" ", 1)[1])])
+            parts[0] = " ".join([parts[0].split(" ", 1)[0], parts[0].split(" ", 1)[1]])
 
             message = '\n'.join(parts)
 

@@ -38,7 +38,7 @@ def compact(lst: List[Any]) -> List[Any]:
     return [item for item in lst if item is not None]
 
 
-def as_text(v: Union[bytes, str]) -> Optional[str]:
+def as_text(v: Union[bytes, str]) -> str:
     """Converts a bytes value to a string using `utf-8`.
 
     Args:
@@ -50,9 +50,7 @@ def as_text(v: Union[bytes, str]) -> Optional[str]:
     Returns:
         value (Optional[str]): Either the decoded string or None
     """
-    if v is None:
-        return None
-    elif isinstance(v, bytes):
+    if isinstance(v, bytes):
         return v.decode('utf-8')
     elif isinstance(v, str):
         return v
