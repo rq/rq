@@ -12,7 +12,7 @@ from redis import Redis
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import read_config_file, CliConfig, parse_function_arg, parse_schedule
-from rq.job import Job
+from rq.job import Job, JobStatus
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.serializers import JSONSerializer
 from rq.timeouts import UnixSignalDeathPenalty
@@ -796,8 +796,50 @@ class TestRQCli(CLITestCase):
 
 
 class WorkerPoolCLITestCase(CLITestCase):
-    def test_worker_pool_burst(self):
-        """rq worker-pool -u <url> -b"""
+    def test_worker_pool_burst_and_num_workers(self):
+        """rq worker-pool -u <url> -b -n 3"""
         runner = CliRunner()
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '-n', '3'])
         self.assert_normal_execution(result)
+
+    def test_serializer_and_queue_argument(self):
+        """rq worker-pool foo bar -u <url> -b"""
+        queue = Queue('foo', connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello, 'Hello')
+        queue = Queue('bar', connection=self.connection, serializer=JSONSerializer)
+        job_2 = queue.enqueue(say_hello, 'Hello')
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ['worker-pool', 'foo', 'bar', '-u', self.redis_url, '-b', '--serializer', 'rq.serializers.JSONSerializer'],
+        )
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+        self.assertEqual(job_2.get_status(refresh=True), JobStatus.FINISHED)
+
+    def test_worker_class_argument(self):
+        """rq worker-pool -u <url> -b --worker-class rq.Worker"""
+        runner = CliRunner()
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--worker-class', 'rq.Worker'])
+        self.assert_normal_execution(result)
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--worker-class', 'rq.worker.SimpleWorker']
+        )
+        self.assert_normal_execution(result)
+
+        # This one fails because the worker class doesn't exist
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--worker-class', 'rq.worker.NonExistantWorker']
+        )
+        self.assertNotEqual(result.exit_code, 0)
+
+    def test_job_class_argument(self):
+        """rq worker-pool -u <url> -b --job-class rq.job.Job"""
+        runner = CliRunner()
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.Job'])
+        self.assert_normal_execution(result)
+
+        # This one fails because Job class doesn't exist
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.NonExistantJob']
+        )
+        self.assertNotEqual(result.exit_code, 0)

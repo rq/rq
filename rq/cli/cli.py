@@ -35,10 +35,12 @@ from rq.defaults import (
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
 )
 from rq.exceptions import InvalidJobOperationError
-from rq.job import JobStatus
+from rq.job import Job, JobStatus
 from rq.logutils import blue
 from rq.registry import FailedJobRegistry, clean_registries
+from rq.serializers import DefaultSerializer
 from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
+from rq.worker import Worker
 from rq.worker_pool import WorkerPool
 from rq.worker_registration import clean_worker_registry
 from rq.utils import import_attribute, get_call_string
@@ -435,61 +437,35 @@ def enqueue(
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--logging-level', type=str, default="INFO", help='Set logging level')
-@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
-@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
-@click.option('--name', '-n', help='Specify a different name')
-@click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
-@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Worker timeout to be used')
-@click.option(
-    '--maintenance-interval',
-    type=int,
-    default=DEFAULT_MAINTENANCE_TASK_INTERVAL,
-    help='Maintenance task interval (in seconds) to be used',
-)
-@click.option(
-    '--job-monitoring-interval',
-    type=int,
-    default=DEFAULT_JOB_MONITORING_INTERVAL,
-    help='Default job monitoring interval to be used',
-)
-@click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
-@click.option('--verbose', '-v', is_flag=True, help='Show more output')
-@click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--sentry-ca-certs', envvar='RQ_SENTRY_CA_CERTS', help='Path to CRT file for Sentry DSN')
 @click.option('--sentry-debug', envvar='RQ_SENTRY_DEBUG', help='Enable debug')
 @click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
-@click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
-@click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
-@click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
-@click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
-@click.option(
-    '--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues'
-)
+@click.option('--verbose', '-v', is_flag=True, help='Show more output')
+@click.option('--quiet', '-q', is_flag=True, help='Show less output')
+@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
+@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
+@click.option('--worker-class', type=str, default=None, help='Dotted path to a worker class')
+@click.option('--job-class', type=str, default=None, help='Dotted path to a Job class')
 @click.argument('queues', nargs=-1)
+@click.option('--num-workers', '-n', type=int, default=1, help='Number of workers to start')
 @pass_cli_config
 def worker_pool(
     cli_config,
     burst: bool,
     logging_level,
-    name,
-    results_ttl,
-    worker_ttl,
-    maintenance_interval,
-    job_monitoring_interval,
-    disable_job_desc_logging,
-    verbose,
-    quiet,
+    queues,
+    serializer,
     sentry_ca_certs,
     sentry_debug,
     sentry_dsn,
-    max_jobs,
-    max_idle_time,
-    queues,
+    verbose,
+    quiet,
     log_format,
     date_format,
-    serializer,
-    dequeue_strategy,
+    worker_class,
+    job_class,
+    num_workers,
     **options,
 ):
     """Starts a RQ worker pool"""
@@ -502,7 +478,29 @@ def worker_pool(
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
-    pool = WorkerPool(queue_names, connection=cli_config.connection, num_workers=2)
+    if serializer:
+        serializer_class = import_attribute(serializer)
+    else:
+        serializer_class = DefaultSerializer
+
+    if worker_class:
+        worker_class = import_attribute(worker_class)
+    else:
+        worker_class = Worker
+
+    if job_class:
+        job_class = import_attribute(job_class)
+    else:
+        job_class = Job
+
+    pool = WorkerPool(
+        queue_names,
+        connection=cli_config.connection,
+        num_workers=num_workers,
+        serializer=serializer_class,
+        worker_class=worker_class,
+        job_class=job_class,
+    )
     pool.start(burst=burst, logging_level=logging_level)
 
     # Should we configure Sentry?
