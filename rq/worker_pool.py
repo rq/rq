@@ -7,19 +7,21 @@ import time
 
 from enum import Enum
 from multiprocessing import Process
-from typing import Dict, List, NamedTuple, Optional, Set, Union
+from typing import Dict, List, NamedTuple, Optional, Set, Type, Union
 from uuid import uuid4
 
 from redis import Redis
 from redis import SSLConnection, UnixDomainSocketConnection
+from rq.serializers import DefaultSerializer
 
 from rq.timeouts import HorseMonitorTimeoutException, UnixSignalDeathPenalty
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .utils import parse_names
-from .worker import Worker
+from .worker import BaseWorker, Worker
 
 
 class WorkerData(NamedTuple):
@@ -34,7 +36,17 @@ class WorkerPool:
         STARTED = 2
         STOPPED = 3
 
-    def __init__(self, queues: List[Union[str, Queue]], connection: Redis, num_workers: int = 1, *args, **kwargs):
+    def __init__(
+        self,
+        queues: List[Union[str, Queue]],
+        connection: Redis,
+        num_workers: int = 1,
+        worker_class: Type[BaseWorker] = Worker,
+        serializer: Type[DefaultSerializer] = DefaultSerializer,
+        job_class: Type[Job] = Job,
+        *args,
+        **kwargs,
+    ):
         self.num_workers: int = num_workers
         self._workers: List[Worker] = []
         setup_loghandlers('INFO', DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
@@ -46,6 +58,9 @@ class WorkerPool:
         self._burst: bool = True
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
+        self.worker_class: Type[BaseWorker] = worker_class
+        self.serializer: Type[DefaultSerializer] = serializer
+        self.job_class: Type[Job] = job_class
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: Dict[str, WorkerData] = {}
@@ -161,7 +176,14 @@ class WorkerPool:
         process = Process(
             target=run_worker,
             args=(name, self._queue_names, self._connection_class, self._connection_kwargs),
-            kwargs={'_sleep': _sleep, 'burst': burst, 'logging_level': logging_level},
+            kwargs={
+                '_sleep': _sleep,
+                'burst': burst,
+                'logging_level': logging_level,
+                'worker_class': self.worker_class,
+                'job_class': self.job_class,
+                'serializer': self.serializer,
+            },
             name=f'Worker {name} (WorkerPool {self.name})',
         )
         process.start()
@@ -230,13 +252,16 @@ def run_worker(
     queue_names: List[str],
     connection_class,
     connection_kwargs: dict,
+    worker_class: Type[BaseWorker] = Worker,
+    serializer: Type[DefaultSerializer] = DefaultSerializer,
+    job_class: Type[Job] = Job,
     burst: bool = True,
     logging_level: str = "INFO",
     _sleep: int = 0,
 ):
     connection = connection_class(**connection_kwargs)
     queues = [Queue(name, connection=connection) for name in queue_names]
-    worker = Worker(queues, name=worker_name, connection=connection)
+    worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
     worker.log.info("Starting worker started with PID %s", os.getpid())
     time.sleep(_sleep)
     worker.work(burst=burst, logging_level=logging_level)

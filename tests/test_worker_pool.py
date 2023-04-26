@@ -6,9 +6,11 @@ from time import sleep
 from rq.job import JobStatus
 
 from tests import TestCase
-from tests.fixtures import _send_shutdown_command, long_running_job, say_hello
+from tests.fixtures import CustomJob, _send_shutdown_command, long_running_job, say_hello
 
 from rq.queue import Queue
+from rq.serializers import JSONSerializer
+from rq.worker import SimpleWorker
 from rq.worker_pool import run_worker, WorkerPool
 
 
@@ -111,3 +113,26 @@ class TestWorkerPool(TestCase):
         )
         # Worker should have processed the job
         self.assertEqual(len(queue), 0)
+
+    def test_worker_pool_arguments(self):
+        """Ensure arguments are properly used to create the right workers"""
+        queue = Queue('foo', connection=self.connection)
+        job = queue.enqueue(say_hello)
+        pool = WorkerPool([queue], connection=self.connection, num_workers=2, worker_class=SimpleWorker)
+        pool.start(burst=True)
+        # Worker should have processed the job
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
+        queue = Queue('json', connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello, 'Hello')
+        pool = WorkerPool(
+            [queue], connection=self.connection, num_workers=2, worker_class=SimpleWorker, serializer=JSONSerializer
+        )
+        pool.start(burst=True)
+        # Worker should have processed the job
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
+        pool = WorkerPool([queue], connection=self.connection, num_workers=2, job_class=CustomJob)
+        pool.start(burst=True)
+        # Worker should have processed the job
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)

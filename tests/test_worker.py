@@ -26,6 +26,7 @@ from tests.fixtures import (
     create_file,
     create_file_after_timeout,
     create_file_after_timeout_and_setsid,
+    CustomJob,
     div_by_zero,
     do_nothing,
     kill_worker,
@@ -50,10 +51,6 @@ from rq.utils import utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, WorkerStatus, RoundRobinWorker, RandomWorker
 from rq.serializers import JSONSerializer
-
-
-class CustomJob(Job):
-    pass
 
 
 class CustomQueue(Queue):
