@@ -550,7 +550,10 @@ class Worker(BaseWorker):
             job_id (Optional[str): The job id
         """
         connection = pipeline if pipeline is not None else self.connection
-        return as_text(connection.hget(self.key, 'current_job'))
+        result = connection.hget(self.key, 'current_job')
+        if result is None:
+            return None
+        return as_text(result)
 
     def get_current_job(self) -> Optional['Job']:
         """Returns the currently executing job instance.
