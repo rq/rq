@@ -454,10 +454,10 @@ class Queue:
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
-            job_id = as_text(self.connection.lpop(COMPACT_QUEUE))
+            job_id = self.connection.lpop(COMPACT_QUEUE)
             if job_id is None:
                 break
-            if self.job_class.exists(job_id, self.connection):
+            if self.job_class.exists(as_text(job_id), self.connection):
                 self.connection.rpush(self.key, job_id)
 
     def push_job_id(self, job_id: str, pipeline: Optional['Pipeline'] = None, at_front: bool = False):

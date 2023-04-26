@@ -304,7 +304,8 @@ class Job:
             status (JobStatus): The Job Status
         """
         if refresh:
-            self._status = as_text(self.connection.hget(self.key, 'status'))
+            status = self.connection.hget(self.key, 'status')
+            self._status = as_text(status) if status else None
         return self._status
 
     def set_status(self, status: JobStatus, pipeline: Optional['Pipeline'] = None) -> None:
@@ -876,7 +877,7 @@ class Job:
         self.created_at = str_to_date(obj.get('created_at'))
         self.origin = as_text(obj.get('origin')) if obj.get('origin') else None
         self.worker_name = obj.get('worker_name').decode() if obj.get('worker_name') else None
-        self.description = as_text(obj.get('description'))
+        self.description = as_text(obj.get('description')) if obj.get('description') else None
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
