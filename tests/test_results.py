@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 
 from datetime import timedelta
 from unittest.mock import patch, PropertyMock
@@ -236,3 +237,19 @@ class TestScheduledJobRegistry(RQTestCase):
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=0, return_value=1)
         self.assertIsNone(job.return_value())
+
+    def test_job_return_value_unserializable(self):
+        """Test job.return_value when it is not serializable"""
+        queue = Queue(connection=self.connection, result_ttl=0)
+        job = queue.enqueue(say_hello)
+
+        # Returns None when there's no result
+        self.assertIsNone(job.return_value())
+
+        # tempfile.NamedTemporaryFile() is not picklable
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=tempfile.NamedTemporaryFile())
+        self.assertIsNone(job.return_value())
+        self.assertEqual(Result.count(job), 1)
+
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        self.assertEqual(Result.count(job), 2)
