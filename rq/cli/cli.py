@@ -31,13 +31,12 @@ from rq.defaults import (
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
 )
 from rq.exceptions import InvalidJobOperationError
-from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute, get_call_string, make_colorizer
-from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
-from rq.worker_registration import clean_worker_registry
 from rq.job import JobStatus
-
-blue = make_colorizer('darkblue')
+from rq.logutils import blue
+from rq.registry import FailedJobRegistry, clean_registries
+from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
+from rq.utils import import_attribute, get_call_string
+from rq.worker_registration import clean_worker_registry
 
 
 @click.group()

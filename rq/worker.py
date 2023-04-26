@@ -13,8 +13,7 @@ import warnings
 from datetime import timedelta
 from enum import Enum
 from random import shuffle
-from typing import (TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type,
-                    Union)
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -50,14 +49,23 @@ from .defaults import (
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 
 from .job import Job, JobStatus
-from .logutils import setup_loghandlers
+from .logutils import blue, green, setup_loghandlers, yellow
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import backend_class, ensure_list, get_version, make_colorizer, utcformat, utcnow, utcparse, compact, as_text
+from .utils import (
+    backend_class,
+    ensure_list,
+    get_version,
+    utcformat,
+    utcnow,
+    utcparse,
+    compact,
+    as_text,
+)
 from .version import VERSION
 from .serializers import resolve_serializer
 
@@ -69,10 +77,6 @@ except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
 
-
-green = make_colorizer('darkgreen')
-yellow = make_colorizer('darkyellow')
-blue = make_colorizer('darkblue')
 
 logger = logging.getLogger("rq.worker")
 
@@ -112,12 +116,13 @@ class WorkerStatus(str, Enum):
     IDLE = 'idle'
 
 
-class Worker:
+class BaseWorker:
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
+
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
     # messages are logged after every job, by default they are.
     log_result_lifespan = True
@@ -182,6 +187,51 @@ class Worker:
         """
         return len(worker_registration.get_keys(queue=queue, connection=connection))
 
+    def get_redis_server_version(self):
+        """Return Redis server version of connection"""
+        if not self.redis_server_version:
+            self.redis_server_version = get_version(self.connection)
+        return self.redis_server_version
+
+    def validate_queues(self):
+        """Sanity check for the given queues."""
+        for queue in self.queues:
+            if not isinstance(queue, self.queue_class):
+                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
+
+    def queue_names(self) -> List[str]:
+        """Returns the queue names of this worker's queues.
+
+        Returns:
+            List[str]: The queue names.
+        """
+        return [queue.name for queue in self.queues]
+
+    def queue_keys(self) -> List[str]:
+        """Returns the Redis keys representing this worker's queues.
+
+        Returns:
+            List[str]: The list of strings with queues keys
+        """
+        return [queue.key for queue in self.queues]
+
+    @property
+    def key(self):
+        """Returns the worker's Redis hash key."""
+        return self.redis_worker_namespace_prefix + self.name
+
+    @property
+    def pubsub_channel_name(self):
+        """Returns the worker's Redis hash key."""
+        return PUBSUB_CHANNEL_TEMPLATE % self.name
+
+    @property
+    def supports_redis_streams(self) -> bool:
+        """Only supported by Redis server >= 5.0 is required."""
+        return self.get_redis_server_version() >= (5, 0, 0)
+
+
+class Worker(BaseWorker):
     @classmethod
     def find_by_key(
         cls,
@@ -249,7 +299,7 @@ class Worker:
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
         serializer=None,
-        work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None
+        work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
@@ -267,8 +317,13 @@ class Worker:
         self.serializer = resolve_serializer(serializer)
 
         queues = [
-            self.queue_class(name=q, connection=connection, job_class=self.job_class,
-                             serializer=self.serializer, death_penalty_class=self.death_penalty_class,)
+            self.queue_class(
+                name=q,
+                connection=connection,
+                job_class=self.job_class,
+                serializer=self.serializer,
+                death_penalty_class=self.death_penalty_class,
+            )
             if isinstance(q, str)
             else q
             for q in ensure_list(queues)
@@ -343,49 +398,6 @@ class Worker:
             timeout_config = {"socket_timeout": self.connection_timeout}
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
-
-    def get_redis_server_version(self):
-        """Return Redis server version of connection"""
-        if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
-        return self.redis_server_version
-
-    def validate_queues(self):
-        """Sanity check for the given queues."""
-        for queue in self.queues:
-            if not isinstance(queue, self.queue_class):
-                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
-
-    def queue_names(self) -> List[str]:
-        """Returns the queue names of this worker's queues.
-
-        Returns:
-            List[str]: The queue names.
-        """
-        return [queue.name for queue in self.queues]
-
-    def queue_keys(self) -> List[str]:
-        """Returns the Redis keys representing this worker's queues.
-
-        Returns:
-            List[str]: The list of strings with queues keys
-        """
-        return [queue.key for queue in self.queues]
-
-    @property
-    def key(self):
-        """Returns the worker's Redis hash key."""
-        return self.redis_worker_namespace_prefix + self.name
-
-    @property
-    def pubsub_channel_name(self):
-        """Returns the worker's Redis hash key."""
-        return PUBSUB_CHANNEL_TEMPLATE % self.name
-
-    @property
-    def supports_redis_streams(self) -> bool:
-        """Only supported by Redis server >= 5.0 is required."""
-        return self.get_redis_server_version() >= (5, 0, 0)
 
     @property
     def horse_pid(self):
@@ -538,7 +550,10 @@ class Worker:
             job_id (Optional[str): The job id
         """
         connection = pipeline if pipeline is not None else self.connection
-        return as_text(connection.hget(self.key, 'current_job'))
+        result = connection.hget(self.key, 'current_job')
+        if result is None:
+            return None
+        return as_text(result)
 
     def get_current_job(self) -> Optional['Job']:
         """Returns the currently executing job instance.
@@ -706,7 +721,7 @@ class Worker:
             return
         if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
             pos = self._ordered_queues.index(reference_queue)
-            self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
+            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
             return
         if self._dequeue_strategy == DequeueStrategy.RANDOM:
             shuffle(self._ordered_queues)
@@ -716,7 +731,7 @@ class Worker:
         self,
         logging_level: str = "INFO",
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
-        log_format: str = DEFAULT_LOGGING_FORMAT
+        log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
@@ -781,7 +796,7 @@ class Worker:
         max_jobs: Optional[int] = None,
         max_idle_time: Optional[int] = None,
         with_scheduler: bool = False,
-        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
+        dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
     ) -> bool:
         """Starts the work loop.
 
@@ -881,7 +896,9 @@ class Worker:
                 pass
             self.scheduler._process.join()
 
-    def dequeue_job_and_maintain_ttl(self, timeout: Optional[int], max_idle_time: Optional[int] = None) -> Tuple['Job', 'Queue']:
+    def dequeue_job_and_maintain_ttl(
+        self, timeout: Optional[int], max_idle_time: Optional[int] = None
+    ) -> Tuple['Job', 'Queue']:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
@@ -1167,10 +1184,7 @@ class Worker:
             self.log.warning('Moving job to FailedJobRegistry (%s)', exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
-            self.handle_job_failure(
-                job, queue=queue,
-                exc_string=exc_string
-            )
+            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
 
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -1458,9 +1472,7 @@ class Worker:
         extra.update({'queue': job.origin, 'job_id': job.id})
 
         # func_name
-        self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n' + exc_string, job.id, func_name, extra=extra
-        )
+        self.log.error('[Job %s]: exception raised while executing (%s)\n' + exc_string, job.id, func_name, extra=extra)
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
@@ -1598,7 +1610,7 @@ class RoundRobinWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[: pos + 1]
+        self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
 
 
 class RandomWorker(Worker):

@@ -158,7 +158,7 @@ class Job:
         serializer=None,
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
-        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None
+        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -239,16 +239,18 @@ class Job:
 
         if on_success:
             if not isinstance(on_success, Callback):
-                warnings.warn('Passing a `Callable` `on_success` is deprecated, pass `Callback` instead',
-                              DeprecationWarning)
+                warnings.warn(
+                    'Passing a `Callable` `on_success` is deprecated, pass `Callback` instead', DeprecationWarning
+                )
                 on_success = Callback(on_success)  # backward compatibility
             job._success_callback_name = on_success.name
             job._success_callback_timeout = on_success.timeout
 
         if on_failure:
             if not isinstance(on_failure, Callback):
-                warnings.warn('Passing a `Callable` `on_failure` is deprecated, pass `Callback` instead',
-                              DeprecationWarning)
+                warnings.warn(
+                    'Passing a `Callable` `on_failure` is deprecated, pass `Callback` instead', DeprecationWarning
+                )
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
@@ -302,7 +304,8 @@ class Job:
             status (JobStatus): The Job Status
         """
         if refresh:
-            self._status = as_text(self.connection.hget(self.key, 'status'))
+            status = self.connection.hget(self.key, 'status')
+            self._status = as_text(status) if status else None
         return self._status
 
     def set_status(self, status: JobStatus, pipeline: Optional['Pipeline'] = None) -> None:
@@ -872,9 +875,9 @@ class Job:
             self.data = raw_data
 
         self.created_at = str_to_date(obj.get('created_at'))
-        self.origin = as_text(obj.get('origin'))
+        self.origin = as_text(obj.get('origin')) if obj.get('origin') else None
         self.worker_name = obj.get('worker_name').decode() if obj.get('worker_name') else None
-        self.description = as_text(obj.get('description'))
+        self.description = as_text(obj.get('description')) if obj.get('description') else None
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
@@ -1360,8 +1363,7 @@ class Job:
             self.success_callback(self, self.connection, result)
 
     def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info):
-        """Executes failure_callback with possible timeout
-        """
+        """Executes failure_callback with possible timeout"""
         if not self.failure_callback:
             return
 
@@ -1369,7 +1371,7 @@ class Job:
         try:
             with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.failure_callback(self, self.connection, *exc_info)
-        except Exception: # noqa
+        except Exception:  # noqa
             logger.exception(f'Job {self.id}: error while executing failure callback')
             raise
 
