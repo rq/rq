@@ -49,7 +49,7 @@ from .defaults import (
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 
 from .job import Job, JobStatus
-from .logutils import setup_loghandlers
+from .logutils import blue, green, setup_loghandlers, yellow
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
@@ -60,7 +60,6 @@ from .utils import (
     backend_class,
     ensure_list,
     get_version,
-    make_colorizer,
     utcformat,
     utcnow,
     utcparse,
@@ -78,10 +77,6 @@ except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
 
-
-green = make_colorizer('darkgreen')
-yellow = make_colorizer('darkyellow')
-blue = make_colorizer('darkblue')
 
 logger = logging.getLogger("rq.worker")
 

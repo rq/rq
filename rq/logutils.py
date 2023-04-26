@@ -2,8 +2,112 @@ import logging
 import sys
 from typing import Union
 
-from rq.utils import ColorizingStreamHandler
 from rq.defaults import DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT
+
+
+class _Colorizer:
+    def __init__(self):
+        esc = "\x1b["
+
+        self.codes = {}
+        self.codes[""] = ""
+        self.codes["reset"] = esc + "39;49;00m"
+
+        self.codes["bold"] = esc + "01m"
+        self.codes["faint"] = esc + "02m"
+        self.codes["standout"] = esc + "03m"
+        self.codes["underline"] = esc + "04m"
+        self.codes["blink"] = esc + "05m"
+        self.codes["overline"] = esc + "06m"
+
+        dark_colors = ["black", "darkred", "darkgreen", "brown", "darkblue", "purple", "teal", "lightgray"]
+        light_colors = ["darkgray", "red", "green", "yellow", "blue", "fuchsia", "turquoise", "white"]
+
+        x = 30
+        for d, l in zip(dark_colors, light_colors):
+            self.codes[d] = esc + "%im" % x
+            self.codes[l] = esc + "%i;01m" % x
+            x += 1
+
+        del d, l, x
+
+        self.codes["darkteal"] = self.codes["turquoise"]
+        self.codes["darkyellow"] = self.codes["brown"]
+        self.codes["fuscia"] = self.codes["fuchsia"]
+        self.codes["white"] = self.codes["bold"]
+
+        if hasattr(sys.stdout, "isatty"):
+            self.notty = not sys.stdout.isatty()
+        else:
+            self.notty = True
+
+    def reset_color(self):
+        return self.codes["reset"]
+
+    def colorize(self, color_key, text):
+        if self.notty:
+            return text
+        else:
+            return self.codes[color_key] + text + self.codes["reset"]
+
+
+colorizer = _Colorizer()
+
+
+def make_colorizer(color: str):
+    """Creates a function that colorizes text with the given color.
+
+    For example::
+
+        ..codeblock::python
+
+            >>> green = make_colorizer('darkgreen')
+            >>> red = make_colorizer('red')
+            >>>
+            >>> # You can then use:
+            >>> print("It's either " + green('OK') + ' or ' + red('Oops'))
+    """
+
+    def inner(text):
+        return colorizer.colorize(color, text)
+
+    return inner
+
+
+green = make_colorizer('darkgreen')
+yellow = make_colorizer('darkyellow')
+blue = make_colorizer('darkblue')
+red = make_colorizer('darkred')
+
+
+class ColorizingStreamHandler(logging.StreamHandler):
+    levels = {
+        logging.WARNING: yellow,
+        logging.ERROR: red,
+        logging.CRITICAL: red,
+    }
+
+    def __init__(self, exclude=None, *args, **kwargs):
+        self.exclude = exclude
+        super().__init__(*args, **kwargs)
+
+    @property
+    def is_tty(self):
+        isatty = getattr(self.stream, 'isatty', None)
+        return isatty and isatty()
+
+    def format(self, record):
+        message = logging.StreamHandler.format(self, record)
+        if self.is_tty:
+            colorize = self.levels.get(record.levelno, lambda x: x)
+
+            # Don't colorize any traceback
+            parts = message.split('\n', 1)
+            parts[0] = " ".join([parts[0].split(" ", 1)[0], colorize(parts[0].split(" ", 1)[1])])
+
+            message = '\n'.join(parts)
+
+        return message
 
 
 def setup_loghandlers(

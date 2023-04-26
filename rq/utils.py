@@ -26,105 +26,6 @@ from .exceptions import TimeoutFormatError
 logger = logging.getLogger(__name__)
 
 
-class _Colorizer:
-    def __init__(self):
-        esc = "\x1b["
-
-        self.codes = {}
-        self.codes[""] = ""
-        self.codes["reset"] = esc + "39;49;00m"
-
-        self.codes["bold"] = esc + "01m"
-        self.codes["faint"] = esc + "02m"
-        self.codes["standout"] = esc + "03m"
-        self.codes["underline"] = esc + "04m"
-        self.codes["blink"] = esc + "05m"
-        self.codes["overline"] = esc + "06m"
-
-        dark_colors = ["black", "darkred", "darkgreen", "brown", "darkblue", "purple", "teal", "lightgray"]
-        light_colors = ["darkgray", "red", "green", "yellow", "blue", "fuchsia", "turquoise", "white"]
-
-        x = 30
-        for d, l in zip(dark_colors, light_colors):
-            self.codes[d] = esc + "%im" % x
-            self.codes[l] = esc + "%i;01m" % x
-            x += 1
-
-        del d, l, x
-
-        self.codes["darkteal"] = self.codes["turquoise"]
-        self.codes["darkyellow"] = self.codes["brown"]
-        self.codes["fuscia"] = self.codes["fuchsia"]
-        self.codes["white"] = self.codes["bold"]
-
-        if hasattr(sys.stdout, "isatty"):
-            self.notty = not sys.stdout.isatty()
-        else:
-            self.notty = True
-
-    def reset_color(self):
-        return self.codes["reset"]
-
-    def colorize(self, color_key, text):
-        if self.notty:
-            return text
-        else:
-            return self.codes[color_key] + text + self.codes["reset"]
-
-
-colorizer = _Colorizer()
-
-
-def make_colorizer(color: str):
-    """Creates a function that colorizes text with the given color.
-
-    For example::
-
-        ..codeblock::python
-
-            >>> green = make_colorizer('darkgreen')
-            >>> red = make_colorizer('red')
-            >>>
-            >>> # You can then use:
-            >>> print("It's either " + green('OK') + ' or ' + red('Oops'))
-    """
-
-    def inner(text):
-        return colorizer.colorize(color, text)
-
-    return inner
-
-
-class ColorizingStreamHandler(logging.StreamHandler):
-    levels = {
-        logging.WARNING: make_colorizer('darkyellow'),
-        logging.ERROR: make_colorizer('darkred'),
-        logging.CRITICAL: make_colorizer('darkred'),
-    }
-
-    def __init__(self, exclude=None, *args, **kwargs):
-        self.exclude = exclude
-        super().__init__(*args, **kwargs)
-
-    @property
-    def is_tty(self):
-        isatty = getattr(self.stream, 'isatty', None)
-        return isatty and isatty()
-
-    def format(self, record):
-        message = logging.StreamHandler.format(self, record)
-        if self.is_tty:
-            colorize = self.levels.get(record.levelno, lambda x: x)
-
-            # Don't colorize any traceback
-            parts = message.split('\n', 1)
-            parts[0] = " ".join([parts[0].split(" ", 1)[0], colorize(parts[0].split(" ", 1)[1])])
-
-            message = '\n'.join(parts)
-
-        return message
-
-
 def compact(lst: List[Any]) -> List[Any]:
     """Excludes `None` values from a list-like object.
 
@@ -181,7 +82,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
     E.g.: package_a.package_b.module_a.ClassA.my_static_method
 
     Thus we remove the bits from the end of the name until we can import it
-    
+
     Args:
         name (str): The name (reference) to the path.
 
