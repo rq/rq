@@ -13,7 +13,7 @@ import warnings
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type, Union
 from types import FrameType
 from uuid import uuid4
 
@@ -49,7 +49,7 @@ from .defaults import (
 from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
 
 from .job import Job, JobStatus
-from .logutils import setup_loghandlers
+from .logutils import blue, green, setup_loghandlers, yellow
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
@@ -60,7 +60,6 @@ from .utils import (
     backend_class,
     ensure_list,
     get_version,
-    make_colorizer,
     utcformat,
     utcnow,
     utcparse,
@@ -77,10 +76,6 @@ except ImportError:
     def setprocname(*args, **kwargs):  # noqa
         pass
 
-
-green = make_colorizer('darkgreen')
-yellow = make_colorizer('darkyellow')
-blue = make_colorizer('darkblue')
 
 logger = logging.getLogger("rq.worker")
 
@@ -120,12 +115,13 @@ class WorkerStatus(str, Enum):
     IDLE = 'idle'
 
 
-class Worker:
+class BaseWorker:
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = UnixSignalDeathPenalty
     queue_class = Queue
     job_class = Job
+
     # `log_result_lifespan` controls whether "Result is kept for XXX seconds"
     # messages are logged after every job, by default they are.
     log_result_lifespan = True
@@ -190,6 +186,51 @@ class Worker:
         """
         return len(worker_registration.get_keys(queue=queue, connection=connection))
 
+    def get_redis_server_version(self):
+        """Return Redis server version of connection"""
+        if not self.redis_server_version:
+            self.redis_server_version = get_version(self.connection)
+        return self.redis_server_version
+
+    def validate_queues(self):
+        """Sanity check for the given queues."""
+        for queue in self.queues:
+            if not isinstance(queue, self.queue_class):
+                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
+
+    def queue_names(self) -> List[str]:
+        """Returns the queue names of this worker's queues.
+
+        Returns:
+            List[str]: The queue names.
+        """
+        return [queue.name for queue in self.queues]
+
+    def queue_keys(self) -> List[str]:
+        """Returns the Redis keys representing this worker's queues.
+
+        Returns:
+            List[str]: The list of strings with queues keys
+        """
+        return [queue.key for queue in self.queues]
+
+    @property
+    def key(self):
+        """Returns the worker's Redis hash key."""
+        return self.redis_worker_namespace_prefix + self.name
+
+    @property
+    def pubsub_channel_name(self):
+        """Returns the worker's Redis hash key."""
+        return PUBSUB_CHANNEL_TEMPLATE % self.name
+
+    @property
+    def supports_redis_streams(self) -> bool:
+        """Only supported by Redis server >= 5.0 is required."""
+        return self.get_redis_server_version() >= (5, 0, 0)
+
+
+class Worker(BaseWorker):
     @classmethod
     def find_by_key(
         cls,
@@ -358,49 +399,6 @@ class Worker:
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
 
-    def get_redis_server_version(self):
-        """Return Redis server version of connection"""
-        if not self.redis_server_version:
-            self.redis_server_version = get_version(self.connection)
-        return self.redis_server_version
-
-    def validate_queues(self):
-        """Sanity check for the given queues."""
-        for queue in self.queues:
-            if not isinstance(queue, self.queue_class):
-                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
-
-    def queue_names(self) -> List[str]:
-        """Returns the queue names of this worker's queues.
-
-        Returns:
-            List[str]: The queue names.
-        """
-        return [queue.name for queue in self.queues]
-
-    def queue_keys(self) -> List[str]:
-        """Returns the Redis keys representing this worker's queues.
-
-        Returns:
-            List[str]: The list of strings with queues keys
-        """
-        return [queue.key for queue in self.queues]
-
-    @property
-    def key(self):
-        """Returns the worker's Redis hash key."""
-        return self.redis_worker_namespace_prefix + self.name
-
-    @property
-    def pubsub_channel_name(self):
-        """Returns the worker's Redis hash key."""
-        return PUBSUB_CHANNEL_TEMPLATE % self.name
-
-    @property
-    def supports_redis_streams(self) -> bool:
-        """Only supported by Redis server >= 5.0 is required."""
-        return self.get_redis_server_version() >= (5, 0, 0)
-
     @property
     def horse_pid(self):
         """The horse's process ID.  Only available in the worker.  Will return
@@ -552,7 +550,10 @@ class Worker:
             job_id (Optional[str): The job id
         """
         connection = pipeline if pipeline is not None else self.connection
-        return as_text(connection.hget(self.key, 'current_job'))
+        result = connection.hget(self.key, 'current_job')
+        if result is None:
+            return None
+        return as_text(result)
 
     def get_current_job(self) -> Optional['Job']:
         """Returns the currently executing job instance.

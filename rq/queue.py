@@ -22,13 +22,11 @@ from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
+from .logutils import blue, green, yellow
 from .types import FunctionReferenceType, JobDependencyType
 from .serializers import resolve_serializer
-from .utils import backend_class, get_version, import_attribute, make_colorizer, parse_timeout, utcnow, compact
+from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow, compact
 
-green = make_colorizer('darkgreen')
-yellow = make_colorizer('darkyellow')
-blue = make_colorizer('darkblue')
 
 logger = logging.getLogger("rq.queue")
 
@@ -456,10 +454,10 @@ class Queue:
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:
-            job_id = as_text(self.connection.lpop(COMPACT_QUEUE))
+            job_id = self.connection.lpop(COMPACT_QUEUE)
             if job_id is None:
                 break
-            if self.job_class.exists(job_id, self.connection):
+            if self.job_class.exists(as_text(job_id), self.connection):
                 self.connection.rpush(self.key, job_id)
 
     def push_job_id(self, job_id: str, pipeline: Optional['Pipeline'] = None, at_front: bool = False):
@@ -472,11 +470,13 @@ class Queue:
             at_front (bool, optional): Whether to push the job to front of the queue. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        if at_front:
-            result = connection.lpush(self.key, job_id)
+        push = connection.lpush if at_front else connection.rpush
+        result = push(self.key, job_id)
+        if pipeline is None:
+            self.log.debug('Pushed job %s into %s, %s job(s) are in queue.', blue(job_id), green(self.name), result)
         else:
-            result = connection.rpush(self.key, job_id)
-        self.log.debug('Pushed job %s into %s, %s job(s) are in queue.', blue(job_id), green(self.name), result)
+            # Pipelines do not return the number of jobs in the queue.
+            self.log.debug('Pushed job %s into %s', blue(job_id), green(self.name))
 
     def create_job(
         self,
