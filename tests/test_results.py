@@ -8,6 +8,7 @@ from redis import Redis
 
 from tests import RQTestCase
 
+from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.job import Job
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
@@ -248,7 +249,7 @@ class TestScheduledJobRegistry(RQTestCase):
 
         # tempfile.NamedTemporaryFile() is not picklable
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=tempfile.NamedTemporaryFile())
-        self.assertIsNone(job.return_value())
+        self.assertEqual(job.return_value(), UNSERIALIZABLE_RETURN_VALUE_PAYLOAD)
         self.assertEqual(Result.count(job), 1)
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
