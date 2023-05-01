@@ -1,4 +1,6 @@
 import json
+
+from rq.defaults import CALLBACK_TIMEOUT
 from rq.serializers import JSONSerializer
 import time
 import queue
@@ -9,11 +11,16 @@ from redis import WatchError
 
 from rq.utils import as_text
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job
+from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job, Callback
 from rq.queue import Queue
-from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
-                         FinishedJobRegistry, StartedJobRegistry,
-                         ScheduledJobRegistry)
+from rq.registry import (
+    CanceledJobRegistry,
+    DeferredJobRegistry,
+    FailedJobRegistry,
+    FinishedJobRegistry,
+    StartedJobRegistry,
+    ScheduledJobRegistry,
+)
 from rq.utils import utcformat, utcnow
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
@@ -162,10 +169,10 @@ class TestJob(RQTestCase):
     def test_fetch(self):
         """Fetching jobs."""
         # Prepare test
-        self.testconn.hset('rq:job:some_id', 'data',
-                           "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n.")
-        self.testconn.hset('rq:job:some_id', 'created_at',
-                           '2012-02-07T22:13:24.123456Z')
+        self.testconn.hset(
+            'rq:job:some_id', 'data', "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n."
+        )
+        self.testconn.hset('rq:job:some_id', 'created_at', '2012-02-07T22:13:24.123456Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id')
@@ -209,9 +216,18 @@ class TestJob(RQTestCase):
 
         # ... and no other keys are stored
         self.assertEqual(
+            {
+                b'created_at',
+                b'data',
+                b'description',
+                b'ended_at',
+                b'last_heartbeat',
+                b'started_at',
+                b'worker_name',
+                b'success_callback_name',
+                b'failure_callback_name',
+            },
             set(self.testconn.hkeys(job.key)),
-            {b'created_at', b'data', b'description', b'ended_at', b'last_heartbeat', b'started_at',
-             b'worker_name', b'success_callback_name', b'failure_callback_name'}
         )
 
         self.assertEqual(job.last_heartbeat, None)
@@ -241,10 +257,35 @@ class TestJob(RQTestCase):
         self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 
+    def test_persistence_of_callbacks(self):
+        """Storing jobs with success and/or failure callbacks."""
+        job = Job.create(
+            func=fixtures.some_calculation,
+            on_success=Callback(fixtures.say_hello, timeout=10),
+            on_failure=fixtures.say_pid,
+        )  # deprecated callable
+        job.save()
+        stored_job = Job.fetch(job.id)
+
+        self.assertEqual(fixtures.say_hello, stored_job.success_callback)
+        self.assertEqual(10, stored_job.success_callback_timeout)
+        self.assertEqual(fixtures.say_pid, stored_job.failure_callback)
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+
+        # None(s)
+        job = Job.create(func=fixtures.some_calculation, on_failure=None)
+        job.save()
+        stored_job = Job.fetch(job.id)
+        self.assertIsNone(stored_job.success_callback)
+        self.assertEqual(CALLBACK_TIMEOUT, job.success_callback_timeout)  # timeout should be never none
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.success_callback_timeout)
+        self.assertIsNone(stored_job.failure_callback)
+        self.assertEqual(CALLBACK_TIMEOUT, job.failure_callback_timeout)  # timeout should be never none
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+
     def test_store_then_fetch(self):
         """Store, then fetch."""
-        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4),
-                         kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, timeout='1h', args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         job2 = Job.fetch(job.id)
@@ -264,8 +305,7 @@ class TestJob(RQTestCase):
     def test_fetching_unreadable_data(self):
         """Fetching succeeds on unreadable data, but lazy props fail."""
         # Set up
-        job = Job.create(func=fixtures.some_calculation, args=(3, 4),
-                         kwargs=dict(z=2))
+        job = Job.create(func=fixtures.some_calculation, args=(3, 4), kwargs=dict(z=2))
         job.save()
 
         # Just replace the data hkey with some random noise
@@ -290,7 +330,7 @@ class TestJob(RQTestCase):
         self.testconn.hset(job.key, 'data', zlib.compress(unimportable_data))
 
         job.refresh()
-        with self.assertRaises(AttributeError):
+        with self.assertRaises(ValueError):
             job.func  # accessing the func property should fail
 
     def test_compressed_exc_info_handling(self):
@@ -303,10 +343,7 @@ class TestJob(RQTestCase):
 
         # exc_info is stored in compressed format
         exc_info = self.testconn.hget(job.key, 'exc_info')
-        self.assertEqual(
-            as_text(zlib.decompress(exc_info)),
-            exception_string
-        )
+        self.assertEqual(as_text(zlib.decompress(exc_info)), exception_string)
 
         job.refresh()
         self.assertEqual(job.exc_info, exception_string)
@@ -325,10 +362,7 @@ class TestJob(RQTestCase):
 
         # Job data is stored in compressed format
         job_data = job.data
-        self.assertEqual(
-            zlib.compress(job_data),
-            self.testconn.hget(job.key, 'data')
-        )
+        self.assertEqual(zlib.compress(job_data), self.testconn.hget(job.key, 'data'))
 
         self.testconn.hset(job.key, 'data', job_data)
         job.refresh()
@@ -388,10 +422,7 @@ class TestJob(RQTestCase):
         job._result = queue.Queue()
         job.save()
 
-        self.assertEqual(
-            self.testconn.hget(job.key, 'result').decode('utf-8'),
-            'Unserializable return value'
-        )
+        self.assertEqual(self.testconn.hget(job.key, 'result').decode('utf-8'), 'Unserializable return value')
 
         job = Job.fetch(job.id)
         self.assertEqual(job.result, 'Unserializable return value')
@@ -422,8 +453,7 @@ class TestJob(RQTestCase):
 
     def test_description_is_persisted(self):
         """Ensure that job's custom description is set properly"""
-        job = Job.create(func=fixtures.say_hello, args=('Lionel',),
-                         description='Say hello!')
+        job = Job.create(func=fixtures.say_hello, args=('Lionel',), description='Say hello!')
         job.save()
         Job.fetch(job.id, connection=self.testconn)
         self.assertEqual(job.description, 'Say hello!')
@@ -579,7 +609,6 @@ class TestJob(RQTestCase):
         self.assertRaises(NoSuchJobError, Job.fetch, job.id, self.testconn)
 
     def test_cleanup_expires_dependency_keys(self):
-
         dependency_job = Job.create(func=fixtures.say_hello)
         dependency_job.save()
 
@@ -626,8 +655,13 @@ class TestJob(RQTestCase):
 
     def test_job_delete_removes_itself_from_registries(self):
         """job.delete() should remove itself from job registries"""
-        job = Job.create(func=fixtures.say_hello, status=JobStatus.FAILED,
-                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job = Job.create(
+            func=fixtures.say_hello,
+            status=JobStatus.FAILED,
+            connection=self.testconn,
+            origin='default',
+            serializer=JSONSerializer,
+        )
         job.save()
         registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
@@ -635,8 +669,13 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
-        job = Job.create(func=fixtures.say_hello, status=JobStatus.STOPPED,
-                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job = Job.create(
+            func=fixtures.say_hello,
+            status=JobStatus.STOPPED,
+            connection=self.testconn,
+            origin='default',
+            serializer=JSONSerializer,
+        )
         job.save()
         registry = FailedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
         registry.add(job, 500)
@@ -644,8 +683,13 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
-        job = Job.create(func=fixtures.say_hello, status=JobStatus.FINISHED,
-                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job = Job.create(
+            func=fixtures.say_hello,
+            status=JobStatus.FINISHED,
+            connection=self.testconn,
+            origin='default',
+            serializer=JSONSerializer,
+        )
         job.save()
 
         registry = FinishedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
@@ -654,8 +698,13 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
-        job = Job.create(func=fixtures.say_hello, status=JobStatus.STARTED,
-                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job = Job.create(
+            func=fixtures.say_hello,
+            status=JobStatus.STARTED,
+            connection=self.testconn,
+            origin='default',
+            serializer=JSONSerializer,
+        )
         job.save()
 
         registry = StartedJobRegistry(connection=self.testconn, serializer=JSONSerializer)
@@ -664,8 +713,13 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
-        job = Job.create(func=fixtures.say_hello, status=JobStatus.DEFERRED,
-                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job = Job.create(
+            func=fixtures.say_hello,
+            status=JobStatus.DEFERRED,
+            connection=self.testconn,
+            origin='default',
+            serializer=JSONSerializer,
+        )
         job.save()
 
         registry = DeferredJobRegistry(connection=self.testconn, serializer=JSONSerializer)
@@ -674,8 +728,13 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
-        job = Job.create(func=fixtures.say_hello, status=JobStatus.SCHEDULED,
-                         connection=self.testconn, origin='default', serializer=JSONSerializer)
+        job = Job.create(
+            func=fixtures.say_hello,
+            status=JobStatus.SCHEDULED,
+            connection=self.testconn,
+            origin='default',
+            serializer=JSONSerializer,
+        )
         job.save()
 
         registry = ScheduledJobRegistry(connection=self.testconn, serializer=JSONSerializer)
@@ -737,7 +796,6 @@ class TestJob(RQTestCase):
         self.assertNotIn(job.id, queue.get_job_ids())
 
     def test_dependent_job_creates_dependencies_key(self):
-
         queue = Queue(connection=self.testconn)
         dependency_job = queue.enqueue(fixtures.say_hello)
         dependent_job = Job.create(func=fixtures.say_hello, depends_on=dependency_job)
@@ -791,8 +849,7 @@ class TestJob(RQTestCase):
         """test call string with unicode keyword arguments"""
         queue = Queue(connection=self.testconn)
 
-        job = queue.enqueue(fixtures.echo,
-                            arg_with_unicode=fixtures.UnicodeStringObject())
+        job = queue.enqueue(fixtures.echo, arg_with_unicode=fixtures.UnicodeStringObject())
         self.assertIsNotNone(job.get_call_string())
         job.perform()
 
@@ -848,10 +905,7 @@ class TestJob(RQTestCase):
 
         # Second cancel should fail
         self.assertRaisesRegex(
-            InvalidJobOperation,
-            r'Cannot cancel already canceled job: fake_job_id',
-            cancel_job,
-            job.id
+            InvalidJobOperation, r'Cannot cancel already canceled job: fake_job_id', cancel_job, job.id
         )
 
     def test_create_and_cancel_job_enqueue_dependents(self):
@@ -1003,12 +1057,7 @@ class TestJob(RQTestCase):
 
         dependency_job.delete()
 
-        self.assertNotIn(
-            dependent_job.id,
-            [job.id for job in dependent_job.fetch_dependencies(
-                pipeline=self.testconn
-            )]
-        )
+        self.assertNotIn(dependent_job.id, [job.id for job in dependent_job.fetch_dependencies(pipeline=self.testconn)])
 
     def test_fetch_dependencies_watches(self):
         queue = Queue(connection=self.testconn)
@@ -1019,10 +1068,7 @@ class TestJob(RQTestCase):
         dependent_job.save()
 
         with self.testconn.pipeline() as pipeline:
-            dependent_job.fetch_dependencies(
-                watch=True,
-                pipeline=pipeline
-            )
+            dependent_job.fetch_dependencies(watch=True, pipeline=pipeline)
 
             pipeline.multi()
 
@@ -1034,10 +1080,7 @@ class TestJob(RQTestCase):
     def test_dependencies_finished_returns_false_if_dependencies_queued(self):
         queue = Queue(connection=self.testconn)
 
-        dependency_job_ids = [
-            queue.enqueue(fixtures.say_hello).id
-            for _ in range(5)
-        ]
+        dependency_job_ids = [queue.enqueue(fixtures.say_hello).id for _ in range(5)]
 
         dependent_job = Job.create(func=fixtures.say_hello)
         dependent_job._dependency_ids = dependency_job_ids
@@ -1056,10 +1099,7 @@ class TestJob(RQTestCase):
         self.assertTrue(dependencies_finished)
 
     def test_dependencies_finished_returns_true_if_all_dependencies_finished(self):
-        dependency_jobs = [
-            Job.create(fixtures.say_hello)
-            for _ in range(5)
-        ]
+        dependency_jobs = [Job.create(fixtures.say_hello) for _ in range(5)]
 
         dependent_job = Job.create(func=fixtures.say_hello)
         dependent_job._dependency_ids = [job.id for job in dependency_jobs]

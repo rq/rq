@@ -95,8 +95,8 @@ from rq import Worker, Queue
 from redis import Redis
 
 redis = Redis()
-
 queue = Queue(connection=redis)
+
 worker = Worker(queues=[queue], connection=redis)
 worker.work(with_scheduler=True)
 ```
@@ -113,5 +113,26 @@ working. This way, if a worker with active scheduler dies, the scheduling work w
 up by other workers with the scheduling component enabled.
 
 
+## Safe importing of the worker module
 
+When running the worker programmatically with the scheduler, you must keep in mind that the
+import must be protected with `if __name__ == '__main__'`. The scheduler runs on it's own process
+(using `multiprocessing` from the stdlib), so the new spawned process must able to safely import the module without
+causing any side effects (starting a new process on top of the main ones).
+
+```python
+...
+
+# When running `with_scheduler=True` this is necessary
+if __name__ == '__main__':
+    worker = Worker(queues=[queue], connection=redis)
+    worker.work(with_scheduler=True)
+
+...
+# When running without the scheduler this is fine
+worker = Worker(queues=[queue], connection=redis)
+worker.work()
+```
+
+More information on the Python official docs [here](https://docs.python.org/3.7/library/multiprocessing.html#the-spawn-and-forkserver-start-methods).
 

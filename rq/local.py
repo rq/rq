@@ -15,7 +15,7 @@ try:
     from greenlet import getcurrent as get_ident
 except ImportError:  # noqa
     try:
-        from thread import get_ident  # noqa
+        from threading import get_ident  # noqa
     except ImportError:  # noqa
         try:
             from _thread import get_ident  # noqa
@@ -296,18 +296,6 @@ class LocalProxy:
             return '<%s unbound>' % self.__class__.__name__
         return repr(obj)
 
-    def __nonzero__(self):
-        try:
-            return bool(self._get_current_object())
-        except RuntimeError:
-            return False
-
-    def __unicode__(self):
-        try:
-            return unicode(self._get_current_object())
-        except RuntimeError:
-            return repr(self)
-
     def __dir__(self):
         try:
             return dir(self._get_current_object())
@@ -325,12 +313,6 @@ class LocalProxy:
     def __delitem__(self, key):
         del self._get_current_object()[key]
 
-    def __setslice__(self, i, j, seq):
-        self._get_current_object()[i:j] = seq
-
-    def __delslice__(self, i, j):
-        del self._get_current_object()[i:j]
-
     __setattr__ = lambda x, n, v: setattr(x._get_current_object(), n, v)
     __delattr__ = lambda x, n: delattr(x._get_current_object(), n)
     __str__ = lambda x: str(x._get_current_object())
@@ -340,14 +322,12 @@ class LocalProxy:
     __ne__ = lambda x, o: x._get_current_object() != o
     __gt__ = lambda x, o: x._get_current_object() > o
     __ge__ = lambda x, o: x._get_current_object() >= o
-    __cmp__ = lambda x, o: cmp(x._get_current_object(), o)
     __hash__ = lambda x: hash(x._get_current_object())
     __call__ = lambda x, *a, **kw: x._get_current_object()(*a, **kw)
     __len__ = lambda x: len(x._get_current_object())
     __getitem__ = lambda x, i: x._get_current_object()[i]
     __iter__ = lambda x: iter(x._get_current_object())
     __contains__ = lambda x, i: i in x._get_current_object()
-    __getslice__ = lambda x, i, j: x._get_current_object()[i:j]
     __add__ = lambda x, o: x._get_current_object() + o
     __sub__ = lambda x, o: x._get_current_object() - o
     __mul__ = lambda x, o: x._get_current_object() * o
@@ -373,6 +353,5 @@ class LocalProxy:
     __oct__ = lambda x: oct(x._get_current_object())
     __hex__ = lambda x: hex(x._get_current_object())
     __index__ = lambda x: x._get_current_object().__index__()
-    __coerce__ = lambda x, o: x._get_current_object().__coerce__(x, o)
     __enter__ = lambda x: x._get_current_object().__enter__()
     __exit__ = lambda x, *a, **kw: x._get_current_object().__exit__(*a, **kw)

@@ -2,7 +2,8 @@ import sys
 import importlib
 import time
 import os
-from functools import partial
+
+from functools import partial, update_wrapper
 from enum import Enum
 
 from datetime import datetime, timezone, timedelta
@@ -13,7 +14,15 @@ from shutil import get_terminal_size
 import click
 from redis import Redis
 from redis.sentinel import Sentinel
-from rq.defaults import DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS, DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS
+
+from rq.defaults import (
+    DEFAULT_CONNECTION_CLASS,
+    DEFAULT_DEATH_PENALTY_CLASS,
+    DEFAULT_JOB_CLASS,
+    DEFAULT_QUEUE_CLASS,
+    DEFAULT_WORKER_CLASS,
+    DEFAULT_SERIALIZER_CLASS,
+)
 from rq.logutils import setup_loghandlers
 from rq.utils import import_attribute, parse_timeout
 from rq.worker import WorkerStatus
@@ -33,22 +42,26 @@ def get_redis_from_config(settings, connection_class=Redis):
     """Returns a StrictRedis instance from a dictionary of settings.
     To use redis sentinel, you must specify a dictionary in the configuration file.
     Example of a dictionary with keys without values:
-    SENTINEL = {'INSTANCES':, 'SOCKET_TIMEOUT':, 'PASSWORD':,'DB':, 'MASTER_NAME':}
+    SENTINEL = {'INSTANCES':, 'SOCKET_TIMEOUT':, 'USERNAME':, 'PASSWORD':, 'DB':, 'MASTER_NAME':, 'SENTINEL_KWARGS':}
     """
     if settings.get('REDIS_URL') is not None:
         return connection_class.from_url(settings['REDIS_URL'])
 
     elif settings.get('SENTINEL') is not None:
         instances = settings['SENTINEL'].get('INSTANCES', [('localhost', 26379)])
-        socket_timeout = settings['SENTINEL'].get('SOCKET_TIMEOUT', None)
-        password = settings['SENTINEL'].get('PASSWORD', None)
-        db = settings['SENTINEL'].get('DB', 0)
         master_name = settings['SENTINEL'].get('MASTER_NAME', 'mymaster')
-        ssl = settings['SENTINEL'].get('SSL', False)
-        arguments = {'password': password, 'ssl': ssl}
-        sn = Sentinel(
-            instances, socket_timeout=socket_timeout, password=password, db=db, ssl=ssl, sentinel_kwargs=arguments
-        )
+
+        connection_kwargs = {
+            'db': settings['SENTINEL'].get('DB', 0),
+            'username': settings['SENTINEL'].get('USERNAME', None),
+            'password': settings['SENTINEL'].get('PASSWORD', None),
+            'socket_timeout': settings['SENTINEL'].get('SOCKET_TIMEOUT', None),
+            'ssl': settings['SENTINEL'].get('SSL', False),
+        }
+        connection_kwargs.update(settings['SENTINEL'].get('CONNECTION_KWARGS', {}))
+        sentinel_kwargs = settings['SENTINEL'].get('SENTINEL_KWARGS', {})
+
+        sn = Sentinel(instances, sentinel_kwargs=sentinel_kwargs, **connection_kwargs)
         return sn.master_for(master_name)
 
     ssl = settings.get('REDIS_SSL', False)
@@ -100,7 +113,6 @@ def state_symbol(state):
 
 
 def show_queues(queues, raw, by_queue, queue_class, worker_class):
-
     num_jobs = 0
     termwidth = get_terminal_size().columns
     chartwidth = min(20, termwidth - 20)
@@ -118,9 +130,22 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
         count = counts[q]
         if not raw:
             chart = green('|' + '█' * int(ratio * count))
-            line = '%-12s %s %d' % (q.name, chart, count)
+            line = '%-12s %s %d, %d executing, %d finished, %d failed' % (
+                q.name,
+                chart,
+                count,
+                q.started_job_registry.count,
+                q.finished_job_registry.count,
+                q.failed_job_registry.count,
+            )
         else:
-            line = 'queue %s %d' % (q.name, count)
+            line = 'queue %s %d, %d executing, %d finished, %d failed' % (
+                q.name,
+                count,
+                q.started_job_registry.count,
+                q.finished_job_registry.count,
+                q.failed_job_registry.count,
+            )
         click.echo(line)
 
         num_jobs += count
@@ -141,14 +166,27 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
             workers.add(worker)
 
     if not by_queue:
-
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
             name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
             if not raw:
-                click.echo('%s: %s %s' % (name, state_symbol(worker.get_state()), queue_names))
+                line = '%s: %s %s. jobs: %d finished, %d failed' % (
+                    name,
+                    state_symbol(worker.get_state()),
+                    queue_names,
+                    worker.successful_job_count,
+                    worker.failed_job_count,
+                )
+                click.echo(line)
             else:
-                click.echo('worker %s %s %s' % (name, worker.get_state(), queue_names))
+                line = 'worker %s %s %s. jobs: %d finished, %d failed' % (
+                    name,
+                    worker.get_state(),
+                    queue_names,
+                    worker.successful_job_count,
+                    worker.failed_job_count,
+                )
+                click.echo(line)
 
     else:
         # Display workers by queue
@@ -298,11 +336,12 @@ class CliConfig:
         config=None,
         worker_class=DEFAULT_WORKER_CLASS,
         job_class=DEFAULT_JOB_CLASS,
+        death_penalty_class=DEFAULT_DEATH_PENALTY_CLASS,
         queue_class=DEFAULT_QUEUE_CLASS,
         connection_class=DEFAULT_CONNECTION_CLASS,
         path=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         self._connection = None
         self.url = url
@@ -320,6 +359,11 @@ class CliConfig:
             self.job_class = import_attribute(job_class)
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--job-class')
+
+        try:
+            self.death_penalty_class = import_attribute(death_penalty_class)
+        except (ImportError, AttributeError) as exc:
+            raise click.BadParameter(str(exc), param_hint='--death-penalty-class')
 
         try:
             self.queue_class = import_attribute(queue_class)
@@ -342,3 +386,41 @@ class CliConfig:
             else:
                 self._connection = get_redis_from_config(os.environ, self.connection_class)
         return self._connection
+
+
+shared_options = [
+    click.option('--url', '-u', envvar='RQ_REDIS_URL', help='URL describing Redis connection details.'),
+    click.option('--config', '-c', envvar='RQ_CONFIG', help='Module containing RQ settings.'),
+    click.option(
+        '--worker-class', '-w', envvar='RQ_WORKER_CLASS', default=DEFAULT_WORKER_CLASS, help='RQ Worker class to use'
+    ),
+    click.option('--job-class', '-j', envvar='RQ_JOB_CLASS', default=DEFAULT_JOB_CLASS, help='RQ Job class to use'),
+    click.option('--queue-class', envvar='RQ_QUEUE_CLASS', default=DEFAULT_QUEUE_CLASS, help='RQ Queue class to use'),
+    click.option(
+        '--connection-class',
+        envvar='RQ_CONNECTION_CLASS',
+        default=DEFAULT_CONNECTION_CLASS,
+        help='Redis client class to use',
+    ),
+    click.option('--path', '-P', default=['.'], help='Specify the import path.', multiple=True),
+    click.option(
+        '--serializer',
+        '-S',
+        default=DEFAULT_SERIALIZER_CLASS,
+        help='Path to serializer, defaults to rq.serializers.DefaultSerializer',
+    ),
+]
+
+
+def pass_cli_config(func):
+    # add all the shared options to the command
+    for option in shared_options:
+        func = option(func)
+
+    # pass the cli config object into the command
+    def wrapper(*args, **kwargs):
+        ctx = click.get_current_context()
+        cli_config = CliConfig(**kwargs)
+        return ctx.invoke(func, cli_config, *args[1:], **kwargs)
+
+    return update_wrapper(wrapper, func)

@@ -1,9 +1,10 @@
-from contextlib import contextmanager
-from typing import Optional
 import warnings
-from redis import Redis
+from contextlib import contextmanager
+from typing import Any, Optional, Tuple, Type
 
-from .local import LocalStack, release_local
+from redis import Connection as RedisConnection, Redis, SSLConnection, UnixDomainSocketConnection
+
+from .local import LocalStack
 
 
 class NoRedisConnectionException(Exception):
@@ -31,7 +32,8 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
         connection (Optional[Redis], optional): A Redis Connection instance. Defaults to None.
     """
     warnings.warn(
-        "The Conneciton context manager is deprecated. Use the `connection` parameter instead.", DeprecationWarning
+        "The Connection context manager is deprecated. Use the `connection` parameter instead.",
+        DeprecationWarning,
     )
     if connection is None:
         connection = Redis()
@@ -40,9 +42,9 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
         yield
     finally:
         popped = pop_connection()
-        assert popped == connection, (
-            'Unexpected Redis connection was popped off the stack. ' 'Check your Redis connection setup.'
-        )
+        assert (
+            popped == connection
+        ), 'Unexpected Redis connection was popped off the stack. Check your Redis connection setup.'
 
 
 def push_connection(redis: 'Redis'):
@@ -52,6 +54,10 @@ def push_connection(redis: 'Redis'):
     Args:
         redis (Redis): A Redis connection
     """
+    warnings.warn(
+        "The `push_connection` function is deprecated. Pass the `connection` explicitly instead.",
+        DeprecationWarning,
+    )
     _connection_stack.push(redis)
 
 
@@ -62,23 +68,11 @@ def pop_connection() -> 'Redis':
     Returns:
         redis (Redis): A Redis connection
     """
+    warnings.warn(
+        "The `pop_connection` function is deprecated. Pass the `connection` explicitly instead.",
+        DeprecationWarning,
+    )
     return _connection_stack.pop()
-
-
-def use_connection(redis: Optional['Redis'] = None):
-    """
-    Clears the stack and uses the given connection.  Protects against mixed
-    use of use_connection() and stacked connection contexts.
-
-    Args:
-        redis (Optional[Redis], optional): A Redis Connection. Defaults to None.
-    """
-    assert len(_connection_stack) <= 1, 'You should not mix Connection contexts with use_connection()'
-    release_local(_connection_stack)
-
-    if redis is None:
-        redis = Redis()
-    push_connection(redis)
 
 
 def get_current_connection() -> 'Redis':
@@ -89,6 +83,10 @@ def get_current_connection() -> 'Redis':
     Returns:
         Redis: A Redis Connection
     """
+    warnings.warn(
+        "The `get_current_connection` function is deprecated. Pass the `connection` explicitly instead.",
+        DeprecationWarning,
+    )
     return _connection_stack.top
 
 
@@ -106,7 +104,10 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
     Returns:
         Redis: A Redis Connection
     """
-
+    warnings.warn(
+        "The `resolve_connection` function is deprecated. Pass the `connection` explicitly instead.",
+        DeprecationWarning,
+    )
     if connection is not None:
         return connection
 
@@ -116,6 +117,27 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
     return connection
 
 
+def parse_connection(connection: Redis) -> Tuple[Type[Redis], Type[RedisConnection], dict]:
+    connection_kwargs = connection.connection_pool.connection_kwargs.copy()
+    # Redis does not accept parser_class argument which is sometimes present
+    # on connection_pool kwargs, for example when hiredis is used
+    connection_kwargs.pop('parser_class', None)
+    connection_pool_class = connection.connection_pool.connection_class
+    if issubclass(connection_pool_class, SSLConnection):
+        connection_kwargs['ssl'] = True
+    if issubclass(connection_pool_class, UnixDomainSocketConnection):
+        # The connection keyword arguments are obtained from
+        # `UnixDomainSocketConnection`, which expects `path`, but passed to
+        # `redis.client.Redis`, which expects `unix_socket_path`, renaming
+        # the key is necessary.
+        # `path` is not left in the dictionary as that keyword argument is
+        # not expected by `redis.client.Redis` and would raise an exception.
+        connection_kwargs['unix_socket_path'] = connection_kwargs.pop('path')
+
+    return connection.__class__, connection_pool_class, connection_kwargs
+
+
 _connection_stack = LocalStack()
 
-__all__ = ['Connection', 'get_current_connection', 'push_connection', 'pop_connection', 'use_connection']
+
+__all__ = ['Connection', 'get_current_connection', 'push_connection', 'pop_connection']

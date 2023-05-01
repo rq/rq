@@ -1,4 +1,6 @@
 import os
+import redis
+
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from unittest import mock
@@ -16,8 +18,18 @@ from tests import RQTestCase, find_empty_redis_database, ssl_test
 from .fixtures import kill_worker, say_hello
 
 
-class TestScheduledJobRegistry(RQTestCase):
+class CustomRedisConnection(redis.Connection):
+    """Custom redis connection with a custom arg, used in test_custom_connection_pool"""
 
+    def __init__(self, *args, custom_arg=None, **kwargs):
+        self.custom_arg = custom_arg
+        super().__init__(*args, **kwargs)
+
+    def get_custom_arg(self):
+        return self.custom_arg
+
+
+class TestScheduledJobRegistry(RQTestCase):
     def test_get_jobs_to_enqueue(self):
         """Getting job ids to enqueue from ScheduledJobRegistry."""
         queue = Queue(connection=self.testconn)
@@ -29,8 +41,7 @@ class TestScheduledJobRegistry(RQTestCase):
         self.testconn.zadd(registry.key, {'baz': timestamp + 30})
 
         self.assertEqual(registry.get_jobs_to_enqueue(), ['foo'])
-        self.assertEqual(registry.get_jobs_to_enqueue(timestamp + 20),
-                         ['foo', 'bar'])
+        self.assertEqual(registry.get_jobs_to_enqueue(timestamp + 20), ['foo', 'bar'])
 
     def test_get_jobs_to_schedule_with_chunk_size(self):
         """Max amount of jobs returns by get_jobs_to_schedule() equal to chunk_size"""
@@ -42,10 +53,8 @@ class TestScheduledJobRegistry(RQTestCase):
         for index in range(0, chunk_size * 2):
             self.testconn.zadd(registry.key, {'foo_{}'.format(index): 1})
 
-        self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size)),
-                         chunk_size)
-        self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size * 2)),
-                         chunk_size * 2)
+        self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size)), chunk_size)
+        self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size * 2)), chunk_size * 2)
 
     def test_get_scheduled_time(self):
         """get_scheduled_time() returns job's scheduled datetime"""
@@ -93,8 +102,9 @@ class TestScheduledJobRegistry(RQTestCase):
         mock_atz = mock.patch('time.altzone', 14400)
         with mock_tz, mock_day, mock_atz:
             registry.schedule(job, datetime(2019, 1, 1))
-            self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                             1546300800 + 18000)  # 2019-01-01 UTC in Unix timestamp
+            self.assertEqual(
+                self.testconn.zscore(registry.key, job.id), 1546300800 + 18000
+            )  # 2019-01-01 UTC in Unix timestamp
 
             # second, time.daylight != 0 (in DST)
             # mock the sitatuoin for American/New_York not in DST (UTC - 4)
@@ -106,20 +116,19 @@ class TestScheduledJobRegistry(RQTestCase):
             mock_atz = mock.patch('time.altzone', 14400)
             with mock_tz, mock_day, mock_atz:
                 registry.schedule(job, datetime(2019, 1, 1))
-                self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                                 1546300800 + 14400)  # 2019-01-01 UTC in Unix timestamp
+                self.assertEqual(
+                    self.testconn.zscore(registry.key, job.id), 1546300800 + 14400
+                )  # 2019-01-01 UTC in Unix timestamp
 
             # Score is always stored in UTC even if datetime is in a different tz
             tz = timezone(timedelta(hours=7))
             job = Job.create('myfunc', connection=self.testconn)
             job.save()
             registry.schedule(job, datetime(2019, 1, 1, 7, tzinfo=tz))
-            self.assertEqual(self.testconn.zscore(registry.key, job.id),
-                             1546300800)  # 2019-01-01 UTC in Unix timestamp
+            self.assertEqual(self.testconn.zscore(registry.key, job.id), 1546300800)  # 2019-01-01 UTC in Unix timestamp
 
 
 class TestScheduler(RQTestCase):
-
     def test_init(self):
         """Scheduler can be instantiated with queues or queue names"""
         foo_queue = Queue('foo', connection=self.testconn)
@@ -196,7 +205,12 @@ class TestScheduler(RQTestCase):
 
     def test_queue_scheduler_pid(self):
         queue = Queue(connection=self.testconn)
-        scheduler = RQScheduler([queue, ], connection=self.testconn)
+        scheduler = RQScheduler(
+            [
+                queue,
+            ],
+            connection=self.testconn,
+        )
         scheduler.acquire_locks()
         assert queue.scheduler_pid == os.getpid()
 
@@ -263,12 +277,11 @@ class TestScheduler(RQTestCase):
         scheduler.prepare_registries([foo_queue.name, bar_queue.name])
         self.assertEqual(
             scheduler._scheduled_job_registries,
-            [ScheduledJobRegistry(queue=foo_queue), ScheduledJobRegistry(queue=bar_queue)]
+            [ScheduledJobRegistry(queue=foo_queue), ScheduledJobRegistry(queue=bar_queue)],
         )
 
 
 class TestWorker(RQTestCase):
-
     def test_work_burst(self):
         """worker.work() with scheduler enabled works properly"""
         queue = Queue(connection=self.testconn)
@@ -350,10 +363,7 @@ class TestWorker(RQTestCase):
         p = Process(target=kill_worker, args=(os.getpid(), False, 5))
 
         p.start()
-        queue.enqueue_at(
-            datetime(2019, 1, 1, tzinfo=timezone.utc),
-            say_hello, meta={'foo': 'bar'}
-        )
+        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello, meta={'foo': 'bar'})
         worker.work(burst=False, with_scheduler=True)
         p.join(1)
         self.assertIsNotNone(worker.scheduler)
@@ -362,7 +372,6 @@ class TestWorker(RQTestCase):
 
 
 class TestQueue(RQTestCase):
-
     def test_enqueue_at(self):
         """queue.enqueue_at() puts job in the scheduled"""
         queue = Queue(connection=self.testconn)
@@ -385,7 +394,7 @@ class TestQueue(RQTestCase):
 
     def test_enqueue_at_at_front(self):
         """queue.enqueue_at() accepts at_front argument. When true, job will be put at position 0
-            of the queue when the time comes for the job to be scheduled"""
+        of the queue when the time comes for the job to be scheduled"""
         queue = Queue(connection=self.testconn)
         registry = ScheduledJobRegistry(queue=queue)
         scheduler = RQScheduler([queue], connection=self.testconn)
@@ -419,15 +428,44 @@ class TestQueue(RQTestCase):
         now = datetime.now(timezone.utc)
         scheduled_time = registry.get_scheduled_time(job)
         # Ensure that job is scheduled roughly 30 seconds from now
-        self.assertTrue(
-            now + timedelta(seconds=28) < scheduled_time < now + timedelta(seconds=32)
-        )
+        self.assertTrue(now + timedelta(seconds=28) < scheduled_time < now + timedelta(seconds=32))
 
     def test_enqueue_in_with_retry(self):
-        """ Ensure that the retry parameter is passed
+        """Ensure that the retry parameter is passed
         to the enqueue_at function from enqueue_in.
         """
         queue = Queue(connection=self.testconn)
         job = queue.enqueue_in(timedelta(seconds=30), say_hello, retry=Retry(3, [2]))
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [2])
+
+    def test_custom_connection_pool(self):
+        """Connection pool customizing. Ensure that we can properly set a
+        custom connection pool class and pass extra arguments"""
+        custom_conn = redis.Redis(
+            connection_pool=redis.ConnectionPool(
+                connection_class=CustomRedisConnection,
+                db=4,
+                custom_arg="foo",
+            )
+        )
+
+        queue = Queue(connection=custom_conn)
+        scheduler = RQScheduler([queue], connection=custom_conn)
+
+        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+
+        self.assertEqual(scheduler_connection.__class__, CustomRedisConnection)
+        self.assertEqual(scheduler_connection.get_custom_arg(), "foo")
+
+    def test_no_custom_connection_pool(self):
+        """Connection pool customizing must not interfere if we're using a standard
+        connection (non-pooled)"""
+        standard_conn = redis.Redis(db=5)
+
+        queue = Queue(connection=standard_conn)
+        scheduler = RQScheduler([queue], connection=standard_conn)
+
+        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+
+        self.assertEqual(scheduler_connection.__class__, redis.Connection)

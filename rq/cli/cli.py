@@ -2,9 +2,11 @@
 RQ command line tool
 """
 
-from functools import update_wrapper
 import os
 import sys
+import warnings
+
+from typing import List, Type
 
 import click
 from redis.exceptions import ConnectionError
@@ -17,75 +19,31 @@ from rq.cli.helpers import (
     show_both,
     show_queues,
     show_workers,
-    CliConfig,
     parse_function_args,
     parse_schedule,
+    pass_cli_config,
 )
+
+# from rq.cli.pool import pool
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (
-    DEFAULT_CONNECTION_CLASS,
-    DEFAULT_JOB_CLASS,
-    DEFAULT_QUEUE_CLASS,
-    DEFAULT_WORKER_CLASS,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_FORMAT,
     DEFAULT_LOGGING_DATE_FORMAT,
-    DEFAULT_SERIALIZER_CLASS, DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    DEFAULT_MAINTENANCE_TASK_INTERVAL,
 )
 from rq.exceptions import InvalidJobOperationError
+from rq.job import Job, JobStatus
+from rq.logutils import blue
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute, get_call_string, make_colorizer
+from rq.serializers import DefaultSerializer
 from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
+from rq.worker import Worker
+from rq.worker_pool import WorkerPool
 from rq.worker_registration import clean_worker_registry
-from rq.job import JobStatus
-
-blue = make_colorizer('darkblue')
-
-
-# Disable the warning that Click displays (as of Click version 5.0) when users
-# use unicode_literals in Python 2.
-# See http://click.pocoo.org/dev/python3/#unicode-literals for more details.
-click.disable_unicode_literals_warning = True
-
-
-shared_options = [
-    click.option('--url', '-u', envvar='RQ_REDIS_URL', help='URL describing Redis connection details.'),
-    click.option('--config', '-c', envvar='RQ_CONFIG', help='Module containing RQ settings.'),
-    click.option(
-        '--worker-class', '-w', envvar='RQ_WORKER_CLASS', default=DEFAULT_WORKER_CLASS, help='RQ Worker class to use'
-    ),
-    click.option('--job-class', '-j', envvar='RQ_JOB_CLASS', default=DEFAULT_JOB_CLASS, help='RQ Job class to use'),
-    click.option('--queue-class', envvar='RQ_QUEUE_CLASS', default=DEFAULT_QUEUE_CLASS, help='RQ Queue class to use'),
-    click.option(
-        '--connection-class',
-        envvar='RQ_CONNECTION_CLASS',
-        default=DEFAULT_CONNECTION_CLASS,
-        help='Redis client class to use',
-    ),
-    click.option('--path', '-P', default=['.'], help='Specify the import path.', multiple=True),
-    click.option(
-        '--serializer',
-        '-S',
-        default=DEFAULT_SERIALIZER_CLASS,
-        help='Path to serializer, defaults to rq.serializers.DefaultSerializer',
-    ),
-]
-
-
-def pass_cli_config(func):
-    # add all the shared options to the command
-    for option in shared_options:
-        func = option(func)
-
-    # pass the cli config object into the command
-    def wrapper(*args, **kwargs):
-        ctx = click.get_current_context()
-        cli_config = CliConfig(**kwargs)
-        return ctx.invoke(func, cli_config, *args[1:], **kwargs)
-
-    return update_wrapper(wrapper, func)
+from rq.utils import import_attribute, get_call_string
 
 
 @click.group()
@@ -104,7 +62,10 @@ def empty(cli_config, all, queues, serializer, **options):
 
     if all:
         queues = cli_config.queue_class.all(
-            connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
+            connection=cli_config.connection,
+            job_class=cli_config.job_class,
+            death_penalty_class=cli_config.death_penalty_class,
+            serializer=serializer,
         )
     else:
         queues = [
@@ -174,7 +135,6 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
     try:
         with Connection(cli_config.connection):
-
             if queues:
                 qs = list(map(cli_config.queue_class, queues))
             else:
@@ -205,7 +165,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
     '--maintenance-interval',
     type=int,
     default=DEFAULT_MAINTENANCE_TASK_INTERVAL,
-    help='Maintenance task interval (in seconds) to be used'
+    help='Maintenance task interval (in seconds) to be used',
 )
 @click.option(
     '--job-monitoring-interval',
@@ -226,6 +186,9 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
+@click.option(
+    '--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues'
+)
 @click.argument('queues', nargs=-1)
 @pass_cli_config
 def worker(
@@ -253,7 +216,8 @@ def worker(
     log_format,
     date_format,
     serializer,
-    **options
+    dequeue_strategy,
+    **options,
 ):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
@@ -267,6 +231,19 @@ def worker(
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
+
+    worker_name = cli_config.worker_class.__qualname__
+    if worker_name in ["RoundRobinWorker", "RandomWorker"]:
+        strategy_alternative = "random" if worker_name == "RandomWorker" else "round_robin"
+        msg = f"WARNING: {worker_name} is deprecated. Use `--dequeue-strategy {strategy_alternative}` instead."
+        warnings.warn(msg, DeprecationWarning)
+        click.secho(msg, fg='yellow')
+
+    if dequeue_strategy not in ("default", "random", "round_robin"):
+        click.secho(
+            "ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red'
+        )
+        sys.exit(1)
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
@@ -321,6 +298,7 @@ def worker(
             max_jobs=max_jobs,
             max_idle_time=max_idle_time,
             with_scheduler=with_scheduler,
+            dequeue_strategy=dequeue_strategy,
         )
     except ConnectionError as e:
         print(e)
@@ -402,7 +380,7 @@ def enqueue(
     serializer,
     function,
     arguments,
-    **options
+    **options,
 ):
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
@@ -454,3 +432,82 @@ def enqueue(
 
     if not quiet:
         click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))
+
+
+@main.command()
+@click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
+@click.option('--logging-level', '-l', type=str, default="INFO", help='Set logging level')
+@click.option('--sentry-ca-certs', envvar='RQ_SENTRY_CA_CERTS', help='Path to CRT file for Sentry DSN')
+@click.option('--sentry-debug', envvar='RQ_SENTRY_DEBUG', help='Enable debug')
+@click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
+@click.option('--verbose', '-v', is_flag=True, help='Show more output')
+@click.option('--quiet', '-q', is_flag=True, help='Show less output')
+@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
+@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
+@click.option('--job-class', type=str, default=None, help='Dotted path to a Job class')
+@click.argument('queues', nargs=-1)
+@click.option('--num-workers', '-n', type=int, default=1, help='Number of workers to start')
+@pass_cli_config
+def worker_pool(
+    cli_config,
+    burst: bool,
+    logging_level,
+    queues,
+    serializer,
+    sentry_ca_certs,
+    sentry_debug,
+    sentry_dsn,
+    verbose,
+    quiet,
+    log_format,
+    date_format,
+    worker_class,
+    job_class,
+    num_workers,
+    **options,
+):
+    """Starts a RQ worker pool"""
+    settings = read_config_file(cli_config.config) if cli_config.config else {}
+    # Worker specific default arguments
+    queue_names: List[str] = queues or settings.get('QUEUES', ['default'])
+    sentry_ca_certs = sentry_ca_certs or settings.get('SENTRY_CA_CERTS')
+    sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
+    sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
+
+    setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
+
+    if serializer:
+        serializer_class: Type[DefaultSerializer] = import_attribute(serializer)
+    else:
+        serializer_class = DefaultSerializer
+
+    if worker_class:
+        worker_class = import_attribute(worker_class)
+    else:
+        worker_class = Worker
+
+    if job_class:
+        job_class = import_attribute(job_class)
+    else:
+        job_class = Job
+
+    pool = WorkerPool(
+        queue_names,
+        connection=cli_config.connection,
+        num_workers=num_workers,
+        serializer=serializer_class,
+        worker_class=worker_class,
+        job_class=job_class,
+    )
+    pool.start(burst=burst, logging_level=logging_level)
+
+    # Should we configure Sentry?
+    if sentry_dsn:
+        sentry_opts = {"ca_certs": sentry_ca_certs, "debug": sentry_debug}
+        from rq.contrib.sentry import register_sentry
+
+        register_sentry(sentry_dsn, **sentry_opts)
+
+
+if __name__ == '__main__':
+    main()

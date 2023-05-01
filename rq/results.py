@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from redis import Redis
 
+from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .utils import decode_redis_hash
 from .job import Job
 from .serializers import resolve_serializer
@@ -16,7 +17,7 @@ def get_key(job_id):
     return 'rq:results:%s' % job_id
 
 
-class Result(object):
+class Result:
     class Type(Enum):
         SUCCESSFUL = 1
         FAILED = 2
@@ -85,7 +86,7 @@ class Result(object):
         # response = job.connection.zrange(cls.get_key(job.id), 0, 10, desc=True, withscores=True)
         response = job.connection.xrevrange(cls.get_key(job.id), '+', '-')
         results = []
-        for (result_id, payload) in response:
+        for result_id, payload in response:
             results.append(
                 cls.restore(job.id, result_id.decode(), payload, connection=job.connection, serializer=serializer)
             )
@@ -181,7 +182,11 @@ class Result(object):
         if self.exc_string is not None:
             data['exc_string'] = b64encode(zlib.compress(self.exc_string.encode())).decode()
 
-        serialized = self.serializer.dumps(self.return_value)
+        try:
+            serialized = self.serializer.dumps(self.return_value)
+        except:  # noqa
+            serialized = self.serializer.dumps(UNSERIALIZABLE_RETURN_VALUE_PAYLOAD)
+
         if self.return_value is not None:
             data['return_value'] = b64encode(serialized).decode()
 

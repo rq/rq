@@ -5,3 +5,12 @@ omit =
     rq/contrib/legacy.py
     rq/dummy.py
     rq/local.py
+    rq/tests/*
+    tests/*
+
+[report]
+exclude_lines =
+    if TYPE_CHECKING:
+    pragma: no cover
+    if __name__ == .__main__.:
+        

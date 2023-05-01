@@ -12,24 +12,24 @@ To setup RQ on [Heroku][1], first add it to your
     rq>=0.13
 
 Create a file called `run-worker.py` with the following content (assuming you
-are using [Redis To Go][2] with Heroku):
+are using [Heroku Data For Redis][2] with Heroku):
 
 ```python
 import os
-import urlparse
+import redis
 from redis import Redis
 from rq import Queue, Connection
 from rq.worker import HerokuWorker as Worker
 
+
 listen = ['high', 'default', 'low']
 
-redis_url = os.getenv('REDISTOGO_URL')
+redis_url = os.getenv('REDIS_URL')
 if not redis_url:
-    raise RuntimeError('Set up Redis To Go first.')
-
-urlparse.uses_netloc.append('redis')
-url = urlparse.urlparse(redis_url)
-conn = Redis(host=url.hostname, port=url.port, db=0, password=url.password)
+    raise RuntimeError("Set up Heroku Data For Redis first, \
+    make sure its config var is named 'REDIS_URL'.")
+    
+conn = redis.from_url(redis_url)
 
 if __name__ == '__main__':
     with Connection(conn):
@@ -47,7 +47,7 @@ Now, all you have to do is spin up a worker:
 $ heroku scale worker=1
 ```
 
-If you are using [Heroku Redis][5]) you might need to change the Redis connection as follows:
+If the from_url function fails to parse your credentials, you might need to do so manually:
 
 ```console
 conn = redis.Redis(
@@ -58,6 +58,7 @@ conn = redis.Redis(
     ssl_cert_reqs=None
 )
 ```
+The details are from the 'settings' page of your Redis add-on on the Heroku dashboard.
 
 and for using the cli:
 
@@ -90,7 +91,7 @@ force stdin, stdout and stderr to be totally unbuffered):
     worker: python -u run-worker.py
 
 [1]: https://heroku.com
-[2]: https://devcenter.heroku.com/articles/redistogo
+[2]: https://devcenter.heroku.com/articles/heroku-redis
 [3]: https://github.com/ddollar/foreman
 [4]: https://github.com/ddollar/foreman/wiki/Missing-Output
 [5]: https://elements.heroku.com/addons/heroku-redis

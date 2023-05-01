@@ -1,8 +1,13 @@
 import calendar
+import logging
+import traceback
+
 from rq.serializers import resolve_serializer
 import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
+
+from .timeouts import JobTimeoutException, UnixSignalDeathPenalty, BaseDeathPenalty
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -10,11 +15,14 @@ if TYPE_CHECKING:
 
 from .utils import as_text
 from .connections import resolve_connection
-from .defaults import DEFAULT_FAILURE_TTL
-from .exceptions import InvalidJobOperation, NoSuchJobError
+from .defaults import DEFAULT_FAILURE_TTL, CALLBACK_TIMEOUT
+from .exceptions import InvalidJobOperation, NoSuchJobError, AbandonedJobError
 from .job import Job, JobStatus
 from .queue import Queue
 from .utils import backend_class, current_timestamp
+
+
+logger = logging.getLogger("rq.registry")
 
 
 class BaseRegistry:
@@ -25,6 +33,7 @@ class BaseRegistry:
     """
 
     job_class = Job
+    death_penalty_class = UnixSignalDeathPenalty
     key_template = 'rq:registry:{0}'
 
     def __init__(
@@ -34,6 +43,7 @@ class BaseRegistry:
         job_class: Optional[Type['Job']] = None,
         queue: Optional['Queue'] = None,
         serializer: Any = None,
+        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
     ):
         if queue:
             self.name = queue.name
@@ -46,6 +56,7 @@ class BaseRegistry:
 
         self.key = self.key_template.format(self.name)
         self.job_class = backend_class(self, 'job_class', override=job_class)
+        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -186,7 +197,7 @@ class BaseRegistry:
             job.ended_at = None
             job._exc_info = ''
             job.save()
-            job = queue.enqueue_job(job, pipeline=pipeline, at_front=at_front)
+            job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
         return job
 
@@ -204,7 +215,7 @@ class StartedJobRegistry(BaseRegistry):
     key_template = 'rq:wip:{0}'
 
     def cleanup(self, timestamp: Optional[float] = None):
-        """Remove expired jobs from registry and add them to FailedJobRegistry.
+        """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
@@ -226,6 +237,9 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
+                    job.execute_failure_callback(self.death_penalty_class, AbandonedJobError, AbandonedJobError(),
+                                                 traceback.extract_stack())
+
                     retry = job.retries_left and job.retries_left > 0
 
                     if retry:
@@ -233,8 +247,11 @@ class StartedJobRegistry(BaseRegistry):
                         job.retry(queue, pipeline)
 
                     else:
+                        exc_string = f"due to {AbandonedJobError.__name__}"
+                        logger.warning(f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
+                                       f'({exc_string})')
                         job.set_status(JobStatus.FAILED)
-                        job._exc_info = "Moved to FailedJobRegistry at %s" % datetime.now()
+                        job._exc_info = f"Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}"
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)

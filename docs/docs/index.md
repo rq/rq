@@ -111,8 +111,8 @@ You can also enqueue multiple jobs in bulk with `queue.enqueue_many()` and `Queu
 ```python
 jobs = q.enqueue_many(
   [
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
   ]
 )
 ```
@@ -123,8 +123,8 @@ which will enqueue all the jobs in a single redis `pipeline` which you can optio
 with q.connection.pipeline() as pipe:
   jobs = q.enqueue_many(
     [
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+      Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+      Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
     ],
     pipeline=pipe
   )
@@ -200,6 +200,21 @@ If you want to execute a function whenever a job completes or fails, RQ provides
 
 ```python
 queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure)
+```
+
+### Callback Class and Callback Timeouts
+
+_New in version 1.14.0_
+
+RQ lets you configure the method and timeout for each callback - success and failure.   
+To configure callback timeouts, use RQ's
+`Callback` object that accepts `func` and `timeout` arguments. For example:
+
+```python
+from rq import Callback
+queue.enqueue(say_hello, 
+              on_success=Callback(report_success),  # default callback timeout (60 seconds) 
+              on_failure=Callback(report_failure, timeout=10))  # 10 seconds timeout
 ```
 
 ### Success Callback
