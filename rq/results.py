@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from redis import Redis
 
+from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .utils import decode_redis_hash
 from .job import Job
 from .serializers import resolve_serializer
@@ -181,7 +182,11 @@ class Result:
         if self.exc_string is not None:
             data['exc_string'] = b64encode(zlib.compress(self.exc_string.encode())).decode()
 
-        serialized = self.serializer.dumps(self.return_value)
+        try:
+            serialized = self.serializer.dumps(self.return_value)
+        except:  # noqa
+            serialized = self.serializer.dumps(UNSERIALIZABLE_RETURN_VALUE_PAYLOAD)
+
         if self.return_value is not None:
             data['return_value'] = b64encode(serialized).decode()
 
