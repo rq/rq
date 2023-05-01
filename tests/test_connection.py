@@ -29,7 +29,7 @@ class TestConnectionInheritance(RQTestCase):
 
     def test_connection_pass_thru(self):
         """Connection passed through from queues to jobs."""
-        q1 = Queue()
+        q1 = Queue(connection=self.testconn)
         with Connection(new_connection()):
             q2 = Queue()
         job1 = q1.enqueue(do_nothing)
