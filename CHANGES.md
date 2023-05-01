@@ -1,4 +1,5 @@
 ### RQ 1.14.0 (2023-05-01)
+* Added `WorkerPool` (beta) that manages multiple workers in a single CLI. Thanks @selwin!
 * Added a new `Callback` class that allows more flexibility in declaring job callbacks. Thanks @ronlut!
 * Fixed a regression where jobs with unserializable return value crashes RQ. Thanks @tchapi!
 * Added `--dequeue-strategy` option to RQ's CLI. Thanks @ccrvlh!
@@ -8,7 +9,6 @@
 * Show more info on `rq info` CLI command. Thanks @iggeehu!
 * `queue.enqueue_jobs()` now properly account for job dependencies. Thanks @sim6!
 * `TimerDeathPenalty` now properly handles negative/infinite timeout. Thanks @marqueurs404!
-*
 
 ### RQ 1.13.0 (2023-02-19)
 * Added `work_horse_killed_handler` argument to `Worker`. Thanks @ronlut!
