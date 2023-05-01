@@ -1,4 +1,4 @@
-packaging==21.3
+packaging==20.9
 coverage==6.2
 psutil
 pytest
