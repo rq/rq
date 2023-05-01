@@ -11,7 +11,7 @@ from redis import WatchError
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, Type
 from uuid import uuid4
 
-from .defaults import CALLBACK_TIMEOUT
+from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import JobTimeoutException, BaseDeathPenalty
 
 if TYPE_CHECKING:
@@ -887,7 +887,7 @@ class Job:
             try:
                 self._result = self.serializer.loads(result)
             except Exception:
-                self._result = "Unserializable return value"
+                self._result = UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
