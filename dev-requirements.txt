@@ -1,4 +1,4 @@
-codecov
+coverage
 psutil
 pytest
 pytest-cov
