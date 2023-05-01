@@ -573,7 +573,7 @@ class BaseWorker:
                 if timeout is not None and idle_time_left is not None:
                     timeout = min(timeout, idle_time_left)
 
-                self.log.debug('Dequeueing jobs on queues %s and timeout %d', green(qnames), timeout)
+                self.log.debug('Dequeueing jobs on queues %s and timeout %s', green(qnames), timeout)
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,

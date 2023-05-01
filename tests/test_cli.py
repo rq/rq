@@ -124,7 +124,7 @@ class TestRQCli(CLITestCase):
         cli_config = CliConfig(death_penalty_class='rq.job.Job')
         self.assertEqual(Job, cli_config.death_penalty_class)
 
-        with self.assertRaises(BadParameter):
+        with self.assertRaises(ValueError):
             CliConfig(death_penalty_class='rq.abcd')
 
     def test_empty_nothing(self):
