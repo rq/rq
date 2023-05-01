@@ -6,7 +6,7 @@ import os
 import sys
 import warnings
 
-from typing import List
+from typing import List, Type
 
 import click
 from redis.exceptions import ConnectionError
@@ -479,7 +479,7 @@ def worker_pool(
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     if serializer:
-        serializer_class = import_attribute(serializer)
+        serializer_class: Type[DefaultSerializer] = import_attribute(serializer)
     else:
         serializer_class = DefaultSerializer
 

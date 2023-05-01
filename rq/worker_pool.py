@@ -53,7 +53,7 @@ class WorkerPool:
         setup_loghandlers('INFO', DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log: logging.Logger = logging.getLogger(__name__)
         # self.log: logging.Logger = logger
-        self._queue_names: Set[str] = set(parse_names(queues))
+        self._queue_names: List[str] = parse_names(queues)
         self.connection = connection
         self.name: str = uuid4().hex
         self._burst: bool = True
