@@ -1,5 +1,5 @@
 packaging==21.3
-coverage
+coverage==6.5.0
 psutil
 pytest
 pytest-cov
