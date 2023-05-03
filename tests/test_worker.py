@@ -225,6 +225,23 @@ class TestWorker(RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=q)
         self.assertTrue(job in failed_job_registry)
 
+    def test_meta_is_unserializable(self):
+        """Unserializable jobs are put on the failed job registry."""
+        q = Queue()
+        self.assertEqual(q.count, 0)
+
+        # NOTE: We have to fake this enqueueing for this test case.
+        # What we're simulating here is a call to a function that is not
+        # importable from the worker process.
+        job = Job.create(func=do_nothing, origin=q.name, meta={'key': 'value'})
+        job.save()
+
+        invalid_meta = '{{{{{{{{INVALID_JSON'
+        self.testconn.hset(job.key, 'meta', invalid_meta)
+        job.refresh()
+        self.assertIsInstance(job.meta, dict)
+        self.assertTrue('unserialized' in job.meta.keys())
+
     @mock.patch('rq.worker.logger.error')
     def test_deserializing_failure_is_handled(self, mock_logger_error):
         """

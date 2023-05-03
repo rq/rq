@@ -912,7 +912,10 @@ class Job:
         self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
-        self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        try:
+            self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        except Exception:  # depends on the serializer
+            self.meta = {'unserialized': obj.get('meta', {})}
 
         self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
