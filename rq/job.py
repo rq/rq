@@ -914,8 +914,7 @@ class Job:
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
         try:
             self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
-        except TypeError:
-            # TypeError: InvalidChunkLength.__init__() missing 1 required positional argument: 'length'
+        except Exception:  # depends on the serializer
             self.meta = {'unserialized': obj.get('meta', {})}
 
         self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
