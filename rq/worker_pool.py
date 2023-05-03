@@ -11,7 +11,7 @@ from typing import Dict, List, NamedTuple, Optional, Set, Type, Union
 from uuid import uuid4
 
 from redis import Redis
-from redis import SSLConnection, UnixDomainSocketConnection
+from redis import ConnectionPool
 from rq.serializers import DefaultSerializer
 
 from rq.timeouts import HorseMonitorTimeoutException, UnixSignalDeathPenalty
@@ -65,7 +65,7 @@ class WorkerPool:
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: Dict[str, WorkerData] = {}
-        self._connection_class, _, self._connection_kwargs = parse_connection(connection)
+        self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
 
     @property
     def queues(self) -> List[Queue]:
@@ -158,7 +158,7 @@ class WorkerPool:
         name = uuid4().hex
         process = Process(
             target=run_worker,
-            args=(name, self._queue_names, self._connection_class, self._connection_kwargs),
+            args=(name, self._queue_names, self._connection_class, self._pool_class, self._pool_kwargs),
             kwargs={
                 '_sleep': _sleep,
                 'burst': burst,
@@ -234,7 +234,8 @@ def run_worker(
     worker_name: str,
     queue_names: List[str],
     connection_class,
-    connection_kwargs: dict,
+    connection_pool_class,
+    connection_pool_kwargs: dict,
     worker_class: Type[BaseWorker] = Worker,
     serializer: Type[DefaultSerializer] = DefaultSerializer,
     job_class: Type[Job] = Job,
@@ -242,7 +243,9 @@ def run_worker(
     logging_level: str = "INFO",
     _sleep: int = 0,
 ):
-    connection = connection_class(**connection_kwargs)
+    connection = connection_class(
+        connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
+    )
     queues = [Queue(name, connection=connection) for name in queue_names]
     worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
     worker.log.info("Starting worker started with PID %s", os.getpid())
