@@ -43,6 +43,7 @@ class EnqueueData(
             "ttl",
             "failure_ttl",
             "description",
+            "depends_on",
             "job_id",
             "at_front",
             "meta",
@@ -696,6 +697,7 @@ class Queue:
         ttl: Optional[int] = None,
         failure_ttl: Optional[int] = None,
         description: Optional[str] = None,
+        depends_on: Optional[List] = None,
         job_id: Optional[str] = None,
         at_front: bool = False,
         meta: Optional[Dict] = None,
@@ -715,6 +717,7 @@ class Queue:
             ttl (Optional[int], optional): Time to live. Defaults to None.
             failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.
             description (Optional[str], optional): The job description. Defaults to None.
+            depends_on (Optional[JobDependencyType], optional): The job dependencies. Defaults to None.
             job_id (Optional[str], optional): The job ID. Defaults to None.
             at_front (bool, optional): Whether to enqueue the job at the front. Defaults to False.
             meta (Optional[Dict], optional): Metadata to attach to the job. Defaults to None.
@@ -734,6 +737,7 @@ class Queue:
             ttl,
             failure_ttl,
             description,
+            depends_on,
             job_id,
             at_front,
             meta,
