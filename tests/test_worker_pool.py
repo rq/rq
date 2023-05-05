@@ -8,6 +8,7 @@ from rq.job import JobStatus
 from tests import TestCase
 from tests.fixtures import CustomJob, _send_shutdown_command, long_running_job, say_hello
 
+from rq.connections import parse_connection
 from rq.queue import Queue
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
@@ -108,8 +109,10 @@ class TestWorkerPool(TestCase):
         """Ensure run_worker() properly spawns a Worker"""
         queue = Queue('foo', connection=self.connection)
         queue.enqueue(say_hello)
+
+        connection_class, pool_class, pool_kwargs = parse_connection(self.connection)
         run_worker(
-            'test-worker', ['foo'], self.connection.__class__, self.connection.connection_pool.connection_kwargs.copy()
+            'test-worker', ['foo'], connection_class, pool_class, pool_kwargs
         )
         # Worker should have processed the job
         self.assertEqual(len(queue), 0)

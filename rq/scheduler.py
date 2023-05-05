@@ -50,7 +50,7 @@ class RQScheduler:
         self._acquired_locks: Set[str] = set()
         self._scheduled_job_registries: List[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
-        self._connection_class, self._pool_class, self._connection_kwargs = parse_connection(connection)
+        self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
 
         self._connection = None
@@ -71,7 +71,7 @@ class RQScheduler:
         if self._connection:
             return self._connection
         self._connection = self._connection_class(
-            connection_pool=ConnectionPool(connection_class=self._pool_class, **self._connection_kwargs)
+            connection_pool=ConnectionPool(connection_class=self._pool_class, **self._pool_kwargs)
         )
         return self._connection
 
