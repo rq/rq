@@ -1,3 +1,7 @@
+### RQ 1.14.1 (2023-05-05)
+* Fixes a crash that happens if Redis connection uses SSL. Thanks @tchapi!
+* Fixes a crash if `job.meta()` is loaded using the wrong serializer. Thanks @gabriels1234!
+
 ### RQ 1.14.0 (2023-05-01)
 * Added `WorkerPool` (beta) that manages multiple workers in a single CLI. Thanks @selwin!
 * Added a new `Callback` class that allows more flexibility in declaring job callbacks. Thanks @ronlut!
