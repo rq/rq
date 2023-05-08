@@ -1580,13 +1580,15 @@ class Retry:
 
 
 class Callback:
-    def __init__(self, func: Callable[..., Any], timeout: Optional[Any] = None):
-        if not inspect.isfunction(func) and not inspect.isbuiltin(func):
-            raise ValueError('Callback func must be a function')
+    def __init__(self, func: Union[str, Callable[..., Any]], timeout: Optional[Any] = None):
+        if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
+            raise ValueError('Callback func must be a string or function')
 
         self.func = func
         self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
 
     @property
     def name(self) -> str:
+        if isinstance(self.func, str):
+            return self.func
         return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)
