@@ -26,7 +26,7 @@ from .logutils import blue, green, yellow
 from .types import FunctionReferenceType, JobDependencyType
 from .serializers import resolve_serializer
 from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow, compact
-
+from .dependency import Dependency
 
 logger = logging.getLogger("rq.queue")
 
@@ -758,8 +758,8 @@ class Queue:
             List[Job]: A list of enqueued jobs
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
-        jobs = [
-            self._enqueue_job(
+        if any([job_data.depends_on for job_data in job_datas]):
+            jobs = [
                 self.create_job(
                     job_data.func,
                     args=job_data.args,
@@ -768,20 +768,48 @@ class Queue:
                     ttl=job_data.ttl,
                     failure_ttl=job_data.failure_ttl,
                     description=job_data.description,
-                    depends_on=None,
+                    depends_on=job_data.depends_on,
                     job_id=job_data.job_id,
                     meta=job_data.meta,
-                    status=JobStatus.QUEUED,
+                    status=JobStatus.DEFERRED,
                     timeout=job_data.timeout,
                     retry=job_data.retry,
                     on_success=job_data.on_success,
                     on_failure=job_data.on_failure,
-                ),
-                pipeline=pipe,
-                at_front=job_data.at_front,
-            )
-            for job_data in job_datas
-        ]
+                )
+                for job_data in job_datas
+            ]
+            # If any of our jobs have dependencies, just defer them all,
+            # Then enqueue all that either didn't have dependencies, or whose dependencies
+            # have already been met
+            ready_jobs = Dependency.get_ready_jobs(jobs, pipeline=pipe)
+            jobs = [self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front) for job in ready_jobs]
+
+        else:
+            jobs = [
+                self._enqueue_job(
+                    self.create_job(
+                        job_data.func,
+                        args=job_data.args,
+                        kwargs=job_data.kwargs,
+                        result_ttl=job_data.result_ttl,
+                        ttl=job_data.ttl,
+                        failure_ttl=job_data.failure_ttl,
+                        description=job_data.description,
+                        depends_on=job_data.depends_on,
+                        job_id=job_data.job_id,
+                        meta=job_data.meta,
+                        status=JobStatus.QUEUED,
+                        timeout=job_data.timeout,
+                        retry=job_data.retry,
+                        on_success=job_data.on_success,
+                        on_failure=job_data.on_failure,
+                    ),
+                    pipeline=pipe,
+                    at_front=job_data.at_front,
+                )
+                for job_data in job_datas
+            ]
         if pipeline is None:
             pipe.execute()
         return jobs
