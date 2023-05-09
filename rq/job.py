@@ -716,7 +716,7 @@ class Job:
 
     @property
     def dependencies_key(self):
-        return '{0}{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
 
     def fetch_dependencies(self, watch: bool = False, pipeline: Optional['Pipeline'] = None) -> List['Job']:
         """Fetch all of a job's dependencies. If a pipeline is supplied, and

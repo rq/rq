@@ -994,7 +994,7 @@ class TestJob(RQTestCase):
     def test_dependencies_key_should_have_prefixed_job_id(self):
         job_id = 'random'
         job = Job(id=job_id)
-        expected_key = Job.redis_job_namespace_prefix + job_id + ':dependencies'
+        expected_key = Job.redis_job_namespace_prefix + ":" + job_id + ':dependencies'
 
         assert job.dependencies_key == expected_key
 
