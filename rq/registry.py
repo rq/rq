@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
 
-from .timeouts import JobTimeoutException, UnixSignalDeathPenalty, BaseDeathPenalty
+from .timeouts import UnixSignalDeathPenalty, BaseDeathPenalty
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 from .utils import as_text
 from .connections import resolve_connection
-from .defaults import DEFAULT_FAILURE_TTL, CALLBACK_TIMEOUT
+from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import InvalidJobOperation, NoSuchJobError, AbandonedJobError
 from .job import Job, JobStatus
 from .queue import Queue
@@ -47,11 +47,11 @@ class BaseRegistry:
     ):
         if queue:
             self.name = queue.name
-            self.connection = resolve_connection(queue.connection)
+            self.connection = queue.connection or resolve_connection()
             self.serializer = queue.serializer
         else:
             self.name = name
-            self.connection = resolve_connection(connection)
+            self.connection = connection or resolve_connection()
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
