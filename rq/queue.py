@@ -759,6 +759,8 @@ class Queue:
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         if any([job_data.depends_on for job_data in job_datas]):
+            # Create all jobs as deferred. enqueue_job will just create the objects
+            # in Redis, it won't add deferred jobs to the queue.
             jobs = [
                 self.create_job(
                     job_data.func,
@@ -779,6 +781,9 @@ class Queue:
                 )
                 for job_data in job_datas
             ]
+            for job in jobs:
+                job.save(pipeline=pipe)
+            pipe.execute()
             # If any of our jobs have dependencies, just defer them all,
             # Then enqueue all that either didn't have dependencies, or whose dependencies
             # have already been met
