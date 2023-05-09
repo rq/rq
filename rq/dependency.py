@@ -10,6 +10,8 @@ class Dependency:
         pipe = pipeline if pipeline else cls.connection
         ready_jobs = []
         for job in jobs:
+            if not job._dependency_ids:
+                pass
             while True:
                 try:
                     pipe.watch(*[Job.key_for(dependency_id) for dependency_id in job._dependency_ids])
