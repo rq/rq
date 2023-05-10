@@ -159,6 +159,7 @@ class Job:
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
         on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_stopped: Optional[Union['Callback', Callable[..., Any]]] = None,
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -192,6 +193,8 @@ class Job:
                 when/if the Job finishes sucessfully. Defaults to None.
             on_failure (Optional[Callable[..., Any]], optional): A callback function, should be a callable to run
                 when/if the Job fails. Defaults to None.
+            on_stopped (Optional[Callable[..., Any]], optional): A callback function, should be a callable to run
+                when/if the Job is stopped. Defaults to None.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -199,6 +202,7 @@ class Job:
             TypeError: If the `func` is something other than a string or a Callable reference
             ValueError: If `on_failure` is not a function
             ValueError: If `on_success` is not a function
+            ValueError: If `on_stopped` is not a function
 
         Returns:
             Job: A job instance.
@@ -254,6 +258,15 @@ class Job:
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
+
+        if on_stopped:
+            if not isinstance(on_stopped, Callback):
+                warnings.warn(
+                    'Passing a `Callable` `on_stopped` is deprecated, pass `Callback` instead', DeprecationWarning
+                )
+                on_stopped = Callback(on_stopped)  # backward compatibility
+            job._stopped_callback_name = on_stopped.name
+            job._stopped_callback_timeout = on_stopped.timeout
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -438,6 +451,23 @@ class Job:
 
         return self._failure_callback_timeout
 
+    @property
+    def stopped_callback(self):
+        if self._stopped_callback is UNEVALUATED:
+            if self._stopped_callback_name:
+                self._stopped_callback = import_attribute(self._stopped_callback_name)
+            else:
+                self._stopped_callback = None
+
+        return self._stopped_callback
+
+    @property
+    def stopped_callback_timeout(self) -> int:
+        if self._stopped_callback_timeout is None:
+            return CALLBACK_TIMEOUT
+
+        return self._stopped_callback_timeout
+
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
         This includes the `_func_name`, `_instance`, `_args` and `_kwargs`
@@ -599,6 +629,8 @@ class Job:
         self._success_callback = UNEVALUATED
         self._failure_callback_name = None
         self._failure_callback = UNEVALUATED
+        self._stopped_callback_name = None
+        self._stopped_callback = UNEVALUATED
         self.description: Optional[str] = None
         self.origin: Optional[str] = None
         self.enqueued_at: Optional[datetime] = None
@@ -609,6 +641,7 @@ class Job:
         self.timeout: Optional[float] = None
         self._success_callback_timeout: Optional[int] = None
         self._failure_callback_timeout: Optional[int] = None
+        self._stopped_callback_timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
@@ -905,6 +938,12 @@ class Job:
         if 'failure_callback_timeout' in obj:
             self._failure_callback_timeout = int(obj.get('failure_callback_timeout'))
 
+        if obj.get('stopped_callback_name'):
+            self._stopped_callback_name = obj.get('stopped_callback_name').decode()
+
+        if 'stopped_callback_timeout' in obj:
+            self._stopped_callback_timeout = int(obj.get('stopped_callback_timeout'))
+
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = json.loads(dep_ids.decode()) if dep_ids else [dep_id.decode()] if dep_id else []
@@ -956,6 +995,7 @@ class Job:
             'data': zlib.compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
+            'stopped_callback_name': self._stopped_callback_name if self._stopped_callback_name else '',
             'started_at': utcformat(self.started_at) if self.started_at else '',
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
@@ -986,6 +1026,8 @@ class Job:
             obj['success_callback_timeout'] = self._success_callback_timeout
         if self._failure_callback_timeout is not None:
             obj['failure_callback_timeout'] = self._failure_callback_timeout
+        if self._stopped_callback_timeout is not None:
+            obj['stopped_callback_timeout'] = self._stopped_callback_timeout
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1373,6 +1415,19 @@ class Job:
                 self.failure_callback(self, self.connection, *exc_info)
         except Exception:  # noqa
             logger.exception(f'Job {self.id}: error while executing failure callback')
+            raise
+
+    def execute_stopped_callback(self, death_penalty_class: Type[BaseDeathPenalty]):
+        """Executes stopped_callback with possible timeout"""
+        if not self.stopped_callback:
+            return
+
+        logger.debug('Running stopped callbacks for %s', self.id)
+        try:
+            with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
+                self.stopped_callback(self, self.connection)
+        except Exception:  # noqa
+            logger.exception(f'Job {self.id}: error while executing stopped callback')
             raise
 
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
