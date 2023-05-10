@@ -11,7 +11,7 @@ from redis import WatchError
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, Type
 from uuid import uuid4
 
-from .defaults import CALLBACK_TIMEOUT
+from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import JobTimeoutException, BaseDeathPenalty
 
 if TYPE_CHECKING:
@@ -920,7 +920,7 @@ class Job:
             try:
                 self._result = self.serializer.loads(result)
             except Exception:
-                self._result = "Unserializable return value"
+                self._result = UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
@@ -951,7 +951,10 @@ class Job:
         self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
-        self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        try:
+            self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        except Exception:  # depends on the serializer
+            self.meta = {'unserialized': obj.get('meta', {})}
 
         self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):

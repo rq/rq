@@ -13,7 +13,9 @@ from multiprocessing import Process
 
 from redis import Redis
 from rq import Connection, get_current_job, get_current_connection, Queue
+from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
+from rq.job import Job
 from rq.worker import HerokuWorker, Worker
 
 
@@ -216,7 +218,7 @@ class DummyQueue:
     pass
 
 
-def kill_worker(pid, double_kill, interval=0.5):
+def kill_worker(pid: int, double_kill: bool, interval: float = 1.5):
     # wait for the worker to be started over on the main process
     time.sleep(interval)
     os.kill(pid, signal.SIGTERM)
@@ -296,3 +298,18 @@ def save_result_if_not_stopped(job, connection, result=""):
 def erroneous_callback(job):
     """A callback that's not written properly"""
     pass
+
+
+def _send_shutdown_command(worker_name, connection_kwargs, delay=0.25):
+    time.sleep(delay)
+    send_shutdown_command(Redis(**connection_kwargs), worker_name)
+
+
+def _send_kill_horse_command(worker_name, connection_kwargs, delay=0.25):
+    """Waits delay before sending kill-horse command"""
+    time.sleep(delay)
+    send_kill_horse_command(Redis(**connection_kwargs), worker_name)
+
+
+class CustomJob(Job):
+    """A custom job class just to test it"""

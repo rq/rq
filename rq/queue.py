@@ -89,7 +89,7 @@ class Queue:
         """
         connection = resolve_connection(connection)
 
-        def to_queue(queue_key):
+        def to_queue(queue_key: Union[bytes, str]):
             return cls.from_queue_key(
                 as_text(queue_key),
                 connection=connection,
@@ -146,7 +146,7 @@ class Queue:
         default_timeout: Optional[int] = None,
         connection: Optional['Redis'] = None,
         is_async: bool = True,
-        job_class: Union[str, Type['Job'], None] = None,
+        job_class: Optional[Union[str, Type['Job']]] = None,
         serializer: Any = None,
         death_penalty_class: Type[BaseDeathPenalty] = UnixSignalDeathPenalty,
         **kwargs,
@@ -440,7 +440,7 @@ class Queue:
         Returns:
             _type_: _description_
         """
-        job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
+        job_id: str = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
 
         if pipeline is not None:
             return pipeline.lrem(self.key, 1, job_id)

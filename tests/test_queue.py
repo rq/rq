@@ -5,17 +5,18 @@ from unittest.mock import patch
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
-from rq.registry import (CanceledJobRegistry, DeferredJobRegistry, FailedJobRegistry,
-                         FinishedJobRegistry, ScheduledJobRegistry,
-                         StartedJobRegistry)
+from rq.registry import (
+    CanceledJobRegistry,
+    DeferredJobRegistry,
+    FailedJobRegistry,
+    FinishedJobRegistry,
+    ScheduledJobRegistry,
+    StartedJobRegistry,
+)
 from rq.worker import Worker
 
 from tests import RQTestCase
-from tests.fixtures import echo, say_hello
-
-
-class CustomJob(Job):
-    pass
+from tests.fixtures import CustomJob, echo, say_hello
 
 
 class MultipleDependencyJob(Job):
@@ -23,6 +24,7 @@ class MultipleDependencyJob(Job):
     Allows for the patching of `_dependency_ids` to simulate multi-dependency
     support without modifying the public interface of `Job`
     """
+
     create_job = Job.create
 
     @classmethod
@@ -193,9 +195,7 @@ class TestQueue(RQTestCase):
         # Inspect data inside Redis
         q_key = 'rq:queue:default'
         self.assertEqual(self.testconn.llen(q_key), 1)
-        self.assertEqual(
-            self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'),
-            job_id)
+        self.assertEqual(self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'), job_id)
 
     def test_enqueue_sets_metadata(self):
         """Enqueueing job onto queues modifies meta data."""
@@ -246,19 +246,13 @@ class TestQueue(RQTestCase):
         self.assertEqual(queue, fooq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, fooq.name)
-        self.assertEqual(
-            job.args[0], 'for Foo',
-            'Foo should be dequeued first.'
-        )
+        self.assertEqual(job.args[0], 'for Foo', 'Foo should be dequeued first.')
 
         job, queue = Queue.dequeue_any([fooq, barq], None)
         self.assertEqual(queue, barq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
-        self.assertEqual(
-            job.args[0], 'for Bar',
-            'Bar should be dequeued second.'
-        )
+        self.assertEqual(job.args[0], 'for Bar', 'Bar should be dequeued second.')
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
@@ -269,10 +263,7 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEqual(q.count, 1)
-        self.assertEqual(
-            Queue.dequeue_any([Queue(), Queue('low')], None),  # noqa
-            None
-        )
+        self.assertEqual(Queue.dequeue_any([Queue(), Queue('low')], None), None)  # noqa
         self.assertEqual(q.count, 0)
 
     def test_enqueue_with_ttl(self):
@@ -352,10 +343,7 @@ class TestQueue(RQTestCase):
         job = q.enqueue(echo, 1, job_timeout=1, result_ttl=1, bar='baz')
         self.assertEqual(job.timeout, 1)
         self.assertEqual(job.result_ttl, 1)
-        self.assertEqual(
-            job.perform(),
-            ((1,), {'bar': 'baz'})
-        )
+        self.assertEqual(job.perform(), ((1,), {'bar': 'baz'}))
 
         # Explicit kwargs mode
         kwargs = {
@@ -365,20 +353,14 @@ class TestQueue(RQTestCase):
         job = q.enqueue(echo, job_timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
         self.assertEqual(job.timeout, 2)
         self.assertEqual(job.result_ttl, 2)
-        self.assertEqual(
-            job.perform(),
-            ((1,), {'timeout': 1, 'result_ttl': 1})
-        )
+        self.assertEqual(job.perform(), ((1,), {'timeout': 1, 'result_ttl': 1}))
 
         # Explicit args and kwargs should also work with enqueue_at
         time = datetime.now(timezone.utc) + timedelta(seconds=10)
         job = q.enqueue_at(time, echo, job_timeout=2, result_ttl=2, args=[1], kwargs=kwargs)
         self.assertEqual(job.timeout, 2)
         self.assertEqual(job.result_ttl, 2)
-        self.assertEqual(
-            job.perform(),
-            ((1,), {'timeout': 1, 'result_ttl': 1})
-        )
+        self.assertEqual(job.perform(), ((1,), {'timeout': 1, 'result_ttl': 1}))
 
         # Positional arguments is not allowed if explicit args and kwargs are used
         self.assertRaises(Exception, q.enqueue, echo, 1, kwargs=kwargs)
@@ -447,10 +429,7 @@ class TestQueue(RQTestCase):
 
         parent_job.set_status(JobStatus.FINISHED)
 
-        self.assertEqual(
-            set(registry.get_job_ids()),
-            set([job_1.id, job_2.id])
-        )
+        self.assertEqual(set(registry.get_job_ids()), set([job_1.id, job_2.id]))
         # After dependents is enqueued, job_1 and job_2 should be in queue
         self.assertEqual(q.job_ids, [])
         q.enqueue_dependents(parent_job)
@@ -472,18 +451,12 @@ class TestQueue(RQTestCase):
 
         # Each queue has its own DeferredJobRegistry
         registry_1 = DeferredJobRegistry(q_1.name, connection=self.testconn)
-        self.assertEqual(
-            set(registry_1.get_job_ids()),
-            set([job_1.id])
-        )
+        self.assertEqual(set(registry_1.get_job_ids()), set([job_1.id]))
         registry_2 = DeferredJobRegistry(q_2.name, connection=self.testconn)
 
         parent_job.set_status(JobStatus.FINISHED)
 
-        self.assertEqual(
-            set(registry_2.get_job_ids()),
-            set([job_2.id])
-        )
+        self.assertEqual(set(registry_2.get_job_ids()), set([job_2.id]))
 
         # After dependents is enqueued, job_1 on queue_1 and
         # job_2 should be in queue_2
@@ -569,21 +542,9 @@ class TestQueue(RQTestCase):
         (but at_front still applies)"""
         # Job with unfinished dependency is not immediately enqueued
         q = Queue()
-        job_1_data = Queue.prepare_data(
-            say_hello,
-            job_id='fake_job_id_1',
-            at_front=False
-        )
-        job_2_data = Queue.prepare_data(
-            say_hello,
-            job_id='fake_job_id_2',
-            at_front=False
-        )
-        job_3_data = Queue.prepare_data(
-            say_hello,
-            job_id='fake_job_id_3',
-            at_front=True
-        )
+        job_1_data = Queue.prepare_data(say_hello, job_id='fake_job_id_1', at_front=False)
+        job_2_data = Queue.prepare_data(say_hello, job_id='fake_job_id_2', at_front=False)
+        job_3_data = Queue.prepare_data(say_hello, job_id='fake_job_id_3', at_front=True)
         jobs = q.enqueue_many(
             [job_1_data, job_2_data, job_3_data],
         )
@@ -599,25 +560,10 @@ class TestQueue(RQTestCase):
         # Job with unfinished dependency is not immediately enqueued
         q = Queue()
         with q.connection.pipeline() as pipe:
-            job_1_data = Queue.prepare_data(
-                say_hello,
-                job_id='fake_job_id_1',
-                at_front=False
-            )
-            job_2_data = Queue.prepare_data(
-                say_hello,
-                job_id='fake_job_id_2',
-                at_front=False
-            )
-            job_3_data = Queue.prepare_data(
-                say_hello,
-                job_id='fake_job_id_3',
-                at_front=True
-            )
-            jobs = q.enqueue_many(
-                [job_1_data, job_2_data, job_3_data],
-                pipeline=pipe
-            )
+            job_1_data = Queue.prepare_data(say_hello, job_id='fake_job_id_1', at_front=False)
+            job_2_data = Queue.prepare_data(say_hello, job_id='fake_job_id_2', at_front=False)
+            job_3_data = Queue.prepare_data(say_hello, job_id='fake_job_id_3', at_front=True)
+            jobs = q.enqueue_many([job_1_data, job_2_data, job_3_data], pipeline=pipe)
             self.assertEqual(q.job_ids, [])
             for job in jobs:
                 self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
@@ -660,7 +606,6 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.timeout, 123)
 
     def test_enqueue_job_with_multiple_queued_dependencies(self):
-
         parent_jobs = [Job.create(func=say_hello) for _ in range(2)]
 
         for job in parent_jobs:
@@ -669,14 +614,12 @@ class TestQueue(RQTestCase):
 
         q = Queue()
         with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
-            job = q.enqueue(say_hello, depends_on=parent_jobs[0],
-                            _dependency_ids=[job.id for job in parent_jobs])
+            job = q.enqueue(say_hello, depends_on=parent_jobs[0], _dependency_ids=[job.id for job in parent_jobs])
             self.assertEqual(job.get_status(), JobStatus.DEFERRED)
             self.assertEqual(q.job_ids, [])
             self.assertEqual(job.fetch_dependencies(), parent_jobs)
 
     def test_enqueue_job_with_multiple_finished_dependencies(self):
-
         parent_jobs = [Job.create(func=say_hello) for _ in range(2)]
 
         for job in parent_jobs:
@@ -685,16 +628,13 @@ class TestQueue(RQTestCase):
 
         q = Queue()
         with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
-            job = q.enqueue(say_hello, depends_on=parent_jobs[0],
-                            _dependency_ids=[job.id for job in parent_jobs])
+            job = q.enqueue(say_hello, depends_on=parent_jobs[0], _dependency_ids=[job.id for job in parent_jobs])
             self.assertEqual(job.get_status(), JobStatus.QUEUED)
             self.assertEqual(q.job_ids, [job.id])
             self.assertEqual(job.fetch_dependencies(), parent_jobs)
 
     def test_enqueues_dependent_if_other_dependencies_finished(self):
-
-        parent_jobs = [Job.create(func=say_hello) for _ in
-                       range(3)]
+        parent_jobs = [Job.create(func=say_hello) for _ in range(3)]
 
         parent_jobs[0]._status = JobStatus.STARTED
         parent_jobs[0].save()
@@ -706,11 +646,11 @@ class TestQueue(RQTestCase):
         parent_jobs[2].save()
 
         q = Queue()
-        with patch('rq.queue.Job.create',
-                   new=MultipleDependencyJob.create):
+        with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
             # dependent job deferred, b/c parent_job 0 is still 'started'
-            dependent_job = q.enqueue(say_hello, depends_on=parent_jobs[0],
-                                      _dependency_ids=[job.id for job in parent_jobs])
+            dependent_job = q.enqueue(
+                say_hello, depends_on=parent_jobs[0], _dependency_ids=[job.id for job in parent_jobs]
+            )
             self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
 
         # now set parent job 0 to 'finished'
@@ -721,7 +661,6 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [dependent_job.id])
 
     def test_does_not_enqueue_dependent_if_other_dependencies_not_finished(self):
-
         started_dependency = Job.create(func=say_hello, status=JobStatus.STARTED)
         started_dependency.save()
 
@@ -730,8 +669,11 @@ class TestQueue(RQTestCase):
 
         q = Queue()
         with patch('rq.queue.Job.create', new=MultipleDependencyJob.create):
-            dependent_job = q.enqueue(say_hello, depends_on=[started_dependency],
-                                      _dependency_ids=[started_dependency.id, queued_dependency.id])
+            dependent_job = q.enqueue(
+                say_hello,
+                depends_on=[started_dependency],
+                _dependency_ids=[started_dependency.id, queued_dependency.id],
+            )
             self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
 
         q.enqueue_dependents(started_dependency)
