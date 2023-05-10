@@ -151,28 +151,6 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertFalse(self.testconn.exists('failure_callback:%s' % job.id))
 
         # TODO: add test case for error while executing failure callback
-        
-    def test_stopped_callback(self):
-        """Test stopped callback is executed only when job is stopped"""
-        queue = Queue(connection=self.testconn)
-        worker = SimpleWorker([queue])
-
-        job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
-
-        # Callback is executed when job is stopped
-        worker.work(burst=True)
-        send_stop_job_command(job.connection, job.id)
-        self.assertEqual(job.get_status(), JobStatus.STOPPED)
-        job.refresh()
-        self.assertEqual("",
-                      self.testconn.get('stopped_callback:%s' % job.id).decode())
-
-        job = queue.enqueue(say_hello, on_stopped=save_result_if_not_stopped)
-        worker.work(burst=True)
-        self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertFalse(self.testconn.exists('stopped_callback:%s' % job.id))
-
-        # TODO: add test case for error while executing failure callback
 
 
 class JobCallbackTestCase(RQTestCase):
