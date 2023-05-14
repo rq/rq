@@ -757,41 +757,12 @@ class Queue:
         Returns:
             List[Job]: A list of enqueued jobs
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
-        if any([job_data.depends_on for job_data in job_datas]):
-            # Create all jobs as deferred. enqueue_job will just create the objects
-            # in Redis, it won't add deferred jobs to the queue.
-            jobs = [
-                self.create_job(
-                    job_data.func,
-                    args=job_data.args,
-                    kwargs=job_data.kwargs,
-                    result_ttl=job_data.result_ttl,
-                    ttl=job_data.ttl,
-                    failure_ttl=job_data.failure_ttl,
-                    description=job_data.description,
-                    depends_on=job_data.depends_on,
-                    job_id=job_data.job_id,
-                    meta=job_data.meta,
-                    status=JobStatus.DEFERRED,
-                    timeout=job_data.timeout,
-                    retry=job_data.retry,
-                    on_success=job_data.on_success,
-                    on_failure=job_data.on_failure,
-                )
-                for job_data in job_datas
-            ]
-            for job in jobs:
-                job.save(pipeline=pipe)
-            pipe.execute()
-            # If any of our jobs have dependencies, just defer them all,
-            # Then enqueue all that either didn't have dependencies, or whose dependencies
-            # have already been met
-            ready_jobs = Dependency.get_ready_jobs(jobs, pipeline=pipe)
-            jobs = [self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front) for job in ready_jobs]
-
-        else:
-            jobs = [
+        pipe = pipeline if pipeline is not None else self.connection.pipeline() # This is the pipe
+        jobs = []
+        
+        job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
+        if job_datas_without_dependencies:
+            jobs_without_dependencies = [
                 self._enqueue_job(
                     self.create_job(
                         job_data.func,
@@ -813,10 +784,45 @@ class Queue:
                     pipeline=pipe,
                     at_front=job_data.at_front,
                 )
-                for job_data in job_datas
+                for job_data in job_datas_without_dependencies
+                ]
+            if pipeline is None:
+                pipe.execute()
+            jobs.append(jobs_without_dependencies)
+        
+        job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
+        if job_datas_with_dependencies:
+            # Create all jobs as deferred. enqueue_job will just create the objects
+            # in Redis, it won't add deferred jobs to the queue.
+            jobs_with_dependencies = [
+                self.create_job(
+                    job_data.func,
+                    args=job_data.args,
+                    kwargs=job_data.kwargs,
+                    result_ttl=job_data.result_ttl,
+                    ttl=job_data.ttl,
+                    failure_ttl=job_data.failure_ttl,
+                    description=job_data.description,
+                    depends_on=job_data.depends_on,
+                    job_id=job_data.job_id,
+                    meta=job_data.meta,
+                    status=JobStatus.DEFERRED,
+                    timeout=job_data.timeout,
+                    retry=job_data.retry,
+                    on_success=job_data.on_success,
+                    on_failure=job_data.on_failure,
+                )
+                for job_data in job_datas_with_dependencies
             ]
-        if pipeline is None:
+            for job in jobs_with_dependencies:
+                job.save(pipeline=pipe) # Save all the jobs, execute
             pipe.execute()
+            # If any of our jobs have dependencies, just defer them all,
+            # Then enqueue all that either didn't have dependencies, or whose dependencies
+            # have already been met
+            ready_jobs = Dependency.get_ready_jobs(jobs_with_dependencies, pipeline=pipe)
+            jobs.append([self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front) for job in ready_jobs])
+
         return jobs
 
     def run_job(self, job: 'Job') -> Job:
