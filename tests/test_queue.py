@@ -261,7 +261,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
         self.assertEqual(job.args[0], 'for Bar', 'Bar should be dequeued second.')
-    
+
     @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_dequeue_any_reliable(self):
         """Dequeueing job from a single queue moves job to intermediate queue."""
@@ -284,7 +284,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.func, say_hello)
         # After job is dequeued, the job ID is in the intermediate queue
         self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 1)
-    
+
     @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_intermediate_queue(self):
         """Job should be stuck in intermediate queue if execution fails after dequeued."""
@@ -302,7 +302,7 @@ class TestQueue(RQTestCase):
             self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
             self.assertFalse(job.id in queue.get_job_ids())
             self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
-    
+
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
 

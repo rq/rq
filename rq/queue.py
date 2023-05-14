@@ -237,7 +237,7 @@ class Queue:
         pid = self.connection.get(RQScheduler.get_locking_key(self.name))
         return int(pid.decode()) if pid is not None else None
 
-    def acquire_cleaning_lock(self) -> bool:
+    def acquire_maintenance_lock(self) -> bool:
         """Returns a boolean indicating whether a lock to clean this queue
         is acquired. A lock expires in 899 seconds (15 minutes - 1 second)
 
