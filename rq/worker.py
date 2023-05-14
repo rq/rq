@@ -1265,7 +1265,7 @@ class Worker(BaseWorker):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job: 'Job'):
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1279,6 +1279,10 @@ class Worker(BaseWorker):
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
+            if remove_from_intermediate_queue:
+                from .queue import Queue
+                queue = Queue(job.origin, connection=self.connection)
+                pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
             pipeline.execute()
             self.log.debug('Job preparation finished.')
 
@@ -1409,7 +1413,8 @@ class Worker(BaseWorker):
         self.log.debug('Started Job Registry set.')
 
         try:
-            self.prepare_job_execution(job)
+            remove_from_intermediate_queue = len(self.queues) == 1
+            self.prepare_job_execution(job, remove_from_intermediate_queue)
 
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT

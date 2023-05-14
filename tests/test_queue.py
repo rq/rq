@@ -227,8 +227,8 @@ class TestQueue(RQTestCase):
 
     def test_dequeue_any(self):
         """Fetching work from any given queue."""
-        fooq = Queue('foo')
-        barq = Queue('bar')
+        fooq = Queue('foo', connection=self.testconn)
+        barq = Queue('bar', connection=self.testconn)
 
         self.assertEqual(Queue.dequeue_any([fooq, barq], None), None)
 
@@ -253,6 +253,27 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
         self.assertEqual(job.args[0], 'for Bar', 'Bar should be dequeued second.')
+    
+    def test_dequeue_any_reliable(self):
+        """Dequeueing job from a single queue moves job to intermediate queue."""
+        foo_queue = Queue('foo', connection=self.testconn)
+        job_1 = foo_queue.enqueue(say_hello)
+
+        # Job ID is not in intermediate queue
+        self.assertIsNone(self.testconn.lpos(foo_queue.intermediate_queue_key, job_1.id))
+        job, queue = Queue.dequeue_any([foo_queue], timeout=None, connection=self.testconn)
+        self.assertEqual(queue, foo_queue)
+        self.assertEqual(job.func, say_hello)
+        # After job is dequeued, the job ID is in the intermediate queue
+        self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 0)
+
+        # Test the blocking version
+        job_2 = foo_queue.enqueue(say_hello)
+        job, queue = Queue.dequeue_any([foo_queue], timeout=1, connection=self.testconn)
+        self.assertEqual(queue, foo_queue)
+        self.assertEqual(job.func, say_hello)
+        # After job is dequeued, the job ID is in the intermediate queue
+        self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 1)
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""

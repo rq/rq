@@ -139,6 +139,18 @@ class Queue:
             death_penalty_class=death_penalty_class,
         )
 
+    @classmethod
+    def get_intermediate_queue_key(cls, key: str) -> str:
+        """Returns the intermediate queue key for a given queue key.
+
+        Args:
+            key (str): The queue key
+
+        Returns:
+            str: The intermediate queue key
+        """
+        return f'{key}:intermediate'
+
     def __init__(
         self,
         name: str = 'default',
@@ -207,6 +219,11 @@ class Queue:
     def key(self):
         """Returns the Redis key for this Queue."""
         return self._key
+
+    @property
+    def intermediate_queue_key(self):
+        """Returns the Redis key for intermediate queue."""
+        return self.get_intermediate_queue_key(self._key)
 
     @property
     def registry_cleaning_key(self):
@@ -1206,7 +1223,7 @@ class Queue:
             logger.debug(f"Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}")
             result = connection.blpop(queue_keys, timeout)
             if result is None:
-                logger.debug(f"BLPOP Timeout, no jobs found on queues {colored_queues}")
+                logger.debug(f"BLPOP timeout, no jobs found on queues {colored_queues}")
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
             return queue_key, job_id
@@ -1215,6 +1232,27 @@ class Queue:
                 blob = connection.lpop(queue_key)
                 if blob is not None:
                     return queue_key, blob
+            return None
+
+    @classmethod
+    def lmove(cls, connection: 'Redis', queue_key: str, timeout: Optional[int]):
+        """Similar to lpop, but accepts only a single queue key and immediately pushes
+        the result to an intermediate queue.
+        """
+        if timeout is not None:  # blocking variant
+            if timeout == 0:
+                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
+            colored_queue = green(queue_key)
+            logger.debug(f"Starting BLMOVE operation for {colored_queue} with timeout of {timeout}")
+            result = connection.blmove(queue_key, cls.get_intermediate_queue_key(queue_key), timeout)
+            if result is None:
+                logger.debug(f"BLMOVE timeout, no jobs found on {colored_queue}")
+                raise DequeueTimeout(timeout, queue_key)
+            return queue_key, result
+        else:  # non-blocking variant
+            result = connection.lmove(queue_key, cls.get_intermediate_queue_key(queue_key))
+            if result is not None:
+                return queue_key, result
             return None
 
     @classmethod
@@ -1255,7 +1293,10 @@ class Queue:
 
         while True:
             queue_keys = [q.key for q in queues]
-            result = cls.lpop(queue_keys, timeout, connection=connection)
+            if len(queue_keys) == 1:
+                result = cls.lmove(connection, queue_keys[0], timeout)
+            else:
+                result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:
                 return None
             queue_key, job_id = map(as_text, result)

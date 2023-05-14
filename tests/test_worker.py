@@ -800,6 +800,26 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
+    
+    def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
+        """Prepare job execution removes job from intermediate queue."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        Queue.dequeue_any([queue], timeout=None, connection=self.testconn)
+        self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        worker = Worker([queue])
+        worker.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        self.assertEqual(queue.count, 0)
+    
+    def test_work_removes_key_from_intermediate_queue(self):
+        """Worker removes job from intermediate queue."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.work(burst=True)
+        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
