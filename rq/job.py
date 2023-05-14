@@ -532,9 +532,10 @@ class Job:
         Returns:
             job_exists (bool): Whether the Job exists
         """
-        conn = resolve_connection(connection)
+        if not connection:
+            connection = resolve_connection()
         job_key = cls.key_for(job_id)
-        job_exists = conn.exists(job_key)
+        job_exists = connection.exists(job_key)
         return bool(job_exists)
 
     @classmethod
@@ -587,7 +588,10 @@ class Job:
         return jobs
 
     def __init__(self, id: Optional[str] = None, connection: Optional['Redis'] = None, serializer=None):
-        self.connection = resolve_connection(connection)
+        if connection:
+            self.connection = connection
+        else:
+            self.connection = resolve_connection()
         self._id = id
         self.created_at = utcnow()
         self._data = UNEVALUATED
