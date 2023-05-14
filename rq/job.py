@@ -1,18 +1,18 @@
+import asyncio
 import inspect
 import json
 import logging
 import warnings
 import zlib
-import asyncio
-
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from redis import WatchError
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
+from redis import WatchError
+
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
-from .timeouts import JobTimeoutException, BaseDeathPenalty
+from .timeouts import BaseDeathPenalty, JobTimeoutException
 
 if TYPE_CHECKING:
     from .results import Result
@@ -152,7 +152,7 @@ class Job:
         depends_on: Optional[JobDependencyType] = None,
         timeout: Optional[int] = None,
         id: Optional[str] = None,
-        origin: str='',
+        origin: str = '',
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
@@ -1081,8 +1081,8 @@ class Job:
         """
         if self.is_canceled:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
-        from .registry import CanceledJobRegistry
         from .queue import Queue
+        from .registry import CanceledJobRegistry
 
         pipe = pipeline or self.connection.pipeline()
 

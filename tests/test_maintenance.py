@@ -1,17 +1,15 @@
 import unittest
-
 from unittest.mock import patch
 
 from redis import Redis
-
-from tests import RQTestCase
-from tests.fixtures import say_hello
 
 from rq.job import JobStatus
 from rq.maintenance import clean_intermediate_queue
 from rq.queue import Queue
 from rq.utils import get_version
 from rq.worker import Worker
+from tests import RQTestCase
+from tests.fixtures import say_hello
 
 
 class MaintenanceTestCase(RQTestCase):
