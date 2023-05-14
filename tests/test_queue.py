@@ -236,6 +236,8 @@ class TestQueue(RQTestCase):
         fooq = Queue('foo', connection=self.testconn)
         barq = Queue('bar', connection=self.testconn)
 
+        self.assertRaises(ValueError, Queue.dequeue_any, [fooq, barq], timeout=0, connection=self.testconn)
+
         self.assertEqual(Queue.dequeue_any([fooq, barq], None), None)
 
         # Enqueue a single item
@@ -265,6 +267,7 @@ class TestQueue(RQTestCase):
         """Dequeueing job from a single queue moves job to intermediate queue."""
         foo_queue = Queue('foo', connection=self.testconn)
         job_1 = foo_queue.enqueue(say_hello)
+        self.assertRaises(ValueError, Queue.dequeue_any, [foo_queue], timeout=0, connection=self.testconn)
 
         # Job ID is not in intermediate queue
         self.assertIsNone(self.testconn.lpos(foo_queue.intermediate_queue_key, job_1.id))
@@ -353,6 +356,7 @@ class TestQueue(RQTestCase):
 
     def test_synchronous_timeout(self):
         queue = Queue(is_async=False)
+        self.assertFalse(queue.is_async)
 
         no_expire_job = queue.enqueue(echo, result_ttl=-1)
         self.assertEqual(queue.connection.ttl(no_expire_job.key), -1)

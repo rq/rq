@@ -306,7 +306,7 @@ class Queue:
         return self.count == 0
 
     @property
-    def is_async(self):
+    def is_async(self) -> bool:
         """Returns whether the current queue is async."""
         return bool(self._is_async)
 
