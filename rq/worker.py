@@ -514,7 +514,7 @@ class BaseWorker:
 
         if before_state:
             self.set_state(before_state)
-
+    
     def run_maintenance_tasks(self):
         """
         Runs periodic maintenance tasks, these include:

@@ -284,7 +284,25 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.func, say_hello)
         # After job is dequeued, the job ID is in the intermediate queue
         self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 1)
+    
+    @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_intermediate_queue(self):
+        """Job should be stuck in intermediate queue if execution fails after dequeued."""
+        queue = Queue('foo', connection=self.testconn)
+        job = queue.enqueue(say_hello)
 
+        # If job execution fails after it's dequeued, job should be in the intermediate queue
+        # # and it's status is still QUEUED
+        with patch.object(Worker, 'execute_job') as mocked:
+            # mocked.execute_job.side_effect = Exception()
+            worker = Worker(queue, connection=self.testconn)
+            worker.work(burst=True)
+
+            # Job status is still QUEUED even though it's already dequeued
+            self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
+            self.assertFalse(job.id in queue.get_job_ids())
+            self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+    
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
 
@@ -716,7 +734,7 @@ class TestQueue(RQTestCase):
         """Fetch a job from a queue."""
         q = Queue('example')
         job_orig = q.enqueue(say_hello)
-        job_fetch = q.fetch_job(job_orig.id)
+        job_fetch: Job = q.fetch_job(job_orig.id)  # type: ignore
         self.assertIsNotNone(job_fetch)
         self.assertEqual(job_orig.id, job_fetch.id)
         self.assertEqual(job_orig.description, job_fetch.description)

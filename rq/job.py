@@ -500,7 +500,7 @@ class Job:
         self._data = UNEVALUATED
 
     @property
-    def args(self):
+    def args(self) -> tuple:
         if self._args is UNEVALUATED:
             self._deserialize_data()
         return self._args
