@@ -1,7 +1,10 @@
 import json
+import unittest
+
 from datetime import datetime, timedelta, timezone
-from rq.serializers import JSONSerializer
 from unittest.mock import patch
+
+from redis import Redis
 
 from rq import Retry, Queue
 from rq.job import Job, JobStatus
@@ -13,6 +16,9 @@ from rq.registry import (
     ScheduledJobRegistry,
     StartedJobRegistry,
 )
+from rq.serializers import JSONSerializer
+
+from rq.utils import get_version
 from rq.worker import Worker
 
 from tests import RQTestCase
@@ -254,6 +260,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.origin, barq.name)
         self.assertEqual(job.args[0], 'for Bar', 'Bar should be dequeued second.')
     
+    @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_dequeue_any_reliable(self):
         """Dequeueing job from a single queue moves job to intermediate queue."""
         foo_queue = Queue('foo', connection=self.testconn)

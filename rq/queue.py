@@ -1191,8 +1191,8 @@ class Queue:
 
     @classmethod
     def lpop(cls, queue_keys: List[str], timeout: Optional[int], connection: Optional['Redis'] = None):
-        """Helper method.  Intermediate method to abstract away from some
-        Redis API details, where LPOP accepts only a single key, whereas BLPOP
+        """Helper method to abstract away from some Redis API details
+        where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
         iterate over all queues, do individual LPOPs, and return the result.
 
@@ -1293,7 +1293,7 @@ class Queue:
 
         while True:
             queue_keys = [q.key for q in queues]
-            if len(queue_keys) == 1:
+            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
                 result = cls.lmove(connection, queue_keys[0], timeout)
             else:
                 result = cls.lpop(queue_keys, timeout, connection=connection)

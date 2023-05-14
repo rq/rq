@@ -12,12 +12,12 @@ from datetime import datetime, timedelta
 from multiprocessing import Process
 from time import sleep
 
-from unittest import skipIf
-
 import redis.exceptions
 import pytest
-from unittest import mock
+from unittest import mock, skipIf
 from unittest.mock import Mock
+
+from redis import Redis
 
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from tests import RQTestCase, slow
@@ -42,7 +42,7 @@ from tests.fixtures import (
 )
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
-from rq.utils import as_text
+from rq.utils import as_text, get_version
 from rq.job import Job, JobStatus, Retry
 from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
@@ -801,6 +801,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
     
+    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
         """Prepare job execution removes job from intermediate queue."""
         queue = Queue(connection=self.testconn)
@@ -813,6 +814,7 @@ class TestWorker(RQTestCase):
         self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
         self.assertEqual(queue.count, 0)
     
+    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_work_removes_key_from_intermediate_queue(self):
         """Worker removes job from intermediate queue."""
         queue = Queue(connection=self.testconn)
