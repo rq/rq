@@ -22,7 +22,7 @@ from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
-from .logutils import blue, green, yellow
+from .logutils import blue, green
 from .types import FunctionReferenceType, JobDependencyType
 from .serializers import resolve_serializer
 from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow, compact
@@ -86,7 +86,7 @@ class Queue:
         Returns:
             queues (List[Queue]): A list of all queues.
         """
-        connection = resolve_connection(connection)
+        connection = connection or resolve_connection()
 
         def to_queue(queue_key: Union[bytes, str]):
             return cls.from_queue_key(
@@ -162,7 +162,7 @@ class Queue:
             serializer (Any, optional): Serializer. Defaults to None.
             death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path. Defaults to UnixSignalDeathPenalty.
         """
-        self.connection = resolve_connection(connection)
+        self.connection = connection or resolve_connection()
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
@@ -1198,7 +1198,7 @@ class Queue:
         Returns:
             _type_: _description_
         """
-        connection = resolve_connection(connection)
+        connection = connection or resolve_connection()
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
