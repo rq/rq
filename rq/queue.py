@@ -788,7 +788,7 @@ class Queue:
                 ]
             if pipeline is None:
                 pipe.execute()
-            jobs.append(jobs_without_dependencies)
+            jobs += jobs_without_dependencies
         
         job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
         if job_datas_with_dependencies:
@@ -821,7 +821,7 @@ class Queue:
             # Then enqueue all that either didn't have dependencies, or whose dependencies
             # have already been met
             ready_jobs = Dependency.get_ready_jobs(jobs_with_dependencies, pipeline=pipe)
-            jobs.append([self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front) for job in ready_jobs])
+            jobs += [self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front) for job in ready_jobs]
 
         return jobs
 
