@@ -5,6 +5,7 @@ RQ command line tool
 import os
 import sys
 import warnings
+import logging.config
 
 from typing import List, Type
 
@@ -230,7 +231,6 @@ def worker(
     dict_config = options.get("dict_config", settings.get('DICT_CONFIG'))
     
     if dict_config:
-        import logging.config
         logging.config.dictConfig(dict_config)
 
     if pid:
