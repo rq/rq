@@ -229,7 +229,7 @@ def worker(
     sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
     name = name or settings.get('NAME')
-    dict_config = options.get("dict_config", settings.get('DICT_CONFIG'))
+    dict_config = settings.get('DICT_CONFIG')
     
     if dict_config:
         logging.config.dictConfig(dict_config)
