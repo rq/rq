@@ -264,6 +264,7 @@ class TestJob(RQTestCase):
             func=fixtures.some_calculation,
             on_success=Callback(fixtures.say_hello, timeout=10),
             on_failure=fixtures.say_pid,
+            on_stopped=fixtures.say_hello,
         )  # deprecated callable
         job.save()
         stored_job = Job.fetch(job.id)
@@ -271,7 +272,9 @@ class TestJob(RQTestCase):
         self.assertEqual(fixtures.say_hello, stored_job.success_callback)
         self.assertEqual(10, stored_job.success_callback_timeout)
         self.assertEqual(fixtures.say_pid, stored_job.failure_callback)
+        self.assertEqual(fixtures.say_hello, stored_job.stopped_callback)
         self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.stopped_callback_timeout)
 
         # None(s)
         job = Job.create(func=fixtures.some_calculation, on_failure=None)
@@ -283,6 +286,8 @@ class TestJob(RQTestCase):
         self.assertIsNone(stored_job.failure_callback)
         self.assertEqual(CALLBACK_TIMEOUT, job.failure_callback_timeout)  # timeout should be never none
         self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+        self.assertEqual(CALLBACK_TIMEOUT, job.stopped_callback_timeout)  # timeout should be never none
+        self.assertIsNone(stored_job.stopped_callback)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""
