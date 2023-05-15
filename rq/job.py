@@ -619,7 +619,7 @@ class Job:
         self.worker_name: Optional[str] = None
         self._status = None
         self._dependency_ids: List[str] = []
-        self.meta: Optional[Dict] = {}
+        self.meta: Dict = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left: Optional[int] = None
         self.retry_intervals: Optional[List[int]] = None
