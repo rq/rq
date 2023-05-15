@@ -757,11 +757,11 @@ class Queue:
         Returns:
             List[Job]: A list of enqueued jobs
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline() # This is the pipe
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
         jobs_without_dependencies = []
         jobs_with_dependencies_unmet = []
         jobs_with_dependencies_met = []
-        
+
         job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
         if job_datas_without_dependencies:
             jobs_without_dependencies = [
@@ -787,10 +787,10 @@ class Queue:
                     at_front=job_data.at_front,
                 )
                 for job_data in job_datas_without_dependencies
-                ]
+            ]
             if pipeline is None:
                 pipe.execute()
-        
+
         job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
         if job_datas_with_dependencies:
             # Create all jobs as deferred. enqueue_job will just create the objects
@@ -816,14 +816,21 @@ class Queue:
                 for job_data in job_datas_with_dependencies
             ]
             for job in jobs_with_dependencies:
-                job.save(pipeline=pipe) # Save all the jobs, execute
-            pipe.execute()
+                job.save(pipeline=pipe)
+            if pipeline is None:
+                pipe.execute()
             # If any of our jobs have dependencies, just defer them all,
             # Then enqueue all that either didn't have dependencies, or whose dependencies
             # have already been met
-            jobs_with_dependencies_met, jobs_with_dependencies_unmet = Dependency.get_jobs_with_dependencies_met(jobs_with_dependencies, pipeline=pipe)
-            jobs_with_dependencies_met = [self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front) for job in jobs_with_dependencies_met]
-
+            jobs_with_dependencies_met, jobs_with_dependencies_unmet = Dependency.get_jobs_with_dependencies_met(
+                jobs_with_dependencies, pipeline=pipe
+            )
+            jobs_with_dependencies_met = [
+                self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front)
+                for job in jobs_with_dependencies_met
+            ]
+            if pipeline is None:
+                pipe.execute()
         return jobs_without_dependencies + jobs_with_dependencies_unmet + jobs_with_dependencies_met
 
     def run_job(self, job: 'Job') -> Job:
