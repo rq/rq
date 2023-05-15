@@ -281,7 +281,7 @@ SENTRY_DSN = 'sync+http://public:secret@example.com/1'
 # for more complex/consistent logging requirements.
 DICT_CONFIG = {
     'version': 1,
-    'disable_existing_loggers': True,
+    'disable_existing_loggers': False,
     'formatters': {
         'standard': {
             'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -296,19 +296,9 @@ DICT_CONFIG = {
         },
     },
     'loggers': {
-        '': {  # root logger
-            'handlers': ['default'],
-            'level': 'WARNING',
-            'propagate': False
-        },
-        'my.packg': {
+        'root': {  # root logger
             'handlers': ['default'],
             'level': 'INFO',
-            'propagate': False
-        },
-        '__main__': {  # if __name__ == '__main__'
-            'handlers': ['default'],
-            'level': 'DEBUG',
             'propagate': False
         },
     }

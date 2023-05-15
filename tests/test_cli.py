@@ -71,6 +71,11 @@ class TestRQCli(CLITestCase):
         self.assertIn('REDIS_HOST', settings)
         self.assertEqual(settings['REDIS_HOST'], 'testhost.example.com')
 
+    def test_config_file_logging(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '-c', 'tests.config_files.dummy'])
+        self.assert_normal_execution(result)
+
     def test_config_file_option(self):
         """"""
         cli_config = CliConfig(config='tests.config_files.dummy')
