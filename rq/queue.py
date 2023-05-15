@@ -758,6 +758,9 @@ class Queue:
             List[Job]: A list of enqueued jobs
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline() # This is the pipe
+        jobs_without_dependencies = []
+        jobs_with_dependencies_unmet = []
+        jobs_with_dependencies_met = []
         
         job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
         if job_datas_without_dependencies:
