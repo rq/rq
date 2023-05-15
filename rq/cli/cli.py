@@ -5,6 +5,7 @@ RQ command line tool
 import os
 import sys
 import warnings
+import logging
 import logging.config
 
 from typing import List, Type
@@ -306,7 +307,6 @@ def worker(
             dequeue_strategy=dequeue_strategy,
         )
     except ConnectionError as e:
-        import logging
         logging.error(e)
         sys.exit(1)
 

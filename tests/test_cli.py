@@ -73,7 +73,7 @@ class TestRQCli(CLITestCase):
 
     def test_config_file_logging(self):
         runner = CliRunner()
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '-c', 'tests.config_files.dummy'])
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '-c', 'tests.config_files.dummy_logging'])
         self.assert_normal_execution(result)
 
     def test_config_file_option(self):
