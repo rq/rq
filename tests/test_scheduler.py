@@ -203,6 +203,33 @@ class TestScheduler(RQTestCase):
             self.assertEqual(mocked.call_count, 1)
             self.assertEqual(stopped_process.is_alive.call_count, 1)
 
+    def test_lock_release(self):
+        """Test lock acquisition"""
+        name_1 = 'lock-test-1'
+        name_2 = 'lock-test-2'
+        scheduler_1 = RQScheduler([name_1], self.testconn)
+
+        self.assertEqual(scheduler_1.acquire_locks(), {name_1})
+        self.assertEqual(scheduler_1._acquired_locks, {name_1})
+
+        # Only name_2 is returned since name_1 is already locked
+        scheduler_1_2 = RQScheduler([name_1, name_2], self.testconn)
+        self.assertEqual(scheduler_1_2.acquire_locks(), {name_2})
+        self.assertEqual(scheduler_1_2._acquired_locks, {name_2})
+
+        self.assertTrue(self.testconn.exists(scheduler_1.get_locking_key(name_1)))
+        self.assertTrue(self.testconn.exists(scheduler_1_2.get_locking_key(name_1)))
+        self.assertTrue(self.testconn.exists(scheduler_1_2.get_locking_key(name_2)))
+
+        scheduler_1_2.release_locks()
+
+        self.assertEqual(scheduler_1_2._acquired_locks, set())
+        self.assertEqual(scheduler_1._acquired_locks, {name_1})
+
+        self.assertTrue(self.testconn.exists(scheduler_1.get_locking_key(name_1)))
+        self.assertTrue(self.testconn.exists(scheduler_1_2.get_locking_key(name_1)))
+        self.assertFalse(self.testconn.exists(scheduler_1_2.get_locking_key(name_2)))
+
     def test_queue_scheduler_pid(self):
         queue = Queue(connection=self.testconn)
         scheduler = RQScheduler(
@@ -218,25 +245,33 @@ class TestScheduler(RQTestCase):
         """Test that heartbeat updates locking keys TTL"""
         name_1 = 'lock-test-1'
         name_2 = 'lock-test-2'
-        scheduler = RQScheduler([name_1, name_2], self.testconn)
+        name_3 = 'lock-test-3'
+        scheduler = RQScheduler([name_3], self.testconn)
+        scheduler.acquire_locks()
+        scheduler = RQScheduler([name_1, name_2, name_3], self.testconn)
         scheduler.acquire_locks()
 
         locking_key_1 = RQScheduler.get_locking_key(name_1)
         locking_key_2 = RQScheduler.get_locking_key(name_2)
+        locking_key_3 = RQScheduler.get_locking_key(name_3)
 
         with self.testconn.pipeline() as pipeline:
             pipeline.expire(locking_key_1, 1000)
             pipeline.expire(locking_key_2, 1000)
+            pipeline.expire(locking_key_3, 1000)
+            pipeline.execute()
 
         scheduler.heartbeat()
         self.assertEqual(self.testconn.ttl(locking_key_1), 61)
-        self.assertEqual(self.testconn.ttl(locking_key_1), 61)
+        self.assertEqual(self.testconn.ttl(locking_key_2), 61)
+        self.assertEqual(self.testconn.ttl(locking_key_3), 1000)
 
         # scheduler.stop() releases locks and sets status to STOPPED
         scheduler._status = scheduler.Status.WORKING
         scheduler.stop()
         self.assertFalse(self.testconn.exists(locking_key_1))
         self.assertFalse(self.testconn.exists(locking_key_2))
+        self.assertTrue(self.testconn.exists(locking_key_3))
         self.assertEqual(scheduler.status, scheduler.Status.STOPPED)
 
         # Heartbeat also works properly for schedulers with a single queue
