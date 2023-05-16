@@ -10,6 +10,23 @@ permissions:
   contents: read # to fetch code (actions/checkout)
 
 jobs:
+  test-with-ssl:
+    name: Test all, including SSL tests
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build the Docker test image for tox
+      uses: docker/build-push-action@v4
+      with:
+        file: tests/Dockerfile
+        tags: rqtest-image:latest
+        push: false
+    - name: Launch tox for all test scenarii
+      uses: addnab/docker-run-action@v3
+      with:
+        image: rqtest-image:latest
+        run: stunnel & redis-server & RUN_SSL_TESTS=1 tox
+
   test:
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
