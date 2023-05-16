@@ -1,4 +1,6 @@
 from datetime import timedelta
+from multiprocessing import Process
+from time import sleep
 
 from tests import RQTestCase
 from tests.fixtures import (
@@ -10,11 +12,13 @@ from tests.fixtures import (
     long_process,
     save_result_if_not_stopped,
 )
+from tests.test_commands import start_work_burst
 
 from rq import Queue, Worker
 from rq.job import Job, JobStatus, UNEVALUATED
 from rq.worker import SimpleWorker
 from rq.command import send_stop_job_command
+from rq.serializers import JSONSerializer
 
 
 class QueueCallbackTestCase(RQTestCase):
@@ -97,7 +101,27 @@ class SyncJobCallback(RQTestCase):
         job = queue.enqueue(div_by_zero, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.testconn.exists('failure_callback:%s' % job.id))
-        
+
+    def test_stopped_callback(self):
+        """queue.enqueue* methods with on_stopped is persisted correctly"""
+        connection = self.testconn
+        queue = Queue('foo', connection=connection, serializer=JSONSerializer)
+        job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
+        worker = Worker('foo', connection=connection, serializer=JSONSerializer)
+
+        p = Process(
+            target=start_work_burst, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy())
+        )
+        p.start()
+        p.join(1)
+
+        sleep(0.1)
+
+        send_stop_job_command(self.connection, job.id)
+        sleep(0.1)
+        self.assertEqual(job.get_status(refresh=True), JobStatus.STOPPED)
+        self.assertTrue(self.testconn.exists('stopped_callback:%s' % job.id))
+
 
 class WorkerCallbackTestCase(RQTestCase):
     def test_success_callback(self):
