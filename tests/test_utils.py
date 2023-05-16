@@ -1,10 +1,9 @@
-import re
 import datetime
+import re
 from unittest.mock import Mock
 
 from redis import Redis
 
-from tests import RQTestCase, fixtures
 from rq.exceptions import TimeoutFormatError
 from rq.utils import (
     backend_class,
@@ -16,11 +15,12 @@ from rq.utils import (
     import_attribute,
     is_nonstring_iterable,
     parse_timeout,
-    utcparse,
     split_list,
     truncate_long_string,
+    utcparse,
 )
 from rq.worker import SimpleWorker
+from tests import RQTestCase, fixtures
 
 
 class TestUtils(RQTestCase):

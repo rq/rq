@@ -1,26 +1,22 @@
-from datetime import datetime, timezone, timedelta
+import json
+import os
+from datetime import datetime, timedelta, timezone
 from time import sleep
 from uuid import uuid4
 
-import os
-import json
-
-from click import BadParameter
+import pytest
 from click.testing import CliRunner
 from redis import Redis
 
 from rq import Queue
 from rq.cli import main
-from rq.cli.helpers import read_config_file, CliConfig, parse_function_arg, parse_schedule
+from rq.cli.helpers import CliConfig, parse_function_arg, parse_schedule, read_config_file
 from rq.job import Job, JobStatus
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
+from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.timeouts import UnixSignalDeathPenalty
 from rq.worker import Worker, WorkerStatus
-from rq.scheduler import RQScheduler
-
-import pytest
-
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -809,7 +805,7 @@ class WorkerPoolCLITestCase(CLITestCase):
         queue = Queue('bar', connection=self.connection, serializer=JSONSerializer)
         job_2 = queue.enqueue(say_hello, 'Hello')
         runner = CliRunner()
-        result = runner.invoke(
+        runner.invoke(
             main,
             ['worker-pool', 'foo', 'bar', '-u', self.redis_url, '-b', '--serializer', 'rq.serializers.JSONSerializer'],
         )

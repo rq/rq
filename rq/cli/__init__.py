@@ -1,4 +1,4 @@
-# flake8: noqa
+# ruff: noqa: F401 I001
 from .cli import main
 
 # TODO: the following imports can be removed when we drop the `rqinfo` and

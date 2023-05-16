@@ -1,7 +1,6 @@
 import logging
-from rq import get_current_connection
-from rq import Worker
 
+from rq import Worker, get_current_connection
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,9 @@
 import os
-import redis
-
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from unittest import mock
+
+import redis
 
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
@@ -15,6 +15,7 @@ from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp
 from rq.worker import Worker
 from tests import RQTestCase, find_empty_redis_database, ssl_test
+
 from .fixtures import kill_worker, say_hello
 
 

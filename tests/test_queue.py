@@ -1,9 +1,8 @@
 import json
 from datetime import datetime, timedelta, timezone
-from rq.serializers import JSONSerializer
 from unittest.mock import patch
 
-from rq import Retry, Queue
+from rq import Queue, Retry
 from rq.job import Job, JobStatus
 from rq.registry import (
     CanceledJobRegistry,
@@ -13,10 +12,10 @@ from rq.registry import (
     ScheduledJobRegistry,
     StartedJobRegistry,
 )
+from rq.serializers import JSONSerializer
 from rq.worker import Worker
-
 from tests import RQTestCase
-from tests.fixtures import CustomJob, echo, say_hello
+from tests.fixtures import echo, say_hello
 
 
 class MultipleDependencyJob(Job):
