@@ -1,31 +1,28 @@
 import json
-
-from rq.defaults import CALLBACK_TIMEOUT
-from rq.serializers import JSONSerializer
-import time
 import queue
+import time
 import zlib
 from datetime import datetime, timedelta
+from pickle import dumps, loads
 
 from redis import WatchError
 
-from rq.utils import as_text
+from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job, Callback
+from rq.job import Callback, Dependency, Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (
     CanceledJobRegistry,
     DeferredJobRegistry,
     FailedJobRegistry,
     FinishedJobRegistry,
-    StartedJobRegistry,
     ScheduledJobRegistry,
+    StartedJobRegistry,
 )
-from rq.utils import utcformat, utcnow
+from rq.serializers import JSONSerializer
+from rq.utils import as_text, utcformat, utcnow
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
-
-from pickle import loads, dumps
 
 
 class TestJob(RQTestCase):

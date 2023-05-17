@@ -8,7 +8,7 @@ from enum import Enum
 from multiprocessing import Process
 from typing import List, Set
 
-from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection
+from redis import ConnectionPool, Redis
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD

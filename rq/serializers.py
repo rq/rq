@@ -1,6 +1,6 @@
-from functools import partial
-import pickle
 import json
+import pickle
+from functools import partial
 from typing import Optional, Type, Union
 
 from .utils import import_attribute

@@ -7,16 +7,16 @@ terminal colorizing code, originally by Georg Brandl.
 
 import calendar
 import datetime
+import datetime as dt
 import importlib
 import logging
 import numbers
-import sys
-import datetime as dt
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Any, Callable, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from redis import Redis
+
     from .queue import Queue
 
 from redis.exceptions import ResponseError

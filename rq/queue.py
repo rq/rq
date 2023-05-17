@@ -4,9 +4,9 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import total_ordering
-from typing import TYPE_CHECKING, Dict, List, Any, Callable, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 from redis import WatchError
 
@@ -15,18 +15,17 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
+
     from .job import Retry
 
-from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
 from .logutils import blue, green
-from .types import FunctionReferenceType, JobDependencyType
 from .serializers import resolve_serializer
-from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow, compact
-
+from .types import FunctionReferenceType, JobDependencyType
+from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, utcnow
 
 logger = logging.getLogger("rq.queue")
 
@@ -158,9 +157,11 @@ class Queue:
             connection (Optional[Redis], optional): Redis connection. Defaults to None.
             is_async (bool, optional): Whether jobs should run "async" (using the worker).
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
-            job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path. Defaults to None.
+            job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
+                Defaults to None.
             serializer (Any, optional): Serializer. Defaults to None.
-            death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path. Defaults to UnixSignalDeathPenalty.
+            death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
+                Defaults to UnixSignalDeathPenalty.
         """
         self.connection = connection or resolve_connection()
         prefix = self.redis_queue_namespace_prefix

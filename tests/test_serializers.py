@@ -18,10 +18,7 @@ class TestSerializers(unittest.TestCase):
         test_data = {'test': 'data'}
         serialized_data = serializer.dumps(test_data)
         self.assertEqual(serializer.loads(serialized_data), test_data)
-        self.assertEqual(
-            next(pickletools.genops(serialized_data))[1],
-            pickle.HIGHEST_PROTOCOL
-        )
+        self.assertEqual(next(pickletools.genops(serialized_data))[1], pickle.HIGHEST_PROTOCOL)
 
         # Test using json serializer
         serializer = resolve_serializer(json)
