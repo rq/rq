@@ -1,8 +1,9 @@
 from functools import wraps
-from typing import TYPE_CHECKING, Callable, Dict, Optional, List, Any, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 if TYPE_CHECKING:
     from redis import Redis
+
     from .job import Retry
 
 from .defaults import DEFAULT_RESULT_TTL

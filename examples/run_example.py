@@ -1,9 +1,9 @@
 import os
 import time
 
-from rq import Connection, Queue
-
 from fib import slow_fib
+
+from rq import Connection, Queue
 
 
 def main():

@@ -1,14 +1,14 @@
+from unittest import mock
+
+from click.testing import CliRunner
+
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import read_config_file
 from rq.contrib.sentry import register_sentry
 from rq.worker import SimpleWorker
-
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
-
-from unittest import mock
-from click.testing import CliRunner
 
 
 class FakeSentry:

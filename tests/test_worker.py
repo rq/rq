@@ -1,56 +1,51 @@
 import json
 import os
-import psutil
 import shutil
 import signal
 import subprocess
 import sys
 import time
 import zlib
-
 from datetime import datetime, timedelta
 from multiprocessing import Process
 from time import sleep
-
-from unittest import skipIf
-
-import redis.exceptions
-import pytest
-from unittest import mock
+from unittest import mock, skipIf
 from unittest.mock import Mock
 
+import psutil
+import pytest
+import redis.exceptions
+
+from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
+from rq.job import Job, JobStatus, Retry
+from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
+from rq.results import Result
+from rq.serializers import JSONSerializer
+from rq.suspension import resume, suspend
+from rq.utils import as_text, utcnow
+from rq.version import VERSION
+from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
 from tests import RQTestCase, slow
 from tests.fixtures import (
+    CustomJob,
     access_self,
     create_file,
     create_file_after_timeout,
     create_file_after_timeout_and_setsid,
-    CustomJob,
     div_by_zero,
     do_nothing,
     kill_worker,
+    launch_process_within_worker_and_store_pid,
     long_running_job,
     modify_self,
     modify_self_and_error,
+    raise_exc_mock,
     run_dummy_heroku_worker,
     save_key_ttl,
     say_hello,
     say_pid,
-    raise_exc_mock,
-    launch_process_within_worker_and_store_pid,
 )
-
-from rq import Queue, SimpleWorker, Worker, get_current_connection
-from rq.utils import as_text
-from rq.job import Job, JobStatus, Retry
-from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
-from rq.results import Result
-from rq.suspension import resume, suspend
-from rq.utils import utcnow
-from rq.version import VERSION
-from rq.worker import HerokuWorker, WorkerStatus, RoundRobinWorker, RandomWorker
-from rq.serializers import JSONSerializer
 
 
 class CustomQueue(Queue):
@@ -656,7 +651,10 @@ class TestWorker(RQTestCase):
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(None))
 
     def test_worker_ttl_param_resolves_timeout(self):
-        """Ensures the worker_ttl param is being considered in the dequeue_timeout and connection_timeout params, takes into account 15 seconds gap (hard coded)"""
+        """
+        Ensures the worker_ttl param is being considered in the dequeue_timeout and
+        connection_timeout params, takes into account 15 seconds gap (hard coded)
+        """
         q = Queue()
         w = Worker([q])
         self.assertEqual(w.dequeue_timeout, 405)

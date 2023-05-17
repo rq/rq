@@ -1,17 +1,15 @@
 import time
-
 from multiprocessing import Process
 
 from redis import Redis
-
-from tests import RQTestCase
-from tests.fixtures import long_running_job, _send_kill_horse_command, _send_shutdown_command
 
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.serializers import JSONSerializer
 from rq.worker import WorkerStatus
+from tests import RQTestCase
+from tests.fixtures import _send_kill_horse_command, _send_shutdown_command, long_running_job
 
 
 def start_work(queue_name, worker_name, connection_kwargs):

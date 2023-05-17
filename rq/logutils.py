@@ -2,7 +2,7 @@ import logging
 import sys
 from typing import Union
 
-from rq.defaults import DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT
+from rq.defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 
 
 class _Colorizer:
@@ -24,12 +24,12 @@ class _Colorizer:
         light_colors = ["darkgray", "red", "green", "yellow", "blue", "fuchsia", "turquoise", "white"]
 
         x = 30
-        for d, l in zip(dark_colors, light_colors):
-            self.codes[d] = esc + "%im" % x
-            self.codes[l] = esc + "%i;01m" % x
+        for dark, light in zip(dark_colors, light_colors):
+            self.codes[dark] = esc + "%im" % x
+            self.codes[light] = esc + "%i;01m" % x
             x += 1
 
-        del d, l, x
+        del dark, light, x
 
         self.codes["darkteal"] = self.codes["turquoise"]
         self.codes["darkyellow"] = self.codes["brown"]
@@ -117,7 +117,8 @@ def setup_loghandlers(
         level (Union[int, str, None], optional): The log level.
             Access an integer level (10-50) or a string level ("info", "debug" etc). Defaults to None.
         date_format (str, optional): The date format to use. Defaults to DEFAULT_LOGGING_DATE_FORMAT ('%H:%M:%S').
-        log_format (str, optional): The log format to use. Defaults to DEFAULT_LOGGING_FORMAT ('%(asctime)s %(message)s').
+        log_format (str, optional): The log format to use.
+            Defaults to DEFAULT_LOGGING_FORMAT ('%(asctime)s %(message)s').
         name (str, optional): The looger name. Defaults to 'rq.worker'.
     """
     logger = logging.getLogger(name)
