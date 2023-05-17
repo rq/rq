@@ -204,7 +204,7 @@ class TestScheduler(RQTestCase):
             self.assertEqual(stopped_process.is_alive.call_count, 1)
 
     def test_lock_release(self):
-        """Test lock acquisition"""
+        """Test that scheduler.release_locks() only releases acquired locks"""
         name_1 = 'lock-test-1'
         name_2 = 'lock-test-2'
         scheduler_1 = RQScheduler([name_1], self.testconn)
