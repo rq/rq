@@ -1422,9 +1422,6 @@ class Job:
 
     def execute_stopped_callback(self, death_penalty_class: Type[BaseDeathPenalty]):
         """Executes stopped_callback with possible timeout"""
-        if not self.stopped_callback:
-            return
-
         logger.debug('Running stopped callbacks for %s', self.id)
         try:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
