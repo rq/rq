@@ -759,8 +759,8 @@ class Queue:
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         jobs_without_dependencies = []
-        jobs_with_dependencies_unmet = []
-        jobs_with_dependencies_met = []
+        jobs_with_unmet_dependencies = []
+        jobs_with_met_dependencies = []
 
         job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
         if job_datas_without_dependencies:
@@ -819,19 +819,18 @@ class Queue:
                 job.save(pipeline=pipe)
             if pipeline is None:
                 pipe.execute()
-            # If any of our jobs have dependencies, just defer them all,
-            # Then enqueue all that either didn't have dependencies, or whose dependencies
-            # have already been met
-            jobs_with_dependencies_met, jobs_with_dependencies_unmet = Dependency.get_jobs_with_dependencies_met(
+
+            # Enqueue the jobs whose dependencies have been met
+            jobs_with_met_dependencies, jobs_with_unmet_dependencies = Dependency.get_jobs_with_met_dependencies(
                 jobs_with_dependencies, pipeline=pipe
             )
-            jobs_with_dependencies_met = [
+            jobs_with_met_dependencies = [
                 self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front)
-                for job in jobs_with_dependencies_met
+                for job in jobs_with_met_dependencies
             ]
             if pipeline is None:
                 pipe.execute()
-        return jobs_without_dependencies + jobs_with_dependencies_unmet + jobs_with_dependencies_met
+        return jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
 
     def run_job(self, job: 'Job') -> Job:
         """Run the job
