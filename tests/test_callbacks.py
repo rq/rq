@@ -107,7 +107,7 @@ class SyncJobCallback(RQTestCase):
         connection = self.testconn
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
-        worker = Worker('foo', connection=connection, serializer=JSONSerializer)
+        worker = SimpleWorker('foo', connection=connection, serializer=JSONSerializer)
 
         p = Process(
             target=start_work_burst, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy())
@@ -134,10 +134,7 @@ class WorkerCallbackTestCase(RQTestCase):
         # Callback is executed when job is successfully executed
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(
-            self.testconn.get('success_callback:%s' % job.id).decode(),
-            job.return_value()
-        )
+        self.assertEqual(self.testconn.get('success_callback:%s' % job.id).decode(), job.return_value())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
@@ -166,8 +163,7 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
         print(job.exc_info)
-        self.assertIn('div_by_zero',
-                      self.testconn.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.testconn.get('failure_callback:%s' % job.id).decode())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
