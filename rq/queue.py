@@ -762,27 +762,31 @@ class Queue:
         jobs_with_unmet_dependencies = []
         jobs_with_met_dependencies = []
 
+        def get_job_kwargs(job_data, initial_status):
+            return {
+                "func": job_data.func,
+                "args": job_data.args,
+                "kwargs": job_data.kwargs,
+                "result_ttl": job_data.result_ttl,
+                "ttl": job_data.ttl,
+                "failure_ttl": job_data.failure_ttl,
+                "description": job_data.description,
+                "depends_on": job_data.depends_on,
+                "job_id": job_data.job_id,
+                "meta": job_data.meta,
+                "status": initial_status,
+                "timeout": job_data.timeout,
+                "retry": job_data.retry,
+                "on_success": job_data.on_success,
+                "on_failure": job_data.on_failure,
+            }
+
+        # Enqueue jobs without dependencies
         job_datas_without_dependencies = [job_data for job_data in job_datas if not job_data.depends_on]
         if job_datas_without_dependencies:
             jobs_without_dependencies = [
                 self._enqueue_job(
-                    self.create_job(
-                        job_data.func,
-                        args=job_data.args,
-                        kwargs=job_data.kwargs,
-                        result_ttl=job_data.result_ttl,
-                        ttl=job_data.ttl,
-                        failure_ttl=job_data.failure_ttl,
-                        description=job_data.description,
-                        depends_on=job_data.depends_on,
-                        job_id=job_data.job_id,
-                        meta=job_data.meta,
-                        status=JobStatus.QUEUED,
-                        timeout=job_data.timeout,
-                        retry=job_data.retry,
-                        on_success=job_data.on_success,
-                        on_failure=job_data.on_failure,
-                    ),
+                    self.create_job(**get_job_kwargs(job_data, JobStatus.QUEUED)),
                     pipeline=pipe,
                     at_front=job_data.at_front,
                 )
@@ -793,26 +797,10 @@ class Queue:
 
         job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
         if job_datas_with_dependencies:
-            # Create all jobs as deferred. enqueue_job will just create the objects
-            # in Redis, it won't add deferred jobs to the queue.
+
+            # Save all jobs with dependencies as deferred
             jobs_with_dependencies = [
-                self.create_job(
-                    job_data.func,
-                    args=job_data.args,
-                    kwargs=job_data.kwargs,
-                    result_ttl=job_data.result_ttl,
-                    ttl=job_data.ttl,
-                    failure_ttl=job_data.failure_ttl,
-                    description=job_data.description,
-                    depends_on=job_data.depends_on,
-                    job_id=job_data.job_id,
-                    meta=job_data.meta,
-                    status=JobStatus.DEFERRED,
-                    timeout=job_data.timeout,
-                    retry=job_data.retry,
-                    on_success=job_data.on_success,
-                    on_failure=job_data.on_failure,
-                )
+                self.create_job(**get_job_kwargs(job_data, JobStatus.DEFERRED))
                 for job_data in job_datas_with_dependencies
             ]
             for job in jobs_with_dependencies:
