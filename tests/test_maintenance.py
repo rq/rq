@@ -21,7 +21,7 @@ class MaintenanceTestCase(RQTestCase):
 
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # # and it's status is still QUEUED
-        with patch.object(Worker, 'execute_job') as mocked:
+        with patch.object(Worker, 'execute_job'):
             # mocked.execute_job.side_effect = Exception()
             worker = Worker(queue, connection=self.testconn)
             worker.work(burst=True)

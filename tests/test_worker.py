@@ -12,11 +12,10 @@ from time import sleep
 from unittest import mock, skipIf
 from unittest.mock import Mock
 
-from redis import Redis
-
 import psutil
 import pytest
 import redis.exceptions
+from redis import Redis
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL

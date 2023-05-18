@@ -47,24 +47,15 @@ from .defaults import (
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .job import Job, JobStatus
-from .maintenance import clean_intermediate_queue
 from .logutils import blue, green, setup_loghandlers, yellow
+from .maintenance import clean_intermediate_queue
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
-from .utils import (
-    as_text,
-    backend_class,
-    compact,
-    ensure_list,
-    get_version,
-    utcformat,
-    utcnow,
-    utcparse,
-)
+from .utils import as_text, backend_class, compact, ensure_list, get_version, utcformat, utcnow, utcparse
 from .version import VERSION
 
 try:

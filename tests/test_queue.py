@@ -1,12 +1,11 @@
 import json
 import unittest
-
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from redis import Redis
 
-from rq import Retry, Queue
+from rq import Queue, Retry
 from rq.job import Job, JobStatus
 from rq.registry import (
     CanceledJobRegistry,
@@ -276,7 +275,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 0)
 
         # Test the blocking version
-        job_2 = foo_queue.enqueue(say_hello)
+        foo_queue.enqueue(say_hello)
         job, queue = Queue.dequeue_any([foo_queue], timeout=1, connection=self.testconn)
         self.assertEqual(queue, foo_queue)
         self.assertEqual(job.func, say_hello)
@@ -291,7 +290,7 @@ class TestQueue(RQTestCase):
 
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # # and it's status is still QUEUED
-        with patch.object(Worker, 'execute_job') as mocked:
+        with patch.object(Worker, 'execute_job'):
             # mocked.execute_job.side_effect = Exception()
             worker = Worker(queue, connection=self.testconn)
             worker.work(burst=True)
