@@ -15,6 +15,7 @@ from unittest.mock import Mock
 import psutil
 import pytest
 import redis.exceptions
+from redis import Redis
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
@@ -23,7 +24,7 @@ from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegist
 from rq.results import Result
 from rq.serializers import JSONSerializer
 from rq.suspension import resume, suspend
-from rq.utils import as_text, utcnow
+from rq.utils import as_text, get_version, utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
 from tests import RQTestCase, slow
@@ -798,6 +799,28 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
+
+    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
+        """Prepare job execution removes job from intermediate queue."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        Queue.dequeue_any([queue], timeout=None, connection=self.testconn)
+        self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        worker = Worker([queue])
+        worker.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        self.assertEqual(queue.count, 0)
+
+    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_work_removes_key_from_intermediate_queue(self):
+        """Worker removes job from intermediate queue."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.work(burst=True)
+        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""

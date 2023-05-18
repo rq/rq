@@ -49,7 +49,7 @@ class TestJob(RQTestCase):
         self.assertEqual(str(job), "<Job %s: test job>" % job.id)
 
         # ...and nothing else
-        self.assertIsNone(job.origin)
+        self.assertEqual(job.origin, '')
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
@@ -87,7 +87,7 @@ class TestJob(RQTestCase):
         self.assertEqual(job.kwargs, {'z': 2})
 
         # ...but metadata is not
-        self.assertIsNone(job.origin)
+        self.assertEqual(job.origin, '')
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.result)
 

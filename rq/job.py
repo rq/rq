@@ -153,7 +153,7 @@ class Job:
         depends_on: Optional[JobDependencyType] = None,
         timeout: Optional[int] = None,
         id: Optional[str] = None,
-        origin=None,
+        origin: str = '',
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
@@ -221,7 +221,7 @@ class Job:
         if id is not None:
             job.set_id(id)
 
-        if origin is not None:
+        if origin:
             job.origin = origin
 
         # Set the core job tuple properties
@@ -504,7 +504,7 @@ class Job:
         self._data = UNEVALUATED
 
     @property
-    def args(self):
+    def args(self) -> tuple:
         if self._args is UNEVALUATED:
             self._deserialize_data()
         return self._args
@@ -608,7 +608,7 @@ class Job:
         self._failure_callback_name = None
         self._failure_callback = UNEVALUATED
         self.description: Optional[str] = None
-        self.origin: Optional[str] = None
+        self.origin: str = ''
         self.enqueued_at: Optional[datetime] = None
         self.started_at: Optional[datetime] = None
         self.ended_at: Optional[datetime] = None
@@ -623,7 +623,7 @@ class Job:
         self.worker_name: Optional[str] = None
         self._status = None
         self._dependency_ids: List[str] = []
-        self.meta: Optional[Dict] = {}
+        self.meta: Dict = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left: Optional[int] = None
         self.retry_intervals: Optional[List[int]] = None
@@ -883,7 +883,7 @@ class Job:
             self.data = raw_data
 
         self.created_at = str_to_date(obj.get('created_at'))
-        self.origin = as_text(obj.get('origin')) if obj.get('origin') else None
+        self.origin = as_text(obj.get('origin')) if obj.get('origin') else ''
         self.worker_name = obj.get('worker_name').decode() if obj.get('worker_name') else None
         self.description = as_text(obj.get('description')) if obj.get('description') else None
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
@@ -977,7 +977,7 @@ class Job:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
             obj['retry_intervals'] = json.dumps(self.retry_intervals)
-        if self.origin is not None:
+        if self.origin:
             obj['origin'] = self.origin
         if self.description is not None:
             obj['description'] = self.description

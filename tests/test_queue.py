@@ -1,6 +1,9 @@
 import json
+import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+
+from redis import Redis
 
 from rq import Queue, Retry
 from rq.job import Job, JobStatus
@@ -13,6 +16,7 @@ from rq.registry import (
     StartedJobRegistry,
 )
 from rq.serializers import JSONSerializer
+from rq.utils import get_version
 from rq.worker import Worker
 from tests import RQTestCase
 from tests.fixtures import echo, say_hello
@@ -226,8 +230,10 @@ class TestQueue(RQTestCase):
 
     def test_dequeue_any(self):
         """Fetching work from any given queue."""
-        fooq = Queue('foo')
-        barq = Queue('bar')
+        fooq = Queue('foo', connection=self.testconn)
+        barq = Queue('bar', connection=self.testconn)
+
+        self.assertRaises(ValueError, Queue.dequeue_any, [fooq, barq], timeout=0, connection=self.testconn)
 
         self.assertEqual(Queue.dequeue_any([fooq, barq], None), None)
 
@@ -252,6 +258,47 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
         self.assertEqual(job.args[0], 'for Bar', 'Bar should be dequeued second.')
+
+    @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_dequeue_any_reliable(self):
+        """Dequeueing job from a single queue moves job to intermediate queue."""
+        foo_queue = Queue('foo', connection=self.testconn)
+        job_1 = foo_queue.enqueue(say_hello)
+        self.assertRaises(ValueError, Queue.dequeue_any, [foo_queue], timeout=0, connection=self.testconn)
+
+        # Job ID is not in intermediate queue
+        self.assertIsNone(self.testconn.lpos(foo_queue.intermediate_queue_key, job_1.id))
+        job, queue = Queue.dequeue_any([foo_queue], timeout=None, connection=self.testconn)
+        self.assertEqual(queue, foo_queue)
+        self.assertEqual(job.func, say_hello)
+        # After job is dequeued, the job ID is in the intermediate queue
+        self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 0)
+
+        # Test the blocking version
+        foo_queue.enqueue(say_hello)
+        job, queue = Queue.dequeue_any([foo_queue], timeout=1, connection=self.testconn)
+        self.assertEqual(queue, foo_queue)
+        self.assertEqual(job.func, say_hello)
+        # After job is dequeued, the job ID is in the intermediate queue
+        self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 1)
+
+    @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_intermediate_queue(self):
+        """Job should be stuck in intermediate queue if execution fails after dequeued."""
+        queue = Queue('foo', connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        # If job execution fails after it's dequeued, job should be in the intermediate queue
+        # # and it's status is still QUEUED
+        with patch.object(Worker, 'execute_job'):
+            # mocked.execute_job.side_effect = Exception()
+            worker = Worker(queue, connection=self.testconn)
+            worker.work(burst=True)
+
+            # Job status is still QUEUED even though it's already dequeued
+            self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
+            self.assertFalse(job.id in queue.get_job_ids())
+            self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
@@ -324,6 +371,7 @@ class TestQueue(RQTestCase):
 
     def test_synchronous_timeout(self):
         queue = Queue(is_async=False)
+        self.assertFalse(queue.is_async)
 
         no_expire_job = queue.enqueue(echo, result_ttl=-1)
         self.assertEqual(queue.connection.ttl(no_expire_job.key), -1)
@@ -683,7 +731,7 @@ class TestQueue(RQTestCase):
         """Fetch a job from a queue."""
         q = Queue('example')
         job_orig = q.enqueue(say_hello)
-        job_fetch = q.fetch_job(job_orig.id)
+        job_fetch: Job = q.fetch_job(job_orig.id)  # type: ignore
         self.assertIsNotNone(job_fetch)
         self.assertEqual(job_orig.id, job_fetch.id)
         self.assertEqual(job_orig.description, job_fetch.description)
