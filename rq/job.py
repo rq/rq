@@ -1,24 +1,25 @@
+import asyncio
 import inspect
 import json
 import logging
 import warnings
 import zlib
-import asyncio
-
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from redis import WatchError
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
-from .defaults import CALLBACK_TIMEOUT
-from .timeouts import JobTimeoutException, BaseDeathPenalty
+from redis import WatchError
+
+from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from .timeouts import BaseDeathPenalty, JobTimeoutException
 
 if TYPE_CHECKING:
-    from .results import Result
-    from .queue import Queue
     from redis import Redis
     from redis.client import Pipeline
+
+    from .queue import Queue
+    from .results import Result
 
 from .connections import resolve_connection
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
@@ -152,7 +153,7 @@ class Job:
         depends_on: Optional[JobDependencyType] = None,
         timeout: Optional[int] = None,
         id: Optional[str] = None,
-        origin=None,
+        origin: str = '',
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
@@ -167,8 +168,8 @@ class Job:
             func (FunctionReference): The function/method/callable for the Job. This can be
                 a reference to a concrete callable or a string representing the  path of function/method to be
                 imported. Effectively this is the only required attribute when creating a new Job.
-            args (Union[List[Any], Optional[Tuple]], optional): A Tuple / List of positional arguments to pass the callable.
-                Defaults to None, meaning no args being passed.
+            args (Union[List[Any], Optional[Tuple]], optional): A Tuple / List of positional arguments to pass the
+                callable.  Defaults to None, meaning no args being passed.
             kwargs (Optional[Dict], optional): A Dictionary of keyword arguments to pass the callable.
                 Defaults to None, meaning no kwargs being passed.
             connection (Optional[Redis], optional): The Redis connection to use. Defaults to None.
@@ -179,13 +180,16 @@ class Job:
             status (JobStatus, optional): The Job Status. Defaults to None.
             description (Optional[str], optional): The Job Description. Defaults to None.
             depends_on (Union['Dependency', List[Union['Dependency', 'Job']]], optional): What the jobs depends on.
-                This accepts a variaty of different arguments including a `Dependency`, a list of `Dependency` or a `Job`
-                list of `Job`. Defaults to None.
-            timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job execution. Defaults to None.
+                This accepts a variaty of different arguments including a `Dependency`, a list of `Dependency` or a
+                `Job` list of `Job`. Defaults to None.
+            timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job
+                execution. Defaults to None.
             id (Optional[str], optional): An Optional ID (str) for the Job. Defaults to None.
             origin (Optional[str], optional): The queue of origin. Defaults to None.
-            meta (Optional[Dict[str, Any]], optional): Custom metadata about the job, takes a dictioanry. Defaults to None.
-            failure_ttl (Optional[int], optional): THe time to live in seconds for failed-jobs information. Defaults to None.
+            meta (Optional[Dict[str, Any]], optional): Custom metadata about the job, takes a dictioanry.
+                Defaults to None.
+            failure_ttl (Optional[int], optional): THe time to live in seconds for failed-jobs information.
+                Defaults to None.
             serializer (Optional[str], optional): The serializer class path to use. Should be a string with the import
                 path for the serializer to use. eg. `mymodule.myfile.MySerializer` Defaults to None.
             on_success (Optional[Callable[..., Any]], optional): A callback function, should be a callable to run
@@ -217,7 +221,7 @@ class Job:
         if id is not None:
             job.set_id(id)
 
-        if origin is not None:
+        if origin:
             job.origin = origin
 
         # Set the core job tuple properties
@@ -500,7 +504,7 @@ class Job:
         self._data = UNEVALUATED
 
     @property
-    def args(self):
+    def args(self) -> tuple:
         if self._args is UNEVALUATED:
             self._deserialize_data()
         return self._args
@@ -532,9 +536,10 @@ class Job:
         Returns:
             job_exists (bool): Whether the Job exists
         """
-        conn = resolve_connection(connection)
+        if not connection:
+            connection = resolve_connection()
         job_key = cls.key_for(job_id)
-        job_exists = conn.exists(job_key)
+        job_exists = connection.exists(job_key)
         return bool(job_exists)
 
     @classmethod
@@ -587,7 +592,10 @@ class Job:
         return jobs
 
     def __init__(self, id: Optional[str] = None, connection: Optional['Redis'] = None, serializer=None):
-        self.connection = resolve_connection(connection)
+        if connection:
+            self.connection = connection
+        else:
+            self.connection = resolve_connection()
         self._id = id
         self.created_at = utcnow()
         self._data = UNEVALUATED
@@ -600,7 +608,7 @@ class Job:
         self._failure_callback_name = None
         self._failure_callback = UNEVALUATED
         self.description: Optional[str] = None
-        self.origin: Optional[str] = None
+        self.origin: str = ''
         self.enqueued_at: Optional[datetime] = None
         self.started_at: Optional[datetime] = None
         self.ended_at: Optional[datetime] = None
@@ -615,7 +623,7 @@ class Job:
         self.worker_name: Optional[str] = None
         self._status = None
         self._dependency_ids: List[str] = []
-        self.meta: Optional[Dict] = {}
+        self.meta: Dict = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left: Optional[int] = None
         self.retry_intervals: Optional[List[int]] = None
@@ -875,7 +883,7 @@ class Job:
             self.data = raw_data
 
         self.created_at = str_to_date(obj.get('created_at'))
-        self.origin = as_text(obj.get('origin')) if obj.get('origin') else None
+        self.origin = as_text(obj.get('origin')) if obj.get('origin') else ''
         self.worker_name = obj.get('worker_name').decode() if obj.get('worker_name') else None
         self.description = as_text(obj.get('description')) if obj.get('description') else None
         self.enqueued_at = str_to_date(obj.get('enqueued_at'))
@@ -887,7 +895,7 @@ class Job:
             try:
                 self._result = self.serializer.loads(result)
             except Exception:
-                self._result = "Unserializable return value"
+                self._result = UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
@@ -912,7 +920,10 @@ class Job:
         self.allow_dependency_failures = bool(int(allow_failures)) if allow_failures else None
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj.get('ttl')) if obj.get('ttl') else None
-        self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        try:
+            self.meta = self.serializer.loads(obj.get('meta')) if obj.get('meta') else {}
+        except Exception:  # depends on the serializer
+            self.meta = {'unserialized': obj.get('meta', {})}
 
         self.retries_left = int(obj.get('retries_left')) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
@@ -966,7 +977,7 @@ class Job:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
             obj['retry_intervals'] = json.dumps(self.retry_intervals)
-        if self.origin is not None:
+        if self.origin:
             obj['origin'] = self.origin
         if self.description is not None:
             obj['description'] = self.description
@@ -1074,8 +1085,8 @@ class Job:
         """
         if self.is_canceled:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
-        from .registry import CanceledJobRegistry
         from .queue import Queue
+        from .registry import CanceledJobRegistry
 
         pipe = pipeline or self.connection.pipeline()
 

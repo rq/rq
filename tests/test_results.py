@@ -1,25 +1,24 @@
+import tempfile
 import unittest
-
 from datetime import timedelta
-from unittest.mock import patch, PropertyMock
+from unittest.mock import PropertyMock, patch
 
 from redis import Redis
 
-from tests import RQTestCase
-
+from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.job import Job
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result, get_key
 from rq.utils import get_version, utcnow
 from rq.worker import Worker
+from tests import RQTestCase
 
-from .fixtures import say_hello, div_by_zero
+from .fixtures import div_by_zero, say_hello
 
 
 @unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
 class TestScheduledJobRegistry(RQTestCase):
-
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)
@@ -157,8 +156,7 @@ class TestScheduledJobRegistry(RQTestCase):
         registry = StartedJobRegistry(connection=self.connection)
         job.started_at = utcnow()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
-        worker.handle_job_failure(job, exc_string='Error', queue=queue,
-                                  started_job_registry=registry)
+        worker.handle_job_failure(job, exc_string='Error', queue=queue, started_job_registry=registry)
 
         job = Job.fetch(job.id, connection=self.connection)
         payload = self.connection.hgetall(job.key)
@@ -179,8 +177,7 @@ class TestScheduledJobRegistry(RQTestCase):
                 # If `save_result_to_job` = True, result will be saved to job
                 # hash, simulating older versions of RQ
 
-                worker.handle_job_failure(job, exc_string='Error', queue=queue,
-                                          started_job_registry=registry)
+                worker.handle_job_failure(job, exc_string='Error', queue=queue, started_job_registry=registry)
                 payload = self.connection.hgetall(job.key)
                 self.assertTrue(b'exc_info' in payload.keys())
                 # Delete all new result objects so we only have result stored in job hash,
@@ -236,3 +233,19 @@ class TestScheduledJobRegistry(RQTestCase):
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=0, return_value=1)
         self.assertIsNone(job.return_value())
+
+    def test_job_return_value_unserializable(self):
+        """Test job.return_value when it is not serializable"""
+        queue = Queue(connection=self.connection, result_ttl=0)
+        job = queue.enqueue(say_hello)
+
+        # Returns None when there's no result
+        self.assertIsNone(job.return_value())
+
+        # tempfile.NamedTemporaryFile() is not picklable
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=tempfile.NamedTemporaryFile())
+        self.assertEqual(job.return_value(), UNSERIALIZABLE_RETURN_VALUE_PAYLOAD)
+        self.assertEqual(Result.count(job), 1)
+
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        self.assertEqual(Result.count(job), 2)

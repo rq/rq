@@ -1,5 +1,4 @@
 from rq import Queue
-
 from tests import RQTestCase, fixtures
 
 

@@ -1,47 +1,52 @@
 import json
 import os
-import psutil
 import shutil
 import signal
 import subprocess
 import sys
 import time
 import zlib
-
 from datetime import datetime, timedelta
 from multiprocessing import Process
 from time import sleep
-
-from unittest import skipIf
-
-import redis.exceptions
-import pytest
-from unittest import mock
+from unittest import mock, skipIf
 from unittest.mock import Mock
 
-from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
-from tests import RQTestCase, slow
-from tests.fixtures import (
-    access_self, create_file, create_file_after_timeout, create_file_after_timeout_and_setsid, div_by_zero, do_nothing,
-    kill_worker, long_running_job, modify_self, modify_self_and_error,
-    run_dummy_heroku_worker, save_key_ttl, say_hello, say_pid, raise_exc_mock,
-    launch_process_within_worker_and_store_pid
-)
+import psutil
+import pytest
+import redis.exceptions
+from redis import Redis
 
 from rq import Queue, SimpleWorker, Worker, get_current_connection
-from rq.utils import as_text
+from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.job import Job, JobStatus, Retry
-from rq.registry import StartedJobRegistry, FailedJobRegistry, FinishedJobRegistry
+from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
-from rq.suspension import resume, suspend
-from rq.utils import utcnow
-from rq.version import VERSION
-from rq.worker import HerokuWorker, WorkerStatus, RoundRobinWorker, RandomWorker
 from rq.serializers import JSONSerializer
-
-
-class CustomJob(Job):
-    pass
+from rq.suspension import resume, suspend
+from rq.utils import as_text, get_version, utcnow
+from rq.version import VERSION
+from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
+from tests import RQTestCase, slow
+from tests.fixtures import (
+    CustomJob,
+    access_self,
+    create_file,
+    create_file_after_timeout,
+    create_file_after_timeout_and_setsid,
+    div_by_zero,
+    do_nothing,
+    kill_worker,
+    launch_process_within_worker_and_store_pid,
+    long_running_job,
+    modify_self,
+    modify_self_and_error,
+    raise_exc_mock,
+    run_dummy_heroku_worker,
+    save_key_ttl,
+    say_hello,
+    say_pid,
+)
 
 
 class CustomQueue(Queue):
@@ -49,7 +54,6 @@ class CustomQueue(Queue):
 
 
 class TestWorker(RQTestCase):
-
     def test_create_worker(self):
         """Worker creation using various inputs."""
 
@@ -96,31 +100,19 @@ class TestWorker(RQTestCase):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = Worker([fooq, barq])
-        self.assertEqual(
-            w.work(burst=True), False,
-            'Did not expect any work on the queue.'
-        )
+        self.assertEqual(w.work(burst=True), False, 'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
-        self.assertEqual(
-            w.work(burst=True), True,
-            'Expected at least some work done.'
-        )
+        self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
 
     def test_work_and_quit_custom_serializer(self):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo', serializer=JSONSerializer), Queue('bar', serializer=JSONSerializer)
         w = Worker([fooq, barq], serializer=JSONSerializer)
-        self.assertEqual(
-            w.work(burst=True), False,
-            'Did not expect any work on the queue.'
-        )
+        self.assertEqual(w.work(burst=True), False, 'Did not expect any work on the queue.')
 
         fooq.enqueue(say_hello, name='Frank')
-        self.assertEqual(
-            w.work(burst=True), True,
-            'Expected at least some work done.'
-        )
+        self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
 
     def test_worker_all(self):
         """Worker.all() works properly"""
@@ -132,10 +124,7 @@ class TestWorker(RQTestCase):
         w2 = Worker([foo_queue], name='w2')
         w2.register_birth()
 
-        self.assertEqual(
-            set(Worker.all(connection=foo_queue.connection)),
-            set([w1, w2])
-        )
+        self.assertEqual(set(Worker.all(connection=foo_queue.connection)), set([w1, w2]))
         self.assertEqual(set(Worker.all(queue=foo_queue)), set([w1, w2]))
         self.assertEqual(set(Worker.all(queue=bar_queue)), set([w1]))
 
@@ -176,10 +165,7 @@ class TestWorker(RQTestCase):
         q = Queue('foo')
         w = Worker([q])
         job = q.enqueue('tests.fixtures.say_hello', name='Frank')
-        self.assertEqual(
-            w.work(burst=True), True,
-            'Expected at least some work done.'
-        )
+        self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
         expected_result = 'Hi there, Frank!'
         self.assertEqual(job.result, expected_result)
         # Only run if Redis server supports streams
@@ -197,25 +183,13 @@ class TestWorker(RQTestCase):
         self.assertIsNotNone(job.enqueued_at)
         self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
-        self.assertEqual(
-            w.work(burst=True), True,
-            'Expected at least some work done.'
-        )
+        self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
         self.assertEqual(job.result, 'Hi there, Stranger!')
         after = utcnow()
         job.refresh()
-        self.assertTrue(
-            before <= job.enqueued_at <= after,
-            'Not %s <= %s <= %s' % (before, job.enqueued_at, after)
-        )
-        self.assertTrue(
-            before <= job.started_at <= after,
-            'Not %s <= %s <= %s' % (before, job.started_at, after)
-        )
-        self.assertTrue(
-            before <= job.ended_at <= after,
-            'Not %s <= %s <= %s' % (before, job.ended_at, after)
-        )
+        self.assertTrue(before <= job.enqueued_at <= after, 'Not %s <= %s <= %s' % (before, job.enqueued_at, after))
+        self.assertTrue(before <= job.started_at <= after, 'Not %s <= %s <= %s' % (before, job.started_at, after))
+        self.assertTrue(before <= job.ended_at <= after, 'Not %s <= %s <= %s' % (before, job.ended_at, after))
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed job registry."""
@@ -241,11 +215,28 @@ class TestWorker(RQTestCase):
 
         # All set, we're going to process it
         w = Worker([q])
-        w.work(burst=True)   # should silently pass
+        w.work(burst=True)  # should silently pass
         self.assertEqual(q.count, 0)
 
         failed_job_registry = FailedJobRegistry(queue=q)
         self.assertTrue(job in failed_job_registry)
+
+    def test_meta_is_unserializable(self):
+        """Unserializable jobs are put on the failed job registry."""
+        q = Queue()
+        self.assertEqual(q.count, 0)
+
+        # NOTE: We have to fake this enqueueing for this test case.
+        # What we're simulating here is a call to a function that is not
+        # importable from the worker process.
+        job = Job.create(func=do_nothing, origin=q.name, meta={'key': 'value'})
+        job.save()
+
+        invalid_meta = '{{{{{{{{INVALID_JSON'
+        self.testconn.hset(job.key, 'meta', invalid_meta)
+        job.refresh()
+        self.assertIsInstance(job.meta, dict)
+        self.assertTrue('unserialized' in job.meta.keys())
 
     @mock.patch('rq.worker.logger.error')
     def test_deserializing_failure_is_handled(self, mock_logger_error):
@@ -286,8 +277,7 @@ class TestWorker(RQTestCase):
         w.register_birth()
 
         self.assertEqual(str(w.pid), as_text(self.testconn.hget(w.key, 'pid')))
-        self.assertEqual(w.hostname,
-                         as_text(self.testconn.hget(w.key, 'hostname')))
+        self.assertEqual(w.hostname, as_text(self.testconn.hget(w.key, 'hostname')))
         last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
         self.assertIsNotNone(self.testconn.hget(w.key, 'birth'))
         self.assertTrue(last_heartbeat is not None)
@@ -346,10 +336,7 @@ class TestWorker(RQTestCase):
         w = Worker([q], job_monitoring_interval=5)
 
         for timeout, expected_heartbeats in [(2, 0), (7, 1), (12, 2)]:
-            job = q.enqueue(long_running_job,
-                            args=(timeout,),
-                            job_timeout=30,
-                            result_ttl=-1)
+            job = q.enqueue(long_running_job, args=(timeout,), job_timeout=30, result_ttl=-1)
             with mock.patch.object(w, 'heartbeat', wraps=w.heartbeat) as mocked:
                 w.execute_job(job, q)
                 self.assertEqual(mocked.call_count, expected_heartbeats)
@@ -573,8 +560,7 @@ class TestWorker(RQTestCase):
         self.assertTrue(job.meta['second_handler'])
 
         job = q.enqueue(div_by_zero)
-        w = Worker([q], exception_handlers=[first_handler, black_hole,
-                                            second_handler])
+        w = Worker([q], exception_handlers=[first_handler, black_hole, second_handler])
         w.work(burst=True)
 
         # second_handler is not run since it's interrupted by black_hole
@@ -621,17 +607,17 @@ class TestWorker(RQTestCase):
         # idle for 3 seconds
         now = utcnow()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))
-        self.assertLess((utcnow()-now).total_seconds(), 5)  # 5 for some buffer
+        self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
 
         # idle for 2 seconds because idle_time is less than timeout
         now = utcnow()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(3, max_idle_time=2))
-        self.assertLess((utcnow()-now).total_seconds(), 4)  # 4 for some buffer
+        self.assertLess((utcnow() - now).total_seconds(), 4)  # 4 for some buffer
 
         # idle for 3 seconds because idle_time is less than two rounds of timeout
         now = utcnow()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(2, max_idle_time=3))
-        self.assertLess((utcnow()-now).total_seconds(), 5)  # 5 for some buffer
+        self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
 
     @slow  # noqa
     def test_timeouts(self):
@@ -642,9 +628,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         # Put it on the queue with a timeout value
-        res = q.enqueue(create_file_after_timeout,
-                        args=(sentinel_file, 4),
-                        job_timeout=1)
+        res = q.enqueue(create_file_after_timeout, args=(sentinel_file, 4), job_timeout=1)
 
         try:
             os.unlink(sentinel_file)
@@ -668,7 +652,10 @@ class TestWorker(RQTestCase):
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(None))
 
     def test_worker_ttl_param_resolves_timeout(self):
-        """Ensures the worker_ttl param is being considered in the dequeue_timeout and connection_timeout params, takes into account 15 seconds gap (hard coded)"""
+        """
+        Ensures the worker_ttl param is being considered in the dequeue_timeout and
+        connection_timeout params, takes into account 15 seconds gap (hard coded)
+        """
         q = Queue()
         w = Worker([q])
         self.assertEqual(w.dequeue_timeout, 405)
@@ -738,10 +725,7 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(self.testconn.hget(worker.key, 'current_job'), None)
         worker.set_current_job_id(job.id)
-        self.assertEqual(
-            worker.get_current_job_id(),
-            as_text(self.testconn.hget(worker.key, 'current_job'))
-        )
+        self.assertEqual(worker.get_current_job_id(), as_text(self.testconn.hget(worker.key, 'current_job')))
         self.assertEqual(worker.get_current_job(), job)
 
     def test_custom_job_class(self):
@@ -781,14 +765,11 @@ class TestWorker(RQTestCase):
         then returns."""
         fooq, barq = Queue('foo'), Queue('bar')
         w = SimpleWorker([fooq, barq])
-        self.assertEqual(w.work(burst=True), False,
-                         'Did not expect any work on the queue.')
+        self.assertEqual(w.work(burst=True), False, 'Did not expect any work on the queue.')
 
         job = fooq.enqueue(say_pid)
-        self.assertEqual(w.work(burst=True), True,
-                         'Expected at least some work done.')
-        self.assertEqual(job.result, os.getpid(),
-                         'PID mismatch, fork() is not supposed to happen here')
+        self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
+        self.assertEqual(job.result, os.getpid(), 'PID mismatch, fork() is not supposed to happen here')
 
     def test_simpleworker_heartbeat_ttl(self):
         """SimpleWorker's key must last longer than job.timeout when working"""
@@ -819,14 +800,34 @@ class TestWorker(RQTestCase):
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
 
+    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
+        """Prepare job execution removes job from intermediate queue."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+
+        Queue.dequeue_any([queue], timeout=None, connection=self.testconn)
+        self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        worker = Worker([queue])
+        worker.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        self.assertEqual(queue.count, 0)
+
+    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    def test_work_removes_key_from_intermediate_queue(self):
+        """Worker removes job from intermediate queue."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.work(burst=True)
+        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
         q = Queue('foo')
         w = Worker([q])
-        job = q.enqueue('tests.fixtures.say_hello', name='Adam',
-                        description='你好 世界!')
-        self.assertEqual(w.work(burst=True), True,
-                         'Expected at least some work done.')
+        job = q.enqueue('tests.fixtures.say_hello', name='Adam', description='你好 世界!')
+        self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
         self.assertEqual(job.result, 'Hi there, Adam!')
         self.assertEqual(job.description, '你好 世界!')
 
@@ -836,13 +837,11 @@ class TestWorker(RQTestCase):
         q = Queue("foo")
         w = Worker([q])
 
-        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆',
-                        description='你好 世界!')
+        job = q.enqueue('tests.fixtures.say_hello', name='阿达姆', description='你好 世界!')
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
-        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆',
-                        description='你好 世界!')
+        job = q.enqueue('tests.fixtures.say_hello_unicode', name='阿达姆', description='你好 世界!')
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
@@ -1023,8 +1022,7 @@ class TestWorker(RQTestCase):
         q = Queue()
         # Also make sure that previously existing metadata
         # persists properly
-        job = q.enqueue(modify_self, meta={'foo': 'bar', 'baz': 42},
-                        args=[{'baz': 10, 'newinfo': 'waka'}])
+        job = q.enqueue(modify_self, meta={'foo': 'bar', 'baz': 42}, args=[{'baz': 10, 'newinfo': 'waka'}])
 
         w = Worker([q])
         w.work(burst=True)
@@ -1041,8 +1039,7 @@ class TestWorker(RQTestCase):
         q = Queue()
         # Also make sure that previously existing metadata
         # persists properly
-        job = q.enqueue(modify_self_and_error, meta={'foo': 'bar', 'baz': 42},
-                        args=[{'baz': 10, 'newinfo': 'waka'}])
+        job = q.enqueue(modify_self_and_error, meta={'foo': 'bar', 'baz': 42}, args=[{'baz': 10, 'newinfo': 'waka'}])
 
         w = Worker([q])
         w.work(burst=True)
@@ -1166,6 +1163,20 @@ class TestWorker(RQTestCase):
         expected_ser.sort()
         self.assertEqual(sorted_ids, expected_ser)
 
+    def test_request_force_stop_ignores_consecutive_signals(self):
+        """Ignore signals sent within 1 second of the last signal"""
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+        worker._horse_pid = 1
+        worker._shutdown_requested_date = utcnow()
+        with mock.patch.object(worker, 'kill_horse') as mocked:
+            worker.request_force_stop(1, frame=None)
+            self.assertEqual(mocked.call_count, 0)
+        # If signal is sent a few seconds after, kill_horse() is called
+        worker._shutdown_requested_date = utcnow() - timedelta(seconds=2)
+        with mock.patch.object(worker, 'kill_horse') as mocked:
+            self.assertRaises(SystemExit, worker.request_force_stop, 1, frame=None)
+
     def test_dequeue_round_robin(self):
         qs = [Queue('q%d' % i) for i in range(5)]
 
@@ -1183,9 +1194,23 @@ class TestWorker(RQTestCase):
                 start_times.append(('q%d_%d' % (i, j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected = ['q0_0', 'q1_0', 'q2_0', 'q3_0', 'q4_0',
-                    'q0_1', 'q1_1', 'q2_1', 'q3_1', 'q4_1',
-                    'q0_2', 'q1_2', 'q2_2', 'q3_2', 'q4_2']
+        expected = [
+            'q0_0',
+            'q1_0',
+            'q2_0',
+            'q3_0',
+            'q4_0',
+            'q0_1',
+            'q1_1',
+            'q2_1',
+            'q3_1',
+            'q4_1',
+            'q0_2',
+            'q1_2',
+            'q2_2',
+            'q3_2',
+            'q4_2',
+        ]
 
         self.assertEqual(expected, sorted_ids)
 
@@ -1250,8 +1275,12 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         """Busy worker shuts down immediately on double SIGTERM signal"""
         fooq = Queue('foo')
         w = Worker(fooq)
+
         sentinel_file = '/tmp/.rq_sentinel_cold'
-        fooq.enqueue(create_file_after_timeout, sentinel_file, 2)
+        self.assertFalse(
+            os.path.exists(sentinel_file), '{sentinel_file} file should not exist yet, delete that file and try again.'
+        )
+        fooq.enqueue(create_file_after_timeout, sentinel_file, 5)
         self.assertFalse(w._stop_requested)
         p = Process(target=kill_worker, args=(os.getpid(), True))
         p.start()
@@ -1454,7 +1483,6 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
 
 class TestExceptionHandlerMessageEncoding(RQTestCase):
-
     def setUp(self):
         super().setUp()
         self.worker = Worker("foo")
@@ -1476,8 +1504,7 @@ class TestRoundRobinWorker(RQTestCase):
 
         for i in range(5):
             for j in range(3):
-                qs[i].enqueue(say_pid,
-                              job_id='q%d_%d' % (i, j))
+                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
 
         w = RoundRobinWorker(qs)
         w.work(burst=True)
@@ -1488,9 +1515,23 @@ class TestRoundRobinWorker(RQTestCase):
                 start_times.append(('q%d_%d' % (i, j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected = ['q0_0', 'q1_0', 'q2_0', 'q3_0', 'q4_0',
-                    'q0_1', 'q1_1', 'q2_1', 'q3_1', 'q4_1',
-                    'q0_2', 'q1_2', 'q2_2', 'q3_2', 'q4_2']
+        expected = [
+            'q0_0',
+            'q1_0',
+            'q2_0',
+            'q3_0',
+            'q4_0',
+            'q0_1',
+            'q1_1',
+            'q2_1',
+            'q3_1',
+            'q4_1',
+            'q0_2',
+            'q1_2',
+            'q2_2',
+            'q3_2',
+            'q4_2',
+        ]
         self.assertEqual(expected, sorted_ids)
 
 
@@ -1500,8 +1541,7 @@ class TestRandomWorker(RQTestCase):
 
         for i in range(5):
             for j in range(3):
-                qs[i].enqueue(say_pid,
-                              job_id='q%d_%d' % (i, j))
+                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
 
         w = RandomWorker(qs)
         w.work(burst=True)

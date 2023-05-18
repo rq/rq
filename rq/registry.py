@@ -1,26 +1,24 @@
 import calendar
 import logging
-import traceback
-
-from rq.serializers import resolve_serializer
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
 
-from .timeouts import JobTimeoutException, UnixSignalDeathPenalty, BaseDeathPenalty
+from rq.serializers import resolve_serializer
+
+from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
-from .utils import as_text
 from .connections import resolve_connection
-from .defaults import DEFAULT_FAILURE_TTL, CALLBACK_TIMEOUT
-from .exceptions import InvalidJobOperation, NoSuchJobError, AbandonedJobError
+from .defaults import DEFAULT_FAILURE_TTL
+from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import Queue
-from .utils import backend_class, current_timestamp
-
+from .utils import as_text, backend_class, current_timestamp
 
 logger = logging.getLogger("rq.registry")
 
@@ -47,11 +45,11 @@ class BaseRegistry:
     ):
         if queue:
             self.name = queue.name
-            self.connection = resolve_connection(queue.connection)
+            self.connection = queue.connection or resolve_connection()
             self.serializer = queue.serializer
         else:
             self.name = name
-            self.connection = resolve_connection(connection)
+            self.connection = connection or resolve_connection()
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
@@ -68,7 +66,7 @@ class BaseRegistry:
             and self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
         )
 
-    def __contains__(self, item: Union[str, 'Job']):
+    def __contains__(self, item: Union[str, 'Job']) -> bool:
         """
         Returns a boolean indicating registry contains the given
         job instance or job id.
@@ -237,8 +235,9 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
-                    job.execute_failure_callback(self.death_penalty_class, AbandonedJobError, AbandonedJobError(),
-                                                 traceback.extract_stack())
+                    job.execute_failure_callback(
+                        self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
+                    )
 
                     retry = job.retries_left and job.retries_left > 0
 
@@ -248,8 +247,10 @@ class StartedJobRegistry(BaseRegistry):
 
                     else:
                         exc_string = f"due to {AbandonedJobError.__name__}"
-                        logger.warning(f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
-                                       f'({exc_string})')
+                        logger.warning(
+                            f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
+                            f'({exc_string})'
+                        )
                         job.set_status(JobStatus.FAILED)
                         job._exc_info = f"Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}"
                         job.save(pipeline=pipeline, include_meta=False)

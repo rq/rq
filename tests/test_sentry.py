@@ -1,14 +1,14 @@
+from unittest import mock
+
+from click.testing import CliRunner
+
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import read_config_file
 from rq.contrib.sentry import register_sentry
 from rq.worker import SimpleWorker
-
 from tests import RQTestCase
 from tests.fixtures import div_by_zero
-
-from unittest import mock
-from click.testing import CliRunner
 
 
 class FakeSentry:
@@ -19,7 +19,6 @@ class FakeSentry:
 
 
 class TestSentry(RQTestCase):
-
     def setUp(self):
         super().setUp()
         db_num = self.testconn.connection_pool.connection_kwargs['db']
@@ -35,13 +34,16 @@ class TestSentry(RQTestCase):
         """rq worker -u <url> -b --exception-handler <handler>"""
         # connection = Redis.from_url(self.redis_url)
         runner = CliRunner()
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
-                             '--sentry-dsn', 'https://1@sentry.io/1'])
+        runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--sentry-dsn', 'https://1@sentry.io/1'])
         self.assertEqual(mocked.call_count, 1)
+
+        runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--sentry-dsn', 'https://1@sentry.io/1'])
+        self.assertEqual(mocked.call_count, 2)
 
     def test_failure_capture(self):
         """Test failure is captured by Sentry SDK"""
         from sentry_sdk import Hub
+
         hub = Hub.current
         self.assertIsNone(hub.last_event_id())
         queue = Queue(connection=self.testconn)

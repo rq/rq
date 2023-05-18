@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from redis import Redis
+
     from rq.worker import Worker
 
 

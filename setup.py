@@ -3,7 +3,8 @@ rq is a simple, lightweight, library for creating background jobs, and
 processing them.
 """
 import os
-from setuptools import setup, find_packages
+
+from setuptools import find_packages, setup
 
 
 def get_version():
@@ -33,11 +34,10 @@ setup(
     license='BSD',
     author='Vincent Driessen',
     author_email='vincent@3rdcloud.com',
-    description='RQ is a simple, lightweight, library for creating background '
-                'jobs, and processing them.',
+    description='RQ is a simple, lightweight, library for creating background jobs, and processing them.',
     long_description=__doc__,
     packages=find_packages(exclude=['tests', 'tests.*']),
-    package_data = {"rq": ["py.typed"]},
+    package_data={"rq": ["py.typed"]},
     include_package_data=True,
     zip_safe=False,
     platforms='any',
@@ -46,7 +46,6 @@ setup(
     entry_points={
         'console_scripts': [
             'rq = rq.cli:main',
-
             # NOTE: rqworker/rqinfo are kept for backward-compatibility,
             # remove eventually (TODO)
             'rqinfo = rq.cli:info',
@@ -85,6 +84,5 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Systems Administration',
         'Topic :: System :: Monitoring',
-
-    ]
+    ],
 )

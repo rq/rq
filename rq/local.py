@@ -1,4 +1,4 @@
-# flake8: noqa
+# ruff: noqa: E731
 """
     werkzeug.local
     ~~~~~~~~~~~~~~
@@ -13,14 +13,14 @@
 # current thread ident.
 try:
     from greenlet import getcurrent as get_ident
-except ImportError:  # noqa
+except ImportError:
     try:
-        from threading import get_ident  # noqa
-    except ImportError:  # noqa
+        from threading import get_ident
+    except ImportError:
         try:
-            from _thread import get_ident  # noqa
-        except ImportError:  # noqa
-            from dummy_thread import get_ident  # noqa
+            from _thread import get_ident
+        except ImportError:
+            from dummy_thread import get_ident
 
 
 def release_local(local):
@@ -120,7 +120,7 @@ class LocalStack:
     def _get__ident_func__(self):
         return self._local.__ident_func__
 
-    def _set__ident_func__(self, value):  # noqa
+    def _set__ident_func__(self, value):
         object.__setattr__(self._local, '__ident_func__', value)
 
     __ident_func__ = property(_get__ident_func__, _set__ident_func__)
@@ -348,7 +348,6 @@ class LocalProxy:
     __invert__ = lambda x: ~(x._get_current_object())
     __complex__ = lambda x: complex(x._get_current_object())
     __int__ = lambda x: int(x._get_current_object())
-    __long__ = lambda x: long(x._get_current_object())
     __float__ = lambda x: float(x._get_current_object())
     __oct__ = lambda x: oct(x._get_current_object())
     __hex__ = lambda x: hex(x._get_current_object())

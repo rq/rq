@@ -1,13 +1,26 @@
-import re
 import datetime
+import re
 from unittest.mock import Mock
 
 from redis import Redis
 
-from tests import RQTestCase, fixtures
-from rq.utils import backend_class, ensure_list, first, get_version, is_nonstring_iterable, parse_timeout, utcparse, \
-    split_list, ceildiv, get_call_string, truncate_long_string
 from rq.exceptions import TimeoutFormatError
+from rq.utils import (
+    backend_class,
+    ceildiv,
+    ensure_list,
+    first,
+    get_call_string,
+    get_version,
+    import_attribute,
+    is_nonstring_iterable,
+    parse_timeout,
+    split_list,
+    truncate_long_string,
+    utcparse,
+)
+from rq.worker import SimpleWorker
+from tests import RQTestCase, fixtures
 
 
 class TestUtils(RQTestCase):
@@ -66,8 +79,9 @@ class TestUtils(RQTestCase):
         self.assertEqual(fixtures.DummyQueue, backend_class(fixtures, 'DummyQueue'))
         self.assertNotEqual(fixtures.say_pid, backend_class(fixtures, 'DummyQueue'))
         self.assertEqual(fixtures.DummyQueue, backend_class(fixtures, 'DummyQueue', override=fixtures.DummyQueue))
-        self.assertEqual(fixtures.DummyQueue,
-                         backend_class(fixtures, 'DummyQueue', override='tests.fixtures.DummyQueue'))
+        self.assertEqual(
+            fixtures.DummyQueue, backend_class(fixtures, 'DummyQueue', override='tests.fixtures.DummyQueue')
+        )
 
     def test_get_redis_version(self):
         """Ensure get_version works properly"""
@@ -78,12 +92,14 @@ class TestUtils(RQTestCase):
         class DummyRedis(Redis):
             def info(*args):
                 return {'redis_version': '4.0.8'}
+
         self.assertEqual(get_version(DummyRedis()), (4, 0, 8))
 
         # Parses 3 digit version numbers correctly
         class DummyRedis(Redis):
             def info(*args):
                 return {'redis_version': '3.0.7.9'}
+
         self.assertEqual(get_version(DummyRedis()), (3, 0, 7))
 
     def test_get_redis_version_gets_cached(self):
@@ -94,6 +110,13 @@ class TestUtils(RQTestCase):
         self.assertEqual(get_version(redis), (4, 0, 8))
         self.assertEqual(get_version(redis), (4, 0, 8))
         redis.info.assert_called_once()
+
+    def test_import_attribute(self):
+        """Ensure get_version works properly"""
+        self.assertEqual(import_attribute('rq.utils.get_version'), get_version)
+        self.assertEqual(import_attribute('rq.worker.SimpleWorker'), SimpleWorker)
+        self.assertRaises(ValueError, import_attribute, 'non.existent.module')
+        self.assertRaises(ValueError, import_attribute, 'rq.worker.WrongWorker')
 
     def test_ceildiv_even(self):
         """When a number is evenly divisible by another ceildiv returns the quotient"""

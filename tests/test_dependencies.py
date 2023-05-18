@@ -1,8 +1,7 @@
+from rq import Queue, SimpleWorker, Worker
+from rq.job import Dependency, Job, JobStatus
 from tests import RQTestCase
 from tests.fixtures import check_dependencies_are_met, div_by_zero, say_hello
-
-from rq import Queue, SimpleWorker, Worker
-from rq.job import Job, JobStatus, Dependency
 
 
 class TestDependencies(RQTestCase):
@@ -100,10 +99,10 @@ class TestDependencies(RQTestCase):
         parent_job = q.enqueue(say_hello)
         q.enqueue(say_hello, job_id='fake_job_id_1', depends_on=Dependency(jobs=[parent_job]))
         q.enqueue(say_hello, job_id='fake_job_id_2', depends_on=Dependency(jobs=[parent_job], enqueue_at_front=True))
-        # q.enqueue(say_hello) # This is a filler job that will act as a separator for jobs, one will be enqueued at front while the other one at the end of the queue
         w.work(burst=True, max_jobs=1)
 
         self.assertEqual(q.job_ids, ["fake_job_id_2", "fake_job_id_1"])
+
 
     def test_multiple_jobs_with_dependencies(self):
         """Enqueue dependent jobs only when appropriate"""
