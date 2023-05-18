@@ -17,12 +17,10 @@ from rq.registry import (
     StartedJobRegistry,
 )
 from rq.serializers import JSONSerializer
-
 from rq.utils import get_version
 from rq.worker import Worker
-
 from tests import RQTestCase
-from tests.fixtures import CustomJob, echo, say_hello
+from tests.fixtures import echo, say_hello
 
 
 class MultipleDependencyJob(Job):

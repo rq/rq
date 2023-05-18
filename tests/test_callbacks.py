@@ -1,15 +1,13 @@
 from datetime import timedelta
 
+from rq import Queue, Worker
+from rq.job import UNEVALUATED, Job, JobStatus
+from rq.worker import SimpleWorker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save_result, say_hello
 
-from rq import Queue, Worker
-from rq.job import Job, JobStatus, UNEVALUATED
-from rq.worker import SimpleWorker
-
 
 class QueueCallbackTestCase(RQTestCase):
-
     def test_enqueue_with_success_callback(self):
         """Test enqueue* methods with on_success"""
         queue = Queue(connection=self.testconn)
@@ -54,10 +52,7 @@ class SyncJobCallback(RQTestCase):
 
         job = queue.enqueue(say_hello, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(
-            self.testconn.get('success_callback:%s' % job.id).decode(),
-            job.result
-        )
+        self.assertEqual(self.testconn.get('success_callback:%s' % job.id).decode(), job.result)
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
@@ -69,8 +64,7 @@ class SyncJobCallback(RQTestCase):
 
         job = queue.enqueue(div_by_zero, on_failure=save_exception)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIn('div_by_zero',
-                      self.testconn.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.testconn.get('failure_callback:%s' % job.id).decode())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
@@ -88,10 +82,7 @@ class WorkerCallbackTestCase(RQTestCase):
         # Callback is executed when job is successfully executed
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(
-            self.testconn.get('success_callback:%s' % job.id).decode(),
-            job.return_value()
-        )
+        self.assertEqual(self.testconn.get('success_callback:%s' % job.id).decode(), job.return_value())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
@@ -120,8 +111,7 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
         print(job.exc_info)
-        self.assertIn('div_by_zero',
-                      self.testconn.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.testconn.get('failure_callback:%s' % job.id).decode())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
@@ -132,7 +122,6 @@ class WorkerCallbackTestCase(RQTestCase):
 
 
 class JobCallbackTestCase(RQTestCase):
-
     def test_job_creation_with_success_callback(self):
         """Ensure callbacks are created and persisted properly"""
         job = Job.create(say_hello)

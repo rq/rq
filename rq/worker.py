@@ -13,8 +13,8 @@ import warnings
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type, Union
 from types import FrameType
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -35,19 +35,17 @@ from contextlib import suppress
 import redis.exceptions
 
 from . import worker_registration
-from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .connections import get_current_connection, push_connection, pop_connection
-
+from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
+from .connections import get_current_connection, pop_connection, push_connection
 from .defaults import (
+    DEFAULT_JOB_MONITORING_INTERVAL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
-    DEFAULT_JOB_MONITORING_INTERVAL,
-    DEFAULT_LOGGING_FORMAT,
-    DEFAULT_LOGGING_DATE_FORMAT,
 )
-from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
-
+from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .job import Job, JobStatus
 from .maintenance import clean_intermediate_queue
 from .logutils import blue, green, setup_loghandlers, yellow
@@ -56,19 +54,18 @@ from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
+from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
 from .utils import (
+    as_text,
     backend_class,
+    compact,
     ensure_list,
     get_version,
     utcformat,
     utcnow,
     utcparse,
-    compact,
-    as_text,
 )
 from .version import VERSION
-
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -406,7 +403,8 @@ class BaseWorker:
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
             max_idle_time (Optional[int], optional): Max seconds for worker to be idle. Defaults to None.
             with_scheduler (bool, optional): Whether to run the scheduler in a separate process. Defaults to False.
-            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs. Defaults to DequeueStrategy.DEFAULT
+            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs.
+                Defaults to DequeueStrategy.DEFAULT
 
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.

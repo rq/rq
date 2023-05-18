@@ -4,17 +4,14 @@ import logging
 import os
 import signal
 import time
-
 from enum import Enum
 from multiprocessing import Process
-from typing import Dict, List, NamedTuple, Optional, Set, Type, Union
+from typing import Dict, List, NamedTuple, Optional, Type, Union
 from uuid import uuid4
 
-from redis import Redis
-from redis import ConnectionPool
-from rq.serializers import DefaultSerializer
+from redis import ConnectionPool, Redis
 
-from rq.timeouts import HorseMonitorTimeoutException, UnixSignalDeathPenalty
+from rq.serializers import DefaultSerializer
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT

@@ -3,16 +3,17 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slightly different characteristics.
 """
 
-import os
-import time
-import signal
-import sys
-import subprocess
 import contextlib
+import os
+import signal
+import subprocess
+import sys
+import time
 from multiprocessing import Process
 
 from redis import Redis
-from rq import Connection, get_current_job, get_current_connection, Queue
+
+from rq import Connection, Queue, get_current_connection, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
 from rq.job import Job

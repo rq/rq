@@ -15,6 +15,7 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
+
     from .job import Retry
 
 from .connections import resolve_connection
@@ -168,9 +169,11 @@ class Queue:
             connection (Optional[Redis], optional): Redis connection. Defaults to None.
             is_async (bool, optional): Whether jobs should run "async" (using the worker).
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
-            job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path. Defaults to None.
+            job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
+                Defaults to None.
             serializer (Any, optional): Serializer. Defaults to None.
-            death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path. Defaults to UnixSignalDeathPenalty.
+            death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
+                Defaults to UnixSignalDeathPenalty.
         """
         self.connection = connection or resolve_connection()
         prefix = self.redis_queue_namespace_prefix

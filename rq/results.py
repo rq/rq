@@ -1,16 +1,15 @@
-from typing import Any, Optional
 import zlib
-
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Optional
+
 from redis import Redis
 
 from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
-from .utils import decode_redis_hash
 from .job import Job
 from .serializers import resolve_serializer
-from .utils import now
+from .utils import decode_redis_hash, now
 
 
 def get_key(job_id):

@@ -37,7 +37,7 @@ RUN_SLOW_TESTS_TOO=1 pytest .
 If you want to analyze the coverage reports, you can use the `--cov` argument to `pytest`. By adding `--cov-report`, you also have some flexibility in terms of the report output format:
 
 ```sh
-RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report={{report_format}} --durations=5
+RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report={{report_format}} --durations=5
 ```
 
 Where you replace the `report_format` by the desired format (`term` / `html` / `xml`).

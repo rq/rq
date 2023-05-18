@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Uni
 
 if TYPE_CHECKING:
     from redis import Redis
+
     from .job import Retry
 
 from .defaults import DEFAULT_RESULT_TTL
