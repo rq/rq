@@ -2,6 +2,8 @@
 RQ command line tool
 """
 
+import logging
+import logging.config
 import os
 import sys
 import warnings
@@ -229,6 +231,10 @@ def worker(
     sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
     name = name or settings.get('NAME')
+    dict_config = settings.get('DICT_CONFIG')
+
+    if dict_config:
+        logging.config.dictConfig(dict_config)
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
@@ -303,7 +309,7 @@ def worker(
             dequeue_strategy=dequeue_strategy,
         )
     except ConnectionError as e:
-        print(e)
+        logging.error(e)
         sys.exit(1)
 
 
