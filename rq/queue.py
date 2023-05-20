@@ -816,7 +816,6 @@ class Queue:
 
         job_datas_with_dependencies = [job_data for job_data in job_datas if job_data.depends_on]
         if job_datas_with_dependencies:
-
             # Save all jobs with dependencies as deferred
             jobs_with_dependencies = [
                 self.create_job(**get_job_kwargs(job_data, JobStatus.DEFERRED))
