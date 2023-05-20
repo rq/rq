@@ -20,13 +20,13 @@ if TYPE_CHECKING:
 
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
+from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
 from .logutils import blue, green
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, utcnow
-from .dependency import Dependency
 
 logger = logging.getLogger("rq.queue")
 
