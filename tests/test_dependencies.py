@@ -120,7 +120,7 @@ class TestDependencies(RQTestCase):
 
         job_with_met_deps = Queue.prepare_data(say_hello, depends_on=parent_job)
         jobs = q.enqueue_many([job_with_met_deps])
-        self.asserEqual(jobs[0].get_status(), JobStatus.QUEUED)
+        self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
         q.empty()
 
     def test_dependency_list_in_depends_on(self):
