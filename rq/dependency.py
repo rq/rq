@@ -1,7 +1,9 @@
-from .job import Job
-from redis.client import Pipeline
 from typing import List
+
+from redis.client import Pipeline
 from redis.exceptions import WatchError
+
+from .job import Job
 
 
 class Dependency:
