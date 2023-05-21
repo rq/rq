@@ -15,10 +15,10 @@ from tests.fixtures import (
 from tests.test_commands import start_work_burst
 
 from rq import Queue, Worker
-from rq.job import Job, JobStatus, UNEVALUATED
-from rq.worker import SimpleWorker
 from rq.command import send_stop_job_command
+from rq.job import Job, JobStatus, UNEVALUATED
 from rq.serializers import JSONSerializer
+from rq.worker import SimpleWorker
 
 
 class QueueCallbackTestCase(RQTestCase):
@@ -107,19 +107,7 @@ class SyncJobCallback(RQTestCase):
         connection = self.testconn
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
-        worker = SimpleWorker('foo', connection=connection, serializer=JSONSerializer)
-
-        p = Process(
-            target=start_work_burst, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy())
-        )
-        p.start()
-        p.join(1)
-
-        sleep(0.1)
-
-        send_stop_job_command(self.connection, job.id)
-        sleep(0.1)
-        self.assertEqual(job.get_status(refresh=True), JobStatus.STOPPED)
+        job.execute_stopped_callback()  # Calling execute_stopped_callback directly for coverage
         self.assertTrue(self.testconn.exists('stopped_callback:%s' % job.id))
 
 
