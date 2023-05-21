@@ -103,6 +103,26 @@ class TestDependencies(RQTestCase):
 
         self.assertEqual(q.job_ids, ["fake_job_id_2", "fake_job_id_1"])
 
+    def test_multiple_jobs_with_dependencies(self):
+        """Enqueue dependent jobs only when appropriate"""
+        q = Queue(connection=self.testconn)
+        w = SimpleWorker([q], connection=q.connection)
+
+        # Multiple jobs are enqueued with correct status
+        parent_job = q.enqueue(say_hello)
+        job_no_deps = Queue.prepare_data(say_hello)
+        job_with_deps = Queue.prepare_data(say_hello, depends_on=parent_job)
+        jobs = q.enqueue_many([job_no_deps, job_with_deps])
+        self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
+        self.assertEqual(jobs[1].get_status(), JobStatus.DEFERRED)
+        w.work(burst=True, max_jobs=1)
+        self.assertEqual(jobs[1].get_status(), JobStatus.QUEUED)
+
+        job_with_met_deps = Queue.prepare_data(say_hello, depends_on=parent_job)
+        jobs = q.enqueue_many([job_with_met_deps])
+        self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
+        q.empty()
+
     def test_dependency_list_in_depends_on(self):
         """Enqueue with Dependency list in depends_on"""
         q = Queue(connection=self.testconn)
