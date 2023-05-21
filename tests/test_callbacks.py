@@ -10,8 +10,8 @@ from tests.fixtures import (
     erroneous_callback,
     long_process,
     save_exception,
-    save_result_if_not_stopped,
     save_result,
+    save_result_if_not_stopped,
     say_hello,
 )
 
