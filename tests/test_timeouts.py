@@ -1,8 +1,8 @@
 import time
 
 from rq import Queue, SimpleWorker
-from rq.timeouts import TimerDeathPenalty
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
+from rq.timeouts import TimerDeathPenalty
 from tests import RQTestCase
 
 

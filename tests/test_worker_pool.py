@@ -1,18 +1,16 @@
 import os
 import signal
-
 from multiprocessing import Process
 from time import sleep
-from rq.job import JobStatus
-
-from tests import TestCase
-from tests.fixtures import CustomJob, _send_shutdown_command, long_running_job, say_hello
 
 from rq.connections import parse_connection
+from rq.job import JobStatus
 from rq.queue import Queue
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
-from rq.worker_pool import run_worker, WorkerPool
+from rq.worker_pool import WorkerPool, run_worker
+from tests import TestCase
+from tests.fixtures import CustomJob, _send_shutdown_command, long_running_job, say_hello
 
 
 def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
@@ -111,9 +109,7 @@ class TestWorkerPool(TestCase):
         queue.enqueue(say_hello)
 
         connection_class, pool_class, pool_kwargs = parse_connection(self.connection)
-        run_worker(
-            'test-worker', ['foo'], connection_class, pool_class, pool_kwargs
-        )
+        run_worker('test-worker', ['foo'], connection_class, pool_class, pool_kwargs)
         # Worker should have processed the job
         self.assertEqual(len(queue), 0)
 

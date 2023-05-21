@@ -1,20 +1,22 @@
 from datetime import datetime, timedelta
 from unittest import mock
-from unittest.mock import PropertyMock, ANY
+from unittest.mock import ANY
 
-from rq.serializers import JSONSerializer
-
-from rq.utils import as_text
 from rq.defaults import DEFAULT_FAILURE_TTL
-from rq.exceptions import InvalidJobOperation, AbandonedJobError
+from rq.exceptions import AbandonedJobError, InvalidJobOperation
 from rq.job import Job, JobStatus, requeue_job
 from rq.queue import Queue
-from rq.utils import current_timestamp
+from rq.registry import (
+    CanceledJobRegistry,
+    DeferredJobRegistry,
+    FailedJobRegistry,
+    FinishedJobRegistry,
+    StartedJobRegistry,
+    clean_registries,
+)
+from rq.serializers import JSONSerializer
+from rq.utils import as_text, current_timestamp
 from rq.worker import Worker
-from rq.registry import (CanceledJobRegistry, clean_registries, DeferredJobRegistry,
-                         FailedJobRegistry, FinishedJobRegistry,
-                         StartedJobRegistry)
-
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -24,7 +26,6 @@ class CustomJob(Job):
 
 
 class TestRegistry(RQTestCase):
-
     def setUp(self):
         super().setUp()
         self.registry = StartedJobRegistry(connection=self.testconn)
@@ -83,8 +84,7 @@ class TestRegistry(RQTestCase):
 
         # Test that job is added with the right score
         self.registry.add(job, 1000)
-        self.assertLess(self.testconn.zscore(self.registry.key, job.id),
-                        timestamp + 1002)
+        self.assertLess(self.testconn.zscore(self.registry.key, job.id), timestamp + 1002)
 
         # Ensure that a timeout of -1 results in a score of inf
         self.registry.add(job, -1)
@@ -144,8 +144,7 @@ class TestRegistry(RQTestCase):
         self.testconn.zadd(self.registry.key, {'baz': timestamp + 30})
 
         self.assertEqual(self.registry.get_expired_job_ids(), ['foo'])
-        self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20),
-                         ['foo', 'bar'])
+        self.assertEqual(self.registry.get_expired_job_ids(timestamp + 20), ['foo', 'bar'])
 
         # CanceledJobRegistry does not implement get_expired_job_ids()
         registry = CanceledJobRegistry(connection=self.testconn)
@@ -268,12 +267,10 @@ class TestRegistry(RQTestCase):
         self.assertEqual(registry.get_queue(), Queue(connection=self.testconn))
 
         registry = StartedJobRegistry('foo', connection=self.testconn, serializer=JSONSerializer)
-        self.assertEqual(registry.get_queue(),
-                         Queue('foo', connection=self.testconn, serializer=JSONSerializer))
+        self.assertEqual(registry.get_queue(), Queue('foo', connection=self.testconn, serializer=JSONSerializer))
 
 
 class TestFinishedJobRegistry(RQTestCase):
-
     def setUp(self):
         super().setUp()
         self.registry = FinishedJobRegistry(connection=self.testconn)
@@ -321,7 +318,6 @@ class TestFinishedJobRegistry(RQTestCase):
 
 
 class TestDeferredRegistry(RQTestCase):
-
     def setUp(self):
         super().setUp()
         self.registry = DeferredJobRegistry(connection=self.testconn)
@@ -333,8 +329,7 @@ class TestDeferredRegistry(RQTestCase):
         """Adding a job to DeferredJobsRegistry."""
         job = Job()
         self.registry.add(job)
-        job_ids = [as_text(job_id) for job_id in
-                   self.testconn.zrange(self.registry.key, 0, -1)]
+        job_ids = [as_text(job_id) for job_id in self.testconn.zrange(self.registry.key, 0, -1)]
         self.assertEqual(job_ids, [job.id])
 
     def test_register_dependency(self):
@@ -352,7 +347,6 @@ class TestDeferredRegistry(RQTestCase):
 
 
 class TestFailedJobRegistry(RQTestCase):
-
     def test_default_failure_ttl(self):
         """Job TTL defaults to DEFAULT_FAILURE_TTL"""
         queue = Queue(connection=self.testconn)
@@ -511,11 +505,9 @@ class TestFailedJobRegistry(RQTestCase):
         w.handle_job_failure(job, q)
         # job is added to FailedJobRegistry with default failure ttl
         self.assertIn(job.id, registry.get_job_ids())
-        self.assertLess(self.testconn.zscore(registry.key, job.id),
-                        timestamp + DEFAULT_FAILURE_TTL + 5)
+        self.assertLess(self.testconn.zscore(registry.key, job.id), timestamp + DEFAULT_FAILURE_TTL + 5)
 
         # job is added to FailedJobRegistry with specified ttl
         job = q.enqueue(div_by_zero, failure_ttl=5)
         w.handle_job_failure(job, q)
-        self.assertLess(self.testconn.zscore(registry.key, job.id),
-                        timestamp + 7)
+        self.assertLess(self.testconn.zscore(registry.key, job.id), timestamp + 7)

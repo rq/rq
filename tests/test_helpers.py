@@ -1,16 +1,14 @@
-from rq.cli.helpers import get_redis_from_config
-
-from tests import RQTestCase
 from unittest import mock
 
-class TestHelpers(RQTestCase):
+from rq.cli.helpers import get_redis_from_config
+from tests import RQTestCase
 
+
+class TestHelpers(RQTestCase):
     @mock.patch('rq.cli.helpers.Sentinel')
     def test_get_redis_from_config(self, sentinel_class_mock):
         """Ensure Redis connection params are properly parsed"""
-        settings = {
-            'REDIS_URL': 'redis://localhost:1/1'
-        }
+        settings = {'REDIS_URL': 'redis://localhost:1/1'}
 
         # Ensure REDIS_URL is read
         redis = get_redis_from_config(settings)
@@ -23,7 +21,7 @@ class TestHelpers(RQTestCase):
             'REDIS_HOST': 'foo',
             'REDIS_DB': 2,
             'REDIS_PORT': 2,
-            'REDIS_PASSWORD': 'bar'
+            'REDIS_PASSWORD': 'bar',
         }
 
         # Ensure REDIS_URL is preferred
@@ -42,23 +40,29 @@ class TestHelpers(RQTestCase):
         self.assertEqual(connection_kwargs['password'], 'bar')
 
         # Add Sentinel to the settings
-        settings.update({
-            'SENTINEL': {
-                'INSTANCES':[('remote.host1.org', 26379), ('remote.host2.org', 26379), ('remote.host3.org', 26379)],
-                'MASTER_NAME': 'master',
-                'DB': 2,
-                'USERNAME': 'redis-user',
-                'PASSWORD': 'redis-secret',
-                'SOCKET_TIMEOUT': None,
-                'CONNECTION_KWARGS': {
-                    'ssl_ca_path': None,
+        settings.update(
+            {
+                'SENTINEL': {
+                    'INSTANCES': [
+                        ('remote.host1.org', 26379),
+                        ('remote.host2.org', 26379),
+                        ('remote.host3.org', 26379),
+                    ],
+                    'MASTER_NAME': 'master',
+                    'DB': 2,
+                    'USERNAME': 'redis-user',
+                    'PASSWORD': 'redis-secret',
+                    'SOCKET_TIMEOUT': None,
+                    'CONNECTION_KWARGS': {
+                        'ssl_ca_path': None,
+                    },
+                    'SENTINEL_KWARGS': {
+                        'username': 'sentinel-user',
+                        'password': 'sentinel-secret',
+                    },
                 },
-                'SENTINEL_KWARGS': {
-                    'username': 'sentinel-user',
-                    'password': 'sentinel-secret',
-                },
-            },
-        })
+            }
+        )
 
         # Ensure SENTINEL is preferred against REDIS_* parameters
         redis = get_redis_from_config(settings)
@@ -66,7 +70,7 @@ class TestHelpers(RQTestCase):
         sentinel_init_sentinel_kwargs = sentinel_class_mock.call_args[1]
         self.assertEqual(
             sentinel_init_sentinels_args,
-            ([('remote.host1.org', 26379), ('remote.host2.org', 26379), ('remote.host3.org', 26379)],)
+            ([('remote.host1.org', 26379), ('remote.host2.org', 26379), ('remote.host3.org', 26379)],),
         )
         self.assertDictEqual(
             sentinel_init_sentinel_kwargs,
@@ -80,6 +84,6 @@ class TestHelpers(RQTestCase):
                 'sentinel_kwargs': {
                     'username': 'sentinel-user',
                     'password': 'sentinel-secret',
-                }
-            }
+                },
+            },
         )

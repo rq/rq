@@ -19,6 +19,8 @@ from rq.command import send_stop_job_command
 from rq.job import Job, JobStatus, UNEVALUATED
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
+from tests import RQTestCase
+from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save_result, say_hello
 
 
 class QueueCallbackTestCase(RQTestCase):

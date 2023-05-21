@@ -4,9 +4,9 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import total_ordering
-from typing import TYPE_CHECKING, Dict, List, Any, Callable, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 from redis import WatchError
 
@@ -15,18 +15,17 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
+
     from .job import Retry
 
-from .utils import as_text
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .job import Job, JobStatus
-from .logutils import blue, green, yellow
-from .types import FunctionReferenceType, JobDependencyType
+from .logutils import blue, green
 from .serializers import resolve_serializer
-from .utils import backend_class, get_version, import_attribute, parse_timeout, utcnow, compact
-
+from .types import FunctionReferenceType, JobDependencyType
+from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, utcnow
 
 logger = logging.getLogger("rq.queue")
 
@@ -87,7 +86,7 @@ class Queue:
         Returns:
             queues (List[Queue]): A list of all queues.
         """
-        connection = resolve_connection(connection)
+        connection = connection or resolve_connection()
 
         def to_queue(queue_key: Union[bytes, str]):
             return cls.from_queue_key(
@@ -140,6 +139,18 @@ class Queue:
             death_penalty_class=death_penalty_class,
         )
 
+    @classmethod
+    def get_intermediate_queue_key(cls, key: str) -> str:
+        """Returns the intermediate queue key for a given queue key.
+
+        Args:
+            key (str): The queue key
+
+        Returns:
+            str: The intermediate queue key
+        """
+        return f'{key}:intermediate'
+
     def __init__(
         self,
         name: str = 'default',
@@ -159,11 +170,13 @@ class Queue:
             connection (Optional[Redis], optional): Redis connection. Defaults to None.
             is_async (bool, optional): Whether jobs should run "async" (using the worker).
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
-            job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path. Defaults to None.
+            job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
+                Defaults to None.
             serializer (Any, optional): Serializer. Defaults to None.
-            death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path. Defaults to UnixSignalDeathPenalty.
+            death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
+                Defaults to UnixSignalDeathPenalty.
         """
-        self.connection = resolve_connection(connection)
+        self.connection = connection or resolve_connection()
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
@@ -210,6 +223,11 @@ class Queue:
         return self._key
 
     @property
+    def intermediate_queue_key(self):
+        """Returns the Redis key for intermediate queue."""
+        return self.get_intermediate_queue_key(self._key)
+
+    @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
         return 'rq:clean_registries:%s' % self.name
@@ -221,7 +239,7 @@ class Queue:
         pid = self.connection.get(RQScheduler.get_locking_key(self.name))
         return int(pid.decode()) if pid is not None else None
 
-    def acquire_cleaning_lock(self) -> bool:
+    def acquire_maintenance_lock(self) -> bool:
         """Returns a boolean indicating whether a lock to clean this queue
         is acquired. A lock expires in 899 seconds (15 minutes - 1 second)
 
@@ -290,7 +308,7 @@ class Queue:
         return self.count == 0
 
     @property
-    def is_async(self):
+    def is_async(self) -> bool:
         """Returns whether the current queue is async."""
         return bool(self._is_async)
 
@@ -1190,8 +1208,8 @@ class Queue:
 
     @classmethod
     def lpop(cls, queue_keys: List[str], timeout: Optional[int], connection: Optional['Redis'] = None):
-        """Helper method.  Intermediate method to abstract away from some
-        Redis API details, where LPOP accepts only a single key, whereas BLPOP
+        """Helper method to abstract away from some Redis API details
+        where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
         iterate over all queues, do individual LPOPs, and return the result.
 
@@ -1214,7 +1232,7 @@ class Queue:
         Returns:
             _type_: _description_
         """
-        connection = resolve_connection(connection)
+        connection = connection or resolve_connection()
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
@@ -1222,7 +1240,7 @@ class Queue:
             logger.debug(f"Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}")
             result = connection.blpop(queue_keys, timeout)
             if result is None:
-                logger.debug(f"BLPOP Timeout, no jobs found on queues {colored_queues}")
+                logger.debug(f"BLPOP timeout, no jobs found on queues {colored_queues}")
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
             return queue_key, job_id
@@ -1231,6 +1249,27 @@ class Queue:
                 blob = connection.lpop(queue_key)
                 if blob is not None:
                     return queue_key, blob
+            return None
+
+    @classmethod
+    def lmove(cls, connection: 'Redis', queue_key: str, timeout: Optional[int]):
+        """Similar to lpop, but accepts only a single queue key and immediately pushes
+        the result to an intermediate queue.
+        """
+        if timeout is not None:  # blocking variant
+            if timeout == 0:
+                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
+            colored_queue = green(queue_key)
+            logger.debug(f"Starting BLMOVE operation for {colored_queue} with timeout of {timeout}")
+            result = connection.blmove(queue_key, cls.get_intermediate_queue_key(queue_key), timeout)
+            if result is None:
+                logger.debug(f"BLMOVE timeout, no jobs found on {colored_queue}")
+                raise DequeueTimeout(timeout, queue_key)
+            return queue_key, result
+        else:  # non-blocking variant
+            result = connection.lmove(queue_key, cls.get_intermediate_queue_key(queue_key))
+            if result is not None:
+                return queue_key, result
             return None
 
     @classmethod
@@ -1271,7 +1310,10 @@ class Queue:
 
         while True:
             queue_keys = [q.key for q in queues]
-            result = cls.lpop(queue_keys, timeout, connection=connection)
+            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
+                result = cls.lmove(connection, queue_keys[0], timeout)
+            else:
+                result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:
                 return None
             queue_key, job_id = map(as_text, result)

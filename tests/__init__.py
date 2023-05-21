@@ -1,10 +1,10 @@
 import logging
 import os
+import unittest
 
 from redis import Redis
-from rq import pop_connection, push_connection
 
-import unittest
+from rq import pop_connection, push_connection
 
 
 def find_empty_redis_database(ssl=False):

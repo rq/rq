@@ -1,8 +1,9 @@
 from functools import wraps
-from typing import TYPE_CHECKING, Callable, Dict, Optional, List, Any, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Union
 
 if TYPE_CHECKING:
     from redis import Redis
+
     from .job import Retry
 
 from .defaults import DEFAULT_RESULT_TTL
@@ -20,9 +21,9 @@ class job:  # noqa
         timeout: Optional[int] = None,
         result_ttl: int = DEFAULT_RESULT_TTL,
         ttl: Optional[int] = None,
-        queue_class: Optional['Queue'] = None,
+        queue_class: Optional[Type['Queue']] = None,
         depends_on: Optional[List[Any]] = None,
-        at_front: Optional[bool] = None,
+        at_front: bool = False,
         meta: Optional[Dict[Any, Any]] = None,
         description: Optional[str] = None,
         failure_ttl: Optional[int] = None,
