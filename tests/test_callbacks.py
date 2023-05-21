@@ -1,24 +1,19 @@
 from datetime import timedelta
 
-from tests import RQTestCase
-from tests.fixtures import (
-    div_by_zero,
-    erroneous_callback,
-    save_exception,
-    save_result,
-    say_hello,
-    long_process,
-    save_result_if_not_stopped,
-)
-from tests.test_commands import start_work_burst
-
 from rq import Queue, Worker
-from rq.command import send_stop_job_command
 from rq.job import Job, JobStatus, UNEVALUATED
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, erroneous_callback, save_exception, save_result, say_hello
+from tests.fixtures import (
+    div_by_zero,
+    erroneous_callback,
+    long_process,
+    save_exception,
+    save_result_if_not_stopped,
+    save_result,
+    say_hello,
+)
 
 
 class QueueCallbackTestCase(RQTestCase):
@@ -107,7 +102,7 @@ class SyncJobCallback(RQTestCase):
         connection = self.testconn
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
-        job.execute_stopped_callback()  # Calling execute_stopped_callback directly for coverage
+        job.execute_stopped_callback(job.death_penalty_class)  # Calling execute_stopped_callback directly for coverage
         self.assertTrue(self.testconn.exists('stopped_callback:%s' % job.id))
 
 
