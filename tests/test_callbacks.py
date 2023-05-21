@@ -101,9 +101,11 @@ class SyncJobCallback(RQTestCase):
         """queue.enqueue* methods with on_stopped is persisted correctly"""
         connection = self.testconn
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
-        worker = SimpleWorker()
+        worker = SimpleWorker('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
-        job.execute_stopped_callback(worker.death_penalty_class)  # Calling execute_stopped_callback directly for coverage
+        job.execute_stopped_callback(
+            worker.death_penalty_class
+        )  # Calling execute_stopped_callback directly for coverage
         self.assertTrue(self.testconn.exists('stopped_callback:%s' % job.id))
 
 
