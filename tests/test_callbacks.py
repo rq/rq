@@ -1,6 +1,4 @@
 from datetime import timedelta
-from multiprocessing import Process
-from time import sleep
 
 from tests import RQTestCase
 from tests.fixtures import (
