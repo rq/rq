@@ -10,8 +10,8 @@ permissions:
   contents: read # to fetch code (actions/checkout)
 
 jobs:
-  test-with-ssl:
-    name: Test all, including SSL tests
+  ssl-test:
+    name: Run SSL tests
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v3
