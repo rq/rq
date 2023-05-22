@@ -50,6 +50,7 @@ class EnqueueData(
             "retry",
             "on_success",
             "on_failure",
+            "on_stopped",
         ],
     )
 ):
@@ -516,6 +517,7 @@ class Queue:
         *,
         on_success: Optional[Callable] = None,
         on_failure: Optional[Callable] = None,
+        on_stopped: Optional[Callable] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -535,6 +537,7 @@ class Queue:
             retry (Optional[Retry], optional): The Retry Object. Defaults to None.
             on_success (Optional[Callable], optional): On success callable. Defaults to None.
             on_failure (Optional[Callable], optional): On failure callable. Defaults to None.
+            on_stopped (Optional[Callable], optional): On stopped callable. Defaults to None.
 
         Raises:
             ValueError: If the timeout is 0
@@ -575,6 +578,7 @@ class Queue:
             serializer=self.serializer,
             on_success=on_success,
             on_failure=on_failure,
+            on_stopped=on_stopped,
         )
 
         if retry:
@@ -657,6 +661,7 @@ class Queue:
         retry: Optional['Retry'] = None,
         on_success: Optional[Callable[..., Any]] = None,
         on_failure: Optional[Callable[..., Any]] = None,
+        on_stopped: Optional[Callable[..., Any]] = None,
         pipeline: Optional['Pipeline'] = None,
     ) -> Job:
         """Creates a job to represent the delayed function call and enqueues it.
@@ -681,6 +686,7 @@ class Queue:
             retry (Optional[Retry], optional): Retry object. Defaults to None.
             on_success (Optional[Callable[..., Any]], optional): Callable for on success. Defaults to None.
             on_failure (Optional[Callable[..., Any]], optional): Callable for on failure. Defaults to None.
+            on_stopped (Optional[Callable[..., Any]], optional): Callable for on stopped. Defaults to None.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
@@ -703,6 +709,7 @@ class Queue:
             retry=retry,
             on_success=on_success,
             on_failure=on_failure,
+            on_stopped=on_stopped,
         )
         return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
 
@@ -723,6 +730,7 @@ class Queue:
         retry: Optional['Retry'] = None,
         on_success: Optional[Callable] = None,
         on_failure: Optional[Callable] = None,
+        on_stopped: Optional[Callable] = None,
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -743,6 +751,7 @@ class Queue:
             retry (Optional[Retry], optional): Retry object. Defaults to None.
             on_success (Optional[Callable[..., Any]], optional): Callable for on success. Defaults to None.
             on_failure (Optional[Callable[..., Any]], optional): Callable for on failure. Defaults to None.
+            on_stopped (Optional[Callable[..., Any]], optional): Callable for on stopped. Defaults to None.
 
         Returns:
             EnqueueData: The EnqueueData
@@ -763,6 +772,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_stopped,
         )
 
     def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None) -> List[Job]:
@@ -889,6 +899,7 @@ class Queue:
         retry = kwargs.pop('retry', None)
         on_success = kwargs.pop('on_success', None)
         on_failure = kwargs.pop('on_failure', None)
+        on_stopped = kwargs.pop('on_stopped', None)
         pipeline = kwargs.pop('pipeline', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
@@ -910,6 +921,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_stopped,
             pipeline,
             args,
             kwargs,
@@ -941,6 +953,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_stopped,
             pipeline,
             args,
             kwargs,
@@ -962,6 +975,7 @@ class Queue:
             retry=retry,
             on_success=on_success,
             on_failure=on_failure,
+            on_stopped=on_stopped,
             pipeline=pipeline,
         )
 
@@ -989,6 +1003,7 @@ class Queue:
             retry,
             on_success,
             on_failure,
+            on_stopped,
             pipeline,
             args,
             kwargs,
@@ -1009,6 +1024,7 @@ class Queue:
             retry=retry,
             on_success=on_success,
             on_failure=on_failure,
+            on_stopped=on_stopped,
         )
         if at_front:
             job.enqueue_at_front = True

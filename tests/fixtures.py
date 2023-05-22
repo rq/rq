@@ -59,6 +59,11 @@ def div_by_zero(x):
     return x / 0
 
 
+def long_process():
+    time.sleep(60)
+    return
+
+
 def some_calculation(x, y, z=1):
     """Some arbitrary calculation with three numbers.  Choose z smartly if you
     want a division by zero exception.
@@ -285,6 +290,10 @@ def save_result(job, connection, result):
 def save_exception(job, connection, type, value, traceback):
     """Store job exception in a key"""
     connection.set('failure_callback:%s' % job.id, str(value), ex=60)
+
+
+def save_result_if_not_stopped(job, connection, result=""):
+    connection.set('stopped_callback:%s' % job.id, result, ex=60)
 
 
 def erroneous_callback(job):

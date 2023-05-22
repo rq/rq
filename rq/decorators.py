@@ -30,6 +30,7 @@ class job:  # noqa
         retry: Optional['Retry'] = None,
         on_failure: Optional[Callable[..., Any]] = None,
         on_success: Optional[Callable[..., Any]] = None,
+        on_stopped: Optional[Callable[..., Any]] = None,
     ):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
@@ -60,6 +61,7 @@ class job:  # noqa
             retry (Optional[Retry], optional): A Retry object. Defaults to None.
             on_failure (Optional[Callable[..., Any]], optional): Callable to run on failure. Defaults to None.
             on_success (Optional[Callable[..., Any]], optional): Callable to run on success. Defaults to None.
+            on_stopped (Optional[Callable[..., Any]], optional): Callable to run when stopped. Defaults to None.
         """
         self.queue = queue
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
@@ -75,6 +77,7 @@ class job:  # noqa
         self.retry = retry
         self.on_success = on_success
         self.on_failure = on_failure
+        self.on_stopped = on_stopped
 
     def __call__(self, f):
         @wraps(f)
@@ -110,6 +113,7 @@ class job:  # noqa
                 retry=self.retry,
                 on_failure=self.on_failure,
                 on_success=self.on_success,
+                on_stopped=self.on_stopped,
             )
 
         f.delay = delay
