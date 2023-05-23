@@ -52,10 +52,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
+        pip install --upgrade pip
         pip install redis==${{ matrix.redis-py-version }}
-        pip install --user .[dev]
-        pip install --user --editable .
+        pip install -e .[dev]
 
     - name: Test with pytest
       run: |

@@ -32,10 +32,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
+        pip install --upgrade pip
         pip install redis==${{ matrix.redis-py-version }}
-        pip install .[dev]
-        pip install -e .
+        pip install -e .[dev]
 
     - name: Test with pytest
       run: |
@@ -67,11 +66,10 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
+        pip install --upgrade pip
         pip install git+https://github.com/redis/redis-py
         pip install git+https://github.com/pallets/click
         pip install .[dev]
-        pip install -e .
 
     - name: Test with pytest
       run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1

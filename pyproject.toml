@@ -6,7 +6,7 @@ build-backend = 'setuptools.build_meta'
 name = 'rq'
 version = '1.13.0'
 authors = [{name = 'Vincent Driessen', email = 'vincent@3rdcloud.com'}]
-maintainers = []
+maintainers = [{name = 'Selwin Ong'}]
 description = 'RQ is a simple, lightweight, library for creating background jobs, and processing them.'
 readme = 'README.md'
 license = {file = 'LICENSE'}
@@ -69,7 +69,7 @@ rqworker = 'rq.cli:worker'
 [project.urls]
 homepage = 'https://python-rq.org/'
 documentation = 'https://python-rq.org/docs/'
-repository = 'https://github.com/nvie/rq/'
+repository = 'https://github.com/rq/rq/'
 changelog = 'https://github.com/rq/rq/blob/master/CHANGES.md'
 
 [tool.setuptools]
