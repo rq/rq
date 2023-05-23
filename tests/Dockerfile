@@ -42,7 +42,7 @@ WORKDIR /tmp/rq
 RUN set -e && \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir tox && \
-    pip3 install -r /tmp/rq/requirements.txt -r /tmp/rq/dev-requirements.txt && \
+    pip3 install -e .[dev] && \
     python3 /tmp/rq/setup.py build && \
     python3 /tmp/rq/setup.py install
 
