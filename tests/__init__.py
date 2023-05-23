@@ -2,6 +2,7 @@ import logging
 import os
 import unittest
 
+import pytest
 from redis import Redis
 
 from rq import pop_connection, push_connection
@@ -25,10 +26,12 @@ def find_empty_redis_database(ssl=False):
 
 
 def slow(f):
+    f = pytest.mark.slow(f)
     return unittest.skipUnless(os.environ.get('RUN_SLOW_TESTS_TOO'), "Slow tests disabled")(f)
 
 
 def ssl_test(f):
+    f = pytest.mark.ssl_test(f)
     return unittest.skipUnless(os.environ.get('RUN_SSL_TESTS'), "SSL tests disabled")(f)
 
 
