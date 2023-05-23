@@ -3,16 +3,17 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slightly different characteristics.
 """
 
-import os
-import time
-import signal
-import sys
-import subprocess
 import contextlib
+import os
+import signal
+import subprocess
+import sys
+import time
 from multiprocessing import Process
 
 from redis import Redis
-from rq import Connection, get_current_job, get_current_connection, Queue
+
+from rq import Connection, Queue, get_current_connection, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
 from rq.job import Job
@@ -56,6 +57,11 @@ def raise_exc_mock():
 def div_by_zero(x):
     """Prepare for a division-by-zero exception."""
     return x / 0
+
+
+def long_process():
+    time.sleep(60)
+    return
 
 
 def some_calculation(x, y, z=1):
@@ -284,6 +290,10 @@ def save_result(job, connection, result):
 def save_exception(job, connection, type, value, traceback):
     """Store job exception in a key"""
     connection.set('failure_callback:%s' % job.id, str(value), ex=60)
+
+
+def save_result_if_not_stopped(job, connection, result=""):
+    connection.set('stopped_callback:%s' % job.id, result, ex=60)
 
 
 def erroneous_callback(job):

@@ -2,48 +2,52 @@
 RQ command line tool
 """
 
+import logging
+import logging.config
 import os
 import sys
 import warnings
-
 from typing import List, Type
 
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, Retry, __version__ as version
+from rq import Connection, Retry
+from rq import __version__ as version
 from rq.cli.helpers import (
+    parse_function_args,
+    parse_schedule,
+    pass_cli_config,
     read_config_file,
     refresh,
     setup_loghandlers_from_args,
     show_both,
     show_queues,
     show_workers,
-    parse_function_args,
-    parse_schedule,
-    pass_cli_config,
 )
 
 # from rq.cli.pool import pool
 from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (
+    DEFAULT_JOB_MONITORING_INTERVAL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
+    DEFAULT_MAINTENANCE_TASK_INTERVAL,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
-    DEFAULT_JOB_MONITORING_INTERVAL,
-    DEFAULT_LOGGING_FORMAT,
-    DEFAULT_LOGGING_DATE_FORMAT,
-    DEFAULT_MAINTENANCE_TASK_INTERVAL,
 )
 from rq.exceptions import InvalidJobOperationError
 from rq.job import Job, JobStatus
 from rq.logutils import blue
 from rq.registry import FailedJobRegistry, clean_registries
 from rq.serializers import DefaultSerializer
-from rq.suspension import suspend as connection_suspend, resume as connection_resume, is_suspended
+from rq.suspension import is_suspended
+from rq.suspension import resume as connection_resume
+from rq.suspension import suspend as connection_suspend
+from rq.utils import get_call_string, import_attribute
 from rq.worker import Worker
 from rq.worker_pool import WorkerPool
 from rq.worker_registration import clean_worker_registry
-from rq.utils import import_attribute, get_call_string
 
 
 @click.group()
@@ -227,6 +231,10 @@ def worker(
     sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
     sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
     name = name or settings.get('NAME')
+    dict_config = settings.get('DICT_CONFIG')
+
+    if dict_config:
+        logging.config.dictConfig(dict_config)
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
@@ -301,7 +309,7 @@ def worker(
             dequeue_strategy=dequeue_strategy,
         )
     except ConnectionError as e:
-        print(e)
+        logging.error(e)
         sys.exit(1)
 
 

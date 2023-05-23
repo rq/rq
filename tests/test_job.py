@@ -1,31 +1,28 @@
 import json
-
-from rq.defaults import CALLBACK_TIMEOUT
-from rq.serializers import JSONSerializer
-import time
 import queue
+import time
 import zlib
 from datetime import datetime, timedelta
+from pickle import dumps, loads
 
 from redis import WatchError
 
-from rq.utils import as_text
+from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from rq.job import Job, JobStatus, Dependency, cancel_job, get_current_job, Callback
+from rq.job import Callback, Dependency, Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (
     CanceledJobRegistry,
     DeferredJobRegistry,
     FailedJobRegistry,
     FinishedJobRegistry,
-    StartedJobRegistry,
     ScheduledJobRegistry,
+    StartedJobRegistry,
 )
-from rq.utils import utcformat, utcnow
+from rq.serializers import JSONSerializer
+from rq.utils import as_text, utcformat, utcnow
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
-
-from pickle import loads, dumps
 
 
 class TestJob(RQTestCase):
@@ -52,7 +49,7 @@ class TestJob(RQTestCase):
         self.assertEqual(str(job), "<Job %s: test job>" % job.id)
 
         # ...and nothing else
-        self.assertIsNone(job.origin)
+        self.assertEqual(job.origin, '')
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
@@ -90,7 +87,7 @@ class TestJob(RQTestCase):
         self.assertEqual(job.kwargs, {'z': 2})
 
         # ...but metadata is not
-        self.assertIsNone(job.origin)
+        self.assertEqual(job.origin, '')
         self.assertIsNone(job.enqueued_at)
         self.assertIsNone(job.result)
 
@@ -226,6 +223,7 @@ class TestJob(RQTestCase):
                 b'worker_name',
                 b'success_callback_name',
                 b'failure_callback_name',
+                b'stopped_callback_name',
             },
             set(self.testconn.hkeys(job.key)),
         )
@@ -263,6 +261,7 @@ class TestJob(RQTestCase):
             func=fixtures.some_calculation,
             on_success=Callback(fixtures.say_hello, timeout=10),
             on_failure=fixtures.say_pid,
+            on_stopped=fixtures.say_hello,
         )  # deprecated callable
         job.save()
         stored_job = Job.fetch(job.id)
@@ -270,7 +269,9 @@ class TestJob(RQTestCase):
         self.assertEqual(fixtures.say_hello, stored_job.success_callback)
         self.assertEqual(10, stored_job.success_callback_timeout)
         self.assertEqual(fixtures.say_pid, stored_job.failure_callback)
+        self.assertEqual(fixtures.say_hello, stored_job.stopped_callback)
         self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+        self.assertEqual(CALLBACK_TIMEOUT, stored_job.stopped_callback_timeout)
 
         # None(s)
         job = Job.create(func=fixtures.some_calculation, on_failure=None)
@@ -282,6 +283,8 @@ class TestJob(RQTestCase):
         self.assertIsNone(stored_job.failure_callback)
         self.assertEqual(CALLBACK_TIMEOUT, job.failure_callback_timeout)  # timeout should be never none
         self.assertEqual(CALLBACK_TIMEOUT, stored_job.failure_callback_timeout)
+        self.assertEqual(CALLBACK_TIMEOUT, job.stopped_callback_timeout)  # timeout should be never none
+        self.assertIsNone(stored_job.stopped_callback)
 
     def test_store_then_fetch(self):
         """Store, then fetch."""

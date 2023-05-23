@@ -8,7 +8,7 @@ from enum import Enum
 from multiprocessing import Process
 from typing import List, Set
 
-from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection
+from redis import ConnectionPool, Redis
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
@@ -171,24 +171,24 @@ class RQScheduler:
     def heartbeat(self):
         """Updates the TTL on scheduler keys and the locks"""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
-        if len(self._queue_names) > 1:
+        if len(self._acquired_locks) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._acquired_locks:
                     key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 60)
                 pipeline.execute()
-        else:
-            key = self.get_locking_key(next(iter(self._queue_names)))
+        elif self._acquired_locks:
+            key = self.get_locking_key(next(iter(self._acquired_locks)))
             self.connection.expire(key, self.interval + 60)
 
     def stop(self):
-        self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._queue_names))
+        self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
         self.release_locks()
         self._status = self.Status.STOPPED
 
     def release_locks(self):
         """Release acquired locks"""
-        keys = [self.get_locking_key(name) for name in self._queue_names]
+        keys = [self.get_locking_key(name) for name in self._acquired_locks]
         self.connection.delete(*keys)
         self._acquired_locks = set()
 

@@ -10,6 +10,23 @@ permissions:
   contents: read # to fetch code (actions/checkout)
 
 jobs:
+  ssl-test:
+    name: Run SSL tests
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build the Docker test image for tox
+      uses: docker/build-push-action@v4
+      with:
+        file: tests/Dockerfile
+        tags: rqtest-image:latest
+        push: false
+    - name: Launch tox SSL env only (will only run SSL specific tests)
+      uses: addnab/docker-run-action@v3
+      with:
+        image: rqtest-image:latest
+        run: stunnel & redis-server & RUN_SSL_TESTS=1 tox run -e ssl
+
   test:
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
@@ -42,7 +59,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
+        RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report=xml --durations=5
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -81,7 +98,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
+        RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report=xml --durations=5
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

@@ -13,8 +13,8 @@ import warnings
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type, Union
 from types import FrameType
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -35,39 +35,28 @@ from contextlib import suppress
 import redis.exceptions
 
 from . import worker_registration
-from .command import parse_payload, PUBSUB_CHANNEL_TEMPLATE, handle_command
-from .connections import get_current_connection, push_connection, pop_connection
-
+from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
+from .connections import get_current_connection, pop_connection, push_connection
 from .defaults import (
+    DEFAULT_JOB_MONITORING_INTERVAL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
-    DEFAULT_JOB_MONITORING_INTERVAL,
-    DEFAULT_LOGGING_FORMAT,
-    DEFAULT_LOGGING_DATE_FORMAT,
 )
-from .exceptions import DeserializationError, DequeueTimeout, ShutDownImminentException
-
+from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
+from .maintenance import clean_intermediate_queue
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
-from .timeouts import JobTimeoutException, HorseMonitorTimeoutException, UnixSignalDeathPenalty
-from .utils import (
-    backend_class,
-    ensure_list,
-    get_version,
-    utcformat,
-    utcnow,
-    utcparse,
-    compact,
-    as_text,
-)
+from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
+from .utils import as_text, backend_class, compact, ensure_list, get_version, utcformat, utcnow, utcparse
 from .version import VERSION
-
 
 try:
     from setproctitle import setproctitle as setprocname
@@ -297,6 +286,38 @@ class BaseWorker:
             return True
         return False
 
+    def _set_connection(self, connection: Optional['Redis']) -> 'Redis':
+        """Configures the Redis connection to have a socket timeout.
+        This should timouet the connection in case any specific command hangs at any given time (eg. BLPOP).
+        If the connection provided already has a `socket_timeout` defined, skips.
+
+        Args:
+            connection (Optional[Redis]): The Redis Connection.
+        """
+        if connection is None:
+            connection = get_current_connection()
+        current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
+        if current_socket_timeout is None:
+            timeout_config = {"socket_timeout": self.connection_timeout}
+            connection.connection_pool.connection_kwargs.update(timeout_config)
+        return connection
+
+    @property
+    def dequeue_timeout(self) -> int:
+        return max(1, self.worker_ttl - 15)
+
+    def clean_registries(self):
+        """Runs maintenance jobs on each Queue's registries."""
+        for queue in self.queues:
+            # If there are multiple workers running, we only want 1 worker
+            # to run clean_registries().
+            if queue.acquire_maintenance_lock():
+                self.log.info('Cleaning registries for queue: %s', queue.name)
+                clean_registries(queue)
+                worker_registration.clean_worker_registry(queue)
+                clean_intermediate_queue(self, queue)
+        self.last_cleaned_at = utcnow()
+
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
         if not self.redis_server_version:
@@ -373,7 +394,8 @@ class BaseWorker:
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
             max_idle_time (Optional[int], optional): Max seconds for worker to be idle. Defaults to None.
             with_scheduler (bool, optional): Whether to run the scheduler in a separate process. Defaults to False.
-            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs. Defaults to DequeueStrategy.DEFAULT
+            dequeue_strategy (DequeueStrategy, optional): Which strategy to use to dequeue jobs.
+                Defaults to DequeueStrategy.DEFAULT
 
         Returns:
             worked (bool): Will return True if any job was processed, False otherwise.
@@ -685,22 +707,6 @@ class Worker(BaseWorker):
         worker.refresh()
         return worker
 
-    def _set_connection(self, connection: Optional['Redis']) -> 'Redis':
-        """Configures the Redis connection to have a socket timeout.
-        This should timouet the connection in case any specific command hangs at any given time (eg. BLPOP).
-        If the connection provided already has a `socket_timeout` defined, skips.
-
-        Args:
-            connection (Optional[Redis]): The Redis Connection.
-        """
-        if connection is None:
-            connection = get_current_connection()
-        current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
-        if current_socket_timeout is None:
-            timeout_config = {"socket_timeout": self.connection_timeout}
-            connection.connection_pool.connection_kwargs.update(timeout_config)
-        return connection
-
     @property
     def horse_pid(self):
         """The horse's process ID.  Only available in the worker.  Will return
@@ -712,10 +718,6 @@ class Worker(BaseWorker):
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
-
-    @property
-    def dequeue_timeout(self) -> int:
-        return max(1, self.worker_ttl - 15)
 
     @property
     def connection_timeout(self) -> int:
@@ -1038,12 +1040,11 @@ class Worker(BaseWorker):
             version,
             python_version,
         ) = data
-        queues = as_text(queues)
-        self.hostname = as_text(hostname)
-        self.ip_address = as_text(ip_address)
+        self.hostname = as_text(hostname) if hostname else None
+        self.ip_address = as_text(ip_address) if ip_address else None
         self.pid = int(pid) if pid else None
-        self.version = as_text(version)
-        self.python_version = as_text(python_version)
+        self.version = as_text(version) if version else None
+        self.python_version = as_text(python_version) if python_version else None
         self._state = as_text(state or '?')
         self._job_id = job_id or None
         if last_heartbeat:
@@ -1064,6 +1065,7 @@ class Worker(BaseWorker):
             self.current_job_working_time = float(as_text(current_job_working_time))
 
         if queues:
+            queues = as_text(queues)
             self.queues = [
                 self.queue_class(
                     queue, connection=self.connection, job_class=self.job_class, serializer=self.serializer
@@ -1189,6 +1191,8 @@ class Worker(BaseWorker):
         elif self._stopped_job_id == job.id:
             # Work-horse killed deliberately
             self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
+            if job.stopped_callback:
+                job.execute_stopped_callback(self.death_penalty_class)
             self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             if not job.ended_at:
@@ -1265,7 +1269,7 @@ class Worker(BaseWorker):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job: 'Job'):
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1279,6 +1283,11 @@ class Worker(BaseWorker):
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
+            if remove_from_intermediate_queue:
+                from .queue import Queue
+
+                queue = Queue(job.origin, connection=self.connection)
+                pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
             pipeline.execute()
             self.log.debug('Job preparation finished.')
 
@@ -1409,7 +1418,8 @@ class Worker(BaseWorker):
         self.log.debug('Started Job Registry set.')
 
         try:
-            self.prepare_job_execution(job)
+            remove_from_intermediate_queue = len(self.queues) == 1
+            self.prepare_job_execution(job, remove_from_intermediate_queue)
 
             job.started_at = utcnow()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
@@ -1525,17 +1535,6 @@ class Worker(BaseWorker):
     def __hash__(self):
         """The hash does not take the database/connection into account"""
         return hash(self.name)
-
-    def clean_registries(self):
-        """Runs maintenance jobs on each Queue's registries."""
-        for queue in self.queues:
-            # If there are multiple workers running, we only want 1 worker
-            # to run clean_registries().
-            if queue.acquire_cleaning_lock():
-                self.log.info('Cleaning registries for queue: %s', queue.name)
-                clean_registries(queue)
-                worker_registration.clean_worker_registry(queue)
-        self.last_cleaned_at = utcnow()
 
     def handle_payload(self, message):
         """Handle external commands"""

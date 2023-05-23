@@ -9,7 +9,6 @@ from tests.fixtures import div_by_zero, say_hello
 
 
 class TestRetry(RQTestCase):
-
     def test_persistence_of_retry_data(self):
         """Retry related data is stored and restored properly"""
         job = Job.create(func=fixtures.some_calculation)
