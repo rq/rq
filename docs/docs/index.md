@@ -77,6 +77,7 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `description` to add additional description to enqueued jobs.
 * `on_success` allows you to run a function after a job completes successfully
 * `on_failure` allows you to run a function after a job fails
+* `on_stopped` allows you to run a function after a job is stopped
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
@@ -195,11 +196,11 @@ job_2 = queue.enqueue(say_hello, depends_on=dependency)
 ## Job Callbacks
 _New in version 1.9.0._
 
-If you want to execute a function whenever a job completes or fails, RQ provides
-`on_success` and `on_failure` callbacks.
+If you want to execute a function whenever a job completes, fails or is stopped, RQ provides
+`on_success`, `on_failure` and `on_stopped` callbacks.
 
 ```python
-queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure)
+queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure, on_stopped=report_stopped)
 ```
 
 ### Callback Class and Callback Timeouts
@@ -247,6 +248,11 @@ def report_failure(job, connection, type, value, traceback):
 ```
 
 Failure callbacks are limited to 60 seconds of execution time.
+
+
+### Stopped Callbacks
+
+TODO
 
 
 ### CLI Enqueueing
