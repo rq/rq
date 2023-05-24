@@ -6,8 +6,9 @@ import traceback
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
+from typing import List, Set
 
-from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection
+from redis import ConnectionPool, Redis
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
@@ -16,7 +17,7 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp
+from .utils import current_timestamp, parse_names
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
@@ -46,14 +47,10 @@ class RQScheduler:
         serializer=None,
     ):
         self._queue_names = set(parse_names(queues))
-        self._acquired_locks = set()
-        self._scheduled_job_registries = []
+        self._acquired_locks: Set[str] = set()
+        self._scheduled_job_registries: List[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
-        (
-            self._connection_class,
-            self._connection_pool_class,
-            self._connection_kwargs,
-        ) = parse_connection(connection)
+        self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
 
         self._connection = None
@@ -74,10 +71,7 @@ class RQScheduler:
         if self._connection:
             return self._connection
         self._connection = self._connection_class(
-            connection_pool=ConnectionPool(
-                connection_class=self._connection_pool_class,
-                **self._connection_kwargs
-            )
+            connection_pool=ConnectionPool(connection_class=self._pool_class, **self._pool_kwargs)
         )
         return self._connection
 
@@ -177,24 +171,24 @@ class RQScheduler:
     def heartbeat(self):
         """Updates the TTL on scheduler keys and the locks"""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
-        if len(self._queue_names) > 1:
+        if len(self._acquired_locks) > 1:
             with self.connection.pipeline() as pipeline:
                 for name in self._acquired_locks:
                     key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 60)
                 pipeline.execute()
-        else:
-            key = self.get_locking_key(next(iter(self._queue_names)))
+        elif self._acquired_locks:
+            key = self.get_locking_key(next(iter(self._acquired_locks)))
             self.connection.expire(key, self.interval + 60)
 
     def stop(self):
-        self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._queue_names))
+        self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
         self.release_locks()
         self._status = self.Status.STOPPED
 
     def release_locks(self):
         """Release acquired locks"""
-        keys = [self.get_locking_key(name) for name in self._queue_names]
+        keys = [self.get_locking_key(name) for name in self._acquired_locks]
         self.connection.delete(*keys)
         self._acquired_locks = set()
 
@@ -231,14 +225,3 @@ def run(scheduler):
         scheduler.log.error('Scheduler [PID %s] raised an exception.\n%s', os.getpid(), traceback.format_exc())
         raise
     scheduler.log.info('Scheduler with PID %d has stopped', os.getpid())
-
-
-def parse_names(queues_or_names):
-    """Given a list of strings or queues, returns queue names"""
-    names = []
-    for queue_or_name in queues_or_names:
-        if isinstance(queue_or_name, Queue):
-            names.append(queue_or_name.name)
-        else:
-            names.append(str(queue_or_name))
-    return names

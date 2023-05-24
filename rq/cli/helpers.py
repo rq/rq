@@ -1,14 +1,12 @@
-import sys
 import importlib
-import time
 import os
-
-from functools import partial, update_wrapper
-from enum import Enum
-
-from datetime import datetime, timezone, timedelta
-from json import loads, JSONDecodeError
+import sys
+import time
 from ast import literal_eval
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from functools import partial, update_wrapper
+from json import JSONDecodeError, loads
 from shutil import get_terminal_size
 
 import click
@@ -20,8 +18,8 @@ from rq.defaults import (
     DEFAULT_DEATH_PENALTY_CLASS,
     DEFAULT_JOB_CLASS,
     DEFAULT_QUEUE_CLASS,
-    DEFAULT_WORKER_CLASS,
     DEFAULT_SERIALIZER_CLASS,
+    DEFAULT_WORKER_CLASS,
 )
 from rq.logutils import setup_loghandlers
 from rq.utils import import_attribute, parse_timeout

@@ -1,12 +1,10 @@
+from rq import Queue, SimpleWorker, Worker
+from rq.job import Dependency, Job, JobStatus
 from tests import RQTestCase
 from tests.fixtures import check_dependencies_are_met, div_by_zero, say_hello
 
-from rq import Queue, SimpleWorker, Worker
-from rq.job import Job, JobStatus, Dependency
-
 
 class TestDependencies(RQTestCase):
-
     def test_allow_failure_is_persisted(self):
         """Ensure that job.allow_dependency_failures is properly set
         when providing Dependency object to depends_on."""
@@ -70,10 +68,8 @@ class TestDependencies(RQTestCase):
         # When a failing job has multiple dependents, only enqueue those
         # with allow_failure=True
         parent_job = q.enqueue(div_by_zero)
-        job_allow_failure = q.enqueue(say_hello,
-                                      depends_on=Dependency(jobs=parent_job, allow_failure=True))
-        job = q.enqueue(say_hello,
-                        depends_on=Dependency(jobs=parent_job, allow_failure=False))
+        job_allow_failure = q.enqueue(say_hello, depends_on=Dependency(jobs=parent_job, allow_failure=True))
+        job = q.enqueue(say_hello, depends_on=Dependency(jobs=parent_job, allow_failure=False))
         w.work(burst=True, max_jobs=1)
         self.assertEqual(parent_job.get_status(), JobStatus.FAILED)
         self.assertEqual(job_allow_failure.get_status(), JobStatus.QUEUED)
@@ -101,21 +97,31 @@ class TestDependencies(RQTestCase):
         # Test dependant is enqueued at front
         q.empty()
         parent_job = q.enqueue(say_hello)
-        q.enqueue(
-            say_hello,
-            job_id='fake_job_id_1',
-            depends_on=Dependency(jobs=[parent_job])
-        )
-        q.enqueue(
-            say_hello,
-            job_id='fake_job_id_2',
-            depends_on=Dependency(jobs=[parent_job],enqueue_at_front=True)
-        )
-        #q.enqueue(say_hello) # This is a filler job that will act as a separator for jobs, one will be enqueued at front while the other one at the end of the queue
+        q.enqueue(say_hello, job_id='fake_job_id_1', depends_on=Dependency(jobs=[parent_job]))
+        q.enqueue(say_hello, job_id='fake_job_id_2', depends_on=Dependency(jobs=[parent_job], enqueue_at_front=True))
         w.work(burst=True, max_jobs=1)
 
         self.assertEqual(q.job_ids, ["fake_job_id_2", "fake_job_id_1"])
 
+    def test_multiple_jobs_with_dependencies(self):
+        """Enqueue dependent jobs only when appropriate"""
+        q = Queue(connection=self.testconn)
+        w = SimpleWorker([q], connection=q.connection)
+
+        # Multiple jobs are enqueued with correct status
+        parent_job = q.enqueue(say_hello)
+        job_no_deps = Queue.prepare_data(say_hello)
+        job_with_deps = Queue.prepare_data(say_hello, depends_on=parent_job)
+        jobs = q.enqueue_many([job_no_deps, job_with_deps])
+        self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
+        self.assertEqual(jobs[1].get_status(), JobStatus.DEFERRED)
+        w.work(burst=True, max_jobs=1)
+        self.assertEqual(jobs[1].get_status(), JobStatus.QUEUED)
+
+        job_with_met_deps = Queue.prepare_data(say_hello, depends_on=parent_job)
+        jobs = q.enqueue_many([job_with_met_deps])
+        self.assertEqual(jobs[0].get_status(), JobStatus.QUEUED)
+        q.empty()
 
     def test_dependency_list_in_depends_on(self):
         """Enqueue with Dependency list in depends_on"""
@@ -128,7 +134,6 @@ class TestDependencies(RQTestCase):
         job = q.enqueue_call(say_hello, depends_on=[Dependency([parent_job1]), Dependency([parent_job2])])
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
 
     def test_enqueue_job_dependency(self):
         """Enqueue via Queue.enqueue_job() with depencency"""
@@ -146,7 +151,6 @@ class TestDependencies(RQTestCase):
         w.work(burst=True)
         self.assertEqual(parent_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-
 
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""

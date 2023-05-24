@@ -1,3 +1,27 @@
+### RQ 1.15 (2023-05-24)
+* Added `Callback(on_stopped='my_callback)`. Thanks @eswolinsky3241!
+* `queue.enqueue_many()` now supports job dependencies. Thanks @eswolinsky3241!
+* `rq worker` CLI script now configures logging based on `DICT_CONFIG` key present in config file. Thanks @juur!
+* Whenever possible, `Worker` now uses `lmove()` to implement [reliable queue pattern](https://redis.io/commands/lmove/). Thanks @selwin!
+* `Scheduler` should only release locks that it successfully acquires. Thanks @xzander!
+* Fixes crashes that may happen by changes to `as_text()` function in v1.14. Thanks @tchapi!
+
+### RQ 1.14.1 (2023-05-05)
+* Fixes a crash that happens if Redis connection uses SSL. Thanks @tchapi!
+* Fixes a crash if `job.meta()` is loaded using the wrong serializer. Thanks @gabriels1234!
+
+### RQ 1.14.0 (2023-05-01)
+* Added `WorkerPool` (beta) that manages multiple workers in a single CLI. Thanks @selwin!
+* Added a new `Callback` class that allows more flexibility in declaring job callbacks. Thanks @ronlut!
+* Fixed a regression where jobs with unserializable return value crashes RQ. Thanks @tchapi!
+* Added `--dequeue-strategy` option to RQ's CLI. Thanks @ccrvlh!
+* Added `--max-idle-time` option to RQ's worker CLI. Thanks @ronlut!
+* Added `--maintenance-interval` option to RQ's worker CLI. Thanks @ronlut!
+* Fixed RQ usage in Windows as well as various other refactorings. Thanks @ccrvlh!
+* Show more info on `rq info` CLI command. Thanks @iggeehu!
+* `queue.enqueue_jobs()` now properly account for job dependencies. Thanks @sim6!
+* `TimerDeathPenalty` now properly handles negative/infinite timeout. Thanks @marqueurs404!
+
 ### RQ 1.13.0 (2023-02-19)
 * Added `work_horse_killed_handler` argument to `Worker`. Thanks @ronlut!
 * Fixed an issue where results aren't properly persisted on synchronous jobs. Thanks @selwin!

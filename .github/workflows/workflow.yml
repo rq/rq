@@ -1,4 +1,4 @@
-name: Test rq
+name: Test
 
 on:
   push:
@@ -10,12 +10,30 @@ permissions:
   contents: read # to fetch code (actions/checkout)
 
 jobs:
-  build:
+  ssl-test:
+    name: Run SSL tests
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build the Docker test image for tox
+      uses: docker/build-push-action@v4
+      with:
+        file: tests/Dockerfile
+        tags: rqtest-image:latest
+        push: false
+    - name: Launch tox SSL env only (will only run SSL specific tests)
+      uses: addnab/docker-run-action@v3
+      with:
+        image: rqtest-image:latest
+        run: stunnel & redis-server & RUN_SSL_TESTS=1 tox run -e ssl
+
+  test:
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
+    timeout-minutes: 10
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
+        python-version: ["3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: [3.5.0]
 
@@ -41,7 +59,46 @@ jobs:
 
     - name: Test with pytest
       run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov=./ --cov-report=xml --durations=5
+        RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report=xml --durations=5
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+  test-python-36:
+    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ["3.6"]
+        redis-version: [3, 4, 5, 6, 7]
+        redis-py-version: [3.5.0]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4.6.0
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Start Redis
+      uses: supercharge/redis-github-action@1.5.0
+      with:
+        redis-version: ${{ matrix.redis-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install redis==${{ matrix.redis-py-version }}
+        pip install -r requirements.txt -r dev-requirements-36.txt
+        pip install -e .
+
+    - name: Test with pytest
+      run: |
+        RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report=xml --durations=5
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

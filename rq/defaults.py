@@ -94,3 +94,9 @@ DEFAULT_DEATH_PENALTY_CLASS = 'rq.timeouts.UnixSignalDeathPenalty'
 """ The path for the default Death Penalty class to use.
 Defaults to the `UnixSignalDeathPenalty` class within the `rq.timeouts` module
 """
+
+
+UNSERIALIZABLE_RETURN_VALUE_PAYLOAD = 'Unserializable return value'
+""" The value that we store in the job's _result property or in the Result's return_value
+in case the return value of the actual job is not serializable
+"""
