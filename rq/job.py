@@ -193,9 +193,12 @@ class Job:
                 Defaults to None.
             serializer (Optional[str], optional): The serializer class path to use. Should be a string with the import
                 path for the serializer to use. eg. `mymodule.myfile.MySerializer` Defaults to None.
-            on_success (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job finishes sucessfully. Defaults to None. Passing a callable is deprecated.
-            on_failure (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job fails. Defaults to None. Passing a callable is deprecated.
-            on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job is stopped. Defaults to None. Passing a callable is deprecated.
+            on_success (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
+                finishes sucessfully. Defaults to None. Passing a callable is deprecated.
+            on_failure (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
+                fails. Defaults to None. Passing a callable is deprecated.
+            on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
+                is stopped. Defaults to None. Passing a callable is deprecated.
 
         Raises:
             TypeError: If `args` is not a tuple/list

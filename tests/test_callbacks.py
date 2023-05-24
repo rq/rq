@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from rq import Queue, Worker
-from rq.job import Callback, Job, JobStatus, UNEVALUATED
+from rq.job import UNEVALUATED, Callback, Job, JobStatus
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
 from tests import RQTestCase
