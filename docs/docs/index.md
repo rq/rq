@@ -131,8 +131,7 @@ with q.connection.pipeline() as pipe:
   pipe.execute()
 ```
 
-`Queue.prepare_data` accepts all arguments that `Queue.parse_args` does **EXCEPT** for `depends_on`,
-which is not supported at this time, so dependencies will be up to you to setup.
+`Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
 
 ## Job dependencies
 
