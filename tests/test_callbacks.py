@@ -35,6 +35,17 @@ class QueueCallbackTestCase(RQTestCase):
         job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.success_callback, print)
 
+        # test string callbacks
+        job = queue.enqueue(say_hello, on_success=Callback("print"))
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
+        self.assertEqual(job.success_callback, print)
+
+        job = queue.enqueue_in(timedelta(seconds=10), say_hello, on_success=Callback("print"))
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
+        self.assertEqual(job.success_callback, print)
+
     def test_enqueue_with_failure_callback(self):
         """queue.enqueue* methods with on_failure is persisted correctly"""
         queue = Queue(connection=self.testconn)
@@ -49,6 +60,17 @@ class QueueCallbackTestCase(RQTestCase):
         self.assertEqual(job.failure_callback, print)
 
         job = queue.enqueue_in(timedelta(seconds=10), say_hello, on_failure=print)
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
+        self.assertEqual(job.failure_callback, print)
+
+        # test string callbacks
+        job = queue.enqueue(say_hello, on_failure=Callback("print"))
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
+        self.assertEqual(job.failure_callback, print)
+
+        job = queue.enqueue_in(timedelta(seconds=10), say_hello, on_failure=Callback("print"))
 
         job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.failure_callback, print)
@@ -71,17 +93,15 @@ class QueueCallbackTestCase(RQTestCase):
         job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.stopped_callback, print)
 
-    def test_enqueue_with_string_callback(self):
-        """Test enqueue with callbacks passed in with strings"""
-        queue = Queue(connection=self.testconn)
-
-        job = queue.enqueue(
-            say_hello, on_success=Callback("print"), on_failure=Callback("print"), on_stopped=Callback("print")
-        )
+        # test string callbacks
+        job = queue.enqueue(long_process, on_stopped=Callback("print"))
 
         job = Job.fetch(id=job.id, connection=self.testconn)
-        self.assertEqual(job.success_callback, print)
-        self.assertEqual(job.failure_callback, print)
+        self.assertEqual(job.stopped_callback, print)
+
+        job = queue.enqueue_in(timedelta(seconds=10), long_process, on_stopped=Callback("print"))
+
+        job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.stopped_callback, print)
 
 
