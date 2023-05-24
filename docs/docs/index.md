@@ -218,6 +218,8 @@ queue.enqueue(say_hello,
               on_failure=Callback(report_failure, timeout=10))  # 10 seconds timeout
 ```
 
+You can also pass the function as a string reference: `Callback('my_package.my_module.my_func')`
+
 ### Success Callback
 
 Success callbacks must be a function that accepts `job`, `connection` and `result` arguments.
