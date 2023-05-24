@@ -194,7 +194,7 @@ job_2 = queue.enqueue(say_hello, depends_on=dependency)
 ## Job Callbacks
 _New in version 1.9.0._
 
-If you want to execute a function whenever a job completes or fails, RQ provides
+If you want to execute a function whenever a job completes, fails, or is stopped, RQ provides
 `on_success`, `on_failure`, and `on_stopped` callbacks.
 
 ```python
@@ -213,7 +213,8 @@ To configure callback timeouts, use RQ's
 from rq import Callback
 queue.enqueue(say_hello, 
               on_success=Callback(report_success),  # default callback timeout (60 seconds) 
-              on_failure=Callback(report_failure, timeout=10))  # 10 seconds timeout
+              on_failure=Callback(report_failure, timeout=10), # 10 seconds timeout
+              on_stopped=Callback(report_stopped, timeout=2m)) # 2 minute timeout  
 ```
 
 ### Success Callback
