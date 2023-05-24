@@ -1498,7 +1498,7 @@ class Worker(BaseWorker):
         extra.update({'queue': job.origin, 'job_id': job.id})
 
         # func_name
-        self.log.error('[Job %s]: exception raised while executing (%s)\n' + exc_string, job.id, func_name, extra=extra)
+        self.log.error('[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra)
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
