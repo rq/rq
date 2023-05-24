@@ -34,7 +34,7 @@ RUN apt-get install -y \
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY tests/ssl_config/private.pem tests/ssl_config/stunnel.conf /etc/stunnel/
+COPY tests/ssl_config/ /etc/stunnel/
 
 COPY . /tmp/rq
 WORKDIR /tmp/rq
@@ -44,7 +44,7 @@ RUN set -e && \
     python3 -m pip install --no-cache-dir tox && \
     pip3 install -e .[dev] && \
     python3 -m build && \
-    python3 -m pip install dist/rq*
+    python3 -m pip install dist/rq*whl
 
 CMD stunnel \
     & redis-server \
