@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     if: github.repository == 'rq/rq'
-    name: Python3.11/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    name: Python3.8/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -18,10 +18,10 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python 3.11
+    - name: Set up Python 3.8
       uses: actions/setup-python@v4.6.0
       with:
-        python-version: '3.11'
+        python-version: '3.8'
 
     - name: Start Redis
       uses: supercharge/redis-github-action@1.5.0
@@ -53,10 +53,10 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python 3.11
+    - name: Set up Python 3.8
       uses: actions/setup-python@v4.6.0
       with:
-        python-version: '3.11'
+        python-version: '3.8'
 
     - name: Start Redis
       uses: supercharge/redis-github-action@1.5.0
