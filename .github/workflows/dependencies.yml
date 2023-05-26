@@ -9,21 +9,19 @@ on:
 jobs:
   build:
     if: github.repository == 'rq/rq'
-    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    name: Python3.11/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: [3.5.0]
-
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4.6.1
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4.6.0
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.11'
 
     - name: Start Redis
       uses: supercharge/redis-github-action@1.5.0
@@ -50,16 +48,15 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
 
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4.6.1
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4.6.0
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.11'
 
     - name: Start Redis
       uses: supercharge/redis-github-action@1.5.0

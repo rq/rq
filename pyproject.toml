@@ -1,5 +1,5 @@
 [build-system]
-requires = ['setuptools>=59.6.0', 'wheel']
+requires = ['setuptools>=61.0.0', 'wheel']
 build-backend = 'setuptools.build_meta'
 
 [project]
@@ -74,6 +74,8 @@ changelog = 'https://github.com/rq/rq/blob/master/CHANGES.md'
 
 [tool.setuptools]
 packages = ['rq']
+platforms = ['any']
+zip-safe = false
 
 [tool.black]
 line-length = 120
