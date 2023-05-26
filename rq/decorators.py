@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from .job import Retry
 
 from .defaults import DEFAULT_RESULT_TTL
+from .job import Callback
 from .queue import Queue
 from .utils import backend_class
 
@@ -28,9 +29,9 @@ class job:  # noqa
         description: Optional[str] = None,
         failure_ttl: Optional[int] = None,
         retry: Optional['Retry'] = None,
-        on_failure: Optional[Callable[..., Any]] = None,
-        on_success: Optional[Callable[..., Any]] = None,
-        on_stopped: Optional[Callable[..., Any]] = None,
+        on_failure: Optional[Union[Callback, Callable[..., Any]]] = None,
+        on_success: Optional[Union[Callback, Callable[..., Any]]] = None,
+        on_stopped: Optional[Union[Callback, Callable[..., Any]]] = None,
     ):
         """A decorator that adds a ``delay`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
@@ -59,9 +60,12 @@ class job:  # noqa
             description (Optional[str], optional): Job description. Defaults to None.
             failure_ttl (Optional[int], optional): Failture time to live. Defaults to None.
             retry (Optional[Retry], optional): A Retry object. Defaults to None.
-            on_failure (Optional[Callable[..., Any]], optional): Callable to run on failure. Defaults to None.
-            on_success (Optional[Callable[..., Any]], optional): Callable to run on success. Defaults to None.
-            on_stopped (Optional[Callable[..., Any]], optional): Callable to run when stopped. Defaults to None.
+            on_failure (Optional[Union[Callback, Callable[..., Any]]], optional): Callable to run on failure. Defaults
+                to None.
+            on_success (Optional[Union[Callback, Callable[..., Any]]], optional): Callable to run on success. Defaults
+                to None.
+            on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callable to run when stopped. Defaults
+                to None.
         """
         self.queue = queue
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)

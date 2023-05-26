@@ -77,6 +77,7 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `description` to add additional description to enqueued jobs.
 * `on_success` allows you to run a function after a job completes successfully
 * `on_failure` allows you to run a function after a job fails
+* `on_stopped` allows you to run a function after a job is stopped
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
@@ -216,6 +217,8 @@ queue.enqueue(say_hello,
               on_failure=Callback(report_failure, timeout=10), # 10 seconds timeout
               on_stopped=Callback(report_stopped, timeout="2m")) # 2 minute timeout  
 ```
+
+You can also pass the function as a string reference: `Callback('my_package.my_module.my_func')`
 
 ### Success Callback
 

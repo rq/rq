@@ -22,7 +22,7 @@ from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
-from .job import Job, JobStatus
+from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
@@ -515,9 +515,9 @@ class Queue:
         status: JobStatus = JobStatus.QUEUED,
         retry: Optional['Retry'] = None,
         *,
-        on_success: Optional[Callable] = None,
-        on_failure: Optional[Callable] = None,
-        on_stopped: Optional[Callable] = None,
+        on_success: Optional[Union[Callback, Callable]] = None,
+        on_failure: Optional[Union[Callback, Callable]] = None,
+        on_stopped: Optional[Union[Callback, Callable]] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -535,9 +535,13 @@ class Queue:
             meta (Optional[Dict], optional): Job metadata. Defaults to None.
             status (JobStatus, optional): Job status. Defaults to JobStatus.QUEUED.
             retry (Optional[Retry], optional): The Retry Object. Defaults to None.
-            on_success (Optional[Callable], optional): On success callable. Defaults to None.
-            on_failure (Optional[Callable], optional): On failure callable. Defaults to None.
-            on_stopped (Optional[Callable], optional): On stopped callable. Defaults to None.
+            on_success (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on success. Defaults to
+                None. Callable is deprecated.
+            on_failure (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on failure. Defaults to
+                None. Callable is deprecated.
+            on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
+                None. Callable is deprecated.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Raises:
             ValueError: If the timeout is 0
@@ -659,9 +663,9 @@ class Queue:
         at_front: bool = False,
         meta: Optional[Dict] = None,
         retry: Optional['Retry'] = None,
-        on_success: Optional[Callable[..., Any]] = None,
-        on_failure: Optional[Callable[..., Any]] = None,
-        on_stopped: Optional[Callable[..., Any]] = None,
+        on_success: Optional[Union[Callback, Callable[..., Any]]] = None,
+        on_failure: Optional[Union[Callback, Callable[..., Any]]] = None,
+        on_stopped: Optional[Union[Callback, Callable[..., Any]]] = None,
         pipeline: Optional['Pipeline'] = None,
     ) -> Job:
         """Creates a job to represent the delayed function call and enqueues it.
@@ -684,9 +688,12 @@ class Queue:
             at_front (bool, optional): Whether to enqueue the job at the front. Defaults to False.
             meta (Optional[Dict], optional): Metadata to attach to the job. Defaults to None.
             retry (Optional[Retry], optional): Retry object. Defaults to None.
-            on_success (Optional[Callable[..., Any]], optional): Callable for on success. Defaults to None.
-            on_failure (Optional[Callable[..., Any]], optional): Callable for on failure. Defaults to None.
-            on_stopped (Optional[Callable[..., Any]], optional): Callable for on stopped. Defaults to None.
+            on_success (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on success. Defaults to
+                None. Callable is deprecated.
+            on_failure (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on failure. Defaults to
+                None. Callable is deprecated.
+            on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
+                None. Callable is deprecated.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
 
         Returns:
@@ -728,9 +735,9 @@ class Queue:
         at_front: bool = False,
         meta: Optional[Dict] = None,
         retry: Optional['Retry'] = None,
-        on_success: Optional[Callable] = None,
-        on_failure: Optional[Callable] = None,
-        on_stopped: Optional[Callable] = None,
+        on_success: Optional[Union[Callback, Callable]] = None,
+        on_failure: Optional[Union[Callback, Callable]] = None,
+        on_stopped: Optional[Union[Callback, Callable]] = None,
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -749,9 +756,12 @@ class Queue:
             at_front (bool, optional): Whether to enqueue the job at the front. Defaults to False.
             meta (Optional[Dict], optional): Metadata to attach to the job. Defaults to None.
             retry (Optional[Retry], optional): Retry object. Defaults to None.
-            on_success (Optional[Callable[..., Any]], optional): Callable for on success. Defaults to None.
-            on_failure (Optional[Callable[..., Any]], optional): Callable for on failure. Defaults to None.
-            on_stopped (Optional[Callable[..., Any]], optional): Callable for on stopped. Defaults to None.
+            on_success (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on success. Defaults to
+                None. Callable is deprecated.
+            on_failure (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on failure. Defaults to
+                None. Callable is deprecated.
+            on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
+                None. Callable is deprecated.
 
         Returns:
             EnqueueData: The EnqueueData
