@@ -1,19 +1,95 @@
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "rq"
+version = "1.13.0"
+authors = [{name = "Vincent Driessen", email = "vincent@3rdcloud.com"}]
+maintainers = [{name = "Selwin Ong"}]
+description = "RQ is a simple, lightweight, library for creating background jobs, and processing them."
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.6.2"
+classifiers = [
+    # As from http://pypi.python.org/pypi?%3Aaction=list_classifiers
+    # "Development Status :: 1 - Planning",
+    # "Development Status :: 2 - Pre-Alpha",
+    # "Development Status :: 3 - Alpha",
+    # "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
+    # "Development Status :: 6 - Mature",
+    # "Development Status :: 7 - Inactive",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Operating System :: Unix",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "redis>=3.5.0",
+    "click>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "packaging; python_version>='3.7'",
+    "packaging==21.3; python_version=='3.6'",
+    "coverage; python_version>='3.7'",
+    "coverage==6.2; python_version=='3.6'",
+    "psutil",
+    "pytest",
+    "pytest-cov",
+    "sentry-sdk",
+]
+
+[project.scripts]
+rq = "rq.cli:main"
+# TODO: rqworker/rqinfo are kept for backward-compatibility remove in v2.0
+rqinfo = "rq.cli:info"
+rqworker = "rq.cli:worker"
+
+[project.urls]
+homepage = "https://python-rq.org/"
+documentation = "https://python-rq.org/docs/"
+repository = "https://github.com/rq/rq/"
+changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
+
 [tool.black]
 line-length = 120
-target-version = ['py38']
+target-version = ["py38"]
 skip-string-normalization = true
 
 [tool.ruff]
 # Set what ruff should check for.
 # See https://beta.ruff.rs/docs/rules/ for a list of rules.
 select = [
-    "E", # pycodestyle errors
-    "F", # pyflakes errors
-    "I", # import sorting
-    "W", # pycodestyle warnings
+    "E",  # pycodestyle errors
+    "F",  # pyflakes errors
+    "I",  # import sorting
+    "W",  # pycodestyle warnings
 ]
 line-length = 120  # To match black.
-target-version = 'py38'
+target-version = "py38"
 
 [tool.ruff.isort]
 known-first-party = ["rq"]
