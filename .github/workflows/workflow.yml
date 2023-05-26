@@ -31,18 +31,21 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
-      - name: 'Set up Python 3.8'
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4.5.0
         with:
           python-version: '3.8'
+
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install build==0.8.0
           pip install .
+
       - name: Perform build
         run: python -m build
-      - name: Store versioned files
+
+      - name: Store build artifact
         uses: actions/upload-artifact@v3
         with:
           name: dist
@@ -63,15 +66,15 @@ jobs:
       - name: Git checkout
         uses: actions/checkout@v3
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4.6.1
-        with:
-          python-version: ${{ matrix.python-version }}
-
       - name: Start Redis
         uses: supercharge/redis-github-action@1.5.0
         with:
           redis-version: ${{ matrix.redis-version }}
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4.6.1
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Pull build artifact
         uses: actions/download-artifact@v3
@@ -84,7 +87,7 @@ jobs:
           DEB_PYTHON_INSTALL_LAYOUT: deb_system
         run: |
           pip install --upgrade pip
-          pip install -e .[dev]
+          pip install pytest
           pip install redis==${{ matrix.redis-py-version }}
           pip install dist/rq*whl
 
