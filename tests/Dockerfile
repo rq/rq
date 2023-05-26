@@ -41,7 +41,7 @@ WORKDIR /tmp/rq
 
 RUN set -e && \
     python3 -m pip install --upgrade pip && \
-    python3 -m pip install --no-cache-dir tox && \
+    python3 -m pip install --no-cache-dir build tox && \
     pip3 install -e .[dev] && \
     python3 -m build && \
     python3 -m pip install dist/rq*whl
