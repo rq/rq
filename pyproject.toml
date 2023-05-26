@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
 
 [project]
 name = "rq"
@@ -73,11 +73,6 @@ homepage = "https://python-rq.org/"
 documentation = "https://python-rq.org/docs/"
 repository = "https://github.com/rq/rq/"
 changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
-
-[tool.setuptools]
-packages = ["rq"]
-platforms = ["any"]
-zip-safe = false
 
 [tool.black]
 line-length = 120
