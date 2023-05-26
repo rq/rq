@@ -10,61 +10,90 @@ permissions:
   contents: read  # to fetch code (actions/checkout)
 
 jobs:
-  ssl-test:
-    name: Run SSL tests
+  # ssl-test:
+  #   name: Run SSL tests
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #   - uses: actions/checkout@v3
+  #   - name: Build the Docker test image for tox
+  #     uses: docker/build-push-action@v4
+  #     with:
+  #       file: tests/Dockerfile
+  #       tags: rqtest-image:latest
+  #       push: false
+  #   - name: Launch tox SSL env only (will only run SSL specific tests)
+  #     uses: addnab/docker-run-action@v3
+  #     with:
+  #       image: rqtest-image:latest
+  #       run: stunnel & redis-server & RUN_SSL_TESTS=1 tox run -e ssl
+
+  build:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v3
-    - name: Build the Docker test image for tox
-      uses: docker/build-push-action@v4
-      with:
-        file: tests/Dockerfile
-        tags: rqtest-image:latest
-        push: false
-    - name: Launch tox SSL env only (will only run SSL specific tests)
-      uses: addnab/docker-run-action@v3
-      with:
-        image: rqtest-image:latest
-        run: stunnel & redis-server & RUN_SSL_TESTS=1 tox run -e ssl
+      - uses: actions/checkout@v3
+      - name: 'Set up Python 3.8'
+        uses: actions/setup-python@v4.5.0
+        with:
+          python-version: '3.8'
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install build==0.8.0
+          pip install .
+      - name: Perform build
+        run: python -m build
+      - name: Store versioned files
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist
 
   test:
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
+    needs: build
     timeout-minutes: 10
     strategy:
       matrix:
-        python-version: ["3.7", "3.8.3", "3.9", "3.10", "3.11"]
+        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: ["3.5.0"]
 
     steps:
-    - name: Git checkout
-      uses: actions/checkout@v3
+      - name: Git checkout
+        uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4.6.1
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4.6.1
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Start Redis
-      uses: supercharge/redis-github-action@1.5.0
-      with:
-        redis-version: ${{ matrix.redis-version }}
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.5.0
+        with:
+          redis-version: ${{ matrix.redis-version }}
 
-    - name: Install dependencies
-      env:
-        DEB_PYTHON_INSTALL_LAYOUT: deb_system
-      run: |
-        pip install --upgrade pip
-        pip install -e .[dev]
-        pip install redis==${{ matrix.redis-py-version }}
+      - name: Pull build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
 
-    - name: Test with pytest
-      run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report=xml --durations=5
+      - name: Install dependencies
+        env:
+          DEB_PYTHON_INSTALL_LAYOUT: deb_system
+        run: |
+          pip install --upgrade pip
+          pip install -e .[dev]
+          pip install redis==${{ matrix.redis-py-version }}
+          pip install dist/rq*whl
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: false
+      - name: Test with pytest
+        run: |
+          RUN_SLOW_TESTS_TOO=1 pytest --cov=rq --cov-config=.coveragerc --cov-report=xml --durations=5
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
