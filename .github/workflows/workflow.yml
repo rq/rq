@@ -54,7 +54,7 @@ jobs:
       env:
         DEB_PYTHON_INSTALL_LAYOUT: deb_system
       run: |
-        curl localhost:6379
+        curl localhost:6379 --verbose
         pip install --upgrade pip
         pip install redis==${{ matrix.redis-py-version }}
         pip install -e .[dev]
