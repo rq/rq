@@ -38,7 +38,8 @@ jobs:
         redis-py-version: ["3.5.0"]
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Git checkout
+      uses: actions/checkout@v3
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4.6.1
@@ -55,8 +56,8 @@ jobs:
         DEB_PYTHON_INSTALL_LAYOUT: deb_system
       run: |
         pip install --upgrade pip
-        pip install redis==${{ matrix.redis-py-version }}
         pip install -e .[dev]
+        pip install redis==${{ matrix.redis-py-version }}
 
     - name: Test with pytest
       run: |
