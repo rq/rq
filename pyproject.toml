@@ -52,10 +52,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "packaging; python_version>=3.7",
-    "packaging==21.3; python_version==3.6",
-    "coverage; python_versin>=3.7",
-    "coverage==6.2; python_version==3.6",
+    "packaging; python_version>='3.7'",
+    "packaging==21.3; python_version=='3.6'",
+    "coverage; python_version>='3.7'",
+    "coverage==6.2; python_version=='3.6'",
     "psutil",
     "pytest",
     "pytest-cov",
