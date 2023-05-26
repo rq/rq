@@ -71,8 +71,8 @@ in seconds. Defaults to 10 minutes.
 
 CALLBACK_TIMEOUT = 60
 """ The timeout period in seconds for Callback functions
-Means that Functions used in `success_callback`, `stopped_callback`,
-and `failure_callback` will timeout after N seconds
+Means that Functions used in `success_callback` and `failure_callback`
+will timeout after N seconds
 """
 
 

@@ -102,11 +102,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
-        # maybe it's a builtin
-        try:
-            return __builtins__[name]
-        except KeyError:
-            raise ValueError('Invalid attribute name: %s' % name)
+        raise ValueError('Invalid attribute name: %s' % name)
 
     attribute_name = '.'.join(attribute_bits)
     if hasattr(module, attribute_name):

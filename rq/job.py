@@ -158,9 +158,9 @@ class Job:
         failure_ttl: Optional[int] = None,
         serializer=None,
         *,
-        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
-        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
-        on_stopped: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
+        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_stopped: Optional[Union['Callback', Callable[..., Any]]] = None,
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -193,20 +193,20 @@ class Job:
                 Defaults to None.
             serializer (Optional[str], optional): The serializer class path to use. Should be a string with the import
                 path for the serializer to use. eg. `mymodule.myfile.MySerializer` Defaults to None.
-            on_success (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
-                finishes sucessfully. Defaults to None. Passing a callable is deprecated.
-            on_failure (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
-                fails. Defaults to None. Passing a callable is deprecated.
-            on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
-                is stopped. Defaults to None. Passing a callable is deprecated.
+            on_success (Optional[Callable[..., Any]], optional): A callback function, should be a callable to run
+                when/if the Job finishes sucessfully. Defaults to None.
+            on_failure (Optional[Callable[..., Any]], optional): A callback function, should be a callable to run
+                when/if the Job fails. Defaults to None.
+            on_stopped (Optional[Callable[..., Any]], optional): A callback function, should be a callable to run
+                when/if the Job is stopped. Defaults to None.
 
         Raises:
             TypeError: If `args` is not a tuple/list
             TypeError: If `kwargs` is not a dict
             TypeError: If the `func` is something other than a string or a Callable reference
-            ValueError: If `on_failure` is not a Callback or function or string
-            ValueError: If `on_success` is not a Callback or function or string
-            ValueError: If `on_stopped` is not a Callback or function or string
+            ValueError: If `on_failure` is not a function
+            ValueError: If `on_success` is not a function
+            ValueError: If `on_stopped` is not a function
 
         Returns:
             Job: A job instance.
@@ -248,8 +248,7 @@ class Job:
         if on_success:
             if not isinstance(on_success, Callback):
                 warnings.warn(
-                    'Passing a string or function for `on_success` is deprecated, pass `Callback` instead',
-                    DeprecationWarning,
+                    'Passing a `Callable` `on_success` is deprecated, pass `Callback` instead', DeprecationWarning
                 )
                 on_success = Callback(on_success)  # backward compatibility
             job._success_callback_name = on_success.name
@@ -258,8 +257,7 @@ class Job:
         if on_failure:
             if not isinstance(on_failure, Callback):
                 warnings.warn(
-                    'Passing a string or function for `on_failure` is deprecated, pass `Callback` instead',
-                    DeprecationWarning,
+                    'Passing a `Callable` `on_failure` is deprecated, pass `Callback` instead', DeprecationWarning
                 )
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
@@ -268,8 +266,7 @@ class Job:
         if on_stopped:
             if not isinstance(on_stopped, Callback):
                 warnings.warn(
-                    'Passing a string or function for `on_stopped` is deprecated, pass `Callback` instead',
-                    DeprecationWarning,
+                    'Passing a `Callable` `on_stopped` is deprecated, pass `Callback` instead', DeprecationWarning
                 )
                 on_stopped = Callback(on_stopped)  # backward compatibility
             job._stopped_callback_name = on_stopped.name
@@ -1643,15 +1640,13 @@ class Retry:
 
 
 class Callback:
-    def __init__(self, func: Union[str, Callable[..., Any]], timeout: Optional[Any] = None):
-        if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
-            raise ValueError('Callback `func` must be a string or function')
+    def __init__(self, func: Callable[..., Any], timeout: Optional[Any] = None):
+        if not inspect.isfunction(func) and not inspect.isbuiltin(func):
+            raise ValueError('Callback func must be a function')
 
         self.func = func
         self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
 
     @property
     def name(self) -> str:
-        if isinstance(self.func, str):
-            return self.func
         return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)
