@@ -1,10 +1,12 @@
 ### RQ 1.15 (2023-05-24)
 * Added `Callback(on_stopped='my_callback)`. Thanks @eswolinsky3241!
+* `Callback` now accepts dotted path to function as input. Thanks @rishabh-ranjan!
 * `queue.enqueue_many()` now supports job dependencies. Thanks @eswolinsky3241!
 * `rq worker` CLI script now configures logging based on `DICT_CONFIG` key present in config file. Thanks @juur!
 * Whenever possible, `Worker` now uses `lmove()` to implement [reliable queue pattern](https://redis.io/commands/lmove/). Thanks @selwin!
 * `Scheduler` should only release locks that it successfully acquires. Thanks @xzander!
 * Fixes crashes that may happen by changes to `as_text()` function in v1.14. Thanks @tchapi!
+* Various linting, CI and code quality improvements. Thanks @robhudson!
 
 ### RQ 1.14.1 (2023-05-05)
 * Fixes a crash that happens if Redis connection uses SSL. Thanks @tchapi!
