@@ -9,21 +9,19 @@ on:
 jobs:
   build:
     if: github.repository == 'rq/rq'
-    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    name: Python3.8/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
         redis-py-version: [3.5.0]
-
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.8
       uses: actions/setup-python@v4.6.1
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.8'
 
     - name: Start Redis
       uses: supercharge/redis-github-action@1.5.0
@@ -31,11 +29,12 @@ jobs:
         redis-version: ${{ matrix.redis-version }}
 
     - name: Install dependencies
+      env:
+        DEB_PYTHON_INSTALL_LAYOUT: deb_system
       run: |
-        python -m pip install --upgrade pip
+        pip install --upgrade pip
         pip install redis==${{ matrix.redis-py-version }}
-        pip install -r requirements.txt -r dev-requirements.txt
-        pip install -e .
+        pip install .[dev]
 
     - name: Test with pytest
       run: |
@@ -49,16 +48,15 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.6", "3.7", "3.8.3", "3.9", "3.10", "3.11"]
         redis-version: [3, 4, 5, 6, 7]
 
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.8
       uses: actions/setup-python@v4.6.1
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.8'
 
     - name: Start Redis
       uses: supercharge/redis-github-action@1.5.0
@@ -66,12 +64,13 @@ jobs:
         redis-version: ${{ matrix.redis-version }}
 
     - name: Install dependencies
+      env:
+        DEB_PYTHON_INSTALL_LAYOUT: deb_system
       run: |
-        python -m pip install --upgrade pip
+        pip install --upgrade pip
         pip install git+https://github.com/redis/redis-py
         pip install git+https://github.com/pallets/click
-        pip install -r dev-requirements.txt
-        pip install -e .
+        pip install .[dev]
 
     - name: Test with pytest
       run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
