@@ -91,7 +91,7 @@ jobs:
           DEB_PYTHON_INSTALL_LAYOUT: deb_system
         run: |
           pip install --upgrade pip
-          pip install -e .[dev]
+          pip install .[dev]
           pip install redis==${{ matrix.redis-py-version }}
           pip install dist/rq*whl
 
