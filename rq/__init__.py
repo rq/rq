@@ -6,18 +6,18 @@ from .version import VERSION
 from .worker import SimpleWorker, Worker
 
 __all__ = [
-  "Connection", 
-  "get_current_connection", 
-  "pop_connection", 
-  "push_connection", 
-  "Callback", 
-  "Retry", 
-  "cancel_job", 
-  "get_current_job", 
-  "requeue_job", 
-  "Queue", 
-  "SimpleWorker", 
-  "Worker"
+    "Connection",
+    "get_current_connection",
+    "pop_connection",
+    "push_connection",
+    "Callback",
+    "Retry",
+    "cancel_job",
+    "get_current_job",
+    "requeue_job",
+    "Queue",
+    "SimpleWorker",
+    "Worker",
 ]
 
 __version__ = VERSION
