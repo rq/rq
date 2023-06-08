@@ -21,7 +21,7 @@ from rq.registry import (
     StartedJobRegistry,
 )
 from rq.serializers import JSONSerializer
-from rq.utils import as_text, get_version, utcformat, utcnow, 
+from rq.utils import as_text, get_version, utcformat, utcnow
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
