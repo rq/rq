@@ -1,11 +1,12 @@
 import json
 import queue
 import time
+import unittest
 import zlib
 from datetime import datetime, timedelta
 from pickle import dumps, loads
 
-from redis import WatchError
+from redis import Redis, WatchError
 
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
@@ -20,7 +21,7 @@ from rq.registry import (
     StartedJobRegistry,
 )
 from rq.serializers import JSONSerializer
-from rq.utils import as_text, utcformat, utcnow
+from rq.utils import as_text, get_version, utcformat, utcnow, 
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
@@ -1220,6 +1221,7 @@ class TestJob(RQTestCase):
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
         self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
 
+    @unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
     def test_blocking_result_fetch(self):
         job_sleep_seconds = 2
         block_seconds = 5
