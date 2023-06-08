@@ -143,16 +143,33 @@ class Result:
         return None
 
     @classmethod
-    def fetch_latest(cls, job: Job, serializer=None) -> Optional['Result']:
-        """Returns the latest result for given job instance or ID"""
-        # response = job.connection.zrevrangebyscore(cls.get_key(job.id), '+inf', '-inf',
-        #                                           start=0, num=1, withscores=True)
-        response = job.connection.xrevrange(cls.get_key(job.id), '+', '-', count=1)
-        if not response:
-            return None
+    def fetch_latest(cls, job: Job, serializer=None, timeout: int = 0) -> Optional['Result']:
+        """Returns the latest result for given job instance or ID.
 
-        result_id, payload = response[0]
-        return cls.restore(job.id, result_id.decode(), payload, connection=job.connection, serializer=serializer)
+        If a non-zero timeout is provided, block for a result until timeout is reached.
+        """
+        print('-' * 10)
+
+        if timeout:
+            # Unlike blpop, xread timeout is in miliseconds. "0-0" is the special value for the
+            # first item in the stream, like '-' for xrevrange.
+            timeout_ms = timeout * 1000
+            response = job.connection.xread({cls.get_key(job.id): "0-0"}, block=timeout_ms)
+            if not response:
+                return None
+            response = response[0]  # Querying single stream only.
+            response = response[1]  # Xread also returns Result.id, which we don't need.
+            result_id, payload = response[-1]  # Take most recent result.
+
+        else:
+            # If not blocking, use xrevrange to load a single result (as xread will load them all).
+            response = job.connection.xrevrange(cls.get_key(job.id), '+', '-', count=1)
+            if not response:
+                return None
+            result_id, payload = response[0]
+
+        res = cls.restore(job.id, result_id.decode(), payload, connection=job.connection, serializer=serializer)
+        return res
 
     @classmethod
     def get_key(cls, job_id):

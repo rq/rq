@@ -1219,3 +1219,18 @@ class TestJob(RQTestCase):
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
         self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
+
+    def test_blocking_result_fetch(self):
+        job_sleep_seconds = 2
+        block_seconds = 5
+        q = Queue()
+        job = q.enqueue(fixtures.long_running_job, job_sleep_seconds)
+        w = Worker([q])
+        started_at = time.time()
+        w.work(burst=True)
+        result = job.latest_result(timeout=block_seconds)
+        blocked_for = time.time() - started_at
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertIsNotNone(result)
+        self.assertGreaterEqual(blocked_for, job_sleep_seconds)
+        self.assertLess(blocked_for, block_seconds)

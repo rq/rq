@@ -156,3 +156,10 @@ job = Job.fetch(id='my_id', connection=redis)
 for result in job.results(): 
     print(result.created_at, result.type)
 ```
+
+To block until a result arrives, you can pass a timeout in seconds to `job.latest_result()`. If a result already exists, it is returned immediately. If the timeout is reached without a result arriving a `None` object is returned.
+
+```python
+job = queue.enqueue(sleep_for_10_seconds)
+result = job.fetch_latest(timeout=60)  # Will hang for about 10 seconds.
+```
