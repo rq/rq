@@ -4,3 +4,5 @@ psutil
 pytest
 pytest-cov
 sentry-sdk
+black
+ruff
