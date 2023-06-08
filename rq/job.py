@@ -890,7 +890,7 @@ class Job:
         """Get the latest job result.
 
         Args:
-            timeout (int, optional): Number of seconds to block waiting for a result. Defaults to 0 (no blocking.)
+            timeout (int, optional): Number of seconds to block waiting for a result. Defaults to 0 (no blocking).
 
         Returns:
             result (Result): The Result object

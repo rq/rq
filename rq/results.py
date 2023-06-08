@@ -148,8 +148,6 @@ class Result:
 
         If a non-zero timeout is provided, block for a result until timeout is reached.
         """
-        print('-' * 10)
-
         if timeout:
             # Unlike blpop, xread timeout is in miliseconds. "0-0" is the special value for the
             # first item in the stream, like '-' for xrevrange.
