@@ -268,7 +268,7 @@ class TestWorker(RQTestCase):
         w.perform_job(job, queue)
 
         # An exception should be logged here at ERROR level
-        self.assertIn("Traceback", mock_logger_error.call_args[0][0])
+        self.assertIn("Traceback", mock_logger_error.call_args[0][3])
 
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""
