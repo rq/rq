@@ -1,14 +1,15 @@
-from typing import Optional, TYPE_CHECKING, Any, Set
+from typing import TYPE_CHECKING, Optional, Set
 
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
-    from .worker import Worker
-    from .queue import Queue
 
-from .utils import as_text
+    from .queue import Queue
+    from .worker import Worker
 
 from rq.utils import split_list
+
+from .utils import as_text
 
 WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
 REDIS_WORKER_KEYS = 'rq:workers'

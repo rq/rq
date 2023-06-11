@@ -7,17 +7,17 @@ terminal colorizing code, originally by Georg Brandl.
 
 import calendar
 import datetime
+import datetime as dt
 import importlib
 import logging
 import numbers
-import sys
-import datetime as dt
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Any, Callable, Tuple, Union
-
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from redis import Redis
+
+    from .queue import Queue
 
 from redis.exceptions import ResponseError
 
@@ -102,20 +102,25 @@ def import_attribute(name: str) -> Callable[..., Any]:
             attribute_bits.insert(0, module_name_bits.pop())
 
     if module is None:
-        raise ValueError('Invalid attribute name: %s' % name)
+        # maybe it's a builtin
+        try:
+            return __builtins__[name]
+        except KeyError:
+            raise ValueError('Invalid attribute name: %s' % name)
 
     attribute_name = '.'.join(attribute_bits)
     if hasattr(module, attribute_name):
         return getattr(module, attribute_name)
-
     # staticmethods
     attribute_name = attribute_bits.pop()
     attribute_owner_name = '.'.join(attribute_bits)
-    attribute_owner = getattr(module, attribute_owner_name)
+    try:
+        attribute_owner = getattr(module, attribute_owner_name)
+    except:  # noqa
+        raise ValueError('Invalid attribute name: %s' % attribute_name)
 
     if not hasattr(attribute_owner, attribute_name):
         raise ValueError('Invalid attribute name: %s' % name)
-
     return getattr(attribute_owner, attribute_name)
 
 
@@ -361,3 +366,16 @@ def get_call_string(
     args = ', '.join(arg_list)
 
     return '{0}({1})'.format(func_name, args)
+
+
+def parse_names(queues_or_names: List[Union[str, 'Queue']]) -> List[str]:
+    """Given a list of strings or queues, returns queue names"""
+    from .queue import Queue
+
+    names = []
+    for queue_or_name in queues_or_names:
+        if isinstance(queue_or_name, Queue):
+            names.append(queue_or_name.name)
+        else:
+            names.append(str(queue_or_name))
+    return names

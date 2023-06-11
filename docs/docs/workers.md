@@ -36,7 +36,7 @@ You should use process managers like [Supervisor](/patterns/supervisor/) or
 ### Burst Mode
 
 By default, workers will start working immediately and will block and wait for
-new work when they run out of work.  Workers can also be started in _burst
+new work when they run out of work. Workers can also be started in _burst
 mode_ to finish all currently available work and quit as soon as all given
 queues are emptied.
 
@@ -58,6 +58,7 @@ just to scale up your workers temporarily during peak periods.
 In addition to `--burst`, `rq worker` also accepts these arguments:
 
 * `--url` or `-u`: URL describing Redis connection details (e.g `rq worker --url redis://:secrets@example.com:1234/9` or `rq worker --url unix:///var/run/redis/redis.sock`)
+* `--burst` or `-b`: run worker in burst mode (stops after all jobs in queue have been processed).
 * `--path` or `-P`: multiple import paths are supported (e.g `rq worker --path foo --path bar`)
 * `--config` or `-c`: path to module containing RQ settings.
 * `--results-ttl`: job results will be kept for this number of seconds (defaults to 500).
@@ -69,10 +70,14 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
-* `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)
-
 _New in version 1.8.0._
 * `--serializer`: Path to serializer object (e.g "rq.serializers.DefaultSerializer" or "rq.serializers.JSONSerializer")
+
+_New in version 1.14.0._
+* `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)
+* `--max-idle-time`: if specified, worker will wait for X seconds for a job to arrive before shuttind down.
+* `--maintenance-interval`: defaults to 600 seconds. Runs maintenance tasks every X seconds.
+
 
 ## Inside the worker
 
@@ -151,8 +156,6 @@ worker = Worker([queue], connection=redis, name='foo')
 
 ### Retrieving Worker Information
 
-_Updated in version 0.10.0._
-
 `Worker` instances store their runtime information in Redis. Here's how to
 retrieve them:
 
@@ -169,6 +172,10 @@ queue = Queue('queue_name')
 workers = Worker.all(queue=queue)
 worker = workers[0]
 print(worker.name)
+
+print('Successful jobs: ' + worker.successful_job_count)
+print('Failed jobs: ' + worker.failed_job_count)
+print('Total working time: '+ worker.total_working_time)  # In seconds
 ```
 
 Aside from `worker.name`, worker also have the following properties:
@@ -226,20 +233,6 @@ w = Queue('foo', serializer=JSONSerializer)
 Queues will now use custom serializer
 
 
-### Worker Statistics
-
-If you want to check the utilization of your queues, `Worker` instances
-store a few useful information:
-
-```python
-from rq.worker import Worker
-worker = Worker.find_by_key('rq:worker:name')
-
-worker.successful_job_count  # Number of jobs finished successfully
-worker.failed_job_count # Number of failed jobs processed by this worker
-worker.total_working_time  # Amount of time spent executing jobs (in seconds)
-```
-
 ## Better worker process title
 Worker process will have a better title (as displayed by system tools such as ps and top) 
 after you installed a third-party package `setproctitle`:
@@ -283,6 +276,33 @@ SENTRY_DSN = 'sync+http://public:secret@example.com/1'
 
 # If you want custom worker name
 # NAME = 'worker-1024'
+
+# If you want to use a dictConfig <https://docs.python.org/3/library/logging.config.html#logging-config-dictschema>
+# for more complex/consistent logging requirements.
+DICT_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        },
+    },
+    'handlers': {
+        'default': {
+            'level': 'INFO',
+            'formatter': 'standard',
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stderr',  # Default is stderr
+        },
+    },
+    'loggers': {
+        'root': {  # root logger
+            'handlers': ['default'],
+            'level': 'INFO',
+            'propagate': False
+        },
+    }
+}
 ```
 
 The example above shows all the options that are currently supported.
@@ -314,22 +334,19 @@ $ rq worker -w 'path.to.GeventWorker'
 ```
 
 
-## Round Robin and Random strategies for dequeuing jobs from queues
+## Strategies for Dequeuing Jobs from Queues
 
-The default worker considers the order of queues as their priority order, 
-and if a task is pending in a higher priority queue 
-it will be selected before any other in queues with lower priority (the `default` behavior).
-To choose the strategy that should be used, `rq` provides the `--dequeue-strategy / -ds` option.
+The default worker considers the order of queues as their priority order.
+That's to say if the supplied queues are `rq worker high low`, the worker will
+prioritize dequeueing jobs from `high` before `low`. To choose a different strategy,
+`rq` provides the `--dequeue-strategy / -ds` option.
 
-In certain circumstances it can be useful that a when a worker is listening to multiple queues, 
-say `q1`,`q2`,`q3`, the jobs are dequeued using a Round Robin strategy. That is, the 1st
-dequeued job is taken from `q1`, the 2nd from `q2`, the 3rd from `q3`, the 4th
-from `q1`, the 5th from `q2` and so on. To implement this strategy use `-ds round_robin` argument.
+In certain circumstances, you may want to dequeue jobs in a round robin fashion. For example,
+when you have `q1`,`q2`,`q3`, the 1st dequeued job is taken from `q1`, the 2nd from `q2`,
+the 3rd from `q3`, the 4th from `q1`, the 5th from `q2` and so on.
+To implement this strategy use `-ds round_robin` argument.
 
-In other circumstances, it can be useful to pull jobs from the different queues randomly.
-To implement this strategy use `-ds random` argument.
-In fact, whenever a job is pulled from any queue with the `random` strategy, the list of queues is
-shuffled, so that no queue has more priority than the other ones.
+To dequeue jobs from the different queues randomly,  use `-ds random` argument.
 
 Deprecation Warning: Those strategies were formely being implemented by using the custom classes `rq.worker.RoundRobinWorker`
 and `rq.worker.RandomWorker`. As the `--dequeue-strategy` argument allows for this option to be used with any worker, those worker classes are deprecated and will be removed from future versions. 
@@ -447,3 +464,31 @@ redis = Redis()
 # This will raise an exception if job is invalid or not currently executing
 send_stop_job_command(redis, job_id)
 ```
+
+## Worker Pool
+
+_New in version 1.14.0._
+
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
+    <strong>Note:</strong>
+    <p>`WorkerPool` is still in beta, use at your own risk!</p>
+</div>
+
+WorkerPool allows you to run multiple workers in a single CLI command.
+
+Usage:
+
+```shell
+rq worker-pool high default low -n 3
+```
+
+Options:
+* `-u` or `--url <Redis connection URL>`: as defined in [redis-py's docs](https://redis.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
+* `-w` or `--worker-class <path.to.Worker>`: defaults to `rq.worker.Worker`. `rq.worker.SimpleWorker` is also an option.
+* `-n` or `--num-workers <number of worker>`: defaults to 2.
+* `-b` or `--burst`: run workers in burst mode (stops after all jobs in queue have been processed).
+* `-l` or `--logging-level <level>`: defaults to `INFO`. `DEBUG`, `WARNING`, `ERROR` and `CRITICAL` are supported.
+* `-S` or `--serializer <path.to.Serializer>`: defaults to `rq.serializers.DefaultSerializer`. `rq.serializers.JSONSerializer` is also included.
+* `-P` or `--path <path>`: multiple import paths are supported (e.g `rq worker --path foo --path bar`).
+* `-j` or `--job-class <path.to.Job>`: defaults to `rq.job.Job`.
