@@ -57,8 +57,14 @@ class Batch:
     def save(self, pipeline=None):
         pipe = pipeline if pipeline else self.connection
         pipe.hmset(self.key, {"id": self.id, "ttl": self.ttl})
-        pipe.execute()
-        
+
+    def refresh(self):
+        data = {key.decode(): value.decode() for key, value in self.connection.hgetall(self.key).items()}
+        self.jobs = [
+            Job.fetch(job.decode("utf-8"), self.connection) for job in self.connection.smembers(self.key + ":jobs")
+        ]
+        self.ttl = int(data["ttl"])
+
     def cleanup(self, pipeline=None):
         pass
 
