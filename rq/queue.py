@@ -893,7 +893,7 @@ class Queue:
             kwargs (*kwargs): function kargs
         """
         if not isinstance(f, str) and f.__module__ == '__main__':
-            raise ValueError('Functions from the __main__ module cannot be processed ' 'by workers')
+            raise ValueError('Functions from the __main__ module cannot be processed by workers')
 
         # Detect explicit invocations, i.e. of the form:
         #     q.enqueue(foo, args=(1, 2), kwargs={'a': 1}, job_timeout=30)

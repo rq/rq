@@ -653,7 +653,7 @@ class BaseWorker:
         connection: Union[Redis, 'Pipeline'] = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
-        self.log.debug('Sent heartbeat to prevent worker timeout. ' 'Next one should arrive in %s seconds.', timeout)
+        self.log.debug('Sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', timeout)
 
 
 class Worker(BaseWorker):
@@ -947,7 +947,7 @@ class Worker(BaseWorker):
         if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
-            self.log.debug('Stopping after current horse is finished. ' 'Press Ctrl+C again for a cold shutdown.')
+            self.log.debug('Stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.')
             if self.scheduler:
                 self.stop_scheduler()
         else:
