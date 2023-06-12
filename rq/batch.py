@@ -16,15 +16,17 @@ class Batch:
     REDIS_BATCH_NAME_PREFIX = 'rq:batch:'
 
     def __init__(
-        self, jobs: List[Job] = None, connection: Optional['Redis'] = None, id: Optional[str] = None, ttl=None
+        self, id: str = str(uuid4())[-12:], jobs: List[Job] = None, connection: Optional['Redis'] = None, ttl=500
     ):
+        self.id = id
         self.connection = connection
         self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
-        self.jobs_key = 
+        self.jobs_key = self.key + ":jobs"
         self.ttl = ttl
-        self.job_ids = [job.id for job in self.jobs]
+
         self.jobs = []
-        self.add_jobs(jobs)
+        if jobs:
+            self.add_jobs(jobs)
 
     def add_jobs(self, jobs: List[Union['Job', str]], pipeline=None):
         pipe = pipeline if pipeline else self.connection
@@ -49,10 +51,10 @@ class Batch:
 
     def suspend_ttl(self, pipeline=None):
         pipe = pipeline if pipeline else self.connection
-        pipe.persist(self.key, self.ttl)
-        pipe.persist(self.key + ":jobs", self.ttl)
+        pipe.persist(self.key)
+        pipe.persist(self.key + ":jobs")
         for job in self.jobs:
-            pipe.persist(job.key, self.ttl)
+            pipe.persist(job.key)
 
     def save(self, pipeline=None):
         pipe = pipeline if pipeline else self.connection
