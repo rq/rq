@@ -6,7 +6,7 @@ from redis import Redis
 from redis.client import Pipeline
 
 from .job import Job
-
+from .utils import as_text
 
 logger = logging.getLogger("rq.job")
 
@@ -31,16 +31,16 @@ class Batch:
         pipe = pipeline if pipeline else self.connection.pipeline
         self.job_ids = [job.id for job in jobs]
         self.connection.sadd(self.jobs_key, *self.job_ids)
-        self.renew_ttl()
         self.jobs += jobs
         for job in jobs:
             job.set_batch_id(self.id)
             job.save(pipeline=self.connection)
+        self.renew_ttl()
         self.save()
 
     def fetch_jobs(self) -> list:
-        job_ids = self.connection.smembers(self.key + ":jobs")
-        self.jobs = Job.fetch_many(job_ids)
+        self.job_ids = [as_text(job) for job in self.connection.smembers(self.key + ":jobs")]
+        self.jobs = Job.fetch_many(self.job_ids, self.connection)
 
     def renew_ttl(self, pipeline=None):
         pipe = pipeline if pipeline else self.connection
@@ -62,9 +62,7 @@ class Batch:
 
     def refresh(self):
         data = {key.decode(): value.decode() for key, value in self.connection.hgetall(self.key).items()}
-        self.jobs = [
-            Job.fetch(job.decode("utf-8"), self.connection) for job in self.connection.smembers(self.key + ":jobs")
-        ]
+        self.fetch_jobs()
         self.ttl = int(data["ttl"])
 
     def cleanup(self, pipeline=None):
