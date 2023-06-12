@@ -1,5 +1,4 @@
 import logging
-from job import Job
 from typing import List, Union, Optional
 from uuid import uuid4
 
@@ -29,14 +28,15 @@ class Batch:
             self.add_jobs(jobs)
 
     def add_jobs(self, jobs: List[Union['Job', str]], pipeline=None):
-        pipe = pipeline if pipeline else self.connection
-        pipe.sadd(self.key + ":jobs", *self.job_ids)
-        self.renew_ttl(pipeline=pipe)
-        self.jobs.append(jobs)
+        pipe = pipeline if pipeline else self.connection.pipeline
+        self.job_ids = [job.id for job in jobs]
+        self.connection.sadd(self.jobs_key, *self.job_ids)
+        self.renew_ttl()
+        self.jobs += jobs
         for job in jobs:
             job.set_batch_id(self.id)
-            job.save(pipeline=pipe)
-        pipe.execute()
+            job.save(pipeline=self.connection)
+        self.save()
 
     def fetch_jobs(self) -> list:
         job_ids = self.connection.smembers(self.key + ":jobs")
@@ -81,6 +81,7 @@ class Batch:
             self.connection.expire(job.key, self.ttl)
             
     @classmethod
-    def fetch(cls, id: str, connection: Optional['Redis'] = None, serializer=None):
-        batch = cls(id, connection=connection, serializer=serializer)
+    def fetch(cls, id: str, connection: Optional['Redis'] = None):
+        batch = cls(id, connection=connection)
+        batch.refresh()
         return batch
