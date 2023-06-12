@@ -1250,6 +1250,12 @@ class Job:
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
+            
+        if self.batch_id:
+            from .batch import Batch
+            batch = Batch.fetch(id=self.batch_id, connection=pipeline)
+            pipeline.delete(batch.jobs_key, self.id) # Delete job from batch
+            batch.renew_ttl()
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
@@ -1277,7 +1283,12 @@ class Job:
         Returns:
             result (Any): The job result
         """
-        self.connection.persist(self.key)
+        if self.batch_id:
+            from .batch import Batch
+            batch = Batch.fetch(id=self.batch_id, connection=self.connection)
+            batch.persist_jobs() # When new job is starting, persist all jobs in batch
+        else:    
+            self.connection.persist(self.key)
         _job_stack.push(self)
         try:
             self._result = self._execute()
@@ -1472,6 +1483,11 @@ class Job:
             from .results import Result
 
             Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
+            
+        if self.batch_id:
+            from .batch import Batch
+            batch = Batch.fetch(id=self.batch_id, connection=pipeline)
+            batch.renew_ttl()
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1493,6 +1509,11 @@ class Job:
             from .results import Result
 
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
+            
+        if self.batch_id:
+            from .batch import Batch
+            batch = Batch.fetch(id=self.batch_id, connection=pipeline)
+            batch.renew_ttl()
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
