@@ -79,11 +79,7 @@ class Batch:
     def expire_jobs(self):
         for job in self.jobs:
             self.connection.expire(job.key, self.ttl)
-
-    def persiste_jobs(self):
-        for job in self.jobs:
-            self.connection.persist(job.key)
-
+            
     @classmethod
     def fetch(cls, id: str, connection: Optional['Redis'] = None, serializer=None):
         batch = cls(id, connection=connection, serializer=serializer)
