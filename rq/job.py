@@ -1336,6 +1336,16 @@ class Job:
             ttl (int): The time to live
         """
         return default_ttl if self.ttl is None else self.ttl
+    
+    def set_batch_id(self, batch_id: str):
+        """Associates job with a batch and removes job TTL.
+
+        Args:
+            batch_id (str): ID of the batch job is being added to
+        """
+        self.connection.persist(self.key)
+        self.batch_id = batch_id
+        self.ttl = self.failure_ttl = None
 
     def get_result_ttl(self, default_ttl: int) -> int:
         """Returns ttl for a job that determines how long a jobs result will
