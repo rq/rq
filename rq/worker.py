@@ -35,6 +35,7 @@ from contextlib import suppress
 import redis.exceptions
 
 from . import worker_registration
+from .batch import Batch
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
 from .connections import get_current_connection, pop_connection, push_connection
 from .defaults import (
@@ -1392,7 +1393,11 @@ class Worker(BaseWorker):
                         self.log.debug('Saving job %s\'s successful execution result', job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
 
-                    job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
+                    if job.batch_id:
+                        batch = Batch.fetch(job.batch_id, self.connection)
+                        batch.renew_ttl()
+                    else:
+                        job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
                     started_job_registry.remove(job, pipeline=pipeline)
 
