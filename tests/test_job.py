@@ -1229,17 +1229,11 @@ class TestJob(RQTestCase):
         queue_name = "test_blocking_queue"
         q = Queue(queue_name)
         job = q.enqueue(fixtures.long_running_job, job_sleep_seconds)
-        fixtures.start_worker_process(queue_name, burst=True, worker_name="w1")
-
         started_at = time.time()
+        fixtures.start_worker_process(queue_name, burst=True)
         result = job.latest_result(timeout=block_seconds)
         blocked_for = time.time() - started_at
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
         self.assertIsNotNone(result)
-
-        # Job execution may have already started by the time `start_worker_process` returns: in that case
-        # we might only be blocking for 1.99s until the 2s job is done. To avoid test flakiness, a small
-        # small amount of leeway is added.
-        latency_allowance = 0.1
-        self.assertGreaterEqual(blocked_for + latency_allowance, job_sleep_seconds)
-        self.assertLess(blocked_for + latency_allowance, block_seconds)
+        self.assertGreaterEqual(blocked_for, job_sleep_seconds)
+        self.assertLess(blocked_for, block_seconds)
