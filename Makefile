@@ -19,3 +19,7 @@ force_release: clean
 	git push --tags
 	python setup.py sdist bdist_wheel
 	twine upload dist/*
+
+lint:
+	@ black --check --skip-string-normalization --line-length 120 rq tests
+	@ ruff check --show-source rq tests
