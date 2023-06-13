@@ -456,6 +456,62 @@ class BaseWorker:
             self.teardown()
         return bool(completed_jobs)
 
+    def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None, exc_string=''):
+        """
+        Handles the failure or an executing job by:
+            1. Setting the job status to failed
+            2. Removing the job from StartedJobRegistry
+            3. Setting the workers current job to None
+            4. Add the job to FailedJobRegistry
+        `save_exc_to_job` should only be used for testing purposes
+        """
+        self.log.debug('Handling failed execution of job %s', job.id)
+        with self.connection.pipeline() as pipeline:
+            if started_job_registry is None:
+                started_job_registry = StartedJobRegistry(
+                    job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
+                )
+
+            # check whether a job was stopped intentionally and set the job
+            # status appropriately if it was this job.
+            job_is_stopped = self._stopped_job_id == job.id
+            retry = job.retries_left and job.retries_left > 0 and not job_is_stopped
+
+            if job_is_stopped:
+                job.set_status(JobStatus.STOPPED, pipeline=pipeline)
+                self._stopped_job_id = None
+            else:
+                # Requeue/reschedule if retry is configured, otherwise
+                if not retry:
+                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
+
+            started_job_registry.remove(job, pipeline=pipeline)
+
+            if not self.disable_default_exception_handler and not retry:
+                job._handle_failure(exc_string, pipeline=pipeline)
+                with suppress(redis.exceptions.ConnectionError):
+                    pipeline.execute()
+
+            self.set_current_job_id(None, pipeline=pipeline)
+            self.increment_failed_job_count(pipeline)
+            if job.started_at and job.ended_at:
+                self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
+
+            if retry:
+                job.retry(queue, pipeline)
+                enqueue_dependents = False
+            else:
+                enqueue_dependents = True
+
+            try:
+                pipeline.execute()
+                if enqueue_dependents:
+                    queue.enqueue_dependents(job)
+            except Exception:
+                # Ensure that custom exception handlers are called
+                # even if Redis is down
+                pass
+
     def _start_scheduler(
         self,
         burst: bool = False,
@@ -653,7 +709,7 @@ class BaseWorker:
         connection: Union[Redis, 'Pipeline'] = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
-        self.log.debug('Sent heartbeat to prevent worker timeout. ' 'Next one should arrive in %s seconds.', timeout)
+        self.log.debug('Sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', timeout)
 
 
 class Worker(BaseWorker):
@@ -947,7 +1003,7 @@ class Worker(BaseWorker):
         if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
-            self.log.debug('Stopping after current horse is finished. ' 'Press Ctrl+C again for a cold shutdown.')
+            self.log.debug('Stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.')
             if self.scheduler:
                 self.stop_scheduler()
         else:
@@ -1293,62 +1349,6 @@ class Worker(BaseWorker):
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
-
-    def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None, exc_string=''):
-        """
-        Handles the failure or an executing job by:
-            1. Setting the job status to failed
-            2. Removing the job from StartedJobRegistry
-            3. Setting the workers current job to None
-            4. Add the job to FailedJobRegistry
-        `save_exc_to_job` should only be used for testing purposes
-        """
-        self.log.debug('Handling failed execution of job %s', job.id)
-        with self.connection.pipeline() as pipeline:
-            if started_job_registry is None:
-                started_job_registry = StartedJobRegistry(
-                    job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
-                )
-
-            # check whether a job was stopped intentionally and set the job
-            # status appropriately if it was this job.
-            job_is_stopped = self._stopped_job_id == job.id
-            retry = job.retries_left and job.retries_left > 0 and not job_is_stopped
-
-            if job_is_stopped:
-                job.set_status(JobStatus.STOPPED, pipeline=pipeline)
-                self._stopped_job_id = None
-            else:
-                # Requeue/reschedule if retry is configured, otherwise
-                if not retry:
-                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
-
-            started_job_registry.remove(job, pipeline=pipeline)
-
-            if not self.disable_default_exception_handler and not retry:
-                job._handle_failure(exc_string, pipeline=pipeline)
-                with suppress(redis.exceptions.ConnectionError):
-                    pipeline.execute()
-
-            self.set_current_job_id(None, pipeline=pipeline)
-            self.increment_failed_job_count(pipeline)
-            if job.started_at and job.ended_at:
-                self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
-
-            if retry:
-                job.retry(queue, pipeline)
-                enqueue_dependents = False
-            else:
-                enqueue_dependents = True
-
-            try:
-                pipeline.execute()
-                if enqueue_dependents:
-                    queue.enqueue_dependents(job)
-            except Exception:
-                # Ensure that custom exception handlers are called
-                # even if Redis is down
-                pass
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
