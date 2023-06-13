@@ -1223,16 +1223,23 @@ class TestJob(RQTestCase):
 
     @unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
     def test_blocking_result_fetch(self):
+        # Ensure blocking waits for the time to run the job, but not right up until the timeout.
         job_sleep_seconds = 2
         block_seconds = 5
-        q = Queue()
+        queue_name = "test_blocking_queue"
+        q = Queue(queue_name)
         job = q.enqueue(fixtures.long_running_job, job_sleep_seconds)
-        w = Worker([q])
+        fixtures.start_worker_process(queue_name, burst=True, worker_name="w1")
+
         started_at = time.time()
-        w.work(burst=True)
         result = job.latest_result(timeout=block_seconds)
         blocked_for = time.time() - started_at
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
         self.assertIsNotNone(result)
-        self.assertGreaterEqual(blocked_for, job_sleep_seconds)
-        self.assertLess(blocked_for, block_seconds)
+
+        # Job execution may have already started by the time `start_worker_process` returns: in that case
+        # we might only be blocking for 1.99s until the 2s job is done. To avoid test flakiness, a small
+        # small amount of leeway is added.
+        latency_allowance = 0.1
+        self.assertGreaterEqual(blocked_for + latency_allowance, job_sleep_seconds)
+        self.assertLess(blocked_for + latency_allowance, block_seconds)
