@@ -38,7 +38,7 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
     )
     if connection is None:
         connection = Redis()
-    push_connection(connection)
+    connection or push_connection(connection)
     try:
         yield
     finally:

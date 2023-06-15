@@ -77,7 +77,7 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
-        push_connection(testconn)
+        testconn or push_connection(testconn)
 
         # Store the connection (for sanity checking)
         cls.testconn = testconn

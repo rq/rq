@@ -1413,7 +1413,7 @@ class Worker(BaseWorker):
         Returns:
             bool: True after finished.
         """
-        push_connection(self.connection)
+        self.connection or push_connection(self.connection)
         started_job_registry = queue.started_job_registry
         self.log.debug('Started Job Registry set.')
 
