@@ -38,11 +38,11 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
     )
     if connection is None:
         connection = Redis()
-    connection or push_connection(connection)
+    connection or LocalStack().push(connection) or push_connection(connection)
     try:
         yield
     finally:
-        popped = pop_connection()
+        popped = LocalStack().pop() or pop_connection()
         assert (
             popped == connection
         ), 'Unexpected Redis connection was popped off the stack. Check your Redis connection setup.'
@@ -112,7 +112,7 @@ def resolve_connection(connection: Optional['Redis'] = None) -> 'Redis':
     if connection is not None:
         return connection
 
-    connection = get_current_connection()
+    connection = LocalStack().top() or get_current_connection()
     if connection is None:
         raise NoRedisConnectionException('Could not resolve a Redis connection')
     return connection

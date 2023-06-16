@@ -17,6 +17,7 @@ from rq import Connection, Queue, get_current_connection, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
 from rq.job import Job
+from rq.local import LocalStack
 from rq.worker import HerokuWorker, Worker
 
 
@@ -78,7 +79,7 @@ def rpush(key, value, append_worker_name=False, sleep=0):
         time.sleep(sleep)
     if append_worker_name:
         value += ':' + get_current_job().worker_name
-    redis = get_current_connection()
+    redis = LocalStack().top() or get_current_connection()
     redis.rpush(key, value)
 
 
@@ -111,7 +112,7 @@ def launch_process_within_worker_and_store_pid(path, timeout):
 
 
 def access_self():
-    assert get_current_connection() is not None
+    assert LocalStack().top() or get_current_connection() is not None
     assert get_current_job() is not None
 
 
@@ -253,7 +254,7 @@ def start_worker_process(queue_name, connection=None, worker_name=None, burst=Fa
     """
     Use multiprocessing to start a new worker in a separate process.
     """
-    connection = connection or get_current_connection()
+    connection = connection or LocalStack().top() or get_current_connection()
     conn_kwargs = connection.connection_pool.connection_kwargs
     p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst))
     p.start()

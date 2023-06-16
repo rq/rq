@@ -17,6 +17,8 @@ from types import FrameType
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
+from .local import LocalStack
+
 if TYPE_CHECKING:
     try:
         from resource import struct_rusage
@@ -240,7 +242,7 @@ class BaseWorker:
         if queue:
             connection = queue.connection
         elif connection is None:
-            connection = get_current_connection()
+            connection = LocalStack().top() or get_current_connection()
 
         worker_keys = worker_registration.get_keys(queue=queue, connection=connection)
         workers = [
@@ -295,7 +297,7 @@ class BaseWorker:
             connection (Optional[Redis]): The Redis Connection.
         """
         if connection is None:
-            connection = get_current_connection()
+            connection = LocalStack().top() or get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
             timeout_config = {"socket_timeout": self.connection_timeout}
@@ -744,7 +746,7 @@ class Worker(BaseWorker):
             raise ValueError('Not a valid RQ worker key: %s' % worker_key)
 
         if connection is None:
-            connection = get_current_connection()
+            connection = LocalStack().top() or get_current_connection()
         if not connection.exists(worker_key):
             connection.srem(cls.redis_workers_keys, worker_key)
             return None
@@ -1413,7 +1415,7 @@ class Worker(BaseWorker):
         Returns:
             bool: True after finished.
         """
-        self.connection or push_connection(self.connection)
+        self.connection or LocalStack().push(self.connection) or push_connection(self.connection)
         started_job_registry = queue.started_job_registry
         self.log.debug('Started Job Registry set.')
 
@@ -1458,7 +1460,7 @@ class Worker(BaseWorker):
             return False
 
         finally:
-            pop_connection()
+            LocalStack().pop() or pop_connection()
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:

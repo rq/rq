@@ -20,6 +20,7 @@ from redis import Redis
 from rq import Queue, SimpleWorker, Worker, get_current_connection
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.job import Job, JobStatus, Retry
+from rq.local import LocalStack
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.serializers import JSONSerializer
@@ -1360,7 +1361,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
 
 def schedule_access_self():
-    q = Queue('default', connection=get_current_connection())
+    q = Queue('default', connection=LocalStack().top() or get_current_connection())
     q.enqueue(access_self)
 
 

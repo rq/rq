@@ -6,6 +6,7 @@ import pytest
 from redis import Redis
 
 from rq import pop_connection, push_connection
+from rq.local import LocalStack
 
 
 def find_empty_redis_database(ssl=False):
@@ -77,7 +78,7 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
-        testconn or push_connection(testconn)
+        testconn or LocalStack().push(testconn) or push_connection(testconn)
 
         # Store the connection (for sanity checking)
         cls.testconn = testconn
@@ -105,7 +106,7 @@ class RQTestCase(unittest.TestCase):
         logging.disable(logging.NOTSET)
 
         # Pop the connection to Redis
-        testconn = pop_connection()
+        testconn = LocalStack().pop() or pop_connection()
         assert (
             testconn == cls.testconn
         ), 'Wow, something really nasty happened to the Redis connection stack. Check your setup.'
