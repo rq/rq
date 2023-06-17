@@ -1586,7 +1586,7 @@ class Job:
             # If parent job is not finished, we should only continue
             # if this job allows parent job to fail
             dependencies_ids.discard(parent_job.id)
-            if parent_job._status == JobStatus.CANCELED:
+            if parent_job.get_status() == JobStatus.CANCELED:
                 return False
             elif parent_job._status == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False

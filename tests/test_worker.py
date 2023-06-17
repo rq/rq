@@ -4,6 +4,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import zlib
 from datetime import datetime, timedelta
@@ -593,6 +594,91 @@ class TestWorker(RQTestCase):
 
         # Should not have created evidence of execution
         self.assertEqual(os.path.exists(SENTINEL_FILE), False)
+
+    def test_cancel_running_parent_job(self):
+        """Cancel a running parent job and verify that
+        dependent jobs are not started."""
+
+        def cancel_parent_job(job):
+            while job.is_queued:
+                time.sleep(1)
+
+            job.cancel()
+            return
+
+        q = Queue(
+            "low",
+        )
+        parent_job = q.enqueue(long_running_job, 5)
+
+        job = q.enqueue(say_hello, depends_on=parent_job)
+        job2 = q.enqueue(say_hello, depends_on=job)
+        status_thread = threading.Thread(target=cancel_parent_job, args=(parent_job,))
+        status_thread.start()
+
+        w = Worker([q])
+        w.work(
+            burst=True,
+        )
+        status_thread.join()
+
+        self.assertNotEqual(parent_job.result, None)
+        self.assertEqual(job.get_status(), JobStatus.DEFERRED)
+        self.assertEqual(job.result, None)
+        self.assertEqual(job2.get_status(), JobStatus.DEFERRED)
+        self.assertEqual(job2.result, None)
+        self.assertEqual(q.count, 0)
+
+    def test_cancel_dependent_job(self):
+        """Cancel job and verify that when the parent job is finished,
+        the dependent job is not started."""
+
+        q = Queue(
+            "low",
+        )
+        parent_job = q.enqueue(long_running_job, 5, job_id="parent_job")
+        job = q.enqueue(say_hello, depends_on=parent_job, job_id="job1")
+        job2 = q.enqueue(say_hello, depends_on=job, job_id="job2")
+        job.cancel()
+
+        w = Worker([q])
+        w.work(
+            burst=True,
+        )
+        self.assertTrue(job.is_canceled)
+        self.assertNotEqual(parent_job.result, None)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+        self.assertEqual(job.result, None)
+        self.assertEqual(job2.result, None)
+        self.assertEqual(job2.get_status(), JobStatus.DEFERRED)
+        self.assertEqual(q.count, 0)
+
+    def test_cancel_job_enqueue_dependent(self):
+        """Cancel a job in a chain and enqueue the dependent jobs."""
+
+        q = Queue(
+            "low",
+        )
+        parent_job = q.enqueue(long_running_job, 5, job_id="parent_job")
+        job = q.enqueue(say_hello, depends_on=parent_job, job_id="job1")
+        job2 = q.enqueue(say_hello, depends_on=job, job_id="job2")
+        job3 = q.enqueue(say_hello, depends_on=job2, job_id="job3")
+
+        job.cancel(enqueue_dependents=True)
+
+        w = Worker([q])
+        w.work(
+            burst=True,
+        )
+        self.assertTrue(job.is_canceled)
+        self.assertNotEqual(parent_job.result, None)
+        self.assertEqual(job.get_status(), JobStatus.CANCELED)
+        self.assertEqual(job.result, None)
+        self.assertNotEqual(job2.result, None)
+        self.assertEqual(job2.get_status(), JobStatus.FINISHED)
+        self.assertEqual(job3.get_status(), JobStatus.FINISHED)
+
+        self.assertEqual(q.count, 0)
 
     @slow
     def test_max_idle_time(self):

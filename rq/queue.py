@@ -1206,6 +1206,7 @@ class Queue:
                         pipeline=pipe,
                         exclude_job_id=exclude_job_id,
                     )
+                    and dependent_job.get_status(refresh=False) != JobStatus.CANCELED
                 ]
 
                 pipe.multi()
