@@ -4,6 +4,7 @@
 * `queue.enqueue_many()` now supports job dependencies. Thanks @eswolinsky3241!
 * `rq worker` CLI script now configures logging based on `DICT_CONFIG` key present in config file. Thanks @juur!
 * Whenever possible, `Worker` now uses `lmove()` to implement [reliable queue pattern](https://redis.io/commands/lmove/). Thanks @selwin!
+* Require `redis>=4.0.0`
 * `Scheduler` should only release locks that it successfully acquires. Thanks @xzander!
 * Fixes crashes that may happen by changes to `as_text()` function in v1.14. Thanks @tchapi!
 * Various linting, CI and code quality improvements. Thanks @robhudson!
