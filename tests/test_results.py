@@ -257,12 +257,10 @@ class TestScheduledJobRegistry(RQTestCase):
 
         # Should block if there's no result.
         timeout = 1
-        result_sync = Result.fetch_latest(job)
+        self.assertIsNone(Result.fetch_latest(job))
         started_at = time.time()
-        result_blocking = Result.fetch_latest(job, timeout=timeout)
+        self.assertIsNone(Result.fetch_latest(job, timeout=timeout))
         blocked_for = time.time() - started_at
-        self.assertIsNone(result_sync)
-        self.assertIsNone(result_blocking)
         self.assertGreaterEqual(blocked_for, timeout)
 
         # Shouldn't block if there's already a result present.
