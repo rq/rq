@@ -807,7 +807,7 @@ class Job:
         return self._exc_info
 
     def return_value(self, refresh: bool = False) -> Optional[Any]:
-        """Returns the return value of the latest execution, if it was successful
+        """Returns the return value of the latest execution, if it was successful.
 
         Args:
             refresh (bool, optional): Whether to refresh the current status. Defaults to False.
@@ -886,16 +886,18 @@ class Job:
 
         return Result.all(self, serializer=self.serializer)
 
-    def latest_result(self) -> Optional['Result']:
+    def latest_result(self, timeout: int = 0) -> Optional['Result']:
         """Get the latest job result.
+
+        Args:
+            timeout (int, optional): Number of seconds to block waiting for a result. Defaults to 0 (no blocking).
 
         Returns:
             result (Result): The Result object
         """
-        """Returns the latest Result object"""
         from .results import Result
 
-        return Result.fetch_latest(self, serializer=self.serializer)
+        return Result.fetch_latest(self, serializer=self.serializer, timeout=timeout)
 
     def restore(self, raw_data) -> Any:
         """Overwrite properties with the provided values stored in Redis.
