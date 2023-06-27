@@ -134,6 +134,35 @@ with q.connection.pipeline() as pipe:
 
 `Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
 
+### Batch Enqueueing
+
+When using `enqueue_many`, the `batch` argument can be used to return a batch object instead of a list of jobs:
+
+```python
+batch = q.enqueue_many(
+  [
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
+  ],
+  batch=True,
+  batch_id='my_batch'
+)
+```
+
+Users can then access jobs from the batch's `jobs` attribute:
+
+```python
+print(batch.jobs)  # [Job('my_job_id'), Job('my_other_job_id')]
+```
+
+Existing batches can be fetched from Redis:
+
+```python
+from rq.batch import Batch
+batch = Batch.fetch(id='my_batch', connection=Redis())
+```
+
+
 ## Job dependencies
 
 RQ allows you to chain the execution of multiple jobs.

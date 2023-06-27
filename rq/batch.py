@@ -42,7 +42,8 @@ class Batch:
             pipe.execute()
 
     def delete_expired_jobs(self, pipeline: Optional['Pipeline'] = None):
-        """Delete jobs from the batch's job registry that have been deleted or expired from Redis."""
+        """Delete jobs from the batch's job registry that have been deleted or expired from Redis.
+        We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
 
         pipe = pipeline if pipeline else self.connection.pipeline()
         job_ids = {as_text(job) for job in self.connection.smembers(self.key)}
@@ -53,6 +54,7 @@ class Batch:
             pipe.execute()
 
     def fetch_jobs(self) -> list:
+        """Retrieve list of job IDs from the batch key in Redis, then fetch and add those jobs to attribute"""
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
         self.jobs = [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
@@ -70,6 +72,7 @@ class Batch:
 
     @classmethod
     def fetch(cls, id: str, connection: Redis, fetch_jobs=False):
+        """Fetch an existing batch from Redis"""
         batch = cls(id, connection=connection)
         batch.refresh()
         if not batch.jobs:
