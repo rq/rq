@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional
 from uuid import uuid4
 
 from redis import Redis
