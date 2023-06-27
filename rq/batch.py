@@ -60,18 +60,10 @@ class Batch:
         pipe = pipeline if pipeline else self.connection.pipeline()
         self.fetch_jobs()
         self.delete_expired_jobs(pipeline=pipe)
+        if pipeline is None:
+            pipe.execute()
         if not self.jobs:  # This batch's jobs have all expired
             self.delete()
-            raise NoSuchBatchError
-        if pipeline is None:
-            pipe.execute()
-
-    def cancel_jobs(self, pipeline: Optional['Pipeline'] = None):
-        pipe = pipeline if pipeline else self.connection.pipeline()
-        for job in self.jobs:
-            job.cancel(pipeline=pipe)
-        if pipeline is None:
-            pipe.execute()
 
     def delete(self):
         self.connection.delete(self.key)
@@ -80,4 +72,6 @@ class Batch:
     def fetch(cls, id: str, connection: Redis, fetch_jobs=False):
         batch = cls(id, connection=connection)
         batch.refresh()
+        if not batch.jobs:
+            raise NoSuchBatchError
         return batch
