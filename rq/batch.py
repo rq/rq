@@ -31,7 +31,7 @@ class Batch:
 
     def add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
         """Add jobs to the batch"""
-        pipe = pipeline if pipeline else self.connection.connection.pipeline()
+        pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
         pipe.sadd(self.REDIS_BATCH_KEY, self.id)
         self.jobs += jobs
