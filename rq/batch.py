@@ -19,7 +19,7 @@ class Batch:
     REDIS_BATCH_KEY = 'rq:batches'
 
     def __init__(self, id: str = None, jobs: List[Job] = None, connection: Optional['Redis'] = None):
-        self.id = id if id else str(uuid4())[-12:]
+        self.id = id if id else str(uuid4())
         self.connection = connection
         self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
 
