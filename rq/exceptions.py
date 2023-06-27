@@ -2,6 +2,10 @@ class NoSuchJobError(Exception):
     pass
 
 
+class NoSuchBatchError(Exception):
+    pass
+
+
 class DeserializationError(Exception):
     pass
 

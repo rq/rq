@@ -1,10 +1,11 @@
 import logging
-from typing import List, Union, Optional
+from typing import List, Optional, Union
 from uuid import uuid4
 
 from redis import Redis
 from redis.client import Pipeline
 
+from .exceptions import NoSuchBatchError
 from .job import Job
 from .utils import as_text
 
@@ -12,74 +13,71 @@ logger = logging.getLogger("rq.job")
 
 
 class Batch:
-    REDIS_BATCH_NAME_PREFIX = 'rq:batch:'
+    """A Batch is a container for tracking multiple jobs with a single identifier."""
 
-    def __init__(
-        self, id: str = str(uuid4())[-12:], jobs: List[Job] = None, connection: Optional['Redis'] = None, ttl=500
-    ):
-        self.id = id
+    REDIS_BATCH_NAME_PREFIX = 'rq:batch:'
+    REDIS_BATCH_KEY = 'rq:batches'
+
+    def __init__(self, id: str = None, jobs: List[Job] = None, connection: Optional['Redis'] = None):
+        self.id = id if id else str(uuid4())[-12:]
         self.connection = connection
         self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
-        self.jobs_key = self.key + ":jobs"
-        self.ttl = ttl
 
         self.jobs = []
         if jobs:
-            self.add_jobs(jobs)
+            with connection.pipeline() as pipeline:
+                self.add_jobs(jobs, pipeline)
+                pipeline.execute()
 
-    def add_jobs(self, jobs: List[Union['Job', str]], pipeline=None):
-        pipe = pipeline if pipeline else self.connection.pipeline
-        self.job_ids = [job.id for job in jobs]
-        self.connection.sadd(self.jobs_key, *self.job_ids)
+    def add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
+        """Add jobs to the batch"""
+        pipe = pipeline if pipeline else self.connection.connection.pipeline()
+        pipe.sadd(self.key, *[job.id for job in jobs])
+        pipe.sadd(self.REDIS_BATCH_KEY, self.id)
         self.jobs += jobs
         for job in jobs:
-            job.set_batch_id(self.id)
-            job.save(pipeline=self.connection)
-        self.renew_ttl()
-        self.save()
+            job.set_batch_id(self.id, pipeline=pipe)
+            job.save(pipeline=pipe)
+        if pipeline is None:
+            pipe.execute()
+
+    def delete_expired_jobs(self, pipeline: Optional['Pipeline'] = None):
+        """Delete jobs from the batch's job registry that have been deleted or expired from Redis."""
+
+        pipe = pipeline if pipeline else self.connection.pipeline()
+        job_ids = {as_text(job) for job in self.connection.smembers(self.key)}
+        expired_jobs = job_ids - set([job.id for job in self.jobs if job])  # Return jobs that can't be fetched
+        for job in expired_jobs:
+            pipe.srem(self.key, job)
+        if pipeline is None:
+            pipe.execute()
 
     def fetch_jobs(self) -> list:
-        self.job_ids = [as_text(job) for job in self.connection.smembers(self.key + ":jobs")]
-        self.jobs = Job.fetch_many(self.job_ids, self.connection)
+        job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
+        self.jobs = [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
-    def renew_ttl(self, pipeline=None):
-        pipe = pipeline if pipeline else self.connection
-        pipe.expire(self.key, self.ttl)
-        pipe.expire(self.key + ":jobs", self.ttl)
-        for job in self.jobs:
-            pipe.expire(job.key, self.ttl)
-
-    def suspend_ttl(self, pipeline=None):
-        pipe = pipeline if pipeline else self.connection
-        pipe.persist(self.key)
-        pipe.persist(self.key + ":jobs")
-        for job in self.jobs:
-            pipe.persist(job.key)
-
-    def save(self, pipeline=None):
-        pipe = pipeline if pipeline else self.connection
-        pipe.hmset(self.key, {"id": self.id, "ttl": self.ttl})
-
-    def refresh(self):
-        data = {key.decode(): value.decode() for key, value in self.connection.hgetall(self.key).items()}
+    def refresh(self, pipeline: Optional['Pipeline'] = None):
+        pipe = pipeline if pipeline else self.connection.pipeline()
         self.fetch_jobs()
-        self.ttl = int(data["ttl"])
+        self.delete_expired_jobs(pipeline=pipe)
+        if not self.jobs:  # This batch's jobs have all expired
+            self.delete()
+            raise NoSuchBatchError
+        if pipeline is None:
+            pipe.execute()
 
-    def cleanup(self, pipeline=None):
-        pass
-
-    def get_status(self):
-        pass
-
-    def cancel_jobs(self):
-        pass
-
-    def expire_jobs(self):
+    def cancel_jobs(self, pipeline: Optional['Pipeline'] = None):
+        pipe = pipeline if pipeline else self.connection.pipeline()
         for job in self.jobs:
-            self.connection.expire(job.key, self.ttl)
-            
+            job.cancel(pipeline=pipe)
+        if pipeline is None:
+            pipe.execute()
+
+    def delete(self):
+        self.connection.delete(self.key)
+
     @classmethod
-    def fetch(cls, id: str, connection: Optional['Redis'] = None):
+    def fetch(cls, id: str, connection: Redis, fetch_jobs=False):
         batch = cls(id, connection=connection)
         batch.refresh()
         return batch

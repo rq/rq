@@ -46,7 +46,7 @@ from .defaults import (
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
-from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
+from .exceptions import DequeueTimeout, DeserializationError, NoSuchBatchError, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
 from .maintenance import clean_intermediate_queue
@@ -552,6 +552,7 @@ class BaseWorker:
             if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
+        self.clean_batch_registries()
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
@@ -655,6 +656,16 @@ class BaseWorker:
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
         self.log.debug('Sent heartbeat to prevent worker timeout. ' 'Next one should arrive in %s seconds.', timeout)
+
+    def clean_batch_registries(self):
+        """Loop through batches and delete those that have been deleted.
+        If batch still has jobs in its registry, delete those that have expired"""
+        batches = self.connection.smembers(Batch.REDIS_BATCH_KEY)
+        for batch in batches:
+            try:
+                batch = Batch.fetch(as_text(batch), self.connection)
+            except NoSuchBatchError:
+                self.connection.srem(Batch.REDIS_BATCH_KEY, as_text(batch))
 
 
 class Worker(BaseWorker):
@@ -1342,6 +1353,10 @@ class Worker(BaseWorker):
             else:
                 enqueue_dependents = True
 
+            if job.batch_id:
+                batch = Batch.fetch(job.batch_id, self.connection)
+                batch.delete_expired_jobs(pipeline=pipeline)
+
             try:
                 pipeline.execute()
                 if enqueue_dependents:
@@ -1393,13 +1408,13 @@ class Worker(BaseWorker):
                         self.log.debug('Saving job %s\'s successful execution result', job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
 
-                    if job.batch_id:
-                        batch = Batch.fetch(job.batch_id, self.connection)
-                        batch.renew_ttl()
-                    else:
-                        job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
+                    job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
                     started_job_registry.remove(job, pipeline=pipeline)
+
+                    if job.batch_id:
+                        batch = Batch.fetch(job.batch_id, self.connection)
+                        batch.delete_expired_jobs(pipeline=pipeline)
 
                     pipeline.execute()
                     self.log.debug('Finished handling successful execution of job %s', job.id)

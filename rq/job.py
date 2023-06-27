@@ -156,7 +156,7 @@ class Job:
         origin: str = '',
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
-        serializer = None,
+        serializer=None,
         batch_id: str = None,
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
@@ -1250,12 +1250,12 @@ class Job:
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
-            
+
         if self.batch_id:
             from .batch import Batch
+
             batch = Batch.fetch(id=self.batch_id, connection=pipeline)
-            pipeline.delete(batch.jobs_key, self.id) # Delete job from batch
-            batch.renew_ttl()
+            connection.delete(batch.key, self.id)  # Delete job from batch
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
@@ -1283,12 +1283,7 @@ class Job:
         Returns:
             result (Any): The job result
         """
-        if self.batch_id:
-            from .batch import Batch
-            batch = Batch.fetch(id=self.batch_id, connection=self.connection)
-            batch.persist_jobs() # When new job is starting, persist all jobs in batch
-        else:    
-            self.connection.persist(self.key)
+        self.connection.persist(self.key)
         _job_stack.push(self)
         try:
             self._result = self._execute()
@@ -1347,12 +1342,12 @@ class Job:
             ttl (int): The time to live
         """
         return default_ttl if self.ttl is None else self.ttl
-    
-    def set_batch_id(self, batch_id: str):
+
+    def set_batch_id(self, batch_id: str, pipeline=None):
         """Associates job with a batch and removes job TTL.
 
         Args:
-            batch_id (str): ID of the batch job is being added to
+            batch_id (str): ID of the batch this job is being added to.
         """
         self.connection.persist(self.key)
         self.batch_id = batch_id
@@ -1483,11 +1478,6 @@ class Job:
             from .results import Result
 
             Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
-            
-        if self.batch_id:
-            from .batch import Batch
-            batch = Batch.fetch(id=self.batch_id, connection=pipeline)
-            batch.renew_ttl()
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1509,11 +1499,6 @@ class Job:
             from .results import Result
 
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
-            
-        if self.batch_id:
-            from .batch import Batch
-            batch = Batch.fetch(id=self.batch_id, connection=pipeline)
-            batch.renew_ttl()
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.

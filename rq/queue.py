@@ -786,7 +786,13 @@ class Queue:
             on_stopped,
         )
 
-    def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, batch: Optional[bool] = False, batch_id: Optional[str] = None, batch_ttl: Optional[int] = None) -> List[Job]:
+    def enqueue_many(
+        self,
+        job_datas: List['EnqueueData'],
+        pipeline: Optional['Pipeline'] = None,
+        batch: Optional[bool] = False,
+        batch_id: Optional[str] = None,
+    ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
 
@@ -857,15 +863,13 @@ class Queue:
             ]
             if pipeline is None:
                 pipe.execute()
-                
+
         all_jobs = jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
-        
+
         if batch:
-            batch = Batch(id=batch_id, connection=pipe, jobs=all_jobs, ttl=batch_ttl)
-            return batch
-        
+            return Batch(id=batch_id, connection=self.connection, jobs=all_jobs)
         return all_jobs
-    
+
     def run_job(self, job: 'Job') -> Job:
         """Run the job
 
