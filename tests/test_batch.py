@@ -79,6 +79,17 @@ class TestBatch(RQTestCase):
         assert len(batch.jobs) == 1
         q.empty()
 
+    def test_empty_batch_removed_from_batch_list(self):
+        q = Queue(connection=self.testconn)
+        w = SimpleWorker([q], connection=q.connection)
+        short_lived_job = Queue.prepare_data(say_hello, result_ttl=1)
+        batch = q.enqueue_many([short_lived_job], batch=True)
+        w.work(burst=True, max_jobs=1)
+        sleep(3)
+        w.run_maintenance_tasks()
+        redis_batches = {as_text(batch) for batch in self.testconn.smembers("rq:batches")}
+        assert batch.id not in redis_batches
+
     def test_fetch_expired_batch_raises_error(self):
         q = Queue(connection=self.testconn)
         w = SimpleWorker([q], connection=q.connection)
