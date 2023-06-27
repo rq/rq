@@ -931,7 +931,7 @@ class Job:
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
         self.last_heartbeat = str_to_date(obj.get('last_heartbeat'))
-        self.batch_id = as_text(obj.get('batch_id'))
+        self.batch_id = as_text(obj.get('batch_id')) if obj.get('batch_id') else None
         result = obj.get('result')
         if result:
             try:

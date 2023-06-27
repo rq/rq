@@ -225,6 +225,7 @@ class TestJob(RQTestCase):
                 b'success_callback_name',
                 b'failure_callback_name',
                 b'stopped_callback_name',
+                b'batch_id',
             },
             set(self.testconn.hkeys(job.key)),
         )
