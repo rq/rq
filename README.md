@@ -39,8 +39,6 @@ def count_words_at_url(url):
     return len(resp.text.split())
 ```
 
-You do use the excellent [requests][r] package, don't you?
-
 Then, create an RQ queue:
 
 ```python
@@ -111,11 +109,11 @@ If you want the cutting edge version (that may well be broken), use this:
 
 ## Related Projects
 
-Check out these below repos which might be useful in your rq based project.
+If you use RQ, Check out these below repos which might be useful in your rq based project.
 
+- [django-rq](https://github.com/rq/django-rq)
 - [rq-dashboard](https://github.com/Parallels/rq-dashboard)
 - [rqmonitor](https://github.com/pranavgupta1234/rqmonitor)
-- [django-rq](https://github.com/rq/django-rq)
 - [Flask-RQ2](https://github.com/rq/Flask-RQ2)
 - [rq-scheduler](https://github.com/rq/rq-scheduler)
 
@@ -127,7 +125,6 @@ and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
 
-[r]: http://python-requests.org
 [d]: http://python-rq.org/
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html

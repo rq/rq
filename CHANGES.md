@@ -1,3 +1,7 @@
+### RQ 1.15.1 (2023-06-20)
+* Fixed a bug that may cause a crash when cleaning intermediate queue. Thanks @selwin!
+* Fixed a bug that may cause canceled jobs to still run dependent jobs. Thanks @fredsod!
+
 ### RQ 1.15 (2023-05-24)
 * Added `Callback(on_stopped='my_callback)`. Thanks @eswolinsky3241!
 * `Callback` now accepts dotted path to function as input. Thanks @rishabh-ranjan!

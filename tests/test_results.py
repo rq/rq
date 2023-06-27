@@ -1,4 +1,5 @@
 import tempfile
+import time
 import unittest
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
@@ -249,3 +250,30 @@ class TestScheduledJobRegistry(RQTestCase):
 
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
         self.assertEqual(Result.count(job), 2)
+
+    def test_blocking_results(self):
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        # Should block if there's no result.
+        timeout = 1
+        self.assertIsNone(Result.fetch_latest(job))
+        started_at = time.time()
+        self.assertIsNone(Result.fetch_latest(job, timeout=timeout))
+        blocked_for = time.time() - started_at
+        self.assertGreaterEqual(blocked_for, timeout)
+
+        # Shouldn't block if there's already a result present.
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        timeout = 1
+        result_sync = Result.fetch_latest(job)
+        started_at = time.time()
+        result_blocking = Result.fetch_latest(job, timeout=timeout)
+        blocked_for = time.time() - started_at
+        self.assertEqual(result_sync.return_value, result_blocking.return_value)
+        self.assertGreater(timeout, blocked_for)
+
+        # Should return the latest result if there are multiple.
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=2)
+        result_blocking = Result.fetch_latest(job, timeout=1)
+        self.assertEqual(result_blocking.return_value, 2)

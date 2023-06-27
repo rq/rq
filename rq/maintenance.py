@@ -21,5 +21,6 @@ def clean_intermediate_queue(worker: 'BaseWorker', queue: Queue) -> None:
     for job_id in job_ids:
         if job_id not in queue.started_job_registry:
             job = queue.fetch_job(job_id)
-            worker.handle_job_failure(job, queue, exc_string='Job was stuck in the intermediate queue.')
+            if job:
+                worker.handle_job_failure(job, queue, exc_string='Job was stuck in intermediate queue.')
             queue.connection.lrem(queue.intermediate_queue_key, 1, job_id)
