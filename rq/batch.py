@@ -9,8 +9,6 @@ from .exceptions import NoSuchBatchError
 from .job import Job
 from .utils import as_text
 
-logger = logging.getLogger("rq.job")
-
 
 class Batch:
     """A Batch is a container for tracking multiple jobs with a single identifier."""
@@ -28,6 +26,9 @@ class Batch:
             with connection.pipeline() as pipeline:
                 self.add_jobs(jobs, pipeline)
                 pipeline.execute()
+
+    def __repr__(self):
+        return "Batch(id={}, {} job(s))".format(self.id, len(self.jobs))
 
     def add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
         """Add jobs to the batch"""
@@ -78,6 +79,13 @@ class Batch:
         if not batch.jobs:
             raise NoSuchBatchError
         return batch
+
+    @classmethod
+    def all(cls, connection: 'Redis') -> List['Batch']:
+        "Returns an iterable of all Batches."
+        batch_keys = [as_text(key) for key in connection.smembers(cls.REDIS_BATCH_KEY)]
+        print([Batch.fetch(key, connection=connection) for key in batch_keys])
+        return [Batch.fetch(key, connection=connection) for key in batch_keys]
 
     @classmethod
     def get_key(cls, id: str) -> str:

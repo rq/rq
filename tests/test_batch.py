@@ -103,3 +103,12 @@ class TestBatch(RQTestCase):
     def test_get_batch_key(self):
         batch = Batch(id="foo", connection=self.testconn)
         self.assertEqual(Batch.get_key(batch.id), "rq:batch:foo")
+
+    def test_all_returns_all_batches(self):
+        q = Queue(connection=self.testconn)
+        batch1 = q.enqueue_many([self.job_1_data, self.job_2_data], batch=True, batch_id="batch1")
+        batch2 = Batch(id="batch2", connection=self.testconn, jobs=batch1.jobs)
+        all_batches = Batch.all(self.testconn)
+        assert len(all_batches) == 2
+        assert "batch1" in [batch.id for batch in all_batches]
+        assert "batch2" in [batch.id for batch in all_batches]
