@@ -134,22 +134,24 @@ with q.connection.pipeline() as pipe:
 
 `Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
 
-### Batch Enqueueing
-
-When using `enqueue_many`, the `batch` argument can be used to return a batch object instead of a list of jobs:
+### Batching jobs
+_New in version 1.16.0._  
+Multiple jobs can be added to a Batch to allow them to be tracked by a single ID:
 
 ```python
-batch = q.enqueue_many(
+from rq.batch import Batch
+
+jobs = q.enqueue_many(
   [
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
-  ],
-  batch=True,
-  batch_id='my_batch'
+  ]
 )
+
+batch = Batch.create(id="my_batch", jobs=jobs, connection=redis_conn)
 ```
 
-Users can then access jobs from the batch's `jobs` attribute:
+You can then access jobs from the batch's `jobs` attribute:
 
 ```python
 print(batch.jobs)  # [Job('my_job_id'), Job('my_other_job_id')]
@@ -159,9 +161,16 @@ Existing batches can be fetched from Redis:
 
 ```python
 from rq.batch import Batch
-batch = Batch.fetch(id='my_batch', connection=Redis())
+batch = Batch.fetch(id='my_batch', connection=redis_conn)
 ```
 
+New jobs can be added to existing batches as well:
+
+```python
+batch = Batch.create(id="my_batch", connection=redis_conn)
+new_job = q.enqueue(count_words_at_url, ('http://nvie.com',), job_id='my_new_job')
+batch.add_jobs([new_job])
+```
 
 ## Job dependencies
 

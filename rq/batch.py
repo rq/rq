@@ -1,4 +1,3 @@
-import logging
 from typing import List, Optional
 from uuid import uuid4
 
@@ -16,7 +15,7 @@ class Batch:
     REDIS_BATCH_NAME_PREFIX = 'rq:batch:'
     REDIS_BATCH_KEY = 'rq:batches'
 
-    def __init__(self, id: str = None, jobs: List[Job] = None, connection: Optional['Redis'] = None):
+    def __init__(self, connection: Redis, id: str = None, jobs: List[Job] = None):
         self.id = id if id else str(uuid4())
         self.connection = connection
         self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
@@ -72,9 +71,13 @@ class Batch:
         self.connection.delete(self.key)
 
     @classmethod
-    def fetch(cls, id: str, connection: Redis, fetch_jobs=False):
+    def create(cls, connection: Redis, id: Optional[str] = None, jobs: List[Job] = None):
+        return cls(id=id, jobs=jobs, connection=connection)
+
+    @classmethod
+    def fetch(cls, id: str, connection: Redis):
         """Fetch an existing batch from Redis"""
-        batch = cls(id, connection=connection)
+        batch = cls(id=id, connection=connection)
         batch.refresh()
         if not batch.jobs:
             raise NoSuchBatchError
