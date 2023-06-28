@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
-from .batch import Batch
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
@@ -786,13 +785,7 @@ class Queue:
             on_stopped,
         )
 
-    def enqueue_many(
-        self,
-        job_datas: List['EnqueueData'],
-        pipeline: Optional['Pipeline'] = None,
-        batch: Optional[bool] = False,
-        batch_id: Optional[str] = None,
-    ) -> List[Job]:
+    def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
 
@@ -863,12 +856,7 @@ class Queue:
             ]
             if pipeline is None:
                 pipe.execute()
-
-        all_jobs = jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
-
-        if batch:
-            return Batch(id=batch_id, connection=self.connection, jobs=all_jobs)
-        return all_jobs
+        return jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
 
     def run_job(self, job: 'Job') -> Job:
         """Run the job
