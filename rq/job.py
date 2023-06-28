@@ -1256,8 +1256,7 @@ class Job:
         if self.batch_id:
             from .batch import Batch
 
-            batch = Batch.fetch(id=self.batch_id, connection=self.connection)
-            connection.delete(batch.key, self.id)  # Delete job from batch
+            connection.delete(Batch.get_key(self.batch_id), self.id)  # Delete job from batch
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 

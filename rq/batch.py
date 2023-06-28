@@ -78,3 +78,8 @@ class Batch:
         if not batch.jobs:
             raise NoSuchBatchError
         return batch
+
+    @classmethod
+    def get_key(cls, id: str) -> str:
+        """Return the Redis key of the set containing a batch's jobs"""
+        return cls.REDIS_BATCH_NAME_PREFIX + id

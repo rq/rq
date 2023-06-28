@@ -99,3 +99,7 @@ class TestBatch(RQTestCase):
         sleep(3)
         self.assertRaises(NoSuchBatchError, Batch.fetch, batch.id, batch.connection)
         q.empty()
+
+    def test_get_batch_key(self):
+        batch = Batch(id="foo", connection=self.testconn)
+        self.assertEqual(Batch.get_key(batch.id), "rq:batch:foo")
