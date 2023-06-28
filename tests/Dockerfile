@@ -25,8 +25,6 @@ RUN apt-get install -y \
     redis-server \
     python3-pip \
     stunnel \
-    python3.6 \
-    libpython3.6-dev \
     python3.7 \
     python3.7-dev \
     python3.7-distutils \
@@ -35,8 +33,9 @@ RUN apt-get install -y \
     python3.9 \
     python3.9-dev \
     python3.10 \
-    python3.6-distutils \
     python3.10-dev \
+    python3.11 \
+    python3.11-dev
 
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/*
