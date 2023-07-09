@@ -33,13 +33,12 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install hatch
         pip install redis==${{ matrix.redis-py-version }}
-        pip install -r requirements.txt -r dev-requirements.txt
-        pip install -e .
 
     - name: Test with pytest
       run: |
-        RUN_SLOW_TESTS_TOO=1 pytest --durations=5
+        RUN_SLOW_TESTS_TOO=1 hatch run test:pytest --durations=5
 
   dependency-build:
     name: Check development branches of dependencies
@@ -68,13 +67,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install git+https://github.com/redis/redis-py
-        pip install git+https://github.com/pallets/click
-        pip install -r dev-requirements.txt
-        pip install -e .
+        pip install hatch
 
     - name: Test with pytest
-      run: RUN_SLOW_TESTS_TOO=1 pytest --durations=5 > log.txt 2>&1
+      run: RUN_SLOW_TESTS_TOO=1 hatch run test:pytest --durations=5 > log.txt 2>&1
 
     - uses: actions/upload-artifact@v3
       with:
