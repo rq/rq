@@ -1,0 +1,120 @@
+from datetime import datetime
+from typing import Any, Dict, Optional, TYPE_CHECKING
+from uuid import uuid4
+
+from redis import Redis
+
+if TYPE_CHECKING:
+    from redis.client import Pipeline
+
+from .job import Job
+from .registry import BaseRegistry, StartedJobRegistry
+from .utils import current_timestamp, now, utcnow
+
+
+def get_key(job_id: str) -> str:
+    return 'rq:executions:%s' % job_id
+
+
+class Execution:
+    """Class to represent an execution of a job."""
+
+    def __init__(self, id: str, job_id: str, connection: Redis, created_at: Optional[datetime] = None):
+        self.id = id
+        self.job_id = job_id
+        self.connection = connection
+        self.created_at = created_at if created_at else utcnow()
+    
+    @property
+    def key(self) -> str:
+        return f'rq:execution:{self.composite_key}'
+    
+    @property
+    def composite_key(self):
+        return f'{self.job_id}:{self.id}'
+    
+    @classmethod
+    def fetch(cls, id: str, job_id: str, connection: Redis) -> 'Execution':
+        """Fetch an execution from Redis."""
+        execution = cls(id=id, job_id=job_id, connection=connection)
+        execution.refresh()
+        return execution
+    
+    def refresh(self):
+        """Refresh execution data from Redis."""
+        data = self.connection.hgetall(self.key)
+        if not data:
+            raise ValueError(f'Execution {self.id} not found in Redis')
+        self.created_at = datetime.fromtimestamp(float(data[b'created_at']))
+
+    @classmethod
+    def from_composite_key(cls, composite_key: str, connection: Redis) -> 'Execution':
+        """A combination of job_id and execution_id separated by a colon."""
+        job_id, id = composite_key.split(':')
+        return cls(id=id, job_id=job_id, connection=connection)
+
+    @classmethod
+    def create(cls, job: Job, ttl: int, pipeline: 'Pipeline') -> 'Execution':
+        """Save execution data to Redis."""
+        id = uuid4().hex
+        execution = cls(id=id, job_id=job.id, connection=job.connection, created_at=utcnow())
+        execution.save(ttl=ttl, pipeline=pipeline)
+        ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
+        return execution
+
+    def save(self, ttl: int, pipeline: Optional['Pipeline'] = None):
+        """Save execution data to Redis and JobExecutionRegistry."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, mapping=self.serialize())
+        # Still unsure how to handle TTL, but this should be tied to heartbeat TTL
+        connection.expire(self.key, ttl)
+    
+    def delete(self, pipeline: 'Pipeline'):
+        """Delete an execution from Redis."""
+        pipeline.delete(self.key)
+        ExecutionRegistry(job_id=self.job_id, connection=self.connection).remove(execution=self, pipeline=pipeline)
+    
+    def serialize(self) -> Dict:
+        return {'id': self.id, 'created_at': self.created_at.timestamp()}
+
+
+class ExecutionRegistry(BaseRegistry):
+    """Class to represent a registry of executions."""
+    key_template = 'rq:executions:{0}'
+
+    def __init__(self, job_id: str, connection: Redis):
+        self.connection = connection
+        self.job_id = job_id
+        self.key = self.key_template.format(job_id)
+    
+    def cleanup(self, timestamp: Optional[float] = None):
+        """Remove expired jobs from registry.
+
+        Removes jobs with an expiry time earlier than timestamp, specified as
+        seconds since the Unix epoch. timestamp defaults to call time if
+        unspecified.
+        """
+        score = timestamp if timestamp is not None else current_timestamp() - 60
+        self.connection.zremrangebyscore(self.key, 0, score)
+
+    def add(self, execution: Execution, ttl: int, pipeline: 'Pipeline') -> Any:  # type: ignore
+        """Register an execution to registry with expiry time of now + ttl, unless it's -1 which is set to +inf
+
+        Args:
+            execution (Execution): The Execution to add
+            ttl (int, optional): The time to live. Defaults to 0.
+            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            xx (bool, optional): .... Defaults to False.
+
+        Returns:
+            result (int): The ZADD command result
+        """
+        score = current_timestamp() + ttl
+        pipeline.zadd(self.key, {execution.id: score})
+        # Still unsure how to handle registry TTL, but it should be the same as job TTL
+        pipeline.expire(self.key, ttl + 60)
+        return
+    
+    def remove(self, execution: Execution, pipeline: 'Pipeline') -> Any:  # type: ignore
+        """Remove an execution from registry."""
+        return pipeline.zrem(self.key, execution.id)
