@@ -47,7 +47,9 @@ class Batch:
 
         pipe = pipeline if pipeline else self.connection.pipeline()
         job_ids = {as_text(job) for job in self.connection.smembers(self.key)}
-        expired_jobs = job_ids - set([job.id for job in self.jobs if job])  # Return jobs that can't be fetched
+        expired_jobs = [
+            job.id for job in self.jobs if self.connection.exists(job.id)
+        ]  # Return jobs that can't be fetched
         for job in expired_jobs:
             pipe.srem(self.key, job)
         if pipeline is None:
