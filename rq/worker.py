@@ -506,7 +506,7 @@ class BaseWorker:
 
             if job.batch_id:
                 batch = Batch.fetch(job.batch_id, self.connection)
-                batch.delete_expired_jobs(pipeline=pipeline)
+                batch.cleanup(pipeline=pipeline)
 
             try:
                 pipeline.execute()
@@ -1414,7 +1414,7 @@ class Worker(BaseWorker):
 
                     if job.batch_id:
                         batch = Batch.fetch(job.batch_id, self.connection)
-                        batch.delete_expired_jobs(pipeline=pipeline)
+                        batch.cleanup(pipeline=pipeline)
 
                     pipeline.execute()
                     self.log.debug('Finished handling successful execution of job %s', job.id)
