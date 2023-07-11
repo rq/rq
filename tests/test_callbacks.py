@@ -104,6 +104,18 @@ class QueueCallbackTestCase(RQTestCase):
         job = Job.fetch(id=job.id, connection=self.testconn)
         self.assertEqual(job.stopped_callback, print)
 
+    def test_enqueue_many_callback(self):
+        queue = Queue('example', connection=self.testconn)
+
+        job_data = Queue.prepare_data(
+            func=say_hello, on_success=print, on_failure=save_exception, on_stopped=save_result_if_not_stopped
+        )
+
+        jobs = queue.enqueue_many([job_data])
+        assert jobs[0].success_callback == job_data.on_success
+        assert jobs[0].failure_callback == job_data.on_failure
+        assert jobs[0].stopped_callback == job_data.on_stopped
+
 
 class SyncJobCallback(RQTestCase):
     def test_success_callback(self):
