@@ -65,15 +65,15 @@ class Batch:
         self.connection.delete(self.key)
 
     @classmethod
-    def create(cls, connection: Redis, id: Optional[str] = None, jobs: List[Job] = None):
-        return cls(id=id, jobs=jobs, connection=connection)
+    def create(cls, connection: Redis, id: Optional[str] = None):
+        return cls(id=id, connection=connection)
 
     @classmethod
     def fetch(cls, id: str, connection: Redis):
         """Fetch an existing batch from Redis"""
         batch = cls(id=id, connection=connection)
-        batch.refresh()
-        if not batch.jobs:
+        batch.cleanup()
+        if not connection.exists(Batch.get_key(batch.id)):
             raise NoSuchBatchError
         return batch
 
