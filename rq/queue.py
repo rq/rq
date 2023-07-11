@@ -830,7 +830,7 @@ class Queue:
                 "on_success": job_data.on_success,
                 "on_failure": job_data.on_failure,
                 "on_stopped": job_data.on_stopped,
-                "batch_id": batch.id,
+                "batch_id": batch.id if batch else None,
             }
 
         # Enqueue jobs without dependencies
