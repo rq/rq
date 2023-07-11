@@ -124,9 +124,9 @@ class TestBatch(RQTestCase):
     def test_all_returns_all_batches(self):
         q = Queue(connection=self.testconn)
         batch1 = Batch.create(id="batch1", connection=self.testconn)
-        q.enqueue_many([self.job_1_data, self.job_2_data], batch=batch1)
+        q.enqueue_many([self.job_1_data, self.job_2_data], batch="batch1")
         batch2 = Batch(id="batch2", connection=self.testconn)
-        q.enqueue_many([self.job_1_data, self.job_2_data], batch=batch2)
+        q.enqueue_many([self.job_1_data, self.job_2_data], batch="batch2")
         all_batches = Batch.all(self.testconn)
         assert len(all_batches) == 2
         assert "batch1" in [batch.id for batch in all_batches]
