@@ -36,12 +36,23 @@ class Batch:
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
 
         pipe = pipeline if pipeline else self.connection.pipeline()
-        job_ids = {as_text(job) for job in self.connection.smembers(self.key)}
-        expired_jobs = [
-            job.id for job in self.jobs if self.connection.exists(job.id)
-        ]  # Return jobs that can't be fetched
+        job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
+        expired_jobs = []
+        with self.connection.pipeline() as pipeline:
+            for job in job_ids:
+                pipeline.exists(Job.key_for(job))
+            results = pipeline.execute()
+
+        for i, key_exists in enumerate(results):
+            if not key_exists:
+                expired_jobs.append(job_ids[i])
+                job_ids.pop(i)
+
         for job in expired_jobs:
             pipe.srem(self.key, job)
+
+        if not job_ids:
+            self.delete()
         if pipeline is None:
             pipe.execute()
 
