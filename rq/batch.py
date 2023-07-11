@@ -23,15 +23,11 @@ class Batch:
     def __repr__(self):
         return "Batch(id={})".format(self.id)
 
-    def add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
+    def _add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
         """Add jobs to the batch"""
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
         pipe.sadd(self.REDIS_BATCH_KEY, self.id)
-        self.jobs += jobs
-        for job in jobs:
-            job.set_batch_id(self.id, pipeline=pipe)
-            job.save(pipeline=pipe)
         if pipeline is None:
             pipe.execute()
 
