@@ -38,10 +38,10 @@ class Batch:
         pipe = pipeline if pipeline else self.connection.pipeline()
         job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
         expired_jobs = []
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline() as p:
             for job in job_ids:
-                pipeline.exists(Job.key_for(job))
-            results = pipeline.execute()
+                p.exists(Job.key_for(job))
+            results = p.execute()
 
         for i, key_exists in enumerate(results):
             if not key_exists:
