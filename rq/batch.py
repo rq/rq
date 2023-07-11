@@ -15,19 +15,13 @@ class Batch:
     REDIS_BATCH_NAME_PREFIX = 'rq:batch:'
     REDIS_BATCH_KEY = 'rq:batches'
 
-    def __init__(self, connection: Redis, id: str = None, jobs: List[Job] = None):
+    def __init__(self, connection: Redis, id: str = None):
         self.id = id if id else str(uuid4())
         self.connection = connection
         self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
 
-        self.jobs = []
-        if jobs:
-            with connection.pipeline() as pipeline:
-                self.add_jobs(jobs, pipeline)
-                pipeline.execute()
-
     def __repr__(self):
-        return "Batch(id={}, {} job(s))".format(self.id, len(self.jobs))
+        return "Batch(id={})".format(self.id)
 
     def add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
         """Add jobs to the batch"""
