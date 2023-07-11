@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
+from .batch import Batch
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
@@ -518,6 +519,7 @@ class Queue:
         on_success: Optional[Union[Callback, Callable]] = None,
         on_failure: Optional[Union[Callback, Callable]] = None,
         on_stopped: Optional[Union[Callback, Callable]] = None,
+        batch_id: Optional[str] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -542,6 +544,7 @@ class Queue:
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            batch_id (Optional[str], optional): A batch ID that the job is being added to. Defaults to None.
 
         Raises:
             ValueError: If the timeout is 0
@@ -583,6 +586,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            batch_id=batch_id,
         )
 
         if retry:
@@ -785,7 +789,12 @@ class Queue:
             on_stopped,
         )
 
-    def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None) -> List[Job]:
+    def enqueue_many(
+        self,
+        job_datas: List['EnqueueData'],
+        pipeline: Optional['Pipeline'] = None,
+        batch: Optional[Union[str, Batch]] = None,
+    ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
 
@@ -800,6 +809,8 @@ class Queue:
         jobs_without_dependencies = []
         jobs_with_unmet_dependencies = []
         jobs_with_met_dependencies = []
+        if isinstance(batch, str):
+            batch = Batch.fetch(batch, self.connection)
 
         def get_job_kwargs(job_data, initial_status):
             return {
@@ -819,6 +830,7 @@ class Queue:
                 "on_success": job_data.on_success,
                 "on_failure": job_data.on_failure,
                 "on_stopped": job_data.on_stopped,
+                "batch_id": batch.id,
             }
 
         # Enqueue jobs without dependencies
@@ -857,6 +869,12 @@ class Queue:
             ]
             if pipeline is None:
                 pipe.execute()
+
+        all_jobs = jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
+
+        if batch is not None:
+            batch._add_jobs(all_jobs)
+
         return jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
 
     def run_job(self, job: 'Job') -> Job:
