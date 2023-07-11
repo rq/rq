@@ -810,7 +810,7 @@ class Queue:
         jobs_with_unmet_dependencies = []
         jobs_with_met_dependencies = []
         if isinstance(batch, str):
-            batch = Batch.fetch(batch, self.connection)
+            batch = Batch(id=batch, connection=self.connection)
 
         def get_job_kwargs(job_data, initial_status):
             return {
