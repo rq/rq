@@ -16,7 +16,7 @@ class TestBatch(RQTestCase):
     def test_create_batch(self):
         q = Queue(connection=self.testconn)
         batch = Batch.create(connection=self.testconn)
-        jobs = q.enqueue_many([self.job_1_data, self.job_2_data], batch=batch)
+        q.enqueue_many([self.job_1_data, self.job_2_data], batch=batch)
         assert isinstance(batch, Batch)
         assert len(batch.get_jobs()) == 2
         q.empty
@@ -40,7 +40,7 @@ class TestBatch(RQTestCase):
     def test_add_jobs(self):
         q = Queue(connection=self.testconn)
         batch = Batch.create(connection=self.testconn)
-        job1 = q.enqueue_many([self.job_1_data], batch=batch)[0]
+        q.enqueue_many([self.job_1_data], batch=batch)[0]
         job2 = q.enqueue_many([self.job_2_data], batch=batch)[0]
         assert job2 in batch.get_jobs()
         self.assertEqual(job2.batch_id, batch.id)
@@ -123,9 +123,9 @@ class TestBatch(RQTestCase):
 
     def test_all_returns_all_batches(self):
         q = Queue(connection=self.testconn)
-        batch1 = Batch.create(id="batch1", connection=self.testconn)
+        Batch.create(id="batch1", connection=self.testconn)
         q.enqueue_many([self.job_1_data, self.job_2_data], batch="batch1")
-        batch2 = Batch(id="batch2", connection=self.testconn)
+        Batch(id="batch2", connection=self.testconn)
         q.enqueue_many([self.job_1_data, self.job_2_data], batch="batch2")
         all_batches = Batch.all(self.testconn)
         assert len(all_batches) == 2
