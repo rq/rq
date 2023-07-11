@@ -157,7 +157,7 @@ class Job:
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
-        batch_id: str = None,
+        batch_id: Optional[str] = None,
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
         on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
@@ -200,6 +200,7 @@ class Job:
                 fails. Defaults to None. Passing a callable is deprecated.
             on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
                 is stopped. Defaults to None. Passing a callable is deprecated.
+            batch_id (Optional[str], optional): A batch ID that the job is being added to. Defaults to None.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -1344,15 +1345,15 @@ class Job:
         """
         return default_ttl if self.ttl is None else self.ttl
 
-    def set_batch_id(self, batch_id: str, pipeline=None):
+    def set_batch_id(self, batch_id: str, pipeline: Optional['Pipeline'] = None):
         """Associates job with a batch and removes job TTL.
 
         Args:
             batch_id (str): ID of the batch this job is being added to.
         """
-        self.connection.persist(self.key)
         self.batch_id = batch_id
-        self.ttl = self.failure_ttl = None
+        connection: 'Redis' = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'batch_id', self.batch_id)
 
     def get_result_ttl(self, default_ttl: int) -> int:
         """Returns ttl for a job that determines how long a jobs result will
