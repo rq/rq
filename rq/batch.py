@@ -46,9 +46,9 @@ class Batch:
         for i, key_exists in enumerate(results):
             if not key_exists:
                 expired_jobs.append(job_ids[i])
-                job_ids.pop(i)
 
         for job in expired_jobs:
+            job_ids.remove(job)
             pipe.srem(self.key, job)
 
         if not job_ids:
@@ -81,7 +81,6 @@ class Batch:
     def all(cls, connection: 'Redis') -> List['Batch']:
         "Returns an iterable of all Batches."
         batch_keys = [as_text(key) for key in connection.smembers(cls.REDIS_BATCH_KEY)]
-        print([Batch.fetch(key, connection=connection) for key in batch_keys])
         return [Batch.fetch(key, connection=connection) for key in batch_keys]
 
     @classmethod
