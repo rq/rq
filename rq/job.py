@@ -1345,16 +1345,6 @@ class Job:
         """
         return default_ttl if self.ttl is None else self.ttl
 
-    def set_batch_id(self, batch_id: str, pipeline: Optional['Pipeline'] = None):
-        """Associates job with a batch and removes job TTL.
-
-        Args:
-            batch_id (str): ID of the batch this job is being added to.
-        """
-        self.batch_id = batch_id
-        connection: 'Redis' = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'batch_id', self.batch_id)
-
     def get_result_ttl(self, default_ttl: int) -> int:
         """Returns ttl for a job that determines how long a jobs result will
         be persisted. In the future, this method will also be responsible
