@@ -141,20 +141,20 @@ Multiple jobs can be added to a Batch to allow them to be tracked by a single ID
 ```python
 from rq.batch import Batch
 
+batch = Batch.create(id="my_batch", connection=redis_conn)
 jobs = q.enqueue_many(
   [
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
-  ]
+  ],
+  batch=batch  # You can also pass the batch ID as a string, i.e., batch="my_batch"
 )
-
-batch = Batch.create(id="my_batch", jobs=jobs, connection=redis_conn)
 ```
 
-You can then access jobs from the batch's `jobs` attribute:
+You can then access jobs by calling the batch's `get_jobs()` method:
 
 ```python
-print(batch.jobs)  # [Job('my_job_id'), Job('my_other_job_id')]
+print(batch.get_jobs())  # [Job('my_job_id'), Job('my_other_job_id')]
 ```
 
 Existing batches can be fetched from Redis:
@@ -164,13 +164,7 @@ from rq.batch import Batch
 batch = Batch.fetch(id='my_batch', connection=redis_conn)
 ```
 
-New jobs can be added to existing batches as well:
-
-```python
-batch = Batch.create(id="my_batch", connection=redis_conn)
-new_job = q.enqueue(count_words_at_url, ('http://nvie.com',), job_id='my_new_job')
-batch.add_jobs([new_job])
-```
+If all of a batch's jobs expire or are deleted, the batch is removed from Redis.
 
 ## Job dependencies
 
