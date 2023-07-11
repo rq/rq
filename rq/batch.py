@@ -56,19 +56,10 @@ class Batch:
         if pipeline is None:
             pipe.execute()
 
-    def fetch_jobs(self) -> list:
-        """Retrieve list of job IDs from the batch key in Redis, then fetch and add those jobs to attribute"""
+    def get_jobs(self) -> list:
+        """Retrieve list of job IDs from the batch key in Redis"""
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
-        self.jobs = [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
-
-    def refresh(self, pipeline: Optional['Pipeline'] = None):
-        pipe = pipeline if pipeline else self.connection.pipeline()
-        self.fetch_jobs()
-        self.cleanup(pipeline=pipe)
-        if pipeline is None:
-            pipe.execute()
-        if not self.jobs:  # This batch's jobs have all expired
-            self.delete()
+        return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
     def delete(self):
         self.connection.delete(self.key)
