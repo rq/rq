@@ -1178,6 +1178,11 @@ class Job:
         """
         return self.failed_job_registry.requeue(self, at_front=at_front)
 
+    @property
+    def execution_registry(self) -> 'ExecutionRegistry':
+        from .executions import ExecutionRegistry
+        return ExecutionRegistry(self.id, connection=self.connection)
+    
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
         from .registry import BaseRegistry
 

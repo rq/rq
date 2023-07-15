@@ -525,7 +525,7 @@ class Queue:
             func (FunctionReferenceType): The function referce: a callable or the path.
             args (Union[Tuple, List, None], optional): The `*args` to pass to the function. Defaults to None.
             kwargs (Optional[Dict], optional): The `**kwargs` to pass to the function. Defaults to None.
-            timeout (Optional[int], optional): Function timeout. Defaults to None.
+            timeout (Optional[int], optional): Function timeout. Defaults to None, use -1 for infinite timeout.
             result_ttl (Optional[int], optional): Result time to live. Defaults to None.
             ttl (Optional[int], optional): Time to live. Defaults to None.
             failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.

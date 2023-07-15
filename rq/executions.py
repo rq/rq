@@ -84,6 +84,14 @@ class Execution:
             'last_heartbeat': self.last_heartbeat.timestamp(),
         }
 
+    def heartbeat(self, ttl: int, pipeline: 'Pipeline'):
+        """Update execution heartbeat."""
+        # TODO: worker heartbeat should be tied to execution heartbeat
+        self.last_heartbeat = utcnow()
+        pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
+        pipeline.expire(self.key, ttl)
+        ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(execution=self, ttl=ttl, pipeline=pipeline)
+
 
 class ExecutionRegistry(BaseRegistry):
     """Class to represent a registry of executions."""
