@@ -46,6 +46,7 @@ from .defaults import (
     DEFAULT_WORKER_TTL,
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
+from .executions import Execution
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
 from .maintenance import clean_intermediate_queue
@@ -154,6 +155,7 @@ class BaseWorker:
         self.version = VERSION
         self.python_version = sys.version
         self.serializer = resolve_serializer(serializer)
+        self.execution: Optional[Execution] = None
 
         queues = [
             self.queue_class(
@@ -456,6 +458,19 @@ class BaseWorker:
             self.teardown()
         return bool(completed_jobs)
 
+    def cleanup_execution(self, job: 'Job', pipeline: 'Pipeline'):
+        """Cleans up the execution of a job.
+        It will remove the job from the `StartedJobRegistry` and deleting the Execution object.
+        """
+        started_job_registry = StartedJobRegistry(
+            job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
+        )
+        self.set_current_job_id(None, pipeline=pipeline)
+        started_job_registry.remove(job, pipeline=pipeline)
+        if self.execution:
+            self.execution.delete(pipeline)
+            self.execution = None
+
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None, exc_string=''):
         """
         Handles the failure or an executing job by:
@@ -485,14 +500,16 @@ class BaseWorker:
                 if not retry:
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
-            started_job_registry.remove(job, pipeline=pipeline)
+            # started_job_registry.remove(job, pipeline=pipeline)
+            # self.execution.delete(pipeline=pipeline)  # type: ignore
+            # self.set_current_job_id(None, pipeline=pipeline)
+            self.cleanup_execution(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
                 job._handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
-
-            self.set_current_job_id(None, pipeline=pipeline)
+            
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
@@ -511,6 +528,47 @@ class BaseWorker:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
+    
+    def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
+        """Sets the current job id.
+        If `None` is used it will delete the current job key.
+
+        Args:
+            job_id (Optional[str], optional): The job id. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        if job_id is None:
+            connection.hdel(self.key, 'current_job')
+        else:
+            connection.hset(self.key, 'current_job', job_id)
+
+    def get_current_job_id(self, pipeline: Optional['Pipeline'] = None) -> Optional[str]:
+        """Retrieves the current job id.
+
+        Args:
+            pipeline (Optional[&#39;Pipeline&#39;], optional): The pipeline to use. Defaults to None.
+
+        Returns:
+            job_id (Optional[str): The job id
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        result = connection.hget(self.key, 'current_job')
+        if result is None:
+            return None
+        return as_text(result)
+
+    def get_current_job(self) -> Optional['Job']:
+        """Returns the currently executing job instance.
+
+        Returns:
+            job (Job): The job instance.
+        """
+        job_id = self.get_current_job_id()
+        if job_id is None:
+            return None
+        return self.job_class.fetch(job_id, self.connection, self.serializer)
+
 
     def _start_scheduler(
         self,
@@ -885,46 +943,6 @@ class Worker(BaseWorker):
         self.current_job_working_time = current_job_working_time
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
-
-    def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
-        """Sets the current job id.
-        If `None` is used it will delete the current job key.
-
-        Args:
-            job_id (Optional[str], optional): The job id. Defaults to None.
-            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        if job_id is None:
-            connection.hdel(self.key, 'current_job')
-        else:
-            connection.hset(self.key, 'current_job', job_id)
-
-    def get_current_job_id(self, pipeline: Optional['Pipeline'] = None) -> Optional[str]:
-        """Retrieves the current job id.
-
-        Args:
-            pipeline (Optional[&#39;Pipeline&#39;], optional): The pipeline to use. Defaults to None.
-
-        Returns:
-            job_id (Optional[str): The job id
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        result = connection.hget(self.key, 'current_job')
-        if result is None:
-            return None
-        return as_text(result)
-
-    def get_current_job(self) -> Optional['Job']:
-        """Returns the currently executing job instance.
-
-        Returns:
-            job (Job): The job instance.
-        """
-        job_id = self.get_current_job_id()
-        if job_id is None:
-            return None
-        return self.job_class.fetch(job_id, self.connection, self.serializer)
 
     def kill_horse(self, sig: signal.Signals = SIGKILL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -1335,6 +1353,7 @@ class Worker(BaseWorker):
             self.set_current_job_working_time(0, pipeline=pipeline)
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
+            self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 
@@ -1348,7 +1367,7 @@ class Worker(BaseWorker):
             self.log.debug('Job preparation finished.')
 
         msg = 'Processing {0} from {1} since {2}'
-        self.procline(msg.format(job.func_name, job.origin, time.time()))
+        self.procline(msg.format(job.func_name, job.origin, time.time()))    
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
@@ -1383,7 +1402,7 @@ class Worker(BaseWorker):
                         # We have to do it ourselves to make sure everything runs in a transaction
                         pipeline.multi()
 
-                    self.set_current_job_id(None, pipeline=pipeline)
+                    
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
@@ -1394,13 +1413,21 @@ class Worker(BaseWorker):
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
-                    started_job_registry.remove(job, pipeline=pipeline)
+                    self.cleanup_execution(job, pipeline=pipeline)
+                    # self.set_current_job_id(None, pipeline=pipeline)
+                    # started_job_registry.remove(job, pipeline=pipeline)
+                    # self.execution.delete(pipeline)  # type: ignore
 
                     pipeline.execute()
                     self.log.debug('Finished handling successful execution of job %s', job.id)
                     break
                 except redis.exceptions.WatchError:
                     continue
+    
+    def handle_job_completion(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
+        """Called after job has finished execution."""
+        job.ended_at = utcnow()
+        job.heartbeat(utcnow(), heartbeat_ttl)
 
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
@@ -1428,33 +1455,31 @@ class Worker(BaseWorker):
                 rv = job.perform()
                 self.log.debug('Finished performing Job ID %s', job.id)
 
-            job.ended_at = utcnow()
-
+            self.handle_job_completion(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            job.heartbeat(utcnow(), job.success_callback_timeout)
             job.execute_success_callback(self.death_penalty_class, rv)
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
             self.log.debug('Job %s raised an exception.', job.id)
-            job.ended_at = utcnow()
+
+            self.handle_job_completion(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
             try:
-                job.heartbeat(utcnow(), job.failure_callback_timeout)
                 job.execute_failure_callback(self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
 
+            self.handle_exception(job, *exc_info)
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
-            )
-            self.handle_exception(job, *exc_info)
+            )            
             return False
 
         finally:

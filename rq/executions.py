@@ -19,33 +19,36 @@ def get_key(job_id: str) -> str:
 class Execution:
     """Class to represent an execution of a job."""
 
-    def __init__(self, id: str, job_id: str, connection: Redis, created_at: Optional[datetime] = None):
+    def __init__(self, id: str, job_id: str, connection: Redis):
         self.id = id
         self.job_id = job_id
         self.connection = connection
-        self.created_at = created_at if created_at else utcnow()
-    
+        now = utcnow()
+        self.created_at = now
+        self.last_heartbeat = now
+
     @property
     def key(self) -> str:
         return f'rq:execution:{self.composite_key}'
-    
+
     @property
     def composite_key(self):
         return f'{self.job_id}:{self.id}'
-    
+
     @classmethod
     def fetch(cls, id: str, job_id: str, connection: Redis) -> 'Execution':
         """Fetch an execution from Redis."""
         execution = cls(id=id, job_id=job_id, connection=connection)
         execution.refresh()
         return execution
-    
+
     def refresh(self):
         """Refresh execution data from Redis."""
         data = self.connection.hgetall(self.key)
         if not data:
             raise ValueError(f'Execution {self.id} not found in Redis')
         self.created_at = datetime.fromtimestamp(float(data[b'created_at']))
+        self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']))
 
     @classmethod
     def from_composite_key(cls, composite_key: str, connection: Redis) -> 'Execution':
@@ -57,7 +60,7 @@ class Execution:
     def create(cls, job: Job, ttl: int, pipeline: 'Pipeline') -> 'Execution':
         """Save execution data to Redis."""
         id = uuid4().hex
-        execution = cls(id=id, job_id=job.id, connection=job.connection, created_at=utcnow())
+        execution = cls(id=id, job_id=job.id, connection=job.connection)
         execution.save(ttl=ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
         return execution
@@ -68,25 +71,30 @@ class Execution:
         connection.hset(self.key, mapping=self.serialize())
         # Still unsure how to handle TTL, but this should be tied to heartbeat TTL
         connection.expire(self.key, ttl)
-    
+
     def delete(self, pipeline: 'Pipeline'):
         """Delete an execution from Redis."""
         pipeline.delete(self.key)
         ExecutionRegistry(job_id=self.job_id, connection=self.connection).remove(execution=self, pipeline=pipeline)
-    
+
     def serialize(self) -> Dict:
-        return {'id': self.id, 'created_at': self.created_at.timestamp()}
+        return {
+            'id': self.id,
+            'created_at': self.created_at.timestamp(),
+            'last_heartbeat': self.last_heartbeat.timestamp(),
+        }
 
 
 class ExecutionRegistry(BaseRegistry):
     """Class to represent a registry of executions."""
+
     key_template = 'rq:executions:{0}'
 
     def __init__(self, job_id: str, connection: Redis):
         self.connection = connection
         self.job_id = job_id
         self.key = self.key_template.format(job_id)
-    
+
     def cleanup(self, timestamp: Optional[float] = None):
         """Remove expired jobs from registry.
 
@@ -114,7 +122,7 @@ class ExecutionRegistry(BaseRegistry):
         # Still unsure how to handle registry TTL, but it should be the same as job TTL
         pipeline.expire(self.key, ttl + 60)
         return
-    
+
     def remove(self, execution: Execution, pipeline: 'Pipeline') -> Any:  # type: ignore
         """Remove an execution from registry."""
         return pipeline.zrem(self.key, execution.id)

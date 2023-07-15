@@ -25,6 +25,7 @@ class TestRegistry(RQTestCase):
         execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
         self.assertEqual(execution.created_at, created_at)
         self.assertEqual(execution.composite_key, composite_key)
+        self.assertEqual(execution.last_heartbeat, created_at)
 
         execution.delete(pipeline=pipeline)
         pipeline.execute()
