@@ -818,6 +818,7 @@ class Queue:
                 "retry": job_data.retry,
                 "on_success": job_data.on_success,
                 "on_failure": job_data.on_failure,
+                "on_stopped": job_data.on_stopped,
             }
 
         # Enqueue jobs without dependencies
