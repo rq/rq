@@ -55,6 +55,13 @@ class JobStatus(str, Enum):
     CANCELED = 'canceled'
 
 
+def parse_job_id(job_or_execution_id: str) -> str:
+    """Parse a string and returns job ID. This function supports both job ID and execution composite key."""
+    if ':' in job_or_execution_id:
+        return job_or_execution_id.split(':')[0]
+    return job_or_execution_id
+
+
 class Dependency:
     def __init__(self, jobs: List[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
         """The definition of a Dependency.
@@ -588,7 +595,7 @@ class Job:
             Job: The Job instance
         """
         # TODO: this method needs to support fetching jobs based on execution ID
-        job = cls(id, connection=connection, serializer=serializer)
+        job = cls(parse_job_id(id), connection=connection, serializer=serializer)
         job.refresh()
         return job
 
@@ -608,13 +615,14 @@ class Job:
         Returns:
             jobs (list[Job]): A list of Jobs instances.
         """
+        parsed_ids = [parse_job_id(job_id) for job_id in job_ids]
         with connection.pipeline() as pipeline:
-            for job_id in job_ids:
+            for job_id in parsed_ids:
                 pipeline.hgetall(cls.key_for(job_id))
             results = pipeline.execute()
 
         jobs: List[Optional['Job']] = []
-        for i, job_id in enumerate(job_ids):
+        for i, job_id in enumerate(parsed_ids):
             if not results[i]:
                 jobs.append(None)
                 continue
