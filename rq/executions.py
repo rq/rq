@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
-from .utils import current_timestamp, now, utcnow
+from .utils import as_text, current_timestamp, now, utcnow
 
 
 def get_key(job_id: str) -> str:
@@ -94,7 +94,9 @@ class Execution:
 
 
 class ExecutionRegistry(BaseRegistry):
-    """Class to represent a registry of executions."""
+    """Class to represent a registry of job executions.
+    Each job has its own execution registry.
+    """
 
     key_template = 'rq:executions:{0}'
 
@@ -110,7 +112,7 @@ class ExecutionRegistry(BaseRegistry):
         seconds since the Unix epoch. timestamp defaults to call time if
         unspecified.
         """
-        score = timestamp if timestamp is not None else current_timestamp() - 60
+        score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
     def add(self, execution: Execution, ttl: int, pipeline: 'Pipeline') -> Any:  # type: ignore
@@ -126,7 +128,7 @@ class ExecutionRegistry(BaseRegistry):
             result (int): The ZADD command result
         """
         score = current_timestamp() + ttl
-        pipeline.zadd(self.key, {execution.id: score})
+        pipeline.zadd(self.key, {execution.id: score + 60})
         # Still unsure how to handle registry TTL, but it should be the same as job TTL
         pipeline.expire(self.key, ttl + 60)
         return
@@ -134,3 +136,7 @@ class ExecutionRegistry(BaseRegistry):
     def remove(self, execution: Execution, pipeline: 'Pipeline') -> Any:  # type: ignore
         """Remove an execution from registry."""
         return pipeline.zrem(self.key, execution.id)
+
+    def get_execution_ids(self, start: int = 0, end: int = -1):
+        """Returns all executions IDs in registry"""
+        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]

@@ -1304,9 +1304,12 @@ class Worker(BaseWorker):
 
         https://github.com/rq/rq/issues/1450
         """
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:            
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
             ttl = self.get_heartbeat_ttl(job)
+            # Also need to update execution's heartbeat
+            self.execution.heartbeat(ttl, pipeline=pipeline)  # type: ignore
+            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
             job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
             if results[2] == 1:
@@ -1424,7 +1427,7 @@ class Worker(BaseWorker):
                 except redis.exceptions.WatchError:
                     continue
     
-    def handle_job_completion(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
+    def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
         """Called after job has finished execution."""
         job.ended_at = utcnow()
         job.heartbeat(utcnow(), heartbeat_ttl)
@@ -1455,7 +1458,7 @@ class Worker(BaseWorker):
                 rv = job.perform()
                 self.log.debug('Finished performing Job ID %s', job.id)
 
-            self.handle_job_completion(job, queue, job.success_callback_timeout)
+            self.handle_execution_ended(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
@@ -1466,7 +1469,7 @@ class Worker(BaseWorker):
         except:  # NOQA
             self.log.debug('Job %s raised an exception.', job.id)
 
-            self.handle_job_completion(job, queue, job.failure_callback_timeout)
+            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
