@@ -448,7 +448,7 @@ class BaseWorker:
             # to run clean_registries().
             if queue.acquire_maintenance_lock():
                 self.log.info('Cleaning registries for queue: %s', queue.name)
-                clean_registries(queue)
+                clean_registries(queue, self._exc_handlers)
                 worker_registration.clean_worker_registry(queue)
                 clean_intermediate_queue(self, queue)
                 queue.release_maintenance_lock()
