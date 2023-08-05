@@ -1247,6 +1247,7 @@ class Job:
             remove_from_queue (bool, optional): Whether the job should be removed from the queue. Defaults to True.
             delete_dependents (bool, optional): Whether job dependents should also be deleted. Defaults to False.
         """
+        connection = pipeline if pipeline is not None else self.connection
 
         self._remove_from_registries(pipeline=pipeline, remove_from_queue=remove_from_queue)
 
@@ -1258,6 +1259,8 @@ class Job:
 
             batch = Batch.fetch(self.batch_id, self.connection)
             batch.delete_job(self.id, pipeline=pipeline)
+
+        connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline: Optional['Pipeline'] = None):
         """Delete jobs depending on this job.
