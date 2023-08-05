@@ -1247,7 +1247,6 @@ class Job:
             remove_from_queue (bool, optional): Whether the job should be removed from the queue. Defaults to True.
             delete_dependents (bool, optional): Whether job dependents should also be deleted. Defaults to False.
         """
-        connection = pipeline if pipeline is not None else self.connection
 
         self._remove_from_registries(pipeline=pipeline, remove_from_queue=remove_from_queue)
 
