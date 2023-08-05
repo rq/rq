@@ -873,7 +873,9 @@ class Queue:
         all_jobs = jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
 
         if batch is not None:
-            batch._add_jobs(all_jobs)
+            batch._add_jobs(all_jobs, pipeline=pipe)
+            if pipeline is None:
+                pipe.execute()
 
         return jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
 
