@@ -92,3 +92,14 @@ class Batch:
     def get_key(cls, id: str) -> str:
         """Return the Redis key of the set containing a batch's jobs"""
         return cls.REDIS_BATCH_NAME_PREFIX + id
+
+    @classmethod
+    def clean_batch_registries(cls, connection: 'Redis'):
+        """Loop through batches and delete those that have been deleted.
+        If batch still has jobs in its registry, delete those that have expired"""
+        batches = connection.smembers(Batch.REDIS_BATCH_KEY)
+        for batch in batches:
+            try:
+                batch = Batch.fetch(as_text(batch), connection)
+            except NoSuchBatchError:
+                connection.srem(Batch.REDIS_BATCH_KEY, as_text(batch))

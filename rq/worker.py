@@ -612,7 +612,7 @@ class BaseWorker:
             if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
-        self.clean_batch_registries()
+        Batch.clean_batch_registries(connection=self.connection)
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
@@ -716,16 +716,6 @@ class BaseWorker:
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
         self.log.debug('Sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', timeout)
-
-    def clean_batch_registries(self):
-        """Loop through batches and delete those that have been deleted.
-        If batch still has jobs in its registry, delete those that have expired"""
-        batches = self.connection.smembers(Batch.REDIS_BATCH_KEY)
-        for batch in batches:
-            try:
-                batch = Batch.fetch(as_text(batch), self.connection)
-            except NoSuchBatchError:
-                self.connection.srem(Batch.REDIS_BATCH_KEY, as_text(batch))
 
 
 class Worker(BaseWorker):
