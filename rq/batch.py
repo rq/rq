@@ -39,7 +39,7 @@ class Batch:
         job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
         expired_jobs = []
         with self.connection.pipeline() as p:
-            p.exists(*[Job.key_for() for job in job_ids])
+            p.exists(*[Job.key_for(job) for job in job_ids])
             results = p.execute()
 
         for i, key_exists in enumerate(results):
