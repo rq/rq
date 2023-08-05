@@ -47,9 +47,9 @@ class Batch:
             if not key_exists:
                 expired_jobs.append(job_ids[i])
 
-        for job in expired_jobs:
-            job_ids.remove(job)
-            pipe.srem(self.key, job)
+        if expired_jobs:
+            job_ids = [job for job in job_ids if job not in expired_jobs]
+            pipe.srem(self.key, *expired_jobs)
 
         if not job_ids:
             self.delete()
