@@ -75,6 +75,8 @@ backend, even when outside of the connection context.
 
 ### Pushing/popping connections
 
+deprecated, call `connection` explicitly instead.
+
 If your code does not allow you to use a `with` statement, for example, if you
 want to use this to set up a unit test, you can use the `push_connection()` and
 `pop_connection()` methods instead of using the context manager.
