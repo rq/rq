@@ -26,11 +26,11 @@ class Execution:
         now = utcnow()
         self.created_at = now
         self.last_heartbeat = now
-    
+
     def __hash__(self):
         """Hash execution by id and job_id."""
         return hash(tuple([self.id, self.job_id]))
-    
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):
             return False
@@ -157,7 +157,7 @@ class ExecutionRegistry(BaseRegistry):
         """Returns all executions IDs in registry"""
         self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
-    
+
     def get_executions(self, start: int = 0, end: int = -1) -> List[Execution]:
         """Returns all executions IDs in registry"""
         execution_ids = self.get_execution_ids(start, end)

@@ -17,7 +17,7 @@ from .timeouts import BaseDeathPenalty, JobTimeoutException
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
-
+    from .executions import Execution, ExecutionRegistry
     from .queue import Queue
     from .results import Result
 
@@ -1190,11 +1190,12 @@ class Job:
     @property
     def execution_registry(self) -> 'ExecutionRegistry':
         from .executions import ExecutionRegistry
+
         return ExecutionRegistry(self.id, connection=self.connection)
-    
+
     def get_executions(self) -> List['Execution']:
         return self.execution_registry.get_executions()
-    
+
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
         from .registry import BaseRegistry
 

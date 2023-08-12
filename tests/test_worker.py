@@ -776,7 +776,7 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
         self.assertEqual(self.testconn.get(job.key), None)
         self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
-    
+
     def test_worker_sets_job_status(self):
         """Ensure that worker correctly sets job status."""
         q = Queue()
@@ -886,7 +886,7 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
-    
+
     def test_cleanup_execution(self):
         """Cleanup execution does the necessary bookkeeping."""
         queue = Queue(connection=self.testconn)

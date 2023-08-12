@@ -247,12 +247,18 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_int
     # Silence stdout (thanks to <https://stackoverflow.com/a/28321717/14153673>)
     # with open(os.devnull, 'w') as devnull:
     #     with contextlib.redirect_stdout(devnull):
-    w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs), job_monitoring_interval=job_monitoring_interval or DEFAULT_JOB_MONITORING_INTERVAL)
+    w = Worker(
+        [queue_name],
+        name=worker_name,
+        connection=Redis(**conn_kwargs),
+        job_monitoring_interval=job_monitoring_interval or DEFAULT_JOB_MONITORING_INTERVAL,
+    )
     w.work(burst=burst)
 
 
-def start_worker_process(queue_name, connection=None, worker_name=None, burst=False,
-                         job_monitoring_interval: Optional[int] = None) -> Process:
+def start_worker_process(
+    queue_name, connection=None, worker_name=None, burst=False, job_monitoring_interval: Optional[int] = None
+) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.
     """

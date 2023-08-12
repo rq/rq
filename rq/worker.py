@@ -509,7 +509,7 @@ class BaseWorker:
                 job._handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
-            
+
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
@@ -528,7 +528,7 @@ class BaseWorker:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
-    
+
     def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
         """Sets the current job id.
         If `None` is used it will delete the current job key.
@@ -697,7 +697,7 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
-    
+
     def get_heartbeat_ttl(self, job: 'Job') -> int:
         """Get's the TTL for the next heartbeat.
 
@@ -1304,7 +1304,7 @@ class Worker(BaseWorker):
 
     def maintain_heartbeats(self, job: 'Job'):
         """Updates worker, execution and job's last heartbeat fields."""
-        with self.connection.pipeline() as pipeline:            
+        with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
             ttl = self.get_heartbeat_ttl(job)
             # Also need to update execution's heartbeat
@@ -1313,7 +1313,7 @@ class Worker(BaseWorker):
             # After transition to job execution is complete, `job.heartbeat()` is no longer needed
             job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
-            
+
             # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
             # a race condition could happen where heartbeat arrives after job has been deleted,
             # leaving a job key that contains only `last_heartbeat` field.
@@ -1382,8 +1382,8 @@ class Worker(BaseWorker):
             self.log.debug('Job preparation finished.')
 
         msg = 'Processing {0} from {1} since {2}'
-        self.procline(msg.format(job.func_name, job.origin, time.time()))   
-        return self.execution 
+        self.procline(msg.format(job.func_name, job.origin, time.time()))
+        return self.execution
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
@@ -1418,7 +1418,6 @@ class Worker(BaseWorker):
                         # We have to do it ourselves to make sure everything runs in a transaction
                         pipeline.multi()
 
-                    
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
@@ -1439,7 +1438,7 @@ class Worker(BaseWorker):
                     break
                 except redis.exceptions.WatchError:
                     continue
-    
+
     def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
         """Called after job has finished execution."""
         job.ended_at = utcnow()
@@ -1495,7 +1494,7 @@ class Worker(BaseWorker):
             self.handle_exception(job, *exc_info)
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
-            )            
+            )
             return False
 
         finally:

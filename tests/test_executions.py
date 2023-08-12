@@ -52,7 +52,7 @@ class TestRegistry(RQTestCase):
         execution.delete(pipeline=pipeline)
         pipeline.execute()
         self.assertEqual(self.connection.zcard(registry.key), 0)
-    
+
     def test_ttl(self):
         """Execution registry and job execution should follow heartbeat TTL"""
         queue = Queue(connection=self.connection)
@@ -111,7 +111,7 @@ class TestRegistry(RQTestCase):
 
         registry = job.execution_registry
         self.assertEqual(set(registry.get_execution_ids()), {execution.id, execution_2.id})
-    
+
     def test_execution_added_to_started_job_registry(self):
         """Ensure worker adds execution to started job registry"""
         queue = Queue(connection=self.connection)
@@ -119,18 +119,19 @@ class TestRegistry(RQTestCase):
         worker = Worker([queue], connection=self.connection)
 
         # Start worker process in background with 1 second monitoring interval
-        process = start_worker_process(queue.name, worker_name='w1', connection=self.connection,
-                                       burst=True, job_monitoring_interval=1)
+        process = start_worker_process(
+            queue.name, worker_name='w1', connection=self.connection, burst=True, job_monitoring_interval=1
+        )
 
         sleep(0.5)
         # Job/execution should be registered in started job registry
         execution = job.get_executions()[0]
-        
+
         last_heartbeat = execution.last_heartbeat
         last_heartbeat = utcnow()
         self.assertTrue(30 < self.connection.ttl(execution.key) < 200)
         self.assertIn(job.id, job.started_job_registry.get_job_ids())
-        
+
         sleep(3.5)
         # During execution, heartbeat should be updated, note that this test is flaky
         execution.refresh()
@@ -138,4 +139,3 @@ class TestRegistry(RQTestCase):
         process.join(10)
 
         self.assertEqual(job.get_status(), 'finished')
-        
