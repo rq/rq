@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from uuid import uuid4
 
 from redis import Redis
@@ -26,10 +26,22 @@ class Execution:
         now = utcnow()
         self.created_at = now
         self.last_heartbeat = now
+    
+    def __hash__(self):
+        return hash(tuple([self.id, self.job_id]))
+    
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Execution):
+            return False
+        return self.id == other.id
 
     @property
     def key(self) -> str:
         return f'rq:execution:{self.composite_key}'
+
+    @property
+    def job(self) -> Job:
+        return Job(id=self.job_id, connection=self.connection)
 
     @property
     def composite_key(self):
@@ -63,6 +75,8 @@ class Execution:
         execution = cls(id=id, job_id=job.id, connection=job.connection)
         execution.save(ttl=ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
+        # TODO: important! needs to add test to ensure that when job starts, it's added to StartedJobRegistry
+        job.started_job_registry.add(job, ttl, pipeline=pipeline, xx=False)
         return execution
 
     def save(self, ttl: int, pipeline: Optional['Pipeline'] = None):
@@ -84,12 +98,13 @@ class Execution:
             'last_heartbeat': self.last_heartbeat.timestamp(),
         }
 
-    def heartbeat(self, ttl: int, pipeline: 'Pipeline'):
+    def heartbeat(self, started_job_registry: StartedJobRegistry, ttl: int, pipeline: 'Pipeline'):
         """Update execution heartbeat."""
         # TODO: worker heartbeat should be tied to execution heartbeat
         self.last_heartbeat = utcnow()
         pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
         pipeline.expire(self.key, ttl)
+        started_job_registry.add(self.job, ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(execution=self, ttl=ttl, pipeline=pipeline)
 
 
@@ -137,6 +152,16 @@ class ExecutionRegistry(BaseRegistry):
         """Remove an execution from registry."""
         return pipeline.zrem(self.key, execution.id)
 
-    def get_execution_ids(self, start: int = 0, end: int = -1):
+    def get_execution_ids(self, start: int = 0, end: int = -1) -> List[str]:
         """Returns all executions IDs in registry"""
+        self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
+    
+    def get_executions(self, start: int = 0, end: int = -1) -> List[Execution]:
+        """Returns all executions IDs in registry"""
+        execution_ids = self.get_execution_ids(start, end)
+        executions = []
+        # TODO: This operation should be pipelined, preferably using Execution.fetch_many()
+        for execution_id in execution_ids:
+            executions.append(Execution.fetch(id=execution_id, job_id=self.job_id, connection=self.connection))
+        return executions
