@@ -729,7 +729,7 @@ class Job:
         self.last_heartbeat = timestamp
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
-        self.started_job_registry.add(self, ttl, pipeline=pipeline, xx=xx)
+        # self.started_job_registry.add(self, ttl, pipeline=pipeline, xx=xx)
 
     id = property(get_id, set_id)
 

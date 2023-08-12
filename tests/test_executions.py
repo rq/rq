@@ -71,7 +71,7 @@ class TestRegistry(RQTestCase):
         self.assertTrue(1 < self.connection.ttl(job.execution_registry.key) < 160)
         self.assertTrue(1 < self.connection.ttl(worker.execution.key) < 160)
         with self.connection.pipeline() as pipeline:
-            worker.execution.heartbeat(200, pipeline)  # type: ignore
+            worker.execution.heartbeat(job.started_job_registry, 200, pipeline)  # type: ignore
             pipeline.execute()
 
         # The actual TTL should be 260 seconds for registry and 200 seconds for execution

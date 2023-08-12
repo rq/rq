@@ -28,6 +28,7 @@ class Execution:
         self.last_heartbeat = now
     
     def __hash__(self):
+        """Hash execution by id and job_id."""
         return hash(tuple([self.id, self.job_id]))
     
     def __eq__(self, other: object) -> bool:
@@ -104,7 +105,7 @@ class Execution:
         self.last_heartbeat = utcnow()
         pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
         pipeline.expire(self.key, ttl)
-        started_job_registry.add(self.job, ttl, pipeline=pipeline)
+        started_job_registry.add(self.job, ttl, pipeline=pipeline, xx=True)
         ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(execution=self, ttl=ttl, pipeline=pipeline)
 
 
