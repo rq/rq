@@ -1245,10 +1245,10 @@ class TestJob(RQTestCase):
         job_sleep_seconds = 2
         block_seconds = 5
         queue_name = "test_blocking_queue"
-        q = Queue(queue_name)
+        q = Queue(queue_name, connection=self.connection)
         job = q.enqueue(fixtures.long_running_job, job_sleep_seconds)
         started_at = time.time()
-        fixtures.start_worker_process(queue_name, burst=True)
+        fixtures.start_worker_process(queue_name, connection=self.connection, burst=True)
         result = job.latest_result(timeout=block_seconds)
         blocked_for = time.time() - started_at
         self.assertEqual(job.get_status(), JobStatus.FINISHED)

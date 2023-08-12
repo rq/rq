@@ -776,7 +776,7 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
         self.assertEqual(self.testconn.get(job.key), None)
         self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
-
+    
     def test_worker_sets_job_status(self):
         """Ensure that worker correctly sets job status."""
         q = Queue()

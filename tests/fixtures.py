@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from multiprocessing import Process
+from typing import Optional
 
 from redis import Redis
 
@@ -237,7 +238,7 @@ class Serializer:
         pass
 
 
-def start_worker(queue_name, conn_kwargs, worker_name, burst):
+def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval=None):
     """
     Start a worker. We accept only serializable args, so that this can be
     executed via multiprocessing.
@@ -246,16 +247,19 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst):
     with open(os.devnull, 'w') as devnull:
         with contextlib.redirect_stdout(devnull):
             w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs))
+            if job_monitoring_interval:
+                w.job_monitoring_interval = job_monitoring_interval
             w.work(burst=burst)
 
 
-def start_worker_process(queue_name, connection=None, worker_name=None, burst=False):
+def start_worker_process(queue_name, connection=None, worker_name=None, burst=False,
+                         job_monitoring_interval: Optional[int] = None) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.
     """
     connection = connection or get_current_connection()
     conn_kwargs = connection.connection_pool.connection_kwargs
-    p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst))
+    p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
     p.start()
     return p
 

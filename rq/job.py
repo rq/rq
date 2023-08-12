@@ -1192,6 +1192,9 @@ class Job:
         from .executions import ExecutionRegistry
         return ExecutionRegistry(self.id, connection=self.connection)
     
+    def get_executions(self) -> List['Execution']:
+        return self.execution_registry.get_executions()
+    
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
         from .registry import BaseRegistry
 
