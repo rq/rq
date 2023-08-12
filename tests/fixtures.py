@@ -17,6 +17,7 @@ from redis import Redis
 from rq import Connection, Queue, get_current_connection, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
+from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.worker import HerokuWorker, Worker
 
@@ -246,14 +247,9 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_int
     # Silence stdout (thanks to <https://stackoverflow.com/a/28321717/14153673>)
     with open(os.devnull, 'w') as devnull:
         with contextlib.redirect_stdout(devnull):
-            if job_monitoring_interval:
-                w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs),
-                            job_monitoring_interval=job_monitoring_interval)
-            else:
-                w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs))
-    # if job_monitoring_interval:
-    #     w.job_monitoring_interval = job_monitoring_interval
-    w.work(burst=burst)
+            w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs),
+                       job_monitoring_interval=job_monitoring_interval or DEFAULT_JOB_MONITORING_INTERVAL)
+            w.work(burst=burst)
 
 
 def start_worker_process(queue_name, connection=None, worker_name=None, burst=False,
