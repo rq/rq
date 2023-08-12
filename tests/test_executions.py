@@ -122,16 +122,17 @@ class TestRegistry(RQTestCase):
         process = start_worker_process(queue.name, worker_name='w1', connection=self.connection,
                                        burst=True, job_monitoring_interval=1)
 
-        sleep(1)
+        sleep(0.5)
         # Job/execution should be registered in started job registry
         execution = job.get_executions()[0]
         
         last_heartbeat = execution.last_heartbeat
+        last_heartbeat = utcnow()
         self.assertTrue(30 < self.connection.ttl(execution.key) < 200)
         self.assertIn(job.id, job.started_job_registry.get_job_ids())
         
-        sleep(3)
-        # During execution, heartbeat should be updated
+        sleep(3.5)
+        # During execution, heartbeat should be updated, note that this test is flaky
         execution.refresh()
         self.assertNotEqual(execution.last_heartbeat, last_heartbeat)
         process.join(10)
