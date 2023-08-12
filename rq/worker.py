@@ -569,6 +569,31 @@ class BaseWorker:
             return None
         return self.job_class.fetch(job_id, self.connection, self.serializer)
 
+    def set_state(self, state: str, pipeline: Optional['Pipeline'] = None):
+        """Sets the worker's state.
+
+        Args:
+            state (str): The state
+            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
+        """
+        self._state = state
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'state', state)
+
+    def _set_state(self, state):
+        """Raise a DeprecationWarning if ``worker.state = X`` is used"""
+        warnings.warn("worker.state is deprecated, use worker.set_state() instead.", DeprecationWarning)
+        self.set_state(state)
+
+    def get_state(self) -> str:
+        return self._state
+
+    def _get_state(self):
+        """Raise a DeprecationWarning if ``worker.state == X`` is used"""
+        warnings.warn("worker.state is deprecated, use worker.get_state() instead.", DeprecationWarning)
+        return self.get_state()
+
+    state = property(_get_state, _set_state)
 
     def _start_scheduler(
         self,
@@ -672,6 +697,33 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
+    
+    def get_heartbeat_ttl(self, job: 'Job') -> int:
+        """Get's the TTL for the next heartbeat.
+
+        Args:
+            job (Job): The Job
+
+        Returns:
+            int: The heartbeat TTL.
+        """
+        if job.timeout and job.timeout > 0:
+            remaining_execution_time = job.timeout - self.current_job_working_time
+            return min(remaining_execution_time, self.job_monitoring_interval) + 60
+        else:
+            return self.job_monitoring_interval + 60
+
+    def prepare_execution(self, job: 'Job'):
+        """This method is called by the main `Worker` (not the horse) as it prepares for execution.
+        Do not confuse this with worker.prepare_job_execution() which is called by the horse.
+        """
+        with self.connection.pipeline() as pipeline:
+            heartbeat_ttl = self.get_heartbeat_ttl(job)
+            self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
+            self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
+            pipeline.execute()
+        # self.execution = Execution(self.connection, self.job_class, self.serializer)
+        # self.set_current_job_id(self.execution.job_id)
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
@@ -906,32 +958,6 @@ class Worker(BaseWorker):
         death_timestamp = self.connection.hget(self.key, 'death')
         if death_timestamp is not None:
             return utcparse(as_text(death_timestamp))
-
-    def set_state(self, state: str, pipeline: Optional['Pipeline'] = None):
-        """Sets the worker's state.
-
-        Args:
-            state (str): The state
-            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
-        """
-        self._state = state
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'state', state)
-
-    def _set_state(self, state):
-        """Raise a DeprecationWarning if ``worker.state = X`` is used"""
-        warnings.warn("worker.state is deprecated, use worker.set_state() instead.", DeprecationWarning)
-        self.set_state(state)
-
-    def get_state(self) -> str:
-        return self._state
-
-    def _get_state(self):
-        """Raise a DeprecationWarning if ``worker.state == X`` is used"""
-        warnings.warn("worker.state is deprecated, use worker.get_state() instead.", DeprecationWarning)
-        return self.get_state()
-
-    state = property(_get_state, _set_state)
 
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
         """Sets the current job working time in seconds
@@ -1196,21 +1222,6 @@ class Worker(BaseWorker):
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
 
-    def get_heartbeat_ttl(self, job: 'Job') -> int:
-        """Get's the TTL for the next heartbeat.
-
-        Args:
-            job (Job): The Job
-
-        Returns:
-            int: The heartbeat TTL.
-        """
-        if job.timeout and job.timeout > 0:
-            remaining_execution_time = job.timeout - self.current_job_working_time
-            return min(remaining_execution_time, self.job_monitoring_interval) + 60
-        else:
-            return self.job_monitoring_interval + 60
-
     def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
@@ -1286,7 +1297,7 @@ class Worker(BaseWorker):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
-        self.set_state(WorkerStatus.BUSY)
+        self.prepare_execution(job)
         self.fork_work_horse(job, queue)
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
@@ -1347,7 +1358,7 @@ class Worker(BaseWorker):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False):
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> Execution:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1371,7 +1382,8 @@ class Worker(BaseWorker):
             self.log.debug('Job preparation finished.')
 
         msg = 'Processing {0} from {1} since {2}'
-        self.procline(msg.format(job.func_name, job.origin, time.time()))    
+        self.procline(msg.format(job.func_name, job.origin, time.time()))   
+        return self.execution 
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
@@ -1577,7 +1589,7 @@ class Worker(BaseWorker):
 class SimpleWorker(Worker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
-        self.set_state(WorkerStatus.BUSY)
+        self.prepare_execution(job)
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
