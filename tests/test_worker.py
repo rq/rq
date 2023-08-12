@@ -1444,6 +1444,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             subprocess_pid = int(f.read().strip())
         self.assertTrue(psutil.pid_exists(subprocess_pid))
 
+        w.prepare_execution(job)
         with mock.patch.object(w, 'handle_work_horse_killed', wraps=w.handle_work_horse_killed) as mocked:
             w.monitor_work_horse(job, queue)
             self.assertEqual(mocked.call_count, 1)

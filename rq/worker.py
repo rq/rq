@@ -1306,7 +1306,7 @@ class Worker(BaseWorker):
         """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = self.get_heartbeat_ttl(job)
+            ttl = int(self.get_heartbeat_ttl(job))
             # Also need to update execution's heartbeat
 
             self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
