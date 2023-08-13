@@ -12,7 +12,7 @@ import importlib
 import logging
 import numbers
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -227,7 +227,7 @@ def current_timestamp() -> int:
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
 
 
-def backend_class(holder, default_name, override=None):
+def backend_class(holder, default_name, override=None) -> TypeVar('T'):
     """Get a backend class using its default attribute name or an override
 
     Args:
