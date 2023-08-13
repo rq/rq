@@ -222,7 +222,7 @@ class BaseWorker:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
-    
+
     @classmethod
     def find_by_key(
         cls,
@@ -485,7 +485,7 @@ class BaseWorker:
         """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
-    
+
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """To be implemented by subclasses."""
         raise NotImplementedError
@@ -579,6 +579,34 @@ class BaseWorker:
         finally:
             self.teardown()
         return bool(completed_jobs)
+
+    def handle_warm_shutdown_request(self):
+        self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
+
+    def reorder_queues(self, reference_queue: 'Queue'):
+        """Reorder the queues according to the strategy.
+        As this can be defined both in the `Worker` initialization or in the `work` method,
+        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
+
+        Args:
+            reference_queue (Union[Queue, str]): The queues to reorder
+        """
+        if self._dequeue_strategy is None:
+            self._dequeue_strategy = DequeueStrategy.DEFAULT
+
+        if self._dequeue_strategy not in ("default", "random", "round_robin"):
+            raise ValueError(
+                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
+            )
+        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
+            return
+        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
+            pos = self._ordered_queues.index(reference_queue)
+            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+            return
+        if self._dequeue_strategy == DequeueStrategy.RANDOM:
+            shuffle(self._ordered_queues)
+            return
 
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None, exc_string=''):
         """
@@ -839,6 +867,31 @@ class BaseWorker:
         if before_state:
             self.set_state(before_state)
 
+    def procline(self, message):
+        """Changes the current procname for the process.
+
+        This can be used to make `ps -ef` output more readable.
+        """
+        setprocname(f'rq:worker:{self.name}: {message}')
+
+    def set_shutdown_requested_date(self):
+        """Sets the date on which the worker received a (warm) shutdown request"""
+        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
+
+    @property
+    def shutdown_requested_date(self):
+        """Fetches shutdown_requested_date from Redis."""
+        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
+        if shutdown_requested_timestamp is not None:
+            return utcparse(as_text(shutdown_requested_timestamp))
+
+    @property
+    def death_date(self):
+        """Fetches death date from Redis."""
+        death_timestamp = self.connection.hget(self.key, 'death')
+        if death_timestamp is not None:
+            return utcparse(as_text(death_timestamp))
+
     def run_maintenance_tasks(self):
         """
         Runs periodic maintenance tasks, these include:
@@ -1009,7 +1062,6 @@ class BaseWorker:
 
 
 class Worker(BaseWorker):
-
     @property
     def horse_pid(self):
         """The horse's process ID.  Only available in the worker.  Will return
@@ -1025,31 +1077,6 @@ class Worker(BaseWorker):
     @property
     def connection_timeout(self) -> int:
         return self.dequeue_timeout + 10
-
-    def procline(self, message):
-        """Changes the current procname for the process.
-
-        This can be used to make `ps -ef` output more readable.
-        """
-        setprocname(f'rq:worker:{self.name}: {message}')
-
-    def set_shutdown_requested_date(self):
-        """Sets the date on which the worker received a (warm) shutdown request"""
-        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
-
-    @property
-    def shutdown_requested_date(self):
-        """Fetches shutdown_requested_date from Redis."""
-        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
-        if shutdown_requested_timestamp is not None:
-            return utcparse(as_text(shutdown_requested_timestamp))
-
-    @property
-    def death_date(self):
-        """Fetches death date from Redis."""
-        death_timestamp = self.connection.hget(self.key, 'death')
-        if death_timestamp is not None:
-            return utcparse(as_text(death_timestamp))
 
     def kill_horse(self, sig: signal.Signals = SIGKILL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -1135,34 +1162,6 @@ class Worker(BaseWorker):
             if self.scheduler:
                 self.stop_scheduler()
             raise StopRequested()
-
-    def handle_warm_shutdown_request(self):
-        self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
-
-    def reorder_queues(self, reference_queue: 'Queue'):
-        """Reorder the queues according to the strategy.
-        As this can be defined both in the `Worker` initialization or in the `work` method,
-        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
-
-        Args:
-            reference_queue (Union[Queue, str]): The queues to reorder
-        """
-        if self._dequeue_strategy is None:
-            self._dequeue_strategy = DequeueStrategy.DEFAULT
-
-        if self._dequeue_strategy not in ("default", "random", "round_robin"):
-            raise ValueError(
-                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
-            )
-        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
-            return
-        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
-            pos = self._ordered_queues.index(reference_queue)
-            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
-            return
-        if self._dequeue_strategy == DequeueStrategy.RANDOM:
-            shuffle(self._ordered_queues)
-            return
 
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -1570,7 +1569,7 @@ class SimpleWorker(Worker):
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
         else:
-            return (job.timeout or DEFAULT_WORKER_TTL) + 60
+            return int((job.timeout or DEFAULT_WORKER_TTL)) + 60
 
 
 class HerokuWorker(Worker):

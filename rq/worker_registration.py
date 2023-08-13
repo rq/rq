@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from redis.client import Pipeline
 
     from .queue import Queue
-    from .worker import Worker
+    from .worker import BaseWorker
 
 from rq.utils import split_list
 
@@ -16,7 +16,7 @@ REDIS_WORKER_KEYS = 'rq:workers'
 MAX_KEYS = 1000
 
 
-def register(worker: 'Worker', pipeline: Optional['Pipeline'] = None):
+def register(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
     """
     Store worker key in Redis so we can easily discover active workers.
 
@@ -31,7 +31,7 @@ def register(worker: 'Worker', pipeline: Optional['Pipeline'] = None):
         connection.sadd(redis_key, worker.key)
 
 
-def unregister(worker: 'Worker', pipeline: Optional['Pipeline'] = None):
+def unregister(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
     """Remove Worker key from Redis
 
     Args:
