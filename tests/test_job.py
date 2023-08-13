@@ -185,6 +185,7 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(fixtures.say_hello)
         worker = Worker([queue], connection=self.connection)
+        worker.prepare_execution(job=job)
         worker.prepare_job_execution(job=job)
         execution = worker.execution
         self.assertEqual(Job.fetch(execution.composite_key, self.testconn), job)  # type: ignore
@@ -211,6 +212,7 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(fixtures.say_hello)
         worker = Worker([queue], connection=self.connection)
+        worker.prepare_execution(job=job)
         worker.prepare_job_execution(job=job)
         execution = worker.execution
         self.assertEqual(Job.fetch_many([execution.composite_key], self.testconn), [job])  # type: ignore

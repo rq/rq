@@ -930,11 +930,11 @@ class BaseWorker:
         """
         if job.timeout and job.timeout > 0:
             remaining_execution_time = job.timeout - self.current_job_working_time
-            return min(remaining_execution_time, self.job_monitoring_interval) + 60
+            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
         else:
             return self.job_monitoring_interval + 60
 
-    def prepare_execution(self, job: 'Job'):
+    def prepare_execution(self, job: 'Job') -> Execution:
         """This method is called by the main `Worker` (not the horse) as it prepares for execution.
         Do not confuse this with worker.prepare_job_execution() which is called by the horse.
         """
@@ -943,8 +943,7 @@ class BaseWorker:
             self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
             self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
             pipeline.execute()
-        # self.execution = Execution(self.connection, self.job_class, self.serializer)
-        # self.set_current_job_id(self.execution.job_id)
+        return self.execution
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
@@ -1441,7 +1440,7 @@ class Worker(BaseWorker):
             self.set_current_job_working_time(0, pipeline=pipeline)
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
-            self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
+            # self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 

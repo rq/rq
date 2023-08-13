@@ -180,7 +180,7 @@ class TestRegistry(RQTestCase):
 
         job = queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
-
+        worker.prepare_execution(job)
         worker.prepare_job_execution(job)
         self.assertIn(job.id, registry.get_job_ids())
         self.assertTrue(job.is_started)
@@ -191,7 +191,7 @@ class TestRegistry(RQTestCase):
 
         # Job that fails
         job = queue.enqueue(div_by_zero)
-
+        worker.prepare_execution(job)
         worker.prepare_job_execution(job)
         self.assertIn(job.id, registry.get_job_ids())
 
@@ -207,6 +207,7 @@ class TestRegistry(RQTestCase):
         job = queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
 
+        worker.prepare_execution(job)
         worker.prepare_job_execution(job)
         self.assertIn(job.id, registry.get_job_ids())
 

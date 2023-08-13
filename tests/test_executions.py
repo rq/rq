@@ -58,7 +58,7 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello, timeout=-1)
         worker = Worker([queue], connection=self.connection)
-        execution = worker.prepare_job_execution(job=job)
+        execution = worker.prepare_execution(job=job)
         self.assertTrue(self.connection.ttl(job.execution_registry.key) >= worker.get_heartbeat_ttl(job))
         self.assertTrue(self.connection.ttl(execution.key) >= worker.get_heartbeat_ttl(job))
 
@@ -67,7 +67,7 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello, timeout=1)
         worker = Worker([queue], connection=self.connection)
-        execution = worker.prepare_job_execution(job=job)
+        execution = worker.prepare_execution(job=job)
 
         # The actual TTL should be 150 seconds
         self.assertTrue(1 < self.connection.ttl(job.execution_registry.key) < 160)
@@ -85,7 +85,7 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         worker = Worker([queue], connection=self.connection)
-        worker.prepare_job_execution(job=job)
+        worker.prepare_execution(job=job)
 
         registry = job.execution_registry
         registry.cleanup()
@@ -105,9 +105,9 @@ class TestRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         worker = Worker([queue], connection=self.connection)
-        execution = worker.prepare_job_execution(job=job)
 
-        execution_2 = worker.prepare_job_execution(job=job)
+        execution = worker.prepare_execution(job=job)
+        execution_2 = worker.prepare_execution(job=job)
 
         registry = job.execution_registry
         self.assertEqual(set(registry.get_execution_ids()), {execution.id, execution_2.id})
@@ -126,6 +126,7 @@ class TestRegistry(RQTestCase):
         sleep(0.5)
         # Job/execution should be registered in started job registry
         execution = job.get_executions()[0]
+        self.assertEqual(len(job.get_executions()), 1)
 
         last_heartbeat = execution.last_heartbeat
         last_heartbeat = utcnow()
@@ -133,7 +134,7 @@ class TestRegistry(RQTestCase):
         self.assertIn(job.id, job.started_job_registry.get_job_ids())
 
         sleep(3.5)
-        # During execution, heartbeat should be updated, note that this test is flaky
+        # During execution, heartbeat should be updated, this test is flaky on MacOS
         execution.refresh()
         self.assertNotEqual(execution.last_heartbeat, last_heartbeat)
         process.join(10)

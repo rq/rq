@@ -299,6 +299,7 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=self.testconn)
         worker = Worker([queue], connection=self.testconn)
         job = queue.enqueue(say_hello)
+        worker.prepare_execution(job)
         worker.prepare_job_execution(job)
         worker.maintain_heartbeats(job)
         self.assertTrue(self.testconn.exists(worker.key))
@@ -874,6 +875,7 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(say_hello)
         worker = Worker([queue])
+        worker.prepare_execution(job)
         worker.prepare_job_execution(job)
 
         # Updates working queue
