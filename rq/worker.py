@@ -1562,11 +1562,13 @@ class Worker(BaseWorker):
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
-
-            self.handle_exception(job, *exc_info)
+            
+            # TODO: reversing the order of handle_job_failure() and handle_exception()
+            # causes Sentry test to fail
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
             )
+            self.handle_exception(job, *exc_info)
             return False
 
         finally:
