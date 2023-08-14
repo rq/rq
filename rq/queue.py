@@ -1328,7 +1328,7 @@ class Queue:
         queues: List['Queue'],
         timeout: Optional[int],
         connection: Optional['Redis'] = None,
-        job_class: Optional['Job'] = None,
+        job_class: Optional[Type['Job']] = None,
         serializer: Any = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
     ) -> Tuple['Job', 'Queue']:
@@ -1356,7 +1356,7 @@ class Queue:
         Returns:
             job, queue (Tuple[Job, Queue]): A tuple of Job, Queue
         """
-        job_class: Job = backend_class(cls, 'job_class', override=job_class)
+        job_cls: Job = backend_class(cls, 'job_class', override=job_class)  # type: ignore
 
         while True:
             queue_keys = [q.key for q in queues]
@@ -1370,12 +1370,12 @@ class Queue:
             queue = cls.from_queue_key(
                 queue_key,
                 connection=connection,
-                job_class=job_class,
+                job_class=job_cls,
                 serializer=serializer,
                 death_penalty_class=death_penalty_class,
             )
             try:
-                job = job_class.fetch(job_id, connection=connection, serializer=serializer)
+                job = job_cls.fetch(job_id, connection=connection, serializer=serializer)
             except NoSuchJobError:
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look

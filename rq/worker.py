@@ -63,7 +63,7 @@ try:
     from setproctitle import setproctitle as setprocname
 except ImportError:
 
-    def setprocname(*args, **kwargs):  # noqa
+    def setprocname(title: str) -> None:
         pass
 
 
@@ -594,6 +594,7 @@ class BaseWorker:
         if self.execution:
             self.execution.delete(pipeline)
             self.execution = None
+
     def handle_warm_shutdown_request(self):
         self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
 
@@ -1430,7 +1431,7 @@ class Worker(BaseWorker):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> Execution:
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1440,7 +1441,6 @@ class Worker(BaseWorker):
             self.set_current_job_working_time(0, pipeline=pipeline)
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
-            # self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
 
@@ -1455,7 +1455,6 @@ class Worker(BaseWorker):
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
-        return self.execution
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
