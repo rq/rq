@@ -24,7 +24,7 @@ from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.serializers import JSONSerializer
-from rq.suspension import resume, suspend
+from rq.suspension import is_suspended, resume, suspend
 from rq.utils import as_text, get_version, utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
@@ -43,6 +43,7 @@ from tests.fixtures import (
     modify_self,
     modify_self_and_error,
     raise_exc_mock,
+    resume_worker,
     run_dummy_heroku_worker,
     save_key_ttl,
     say_hello,
@@ -704,7 +705,9 @@ class TestWorker(RQTestCase):
 
         # idle for 3 seconds because idle_time is less than two rounds of timeout
         now = utcnow()
-        self.assertIsNone(w.dequeue_job_and_maintain_ttl(2, max_idle_time=3))
+        w = Worker([q])
+        w.worker_ttl = 2
+        w.work(max_idle_time=3)
         self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
 
     @slow  # noqa
@@ -975,7 +978,18 @@ class TestWorker(RQTestCase):
         resume(self.testconn)
         w.work(burst=True)
         assert q.count == 0
-        self.assertEqual(os.path.exists(SENTINEL_FILE), True)
+        self.assertEqual(os.path.exists(SENTINEL_FILE), True)        
+
+        suspend(self.testconn)
+
+        # Suspend the worker, and then send resume command in the background
+        q.enqueue(say_hello)
+        p = Process(target=resume_worker, args=(self.connection.connection_pool.connection_kwargs.copy(), 2))
+        p.start()
+        w.worker_ttl = 1
+        w.work(max_jobs=1)
+        p.join(1)
+        self.assertEqual(len(q), 0)
 
     @slow
     def test_suspend_with_duration(self):

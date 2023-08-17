@@ -109,3 +109,7 @@ target-version = "py38"
 [tool.ruff.isort]
 known-first-party = ["rq"]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.pyright]
+reportOptionalMemberAccess = false
+reportOptionalOperand = false

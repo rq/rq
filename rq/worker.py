@@ -536,6 +536,7 @@ class BaseWorker:
         try:
             while True:
                 try:
+                    print('##')
                     self.check_for_suspension(burst)
 
                     if self.should_run_maintenance_tasks:
@@ -858,6 +859,7 @@ class BaseWorker:
         notified = False
 
         while not self._stop_requested and is_suspended(self.connection, self):
+            print('IS Suspended: ', is_suspended(self.connection, self))
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
                 self.log.info('Note: There could still be unfinished jobs on the queue')

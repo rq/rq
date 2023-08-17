@@ -19,6 +19,7 @@ from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
+from rq.suspension import resume, suspend
 from rq.worker import HerokuWorker, Worker
 
 
@@ -229,6 +230,12 @@ def kill_worker(pid: int, double_kill: bool, interval: float = 1.5):
         # give the worker time to switch signal handler
         time.sleep(interval)
         os.kill(pid, signal.SIGTERM)
+
+
+def resume_worker(connection_kwargs: dict, interval: float = 1):
+    # Wait and resume RQ
+    time.sleep(interval)
+    resume(Redis(**connection_kwargs))
 
 
 class Serializer:
