@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from redis import Redis
-    from redis.client import Pipeline
+    from redis.client import Pipeline, PubSub
 
 try:
     from signal import SIGKILL
@@ -193,7 +193,7 @@ class BaseWorker:
         self.current_job_working_time: float = 0
         self.birth_date = None
         self.scheduler: Optional[RQScheduler] = None
-        self.pubsub = None
+        self.pubsub: Optional['PubSub'] = None
         self.pubsub_thread = None
         self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
 
@@ -427,6 +427,10 @@ class BaseWorker:
     @property
     def dequeue_timeout(self) -> int:
         return max(1, self.worker_ttl - 15)
+    
+    @property
+    def connection_timeout(self) -> int:
+        return self.dequeue_timeout + 10
 
     def clean_registries(self):
         """Runs maintenance jobs on each Queue's registries."""
@@ -536,7 +540,6 @@ class BaseWorker:
         try:
             while True:
                 try:
-                    print('##')
                     self.check_for_suspension(burst)
 
                     if self.should_run_maintenance_tasks:
@@ -859,7 +862,6 @@ class BaseWorker:
         notified = False
 
         while not self._stop_requested and is_suspended(self.connection, self):
-            print('IS Suspended: ', is_suspended(self.connection, self))
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
                 self.log.info('Note: There could still be unfinished jobs on the queue')
@@ -1094,6 +1096,48 @@ class BaseWorker:
         """
         pipeline.hincrbyfloat(self.key, 'total_working_time', job_execution_time.total_seconds())
 
+    def handle_exception(self, job: 'Job', *exc_info):
+        """Walks the exception handler stack to delegate exception handling.
+        If the job cannot be deserialized, it will raise when func_name or
+        the other properties are accessed, which will stop exceptions from
+        being properly logged, so we guard against it here.
+        """
+        self.log.debug('Handling exception for %s.', job.id)
+        exc_string = ''.join(traceback.format_exception(*exc_info))
+        try:
+            extra = {
+                'func': job.func_name,
+                'arguments': job.args,
+                'kwargs': job.kwargs,
+            }
+            func_name = job.func_name
+        except DeserializationError:
+            extra = {}
+            func_name = '<DeserializationError>'
+
+        # the properties below should be safe however
+        extra.update({'queue': job.origin, 'job_id': job.id})
+
+        # func_name
+        self.log.error(
+            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
+        )
+
+        for handler in self._exc_handlers:
+            self.log.debug('Invoking exception handler %s', handler)
+            fallthrough = handler(job, *exc_info)
+
+            # Only handlers with explicit return values should disable further
+            # exc handling, so interpret a None return value as True.
+            if fallthrough is None:
+                fallthrough = True
+
+            if not fallthrough:
+                break
+
+    def push_exc_handler(self, handler_func):
+        """Pushes an exception handler onto the exc handler stack."""
+        self._exc_handlers.append(handler_func)
 
 class Worker(BaseWorker):
     @property
@@ -1107,91 +1151,6 @@ class Worker(BaseWorker):
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
-
-    @property
-    def connection_timeout(self) -> int:
-        return self.dequeue_timeout + 10
-
-    def procline(self, message):
-        """Changes the current procname for the process.
-
-        This can be used to make `ps -ef` output more readable.
-        """
-        setprocname(f'rq:worker:{self.name}: {message}')
-
-    def register_birth(self):
-        """Registers its own birth."""
-        self.log.debug('Registering birth of worker %s', self.name)
-        if self.connection.exists(self.key) and not self.connection.hexists(self.key, 'death'):
-            msg = 'There exists an active worker named {0!r} already'
-            raise ValueError(msg.format(self.name))
-        key = self.key
-        queues = ','.join(self.queue_names())
-        with self.connection.pipeline() as p:
-            p.delete(key)
-            now = utcnow()
-            now_in_string = utcformat(now)
-            self.birth_date = now
-
-            mapping = {
-                'birth': now_in_string,
-                'last_heartbeat': now_in_string,
-                'queues': queues,
-                'pid': self.pid,
-                'hostname': self.hostname,
-                'ip_address': self.ip_address,
-                'version': self.version,
-                'python_version': self.python_version,
-            }
-
-            if self.get_redis_server_version() >= (4, 0, 0):
-                p.hset(key, mapping=mapping)
-            else:
-                p.hmset(key, mapping)
-
-            worker_registration.register(self, p)
-            p.expire(key, self.worker_ttl + 60)
-            p.execute()
-
-    def register_death(self):
-        """Registers its own death."""
-        self.log.debug('Registering death')
-        with self.connection.pipeline() as p:
-            # We cannot use self.state = 'dead' here, because that would
-            # rollback the pipeline
-            worker_registration.unregister(self, p)
-            p.hset(self.key, 'death', utcformat(utcnow()))
-            p.expire(self.key, 60)
-            p.execute()
-
-    def set_shutdown_requested_date(self):
-        """Sets the date on which the worker received a (warm) shutdown request"""
-        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
-
-    @property
-    def shutdown_requested_date(self):
-        """Fetches shutdown_requested_date from Redis."""
-        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
-        if shutdown_requested_timestamp is not None:
-            return utcparse(as_text(shutdown_requested_timestamp))
-
-    @property
-    def death_date(self):
-        """Fetches death date from Redis."""
-        death_timestamp = self.connection.hget(self.key, 'death')
-        if death_timestamp is not None:
-            return utcparse(as_text(death_timestamp))
-
-    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
-        """Sets the current job working time in seconds
-
-        Args:
-            current_job_working_time (float): The current job working time in seconds
-            pipeline (Optional[Pipeline], optional): Pipeline to use. Defaults to None.
-        """
-        self.current_job_working_time = current_job_working_time
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
     def kill_horse(self, sig: signal.Signals = SIGKILL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -1296,6 +1255,21 @@ class Worker(BaseWorker):
         else:
             self._horse_pid = child_pid
             self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
+
+    def get_heartbeat_ttl(self, job: 'Job') -> int:
+        """Get's the TTL for the next heartbeat.
+
+        Args:
+            job (Job): The Job
+
+        Returns:
+            int: The heartbeat TTL.
+        """
+        if job.timeout and job.timeout > 0:
+            remaining_execution_time = job.timeout - self.current_job_working_time
+            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
+        else:
+            return self.job_monitoring_interval + 60
 
     def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
         """The worker will monitor the work horse and make sure that it
@@ -1589,49 +1563,6 @@ class Worker(BaseWorker):
                 self.log.info('Result will never expire, clean up result key manually')
 
         return True
-
-    def handle_exception(self, job: 'Job', *exc_info):
-        """Walks the exception handler stack to delegate exception handling.
-        If the job cannot be deserialized, it will raise when func_name or
-        the other properties are accessed, which will stop exceptions from
-        being properly logged, so we guard against it here.
-        """
-        self.log.debug('Handling exception for %s.', job.id)
-        exc_string = ''.join(traceback.format_exception(*exc_info))
-        try:
-            extra = {
-                'func': job.func_name,
-                'arguments': job.args,
-                'kwargs': job.kwargs,
-            }
-            func_name = job.func_name
-        except DeserializationError:
-            extra = {}
-            func_name = '<DeserializationError>'
-
-        # the properties below should be safe however
-        extra.update({'queue': job.origin, 'job_id': job.id})
-
-        # func_name
-        self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
-        )
-
-        for handler in self._exc_handlers:
-            self.log.debug('Invoking exception handler %s', handler)
-            fallthrough = handler(job, *exc_info)
-
-            # Only handlers with explicit return values should disable further
-            # exc handling, so interpret a None return value as True.
-            if fallthrough is None:
-                fallthrough = True
-
-            if not fallthrough:
-                break
-
-    def push_exc_handler(self, handler_func):
-        """Pushes an exception handler onto the exc handler stack."""
-        self._exc_handlers.append(handler_func)
 
     def pop_exc_handler(self):
         """Pops the latest exception handler off of the exc handler stack."""
