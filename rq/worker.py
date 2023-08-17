@@ -684,6 +684,17 @@ class BaseWorker:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
+    
+    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
+        """Sets the current job working time in seconds
+
+        Args:
+            current_job_working_time (float): The current job working time in seconds
+            pipeline (Optional[Pipeline], optional): Pipeline to use. Defaults to None.
+        """
+        self.current_job_working_time = current_job_working_time
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
     def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
         """Sets the current job id.
