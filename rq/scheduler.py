@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
-from typing import Iterable, List, Set, Union
+from typing import Iterable, List, Optional, Set, Union
 
 from redis import ConnectionPool, Redis
 
@@ -114,7 +114,7 @@ class RQScheduler:
 
         return successful_locks
 
-    def prepare_registries(self, queue_names: Iterable[str]):
+    def prepare_registries(self, queue_names: Optional[Iterable[str]] = None):
         """Prepare scheduled job registries for use"""
         self._scheduled_job_registries = []
         if not queue_names:
