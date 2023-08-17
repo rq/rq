@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from redis import Redis
-    from redis.client import Pipeline
+    from redis.client import Pipeline, PubSub
 
 try:
     from signal import SIGKILL
@@ -191,7 +191,7 @@ class BaseWorker:
         self.current_job_working_time: float = 0
         self.birth_date = None
         self.scheduler: Optional[RQScheduler] = None
-        self.pubsub = None
+        self.pubsub: Optional['PubSub'] = None
         self.pubsub_thread = None
         self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
 
@@ -425,6 +425,10 @@ class BaseWorker:
     @property
     def dequeue_timeout(self) -> int:
         return max(1, self.worker_ttl - 15)
+    
+    @property
+    def connection_timeout(self) -> int:
+        return self.dequeue_timeout + 10
 
     def clean_registries(self):
         """Runs maintenance jobs on each Queue's registries."""
@@ -1060,6 +1064,48 @@ class BaseWorker:
         """
         pipeline.hincrbyfloat(self.key, 'total_working_time', job_execution_time.total_seconds())
 
+    def handle_exception(self, job: 'Job', *exc_info):
+        """Walks the exception handler stack to delegate exception handling.
+        If the job cannot be deserialized, it will raise when func_name or
+        the other properties are accessed, which will stop exceptions from
+        being properly logged, so we guard against it here.
+        """
+        self.log.debug('Handling exception for %s.', job.id)
+        exc_string = ''.join(traceback.format_exception(*exc_info))
+        try:
+            extra = {
+                'func': job.func_name,
+                'arguments': job.args,
+                'kwargs': job.kwargs,
+            }
+            func_name = job.func_name
+        except DeserializationError:
+            extra = {}
+            func_name = '<DeserializationError>'
+
+        # the properties below should be safe however
+        extra.update({'queue': job.origin, 'job_id': job.id})
+
+        # func_name
+        self.log.error(
+            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
+        )
+
+        for handler in self._exc_handlers:
+            self.log.debug('Invoking exception handler %s', handler)
+            fallthrough = handler(job, *exc_info)
+
+            # Only handlers with explicit return values should disable further
+            # exc handling, so interpret a None return value as True.
+            if fallthrough is None:
+                fallthrough = True
+
+            if not fallthrough:
+                break
+
+    def push_exc_handler(self, handler_func):
+        """Pushes an exception handler onto the exc handler stack."""
+        self._exc_handlers.append(handler_func)
 
 class Worker(BaseWorker):
     @property
@@ -1073,10 +1119,6 @@ class Worker(BaseWorker):
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
-
-    @property
-    def connection_timeout(self) -> int:
-        return self.dequeue_timeout + 10
 
     def kill_horse(self, sig: signal.Signals = SIGKILL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -1193,7 +1235,7 @@ class Worker(BaseWorker):
         """
         if job.timeout and job.timeout > 0:
             remaining_execution_time = job.timeout - self.current_job_working_time
-            return min(remaining_execution_time, self.job_monitoring_interval) + 60
+            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
         else:
             return self.job_monitoring_interval + 60
 
@@ -1478,49 +1520,6 @@ class Worker(BaseWorker):
                 self.log.info('Result will never expire, clean up result key manually')
 
         return True
-
-    def handle_exception(self, job: 'Job', *exc_info):
-        """Walks the exception handler stack to delegate exception handling.
-        If the job cannot be deserialized, it will raise when func_name or
-        the other properties are accessed, which will stop exceptions from
-        being properly logged, so we guard against it here.
-        """
-        self.log.debug('Handling exception for %s.', job.id)
-        exc_string = ''.join(traceback.format_exception(*exc_info))
-        try:
-            extra = {
-                'func': job.func_name,
-                'arguments': job.args,
-                'kwargs': job.kwargs,
-            }
-            func_name = job.func_name
-        except DeserializationError:
-            extra = {}
-            func_name = '<DeserializationError>'
-
-        # the properties below should be safe however
-        extra.update({'queue': job.origin, 'job_id': job.id})
-
-        # func_name
-        self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
-        )
-
-        for handler in self._exc_handlers:
-            self.log.debug('Invoking exception handler %s', handler)
-            fallthrough = handler(job, *exc_info)
-
-            # Only handlers with explicit return values should disable further
-            # exc handling, so interpret a None return value as True.
-            if fallthrough is None:
-                fallthrough = True
-
-            if not fallthrough:
-                break
-
-    def push_exc_handler(self, handler_func):
-        """Pushes an exception handler onto the exc handler stack."""
-        self._exc_handlers.append(handler_func)
 
     def pop_exc_handler(self):
         """Pops the latest exception handler off of the exc handler stack."""
