@@ -79,6 +79,7 @@ def get_redis_from_config(settings, connection_class=Redis):
         'ssl': ssl,
         'ssl_ca_certs': settings.get('REDIS_SSL_CA_CERTS', None),
         'ssl_cert_reqs': settings.get('REDIS_SSL_CERT_REQS', 'required'),
+        'ssl_ca_data': settings.get('REDIS_SSL_CA_DATA', None),
     }
 
     return connection_class(**kwargs)
