@@ -98,8 +98,8 @@ def create_file_after_timeout(path, timeout):
     create_file(path)
 
 
-def create_file_after_timeout_and_setsid(path, timeout):
-    os.setsid()
+def create_file_after_timeout_and_setpgrp(path, timeout):
+    os.setpgrp()
     create_file_after_timeout(path, timeout)
 
 
