@@ -125,6 +125,7 @@ class BaseWorker:
         self,
         queues,
         name: Optional[str] = None,
+        version: Optional[str] = VERSION,
         default_result_ttl=DEFAULT_RESULT_TTL,
         connection: Optional['Redis'] = None,
         exc_handler=None,
@@ -151,7 +152,8 @@ class BaseWorker:
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
-        self.version = VERSION
+        self.version = version
+        self.rq_version = VERSION
         self.python_version = sys.version
         self.serializer = resolve_serializer(serializer)
 
@@ -346,6 +348,7 @@ class BaseWorker:
             'ip_address',
             'pid',
             'version',
+            'rq_version',
             'python_version',
         )
         (
@@ -362,12 +365,14 @@ class BaseWorker:
             ip_address,
             pid,
             version,
+            rq_version,
             python_version,
         ) = data
         self.hostname = as_text(hostname) if hostname else None
         self.ip_address = as_text(ip_address) if ip_address else None
         self.pid = int(pid) if pid else None
         self.version = as_text(version) if version else None
+        self.rq_version = as_text(rq_version) if rq_version else None
         self.python_version = as_text(python_version) if python_version else None
         self._state = as_text(state or '?')
         self._job_id = job_id or None
@@ -803,6 +808,7 @@ class BaseWorker:
                 'hostname': self.hostname,
                 'ip_address': self.ip_address,
                 'version': self.version,
+                'rq_version': self.rq_version,
                 'python_version': self.python_version,
             }
 
@@ -844,7 +850,7 @@ class BaseWorker:
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self.register_birth()
-        self.log.info('Worker %s started with PID %d, version %s', self.key, os.getpid(), VERSION)
+        self.log.info('Worker %s, version %s, started with PID %d, rq_version %s', self.key, self.version, os.getpid(), self.rq_version)
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
