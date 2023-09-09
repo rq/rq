@@ -430,7 +430,7 @@ class BaseWorker:
     @property
     def dequeue_timeout(self) -> int:
         return max(1, self.worker_ttl - 15)
-    
+
     @property
     def connection_timeout(self) -> int:
         return self.dequeue_timeout + 10
@@ -850,7 +850,13 @@ class BaseWorker:
         """
         setup_loghandlers(logging_level, date_format, log_format)
         self.register_birth()
-        self.log.info('Worker %s, version %s, started with PID %d, rq_version %s', self.key, self.version, os.getpid(), self.rq_version)
+        self.log.info(
+            'Worker %s, version %s, started with PID %d, rq_version %s',
+            self.key,
+            self.version,
+            os.getpid(),
+            self.rq_version,
+        )
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
@@ -1112,6 +1118,7 @@ class BaseWorker:
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
+
 
 class Worker(BaseWorker):
     @property
