@@ -6,6 +6,7 @@ import warnings
 import zlib
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
@@ -1646,7 +1647,7 @@ class Retry:
 
 class Callback:
     def __init__(self, func: Union[str, Callable[..., Any]], timeout: Optional[Any] = None):
-        if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
+        if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func) and not isinstance(func, partial):
             raise ValueError('Callback `func` must be a string or function')
 
         self.func = func
