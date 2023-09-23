@@ -309,10 +309,7 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEqual(q.count, 1)
-        self.assertEqual(
-            Queue.dequeue_any([Queue(), Queue('low')], timeout=None, connection=self.connection),
-            None
-        )
+        self.assertEqual(Queue.dequeue_any([Queue(), Queue('low')], timeout=None, connection=self.connection), None)
         self.assertEqual(q.count, 0)
 
     def test_enqueue_with_ttl(self):
