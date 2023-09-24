@@ -881,9 +881,10 @@ class TestWorker(RQTestCase):
         worker.prepare_execution(job)
         worker.prepare_job_execution(job)
 
-        # Updates working queue
+        # Updates working queue, job execution should be there
         registry = StartedJobRegistry(connection=self.testconn)
-        self.assertEqual(registry.get_job_ids(), [job.id])
+        self.assertTrue(job.id in registry.get_job_ids())
+        self.assertTrue(worker.execution.composite_key in registry.get_job_ids())
 
         # Updates worker's current job
         self.assertEqual(worker.get_current_job_id(), job.id)

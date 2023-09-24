@@ -1223,6 +1223,7 @@ class Job:
 
         elif self.is_started:
             from .registry import StartedJobRegistry
+            # TODO: need to cleanup job executions too
 
             registry = StartedJobRegistry(
                 self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
@@ -1238,6 +1239,7 @@ class Job:
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed or self.is_stopped:
+            # TODO: need to cleanup job executions too
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
         elif self.is_canceled:
@@ -1265,7 +1267,7 @@ class Job:
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
-
+        self.execution_registry.delete(pipeline=connection)  # type: ignore
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline: Optional['Pipeline'] = None):

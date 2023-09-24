@@ -78,6 +78,7 @@ class Execution:
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
         # TODO: important! needs to add test to ensure that when job starts, it's added to StartedJobRegistry
         job.started_job_registry.add(job, ttl, pipeline=pipeline, xx=False)
+        job.started_job_registry.add_execution(execution, pipeline=pipeline, ttl=ttl, xx=False)
         return execution
 
     def save(self, ttl: int, pipeline: Optional['Pipeline'] = None):
@@ -166,3 +167,9 @@ class ExecutionRegistry(BaseRegistry):
         for execution_id in execution_ids:
             executions.append(Execution.fetch(id=execution_id, job_id=self.job_id, connection=self.connection))
         return executions
+
+    def delete(self, pipeline: 'Pipeline'):
+        """Delete the registry."""
+        # TODO: should also delete executions within registry
+        executions = self.get_executions()
+        pipeline.delete(self.key, *[execution.key for execution in executions])

@@ -594,8 +594,9 @@ class BaseWorker:
             job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
         )
         self.set_current_job_id(None, pipeline=pipeline)
-        started_job_registry.remove(job, pipeline=pipeline)
+        started_job_registry.remove(job, pipeline=pipeline)        
         if self.execution:
+            started_job_registry.remove_execution(self.execution, job=job, pipeline=pipeline)
             self.execution.delete(pipeline)
             self.execution = None
 

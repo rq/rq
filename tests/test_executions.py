@@ -115,7 +115,7 @@ class TestRegistry(RQTestCase):
     def test_execution_added_to_started_job_registry(self):
         """Ensure worker adds execution to started job registry"""
         queue = Queue(connection=self.connection)
-        job = queue.enqueue(long_running_job, timeout=5)
+        job = queue.enqueue(long_running_job, timeout=3)
         worker = Worker([queue], connection=self.connection)
 
         # Start worker process in background with 1 second monitoring interval
@@ -127,16 +127,19 @@ class TestRegistry(RQTestCase):
         # Job/execution should be registered in started job registry
         execution = job.get_executions()[0]
         self.assertEqual(len(job.get_executions()), 1)
+        self.assertIn(execution.composite_key, job.started_job_registry.get_job_ids())
 
         last_heartbeat = execution.last_heartbeat
         last_heartbeat = utcnow()
         self.assertTrue(30 < self.connection.ttl(execution.key) < 200)
         self.assertIn(job.id, job.started_job_registry.get_job_ids())
 
-        sleep(3.5)
+        sleep(2)
         # During execution, heartbeat should be updated, this test is flaky on MacOS
         execution.refresh()
         self.assertNotEqual(execution.last_heartbeat, last_heartbeat)
         process.join(10)
 
+        # When job is done, execution should be removed from started job registry
+        self.assertNotIn(execution.composite_key, job.started_job_registry.get_job_ids())
         self.assertEqual(job.get_status(), 'finished')

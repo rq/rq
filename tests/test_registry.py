@@ -198,6 +198,29 @@ class TestRegistry(RQTestCase):
         worker.perform_job(job, queue)
         self.assertNotIn(job.id, registry.get_job_ids())
 
+    def test_remove_executions(self):
+        """Ensure all executions for a job are removed from registry."""
+        registry = StartedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+        job = queue.enqueue(say_hello)
+
+        execution_1 = worker.prepare_execution(job)
+        execution_2 = worker.prepare_execution(job)
+
+        self.assertIn(execution_1.composite_key, registry.get_job_ids())
+        self.assertIn(execution_2.composite_key, registry.get_job_ids())
+
+        registry.remove_executions(job)
+
+        print(job.get_executions())
+
+        self.assertNotIn(execution_1.composite_key, registry.get_job_ids())
+        self.assertNotIn(execution_2.composite_key, registry.get_job_ids())
+
+        job.delete()
+
+
     def test_job_deletion(self):
         """Ensure job is removed from StartedJobRegistry when deleted."""
         registry = StartedJobRegistry(connection=self.testconn)
