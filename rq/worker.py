@@ -1539,6 +1539,7 @@ class Worker(BaseWorker):
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
             self.log.debug('Job %s raised an exception.', job.id)
+            job._status = JobStatus.FAILED
 
             self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
