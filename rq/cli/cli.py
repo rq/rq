@@ -256,7 +256,7 @@ def worker(
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     try:
-        cleanup_ghosts(cli_config.connection)
+        cleanup_ghosts(cli_config.connection, worker_class=cli_config.worker_class)
         exception_handlers = []
         for h in exception_handler:
             exception_handlers.append(import_attribute(h))
