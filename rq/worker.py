@@ -427,7 +427,7 @@ class BaseWorker:
     @property
     def dequeue_timeout(self) -> int:
         return max(1, self.worker_ttl - 15)
-    
+
     @property
     def connection_timeout(self) -> int:
         return self.dequeue_timeout + 10
@@ -1151,6 +1151,7 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
+
 class Worker(BaseWorker):
     @property
     def horse_pid(self):
@@ -1261,7 +1262,7 @@ class Worker(BaseWorker):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
-            os.setsid()
+            os.setpgrp()
             self.main_work_horse(job, queue)
             os._exit(0)  # just in case
         else:

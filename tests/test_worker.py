@@ -34,7 +34,7 @@ from tests.fixtures import (
     access_self,
     create_file,
     create_file_after_timeout,
-    create_file_after_timeout_and_setsid,
+    create_file_after_timeout_and_setpgrp,
     div_by_zero,
     do_nothing,
     kill_worker,
@@ -1578,7 +1578,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo')
 
         path = os.path.join(self.sandbox, 'shouldnt_exist')
-        p = Process(target=create_file_after_timeout_and_setsid, args=(path, 2))
+        p = Process(target=create_file_after_timeout_and_setpgrp, args=(path, 2))
         p.start()
         self.assertEqual(p.exitcode, None)
         time.sleep(0.1)
