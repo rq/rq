@@ -1459,7 +1459,7 @@ class Job:
         logger.debug('Running stopped callbacks for %s', self.id)
         try:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
-                self.stopped_callback(self, self.connection self._stopped_callback_params)
+                self.stopped_callback(self, self.connection, self._stopped_callback_params)
         except Exception:  # noqa
             logger.exception(f'Job {self.id}: error while executing stopped callback')
             raise
@@ -1666,13 +1666,18 @@ class Retry:
 
 
 class Callback:
-    def __init__(self, func: Union[str, Callable[..., Any]], timeout: Optional[Any] = None, params: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        func: Union[str, Callable[..., Any]],
+        timeout: Optional[Any] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ):
         if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
             raise ValueError('Callback `func` must be a string or function')
 
         self.func = func
         self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
-        self.params = params 
+        self.params = params
 
     @property
     def name(self) -> str:
