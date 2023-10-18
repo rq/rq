@@ -979,7 +979,7 @@ class TestWorker(RQTestCase):
         resume(self.testconn)
         w.work(burst=True)
         assert q.count == 0
-        self.assertEqual(os.path.exists(SENTINEL_FILE), True)        
+        self.assertEqual(os.path.exists(SENTINEL_FILE), True)
 
         suspend(self.testconn)
 

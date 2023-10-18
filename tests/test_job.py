@@ -766,7 +766,7 @@ class TestJob(RQTestCase):
 
         job.delete()
         self.assertFalse(job in registry)
-    
+
     def test_job_delete_execution_registry(self):
         """job.delete() also deletes ExecutionRegistry and all job executions"""
         queue = Queue(connection=self.connection)
@@ -777,7 +777,7 @@ class TestJob(RQTestCase):
 
         self.assertTrue(self.connection.exists(job.execution_registry.key))
         self.assertTrue(self.connection.exists(execution.key))
-        job.delete()        
+        job.delete()
         self.assertFalse(self.connection.exists(job.execution_registry.key))
         self.assertFalse(self.connection.exists(execution.key))
 

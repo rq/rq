@@ -594,7 +594,7 @@ class BaseWorker:
             job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
         )
         self.set_current_job_id(None, pipeline=pipeline)
-        started_job_registry.remove(job, pipeline=pipeline)        
+        started_job_registry.remove(job, pipeline=pipeline)
         if self.execution:
             started_job_registry.remove_execution(self.execution, job=job, pipeline=pipeline)
             self.execution.delete(job=job, pipeline=pipeline)
@@ -685,7 +685,7 @@ class BaseWorker:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
-    
+
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
         """Sets the current job working time in seconds
 
@@ -1551,14 +1551,14 @@ class Worker(BaseWorker):
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
-            
+
             # TODO: reversing the order of handle_job_failure() and handle_exception()
             # causes Sentry test to fail
             self.handle_exception(job, *exc_info)
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
             )
-            
+
             return False
 
         finally:

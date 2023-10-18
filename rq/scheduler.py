@@ -41,7 +41,7 @@ class RQScheduler:
         queues,
         connection: Redis,
         interval=1,
-        logging_level: Union[str, int]=logging.INFO,
+        logging_level: Union[str, int] = logging.INFO,
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,

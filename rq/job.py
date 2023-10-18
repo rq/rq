@@ -1223,6 +1223,7 @@ class Job:
 
         elif self.is_started:
             from .registry import StartedJobRegistry
+
             # TODO: need to cleanup job executions too
 
             registry = StartedJobRegistry(

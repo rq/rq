@@ -274,7 +274,7 @@ class StartedJobRegistry(BaseRegistry):
                 pipeline.execute()
 
         return job_ids
-    
+
     def add_execution(self, execution: 'Execution', pipeline: 'Pipeline', ttl=0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
@@ -291,7 +291,7 @@ class StartedJobRegistry(BaseRegistry):
         if score == -1:
             score = '+inf'
 
-        return pipeline.zadd(self.key, {execution.composite_key: score}, xx=xx) # type: ignore
+        return pipeline.zadd(self.key, {execution.composite_key: score}, xx=xx)  # type: ignore
 
     def remove_execution(self, execution: 'Execution', job: 'Job', pipeline: 'Pipeline', delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`
@@ -303,7 +303,12 @@ class StartedJobRegistry(BaseRegistry):
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        print('removing execution', execution.composite_key, job.started_job_registry.key, job.started_job_registry.get_job_ids())
+        print(
+            'removing execution',
+            execution.composite_key,
+            job.started_job_registry.key,
+            job.started_job_registry.get_job_ids(),
+        )
         result = job.connection.zrem(self.key, execution.composite_key)
         print(result)
         # if delete_job:
@@ -311,6 +316,7 @@ class StartedJobRegistry(BaseRegistry):
         return result
 
     # TODO: needs to add a method to cleanup executions
+
 
 class FinishedJobRegistry(BaseRegistry):
     """

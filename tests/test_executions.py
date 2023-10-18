@@ -99,7 +99,7 @@ class TestRegistry(RQTestCase):
         # Expiration should be about 150 seconds (worker.get_heartbeat_ttl(job) + 60)
         registry.cleanup(current_timestamp() + 200)
         self.assertEqual(len(registry), 0)
-    
+
     def test_delete_registry(self):
         """ExecutionRegistry.delete() should delete registry and its executions."""
         queue = Queue(connection=self.connection)
