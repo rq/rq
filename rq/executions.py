@@ -76,8 +76,6 @@ class Execution:
         execution = cls(id=id, job_id=job.id, connection=job.connection)
         execution.save(ttl=ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
-        # TODO: important! needs to add test to ensure that when job starts, it's added to StartedJobRegistry
-        job.started_job_registry.add(job, ttl, pipeline=pipeline, xx=False)
         job.started_job_registry.add_execution(execution, pipeline=pipeline, ttl=ttl, xx=False)
         return execution
 
@@ -88,9 +86,10 @@ class Execution:
         # Still unsure how to handle TTL, but this should be tied to heartbeat TTL
         connection.expire(self.key, ttl)
 
-    def delete(self, pipeline: 'Pipeline'):
+    def delete(self, job: Job, pipeline: 'Pipeline'):
         """Delete an execution from Redis."""
         pipeline.delete(self.key)
+        job.started_job_registry.remove_execution(execution=self, job=job, pipeline=pipeline)
         ExecutionRegistry(job_id=self.job_id, connection=self.connection).remove(execution=self, pipeline=pipeline)
 
     def serialize(self) -> Dict:
@@ -168,8 +167,9 @@ class ExecutionRegistry(BaseRegistry):
             executions.append(Execution.fetch(id=execution_id, job_id=self.job_id, connection=self.connection))
         return executions
 
-    def delete(self, pipeline: 'Pipeline'):
+    def delete(self, job: Job, pipeline: 'Pipeline'):
         """Delete the registry."""
-        # TODO: should also delete executions within registry
         executions = self.get_executions()
-        pipeline.delete(self.key, *[execution.key for execution in executions])
+        for execution in executions:
+            execution.delete(pipeline=pipeline, job=job)
+        pipeline.delete(self.key)

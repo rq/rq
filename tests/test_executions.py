@@ -30,7 +30,7 @@ class TestRegistry(RQTestCase):
         self.assertEqual(execution.composite_key, composite_key)
         self.assertEqual(execution.last_heartbeat, created_at)
 
-        execution.delete(pipeline=pipeline)
+        execution.delete(job=job, pipeline=pipeline)
         pipeline.execute()
 
         self.assertFalse(self.connection.exists(execution.key))
@@ -49,7 +49,7 @@ class TestRegistry(RQTestCase):
         # Registry key TTL should be execution TTL + some buffer time (60 at the moment)
         self.assertTrue(158 <= self.connection.ttl(registry.key) <= 160)
 
-        execution.delete(pipeline=pipeline)
+        execution.delete(pipeline=pipeline, job=job)
         pipeline.execute()
         self.assertEqual(self.connection.zcard(registry.key), 0)
 
@@ -99,6 +99,23 @@ class TestRegistry(RQTestCase):
         # Expiration should be about 150 seconds (worker.get_heartbeat_ttl(job) + 60)
         registry.cleanup(current_timestamp() + 200)
         self.assertEqual(len(registry), 0)
+    
+    def test_delete_registry(self):
+        """ExecutionRegistry.delete() should delete registry and its executions."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue], connection=self.connection)
+        execution = worker.prepare_execution(job=job)
+
+        self.assertIn(execution.composite_key, job.started_job_registry.get_job_ids())
+
+        registry = job.execution_registry
+        pipeline = self.connection.pipeline()
+        registry.delete(job=job, pipeline=pipeline)
+        pipeline.execute()
+
+        self.assertNotIn(execution.composite_key, job.started_job_registry.get_job_ids())
+        self.assertFalse(self.connection.exists(registry.key))
 
     def test_get_execution_ids(self):
         """ExecutionRegistry.get_execution_ids() should return a list of execution IDs"""
@@ -124,7 +141,7 @@ class TestRegistry(RQTestCase):
         )
 
         sleep(0.5)
-        # Job/execution should be registered in started job registry
+        # Execution should be registered in started job registry
         execution = job.get_executions()[0]
         self.assertEqual(len(job.get_executions()), 1)
         self.assertIn(execution.composite_key, job.started_job_registry.get_job_ids())
@@ -132,7 +149,6 @@ class TestRegistry(RQTestCase):
         last_heartbeat = execution.last_heartbeat
         last_heartbeat = utcnow()
         self.assertTrue(30 < self.connection.ttl(execution.key) < 200)
-        self.assertIn(job.id, job.started_job_registry.get_job_ids())
 
         sleep(2)
         # During execution, heartbeat should be updated, this test is flaky on MacOS

@@ -138,7 +138,8 @@ class BaseRegistry:
         """
         connection = pipeline if pipeline is not None else self.connection
         execution_ids = [execution.composite_key for execution in job.get_executions()]
-        return connection.zrem(self.key, *execution_ids)
+        if execution_ids:
+            return connection.zrem(self.key, *execution_ids)
 
     def get_expired_job_ids(self, timestamp: Optional[float] = None):
         """Returns job ids whose score are less than current timestamp.
@@ -302,7 +303,9 @@ class StartedJobRegistry(BaseRegistry):
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        result = connection.zrem(self.key, execution.composite_key)
+        print('removing execution', execution.composite_key, job.started_job_registry.key, job.started_job_registry.get_job_ids())
+        result = job.connection.zrem(self.key, execution.composite_key)
+        print(result)
         # if delete_job:
         #     job.delete()
         return result

@@ -597,7 +597,7 @@ class BaseWorker:
         started_job_registry.remove(job, pipeline=pipeline)        
         if self.execution:
             started_job_registry.remove_execution(self.execution, job=job, pipeline=pipeline)
-            self.execution.delete(pipeline)
+            self.execution.delete(job=job, pipeline=pipeline)
             self.execution = None
 
     def handle_warm_shutdown_request(self):

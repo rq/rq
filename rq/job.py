@@ -1228,6 +1228,7 @@ class Job:
             registry = StartedJobRegistry(
                 self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
             )
+            registry.remove_executions(self, pipeline=pipeline)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
@@ -1267,7 +1268,7 @@ class Job:
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
-        self.execution_registry.delete(pipeline=connection)  # type: ignore
+        self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline: Optional['Pipeline'] = None):
