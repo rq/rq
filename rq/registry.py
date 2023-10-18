@@ -303,14 +303,7 @@ class StartedJobRegistry(BaseRegistry):
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        print(
-            'removing execution',
-            execution.composite_key,
-            job.started_job_registry.key,
-            job.started_job_registry.get_job_ids(),
-        )
         result = job.connection.zrem(self.key, execution.composite_key)
-        print(result)
         # if delete_job:
         #     job.delete()
         return result
