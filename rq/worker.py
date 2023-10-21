@@ -824,11 +824,7 @@ class BaseWorker:
                 'python_version': self.python_version,
             }
 
-            if self.get_redis_server_version() >= (4, 0, 0):
-                p.hset(key, mapping=mapping)
-            else:
-                p.hmset(key, mapping)
-
+            p.hset(key, mapping=mapping)
             worker_registration.register(self, p)
             p.expire(key, self.worker_ttl + 60)
             p.execute()

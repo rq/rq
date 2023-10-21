@@ -1094,11 +1094,7 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
 
         mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
-
-        if self.get_redis_server_version() >= (4, 0, 0):
-            connection.hset(key, mapping=mapping)
-        else:
-            connection.hmset(key, mapping)
+        connection.hset(key, mapping=mapping)
 
     @property
     def supports_redis_streams(self) -> bool:
@@ -1322,10 +1318,7 @@ class Job:
             'started_at': utcformat(self.started_at),  # type: ignore
             'worker_name': worker_name,
         }
-        if self.get_redis_server_version() >= (4, 0, 0):
-            pipeline.hset(self.key, mapping=mapping)
-        else:
-            pipeline.hmset(self.key, mapping=mapping)
+        pipeline.hset(self.key, mapping=mapping)
 
     def _execute(self) -> Any:
         """Actually runs the function with it's *args and **kwargs.
