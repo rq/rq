@@ -3,7 +3,6 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slightly different characteristics.
 """
 
-import contextlib
 import os
 import signal
 import subprocess
@@ -19,7 +18,7 @@ from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
-from rq.suspension import resume, suspend
+from rq.suspension import resume
 from rq.worker import HerokuWorker, Worker
 
 

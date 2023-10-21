@@ -24,7 +24,7 @@ from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.serializers import JSONSerializer
-from rq.suspension import is_suspended, resume, suspend
+from rq.suspension import resume, suspend
 from rq.utils import as_text, get_version, utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus

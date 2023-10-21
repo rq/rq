@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
 from redis import Redis
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
-from .utils import as_text, current_timestamp, now, utcnow
+from .utils import as_text, current_timestamp, utcnow
 
 
 def get_key(job_id: str) -> str:

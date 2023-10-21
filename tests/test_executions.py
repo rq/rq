@@ -1,12 +1,11 @@
 from time import sleep
 
-from tests import RQTestCase
-from tests.fixtures import long_running_job, say_hello, start_worker_process, start_worker
-
-from rq.queue import Queue
-from rq.worker import Worker
 from rq.executions import Execution, ExecutionRegistry
-from rq.utils import current_timestamp, now, utcnow
+from rq.queue import Queue
+from rq.utils import current_timestamp, utcnow
+from rq.worker import Worker
+from tests import RQTestCase
+from tests.fixtures import long_running_job, say_hello, start_worker_process
 
 
 class TestRegistry(RQTestCase):
@@ -133,7 +132,7 @@ class TestRegistry(RQTestCase):
         """Ensure worker adds execution to started job registry"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(long_running_job, timeout=3)
-        worker = Worker([queue], connection=self.connection)
+        Worker([queue], connection=self.connection)
 
         # Start worker process in background with 1 second monitoring interval
         process = start_worker_process(
