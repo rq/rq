@@ -1,5 +1,7 @@
 ### RQ unreleased
 * Dropped support for Python 3.6
+* Dropped support for Redis server < 4
+* Support for multiple job executions. One job can have multiple executions running simultaneously, allowing future support for long running scheduled jobs.
 
 ### RQ 1.15.1 (2023-06-20)
 * Fixed a bug that may cause a crash when cleaning intermediate queue. Thanks @selwin!
