@@ -12,10 +12,6 @@ from .registry import BaseRegistry, StartedJobRegistry
 from .utils import as_text, current_timestamp, utcnow
 
 
-def get_key(job_id: str) -> str:
-    return 'rq:executions:%s' % job_id
-
-
 class Execution:
     """Class to represent an execution of a job."""
 
@@ -26,10 +22,6 @@ class Execution:
         now = utcnow()
         self.created_at = now
         self.last_heartbeat = now
-
-    def __hash__(self):
-        """Hash execution by id and job_id."""
-        return hash(tuple([self.id, self.job_id]))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):

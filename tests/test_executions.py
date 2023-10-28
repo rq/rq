@@ -12,6 +12,18 @@ class TestRegistry(RQTestCase):
     def setUp(self):
         super().setUp()
 
+    def test_equality(self):
+        """Test equality between Execution objects"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        pipeline = self.connection.pipeline()
+        execution_1 = Execution.create(job=job, ttl=100, pipeline=pipeline)
+        execution_2 = Execution.create(job=job, ttl=100, pipeline=pipeline)
+        pipeline.execute()
+        self.assertNotEqual(execution_1, execution_2)
+        fetched_execution = Execution.fetch(id=execution_1.id, job_id=job.id, connection=self.connection)
+        self.assertEqual(execution_1, fetched_execution)
+
     def test_add_delete_executions(self):
         """Test adding and deleting executions"""
         queue = Queue(connection=self.connection)
