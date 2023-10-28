@@ -12,6 +12,7 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
+
     from rq.executions import Execution
 
 from .connections import resolve_connection
@@ -303,7 +304,7 @@ class StartedJobRegistry(BaseRegistry):
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        result = job.connection.zrem(self.key, execution.composite_key)
+        result = connection.zrem(self.key, execution.composite_key)
         # if delete_job:
         #     job.delete()
         return result

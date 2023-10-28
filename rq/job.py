@@ -17,6 +17,7 @@ from .timeouts import BaseDeathPenalty, JobTimeoutException
 if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
+
     from .executions import Execution, ExecutionRegistry
     from .queue import Queue
     from .results import Result
