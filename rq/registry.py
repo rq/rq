@@ -87,17 +87,12 @@ class BaseRegistry:
     def count(self) -> int:
         """Returns the number of jobs in this registry
 
-        CPU time:
-            if class is CanceledJobRegistry, ScheduledJobRegistry, DeferredJobRegistry : O(1)
-            if class is StartedJobRegistry: O(2*log(N)+3*M)
-            if class is FinishedJobRegistry or FailedJobRegistry: O(log(N)+M)
-            where N the number of jobs in the registry and M the number of jobs cleaned up
+        CPU time: O(1)
         RAM space: O(1)
 
         Returns:
             int: _description_
         """
-        self.cleanup()
         return self.connection.zcard(self.key)
 
     def add(self, job: 'Job', ttl=0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
@@ -159,8 +154,9 @@ class BaseRegistry:
 
         Returns:
             _type_: _description_
+
+        CPU time: O(log(N)+M) with N the number of jobs in the registry and M the number of jobs returned
         """
-        self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
 
     def get_queue(self):
