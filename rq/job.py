@@ -97,6 +97,16 @@ def cancel_job(job_id: str, connection: Optional['Redis'] = None, serializer=Non
         connection (Optional[Redis], optional): The Redis Connection. Defaults to None.
         serializer (str, optional): The string of the path to the serializer to use. Defaults to None.
         enqueue_dependents (bool, optional): Whether dependents should still be enqueued. Defaults to False.
+
+    Raises:
+        NoSuchJobError: error getting the job data
+        ValueError: the job's data hash contains keys that are not bytes or string
+        TimeoutFormatError: job's timeout format is invalid
+        InvalidJobOperation: If the job has already been cancelled.
+
+    Complexity:
+        CPU time: O(1)
+        RAM space: O(1)
     """
     Job.fetch(job_id, connection=connection, serializer=serializer).cancel(enqueue_dependents=enqueue_dependents)
 
@@ -586,13 +596,21 @@ class Job:
 
         Returns:
             Job: The Job instance
+
+        Raises:
+            NoSuchJobError: error getting the job data
+            ValueError: the job's data hash contains keys that are not bytes or string
+            TimeoutFormatError: job's timeout format is invalid
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         job = cls(id, connection=connection, serializer=serializer)
         job.refresh()
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List['Job']:
+    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List[Optional['Job']]:
         """
         Bulk version of Job.fetch
 
@@ -605,7 +623,16 @@ class Job:
             serializer (Callable): A serializer
 
         Returns:
-            jobs (list[Job]): A list of Jobs instances.
+            jobs (list[Job]): A list of Jobs instances or None of the job didn't exist.
+
+        Raises:
+            NoSuchJobError: error getting some job data
+            ValueError: one job's data hash contains keys that are not bytes or string
+            TimeoutFormatError: one job's timeout format is invalid
+
+        CPU time: O(n)
+        RAM space: O(n)
+
         """
         with connection.pipeline() as pipeline:
             for job_id in job_ids:
@@ -701,6 +728,9 @@ class Job:
 
         Args:
             value (str): The value to set as Job ID
+
+        Raises:
+            TypeError: if the value is not a string
         """
         if not isinstance(value, str):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
@@ -814,6 +844,15 @@ class Job:
 
         Returns:
             result (Optional[Any]): The job return value.
+
+        Raises:
+            NoSuchJobError: error getting some job data
+            ValueError: one job's data hash contains keys that are not bytes or string
+            TimeoutFormatError: one job's timeout format is invalid
+
+        CPU time: O(n)
+        RAM space: O(n)
+
         """
         from .results import Result
 
@@ -894,6 +933,9 @@ class Job:
 
         Returns:
             result (Result): The Result object
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         from .results import Result
 
@@ -906,7 +948,12 @@ class Job:
             raw_data (_type_): The raw data to load the job data from
 
         Raises:
-            NoSuchJobError: If there way an error getting the job data
+            NoSuchJobError: error getting the job data
+            ValueError: the job's data hash contains keys that are not bytes or string
+            TimeoutFormatError: job's timeout format is invalid
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         obj = decode_redis_hash(raw_data)
         try:
@@ -986,7 +1033,13 @@ class Job:
         """Overwrite the current instance's properties with the values in the
         corresponding Redis key.
 
-        Will raise a NoSuchJobError if no corresponding Redis key exists.
+        Raises:
+            NoSuchJobError: error getting the job data
+            ValueError: the job's data hash contains keys that are not bytes or string
+            TimeoutFormatError: job's timeout format is invalid
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         data = self.connection.hgetall(self.key)
         if not data:
