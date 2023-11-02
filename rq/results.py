@@ -148,8 +148,8 @@ class Result:
 
         If a non-zero timeout is provided, block for a result until timeout is reached.
 
-        CPU Complexity: O(1)
-        RAM Complexity: O(1)
+        CPU time: O(1)
+        RAM space: O(1)
         """
         if timeout:
             # Unlike blpop, xread timeout is in miliseconds. "0-0" is the special value for the

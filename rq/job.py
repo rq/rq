@@ -105,8 +105,8 @@ def cancel_job(job_id: str, connection: Optional['Redis'] = None, serializer=Non
         InvalidJobOperation: If the job has already been cancelled.
 
     Complexity:
-        CPU Complexity: O(1)
-        RAM Complexity: O(1)
+        CPU time: O(1)
+        RAM space: O(1)
     """
     Job.fetch(job_id, connection=connection, serializer=serializer).cancel(enqueue_dependents=enqueue_dependents)
 
@@ -602,8 +602,8 @@ class Job:
             ValueError: the job's data hash contains keys that are not bytes or string
             TimeoutFormatError: job's timeout format is invalid
 
-        CPU Complexity: O(1)
-        RAM Complexity: O(1)
+        CPU time: O(1)
+        RAM space: O(1)
         """
         job = cls(id, connection=connection, serializer=serializer)
         job.refresh()
@@ -630,8 +630,8 @@ class Job:
             ValueError: one job's data hash contains keys that are not bytes or string
             TimeoutFormatError: one job's timeout format is invalid
 
-        CPU Complexity: O(n)
-        RAM Complexity: O(n)
+        CPU time: O(n)
+        RAM space: O(n)
 
         """
         with connection.pipeline() as pipeline:
@@ -850,8 +850,8 @@ class Job:
             ValueError: one job's data hash contains keys that are not bytes or string
             TimeoutFormatError: one job's timeout format is invalid
 
-        CPU Complexity: O(n)
-        RAM Complexity: O(n)
+        CPU time: O(n)
+        RAM space: O(n)
 
         """
         from .results import Result
@@ -934,8 +934,8 @@ class Job:
         Returns:
             result (Result): The Result object
 
-        CPU Complexity: O(1)
-        RAM Complexity: O(1)
+        CPU time: O(1)
+        RAM space: O(1)
         """
         from .results import Result
 
@@ -952,8 +952,8 @@ class Job:
             ValueError: the job's data hash contains keys that are not bytes or string
             TimeoutFormatError: job's timeout format is invalid
 
-        CPU Complexity: O(1)
-        RAM Complexity: O(1)
+        CPU time: O(1)
+        RAM space: O(1)
         """
         obj = decode_redis_hash(raw_data)
         try:
@@ -1038,8 +1038,8 @@ class Job:
             ValueError: the job's data hash contains keys that are not bytes or string
             TimeoutFormatError: job's timeout format is invalid
 
-        CPU Complexity: O(1)
-        RAM Complexity: O(1)
+        CPU time: O(1)
+        RAM space: O(1)
         """
         data = self.connection.hgetall(self.key)
         if not data:
