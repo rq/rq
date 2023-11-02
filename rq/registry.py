@@ -57,7 +57,11 @@ class BaseRegistry:
         self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)
 
     def __len__(self):
-        """Returns the number of jobs in this registry"""
+        """Returns the number of jobs in this registry
+
+        CPU Complexity: O(log(N)+M) with N the number of jobs in the registry and M the number of jobs cleaned up
+        RAM Complexity: O(1)
+        """
         return self.count
 
     def __eq__(self, other):
@@ -82,6 +86,13 @@ class BaseRegistry:
     @property
     def count(self) -> int:
         """Returns the number of jobs in this registry
+
+        CPU Complexity:
+            if class is CanceledJobRegistry, ScheduledJobRegistry, DeferredJobRegistry : O(1)
+            if class is StartedJobRegistry: O(2*log(N)+3*M)
+            if class is FinishedJobRegistry or FailedJobRegistry: O(log(N)+M)
+            where N the number of jobs in the registry and M the number of jobs cleaned up
+        RAM Complexity: O(1)
 
         Returns:
             int: _description_
@@ -221,6 +232,9 @@ class StartedJobRegistry(BaseRegistry):
 
         Args:
             timestamp (datetime): The datetime to use as the limit.
+
+        CPU Complexity: O(2*log(N)+3*M) with N the number of jobs in the registry and M the number of expired jobs
+        RAM Complexity: O(1)
         """
         score = timestamp if timestamp is not None else current_timestamp()
         job_ids = self.get_expired_job_ids(score)
@@ -277,6 +291,9 @@ class FinishedJobRegistry(BaseRegistry):
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
         unspecified.
+
+        CPU Complexity:
+            O(log(N)+M) with N the number of jobs in the registry and M the number of elements removed by the operation.
         """
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
@@ -295,6 +312,9 @@ class FailedJobRegistry(BaseRegistry):
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
         unspecified.
+
+        CPU Complexity:
+            O(log(N)+M) with N the number of jobs in the registry and M the number of elements removed by the operation.
         """
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
@@ -339,7 +359,11 @@ class DeferredJobRegistry(BaseRegistry):
     def cleanup(self):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
+        implemented in BaseRegistry.
+
+        CPU Complexity:
+            O(1)
+        """
         pass
 
 
@@ -373,7 +397,11 @@ class ScheduledJobRegistry(BaseRegistry):
     def cleanup(self):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
+        implemented in BaseRegistry.
+
+        CPU Complexity:
+            O(1)
+        """
         pass
 
     def remove_jobs(self, timestamp: Optional[datetime] = None, pipeline: Optional['Pipeline'] = None):
@@ -434,7 +462,11 @@ class CanceledJobRegistry(BaseRegistry):
     def cleanup(self):
         """This method is only here to prevent errors because this method is
         automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
+        implemented in BaseRegistry.
+
+        CPU Complexity:
+            O(1)
+        """
         pass
 
 

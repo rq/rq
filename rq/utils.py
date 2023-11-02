@@ -67,6 +67,10 @@ def decode_redis_hash(h) -> Dict[str, Any]:
 
     Returns:
         Dict[str, Any]: The decoded Redis data (Dictionary)
+
+    Raises:
+        ValueError: If the redis hash contains keys that are not bytes or string
+
     """
     return dict((as_text(k), h[k]) for k in h)
 
@@ -254,7 +258,11 @@ def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
 
 
 def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
-    """Transfer all kinds of timeout format to an integer representing seconds"""
+    """Transfer all kinds of timeout format to an integer representing seconds
+
+    Raises:
+        TimeoutFormatError: when the timeout format is invalid
+    """
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
             timeout = int(timeout)
