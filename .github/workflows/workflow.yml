@@ -34,7 +34,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-        redis-version: [3, 4, 5, 6, 7]
+        redis-version: [4, 5, 6, 7]
         redis-py-version: [3.5.0]
 
     steps:
@@ -61,7 +61,7 @@ jobs:
         RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
         fail_ci_if_error: false

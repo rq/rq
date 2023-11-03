@@ -46,6 +46,7 @@ from .defaults import (
     DEFAULT_WORKER_TTL,
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
+from .executions import Execution
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
 from .maintenance import clean_intermediate_queue
@@ -62,7 +63,7 @@ try:
     from setproctitle import setproctitle as setprocname
 except ImportError:
 
-    def setprocname(*args, **kwargs):  # noqa
+    def setprocname(title: str) -> None:
         pass
 
 
@@ -154,6 +155,7 @@ class BaseWorker:
         self.version = VERSION
         self.python_version = sys.version
         self.serializer = resolve_serializer(serializer)
+        self.execution: Optional[Execution] = None
 
         queues = [
             self.queue_class(
@@ -584,6 +586,20 @@ class BaseWorker:
             self.teardown()
         return bool(completed_jobs)
 
+    def cleanup_execution(self, job: 'Job', pipeline: 'Pipeline'):
+        """Cleans up the execution of a job.
+        It will remove the job from the `StartedJobRegistry` and deleting the Execution object.
+        """
+        started_job_registry = StartedJobRegistry(
+            job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
+        )
+        self.set_current_job_id(None, pipeline=pipeline)
+        started_job_registry.remove(job, pipeline=pipeline)
+        if self.execution:
+            started_job_registry.remove_execution(self.execution, job=job, pipeline=pipeline)
+            self.execution.delete(job=job, pipeline=pipeline)
+            self.execution = None
+
     def handle_warm_shutdown_request(self):
         self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
 
@@ -641,14 +657,16 @@ class BaseWorker:
                 if not retry:
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
-            started_job_registry.remove(job, pipeline=pipeline)
+            # started_job_registry.remove(job, pipeline=pipeline)
+            # self.execution.delete(pipeline=pipeline)  # type: ignore
+            # self.set_current_job_id(None, pipeline=pipeline)
+            self.cleanup_execution(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
                 job._handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
-            self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
@@ -806,11 +824,7 @@ class BaseWorker:
                 'python_version': self.python_version,
             }
 
-            if self.get_redis_server_version() >= (4, 0, 0):
-                p.hset(key, mapping=mapping)
-            else:
-                p.hmset(key, mapping)
-
+            p.hset(key, mapping=mapping)
             worker_registration.register(self, p)
             p.expire(key, self.worker_ttl + 60)
             p.execute()
@@ -917,6 +931,32 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
+
+    def get_heartbeat_ttl(self, job: 'Job') -> int:
+        """Get's the TTL for the next heartbeat.
+
+        Args:
+            job (Job): The Job
+
+        Returns:
+            int: The heartbeat TTL.
+        """
+        if job.timeout and job.timeout > 0:
+            remaining_execution_time = job.timeout - self.current_job_working_time
+            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
+        else:
+            return self.job_monitoring_interval + 60
+
+    def prepare_execution(self, job: 'Job') -> Execution:
+        """This method is called by the main `Worker` (not the horse) as it prepares for execution.
+        Do not confuse this with worker.prepare_job_execution() which is called by the horse.
+        """
+        with self.connection.pipeline() as pipeline:
+            heartbeat_ttl = self.get_heartbeat_ttl(job)
+            self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
+            self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
+            pipeline.execute()
+        return self.execution
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
@@ -1315,30 +1355,34 @@ class Worker(BaseWorker):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
-        self.set_state(WorkerStatus.BUSY)
+        self.prepare_execution(job)
         self.fork_work_horse(job, queue)
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
     def maintain_heartbeats(self, job: 'Job'):
-        """Updates worker and job's last heartbeat field. If job was
-        enqueued with `result_ttl=0`, a race condition could happen where this heartbeat
-        arrives after job has been deleted, leaving a job key that contains only
-        `last_heartbeat` field.
-
-        hset() is used when updating job's timestamp. This command returns 1 if a new
-        Redis key is created, 0 otherwise. So in this case we check the return of job's
-        heartbeat() command. If a new key was created, this means the job was already
-        deleted. In this case, we simply send another delete command to remove the key.
-
-        https://github.com/rq/rq/issues/1450
-        """
+        """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = self.get_heartbeat_ttl(job)
+            ttl = int(self.get_heartbeat_ttl(job))
+            # Also need to update execution's heartbeat
+
+            self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
+            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
             job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
-            if results[2] == 1:
+
+            # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
+            # a race condition could happen where heartbeat arrives after job has been deleted,
+            # leaving a job key that contains only `last_heartbeat` field.
+
+            # job.heartbeat() uses hset() to update job's timestamp. This command returns 1 if a new
+            # Redis key is created, 0 otherwise. So in this case we check the return of job's
+            # heartbeat() command. If a new key was created, this means the job was already
+            # deleted. In this case, we simply send another delete command to remove the key.
+            # https://github.com/rq/rq/issues/1450
+
+            if results[7] == 1:
                 self.connection.delete(job.key)
 
     def main_work_horse(self, job: 'Job', queue: 'Queue'):
@@ -1372,7 +1416,7 @@ class Worker(BaseWorker):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False):
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1430,7 +1474,6 @@ class Worker(BaseWorker):
                         # We have to do it ourselves to make sure everything runs in a transaction
                         pipeline.multi()
 
-                    self.set_current_job_id(None, pipeline=pipeline)
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
@@ -1441,13 +1484,21 @@ class Worker(BaseWorker):
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
-                    started_job_registry.remove(job, pipeline=pipeline)
+                    self.cleanup_execution(job, pipeline=pipeline)
+                    # self.set_current_job_id(None, pipeline=pipeline)
+                    # started_job_registry.remove(job, pipeline=pipeline)
+                    # self.execution.delete(pipeline)  # type: ignore
 
                     pipeline.execute()
                     self.log.debug('Finished handling successful execution of job %s', job.id)
                     break
                 except redis.exceptions.WatchError:
                     continue
+
+    def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
+        """Called after job has finished execution."""
+        job.ended_at = utcnow()
+        job.heartbeat(utcnow(), heartbeat_ttl)
 
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
@@ -1475,33 +1526,35 @@ class Worker(BaseWorker):
                 rv = job.perform()
                 self.log.debug('Finished performing Job ID %s', job.id)
 
-            job.ended_at = utcnow()
-
+            self.handle_execution_ended(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            job.heartbeat(utcnow(), job.success_callback_timeout)
             job.execute_success_callback(self.death_penalty_class, rv)
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
             self.log.debug('Job %s raised an exception.', job.id)
-            job.ended_at = utcnow()
+            job._status = JobStatus.FAILED
+
+            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
             try:
-                job.heartbeat(utcnow(), job.failure_callback_timeout)
                 job.execute_failure_callback(self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
 
+            # TODO: reversing the order of handle_job_failure() and handle_exception()
+            # causes Sentry test to fail
+            self.handle_exception(job, *exc_info)
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
             )
-            self.handle_exception(job, *exc_info)
+
             return False
 
         finally:
@@ -1552,7 +1605,7 @@ class Worker(BaseWorker):
 class SimpleWorker(Worker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
-        self.set_state(WorkerStatus.BUSY)
+        self.prepare_execution(job)
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
