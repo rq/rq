@@ -11,7 +11,7 @@ from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
 from .utils import as_text, current_timestamp, utcnow
 
-
+# TODO: add execution.worker
 class Execution:
     """Class to represent an execution of a job."""
 

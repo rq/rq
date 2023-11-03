@@ -371,7 +371,7 @@ q.delete(delete_jobs=True) # Passing in `True` will remove all jobs in the queue
 ### On the Design
 
 With RQ, you don't have to set up any queues upfront, and you don't have to
-specify any channels, exchanges, routing rules, or whatnot.  You can just put
+specify any channels, exchanges, routing rules or whatnot.  You can just put
 jobs onto any queue you want.  As soon as you enqueue a job to a queue that
 does not exist yet, it is created on the fly.
 
