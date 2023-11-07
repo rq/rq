@@ -216,7 +216,7 @@ The default serializer used is `pickle`
 
 ```python
 from rq import Worker
-from rq.serialzers import JSONSerializer
+from rq.serializers import JSONSerializer
 
 job = Worker('foo', serializer=JSONSerializer)
 ```
@@ -225,7 +225,7 @@ or when creating from a queue
 
 ```python
 from rq import Queue, Worker
-from rq.serialzers import JSONSerializer
+from rq.serializers import JSONSerializer
 
 w = Queue('foo', serializer=JSONSerializer)
 ```
