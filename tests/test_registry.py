@@ -17,7 +17,6 @@ from rq.registry import (
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, current_timestamp
 from rq.worker import Worker
-
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
