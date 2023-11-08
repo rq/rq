@@ -92,10 +92,22 @@ def clean_worker_registry(queue: 'Queue'):
         results = pipeline.execute()
 
         invalid_keys = []
+        keys_to_check = []
 
         for i, key_exists in enumerate(results):
             if not key_exists:
                 invalid_keys.append(keys[i])
+            else:
+                keys_to_check.append(keys[i])
+
+        if keys_to_check:
+            for to_check_subset in split_list(keys_to_check, MAX_KEYS):
+                for key in to_check_subset:
+                    pipeline.hexists(key, 'state')
+                results = pipeline.execute()
+                for i, key_has_state in enumerate(results):
+                    if not key_has_state:
+                        invalid_keys.append(to_check_subset[i])
 
         if invalid_keys:
             for invalid_subset in split_list(invalid_keys, MAX_KEYS):
