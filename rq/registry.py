@@ -88,7 +88,6 @@ class BaseRegistry:
         Returns:
             int: _description_
         """
-        self.cleanup()
         return self.connection.zcard(self.key)
 
     def add(self, job: 'Job', ttl=0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
@@ -163,7 +162,6 @@ class BaseRegistry:
         Returns:
             _type_: _description_
         """
-        self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
 
     def get_queue(self):
@@ -385,12 +383,6 @@ class DeferredJobRegistry(BaseRegistry):
 
     key_template = 'rq:deferred:{0}'
 
-    def cleanup(self):
-        """This method is only here to prevent errors because this method is
-        automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
-        pass
-
 
 class ScheduledJobRegistry(BaseRegistry):
     """
@@ -418,12 +410,6 @@ class ScheduledJobRegistry(BaseRegistry):
 
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         return self.connection.zadd(self.key, {job.id: timestamp})
-
-    def cleanup(self):
-        """This method is only here to prevent errors because this method is
-        automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
-        pass
 
     def remove_jobs(self, timestamp: Optional[datetime] = None, pipeline: Optional['Pipeline'] = None):
         """Remove jobs whose timestamp is in the past from registry.
@@ -479,12 +465,6 @@ class CanceledJobRegistry(BaseRegistry):
 
     def get_expired_job_ids(self, timestamp: Optional[datetime] = None):
         raise NotImplementedError
-
-    def cleanup(self):
-        """This method is only here to prevent errors because this method is
-        automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
-        pass
 
 
 def clean_registries(queue: 'Queue'):
