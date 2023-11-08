@@ -113,4 +113,5 @@ def clean_worker_registry(queue: 'Queue'):
             for invalid_subset in split_list(invalid_keys, MAX_KEYS):
                 pipeline.srem(WORKERS_BY_QUEUE_KEY % queue.name, *invalid_subset)
                 pipeline.srem(REDIS_WORKER_KEYS, *invalid_subset)
+                pipeline.delete(*invalid_subset)
                 pipeline.execute()
