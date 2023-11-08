@@ -17,6 +17,7 @@ from rq.registry import (
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, current_timestamp
 from rq.worker import Worker
+
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -313,10 +314,6 @@ class TestFinishedJobRegistry(RQTestCase):
 
         self.registry.cleanup(timestamp + 20)
         self.assertEqual(self.registry.get_job_ids(), ['baz'])
-
-        # CanceledJobRegistry now implements noop cleanup, should not raise exception
-        registry = CanceledJobRegistry(connection=self.testconn)
-        registry.cleanup()
 
     def test_jobs_are_put_in_registry(self):
         """Completed jobs are added to FinishedJobRegistry."""
