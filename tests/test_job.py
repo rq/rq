@@ -181,6 +181,16 @@ class TestJob(RQTestCase):
         self.assertEqual(job.kwargs, dict(z=2))
         self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
 
+        # Job.fetch also works with execution IDs
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(fixtures.say_hello)
+        worker = Worker([queue], connection=self.connection)
+        worker.prepare_execution(job=job)
+        worker.prepare_job_execution(job=job)
+        execution = worker.execution
+        self.assertEqual(Job.fetch(execution.composite_key, self.testconn), job)  # type: ignore
+        self.assertEqual(Job.fetch(job.id, self.testconn), job)
+
     def test_fetch_many(self):
         """Fetching many jobs at once."""
         data = {
@@ -197,6 +207,16 @@ class TestJob(RQTestCase):
 
         jobs = Job.fetch_many([job.id, job2.id, 'invalid_id'], self.testconn)
         self.assertEqual(jobs, [job, job2, None])
+
+        # Job.fetch_many also works with execution IDs
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(fixtures.say_hello)
+        worker = Worker([queue], connection=self.connection)
+        worker.prepare_execution(job=job)
+        worker.prepare_job_execution(job=job)
+        execution = worker.execution
+        self.assertEqual(Job.fetch_many([execution.composite_key], self.testconn), [job])  # type: ignore
+        self.assertEqual(Job.fetch_many([job.id], self.testconn), [job])
 
     def test_persistence_of_empty_jobs(self):  # noqa
         """Storing empty jobs."""
@@ -747,6 +767,20 @@ class TestJob(RQTestCase):
         job.delete()
         self.assertFalse(job in registry)
 
+    def test_job_delete_execution_registry(self):
+        """job.delete() also deletes ExecutionRegistry and all job executions"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(fixtures.say_hello)
+        worker = Worker([queue], connection=self.connection)
+
+        execution = worker.prepare_execution(job=job)
+
+        self.assertTrue(self.connection.exists(job.execution_registry.key))
+        self.assertTrue(self.connection.exists(execution.key))
+        job.delete()
+        self.assertFalse(self.connection.exists(job.execution_registry.key))
+        self.assertFalse(self.connection.exists(execution.key))
+
     def test_job_with_dependents_delete_parent_with_saved(self):
         """job.delete() deletes itself from Redis but not dependents. If the
         dependent job was saved, it will remain in redis."""
@@ -1227,10 +1261,10 @@ class TestJob(RQTestCase):
         job_sleep_seconds = 2
         block_seconds = 5
         queue_name = "test_blocking_queue"
-        q = Queue(queue_name)
+        q = Queue(queue_name, connection=self.connection)
         job = q.enqueue(fixtures.long_running_job, job_sleep_seconds)
         started_at = time.time()
-        fixtures.start_worker_process(queue_name, burst=True)
+        fixtures.start_worker_process(queue_name, connection=self.connection, burst=True)
         result = job.latest_result(timeout=block_seconds)
         blocked_for = time.time() - started_at
         self.assertEqual(job.get_status(), JobStatus.FINISHED)

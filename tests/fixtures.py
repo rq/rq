@@ -3,20 +3,22 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slightly different characteristics.
 """
 
-import contextlib
 import os
 import signal
 import subprocess
 import sys
 import time
 from multiprocessing import Process
+from typing import Optional
 
 from redis import Redis
 
 from rq import Connection, Queue, get_current_connection, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.decorators import job
+from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
+from rq.suspension import resume
 from rq.worker import HerokuWorker, Worker
 
 
@@ -98,8 +100,8 @@ def create_file_after_timeout(path, timeout):
     create_file(path)
 
 
-def create_file_after_timeout_and_setsid(path, timeout):
-    os.setsid()
+def create_file_after_timeout_and_setpgrp(path, timeout):
+    os.setpgrp()
     create_file_after_timeout(path, timeout)
 
 
@@ -229,6 +231,12 @@ def kill_worker(pid: int, double_kill: bool, interval: float = 1.5):
         os.kill(pid, signal.SIGTERM)
 
 
+def resume_worker(connection_kwargs: dict, interval: float = 1):
+    # Wait and resume RQ
+    time.sleep(interval)
+    resume(Redis(**connection_kwargs))
+
+
 class Serializer:
     def loads(self):
         pass
@@ -237,25 +245,32 @@ class Serializer:
         pass
 
 
-def start_worker(queue_name, conn_kwargs, worker_name, burst):
+def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval=None):
     """
     Start a worker. We accept only serializable args, so that this can be
     executed via multiprocessing.
     """
     # Silence stdout (thanks to <https://stackoverflow.com/a/28321717/14153673>)
-    with open(os.devnull, 'w') as devnull:
-        with contextlib.redirect_stdout(devnull):
-            w = Worker([queue_name], name=worker_name, connection=Redis(**conn_kwargs))
-            w.work(burst=burst)
+    # with open(os.devnull, 'w') as devnull:
+    #     with contextlib.redirect_stdout(devnull):
+    w = Worker(
+        [queue_name],
+        name=worker_name,
+        connection=Redis(**conn_kwargs),
+        job_monitoring_interval=job_monitoring_interval or DEFAULT_JOB_MONITORING_INTERVAL,
+    )
+    w.work(burst=burst)
 
 
-def start_worker_process(queue_name, connection=None, worker_name=None, burst=False):
+def start_worker_process(
+    queue_name, connection=None, worker_name=None, burst=False, job_monitoring_interval: Optional[int] = None
+) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.
     """
     connection = connection or get_current_connection()
     conn_kwargs = connection.connection_pool.connection_kwargs
-    p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst))
+    p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
     p.start()
     return p
 

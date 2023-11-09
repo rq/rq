@@ -34,7 +34,7 @@ from tests.fixtures import (
     access_self,
     create_file,
     create_file_after_timeout,
-    create_file_after_timeout_and_setsid,
+    create_file_after_timeout_and_setpgrp,
     div_by_zero,
     do_nothing,
     kill_worker,
@@ -43,6 +43,7 @@ from tests.fixtures import (
     modify_self,
     modify_self_and_error,
     raise_exc_mock,
+    resume_worker,
     run_dummy_heroku_worker,
     save_key_ttl,
     say_hello,
@@ -299,6 +300,8 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=self.testconn)
         worker = Worker([queue], connection=self.testconn)
         job = queue.enqueue(say_hello)
+        worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
         worker.maintain_heartbeats(job)
         self.assertTrue(self.testconn.exists(worker.key))
         self.assertTrue(self.testconn.exists(job.key))
@@ -702,7 +705,9 @@ class TestWorker(RQTestCase):
 
         # idle for 3 seconds because idle_time is less than two rounds of timeout
         now = utcnow()
-        self.assertIsNone(w.dequeue_job_and_maintain_ttl(2, max_idle_time=3))
+        w = Worker([q])
+        w.worker_ttl = 2
+        w.work(max_idle_time=3)
         self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
 
     @slow  # noqa
@@ -873,11 +878,13 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(say_hello)
         worker = Worker([queue])
+        worker.prepare_execution(job)
         worker.prepare_job_execution(job)
 
-        # Updates working queue
+        # Updates working queue, job execution should be there
         registry = StartedJobRegistry(connection=self.testconn)
-        self.assertEqual(registry.get_job_ids(), [job.id])
+        # self.assertTrue(job.id in registry.get_job_ids())
+        self.assertTrue(worker.execution.composite_key in registry.get_job_ids())
 
         # Updates worker's current job
         self.assertEqual(worker.get_current_job_id(), job.id)
@@ -885,6 +892,19 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
+
+    def test_cleanup_execution(self):
+        """Cleanup execution does the necessary bookkeeping."""
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue])
+        worker.prepare_job_execution(job)
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(job, pipeline=pipeline)
+            pipeline.execute()
+
+        self.assertEqual(worker.get_current_job_id(), None)
+        self.assertIsNone(worker.execution)
 
     @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
@@ -960,6 +980,17 @@ class TestWorker(RQTestCase):
         w.work(burst=True)
         assert q.count == 0
         self.assertEqual(os.path.exists(SENTINEL_FILE), True)
+
+        suspend(self.testconn)
+
+        # Suspend the worker, and then send resume command in the background
+        q.enqueue(say_hello)
+        p = Process(target=resume_worker, args=(self.connection.connection_pool.connection_kwargs.copy(), 2))
+        p.start()
+        w.worker_ttl = 1
+        w.work(max_jobs=1)
+        p.join(1)
+        self.assertEqual(len(q), 0)
 
     @slow
     def test_suspend_with_duration(self):
@@ -1430,6 +1461,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             subprocess_pid = int(f.read().strip())
         self.assertTrue(psutil.pid_exists(subprocess_pid))
 
+        w.prepare_execution(job)
         with mock.patch.object(w, 'handle_work_horse_killed', wraps=w.handle_work_horse_killed) as mocked:
             w.monitor_work_horse(job, queue)
             self.assertEqual(mocked.call_count, 1)
@@ -1546,7 +1578,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo')
 
         path = os.path.join(self.sandbox, 'shouldnt_exist')
-        p = Process(target=create_file_after_timeout_and_setsid, args=(path, 2))
+        p = Process(target=create_file_after_timeout_and_setpgrp, args=(path, 2))
         p.start()
         self.assertEqual(p.exitcode, None)
         time.sleep(0.1)
