@@ -77,6 +77,9 @@ class BaseRegistry:
 
         Args:
             item (Union[str, Job]): A Job ID or a Job.
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         job_id = item
         if isinstance(item, self.job_class):
@@ -87,11 +90,11 @@ class BaseRegistry:
     def count(self) -> int:
         """Returns the number of jobs in this registry
 
-        CPU time: O(1)
-        RAM space: O(1)
-
         Returns:
             int: _description_
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         return self.connection.zcard(self.key)
 
@@ -106,6 +109,9 @@ class BaseRegistry:
 
         Returns:
             result (int): The ZADD command result
+
+        CPU time: O(log(N)) with N the number of jobs in the registry
+        RAM space: O(1)
         """
         score = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
@@ -122,6 +128,9 @@ class BaseRegistry:
             job (Job): The Job to remove from the registry
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             delete_job (bool, optional): If should delete the job.. Defaults to False.
+
+        CPU time: O(log(N)) with N the number of jobs in the registry
+        RAM space: O(1)
         """
         connection = pipeline if pipeline is not None else self.connection
         job_id = job.id if isinstance(job, self.job_class) else job
@@ -140,6 +149,9 @@ class BaseRegistry:
         Returns ids for jobs with an expiry time earlier than timestamp,
         specified as seconds since the Unix epoch. timestamp defaults to call
         time if unspecified.
+
+        CPU time: O(log(N)+M) with N the number of jobs in the registry and M the number of jobs returned
+        RAM space: O(M)
         """
         score = timestamp if timestamp is not None else current_timestamp()
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
@@ -156,6 +168,7 @@ class BaseRegistry:
             _type_: _description_
 
         CPU time: O(log(N)+M) with N the number of jobs in the registry and M the number of jobs returned
+        RAM space: O(M)
         """
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
 
@@ -168,6 +181,9 @@ class BaseRegistry:
 
         Args:
             job (Job): The Job to get the expiration
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
@@ -184,6 +200,9 @@ class BaseRegistry:
 
         Returns:
             Job: The Requeued Job.
+
+        CPU time: O(log(N))
+        RAM space: O(M)
         """
         if isinstance(job_or_id, self.job_class):
             job = job_or_id

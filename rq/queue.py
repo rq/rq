@@ -1108,6 +1108,9 @@ class Queue:
 
         Returns:
             Job: The enqued job
+
+        CPU time: O(1)
+        RAM space: O(1)
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
