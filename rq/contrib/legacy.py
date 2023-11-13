@@ -5,7 +5,7 @@ from rq import Worker, get_current_connection
 logger = logging.getLogger(__name__)
 
 
-def cleanup_ghosts(conn=None):
+def cleanup_ghosts(conn=None, worker_class=Worker):
     """
     RQ versions < 0.3.6 suffered from a race condition where workers, when
     abruptly terminated, did not have a chance to clean up their worker
@@ -16,7 +16,7 @@ def cleanup_ghosts(conn=None):
     This function will clean up any of such legacy ghosted workers.
     """
     conn = conn if conn else get_current_connection()
-    for worker in Worker.all(connection=conn):
+    for worker in worker_class.all(connection=conn):
         if conn.ttl(worker.key) == -1:
             ttl = worker.worker_ttl
             conn.expire(worker.key, ttl)

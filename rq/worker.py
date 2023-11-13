@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from redis import Redis
-    from redis.client import Pipeline
+    from redis.client import Pipeline, PubSub
 
 try:
     from signal import SIGKILL
@@ -47,6 +47,7 @@ from .defaults import (
     DEFAULT_WORKER_TTL,
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
+from .executions import Execution
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
 from .maintenance import clean_intermediate_queue
@@ -63,7 +64,7 @@ try:
     from setproctitle import setproctitle as setprocname
 except ImportError:
 
-    def setprocname(*args, **kwargs):  # noqa
+    def setprocname(title: str) -> None:
         pass
 
 
@@ -155,6 +156,7 @@ class BaseWorker:
         self.version = VERSION
         self.python_version = sys.version
         self.serializer = resolve_serializer(serializer)
+        self.execution: Optional[Execution] = None
 
         queues = [
             self.queue_class(
@@ -188,11 +190,11 @@ class BaseWorker:
         self.last_cleaned_at = None
         self.successful_job_count: int = 0
         self.failed_job_count: int = 0
-        self.total_working_time: int = 0
+        self.total_working_time: float = 0
         self.current_job_working_time: float = 0
         self.birth_date = None
         self.scheduler: Optional[RQScheduler] = None
-        self.pubsub = None
+        self.pubsub: Optional['PubSub'] = None
         self.pubsub_thread = None
         self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
 
@@ -223,6 +225,56 @@ class BaseWorker:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
+
+    @classmethod
+    def find_by_key(
+        cls,
+        worker_key: str,
+        connection: Optional['Redis'] = None,
+        job_class: Optional[Type['Job']] = None,
+        queue_class: Optional[Type['Queue']] = None,
+        serializer=None,
+    ) -> Optional['BaseWorker']:
+        """Returns a Worker instance, based on the naming conventions for
+        naming the internal Redis keys.  Can be used to reverse-lookup Workers
+        by their Redis keys.
+
+        Args:
+            worker_key (str): The worker key
+            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            job_class (Optional[Type[Job]], optional): The job class if custom class is being used. Defaults to None.
+            queue_class (Optional[Type[Queue]]): The queue class if a custom class is being used. Defaults to None.
+            serializer (Any, optional): The serializer to use. Defaults to None.
+
+        Raises:
+            ValueError: If the key doesn't start with `rq:worker:`, the default worker namespace prefix.
+
+        Returns:
+            worker (Worker): The Worker instance.
+        """
+        prefix = cls.redis_worker_namespace_prefix
+        if not worker_key.startswith(prefix):
+            raise ValueError('Not a valid RQ worker key: %s' % worker_key)
+
+        if connection is None:
+            connection = get_current_connection()
+        if not connection.exists(worker_key):
+            connection.srem(cls.redis_workers_keys, worker_key)
+            return None
+
+        name = worker_key[len(prefix) :]
+        worker = cls(
+            [],
+            name,
+            connection=connection,
+            job_class=job_class,
+            queue_class=queue_class,
+            prepare_for_work=False,
+            serializer=serializer,
+        )
+
+        worker.refresh()
+        return worker
 
     @classmethod
     def all(
@@ -278,6 +330,76 @@ class BaseWorker:
         """
         return len(worker_registration.get_keys(queue=queue, connection=connection))
 
+    def refresh(self):
+        """Refreshes the worker data.
+        It will get the data from the datastore and update the Worker's attributes
+        """
+        data = self.connection.hmget(
+            self.key,
+            'queues',
+            'state',
+            'current_job',
+            'last_heartbeat',
+            'birth',
+            'failed_job_count',
+            'successful_job_count',
+            'total_working_time',
+            'current_job_working_time',
+            'hostname',
+            'ip_address',
+            'pid',
+            'version',
+            'python_version',
+        )
+        (
+            queues,
+            state,
+            job_id,
+            last_heartbeat,
+            birth,
+            failed_job_count,
+            successful_job_count,
+            total_working_time,
+            current_job_working_time,
+            hostname,
+            ip_address,
+            pid,
+            version,
+            python_version,
+        ) = data
+        self.hostname = as_text(hostname) if hostname else None
+        self.ip_address = as_text(ip_address) if ip_address else None
+        self.pid = int(pid) if pid else None
+        self.version = as_text(version) if version else None
+        self.python_version = as_text(python_version) if python_version else None
+        self._state = as_text(state or '?')
+        self._job_id = job_id or None
+        if last_heartbeat:
+            self.last_heartbeat = utcparse(as_text(last_heartbeat))
+        else:
+            self.last_heartbeat = None
+        if birth:
+            self.birth_date = utcparse(as_text(birth))
+        else:
+            self.birth_date = None
+        if failed_job_count:
+            self.failed_job_count = int(as_text(failed_job_count))
+        if successful_job_count:
+            self.successful_job_count = int(as_text(successful_job_count))
+        if total_working_time:
+            self.total_working_time = float(as_text(total_working_time))
+        if current_job_working_time:
+            self.current_job_working_time = float(as_text(current_job_working_time))
+
+        if queues:
+            queues = as_text(queues)
+            self.queues = [
+                self.queue_class(
+                    queue, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+                )
+                for queue in queues.split(',')
+            ]
+
     @property
     def should_run_maintenance_tasks(self):
         """Maintenance tasks should run on first startup or every 10 minutes."""
@@ -306,6 +428,10 @@ class BaseWorker:
     @property
     def dequeue_timeout(self) -> int:
         return max(1, self.worker_ttl - 15)
+
+    @property
+    def connection_timeout(self) -> int:
+        return self.dequeue_timeout + 10
 
     def clean_registries(self):
         """Runs maintenance jobs on each Queue's registries."""
@@ -366,6 +492,10 @@ class BaseWorker:
         """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
+
+    def execute_job(self, job: 'Job', queue: 'Queue'):
+        """To be implemented by subclasses."""
+        raise NotImplementedError
 
     def work(
         self,
@@ -457,6 +587,48 @@ class BaseWorker:
             self.teardown()
         return bool(completed_jobs)
 
+    def cleanup_execution(self, job: 'Job', pipeline: 'Pipeline'):
+        """Cleans up the execution of a job.
+        It will remove the job from the `StartedJobRegistry` and deleting the Execution object.
+        """
+        started_job_registry = StartedJobRegistry(
+            job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
+        )
+        self.set_current_job_id(None, pipeline=pipeline)
+        started_job_registry.remove(job, pipeline=pipeline)
+        if self.execution:
+            started_job_registry.remove_execution(self.execution, job=job, pipeline=pipeline)
+            self.execution.delete(job=job, pipeline=pipeline)
+            self.execution = None
+
+    def handle_warm_shutdown_request(self):
+        self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
+
+    def reorder_queues(self, reference_queue: 'Queue'):
+        """Reorder the queues according to the strategy.
+        As this can be defined both in the `Worker` initialization or in the `work` method,
+        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
+
+        Args:
+            reference_queue (Union[Queue, str]): The queues to reorder
+        """
+        if self._dequeue_strategy is None:
+            self._dequeue_strategy = DequeueStrategy.DEFAULT
+
+        if self._dequeue_strategy not in ("default", "random", "round_robin"):
+            raise ValueError(
+                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
+            )
+        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
+            return
+        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
+            pos = self._ordered_queues.index(reference_queue)
+            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
+            return
+        if self._dequeue_strategy == DequeueStrategy.RANDOM:
+            shuffle(self._ordered_queues)
+            return
+
     def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None, exc_string=''):
         """
         Handles the failure or an executing job by:
@@ -486,14 +658,16 @@ class BaseWorker:
                 if not retry:
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
-            started_job_registry.remove(job, pipeline=pipeline)
+            # started_job_registry.remove(job, pipeline=pipeline)
+            # self.execution.delete(pipeline=pipeline)  # type: ignore
+            # self.set_current_job_id(None, pipeline=pipeline)
+            self.cleanup_execution(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
                 job._handle_failure(exc_string, pipeline=pipeline)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
-            self.set_current_job_id(None, pipeline=pipeline)
             self.increment_failed_job_count(pipeline)
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
@@ -516,6 +690,83 @@ class BaseWorker:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
                 pass
+
+    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
+        """Sets the current job working time in seconds
+
+        Args:
+            current_job_working_time (float): The current job working time in seconds
+            pipeline (Optional[Pipeline], optional): Pipeline to use. Defaults to None.
+        """
+        self.current_job_working_time = current_job_working_time
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'current_job_working_time', current_job_working_time)
+
+    def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
+        """Sets the current job id.
+        If `None` is used it will delete the current job key.
+
+        Args:
+            job_id (Optional[str], optional): The job id. Defaults to None.
+            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        if job_id is None:
+            connection.hdel(self.key, 'current_job')
+        else:
+            connection.hset(self.key, 'current_job', job_id)
+
+    def get_current_job_id(self, pipeline: Optional['Pipeline'] = None) -> Optional[str]:
+        """Retrieves the current job id.
+
+        Args:
+            pipeline (Optional[&#39;Pipeline&#39;], optional): The pipeline to use. Defaults to None.
+
+        Returns:
+            job_id (Optional[str): The job id
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        result = connection.hget(self.key, 'current_job')
+        if result is None:
+            return None
+        return as_text(result)
+
+    def get_current_job(self) -> Optional['Job']:
+        """Returns the currently executing job instance.
+
+        Returns:
+            job (Job): The job instance.
+        """
+        job_id = self.get_current_job_id()
+        if job_id is None:
+            return None
+        return self.job_class.fetch(job_id, self.connection, self.serializer)
+
+    def set_state(self, state: str, pipeline: Optional['Pipeline'] = None):
+        """Sets the worker's state.
+
+        Args:
+            state (str): The state
+            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
+        """
+        self._state = state
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, 'state', state)
+
+    def _set_state(self, state):
+        """Raise a DeprecationWarning if ``worker.state = X`` is used"""
+        warnings.warn("worker.state is deprecated, use worker.set_state() instead.", DeprecationWarning)
+        self.set_state(state)
+
+    def get_state(self) -> str:
+        return self._state
+
+    def _get_state(self):
+        """Raise a DeprecationWarning if ``worker.state == X`` is used"""
+        warnings.warn("worker.state is deprecated, use worker.get_state() instead.", DeprecationWarning)
+        return self.get_state()
+
+    state = property(_get_state, _set_state)
 
     def _start_scheduler(
         self,
@@ -552,6 +803,47 @@ class BaseWorker:
                 self.scheduler.release_locks()
             else:
                 self.scheduler.start()
+
+    def register_birth(self):
+        """Registers its own birth."""
+        self.log.debug('Registering birth of worker %s', self.name)
+        if self.connection.exists(self.key) and not self.connection.hexists(self.key, 'death'):
+            msg = 'There exists an active worker named {0!r} already'
+            raise ValueError(msg.format(self.name))
+        key = self.key
+        queues = ','.join(self.queue_names())
+        with self.connection.pipeline() as p:
+            p.delete(key)
+            now = utcnow()
+            now_in_string = utcformat(now)
+            self.birth_date = now
+
+            mapping = {
+                'birth': now_in_string,
+                'last_heartbeat': now_in_string,
+                'queues': queues,
+                'pid': self.pid,
+                'hostname': self.hostname,
+                'ip_address': self.ip_address,
+                'version': self.version,
+                'python_version': self.python_version,
+            }
+
+            p.hset(key, mapping=mapping)
+            worker_registration.register(self, p)
+            p.expire(key, self.worker_ttl + 60)
+            p.execute()
+
+    def register_death(self):
+        """Registers its own death."""
+        self.log.debug('Registering death')
+        with self.connection.pipeline() as p:
+            # We cannot use self.state = 'dead' here, because that would
+            # rollback the pipeline
+            worker_registration.unregister(self, p)
+            p.hset(self.key, 'death', utcformat(utcnow()))
+            p.expire(self.key, 60)
+            p.execute()
 
     def bootstrap(
         self,
@@ -598,6 +890,31 @@ class BaseWorker:
         if before_state:
             self.set_state(before_state)
 
+    def procline(self, message):
+        """Changes the current procname for the process.
+
+        This can be used to make `ps -ef` output more readable.
+        """
+        setprocname(f'rq:worker:{self.name}: {message}')
+
+    def set_shutdown_requested_date(self):
+        """Sets the date on which the worker received a (warm) shutdown request"""
+        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
+
+    @property
+    def shutdown_requested_date(self):
+        """Fetches shutdown_requested_date from Redis."""
+        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
+        if shutdown_requested_timestamp is not None:
+            return utcparse(as_text(shutdown_requested_timestamp))
+
+    @property
+    def death_date(self):
+        """Fetches death date from Redis."""
+        death_timestamp = self.connection.hget(self.key, 'death')
+        if death_timestamp is not None:
+            return utcparse(as_text(death_timestamp))
+
     def run_maintenance_tasks(self):
         """
         Runs periodic maintenance tasks, these include:
@@ -620,6 +937,32 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
+
+    def get_heartbeat_ttl(self, job: 'Job') -> int:
+        """Get's the TTL for the next heartbeat.
+
+        Args:
+            job (Job): The Job
+
+        Returns:
+            int: The heartbeat TTL.
+        """
+        if job.timeout and job.timeout > 0:
+            remaining_execution_time = job.timeout - self.current_job_working_time
+            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
+        else:
+            return self.job_monitoring_interval + 60
+
+    def prepare_execution(self, job: 'Job') -> Execution:
+        """This method is called by the main `Worker` (not the horse) as it prepares for execution.
+        Do not confuse this with worker.prepare_job_execution() which is called by the horse.
+        """
+        with self.connection.pipeline() as pipeline:
+            heartbeat_ttl = self.get_heartbeat_ttl(job)
+            self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
+            self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
+            pipeline.execute()
+        return self.execution
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
@@ -717,58 +1060,101 @@ class BaseWorker:
         connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
         self.log.debug('Sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', timeout)
 
+    def teardown(self):
+        if not self.is_horse:
+            if self.scheduler:
+                self.stop_scheduler()
+            self.register_death()
+            self.unsubscribe()
 
-class Worker(BaseWorker):
-    @classmethod
-    def find_by_key(
-        cls,
-        worker_key: str,
-        connection: Optional['Redis'] = None,
-        job_class: Optional[Type['Job']] = None,
-        queue_class: Optional[Type['Queue']] = None,
-        serializer=None,
-    ) -> 'Worker':
-        """Returns a Worker instance, based on the naming conventions for
-        naming the internal Redis keys.  Can be used to reverse-lookup Workers
-        by their Redis keys.
+    def stop_scheduler(self):
+        """Ensure scheduler process is stopped
+        Will send the kill signal to scheduler process,
+        if there's an OSError, just passes and `join()`'s the scheduler process,
+        waiting for the process to finish.
+        """
+        if self.scheduler._process and self.scheduler._process.pid:
+            try:
+                os.kill(self.scheduler._process.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            self.scheduler._process.join()
+
+    def increment_failed_job_count(self, pipeline: Optional['Pipeline'] = None):
+        """Used to keep the worker stats up to date in Redis.
+        Increments the failed job count.
 
         Args:
-            worker_key (str): The worker key
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
-            job_class (Optional[Type[Job]], optional): The job class if custom class is being used. Defaults to None.
-            queue_class (Optional[Type[Queue]]): The queue class if a custom class is being used. Defaults to None.
-            serializer (Any, optional): The serializer to use. Defaults to None.
-
-        Raises:
-            ValueError: If the key doesn't start with `rq:worker:`, the default worker namespace prefix.
-
-        Returns:
-            worker (Worker): The Worker instance.
+            pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
         """
-        prefix = cls.redis_worker_namespace_prefix
-        if not worker_key.startswith(prefix):
-            raise ValueError('Not a valid RQ worker key: %s' % worker_key)
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hincrby(self.key, 'failed_job_count', 1)
 
-        if connection is None:
-            connection = get_current_connection()
-        if not connection.exists(worker_key):
-            connection.srem(cls.redis_workers_keys, worker_key)
-            return None
+    def increment_successful_job_count(self, pipeline: Optional['Pipeline'] = None):
+        """Used to keep the worker stats up to date in Redis.
+        Increments the successful job count.
 
-        name = worker_key[len(prefix) :]
-        worker = cls(
-            [],
-            name,
-            connection=connection,
-            job_class=job_class,
-            queue_class=queue_class,
-            prepare_for_work=False,
-            serializer=serializer,
+        Args:
+            pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hincrby(self.key, 'successful_job_count', 1)
+
+    def increment_total_working_time(self, job_execution_time: timedelta, pipeline: 'Pipeline'):
+        """Used to keep the worker stats up to date in Redis.
+        Increments the time the worker has been workig for (in seconds).
+
+        Args:
+            job_execution_time (timedelta): A timedelta object.
+            pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
+        """
+        pipeline.hincrbyfloat(self.key, 'total_working_time', job_execution_time.total_seconds())
+
+    def handle_exception(self, job: 'Job', *exc_info):
+        """Walks the exception handler stack to delegate exception handling.
+        If the job cannot be deserialized, it will raise when func_name or
+        the other properties are accessed, which will stop exceptions from
+        being properly logged, so we guard against it here.
+        """
+        self.log.debug('Handling exception for %s.', job.id)
+        exc_string = ''.join(traceback.format_exception(*exc_info))
+        try:
+            extra = {
+                'func': job.func_name,
+                'arguments': job.args,
+                'kwargs': job.kwargs,
+            }
+            func_name = job.func_name
+        except DeserializationError:
+            extra = {}
+            func_name = '<DeserializationError>'
+
+        # the properties below should be safe however
+        extra.update({'queue': job.origin, 'job_id': job.id})
+
+        # func_name
+        self.log.error(
+            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
         )
 
-        worker.refresh()
-        return worker
+        for handler in self._exc_handlers:
+            self.log.debug('Invoking exception handler %s', handler)
+            fallthrough = handler(job, *exc_info)
 
+            # Only handlers with explicit return values should disable further
+            # exc handling, so interpret a None return value as True.
+            if fallthrough is None:
+                fallthrough = True
+
+            if not fallthrough:
+                break
+
+    def push_exc_handler(self, handler_func):
+        """Pushes an exception handler onto the exc handler stack."""
+        self._exc_handlers.append(handler_func)
+
+
+class Worker(BaseWorker):
     @property
     def horse_pid(self):
         """The horse's process ID.  Only available in the worker.  Will return
@@ -780,157 +1166,6 @@ class Worker(BaseWorker):
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
-
-    @property
-    def connection_timeout(self) -> int:
-        return self.dequeue_timeout + 10
-
-    def procline(self, message):
-        """Changes the current procname for the process.
-
-        This can be used to make `ps -ef` output more readable.
-        """
-        setprocname(f'rq:worker:{self.name}: {message}')
-
-    def register_birth(self):
-        """Registers its own birth."""
-        self.log.debug('Registering birth of worker %s', self.name)
-        if self.connection.exists(self.key) and not self.connection.hexists(self.key, 'death'):
-            msg = 'There exists an active worker named {0!r} already'
-            raise ValueError(msg.format(self.name))
-        key = self.key
-        queues = ','.join(self.queue_names())
-        with self.connection.pipeline() as p:
-            p.delete(key)
-            now = utcnow()
-            now_in_string = utcformat(now)
-            self.birth_date = now
-
-            mapping = {
-                'birth': now_in_string,
-                'last_heartbeat': now_in_string,
-                'queues': queues,
-                'pid': self.pid,
-                'hostname': self.hostname,
-                'ip_address': self.ip_address,
-                'version': self.version,
-                'python_version': self.python_version,
-            }
-
-            if self.get_redis_server_version() >= (4, 0, 0):
-                p.hset(key, mapping=mapping)
-            else:
-                p.hmset(key, mapping)
-
-            worker_registration.register(self, p)
-            p.expire(key, self.worker_ttl + 60)
-            p.execute()
-
-    def register_death(self):
-        """Registers its own death."""
-        self.log.debug('Registering death')
-        with self.connection.pipeline() as p:
-            # We cannot use self.state = 'dead' here, because that would
-            # rollback the pipeline
-            worker_registration.unregister(self, p)
-            p.hset(self.key, 'death', utcformat(utcnow()))
-            p.expire(self.key, 60)
-            p.execute()
-
-    def set_shutdown_requested_date(self):
-        """Sets the date on which the worker received a (warm) shutdown request"""
-        self.connection.hset(self.key, 'shutdown_requested_date', utcformat(self._shutdown_requested_date))
-
-    @property
-    def shutdown_requested_date(self):
-        """Fetches shutdown_requested_date from Redis."""
-        shutdown_requested_timestamp = self.connection.hget(self.key, 'shutdown_requested_date')
-        if shutdown_requested_timestamp is not None:
-            return utcparse(as_text(shutdown_requested_timestamp))
-
-    @property
-    def death_date(self):
-        """Fetches death date from Redis."""
-        death_timestamp = self.connection.hget(self.key, 'death')
-        if death_timestamp is not None:
-            return utcparse(as_text(death_timestamp))
-
-    def set_state(self, state: str, pipeline: Optional['Pipeline'] = None):
-        """Sets the worker's state.
-
-        Args:
-            state (str): The state
-            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
-        """
-        self._state = state
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'state', state)
-
-    def _set_state(self, state):
-        """Raise a DeprecationWarning if ``worker.state = X`` is used"""
-        warnings.warn("worker.state is deprecated, use worker.set_state() instead.", DeprecationWarning)
-        self.set_state(state)
-
-    def get_state(self) -> str:
-        return self._state
-
-    def _get_state(self):
-        """Raise a DeprecationWarning if ``worker.state == X`` is used"""
-        warnings.warn("worker.state is deprecated, use worker.get_state() instead.", DeprecationWarning)
-        return self.get_state()
-
-    state = property(_get_state, _set_state)
-
-    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
-        """Sets the current job working time in seconds
-
-        Args:
-            current_job_working_time (float): The current job working time in seconds
-            pipeline (Optional[Pipeline], optional): Pipeline to use. Defaults to None.
-        """
-        self.current_job_working_time = current_job_working_time
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'current_job_working_time', current_job_working_time)
-
-    def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
-        """Sets the current job id.
-        If `None` is used it will delete the current job key.
-
-        Args:
-            job_id (Optional[str], optional): The job id. Defaults to None.
-            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        if job_id is None:
-            connection.hdel(self.key, 'current_job')
-        else:
-            connection.hset(self.key, 'current_job', job_id)
-
-    def get_current_job_id(self, pipeline: Optional['Pipeline'] = None) -> Optional[str]:
-        """Retrieves the current job id.
-
-        Args:
-            pipeline (Optional[&#39;Pipeline&#39;], optional): The pipeline to use. Defaults to None.
-
-        Returns:
-            job_id (Optional[str): The job id
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        result = connection.hget(self.key, 'current_job')
-        if result is None:
-            return None
-        return as_text(result)
-
-    def get_current_job(self) -> Optional['Job']:
-        """Returns the currently executing job instance.
-
-        Returns:
-            job (Job): The job instance.
-        """
-        job_id = self.get_current_job_id()
-        if job_id is None:
-            return None
-        return self.job_class.fetch(job_id, self.connection, self.serializer)
 
     def kill_horse(self, sig: signal.Signals = SIGKILL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -1017,154 +1252,6 @@ class Worker(BaseWorker):
                 self.stop_scheduler()
             raise StopRequested()
 
-    def handle_warm_shutdown_request(self):
-        self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
-
-    def reorder_queues(self, reference_queue: 'Queue'):
-        """Reorder the queues according to the strategy.
-        As this can be defined both in the `Worker` initialization or in the `work` method,
-        it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
-
-        Args:
-            reference_queue (Union[Queue, str]): The queues to reorder
-        """
-        if self._dequeue_strategy is None:
-            self._dequeue_strategy = DequeueStrategy.DEFAULT
-
-        if self._dequeue_strategy not in ("default", "random", "round_robin"):
-            raise ValueError(
-                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
-            )
-        if self._dequeue_strategy == DequeueStrategy.DEFAULT:
-            return
-        if self._dequeue_strategy == DequeueStrategy.ROUND_ROBIN:
-            pos = self._ordered_queues.index(reference_queue)
-            self._ordered_queues = self._ordered_queues[pos + 1 :] + self._ordered_queues[: pos + 1]
-            return
-        if self._dequeue_strategy == DequeueStrategy.RANDOM:
-            shuffle(self._ordered_queues)
-            return
-
-    def teardown(self):
-        if not self.is_horse:
-            if self.scheduler:
-                self.stop_scheduler()
-            self.register_death()
-            self.unsubscribe()
-
-    def stop_scheduler(self):
-        """Ensure scheduler process is stopped
-        Will send the kill signal to scheduler process,
-        if there's an OSError, just passes and `join()`'s the scheduler process,
-        waiting for the process to finish.
-        """
-        if self.scheduler._process and self.scheduler._process.pid:
-            try:
-                os.kill(self.scheduler._process.pid, signal.SIGTERM)
-            except OSError:
-                pass
-            self.scheduler._process.join()
-
-    def refresh(self):
-        """Refreshes the worker data.
-        It will get the data from the datastore and update the Worker's attributes
-        """
-        data = self.connection.hmget(
-            self.key,
-            'queues',
-            'state',
-            'current_job',
-            'last_heartbeat',
-            'birth',
-            'failed_job_count',
-            'successful_job_count',
-            'total_working_time',
-            'current_job_working_time',
-            'hostname',
-            'ip_address',
-            'pid',
-            'version',
-            'python_version',
-        )
-        (
-            queues,
-            state,
-            job_id,
-            last_heartbeat,
-            birth,
-            failed_job_count,
-            successful_job_count,
-            total_working_time,
-            current_job_working_time,
-            hostname,
-            ip_address,
-            pid,
-            version,
-            python_version,
-        ) = data
-        self.hostname = as_text(hostname) if hostname else None
-        self.ip_address = as_text(ip_address) if ip_address else None
-        self.pid = int(pid) if pid else None
-        self.version = as_text(version) if version else None
-        self.python_version = as_text(python_version) if python_version else None
-        self._state = as_text(state or '?')
-        self._job_id = job_id or None
-        if last_heartbeat:
-            self.last_heartbeat = utcparse(as_text(last_heartbeat))
-        else:
-            self.last_heartbeat = None
-        if birth:
-            self.birth_date = utcparse(as_text(birth))
-        else:
-            self.birth_date = None
-        if failed_job_count:
-            self.failed_job_count = int(as_text(failed_job_count))
-        if successful_job_count:
-            self.successful_job_count = int(as_text(successful_job_count))
-        if total_working_time:
-            self.total_working_time = float(as_text(total_working_time))
-        if current_job_working_time:
-            self.current_job_working_time = float(as_text(current_job_working_time))
-
-        if queues:
-            queues = as_text(queues)
-            self.queues = [
-                self.queue_class(
-                    queue, connection=self.connection, job_class=self.job_class, serializer=self.serializer
-                )
-                for queue in queues.split(',')
-            ]
-
-    def increment_failed_job_count(self, pipeline: Optional['Pipeline'] = None):
-        """Used to keep the worker stats up to date in Redis.
-        Increments the failed job count.
-
-        Args:
-            pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hincrby(self.key, 'failed_job_count', 1)
-
-    def increment_successful_job_count(self, pipeline: Optional['Pipeline'] = None):
-        """Used to keep the worker stats up to date in Redis.
-        Increments the successful job count.
-
-        Args:
-            pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hincrby(self.key, 'successful_job_count', 1)
-
-    def increment_total_working_time(self, job_execution_time: timedelta, pipeline: 'Pipeline'):
-        """Used to keep the worker stats up to date in Redis.
-        Increments the time the worker has been workig for (in seconds).
-
-        Args:
-            job_execution_time (timedelta): A timedelta object.
-            pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
-        """
-        pipeline.hincrbyfloat(self.key, 'total_working_time', job_execution_time.total_seconds())
-
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
         This is where the `fork()` actually happens.
@@ -1177,7 +1264,7 @@ class Worker(BaseWorker):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         if child_pid == 0:
-            os.setsid()
+            os.setpgrp()
             self.main_work_horse(job, queue)
             os._exit(0)  # just in case
         else:
@@ -1195,7 +1282,7 @@ class Worker(BaseWorker):
         """
         if job.timeout and job.timeout > 0:
             remaining_execution_time = job.timeout - self.current_job_working_time
-            return min(remaining_execution_time, self.job_monitoring_interval) + 60
+            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
         else:
             return self.job_monitoring_interval + 60
 
@@ -1274,30 +1361,34 @@ class Worker(BaseWorker):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
-        self.set_state(WorkerStatus.BUSY)
+        self.prepare_execution(job)
         self.fork_work_horse(job, queue)
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
     def maintain_heartbeats(self, job: 'Job'):
-        """Updates worker and job's last heartbeat field. If job was
-        enqueued with `result_ttl=0`, a race condition could happen where this heartbeat
-        arrives after job has been deleted, leaving a job key that contains only
-        `last_heartbeat` field.
-
-        hset() is used when updating job's timestamp. This command returns 1 if a new
-        Redis key is created, 0 otherwise. So in this case we check the return of job's
-        heartbeat() command. If a new key was created, this means the job was already
-        deleted. In this case, we simply send another delete command to remove the key.
-
-        https://github.com/rq/rq/issues/1450
-        """
+        """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = self.get_heartbeat_ttl(job)
+            ttl = int(self.get_heartbeat_ttl(job))
+            # Also need to update execution's heartbeat
+
+            self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
+            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
             job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
-            if results[2] == 1:
+
+            # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
+            # a race condition could happen where heartbeat arrives after job has been deleted,
+            # leaving a job key that contains only `last_heartbeat` field.
+
+            # job.heartbeat() uses hset() to update job's timestamp. This command returns 1 if a new
+            # Redis key is created, 0 otherwise. So in this case we check the return of job's
+            # heartbeat() command. If a new key was created, this means the job was already
+            # deleted. In this case, we simply send another delete command to remove the key.
+            # https://github.com/rq/rq/issues/1450
+
+            if results[7] == 1:
                 self.connection.delete(job.key)
 
     def main_work_horse(self, job: 'Job', queue: 'Queue'):
@@ -1331,7 +1422,7 @@ class Worker(BaseWorker):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False):
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1389,7 +1480,6 @@ class Worker(BaseWorker):
                         # We have to do it ourselves to make sure everything runs in a transaction
                         pipeline.multi()
 
-                    self.set_current_job_id(None, pipeline=pipeline)
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
@@ -1400,7 +1490,10 @@ class Worker(BaseWorker):
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
-                    started_job_registry.remove(job, pipeline=pipeline)
+                    self.cleanup_execution(job, pipeline=pipeline)
+                    # self.set_current_job_id(None, pipeline=pipeline)
+                    # started_job_registry.remove(job, pipeline=pipeline)
+                    # self.execution.delete(pipeline)  # type: ignore
 
                     if job.group_id:
                         group = Group.fetch(job.group_id, self.connection)
@@ -1411,6 +1504,11 @@ class Worker(BaseWorker):
                     break
                 except redis.exceptions.WatchError:
                     continue
+
+    def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
+        """Called after job has finished execution."""
+        job.ended_at = utcnow()
+        job.heartbeat(utcnow(), heartbeat_ttl)
 
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
@@ -1438,33 +1536,35 @@ class Worker(BaseWorker):
                 rv = job.perform()
                 self.log.debug('Finished performing Job ID %s', job.id)
 
-            job.ended_at = utcnow()
-
+            self.handle_execution_ended(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
             job._result = rv
 
-            job.heartbeat(utcnow(), job.success_callback_timeout)
             job.execute_success_callback(self.death_penalty_class, rv)
 
             self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
             self.log.debug('Job %s raised an exception.', job.id)
-            job.ended_at = utcnow()
+            job._status = JobStatus.FAILED
+
+            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
             exc_string = ''.join(traceback.format_exception(*exc_info))
 
             try:
-                job.heartbeat(utcnow(), job.failure_callback_timeout)
                 job.execute_failure_callback(self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = ''.join(traceback.format_exception(*exc_info))
 
+            # TODO: reversing the order of handle_job_failure() and handle_exception()
+            # causes Sentry test to fail
+            self.handle_exception(job, *exc_info)
             self.handle_job_failure(
                 job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
             )
-            self.handle_exception(job, *exc_info)
+
             return False
 
         finally:
@@ -1484,49 +1584,6 @@ class Worker(BaseWorker):
                 self.log.info('Result will never expire, clean up result key manually')
 
         return True
-
-    def handle_exception(self, job: 'Job', *exc_info):
-        """Walks the exception handler stack to delegate exception handling.
-        If the job cannot be deserialized, it will raise when func_name or
-        the other properties are accessed, which will stop exceptions from
-        being properly logged, so we guard against it here.
-        """
-        self.log.debug('Handling exception for %s.', job.id)
-        exc_string = ''.join(traceback.format_exception(*exc_info))
-        try:
-            extra = {
-                'func': job.func_name,
-                'arguments': job.args,
-                'kwargs': job.kwargs,
-            }
-            func_name = job.func_name
-        except DeserializationError:
-            extra = {}
-            func_name = '<DeserializationError>'
-
-        # the properties below should be safe however
-        extra.update({'queue': job.origin, 'job_id': job.id})
-
-        # func_name
-        self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
-        )
-
-        for handler in self._exc_handlers:
-            self.log.debug('Invoking exception handler %s', handler)
-            fallthrough = handler(job, *exc_info)
-
-            # Only handlers with explicit return values should disable further
-            # exc handling, so interpret a None return value as True.
-            if fallthrough is None:
-                fallthrough = True
-
-            if not fallthrough:
-                break
-
-    def push_exc_handler(self, handler_func):
-        """Pushes an exception handler onto the exc handler stack."""
-        self._exc_handlers.append(handler_func)
 
     def pop_exc_handler(self):
         """Pops the latest exception handler off of the exc handler stack."""
@@ -1558,7 +1615,7 @@ class Worker(BaseWorker):
 class SimpleWorker(Worker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
-        self.set_state(WorkerStatus.BUSY)
+        self.prepare_execution(job)
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
@@ -1575,7 +1632,7 @@ class SimpleWorker(Worker):
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
         else:
-            return (job.timeout or DEFAULT_WORKER_TTL) + 60
+            return int((job.timeout or DEFAULT_WORKER_TTL)) + 60
 
 
 class HerokuWorker(Worker):

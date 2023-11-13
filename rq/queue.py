@@ -161,7 +161,7 @@ class Queue:
         is_async: bool = True,
         job_class: Optional[Union[str, Type['Job']]] = None,
         serializer: Any = None,
-        death_penalty_class: Type[BaseDeathPenalty] = UnixSignalDeathPenalty,
+        death_penalty_class: Optional[Type[BaseDeathPenalty]] = UnixSignalDeathPenalty,
         **kwargs,
     ):
         """Initializes a Queue object.
@@ -195,7 +195,7 @@ class Queue:
             if isinstance(job_class, str):
                 job_class = import_attribute(job_class)
             self.job_class = job_class
-        self.death_penalty_class = death_penalty_class
+        self.death_penalty_class = death_penalty_class  # type: ignore
 
         self.serializer = resolve_serializer(serializer)
         self.redis_server_version: Optional[Tuple[int, int, int]] = None
@@ -526,7 +526,7 @@ class Queue:
             func (FunctionReferenceType): The function referce: a callable or the path.
             args (Union[Tuple, List, None], optional): The `*args` to pass to the function. Defaults to None.
             kwargs (Optional[Dict], optional): The `**kwargs` to pass to the function. Defaults to None.
-            timeout (Optional[int], optional): Function timeout. Defaults to None.
+            timeout (Optional[int], optional): Function timeout. Defaults to None, use -1 for infinite timeout.
             result_ttl (Optional[int], optional): Result time to live. Defaults to None.
             ttl (Optional[int], optional): Time to live. Defaults to None.
             failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.
@@ -1334,11 +1334,11 @@ class Queue:
         cls,
         queues: List['Queue'],
         timeout: Optional[int],
-        connection: Optional['Redis'] = None,
-        job_class: Optional['Job'] = None,
+        connection: 'Redis',
+        job_class: Optional[Type['Job']] = None,
         serializer: Any = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
-    ) -> Tuple['Job', 'Queue']:
+    ) -> Optional[Tuple['Job', 'Queue']]:
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -1363,7 +1363,7 @@ class Queue:
         Returns:
             job, queue (Tuple[Job, Queue]): A tuple of Job, Queue
         """
-        job_class: Job = backend_class(cls, 'job_class', override=job_class)
+        job_cls: Type[Job] = backend_class(cls, 'job_class', override=job_class)  # type: ignore
 
         while True:
             queue_keys = [q.key for q in queues]
@@ -1377,12 +1377,12 @@ class Queue:
             queue = cls.from_queue_key(
                 queue_key,
                 connection=connection,
-                job_class=job_class,
+                job_class=job_cls,
                 serializer=serializer,
                 death_penalty_class=death_penalty_class,
             )
             try:
-                job = job_class.fetch(job_id, connection=connection, serializer=serializer)
+                job = job_cls.fetch(job_id, connection=connection, serializer=serializer)
             except NoSuchJobError:
                 # Silently pass on jobs that don't exist (anymore),
                 # and continue in the look

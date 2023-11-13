@@ -180,23 +180,43 @@ class TestRegistry(RQTestCase):
 
         job = queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
-
+        execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
-        self.assertIn(job.id, registry.get_job_ids())
+        self.assertIn(execution.composite_key, registry.get_job_ids())
         self.assertTrue(job.is_started)
 
         worker.perform_job(job, queue)
-        self.assertNotIn(job.id, registry.get_job_ids())
+        self.assertNotIn(execution.composite_key, registry.get_job_ids())
         self.assertTrue(job.is_finished)
 
         # Job that fails
         job = queue.enqueue(div_by_zero)
-
+        execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
-        self.assertIn(job.id, registry.get_job_ids())
+        self.assertIn(execution.composite_key, registry.get_job_ids())
 
         worker.perform_job(job, queue)
-        self.assertNotIn(job.id, registry.get_job_ids())
+        self.assertNotIn(execution.composite_key, registry.get_job_ids())
+
+    def test_remove_executions(self):
+        """Ensure all executions for a job are removed from registry."""
+        registry = StartedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.testconn)
+        worker = Worker([queue])
+        job = queue.enqueue(say_hello)
+
+        execution_1 = worker.prepare_execution(job)
+        execution_2 = worker.prepare_execution(job)
+
+        self.assertIn(execution_1.composite_key, registry.get_job_ids())
+        self.assertIn(execution_2.composite_key, registry.get_job_ids())
+
+        registry.remove_executions(job)
+
+        self.assertNotIn(execution_1.composite_key, registry.get_job_ids())
+        self.assertNotIn(execution_2.composite_key, registry.get_job_ids())
+
+        job.delete()
 
     def test_job_deletion(self):
         """Ensure job is removed from StartedJobRegistry when deleted."""
@@ -207,11 +227,14 @@ class TestRegistry(RQTestCase):
         job = queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
 
+        execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
-        self.assertIn(job.id, registry.get_job_ids())
+        self.assertIn(execution.composite_key, registry.get_job_ids())
 
-        job.delete()
-        self.assertNotIn(job.id, registry.get_job_ids())
+        pipeline = self.testconn.pipeline()
+        job.delete(pipeline=pipeline)
+        pipeline.execute()
+        self.assertNotIn(execution.composite_key, registry.get_job_ids())
 
     def test_get_job_count(self):
         """StartedJobRegistry returns the right number of job count."""

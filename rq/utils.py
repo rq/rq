@@ -12,7 +12,7 @@ import importlib
 import logging
 import numbers
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -227,7 +227,7 @@ def current_timestamp() -> int:
     return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
 
 
-def backend_class(holder, default_name, override=None):
+def backend_class(holder, default_name, override=None) -> TypeVar('T'):
     """Get a backend class using its default attribute name or an override
 
     Args:
@@ -253,7 +253,7 @@ def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
         return utcparse(date_str.decode())
 
 
-def parse_timeout(timeout: Union[int, float, str]) -> int:
+def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:

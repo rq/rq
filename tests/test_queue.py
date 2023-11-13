@@ -235,11 +235,11 @@ class TestQueue(RQTestCase):
 
         self.assertRaises(ValueError, Queue.dequeue_any, [fooq, barq], timeout=0, connection=self.testconn)
 
-        self.assertEqual(Queue.dequeue_any([fooq, barq], None), None)
+        self.assertEqual(Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None), None)
 
         # Enqueue a single item
         barq.enqueue(say_hello)
-        job, queue = Queue.dequeue_any([fooq, barq], None)
+        job, queue = Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(queue, barq)
 
@@ -247,13 +247,13 @@ class TestQueue(RQTestCase):
         barq.enqueue(say_hello, 'for Bar')
         fooq.enqueue(say_hello, 'for Foo')
 
-        job, queue = Queue.dequeue_any([fooq, barq], None)
+        job, queue = Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None)
         self.assertEqual(queue, fooq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, fooq.name)
         self.assertEqual(job.args[0], 'for Foo', 'Foo should be dequeued first.')
 
-        job, queue = Queue.dequeue_any([fooq, barq], None)
+        job, queue = Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None)
         self.assertEqual(queue, barq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
@@ -309,7 +309,7 @@ class TestQueue(RQTestCase):
 
         # Dequeue simply ignores the missing job and returns None
         self.assertEqual(q.count, 1)
-        self.assertEqual(Queue.dequeue_any([Queue(), Queue('low')], None), None)  # noqa
+        self.assertEqual(Queue.dequeue_any([Queue(), Queue('low')], timeout=None, connection=self.connection), None)
         self.assertEqual(q.count, 0)
 
     def test_enqueue_with_ttl(self):

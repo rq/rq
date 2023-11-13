@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline
 
+    from .executions import Execution, ExecutionRegistry
     from .queue import Queue
     from .results import Result
 
@@ -53,6 +54,13 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+
+
+def parse_job_id(job_or_execution_id: str) -> str:
+    """Parse a string and returns job ID. This function supports both job ID and execution composite key."""
+    if ':' in job_or_execution_id:
+        return job_or_execution_id.split(':')[0]
+    return job_or_execution_id
 
 
 class Dependency:
@@ -590,7 +598,8 @@ class Job:
         Returns:
             Job: The Job instance
         """
-        job = cls(id, connection=connection, serializer=serializer)
+        # TODO: this method needs to support fetching jobs based on execution ID
+        job = cls(parse_job_id(id), connection=connection, serializer=serializer)
         job.refresh()
         return job
 
@@ -610,13 +619,14 @@ class Job:
         Returns:
             jobs (list[Job]): A list of Jobs instances.
         """
+        parsed_ids = [parse_job_id(job_id) for job_id in job_ids]
         with connection.pipeline() as pipeline:
-            for job_id in job_ids:
+            for job_id in parsed_ids:
                 pipeline.hgetall(cls.key_for(job_id))
             results = pipeline.execute()
 
         jobs: List[Optional['Job']] = []
-        for i, job_id in enumerate(job_ids):
+        for i, job_id in enumerate(parsed_ids):
             if not results[i]:
                 jobs.append(None)
                 continue
@@ -724,7 +734,7 @@ class Job:
         self.last_heartbeat = timestamp
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
-        self.started_job_registry.add(self, ttl, pipeline=pipeline, xx=xx)
+        # self.started_job_registry.add(self, ttl, pipeline=pipeline, xx=xx)
 
     id = property(get_id, set_id)
 
@@ -1091,11 +1101,7 @@ class Job:
         connection = pipeline if pipeline is not None else self.connection
 
         mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
-
-        if self.get_redis_server_version() >= (4, 0, 0):
-            connection.hset(key, mapping=mapping)
-        else:
-            connection.hmset(key, mapping)
+        connection.hset(key, mapping=mapping)
 
     @property
     def supports_redis_streams(self) -> bool:
@@ -1184,6 +1190,15 @@ class Job:
         """
         return self.failed_job_registry.requeue(self, at_front=at_front)
 
+    @property
+    def execution_registry(self) -> 'ExecutionRegistry':
+        from .executions import ExecutionRegistry
+
+        return ExecutionRegistry(self.id, connection=self.connection)
+
+    def get_executions(self) -> List['Execution']:
+        return self.execution_registry.get_executions()
+
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
         from .registry import BaseRegistry
 
@@ -1212,9 +1227,12 @@ class Job:
         elif self.is_started:
             from .registry import StartedJobRegistry
 
+            # TODO: need to cleanup job executions too
+
             registry = StartedJobRegistry(
                 self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
             )
+            registry.remove_executions(self, pipeline=pipeline)
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
@@ -1226,6 +1244,7 @@ class Job:
             registry.remove(self, pipeline=pipeline)
 
         elif self.is_failed or self.is_stopped:
+            # TODO: need to cleanup job executions too
             self.failed_job_registry.remove(self, pipeline=pipeline)
 
         elif self.is_canceled:
@@ -1253,7 +1272,7 @@ class Job:
 
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
-
+        self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
         if self.group_id:
             from .group import Group
 
@@ -1312,10 +1331,7 @@ class Job:
             'started_at': utcformat(self.started_at),  # type: ignore
             'worker_name': worker_name,
         }
-        if self.get_redis_server_version() >= (4, 0, 0):
-            pipeline.hset(self.key, mapping=mapping)
-        else:
-            pipeline.hmset(self.key, mapping=mapping)
+        pipeline.hset(self.key, mapping=mapping)
 
     def _execute(self) -> Any:
         """Actually runs the function with it's *args and **kwargs.
