@@ -1,8 +1,8 @@
 from time import sleep
 
 from rq import Queue, SimpleWorker
-from rq.group import Group
 from rq.exceptions import NoSuchGroupError
+from rq.group import Group
 from rq.job import Job
 from rq.utils import as_text
 from tests import RQTestCase

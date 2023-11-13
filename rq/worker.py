@@ -35,7 +35,6 @@ from contextlib import suppress
 import redis.exceptions
 
 from . import worker_registration
-from .group import Group
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
 from .connections import get_current_connection, pop_connection, push_connection
 from .defaults import (
@@ -48,6 +47,7 @@ from .defaults import (
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .executions import Execution
+from .group import Group
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
 from .maintenance import clean_intermediate_queue
