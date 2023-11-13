@@ -7,6 +7,7 @@ from redis.client import Pipeline
 from . import Queue
 from .exceptions import NoSuchGroupError
 from .job import Job
+from .queue import EnqueueData
 from .utils import as_text
 
 
