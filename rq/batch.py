@@ -51,8 +51,6 @@ class Batch:
             job_ids = [job for job in job_ids if job not in expired_jobs]
             pipe.srem(self.key, *expired_jobs)
 
-        if not job_ids:
-            self.delete()
         if pipeline is None:
             pipe.execute()
 
