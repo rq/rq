@@ -139,15 +139,16 @@ _New in version 1.16.0._
 Multiple jobs can be added to a Batch to allow them to be tracked by a single ID:
 
 ```python
+from rq import Queue
 from rq.batch import Batch
 
-batch = Batch.create(id="my_batch", connection=redis_conn)
-jobs = q.enqueue_many(
+batch = Batch.create(connection=redis_conn)
+jobs = batch.enqueue_many(
+  queue="my_queue",
   [
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
-  ],
-  batch=batch  # You can also pass the batch ID as a string, i.e., batch="my_batch"
+  ]
 )
 ```
 
