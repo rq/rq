@@ -94,6 +94,13 @@ class TestBatch(RQTestCase):
         assert len(batch.get_jobs()) == 1
         q.empty()
 
+    def test_batch_with_str_queue(self):
+        batch = Batch.create(connection=self.testconn)
+        batch.enqueue_many("new_queue", [self.job_1_data])
+        q = Queue("new_queue", connection=self.testconn)
+        assert q.count == 1
+        q.empty()
+
     def test_empty_batch_removed_from_batch_list(self):
         q = Queue(connection=self.testconn)
         w = SimpleWorker([q], connection=q.connection)
