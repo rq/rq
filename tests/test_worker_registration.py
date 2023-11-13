@@ -87,7 +87,7 @@ class TestWorkerRegistry(RQTestCase):
         """
         MAX_WORKERS = 41
         MAX_KEYS = 37
-        # srem is called twice per invalid key batch: once for WORKERS_BY_QUEUE_KEY; once for REDIS_WORKER_KEYS
+        # srem is called twice per invalid key group: once for WORKERS_BY_QUEUE_KEY; once for REDIS_WORKER_KEYS
         SREM_CALL_COUNT = 2
 
         queue = Queue(name='foo')

@@ -134,16 +134,16 @@ with q.connection.pipeline() as pipe:
 
 `Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
 
-### Batching jobs
+### Grouping jobs
 _New in version 1.16.0._  
-Multiple jobs can be added to a Batch to allow them to be tracked by a single ID:
+Multiple jobs can be added to a Group to allow them to be tracked by a single ID:
 
 ```python
 from rq import Queue
-from rq.batch import Batch
+from rq.group import Group
 
-batch = Batch.create(connection=redis_conn)
-jobs = batch.enqueue_many(
+group = Group.create(connection=redis_conn)
+jobs = group.enqueue_many(
   queue="my_queue",
   [
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
@@ -152,20 +152,20 @@ jobs = batch.enqueue_many(
 )
 ```
 
-You can then access jobs by calling the batch's `get_jobs()` method:
+You can then access jobs by calling the group's `get_jobs()` method:
 
 ```python
-print(batch.get_jobs())  # [Job('my_job_id'), Job('my_other_job_id')]
+print(group.get_jobs())  # [Job('my_job_id'), Job('my_other_job_id')]
 ```
 
-Existing batches can be fetched from Redis:
+Existing groups can be fetched from Redis:
 
 ```python
-from rq.batch import Batch
-batch = Batch.fetch(id='my_batch', connection=redis_conn)
+from rq.group import Group
+group = Group.fetch(id='my_group', connection=redis_conn)
 ```
 
-If all of a batch's jobs expire or are deleted, the batch is removed from Redis.
+If all of a group's jobs expire or are deleted, the group is removed from Redis.
 
 ## Job dependencies
 

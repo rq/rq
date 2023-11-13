@@ -518,7 +518,7 @@ class Queue:
         on_success: Optional[Union[Callback, Callable]] = None,
         on_failure: Optional[Union[Callback, Callable]] = None,
         on_stopped: Optional[Union[Callback, Callable]] = None,
-        batch_id: Optional[str] = None,
+        group_id: Optional[str] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -543,7 +543,7 @@ class Queue:
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
-            batch_id (Optional[str], optional): A batch ID that the job is being added to. Defaults to None.
+            group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
         Raises:
             ValueError: If the timeout is 0
@@ -585,7 +585,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
-            batch_id=batch_id,
+            group_id=group_id,
         )
 
         if retry:
@@ -789,7 +789,7 @@ class Queue:
         )
 
     def enqueue_many(
-        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, batch_id: str = None
+        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: str = None
     ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
@@ -824,7 +824,7 @@ class Queue:
                 "on_success": job_data.on_success,
                 "on_failure": job_data.on_failure,
                 "on_stopped": job_data.on_stopped,
-                "batch_id": batch_id,
+                "group_id": group_id,
             }
 
         # Enqueue jobs without dependencies

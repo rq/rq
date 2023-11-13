@@ -35,7 +35,7 @@ from contextlib import suppress
 import redis.exceptions
 
 from . import worker_registration
-from .batch import Batch
+from .group import Group
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
 from .connections import get_current_connection, pop_connection, push_connection
 from .defaults import (
@@ -504,9 +504,9 @@ class BaseWorker:
             else:
                 enqueue_dependents = True
 
-            if job.batch_id:
-                batch = Batch.fetch(job.batch_id, self.connection)
-                batch.cleanup(pipeline=pipeline)
+            if job.group_id:
+                group = Group.fetch(job.group_id, self.connection)
+                group.cleanup(pipeline=pipeline)
 
             try:
                 pipeline.execute()
@@ -612,7 +612,7 @@ class BaseWorker:
             if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
-        Batch.clean_batch_registries(connection=self.connection)
+        Group.clean_group_registries(connection=self.connection)
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
@@ -1402,9 +1402,9 @@ class Worker(BaseWorker):
                     self.log.debug('Removing job %s from StartedJobRegistry', job.id)
                     started_job_registry.remove(job, pipeline=pipeline)
 
-                    if job.batch_id:
-                        batch = Batch.fetch(job.batch_id, self.connection)
-                        batch.cleanup(pipeline=pipeline)
+                    if job.group_id:
+                        group = Group.fetch(job.group_id, self.connection)
+                        group.cleanup(pipeline=pipeline)
 
                     pipeline.execute()
                     self.log.debug('Finished handling successful execution of job %s', job.id)

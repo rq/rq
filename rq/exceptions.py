@@ -2,7 +2,7 @@ class NoSuchJobError(Exception):
     pass
 
 
-class NoSuchBatchError(Exception):
+class NoSuchGroupError(Exception):
     pass
 
 

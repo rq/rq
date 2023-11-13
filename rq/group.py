@@ -5,16 +5,16 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import Queue
-from .exceptions import NoSuchBatchError
+from .exceptions import NoSuchGroupError
 from .job import Job
 from .utils import as_text
 
 
-class Batch:
-    """A Batch is a container for tracking multiple jobs with a single identifier."""
+class Group:
+    """A Group is a container for tracking multiple jobs with a single identifier."""
 
-    REDIS_BATCH_NAME_PREFIX = 'rq:batch:'
-    REDIS_BATCH_KEY = 'rq:batches'
+    REDIS_BATCH_NAME_PREFIX = 'rq:group:'
+    REDIS_BATCH_KEY = 'rq:groups'
 
     def __init__(self, connection: Redis, id: str = None):
         self.id = id if id else str(uuid4())
@@ -22,10 +22,10 @@ class Batch:
         self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
 
     def __repr__(self):
-        return "Batch(id={})".format(self.id)
+        return "Group(id={})".format(self.id)
 
     def _add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
-        """Add jobs to the batch"""
+        """Add jobs to the group"""
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
         pipe.sadd(self.REDIS_BATCH_KEY, self.id)
@@ -33,7 +33,7 @@ class Batch:
             pipe.execute()
 
     def cleanup(self, pipeline: Optional['Pipeline'] = None):
-        """Delete jobs from the batch's job registry that have been deleted or expired from Redis.
+        """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
 
         pipe = pipeline if pipeline else self.connection.pipeline()
@@ -61,7 +61,7 @@ class Batch:
             queue = Queue(queue, connection=self.connection)
         pipe = pipeline if pipeline else self.connection.pipeline()
 
-        jobs = queue.enqueue_many(job_datas, batch_id=self.id, pipeline=pipe)
+        jobs = queue.enqueue_many(job_datas, group_id=self.id, pipeline=pipe)
 
         self._add_jobs(jobs, pipeline=pipe)
 
@@ -71,7 +71,7 @@ class Batch:
         return jobs
 
     def get_jobs(self) -> list:
-        """Retrieve list of job IDs from the batch key in Redis"""
+        """Retrieve list of job IDs from the group key in Redis"""
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
         return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
@@ -90,31 +90,31 @@ class Batch:
 
     @classmethod
     def fetch(cls, id: str, connection: Redis):
-        """Fetch an existing batch from Redis"""
-        batch = cls(id=id, connection=connection)
-        batch.cleanup()
-        if not connection.exists(Batch.get_key(batch.id)):
-            raise NoSuchBatchError
-        return batch
+        """Fetch an existing group from Redis"""
+        group = cls(id=id, connection=connection)
+        group.cleanup()
+        if not connection.exists(Group.get_key(group.id)):
+            raise NoSuchGroupError
+        return group
 
     @classmethod
-    def all(cls, connection: 'Redis') -> List['Batch']:
-        "Returns an iterable of all Batches."
-        batch_keys = [as_text(key) for key in connection.smembers(cls.REDIS_BATCH_KEY)]
-        return [Batch.fetch(key, connection=connection) for key in batch_keys]
+    def all(cls, connection: 'Redis') -> List['Group']:
+        "Returns an iterable of all Groupes."
+        group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_BATCH_KEY)]
+        return [Group.fetch(key, connection=connection) for key in group_keys]
 
     @classmethod
     def get_key(cls, id: str) -> str:
-        """Return the Redis key of the set containing a batch's jobs"""
+        """Return the Redis key of the set containing a group's jobs"""
         return cls.REDIS_BATCH_NAME_PREFIX + id
 
     @classmethod
-    def clean_batch_registries(cls, connection: 'Redis'):
-        """Loop through batches and delete those that have been deleted.
-        If batch still has jobs in its registry, delete those that have expired"""
-        batches = connection.smembers(Batch.REDIS_BATCH_KEY)
-        for batch in batches:
+    def clean_group_registries(cls, connection: 'Redis'):
+        """Loop through groups and delete those that have been deleted.
+        If group still has jobs in its registry, delete those that have expired"""
+        groups = connection.smembers(Group.REDIS_BATCH_KEY)
+        for group in groups:
             try:
-                batch = Batch.fetch(as_text(batch), connection)
-            except NoSuchBatchError:
-                connection.srem(Batch.REDIS_BATCH_KEY, as_text(batch))
+                group = Group.fetch(as_text(group), connection)
+            except NoSuchGroupError:
+                connection.srem(Group.REDIS_BATCH_KEY, as_text(group))
