@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
-from .batch import Batch
 from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
@@ -790,10 +789,7 @@ class Queue:
         )
 
     def enqueue_many(
-        self,
-        job_datas: List['EnqueueData'],
-        pipeline: Optional['Pipeline'] = None,
-        batch: Optional[Union[str, Batch]] = None,
+        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, batch_id: str = None
     ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
@@ -809,8 +805,6 @@ class Queue:
         jobs_without_dependencies = []
         jobs_with_unmet_dependencies = []
         jobs_with_met_dependencies = []
-        if isinstance(batch, str):
-            batch = Batch(id=batch, connection=self.connection)
 
         def get_job_kwargs(job_data, initial_status):
             return {
@@ -830,7 +824,7 @@ class Queue:
                 "on_success": job_data.on_success,
                 "on_failure": job_data.on_failure,
                 "on_stopped": job_data.on_stopped,
-                "batch_id": batch.id if batch else None,
+                "batch_id": batch_id,
             }
 
         # Enqueue jobs without dependencies
@@ -867,13 +861,6 @@ class Queue:
                 self._enqueue_job(job, pipeline=pipe, at_front=job.enqueue_at_front)
                 for job in jobs_with_met_dependencies
             ]
-            if pipeline is None:
-                pipe.execute()
-
-        all_jobs = jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
-
-        if batch is not None:
-            batch._add_jobs(all_jobs, pipeline=pipe)
             if pipeline is None:
                 pipe.execute()
 

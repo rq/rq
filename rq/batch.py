@@ -1,9 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import uuid4
 
 from redis import Redis
 from redis.client import Pipeline
 
+from . import Queue
 from .exceptions import NoSuchBatchError
 from .job import Job
 from .utils import as_text
@@ -54,6 +55,22 @@ class Batch:
             self.delete()
         if pipeline is None:
             pipe.execute()
+
+    def enqueue_many(
+        self, queue: Union[str, Queue], job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None
+    ):
+        if isinstance(queue, str):
+            queue = Queue(queue, connection=self.connection)
+        pipe = pipeline if pipeline else self.connection.pipeline()
+
+        jobs = queue.enqueue_many(job_datas, batch_id=self.id, pipeline=pipe)
+
+        self._add_jobs(jobs, pipeline=pipe)
+
+        if pipeline is None:
+            pipe.execute()
+
+        return jobs
 
     def get_jobs(self) -> list:
         """Retrieve list of job IDs from the batch key in Redis"""
