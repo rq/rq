@@ -1435,6 +1435,11 @@ class Worker(BaseWorker):
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
+                    if result_ttl > 0:
+                        # make sure the job data is not expired by Redis before the
+                        # maintenance task runs and expire the job rezference id in the
+                        # various registries
+                        result_ttl = max(result_ttl, self.maintenance_interval * 2)
                     if result_ttl != 0:
                         self.log.debug('Saving job %s\'s successful execution result', job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
