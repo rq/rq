@@ -241,6 +241,7 @@ class StartedJobRegistry(BaseRegistry):
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection, serializer=self.serializer)
+            queue = self.get_queue()
 
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
@@ -256,7 +257,6 @@ class StartedJobRegistry(BaseRegistry):
                     retry = job.retries_left and job.retries_left > 0
 
                     if retry:
-                        queue = self.get_queue()
                         job.retry(queue, pipeline)
 
                     else:
@@ -270,6 +270,7 @@ class StartedJobRegistry(BaseRegistry):
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
+                        queue.enqueue_dependents(job)
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
