@@ -66,6 +66,10 @@ jobs:
         file: ./coverage.xml
         fail_ci_if_error: false
 
+  sast:
+    name: SAST checks
+    runs-on: ubuntu-20.04
+    steps:
     - name: Run SAST checks
       run: |
         hatch run test:scan
