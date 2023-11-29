@@ -65,3 +65,7 @@ jobs:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
+
+    - name: Run SAST checks
+      run: |
+        hatch run test:scan
