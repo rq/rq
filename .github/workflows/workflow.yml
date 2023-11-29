@@ -70,6 +70,13 @@ jobs:
     name: SAST checks
     runs-on: ubuntu-20.04
     steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4.7.1
+      with:
+        python-version: 3.8
+
     - name: Run SAST checks
       run: |
         hatch run test:scan
