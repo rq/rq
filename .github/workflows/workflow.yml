@@ -77,6 +77,11 @@ jobs:
       with:
         python-version: 3.8
 
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install hatch
+
     - name: Run SAST checks
       run: |
         hatch run test:scan
