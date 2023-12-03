@@ -499,6 +499,9 @@ def worker_pool(
     else:
         job_class = Job
 
+    if verbose or quiet:
+        logging_level = None
+
     pool = WorkerPool(
         queue_names,
         connection=cli_config.connection,
