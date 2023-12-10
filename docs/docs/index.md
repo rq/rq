@@ -135,7 +135,7 @@ with q.connection.pipeline() as pipe:
 `Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
 
 ### Grouping jobs
-_New in version 1.16.0._  
+_New in version 2.0._  
 Multiple jobs can be added to a Group to allow them to be tracked by a single ID:
 
 ```python
