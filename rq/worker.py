@@ -929,7 +929,7 @@ class BaseWorker:
             if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
-        Group.clean_group_registries(connection=self.connection)
+        Group.clean_registries(connection=self.connection)
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
@@ -1119,11 +1119,7 @@ class BaseWorker:
         self.log.debug('Handling exception for %s.', job.id)
         exc_string = ''.join(traceback.format_exception(*exc_info))
         try:
-            extra = {
-                'func': job.func_name,
-                'arguments': job.args,
-                'kwargs': job.kwargs,
-            }
+            extra = {'func': job.func_name, 'arguments': job.args, 'kwargs': job.kwargs}
             func_name = job.func_name
         except DeserializationError:
             extra = {}

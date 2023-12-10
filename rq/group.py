@@ -110,7 +110,7 @@ class Group:
         return cls.REDIS_BATCH_NAME_PREFIX + id
 
     @classmethod
-    def clean_group_registries(cls, connection: 'Redis'):
+    def clean_registries(cls, connection: 'Redis'):
         """Loop through groups and delete those that have been deleted.
         If group still has jobs in its registry, delete those that have expired"""
         groups = connection.smembers(Group.REDIS_BATCH_KEY)
