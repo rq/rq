@@ -14,13 +14,13 @@ from .utils import as_text
 class Group:
     """A Group is a container for tracking multiple jobs with a single identifier."""
 
-    REDIS_BATCH_NAME_PREFIX = 'rq:group:'
-    REDIS_BATCH_KEY = 'rq:groups'
+    REDIS_GROUP_NAME_PREFIX = 'rq:group:'
+    REDIS_GROUP_KEY = 'rq:groups'
 
     def __init__(self, connection: Redis, id: str = None):
         self.id = id if id else str(uuid4())
         self.connection = connection
-        self.key = '{0}{1}'.format(self.REDIS_BATCH_NAME_PREFIX, self.id)
+        self.key = '{0}{1}'.format(self.REDIS_GROUP_NAME_PREFIX, self.id)
 
     def __repr__(self):
         return "Group(id={})".format(self.id)
@@ -29,7 +29,7 @@ class Group:
         """Add jobs to the group"""
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
-        pipe.sadd(self.REDIS_BATCH_KEY, self.id)
+        pipe.sadd(self.REDIS_GROUP_KEY, self.id)
         if pipeline is None:
             pipe.execute()
 
@@ -101,21 +101,21 @@ class Group:
     @classmethod
     def all(cls, connection: 'Redis') -> List['Group']:
         "Returns an iterable of all Groupes."
-        group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_BATCH_KEY)]
+        group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         return [Group.fetch(key, connection=connection) for key in group_keys]
 
     @classmethod
     def get_key(cls, id: str) -> str:
         """Return the Redis key of the set containing a group's jobs"""
-        return cls.REDIS_BATCH_NAME_PREFIX + id
+        return cls.REDIS_GROUP_NAME_PREFIX + id
 
     @classmethod
     def clean_registries(cls, connection: 'Redis'):
         """Loop through groups and delete those that have been deleted.
         If group still has jobs in its registry, delete those that have expired"""
-        groups = connection.smembers(Group.REDIS_BATCH_KEY)
+        groups = connection.smembers(Group.REDIS_GROUP_KEY)
         for group in groups:
             try:
                 group = Group.fetch(as_text(group), connection)
             except NoSuchGroupError:
-                connection.srem(Group.REDIS_BATCH_KEY, as_text(group))
+                connection.srem(Group.REDIS_GROUP_KEY, as_text(group))
