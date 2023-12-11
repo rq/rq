@@ -36,22 +36,8 @@ class Group:
     def cleanup(self, pipeline: Optional['Pipeline'] = None):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
-
         pipe = pipeline if pipeline else self.connection.pipeline()
-        job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
-        expired_jobs = []
-        with self.connection.pipeline() as p:
-            p.exists(*[Job.key_for(job) for job in job_ids])
-            results = p.execute()
-
-        for i, key_exists in enumerate(results):
-            if not key_exists:
-                expired_jobs.append(job_ids[i])
-
-        if expired_jobs:
-            job_ids = [job for job in job_ids if job not in expired_jobs]
-            pipe.srem(self.key, *expired_jobs)
-
+        Group.cleanup_group(self.id, self.connection, pipeline=pipe)
         if pipeline is None:
             pipe.execute()
 
@@ -93,6 +79,27 @@ class Group:
         if not connection.exists(Group.get_key(group.id)):
             raise NoSuchGroupError
         return group
+
+    @classmethod
+    def cleanup_group(cls, id: str, connection: Redis, pipeline: Optional['Pipeline'] = None):
+        pipe = pipeline if pipeline else connection.pipeline()
+        key = cls.get_key(id)
+        job_ids = [as_text(job) for job in list(connection.smembers(key))]
+        expired_jobs = []
+        with connection.pipeline() as p:
+            p.exists(*[Job.key_for(job) for job in job_ids])
+            results = p.execute()
+
+        for i, key_exists in enumerate(results):
+            if not key_exists:
+                expired_jobs.append(job_ids[i])
+
+        if expired_jobs:
+            job_ids = [job for job in job_ids if job not in expired_jobs]
+            pipe.srem(key, *expired_jobs)
+
+        if pipeline is None:
+            pipe.execute()
 
     @classmethod
     def all(cls, connection: 'Redis') -> List['Group']:
