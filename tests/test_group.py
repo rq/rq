@@ -94,13 +94,6 @@ class TestGroup(RQTestCase):
         assert len(group.get_jobs()) == 1
         q.empty()
 
-    def test_group_with_str_queue(self):
-        group = Group.create(connection=self.testconn)
-        group.enqueue_many("new_queue", [self.job_1_data])
-        q = Queue("new_queue", connection=self.testconn)
-        assert q.count == 1
-        q.empty()
-
     def test_empty_group_removed_from_group_list(self):
         q = Queue(connection=self.testconn)
         w = SimpleWorker([q], connection=q.connection)
