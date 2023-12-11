@@ -55,11 +55,7 @@ class Group:
         if pipeline is None:
             pipe.execute()
 
-    def enqueue_many(
-        self, queue: Union[str, Queue], job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None
-    ):
-        if isinstance(queue, str):
-            queue = Queue(queue, connection=self.connection)
+    def enqueue_many(self, queue: Queue, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
 
         jobs = queue.enqueue_many(job_datas, group_id=self.id, pipeline=pipe)
