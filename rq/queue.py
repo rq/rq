@@ -915,9 +915,7 @@ class Queue:
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             if args != ():
-                raise Exception(
-                    'Extra positional arguments cannot be used when using explicit args and kwargs'
-                )
+                raise Exception('Extra positional arguments cannot be used when using explicit args and kwargs')
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 

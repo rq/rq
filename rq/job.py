@@ -1299,9 +1299,7 @@ class Job:
             self._result = self._execute()
         finally:
             if not self is _job_stack.pop():
-                raise Exception(
-                    'Unexpected job was popped off the stack.'
-                )
+                raise Exception('Unexpected job was popped off the stack.')
         return self._result
 
     def prepare_for_execution(self, worker_name: str, pipeline: 'Pipeline'):
