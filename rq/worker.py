@@ -681,10 +681,10 @@ class BaseWorker:
                 pipeline.execute()
                 if enqueue_dependents:
                     queue.enqueue_dependents(job)
-            except Exception:
+            except Exception as err:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
-                pass
+                self.log.error("error handling failed job queue: %s", err)
 
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
         """Sets the current job working time in seconds

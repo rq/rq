@@ -124,6 +124,6 @@ reportOptionalMemberAccess = false
 reportOptionalOperand = false
 
 [tool.bandit]
-exclude_dirs = ['tests']
+exclude_dirs = ["tests"]
 # tests = []
 # skips = []

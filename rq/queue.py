@@ -914,7 +914,10 @@ class Queue:
         pipeline = kwargs.pop('pipeline', None)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
-            assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
+            if args != ():
+                raise Exception(
+                    'Extra positional arguments cannot be used when using explicit args and kwargs'
+                )
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 

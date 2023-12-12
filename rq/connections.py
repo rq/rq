@@ -43,9 +43,10 @@ def Connection(connection: Optional['Redis'] = None):  # noqa
         yield
     finally:
         popped = pop_connection()
-        assert (
-            popped == connection
-        ), 'Unexpected Redis connection was popped off the stack. Check your Redis connection setup.'
+        if popped != connection:
+            raise Exception(
+                 'Unexpected Redis connection was popped off the stack. Check your Redis connection setup.'
+            )
 
 
 def push_connection(redis: 'Redis'):
