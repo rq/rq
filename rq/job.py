@@ -1298,7 +1298,7 @@ class Job:
         try:
             self._result = self._execute()
         finally:
-            if not self is _job_stack.pop():
+            if self is not _job_stack.pop():
                 raise Exception('Unexpected job was popped off the stack.')
         return self._result
 
