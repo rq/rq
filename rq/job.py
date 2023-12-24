@@ -1446,7 +1446,7 @@ class Job:
             with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.failure_callback(self, self.connection, *exc_info)
         except Exception:  # noqa
-            logger.exception(f'Job {self.id}: error while executing failure callback')
+            logger.exception('Job %s: error while executing failure callback', self.id)
             raise
 
     def execute_stopped_callback(self, death_penalty_class: Type[BaseDeathPenalty]):
@@ -1456,7 +1456,7 @@ class Job:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.stopped_callback(self, self.connection)
         except Exception:  # noqa
-            logger.exception(f'Job {self.id}: error while executing stopped callback')
+            logger.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
@@ -1527,8 +1527,12 @@ class Job:
             scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+            logger.info(
+                'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
+            )
         else:
             queue._enqueue_job(self, pipeline=pipeline)
+            logger.info('Job %s: enqueued for retry, %s remaining')
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they
