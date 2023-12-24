@@ -844,3 +844,16 @@ class WorkerPoolCLITestCase(CLITestCase):
             main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.NonExistantJob']
         )
         self.assertNotEqual(result.exit_code, 0)
+
+    def test_worker_pool_logging_options(self):
+        """--quiet and --verbose logging options are supported"""
+        runner = CliRunner()
+        args = ['worker-pool', '-u', self.redis_url, '-b']
+        result = runner.invoke(main, args + ['--verbose'])
+        self.assert_normal_execution(result)
+        result = runner.invoke(main, args + ['--quiet'])
+        self.assert_normal_execution(result)
+
+        # --quiet and --verbose are mutually exclusive
+        result = runner.invoke(main, args + ['--quiet', '--verbose'])
+        self.assertNotEqual(result.exit_code, 0)
