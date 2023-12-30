@@ -401,12 +401,12 @@ class BaseWorker:
 
     @property
     def should_run_maintenance_tasks(self):
-        """Maintenance tasks should run on first startup or every 10 minutes."""
-        if self.last_cleaned_at is None:
-            return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_interval):
-            return True
-        return False
+        """
+        Maintenance tasks should run on first startup or every maintenance
+        interval (defaults to 10 minutes).
+        """
+        l_c_at = self.last_cleaned_at = self.last_cleaned_at or worker_registration.get_last_cleaned_at(self.connection)
+        return l_c_at is None or utcnow() - l_c_at > timedelta(seconds=self.maintenance_interval)
 
     def _set_connection(self, connection: Optional['Redis']) -> 'Redis':
         """Configures the Redis connection to have a socket timeout.
@@ -434,6 +434,8 @@ class BaseWorker:
 
     def clean_registries(self):
         """Runs maintenance jobs on each Queue's registries."""
+        self.last_cleaned_at = utcnow()
+        worker_registration.set_last_cleaned_at(self.last_cleaned_at, self.connection)
         for queue in self.queues:
             # If there are multiple workers running, we only want 1 worker
             # to run clean_registries().
@@ -442,7 +444,7 @@ class BaseWorker:
                 clean_registries(queue)
                 worker_registration.clean_worker_registry(queue)
                 clean_intermediate_queue(self, queue)
-        self.last_cleaned_at = utcnow()
+                queue.release_maintenance_lock()
 
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
