@@ -55,6 +55,7 @@ class Group:
 
     def get_jobs(self) -> list:
         """Retrieve list of job IDs from the group key in Redis"""
+        self.cleanup()
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
         return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
@@ -75,7 +76,6 @@ class Group:
     def fetch(cls, id: str, connection: Redis):
         """Fetch an existing group from Redis"""
         group = cls(id=id, connection=connection)
-        group.cleanup()
         if not connection.exists(Group.get_key(group.id)):
             raise NoSuchGroupError
         return group
