@@ -34,7 +34,7 @@ class TestGroup(RQTestCase):
         q = Queue(connection=self.testconn)
         enqueued_group = Group.create(connection=self.testconn)
         enqueued_group.enqueue_many(q, [self.job_1_data, self.job_2_data])
-        fetched_group = Group.fetch(enqueued_group.id, self.testconn)
+        fetched_group = Group.fetch(enqueued_group.name, self.testconn)
         self.assertCountEqual(enqueued_group.get_jobs(), fetched_group.get_jobs())
         assert len(fetched_group.get_jobs()) == 2
         q.empty()
@@ -45,7 +45,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [self.job_1_data, self.job_2_data])
         job2 = group.enqueue_many(q, [self.job_1_data, self.job_2_data])[0]
         assert job2 in group.get_jobs()
-        self.assertEqual(job2.group_id, group.id)
+        self.assertEqual(job2.group_id, group.name)
         q.empty()
 
     def test_jobs_added_to_group_key(self):
@@ -61,9 +61,9 @@ class TestGroup(RQTestCase):
         q = Queue(connection=self.testconn)
         group = Group.create(connection=self.testconn)
         jobs = group.enqueue_many(q, [self.job_1_data])
-        assert jobs[0].group_id == group.id
+        assert jobs[0].group_id == group.name
         fetched_job = Job.fetch(jobs[0].id, connection=self.testconn)
-        assert fetched_job.group_id == group.id
+        assert fetched_job.group_id == group.name
 
     def test_deleted_jobs_removed_from_group(self):
         q = Queue(connection=self.testconn)
@@ -81,7 +81,7 @@ class TestGroup(RQTestCase):
         group = Group.create(connection=self.testconn)
         group.enqueue_many(q, [self.job_1_data])
         redis_groups = {as_text(group) for group in self.testconn.smembers("rq:groups")}
-        assert group.id in redis_groups
+        assert group.name in redis_groups
         q.empty()
 
     @pytest.mark.slow
@@ -95,7 +95,7 @@ class TestGroup(RQTestCase):
         sleep(2)
         group.cleanup()
         assert len(group.get_jobs()) == 1
-        assert self.job_1_data in group.get_jobs()
+        assert self.job_1_data.job_id in [job.id for job in group.get_jobs()]
         q.empty()
 
     @pytest.mark.slow
@@ -109,7 +109,7 @@ class TestGroup(RQTestCase):
         sleep(2)
         w.run_maintenance_tasks()
         redis_groups = {as_text(group) for group in self.testconn.smembers("rq:groups")}
-        assert group.id not in redis_groups
+        assert group.name not in redis_groups
 
     @pytest.mark.slow
     def test_fetch_expired_group_raises_error(self):
@@ -120,12 +120,12 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
         sleep(2)
-        self.assertRaises(NoSuchGroupError, Group.fetch, group.id, group.connection)
+        self.assertRaises(NoSuchGroupError, Group.fetch, group.name, group.connection)
         q.empty()
 
     def test_get_group_key(self):
         group = Group(name="foo", connection=self.testconn)
-        self.assertEqual(Group.get_key(group.id), "rq:group:foo")
+        self.assertEqual(Group.get_key(group.name), "rq:group:foo")
 
     def test_all_returns_all_groups(self):
         q = Queue(connection=self.testconn)
@@ -134,5 +134,5 @@ class TestGroup(RQTestCase):
         group1.enqueue_many(q, [self.job_1_data, self.job_2_data])
         all_groups = Group.all(self.testconn)
         assert len(all_groups) == 1
-        assert "group1" in [group.id for group in all_groups]
-        assert "group2" not in [group.id for group in all_groups]
+        assert "group1" in [group.name for group in all_groups]
+        assert "group2" not in [group.name for group in all_groups]
