@@ -124,13 +124,13 @@ class TestGroup(RQTestCase):
         q.empty()
 
     def test_get_group_key(self):
-        group = Group(id="foo", connection=self.testconn)
+        group = Group(name="foo", connection=self.testconn)
         self.assertEqual(Group.get_key(group.id), "rq:group:foo")
 
     def test_all_returns_all_groups(self):
         q = Queue(connection=self.testconn)
-        group1 = Group.create(id="group1", connection=self.testconn)
-        Group.create(id="group2", connection=self.testconn)
+        group1 = Group.create(name="group1", connection=self.testconn)
+        Group.create(name="group2", connection=self.testconn)
         group1.enqueue_many(q, [self.job_1_data, self.job_2_data])
         all_groups = Group.all(self.testconn)
         assert len(all_groups) == 1
