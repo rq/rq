@@ -1,5 +1,7 @@
 from time import sleep
 
+import pytest
+
 from rq import Queue, SimpleWorker
 from rq.exceptions import NoSuchGroupError
 from rq.group import Group
@@ -82,6 +84,7 @@ class TestGroup(RQTestCase):
         assert group.id in redis_groups
         q.empty()
 
+    @pytest.mark.slow
     def test_expired_jobs_removed_from_group(self):
         q = Queue(connection=self.testconn)
         w = SimpleWorker([q], connection=q.connection)
@@ -89,11 +92,12 @@ class TestGroup(RQTestCase):
         group = Group.create(connection=self.testconn)
         group.enqueue_many(q, [short_lived_job, self.job_1_data])
         w.work(burst=True, max_jobs=1)
-        sleep(3)
+        sleep(2)
         group.cleanup()
         assert len(group.get_jobs()) == 1
         q.empty()
 
+    @pytest.mark.slow
     def test_empty_group_removed_from_group_list(self):
         q = Queue(connection=self.testconn)
         w = SimpleWorker([q], connection=q.connection)
@@ -101,11 +105,12 @@ class TestGroup(RQTestCase):
         group = Group.create(connection=self.testconn)
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
-        sleep(3)
+        sleep(2)
         w.run_maintenance_tasks()
         redis_groups = {as_text(group) for group in self.testconn.smembers("rq:groups")}
         assert group.id not in redis_groups
 
+    @pytest.mark.slow
     def test_fetch_expired_group_raises_error(self):
         q = Queue(connection=self.testconn)
         w = SimpleWorker([q], connection=q.connection)
@@ -113,7 +118,7 @@ class TestGroup(RQTestCase):
         group = Group.create(connection=self.testconn)
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
-        sleep(3)
+        sleep(2)
         self.assertRaises(NoSuchGroupError, Group.fetch, group.id, group.connection)
         q.empty()
 
