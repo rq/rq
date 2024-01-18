@@ -69,13 +69,13 @@ class Group:
             pipe.execute()
 
     @classmethod
-    def create(cls, connection: Redis, id: Optional[str] = None):
-        return cls(id=id, connection=connection)
+    def create(cls, connection: Redis, name: Optional[str] = None):
+        return cls(name=name, connection=connection)
 
     @classmethod
-    def fetch(cls, id: str, connection: Redis):
+    def fetch(cls, name: str, connection: Redis):
         """Fetch an existing group from Redis"""
-        group = cls(id=id, connection=connection)
+        group = cls(name=name, connection=connection)
         if not connection.exists(Group.get_key(group.id)):
             raise NoSuchGroupError
         return group
