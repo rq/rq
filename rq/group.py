@@ -118,6 +118,7 @@ class Group:
         groups = connection.smembers(Group.REDIS_GROUP_KEY)
         for group in groups:
             try:
+                Group.cleanup_group(name=as_text(group), connection=connection)
                 group = Group.fetch(as_text(group), connection)
             except NoSuchGroupError:
                 connection.srem(Group.REDIS_GROUP_KEY, as_text(group))

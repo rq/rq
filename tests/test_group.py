@@ -120,6 +120,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        w.run_maintenance_tasks()
         self.assertRaises(NoSuchGroupError, Group.fetch, group.name, group.connection)
         q.empty()
 
