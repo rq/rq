@@ -95,7 +95,6 @@ class Group:
                 expired_job_ids.append(job_ids[i])
 
         if expired_job_ids:
-            job_ids = [job for job in job_ids if job not in expired_job_ids]
             pipe.srem(key, *expired_job_ids)
 
         if pipeline is None:
