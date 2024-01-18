@@ -85,18 +85,18 @@ class Group:
         pipe = pipeline if pipeline else connection.pipeline()
         key = cls.get_key(id)
         job_ids = [as_text(job) for job in list(connection.smembers(key))]
-        expired_jobs = []
+        expired_job_ids = []
         with connection.pipeline() as p:
             p.exists(*[Job.key_for(job) for job in job_ids])
             results = p.execute()
 
         for i, key_exists in enumerate(results):
             if not key_exists:
-                expired_jobs.append(job_ids[i])
+                expired_job_ids.append(job_ids[i])
 
-        if expired_jobs:
-            job_ids = [job for job in job_ids if job not in expired_jobs]
-            pipe.srem(key, *expired_jobs)
+        if expired_job_ids:
+            job_ids = [job for job in job_ids if job not in expired_job_ids]
+            pipe.srem(key, *expired_job_ids)
 
         if pipeline is None:
             pipe.execute()
