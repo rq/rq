@@ -95,6 +95,7 @@ class TestGroup(RQTestCase):
         sleep(2)
         group.cleanup()
         assert len(group.get_jobs()) == 1
+        assert self.job_1_data in group.get_jobs()
         q.empty()
 
     @pytest.mark.slow
