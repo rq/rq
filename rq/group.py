@@ -25,7 +25,7 @@ class Group:
     def __repr__(self):
         return "Group(id={})".format(self.id)
 
-    def _add_jobs(self, jobs: List[Job], pipeline: Optional['Pipeline'] = None):
+    def _add_jobs(self, jobs: List[Job], pipeline: Pipeline):
         """Add jobs to the group"""
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
