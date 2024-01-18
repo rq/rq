@@ -290,7 +290,7 @@ def get_version(connection: 'Redis') -> Tuple[int, int, int]:
             setattr(
                 connection,
                 "__rq_redis_server_version",
-                tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3]),
+                tuple(int(i) for i in str(connection.info("server")["redis_version"]).split('.')[:3]),
             )
         return getattr(connection, "__rq_redis_server_version")
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
