@@ -54,6 +54,7 @@ class WorkerPool:
         self.connection = connection
         self.name: str = uuid4().hex
         self._burst: bool = True
+        self._with_scheduler: bool = False
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
         self.worker_class: Type[BaseWorker] = worker_class
@@ -145,6 +146,7 @@ class WorkerPool:
         self,
         count: Optional[int] = None,
         burst: bool = True,
+        with_scheduler: bool = True,
         _sleep: float = 0,
         logging_level: str = "INFO",
     ):
@@ -159,6 +161,7 @@ class WorkerPool:
             kwargs={
                 '_sleep': _sleep,
                 'burst': burst,
+                'with_scheduler': with_scheduler,
                 'logging_level': logging_level,
                 'worker_class': self.worker_class,
                 'job_class': self.job_class,
@@ -171,14 +174,26 @@ class WorkerPool:
         self.worker_dict[name] = worker_data
         self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
-    def start_workers(self, burst: bool = True, _sleep: float = 0, logging_level: str = "INFO"):
+    def start_workers(
+        self,
+        burst: bool = True,
+        with_scheduler: bool = False,
+        _sleep: float = 0,
+        logging_level: str = "INFO"
+    ):
         """
         Run the workers
         * sleep: waits for X seconds before creating worker, only for testing purposes
         """
         self.log.debug(f'Spawning {self.num_workers} workers')
         for i in range(self.num_workers):
-            self.start_worker(i + 1, burst=burst, _sleep=_sleep, logging_level=logging_level)
+            self.start_worker(
+                i + 1,
+                burst=burst,
+                with_scheduler=with_scheduler,
+                _sleep=_sleep,
+                logging_level=logging_level
+            )
 
     def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):
         """
@@ -201,13 +216,14 @@ class WorkerPool:
         for worker_data in worker_datas:
             self.stop_worker(worker_data)
 
-    def start(self, burst: bool = False, logging_level: str = "INFO"):
+    def start(self, burst: bool = False, with_scheduler: bool = False, logging_level: str = "INFO"):
         self._burst = burst
+        self._with_scheduler = with_scheduler
         respawn = not burst  # Don't respawn workers if burst mode is on
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
         self.status = self.Status.IDLE
-        self.start_workers(burst=self._burst, logging_level=logging_level)
+        self.start_workers(burst=self._burst, with_scheduler=self._with_scheduler, logging_level=logging_level)
         self._install_signal_handlers()
         while True:
             if self.status == self.Status.STOPPED:
@@ -237,6 +253,7 @@ def run_worker(
     serializer: Type[DefaultSerializer] = DefaultSerializer,
     job_class: Type[Job] = Job,
     burst: bool = True,
+    with_scheduler: bool = False,
     logging_level: str = "INFO",
     _sleep: int = 0,
 ):
@@ -247,4 +264,4 @@ def run_worker(
     worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
     worker.log.info("Starting worker started with PID %s", os.getpid())
     time.sleep(_sleep)
-    worker.work(burst=burst, logging_level=logging_level)
+    worker.work(burst=burst, with_scheduler=with_scheduler, logging_level=logging_level)
