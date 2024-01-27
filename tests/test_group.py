@@ -93,6 +93,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [short_lived_job, self.job_1_data])
         w.work(burst=True, max_jobs=1)
         sleep(2)
+        w.run_maintenance_tasks()
         group.cleanup()
         assert len(group.get_jobs()) == 1
         assert self.job_1_data.job_id in [job.id for job in group.get_jobs()]
