@@ -94,7 +94,7 @@ class Group:
     def all(cls, connection: 'Redis') -> List['Group']:
         "Returns an iterable of all Groupes."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
-        return [Group.fetch(key, connection=connection) for key in group_keys]
+        return [cls.fetch(key, connection=connection) for key in group_keys]
 
     @classmethod
     def get_key(cls, name: str) -> str:
@@ -105,10 +105,6 @@ class Group:
     def clean_registries(cls, connection: 'Redis'):
         """Loop through groups and delete those that have been deleted.
         If group still has jobs in its registry, delete those that have expired"""
-        groups = connection.smembers(Group.REDIS_GROUP_KEY)
+        groups = Group.all(connection=connection)
         for group in groups:
-            try:
-                Group.cleanup_group(name=as_text(group), connection=connection)
-                group = Group.fetch(as_text(group), connection)
-            except NoSuchGroupError:
-                connection.srem(Group.REDIS_GROUP_KEY, as_text(group))
+            group.cleanup()
