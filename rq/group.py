@@ -108,3 +108,5 @@ class Group:
         groups = Group.all(connection=connection)
         for group in groups:
             group.cleanup()
+            if not connection.exists(group.key):
+                connection.srem(cls.REDIS_GROUP_KEY, as_text(group.name))
