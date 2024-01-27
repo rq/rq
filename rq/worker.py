@@ -36,14 +36,16 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
-from .connections import (get_current_connection, pop_connection,
-                          push_connection)
-from .defaults import (DEFAULT_JOB_MONITORING_INTERVAL,
-                       DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT,
-                       DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_RESULT_TTL,
-                       DEFAULT_WORKER_TTL)
-from .exceptions import (DequeueTimeout, DeserializationError,
-                         ShutDownImminentException)
+from .connections import get_current_connection, pop_connection, push_connection
+from .defaults import (
+    DEFAULT_JOB_MONITORING_INTERVAL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
+    DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    DEFAULT_RESULT_TTL,
+    DEFAULT_WORKER_TTL,
+)
+from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .executions import Execution
 from .group import Group
 from .job import Job, JobStatus
@@ -54,10 +56,8 @@ from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
-from .timeouts import (HorseMonitorTimeoutException, JobTimeoutException,
-                       UnixSignalDeathPenalty)
-from .utils import (as_text, backend_class, compact, ensure_list, get_version,
-                    utcformat, utcnow, utcparse)
+from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
+from .utils import as_text, backend_class, compact, ensure_list, get_version, utcformat, utcnow, utcparse
 from .version import VERSION
 
 try:
@@ -159,15 +159,17 @@ class BaseWorker:
         self.execution: Optional[Execution] = None
 
         queues = [
-            self.queue_class(
-                name=q,
-                connection=connection,
-                job_class=self.job_class,
-                serializer=self.serializer,
-                death_penalty_class=self.death_penalty_class,
+            (
+                self.queue_class(
+                    name=q,
+                    connection=connection,
+                    job_class=self.job_class,
+                    serializer=self.serializer,
+                    death_penalty_class=self.death_penalty_class,
+                )
+                if isinstance(q, str)
+                else q
             )
-            if isinstance(q, str)
-            else q
             for q in ensure_list(queues)
         ]
 
