@@ -156,7 +156,7 @@ class TestWorker(RQTestCase):
 
     def test_worker_ttl(self):
         """Worker ttl."""
-        w = Worker([])
+        w = Worker([], connection=self.connection)
         w.register_birth()
         [worker_key] = self.testconn.smembers(Worker.redis_workers_keys)
         self.assertIsNotNone(self.testconn.ttl(worker_key))

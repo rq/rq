@@ -1196,15 +1196,16 @@ class TestJob(RQTestCase):
                 pipeline.execute()
 
     def test_execution_order_with_sole_dependency(self):
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         key = 'test_job:job_order'
 
+        connection_kwargs = self.connection.connection_pool.connection_kwargs
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         # Worker 1 will be busy with the slow job, so worker 2 will complete both fast jobs.
-        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", True])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True])
-        fixtures.burst_two_workers(queue)
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", connection_kwargs, True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", connection_kwargs, True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True])
+        fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 2)]
         self.assertEqual(queue.count, 0)
@@ -1214,10 +1215,10 @@ class TestJob(RQTestCase):
 
         # When job "A" depends on the slow job, then job "B" finishes before "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", False], depends_on='slow_job')
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True])
-        fixtures.burst_two_workers(queue)
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", connection_kwargs, True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", connection_kwargs, False], depends_on='slow_job')
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True])
+        fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 2)]
         self.assertEqual(queue.count, 0)
@@ -1225,15 +1226,15 @@ class TestJob(RQTestCase):
         self.assertEqual(jobs_completed, ["B:w2", "slow:w1", "A"])
 
     def test_execution_order_with_dual_dependency(self):
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         key = 'test_job:job_order'
-
+        connection_kwargs = self.connection.connection_pool.connection_kwargs
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", True])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True])
-        fixtures.burst_two_workers(queue)
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", connection_kwargs, True, 0.5], job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", connection_kwargs, True, 0.75], job_id='slow_2')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", connection_kwargs, True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True])
+        fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 3)]
         self.assertEqual(queue.count, 0)
@@ -1244,11 +1245,13 @@ class TestJob(RQTestCase):
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
         # the two. Job "B" should be completed before job "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", False], depends_on=['slow_1', 'slow_2'])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", True], depends_on=['slow_1'])
-        fixtures.burst_two_workers(queue)
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", connection_kwargs, True, 0.5], job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", connection_kwargs, True, 0.75], job_id='slow_2')
+        job_A = queue.enqueue(
+            fixtures.rpush, args=[key, "A", connection_kwargs, False], depends_on=['slow_1', 'slow_2']
+        )
+        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True], depends_on=['slow_1'])
+        fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.testconn.lrange(key, 0, 3)]
         self.assertEqual(queue.count, 0)

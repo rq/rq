@@ -73,14 +73,14 @@ def some_calculation(x, y, z=1):
     return x * y / z
 
 
-def rpush(key, value, append_worker_name=False, sleep=0):
+def rpush(key, value, connection_kwargs: dict, append_worker_name=False, sleep=0):
     """Push a value into a list in Redis. Useful for detecting the order in
     which jobs were executed."""
     if sleep:
         time.sleep(sleep)
     if append_worker_name:
         value += ':' + get_current_job().worker_name
-    redis = get_current_connection()
+    redis = Redis(**connection_kwargs)
     redis.rpush(key, value)
 
 
@@ -275,14 +275,14 @@ def start_worker_process(
     return p
 
 
-def burst_two_workers(queue, timeout=2, tries=5, pause=0.1):
+def burst_two_workers(queue, connection: Redis, timeout=2, tries=5, pause=0.1):
     """
     Get two workers working simultaneously in burst mode, on a given queue.
     Return after both workers have finished handling jobs, up to a fixed timeout
     on the worker that runs in another process.
     """
     w1 = start_worker_process(queue.name, worker_name='w1', burst=True)
-    w2 = Worker(queue, name='w2')
+    w2 = Worker(queue, name='w2', connection=connection)
     jobs = queue.jobs
     if jobs:
         first_job = jobs[0]
