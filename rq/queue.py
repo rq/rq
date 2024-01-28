@@ -248,7 +248,7 @@ class Queue:
         Returns:
             lock_acquired (bool)
         """
-        lock_acquired = self.connection.set(self.registry_cleaning_key, 1, nx=1, ex=899)
+        lock_acquired = self.connection.set(self.registry_cleaning_key, 1, nx=True, ex=899)
         if not lock_acquired:
             return False
         return lock_acquired

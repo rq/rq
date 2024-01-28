@@ -140,7 +140,7 @@ class TestWorker(RQTestCase):
         w.register_death()
         w.register_birth()
         w.set_state(WorkerStatus.STARTED)
-        worker = Worker.find_by_key(w.key)
+        worker = Worker.find_by_key(w.key, connection=self.connection)
         self.assertEqual(worker.queues, queues)
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
         self.assertEqual(worker._job_id, None)
@@ -149,10 +149,10 @@ class TestWorker(RQTestCase):
 
         # If worker is gone, its keys should also be removed
         worker.connection.delete(worker.key)
-        Worker.find_by_key(worker.key)
+        Worker.find_by_key(worker.key, connection=self.connection)
         self.assertFalse(worker.key in Worker.all_keys(worker.connection))
 
-        self.assertRaises(ValueError, Worker.find_by_key, 'foo')
+        self.assertRaises(ValueError, Worker.find_by_key, 'foo', connection=self.connection)
 
     def test_worker_ttl(self):
         """Worker ttl."""
@@ -164,8 +164,8 @@ class TestWorker(RQTestCase):
 
     def test_work_via_string_argument(self):
         """Worker processes work fed via string arguments."""
-        q = Queue('foo')
-        w = Worker([q])
+        q = Queue('foo', connection=self.connection)
+        w = Worker([q], connection=self.connection)
         job = q.enqueue('tests.fixtures.say_hello', name='Frank')
         self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
         expected_result = 'Hi there, Frank!'
@@ -177,8 +177,8 @@ class TestWorker(RQTestCase):
 
     def test_job_times(self):
         """job times are set correctly."""
-        q = Queue('foo')
-        w = Worker([q])
+        q = Queue('foo', connection=self.connection)
+        w = Worker([q], connection=self.connection)
         before = utcnow()
         before = before.replace(microsecond=0)
         job = q.enqueue(say_hello)
@@ -195,13 +195,13 @@ class TestWorker(RQTestCase):
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed job registry."""
-        q = Queue()
+        q = Queue(connection=self.connection)
         self.assertEqual(q.count, 0)
 
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.create(func=div_by_zero, args=(3,), origin=q.name)
+        job = Job.create(func=div_by_zero, args=(3,), origin=q.name, connection=self.connection)
         job.save()
 
         job_data = job.data
@@ -216,7 +216,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 1)
 
         # All set, we're going to process it
-        w = Worker([q])
+        w = Worker([q], connection=self.connection)
         w.work(burst=True)  # should silently pass
         self.assertEqual(q.count, 0)
 
@@ -225,13 +225,13 @@ class TestWorker(RQTestCase):
 
     def test_meta_is_unserializable(self):
         """Unserializable jobs are put on the failed job registry."""
-        q = Queue()
+        q = Queue(connection=self.connection)
         self.assertEqual(q.count, 0)
 
         # NOTE: We have to fake this enqueueing for this test case.
         # What we're simulating here is a call to a function that is not
         # importable from the worker process.
-        job = Job.create(func=do_nothing, origin=q.name, meta={'key': 'value'})
+        job = Job.create(func=do_nothing, origin=q.name, meta={'key': 'value'}, connection=self.connection)
         job.save()
 
         invalid_meta = '{{{{{{{{INVALID_JSON'
@@ -246,11 +246,11 @@ class TestWorker(RQTestCase):
         Test that exceptions are properly handled for a job that fails to
         deserialize.
         """
-        q = Queue()
+        q = Queue(connection=self.connection)
         self.assertEqual(q.count, 0)
 
         # as in test_work_is_unreadable(), we create a fake bad job
-        job = Job.create(func=div_by_zero, args=(3,), origin=q.name)
+        job = Job.create(func=div_by_zero, args=(3,), origin=q.name, connection=self.connection)
         job.save()
 
         # setting data to b'' ensures that pickling will completely fail
@@ -265,7 +265,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 1)
 
         # Now we try to run the job...
-        w = Worker([q])
+        w = Worker([q], connection=self.connection)
         job, queue = w.dequeue_job_and_maintain_ttl(10)
         w.perform_job(job, queue)
 
@@ -274,8 +274,8 @@ class TestWorker(RQTestCase):
 
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""
-        q = Queue()
-        w = Worker([q])
+        q = Queue(connection=self.connection)
+        w = Worker([q], connection=self.connection)
         w.register_birth()
 
         self.assertEqual(str(w.pid), as_text(self.testconn.hget(w.key, 'pid')))
@@ -283,7 +283,7 @@ class TestWorker(RQTestCase):
         last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
         self.assertIsNotNone(self.testconn.hget(w.key, 'birth'))
         self.assertTrue(last_heartbeat is not None)
-        w = Worker.find_by_key(w.key)
+        w = Worker.find_by_key(w.key, connection=self.connection)
         self.assertIsInstance(w.last_heartbeat, datetime)
 
         # worker.refresh() shouldn't fail if last_heartbeat is None
@@ -495,10 +495,10 @@ class TestWorker(RQTestCase):
 
     def test_max_jobs(self):
         """Worker exits after number of jobs complete."""
-        queue = Queue()
+        queue = Queue(connection=self.connection)
         job1 = queue.enqueue(do_nothing)
         job2 = queue.enqueue(do_nothing)
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker.work(max_jobs=1)
 
         self.assertEqual(JobStatus.FINISHED, job1.get_status())
@@ -966,7 +966,7 @@ class TestWorker(RQTestCase):
         q = Queue()
         q.enqueue(create_file, SENTINEL_FILE)
 
-        w = Worker([q])
+        w = Worker([q], connection=self.connection)
 
         suspend(self.testconn)
 
@@ -1113,7 +1113,7 @@ class TestWorker(RQTestCase):
 
         Queue.enqueue_dependents = new_enqueue_dependents
 
-        q = Queue()
+        q = Queue(connection=self.connection)
         w = Worker([q])
         with mock.patch.object(Worker, 'execute_job', wraps=w.execute_job) as mocked:
             parent_job = q.enqueue(say_hello, result_ttl=0)
@@ -1136,15 +1136,15 @@ class TestWorker(RQTestCase):
         """Make sure that any meta modification done by
         the job itself persists completely through the
         queue/worker/job stack."""
-        q = Queue()
+        q = Queue(connection=self.connection)
         # Also make sure that previously existing metadata
         # persists properly
         job = q.enqueue(modify_self, meta={'foo': 'bar', 'baz': 42}, args=[{'baz': 10, 'newinfo': 'waka'}])
 
-        w = Worker([q])
+        w = Worker([q], connection=self.connection)
         w.work(burst=True)
 
-        job_check = Job.fetch(job.id)
+        job_check = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job_check.meta['foo'], 'bar')
         self.assertEqual(job_check.meta['baz'], 10)
         self.assertEqual(job_check.meta['newinfo'], 'waka')
@@ -1153,12 +1153,12 @@ class TestWorker(RQTestCase):
         """Make sure that any meta modification done by
         the job itself persists completely through the
         queue/worker/job stack -- even if the job errored"""
-        q = Queue()
+        q = Queue(connection=self.connection)
         # Also make sure that previously existing metadata
         # persists properly
         job = q.enqueue(modify_self_and_error, meta={'foo': 'bar', 'baz': 42}, args=[{'baz': 10, 'newinfo': 'waka'}])
 
-        w = Worker([q])
+        w = Worker([q], connection=self.connection)
         w.work(burst=True)
 
         # Postconditions
@@ -1175,9 +1175,9 @@ class TestWorker(RQTestCase):
     @mock.patch('rq.worker.logger.info')
     def test_log_result_lifespan_true(self, mock_logger_info):
         """Check that log_result_lifespan True causes job lifespan to be logged."""
-        q = Queue()
+        q = Queue(connection=self.connection)
 
-        w = Worker([q])
+        w = Worker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.perform_job(job, q)
         mock_logger_info.assert_called_with('Result is kept for %s seconds', 10)
@@ -1186,12 +1186,12 @@ class TestWorker(RQTestCase):
     @mock.patch('rq.worker.logger.info')
     def test_log_result_lifespan_false(self, mock_logger_info):
         """Check that log_result_lifespan False causes job lifespan to not be logged."""
-        q = Queue()
+        q = Queue(connection=self.connection)
 
         class TestWorker(Worker):
             log_result_lifespan = False
 
-        w = TestWorker([q])
+        w = TestWorker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.perform_job(job, q)
         self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
@@ -1199,8 +1199,8 @@ class TestWorker(RQTestCase):
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_true(self, mock_logger_info):
         """Check that log_job_description True causes job lifespan to be logged."""
-        q = Queue()
-        w = Worker([q])
+        q = Queue(connection=self.connection)
+        w = Worker([q], connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertIn("Frank", mock_logger_info.call_args[0][2])
@@ -1208,62 +1208,62 @@ class TestWorker(RQTestCase):
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_false(self, mock_logger_info):
         """Check that log_job_description False causes job lifespan to not be logged."""
-        q = Queue()
-        w = Worker([q], log_job_description=False)
+        q = Queue(connection=self.connection)
+        w = Worker([q], log_job_description=False, connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
 
     def test_worker_configures_socket_timeout(self):
         """Ensures that the worker correctly updates Redis client connection to have a socket_timeout"""
-        q = Queue()
-        _ = Worker([q])
+        q = Queue(connection=self.connection)
+        _ = Worker([q], connection=self.connection)
         connection_kwargs = q.connection.connection_pool.connection_kwargs
         self.assertEqual(connection_kwargs["socket_timeout"], 415)
 
     def test_worker_version(self):
-        q = Queue()
-        w = Worker([q])
+        q = Queue(connection=self.connection)
+        w = Worker([q], connection=self.connection)
         w.version = '0.0.0'
         w.register_birth()
         self.assertEqual(w.version, '0.0.0')
         w.refresh()
         self.assertEqual(w.version, '0.0.0')
         # making sure that version is preserved when worker is retrieved by key
-        worker = Worker.find_by_key(w.key)
+        worker = Worker.find_by_key(w.key, connection=self.connection)
         self.assertEqual(worker.version, '0.0.0')
 
     def test_python_version(self):
         python_version = sys.version
-        q = Queue()
-        w = Worker([q])
+        q = Queue(connection=self.connection)
+        w = Worker([q], connection=self.connection)
         w.register_birth()
         self.assertEqual(w.python_version, python_version)
         # now patching version
         python_version = 'X.Y.Z.final'  # dummy version
         self.assertNotEqual(python_version, sys.version)  # otherwise tests are pointless
-        w2 = Worker([q])
+        w2 = Worker([q], connection=self.connection)
         w2.python_version = python_version
         w2.register_birth()
         self.assertEqual(w2.python_version, python_version)
         # making sure that version is preserved when worker is retrieved by key
-        worker = Worker.find_by_key(w2.key)
+        worker = Worker.find_by_key(w2.key, connection=self.connection)
         self.assertEqual(worker.python_version, python_version)
 
     def test_dequeue_random_strategy(self):
-        qs = [Queue('q%d' % i) for i in range(5)]
+        qs = [Queue('q%d' % i, connection=self.connection) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
                 qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
 
-        w = Worker(qs)
+        w = Worker(qs, connection=self.connection)
         w.work(burst=True, dequeue_strategy="random")
 
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i, j))
+                job = Job.fetch('q%d_%d' % (i, j), connection=self.connection)
                 start_times.append(('q%d_%d' % (i, j), job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
@@ -1283,7 +1283,7 @@ class TestWorker(RQTestCase):
     def test_request_force_stop_ignores_consecutive_signals(self):
         """Ignore signals sent within 1 second of the last signal"""
         queue = Queue(connection=self.testconn)
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker._horse_pid = 1
         worker._shutdown_requested_date = utcnow()
         with mock.patch.object(worker, 'kill_horse') as mocked:

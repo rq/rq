@@ -229,7 +229,7 @@ class BaseWorker:
     def find_by_key(
         cls,
         worker_key: str,
-        connection: Optional['Redis'] = None,
+        connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
         queue_class: Optional[Type['Queue']] = None,
         serializer=None,
@@ -255,8 +255,6 @@ class BaseWorker:
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % worker_key)
 
-        if connection is None:
-            connection = get_current_connection()
         if not connection.exists(worker_key):
             connection.srem(cls.redis_workers_keys, worker_key)
             return None

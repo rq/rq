@@ -405,7 +405,7 @@ class TestFailedJobRegistry(RQTestCase):
         queue = Queue(connection=self.testconn)
         job = queue.enqueue(div_by_zero, failure_ttl=5)
 
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker.work(burst=True)
 
         registry = FailedJobRegistry(connection=worker.connection)
