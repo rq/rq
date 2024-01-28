@@ -40,7 +40,8 @@ class Group:
         job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
         expired_job_ids = []
         with self.connection.pipeline() as p:
-            p.exists(*[Job.key_for(job) for job in job_ids])
+            for job in job_ids:
+                p.exists(Job.key_for(job))
             results = p.execute()
 
         for i, key_exists in enumerate(results):
@@ -113,7 +114,8 @@ class Group:
                     group.cleanup(pipeline=p)
                 p.execute()
                 # Remove empty groups from group registry
-                p.exists(*[group.key for group in groups])
+                for group in groups:
+                    p.exists(group.key)
                 results = p.execute()
                 expired_group_ids = []
                 for i, key_exists in enumerate(results):
