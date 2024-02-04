@@ -4,7 +4,8 @@ from tests import RQTestCase, fixtures
 
 class TestFixtures(RQTestCase):
     def test_rpush_fixture(self):
-        fixtures.rpush('foo', 'bar')
+        connection_kwargs = self.connection.connection_pool.connection_kwargs
+        fixtures.rpush('foo', 'bar', connection_kwargs)
         assert self.testconn.lrange('foo', 0, 0)[0].decode() == 'bar'
 
     def test_start_worker_fixture(self):

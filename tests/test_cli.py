@@ -507,7 +507,7 @@ class TestRQCli(CLITestCase):
         args, kwargs = Job(job_id).result
 
         self.assertEqual(args, ('hello', [1, {'key': 'value'}], {"test": True}, (1, 2)))
-        self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc', 'file': '{\n    "test": true\n}\n'})
+        self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc', 'file': '{"test": true}\n'})
 
     def test_cli_enqueue_schedule_in(self):
         """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""

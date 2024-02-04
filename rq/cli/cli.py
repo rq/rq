@@ -148,7 +148,8 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
                 clean_registries(queue)
                 clean_worker_registry(queue)
 
-            refresh(interval, func, qs, raw, by_queue, cli_config.queue_class, cli_config.worker_class)
+            refresh(interval, func, qs, raw, by_queue, cli_config.queue_class, cli_config.worker_class,
+                    cli_config.connection)
     except ConnectionError as e:
         click.echo(e)
         sys.exit(1)
@@ -401,42 +402,41 @@ def enqueue(
 
     schedule = parse_schedule(schedule_in, schedule_at)
 
-    with Connection(cli_config.connection):
-        queue = cli_config.queue_class(queue, serializer=serializer)
+    queue = cli_config.queue_class(queue, serializer=serializer, connection=cli_config.connection)
 
-        if schedule is None:
-            job = queue.enqueue_call(
-                function,
-                args,
-                kwargs,
-                timeout,
-                result_ttl,
-                ttl,
-                failure_ttl,
-                description,
-                depends_on,
-                job_id,
-                at_front,
-                None,
-                retry,
-            )
-        else:
-            job = queue.create_job(
-                function,
-                args,
-                kwargs,
-                timeout,
-                result_ttl,
-                ttl,
-                failure_ttl,
-                description,
-                depends_on,
-                job_id,
-                None,
-                JobStatus.SCHEDULED,
-                retry,
-            )
-            queue.schedule_job(job, schedule)
+    if schedule is None:
+        job = queue.enqueue_call(
+            function,
+            args,
+            kwargs,
+            timeout,
+            result_ttl,
+            ttl,
+            failure_ttl,
+            description,
+            depends_on,
+            job_id,
+            at_front,
+            None,
+            retry,
+        )
+    else:
+        job = queue.create_job(
+            function,
+            args,
+            kwargs,
+            timeout,
+            result_ttl,
+            ttl,
+            failure_ttl,
+            description,
+            depends_on,
+            job_id,
+            None,
+            JobStatus.SCHEDULED,
+            retry,
+        )
+        queue.schedule_job(job, schedule)
 
     if not quiet:
         click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))

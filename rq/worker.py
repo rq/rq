@@ -36,7 +36,7 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
-from .connections import get_current_connection, pop_connection, push_connection
+from .connections import get_current_connection
 from .defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_DATE_FORMAT,
@@ -158,15 +158,17 @@ class BaseWorker:
         self.execution: Optional[Execution] = None
 
         queues = [
-            self.queue_class(
-                name=q,
-                connection=connection,
-                job_class=self.job_class,
-                serializer=self.serializer,
-                death_penalty_class=self.death_penalty_class,
+            (
+                self.queue_class(
+                    name=q,
+                    connection=connection,
+                    job_class=self.job_class,
+                    serializer=self.serializer,
+                    death_penalty_class=self.death_penalty_class,
+                )
+                if isinstance(q, str)
+                else q
             )
-            if isinstance(q, str)
-            else q
             for q in ensure_list(queues)
         ]
 
@@ -289,8 +291,6 @@ class BaseWorker:
         """
         if queue:
             connection = queue.connection
-        elif connection is None:
-            connection = get_current_connection()
 
         worker_keys = worker_registration.get_keys(queue=queue, connection=connection)
         workers = [
