@@ -8,6 +8,7 @@ from rq.exceptions import TimeoutFormatError
 from rq.utils import (
     backend_class,
     ceildiv,
+    as_text,
     ensure_list,
     first,
     get_call_string,
@@ -56,6 +57,15 @@ class TestUtils(RQTestCase):
         self.assertEqual(False, is_nonstring_iterable('test'))
         self.assertEqual(True, is_nonstring_iterable({}))
         self.assertEqual(True, is_nonstring_iterable(()))
+
+    def test_as_text(self):
+        """Ensure function as_text works correctly"""
+        bad_texts = [3, None, 'test\xd0']
+        self.assertEqual('test', as_text(b'test'))
+        self.assertEqual('test', as_text('test'))
+        with self.assertRaises(ValueError):
+            for text in bad_texts:
+                as_text(text)
 
     def test_ensure_list(self):
         """Ensure function ensure_list works correctly"""

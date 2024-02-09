@@ -48,7 +48,7 @@ def as_text(v: Union[bytes, str]) -> str:
         ValueError: If the value is not bytes or string
 
     Returns:
-        value (Optional[str]): Either the decoded string or None
+        value (str): The decoded string
     """
     if isinstance(v, bytes):
         return v.decode('utf-8')
