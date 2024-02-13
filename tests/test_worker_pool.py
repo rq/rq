@@ -43,9 +43,10 @@ class TestWorkerPool(TestCase):
         self.assertEqual(len(pool.worker_dict.keys()), 2)
 
         worker_data = list(pool.worker_dict.values())[0]
+        sleep(0.5)
         _send_shutdown_command(worker_data.name, self.connection.connection_pool.connection_kwargs.copy(), delay=0)
         # 1 worker should be dead since we sent a shutdown command
-        sleep(0.2)
+        sleep(0.75)
         pool.check_workers(respawn=False)
         self.assertEqual(len(pool.worker_dict.keys()), 1)
 
@@ -65,9 +66,10 @@ class TestWorkerPool(TestCase):
         self.assertEqual(len(pool.worker_dict.keys()), 2)
 
         worker_data = list(pool.worker_dict.values())[0]
+        sleep(0.5)
         _send_shutdown_command(worker_data.name, self.connection.connection_pool.connection_kwargs.copy(), delay=0)
         # 1 worker should be dead since we sent a shutdown command
-        sleep(0.2)
+        sleep(0.75)
         pool.reap_workers()
         self.assertEqual(len(pool.worker_dict.keys()), 1)
         pool.stop_workers()
