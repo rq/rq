@@ -1499,7 +1499,7 @@ class Job:
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
-        If number of retries is bigger than length of intervals, the first
+        If number of retries is bigger than length of intervals, the last
         value in the list will be used multiple times.
 
         Returns:
@@ -1508,7 +1508,7 @@ class Job:
         if self.retry_intervals is None:
             return 0
         number_of_intervals = len(self.retry_intervals)
-        index = max(number_of_intervals - self.retries_left, 0)
+        index = max(number_of_intervals - self.retries_left, -1)
         return self.retry_intervals[index]
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
