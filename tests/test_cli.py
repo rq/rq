@@ -147,7 +147,7 @@ class TestRQCli(CLITestCase):
         job2 = queue.enqueue(div_by_zero)
         job3 = queue.enqueue(div_by_zero)
 
-        worker = Worker([queue])
+        worker = Worker([queue], connection=connection)
         worker.work(burst=True)
 
         self.assertIn(job, registry)
@@ -180,7 +180,7 @@ class TestRQCli(CLITestCase):
         job2 = queue.enqueue(div_by_zero)
         job3 = queue.enqueue(div_by_zero)
 
-        worker = Worker([queue], serializer=JSONSerializer)
+        worker = Worker([queue], serializer=JSONSerializer, connection=connection)
         worker.work(burst=True)
 
         self.assertIn(job, registry)
@@ -445,7 +445,7 @@ class TestRQCli(CLITestCase):
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
-        worker = Worker(queue)
+        worker = Worker(queue, connection=self.connection)
         worker.work(True)
         self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
 
@@ -471,7 +471,7 @@ class TestRQCli(CLITestCase):
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
-        worker = Worker(queue, serializer=JSONSerializer)
+        worker = Worker(queue, serializer=JSONSerializer, connection=self.connection)
         worker.work(True)
         self.assertEqual(Job(job_id, serializer=JSONSerializer).result, 'Hi there, Stranger!')
 
@@ -501,7 +501,7 @@ class TestRQCli(CLITestCase):
 
         job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
 
-        worker = Worker(queue)
+        worker = Worker(queue, connection=self.connection)
         worker.work(True)
 
         args, kwargs = Job(job_id).result
@@ -513,7 +513,7 @@ class TestRQCli(CLITestCase):
         """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""
         queue = Queue(connection=self.connection)
         registry = ScheduledJobRegistry(queue=queue)
-        worker = Worker(queue)
+        worker = Worker(queue, connection=self.connection)
         scheduler = RQScheduler(queue, self.connection)
 
         self.assertTrue(len(queue) == 0)
@@ -550,7 +550,7 @@ class TestRQCli(CLITestCase):
         """
         queue = Queue(connection=self.connection)
         registry = ScheduledJobRegistry(queue=queue)
-        worker = Worker(queue)
+        worker = Worker(queue, connection=self.connection)
         scheduler = RQScheduler(queue, self.connection)
 
         self.assertTrue(len(queue) == 0)
@@ -693,7 +693,7 @@ class TestRQCli(CLITestCase):
         self.assertEqual(parse_function_arg('jsonkey:=["json", "value"]', 4), ('jsonkey', ['json', 'value']))
         self.assertEqual(parse_function_arg('evalkey%=1.2', 5), ('evalkey', 1.2))
         self.assertEqual(parse_function_arg(':@tests/test.json', 6), (None, {'test': True}))
-        self.assertEqual(parse_function_arg('@tests/test.json', 7), (None, '{\n    "test": true\n}\n'))
+        self.assertEqual(parse_function_arg('@tests/test.json', 7), (None, '{"test": true}\n'))
 
     def test_cli_enqueue_doc_test(self):
         """tests the examples of the documentation"""

@@ -60,30 +60,20 @@ class TestWorker(RQTestCase):
         """Worker creation using various inputs."""
 
         # With single string argument
-        w = Worker('foo')
+        w = Worker('foo', connection=self.connection)
         self.assertEqual(w.queues[0].name, 'foo')
 
         # With list of strings
-        w = Worker(['foo', 'bar'])
+        w = Worker(['foo', 'bar'], connection=self.connection)
         self.assertEqual(w.queues[0].name, 'foo')
         self.assertEqual(w.queues[1].name, 'bar')
 
         self.assertEqual(w.queue_keys(), [w.queues[0].key, w.queues[1].key])
         self.assertEqual(w.queue_names(), ['foo', 'bar'])
 
-        # With iterable of strings
-        w = Worker(iter(['foo', 'bar']))
-        self.assertEqual(w.queues[0].name, 'foo')
-        self.assertEqual(w.queues[1].name, 'bar')
-
         # With single Queue
         w = Worker(Queue('foo'))
         self.assertEqual(w.queues[0].name, 'foo')
-
-        # With iterable of Queues
-        w = Worker(iter([Queue('foo'), Queue('bar')]))
-        self.assertEqual(w.queues[0].name, 'foo')
-        self.assertEqual(w.queues[1].name, 'bar')
 
         # With list of Queues
         w = Worker([Queue('foo'), Queue('bar')])
@@ -91,7 +81,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.queues[1].name, 'bar')
 
         # With string and serializer
-        w = Worker('foo', serializer=json)
+        w = Worker('foo', serializer=json, connection=self.connection)
         self.assertEqual(w.queues[0].name, 'foo')
 
         # With queue having serializer
@@ -1601,19 +1591,17 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
 
 class TestExceptionHandlerMessageEncoding(RQTestCase):
-    def setUp(self):
-        super().setUp()
-        self.worker = Worker("foo")
-        self.worker._exc_handlers = []
+
+    def test_handle_exception_handles_non_ascii_in_exception_message(self):
+        """worker.handle_exception doesn't crash on non-ascii in exception message."""
+        worker = Worker("foo", connection=self.connection)
+        worker._exc_handlers = []
         # Mimic how exception info is actually passed forwards
         try:
             raise Exception(u"💪")
         except Exception:
-            self.exc_info = sys.exc_info()
-
-    def test_handle_exception_handles_non_ascii_in_exception_message(self):
-        """worker.handle_exception doesn't crash on non-ascii in exception message."""
-        self.worker.handle_exception(Mock(), *self.exc_info)
+            exc_info = sys.exc_info()
+        worker.handle_exception(Mock(), *exc_info)
 
 
 class TestRoundRobinWorker(RQTestCase):

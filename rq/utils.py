@@ -379,3 +379,13 @@ def parse_names(queues_or_names: List[Union[str, 'Queue']]) -> List[str]:
         else:
             names.append(str(queue_or_name))
     return names
+
+
+def get_connection_from_queues(queues_or_names: List[Union[str, 'Queue']]) -> Optional['Redis']:
+    """Given a list of strings or queues, returns a connection"""
+    from .queue import Queue
+
+    for queue_or_name in queues_or_names:
+        if isinstance(queue_or_name, Queue):
+            return queue_or_name.connection
+    return None

@@ -56,7 +56,7 @@ from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
-from .utils import as_text, backend_class, compact, ensure_list, get_version, utcformat, utcnow, utcparse
+from .utils import as_text, backend_class, compact, ensure_list, get_connection_from_queues, get_version, utcformat, utcnow, utcparse
 from .version import VERSION
 
 try:
@@ -145,6 +145,9 @@ class BaseWorker:
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
         self.maintenance_interval = maintenance_interval
+
+        if not connection:
+            connection = get_connection_from_queues(queues)
 
         connection = self._set_connection(connection)
         self.connection = connection
