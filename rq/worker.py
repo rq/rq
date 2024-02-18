@@ -36,7 +36,6 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
-from .connections import get_current_connection
 from .defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_DATE_FORMAT,
@@ -56,7 +55,17 @@ from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
-from .utils import as_text, backend_class, compact, ensure_list, get_connection_from_queues, get_version, utcformat, utcnow, utcparse
+from .utils import (
+    as_text,
+    backend_class,
+    compact,
+    ensure_list,
+    get_connection_from_queues,
+    get_version,
+    utcformat,
+    utcnow,
+    utcparse,
+)
 from .version import VERSION
 
 try:
@@ -417,8 +426,6 @@ class BaseWorker:
         Args:
             connection (Optional[Redis]): The Redis Connection.
         """
-        # if connection is None:
-        #     connection = get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
             timeout_config = {"socket_timeout": self.connection_timeout}

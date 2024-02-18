@@ -7,7 +7,6 @@ from .worker import SimpleWorker, Worker
 
 __all__ = [
     "Connection",
-    "get_current_connection",
     "pop_connection",
     "push_connection",
     "Callback",
