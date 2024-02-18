@@ -105,7 +105,7 @@ class Queue:
     def from_queue_key(
         cls,
         queue_key: str,
-        connection: Optional['Redis'] = None,
+        connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
         serializer: Any = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
@@ -116,7 +116,7 @@ class Queue:
 
         Args:
             queue_key (str): The queue key
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            connection (Redis): Redis connection. Defaults to None.
             job_class (Optional[Job], optional): Job class. Defaults to None.
             serializer (Any, optional): Serializer. Defaults to None.
             death_penalty_class (Optional[BaseDeathPenalty], optional): Death penalty class. Defaults to None.

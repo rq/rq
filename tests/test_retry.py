@@ -11,7 +11,7 @@ from tests.fixtures import div_by_zero, say_hello
 class TestRetry(RQTestCase):
     def test_persistence_of_retry_data(self):
         """Retry related data is stored and restored properly"""
-        job = Job.create(func=fixtures.some_calculation)
+        job = Job.create(func=fixtures.some_calculation, connection=self.connection)
         job.retries_left = 3
         job.retry_intervals = [1, 2, 3]
         job.save()
@@ -43,7 +43,7 @@ class TestRetry(RQTestCase):
 
     def test_get_retry_interval(self):
         """get_retry_interval() returns the right retry interval"""
-        job = Job.create(func=fixtures.say_hello)
+        job = Job.create(func=fixtures.say_hello, connection=self.connection)
 
         # Handle case where self.retry_intervals is None
         job.retries_left = 2

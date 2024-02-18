@@ -16,8 +16,8 @@ from tests import RQTestCase
 class TestWorkerRegistry(RQTestCase):
     def test_worker_registration(self):
         """Ensure worker.key is correctly set in Redis."""
-        foo_queue = Queue(name='foo')
-        bar_queue = Queue(name='bar')
+        foo_queue = Queue(name='foo', connection=self.connection)
+        bar_queue = Queue(name='bar', connection=self.connection)
         worker = Worker([foo_queue, bar_queue], connection=self.connection)
 
         register(worker)
