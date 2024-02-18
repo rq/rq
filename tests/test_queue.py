@@ -435,7 +435,7 @@ class TestQueue(RQTestCase):
         self.assertTrue('third-queue' in names)
 
         # Now empty two queues
-        w = Worker([q2, q3])
+        w = Worker([q2, q3], connection=self.connection)
         w.work(burst=True)
 
         # Queue.all() should still report the empty queues

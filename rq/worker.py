@@ -406,7 +406,7 @@ class BaseWorker:
             return True
         return False
 
-    def _set_connection(self, connection: Optional['Redis']) -> 'Redis':
+    def _set_connection(self, connection: 'Redis') -> 'Redis':
         """Configures the Redis connection to have a socket timeout.
         This should timouet the connection in case any specific command hangs at any given time (eg. BLPOP).
         If the connection provided already has a `socket_timeout` defined, skips.
@@ -414,8 +414,8 @@ class BaseWorker:
         Args:
             connection (Optional[Redis]): The Redis Connection.
         """
-        if connection is None:
-            connection = get_current_connection()
+        # if connection is None:
+        #     connection = get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
             timeout_config = {"socket_timeout": self.connection_timeout}
