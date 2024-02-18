@@ -13,9 +13,8 @@ from typing import Optional
 
 from redis import Redis
 
-from rq import Connection, Queue, get_current_connection, get_current_job
+from rq import Queue, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
-from rq.decorators import job
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.suspension import resume
@@ -113,7 +112,6 @@ def launch_process_within_worker_and_store_pid(path, timeout):
 
 
 def access_self():
-    assert get_current_connection() is not None
     assert get_current_job() is not None
 
 
@@ -160,13 +158,6 @@ class ClassWithAStaticMethod:
     @staticmethod
     def static_method():
         return u"I'm a static method"
-
-
-with Connection():
-
-    @job(queue='default')
-    def decorated_job(x, y):
-        return x + y
 
 
 def black_hole(job, *exc_info):
@@ -263,12 +254,12 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_int
 
 
 def start_worker_process(
-    queue_name, connection=None, worker_name=None, burst=False, job_monitoring_interval: Optional[int] = None
+    queue_name, connection, worker_name=None, burst=False, job_monitoring_interval: Optional[int] = None
 ) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.
     """
-    connection = connection or get_current_connection()
+    connection = connection
     conn_kwargs = connection.connection_pool.connection_kwargs
     p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
     p.start()
@@ -281,7 +272,7 @@ def burst_two_workers(queue, connection: Redis, timeout=2, tries=5, pause=0.1):
     Return after both workers have finished handling jobs, up to a fixed timeout
     on the worker that runs in another process.
     """
-    w1 = start_worker_process(queue.name, worker_name='w1', burst=True)
+    w1 = start_worker_process(queue.name, worker_name='w1', burst=True, connection=connection)
     w2 = Worker(queue, name='w2', connection=connection)
     jobs = queue.jobs
     if jobs:

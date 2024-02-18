@@ -120,7 +120,7 @@ class QueueCallbackTestCase(RQTestCase):
 class SyncJobCallback(RQTestCase):
     def test_success_callback(self):
         """Test success callback is executed only when job is successful"""
-        queue = Queue(is_async=False)
+        queue = Queue(is_async=False, connection=self.connection)
 
         job = queue.enqueue(say_hello, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
@@ -141,7 +141,7 @@ class SyncJobCallback(RQTestCase):
 
     def test_failure_callback(self):
         """queue.enqueue* methods with on_failure is persisted correctly"""
-        queue = Queue(is_async=False)
+        queue = Queue(is_async=False, connection=self.connection)
 
         job = queue.enqueue(div_by_zero, on_failure=save_exception)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
@@ -260,7 +260,7 @@ class WorkerCallbackTestCase(RQTestCase):
 class JobCallbackTestCase(RQTestCase):
     def test_job_creation_with_success_callback(self):
         """Ensure callbacks are created and persisted properly"""
-        job = Job.create(say_hello)
+        job = Job.create(say_hello, connection=self.connection)
         self.assertIsNone(job._success_callback_name)
         # _success_callback starts with UNEVALUATED
         self.assertEqual(job._success_callback, UNEVALUATED)
@@ -269,7 +269,7 @@ class JobCallbackTestCase(RQTestCase):
         self.assertEqual(job._success_callback, None)
 
         # job.success_callback is assigned properly
-        job = Job.create(say_hello, on_success=print)
+        job = Job.create(say_hello, on_success=print, connection=self.connection)
         self.assertIsNotNone(job._success_callback_name)
         self.assertEqual(job.success_callback, print)
         job.save()
@@ -278,7 +278,7 @@ class JobCallbackTestCase(RQTestCase):
         self.assertEqual(job.success_callback, print)
 
         # test string callbacks
-        job = Job.create(say_hello, on_success=Callback("print"))
+        job = Job.create(say_hello, on_success=Callback("print"), connection=self.connection)
         self.assertIsNotNone(job._success_callback_name)
         self.assertEqual(job.success_callback, print)
         job.save()
@@ -288,7 +288,7 @@ class JobCallbackTestCase(RQTestCase):
 
     def test_job_creation_with_failure_callback(self):
         """Ensure failure callbacks are persisted properly"""
-        job = Job.create(say_hello)
+        job = Job.create(say_hello, connection=self.connection)
         self.assertIsNone(job._failure_callback_name)
         # _failure_callback starts with UNEVALUATED
         self.assertEqual(job._failure_callback, UNEVALUATED)
@@ -297,7 +297,7 @@ class JobCallbackTestCase(RQTestCase):
         self.assertEqual(job._failure_callback, None)
 
         # job.failure_callback is assigned properly
-        job = Job.create(say_hello, on_failure=print)
+        job = Job.create(say_hello, on_failure=print, connection=self.connection)
         self.assertIsNotNone(job._failure_callback_name)
         self.assertEqual(job.failure_callback, print)
         job.save()
@@ -306,7 +306,7 @@ class JobCallbackTestCase(RQTestCase):
         self.assertEqual(job.failure_callback, print)
 
         # test string callbacks
-        job = Job.create(say_hello, on_failure=Callback("print"))
+        job = Job.create(say_hello, on_failure=Callback("print"), connection=self.connection)
         self.assertIsNotNone(job._failure_callback_name)
         self.assertEqual(job.failure_callback, print)
         job.save()
@@ -316,7 +316,7 @@ class JobCallbackTestCase(RQTestCase):
 
     def test_job_creation_with_stopped_callback(self):
         """Ensure stopped callbacks are persisted properly"""
-        job = Job.create(say_hello)
+        job = Job.create(say_hello, connection=self.connection)
         self.assertIsNone(job._stopped_callback_name)
         # _failure_callback starts with UNEVALUATED
         self.assertEqual(job._stopped_callback, UNEVALUATED)
@@ -325,7 +325,7 @@ class JobCallbackTestCase(RQTestCase):
         self.assertEqual(job._stopped_callback, None)
 
         # job.failure_callback is assigned properly
-        job = Job.create(say_hello, on_stopped=print)
+        job = Job.create(say_hello, on_stopped=print, connection=self.connection)
         self.assertIsNotNone(job._stopped_callback_name)
         self.assertEqual(job.stopped_callback, print)
         job.save()
@@ -334,7 +334,7 @@ class JobCallbackTestCase(RQTestCase):
         self.assertEqual(job.stopped_callback, print)
 
         # test string callbacks
-        job = Job.create(say_hello, on_stopped=Callback("print"))
+        job = Job.create(say_hello, on_stopped=Callback("print"), connection=self.connection)
         self.assertIsNotNone(job._stopped_callback_name)
         self.assertEqual(job.stopped_callback, print)
         job.save()

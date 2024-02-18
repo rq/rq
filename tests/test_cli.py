@@ -24,7 +24,7 @@ from tests.fixtures import div_by_zero, say_hello
 class CLITestCase(RQTestCase):
     def setUp(self):
         super().setUp()
-        db_num = self.testconn.connection_pool.connection_kwargs['db']
+        db_num = self.connection.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
         self.connection = Redis.from_url(self.redis_url)
 
@@ -58,7 +58,7 @@ class TestRQCli(CLITestCase):
 
     def setUp(self):
         super().setUp()
-        job = Job.create(func=div_by_zero, args=(1, 2, 3))
+        job = Job.create(func=div_by_zero, args=(1, 2, 3), connection=self.connection)
         job.origin = 'fake'
         job.save()
 
@@ -447,7 +447,7 @@ class TestRQCli(CLITestCase):
 
         worker = Worker(queue, connection=self.connection)
         worker.work(True)
-        self.assertEqual(Job(job_id).result, 'Hi there, Stranger!')
+        self.assertEqual(Job(job_id, connection=self.connection).result, 'Hi there, Stranger!')
 
     def test_cli_enqueue_with_serializer(self):
         """rq enqueue -u <url> -S rq.serializers.JSONSerializer tests.fixtures.say_hello"""
@@ -473,7 +473,9 @@ class TestRQCli(CLITestCase):
 
         worker = Worker(queue, serializer=JSONSerializer, connection=self.connection)
         worker.work(True)
-        self.assertEqual(Job(job_id, serializer=JSONSerializer).result, 'Hi there, Stranger!')
+        self.assertEqual(
+            Job(job_id, serializer=JSONSerializer, connection=self.connection).result, 'Hi there, Stranger!'
+        )
 
     def test_cli_enqueue_args(self):
         """rq enqueue -u <url> tests.fixtures.echo hello ':[1, {"key": "value"}]' json:=["abc"] nojson=def"""
@@ -504,7 +506,7 @@ class TestRQCli(CLITestCase):
         worker = Worker(queue, connection=self.connection)
         worker.work(True)
 
-        args, kwargs = Job(job_id).result
+        args, kwargs = Job(job_id, connection=self.connection).result
 
         self.assertEqual(args, ('hello', [1, {'key': 'value'}], {"test": True}, (1, 2)))
         self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc', 'file': '{"test": true}\n'})
@@ -702,7 +704,7 @@ class TestRQCli(CLITestCase):
         id = str(uuid4())
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc'])
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), (['abc'], {}))
 
         id = str(uuid4())
@@ -710,7 +712,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc=def']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'abc': 'def'}))
 
         id = str(uuid4())
@@ -718,7 +720,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':{"json": "abc"}']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([{'json': 'abc'}], {}))
 
         id = str(uuid4())
@@ -726,25 +728,25 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:={"json": "abc"}']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'key': {'json': 'abc'}}))
 
         id = str(uuid4())
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%1, 2'])
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([(1, 2)], {}))
 
         id = str(uuid4())
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%None'])
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([None], {}))
 
         id = str(uuid4())
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%True'])
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([True], {}))
 
         id = str(uuid4())
@@ -752,7 +754,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%=(1, 2)']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'key': (1, 2)}))
 
         id = str(uuid4())
@@ -760,7 +762,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%={"foo": True}']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'key': {"foo": True}}))
 
         id = str(uuid4())
@@ -768,7 +770,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '@tests/test.json']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([open('tests/test.json', 'r').read()], {}))
 
         id = str(uuid4())
@@ -776,7 +778,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key=@tests/test.json']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json', 'r').read()}))
 
         id = str(uuid4())
@@ -784,7 +786,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':@tests/test.json']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json', 'r').read())], {}))
 
         id = str(uuid4())
@@ -792,7 +794,7 @@ class TestRQCli(CLITestCase):
             main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:=@tests/test.json']
         )
         self.assert_normal_execution(result)
-        job = Job.fetch(id)
+        job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json', 'r').read())}))
 
 

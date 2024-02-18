@@ -4,6 +4,12 @@
 * Support for multiple job executions. A job can now properly manage multiple executions running simultaneously, allowing future support for long running scheduled jobs.
 * [DEPRECATED] `RoundRobinWorker` and `RandomWorker` are deprecated. Use  `--dequeue-strategy <round-robin/random>` instead.
 
+#### Breaking Changes
+* `Job.__init__` requires both `id` and `connection` to be passed in.
+* `Job.exists()` requires `connection` argument to be passed in.
+* `Queue.all()` requires `connection` argument.
+* `@job` decorator now requires `connection` argument.
+
 ### RQ 1.15.1 (2023-06-20)
 * Fixed a bug that may cause a crash when cleaning intermediate queue. Thanks @selwin!
 * Fixed a bug that may cause canceled jobs to still run dependent jobs. Thanks @fredsod!

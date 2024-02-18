@@ -350,7 +350,7 @@ class TestDeferredRegistry(RQTestCase):
 
     def test_add(self):
         """Adding a job to DeferredJobsRegistry."""
-        job = Job()
+        job = Job(connection=self.connection)
         self.registry.add(job)
         job_ids = [as_text(job_id) for job_id in self.connection.zrange(self.registry.key, 0, -1)]
         self.assertEqual(job_ids, [job.id])

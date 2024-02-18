@@ -20,13 +20,13 @@ def thread_friendly_sleep_func(seconds):
 class TestTimeouts(RQTestCase):
     def test_timer_death_penalty(self):
         """Ensure TimerDeathPenalty works correctly."""
-        q = Queue(connection=self.testconn)
+        q = Queue(connection=self.connection)
         q.empty()
-        finished_job_registry = FinishedJobRegistry(connection=self.testconn)
-        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        finished_job_registry = FinishedJobRegistry(connection=self.connection)
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
 
         # make sure death_penalty_class persists
-        w = TimerBasedWorker([q], connection=self.testconn)
+        w = TimerBasedWorker([q], connection=self.connection)
         self.assertIsNotNone(w)
         self.assertEqual(w.death_penalty_class, TimerDeathPenalty)
 

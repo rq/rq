@@ -76,14 +76,14 @@ class TestQueue(RQTestCase):
         """Emptying queues."""
         q = Queue('example')
 
-        self.testconn.rpush('rq:queue:example', 'foo')
-        self.testconn.rpush('rq:queue:example', 'bar')
+        self.connection.rpush('rq:queue:example', 'foo')
+        self.connection.rpush('rq:queue:example', 'bar')
         self.assertEqual(q.is_empty(), False)
 
         q.empty()
 
         self.assertEqual(q.is_empty(), True)
-        self.assertIsNone(self.testconn.lpop('rq:queue:example'))
+        self.assertIsNone(self.connection.lpop('rq:queue:example'))
 
     def test_empty_removes_jobs(self):
         """Emptying a queue deletes the associated job objects"""
@@ -98,7 +98,7 @@ class TestQueue(RQTestCase):
         q = Queue('example')
         self.assertEqual(q.is_empty(), True)
 
-        self.testconn.rpush('rq:queue:example', 'sentinel message')
+        self.connection.rpush('rq:queue:example', 'sentinel message')
         self.assertEqual(q.is_empty(), False)
 
     def test_queue_delete(self):
@@ -112,10 +112,10 @@ class TestQueue(RQTestCase):
         q.delete()
 
         self.assertEqual(0, len(q.get_job_ids()))
-        self.assertEqual(False, self.testconn.exists(job.key))
-        self.assertEqual(False, self.testconn.exists(job2.key))
-        self.assertEqual(0, len(self.testconn.smembers(Queue.redis_queues_keys)))
-        self.assertEqual(False, self.testconn.exists(q.key))
+        self.assertEqual(False, self.connection.exists(job.key))
+        self.assertEqual(False, self.connection.exists(job2.key))
+        self.assertEqual(0, len(self.connection.smembers(Queue.redis_queues_keys)))
+        self.assertEqual(False, self.connection.exists(q.key))
 
     def test_queue_delete_but_keep_jobs(self):
         """Test queue.delete properly removes queue but keeps the job keys in the redis store"""
@@ -128,10 +128,10 @@ class TestQueue(RQTestCase):
         q.delete(delete_jobs=False)
 
         self.assertEqual(0, len(q.get_job_ids()))
-        self.assertEqual(True, self.testconn.exists(job.key))
-        self.assertEqual(True, self.testconn.exists(job2.key))
-        self.assertEqual(0, len(self.testconn.smembers(Queue.redis_queues_keys)))
-        self.assertEqual(False, self.testconn.exists(q.key))
+        self.assertEqual(True, self.connection.exists(job.key))
+        self.assertEqual(True, self.connection.exists(job2.key))
+        self.assertEqual(0, len(self.connection.smembers(Queue.redis_queues_keys)))
+        self.assertEqual(False, self.connection.exists(q.key))
 
     def test_position(self):
         """Test queue.delete properly removes queue but keeps the job keys in the redis store"""
@@ -175,7 +175,7 @@ class TestQueue(RQTestCase):
 
         q.enqueue(say_hello, 'Alice')
         q.enqueue(say_hello, 'Charlie')
-        self.testconn.lpush(q.key, '1', '2')
+        self.connection.lpush(q.key, '1', '2')
 
         self.assertEqual(q.count, 4)
         self.assertEqual(len(q), 4)
@@ -197,8 +197,8 @@ class TestQueue(RQTestCase):
 
         # Inspect data inside Redis
         q_key = 'rq:queue:default'
-        self.assertEqual(self.testconn.llen(q_key), 1)
-        self.assertEqual(self.testconn.lrange(q_key, 0, -1)[0].decode('ascii'), job_id)
+        self.assertEqual(self.connection.llen(q_key), 1)
+        self.assertEqual(self.connection.lrange(q_key, 0, -1)[0].decode('ascii'), job_id)
 
     def test_enqueue_sets_metadata(self):
         """Enqueueing job onto queues modifies meta data."""
@@ -230,16 +230,16 @@ class TestQueue(RQTestCase):
 
     def test_dequeue_any(self):
         """Fetching work from any given queue."""
-        fooq = Queue('foo', connection=self.testconn)
-        barq = Queue('bar', connection=self.testconn)
+        fooq = Queue('foo', connection=self.connection)
+        barq = Queue('bar', connection=self.connection)
 
-        self.assertRaises(ValueError, Queue.dequeue_any, [fooq, barq], timeout=0, connection=self.testconn)
+        self.assertRaises(ValueError, Queue.dequeue_any, [fooq, barq], timeout=0, connection=self.connection)
 
-        self.assertEqual(Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None), None)
+        self.assertEqual(Queue.dequeue_any([fooq, barq], connection=self.connection, timeout=None), None)
 
         # Enqueue a single item
         barq.enqueue(say_hello)
-        job, queue = Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None)
+        job, queue = Queue.dequeue_any([fooq, barq], connection=self.connection, timeout=None)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(queue, barq)
 
@@ -247,13 +247,13 @@ class TestQueue(RQTestCase):
         barq.enqueue(say_hello, 'for Bar')
         fooq.enqueue(say_hello, 'for Foo')
 
-        job, queue = Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None)
+        job, queue = Queue.dequeue_any([fooq, barq], connection=self.connection, timeout=None)
         self.assertEqual(queue, fooq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, fooq.name)
         self.assertEqual(job.args[0], 'for Foo', 'Foo should be dequeued first.')
 
-        job, queue = Queue.dequeue_any([fooq, barq], connection=self.testconn, timeout=None)
+        job, queue = Queue.dequeue_any([fooq, barq], connection=self.connection, timeout=None)
         self.assertEqual(queue, barq)
         self.assertEqual(job.func, say_hello)
         self.assertEqual(job.origin, barq.name)
@@ -262,43 +262,43 @@ class TestQueue(RQTestCase):
     @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_dequeue_any_reliable(self):
         """Dequeueing job from a single queue moves job to intermediate queue."""
-        foo_queue = Queue('foo', connection=self.testconn)
+        foo_queue = Queue('foo', connection=self.connection)
         job_1 = foo_queue.enqueue(say_hello)
-        self.assertRaises(ValueError, Queue.dequeue_any, [foo_queue], timeout=0, connection=self.testconn)
+        self.assertRaises(ValueError, Queue.dequeue_any, [foo_queue], timeout=0, connection=self.connection)
 
         # Job ID is not in intermediate queue
-        self.assertIsNone(self.testconn.lpos(foo_queue.intermediate_queue_key, job_1.id))
-        job, queue = Queue.dequeue_any([foo_queue], timeout=None, connection=self.testconn)
+        self.assertIsNone(self.connection.lpos(foo_queue.intermediate_queue_key, job_1.id))
+        job, queue = Queue.dequeue_any([foo_queue], timeout=None, connection=self.connection)
         self.assertEqual(queue, foo_queue)
         self.assertEqual(job.func, say_hello)
         # After job is dequeued, the job ID is in the intermediate queue
-        self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 0)
+        self.assertEqual(self.connection.lpos(foo_queue.intermediate_queue_key, job.id), 0)
 
         # Test the blocking version
         foo_queue.enqueue(say_hello)
-        job, queue = Queue.dequeue_any([foo_queue], timeout=1, connection=self.testconn)
+        job, queue = Queue.dequeue_any([foo_queue], timeout=1, connection=self.connection)
         self.assertEqual(queue, foo_queue)
         self.assertEqual(job.func, say_hello)
         # After job is dequeued, the job ID is in the intermediate queue
-        self.assertEqual(self.testconn.lpos(foo_queue.intermediate_queue_key, job.id), 1)
+        self.assertEqual(self.connection.lpos(foo_queue.intermediate_queue_key, job.id), 1)
 
     @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_intermediate_queue(self):
         """Job should be stuck in intermediate queue if execution fails after dequeued."""
-        queue = Queue('foo', connection=self.testconn)
+        queue = Queue('foo', connection=self.connection)
         job = queue.enqueue(say_hello)
 
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # # and it's status is still QUEUED
         with patch.object(Worker, 'execute_job'):
             # mocked.execute_job.side_effect = Exception()
-            worker = Worker(queue, connection=self.testconn)
+            worker = Worker(queue, connection=self.connection)
             worker.work(burst=True)
 
             # Job status is still QUEUED even though it's already dequeued
             self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
             self.assertFalse(job.id in queue.get_job_ids())
-            self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+            self.assertIsNotNone(self.connection.lpos(queue.intermediate_queue_key, job.id))
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
         """Dequeuing (from any queue) silently ignores non-existing jobs."""
@@ -472,7 +472,7 @@ class TestQueue(RQTestCase):
         job_1 = q.enqueue(say_hello, depends_on=parent_job)
         job_2 = q.enqueue(say_hello, depends_on=parent_job)
 
-        registry = DeferredJobRegistry(q.name, connection=self.testconn)
+        registry = DeferredJobRegistry(q.name, connection=self.connection)
 
         parent_job.set_status(JobStatus.FINISHED)
 
@@ -481,7 +481,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [])
         q.enqueue_dependents(parent_job)
         self.assertEqual(set(q.job_ids), set([job_2.id, job_1.id]))
-        self.assertFalse(self.testconn.exists(parent_job.dependents_key))
+        self.assertFalse(self.connection.exists(parent_job.dependents_key))
 
         # DeferredJobRegistry should also be empty
         self.assertEqual(registry.get_job_ids(), [])
@@ -497,9 +497,9 @@ class TestQueue(RQTestCase):
         job_2 = q_2.enqueue(say_hello, depends_on=parent_job)
 
         # Each queue has its own DeferredJobRegistry
-        registry_1 = DeferredJobRegistry(q_1.name, connection=self.testconn)
+        registry_1 = DeferredJobRegistry(q_1.name, connection=self.connection)
         self.assertEqual(set(registry_1.get_job_ids()), set([job_1.id]))
-        registry_2 = DeferredJobRegistry(q_2.name, connection=self.testconn)
+        registry_2 = DeferredJobRegistry(q_2.name, connection=self.connection)
 
         parent_job.set_status(JobStatus.FINISHED)
 
@@ -513,7 +513,7 @@ class TestQueue(RQTestCase):
         q_2.enqueue_dependents(parent_job)
         self.assertEqual(set(q_1.job_ids), set([job_1.id]))
         self.assertEqual(set(q_2.job_ids), set([job_2.id]))
-        self.assertFalse(self.testconn.exists(parent_job.dependents_key))
+        self.assertFalse(self.connection.exists(parent_job.dependents_key))
 
         # DeferredJobRegistry should also be empty
         self.assertEqual(registry_1.get_job_ids(), [])
@@ -783,10 +783,10 @@ class TestQueue(RQTestCase):
 
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""
-        queue = Queue('example', connection=self.testconn)
+        queue = Queue('example', connection=self.connection)
         job = queue.enqueue(say_hello, retry=Retry(max=3, interval=5))
 
-        job = Job.fetch(job.id, connection=self.testconn)
+        job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [5])
 
@@ -794,7 +794,7 @@ class TestQueue(RQTestCase):
 class TestJobScheduling(RQTestCase):
     def test_enqueue_at(self):
         """enqueue_at() creates a job in ScheduledJobRegistry"""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=10)
         job = queue.enqueue_at(scheduled_time, say_hello)
         registry = ScheduledJobRegistry(queue=queue)

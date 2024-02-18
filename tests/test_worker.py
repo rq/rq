@@ -18,7 +18,7 @@ import pytest
 import redis.exceptions
 from redis import Redis
 
-from rq import Queue, SimpleWorker, Worker, get_current_connection
+from rq import Queue, SimpleWorker, Worker
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
@@ -148,8 +148,8 @@ class TestWorker(RQTestCase):
         """Worker ttl."""
         w = Worker([], connection=self.connection)
         w.register_birth()
-        [worker_key] = self.testconn.smembers(Worker.redis_workers_keys)
-        self.assertIsNotNone(self.testconn.ttl(worker_key))
+        [worker_key] = self.connection.smembers(Worker.redis_workers_keys)
+        self.assertIsNotNone(self.connection.ttl(worker_key))
         w.register_death()
 
     def test_work_via_string_argument(self):
@@ -197,7 +197,7 @@ class TestWorker(RQTestCase):
         job_data = job.data
         invalid_data = job_data.replace(b'div_by_zero', b'nonexisting')
         assert job_data != invalid_data
-        self.testconn.hset(job.key, 'data', zlib.compress(invalid_data))
+        self.connection.hset(job.key, 'data', zlib.compress(invalid_data))
 
         # We use the low-level internal function to enqueue any data (bypassing
         # validity checks)
@@ -225,7 +225,7 @@ class TestWorker(RQTestCase):
         job.save()
 
         invalid_meta = '{{{{{{{{INVALID_JSON'
-        self.testconn.hset(job.key, 'meta', invalid_meta)
+        self.connection.hset(job.key, 'meta', invalid_meta)
         job.refresh()
         self.assertIsInstance(job.meta, dict)
         self.assertTrue('unserialized' in job.meta.keys())
@@ -247,7 +247,7 @@ class TestWorker(RQTestCase):
         job_data = job.data
         invalid_data = job_data.replace(b'div_by_zero', b'')
         assert job_data != invalid_data
-        self.testconn.hset(job.key, 'data', zlib.compress(invalid_data))
+        self.connection.hset(job.key, 'data', zlib.compress(invalid_data))
 
         # We use the low-level internal function to enqueue any data (bypassing
         # validity checks)
@@ -268,38 +268,38 @@ class TestWorker(RQTestCase):
         w = Worker([q], connection=self.connection)
         w.register_birth()
 
-        self.assertEqual(str(w.pid), as_text(self.testconn.hget(w.key, 'pid')))
-        self.assertEqual(w.hostname, as_text(self.testconn.hget(w.key, 'hostname')))
-        last_heartbeat = self.testconn.hget(w.key, 'last_heartbeat')
-        self.assertIsNotNone(self.testconn.hget(w.key, 'birth'))
+        self.assertEqual(str(w.pid), as_text(self.connection.hget(w.key, 'pid')))
+        self.assertEqual(w.hostname, as_text(self.connection.hget(w.key, 'hostname')))
+        last_heartbeat = self.connection.hget(w.key, 'last_heartbeat')
+        self.assertIsNotNone(self.connection.hget(w.key, 'birth'))
         self.assertTrue(last_heartbeat is not None)
         w = Worker.find_by_key(w.key, connection=self.connection)
         self.assertIsInstance(w.last_heartbeat, datetime)
 
         # worker.refresh() shouldn't fail if last_heartbeat is None
         # for compatibility reasons
-        self.testconn.hdel(w.key, 'last_heartbeat')
+        self.connection.hdel(w.key, 'last_heartbeat')
         w.refresh()
         # worker.refresh() shouldn't fail if birth is None
         # for compatibility reasons
-        self.testconn.hdel(w.key, 'birth')
+        self.connection.hdel(w.key, 'birth')
         w.refresh()
 
     def test_maintain_heartbeats(self):
         """worker.maintain_heartbeats() shouldn't create new job keys"""
-        queue = Queue(connection=self.testconn)
-        worker = Worker([queue], connection=self.testconn)
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
         job = queue.enqueue(say_hello)
         worker.prepare_execution(job)
         worker.prepare_job_execution(job)
         worker.maintain_heartbeats(job)
-        self.assertTrue(self.testconn.exists(worker.key))
-        self.assertTrue(self.testconn.exists(job.key))
+        self.assertTrue(self.connection.exists(worker.key))
+        self.assertTrue(self.connection.exists(job.key))
 
-        self.testconn.delete(job.key)
+        self.connection.delete(job.key)
 
         worker.maintain_heartbeats(job)
-        self.assertFalse(self.testconn.exists(job.key))
+        self.assertFalse(self.connection.exists(job.key))
 
     @slow
     def test_heartbeat_survives_lost_connection(self):
@@ -434,7 +434,7 @@ class TestWorker(RQTestCase):
 
     def test_handle_retry(self):
         """handle_job_failure() handles retry properly"""
-        connection = self.testconn
+        connection = self.connection
         queue = Queue(connection=connection)
         retry = Retry(max=2)
         job = queue.enqueue(div_by_zero, retry=retry)
@@ -499,7 +499,7 @@ class TestWorker(RQTestCase):
         Job is not moved to FailedJobRegistry when default custom exception
         handler is disabled.
         """
-        queue = Queue(name='default', connection=self.testconn)
+        queue = Queue(name='default', connection=self.connection)
 
         job = queue.enqueue(div_by_zero)
         worker = Worker([queue], disable_default_exception_handler=False)
@@ -579,7 +579,7 @@ class TestWorker(RQTestCase):
         job = q.enqueue(create_file, SENTINEL_FILE)
 
         # Here, we cancel the job, so the sentinel file may not be created
-        self.testconn.delete(job.key)
+        self.connection.delete(job.key)
 
         w = Worker([q])
         w.work(burst=True)
@@ -750,26 +750,26 @@ class TestWorker(RQTestCase):
         q = Queue()
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w = Worker([q])
-        self.assertIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
+        self.assertIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertNotEqual(self.testconn.ttl(job.key), 0)
-        self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
+        self.assertNotEqual(self.connection.ttl(job.key), 0)
+        self.assertNotIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
 
         # Job with -1 result_ttl don't expire
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
         w = Worker([q])
-        self.assertIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
+        self.assertIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertEqual(self.testconn.ttl(job.key), -1)
-        self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
+        self.assertEqual(self.connection.ttl(job.key), -1)
+        self.assertNotIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
 
         # Job with result_ttl = 0 gets deleted immediately
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=0)
         w = Worker([q])
-        self.assertIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
+        self.assertIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
         w.work(burst=True)
-        self.assertEqual(self.testconn.get(job.key), None)
-        self.assertNotIn(job.get_id().encode(), self.testconn.lrange(q.key, 0, -1))
+        self.assertEqual(self.connection.get(job.key), None)
+        self.assertNotIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
 
     def test_worker_sets_job_status(self):
         """Ensure that worker correctly sets job status."""
@@ -804,9 +804,9 @@ class TestWorker(RQTestCase):
         worker = Worker([q])
         job = q.enqueue_call(say_hello)
 
-        self.assertEqual(self.testconn.hget(worker.key, 'current_job'), None)
+        self.assertEqual(self.connection.hget(worker.key, 'current_job'), None)
         worker.set_current_job_id(job.id)
-        self.assertEqual(worker.get_current_job_id(), as_text(self.testconn.hget(worker.key, 'current_job')))
+        self.assertEqual(worker.get_current_job_id(), as_text(self.connection.hget(worker.key, 'current_job')))
         self.assertEqual(worker.get_current_job(), job)
 
     def test_custom_job_class(self):
@@ -865,14 +865,14 @@ class TestWorker(RQTestCase):
 
     def test_prepare_job_execution(self):
         """Prepare job execution does the necessary bookkeeping."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         worker = Worker([queue])
         worker.prepare_execution(job)
         worker.prepare_job_execution(job)
 
         # Updates working queue, job execution should be there
-        registry = StartedJobRegistry(connection=self.testconn)
+        registry = StartedJobRegistry(connection=self.connection)
         # self.assertTrue(job.id in registry.get_job_ids())
         self.assertTrue(worker.execution.composite_key in registry.get_job_ids())
 
@@ -885,7 +885,7 @@ class TestWorker(RQTestCase):
 
     def test_cleanup_execution(self):
         """Cleanup execution does the necessary bookkeeping."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         worker = Worker([queue])
         worker.prepare_job_execution(job)
@@ -899,24 +899,24 @@ class TestWorker(RQTestCase):
     @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
         """Prepare job execution removes job from intermediate queue."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
-        Queue.dequeue_any([queue], timeout=None, connection=self.testconn)
-        self.assertIsNotNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        Queue.dequeue_any([queue], timeout=None, connection=self.connection)
+        self.assertIsNotNone(self.connection.lpos(queue.intermediate_queue_key, job.id))
         worker = Worker([queue])
         worker.prepare_job_execution(job, remove_from_intermediate_queue=True)
-        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        self.assertIsNone(self.connection.lpos(queue.intermediate_queue_key, job.id))
         self.assertEqual(queue.count, 0)
 
     @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
     def test_work_removes_key_from_intermediate_queue(self):
         """Worker removes job from intermediate queue."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         worker = Worker([queue])
         worker.work(burst=True)
-        self.assertIsNone(self.testconn.lpos(queue.intermediate_queue_key, job.id))
+        self.assertIsNone(self.connection.lpos(queue.intermediate_queue_key, job.id))
 
     def test_work_unicode_friendly(self):
         """Worker processes work with unicode description, then quits."""
@@ -958,7 +958,7 @@ class TestWorker(RQTestCase):
 
         w = Worker([q], connection=self.connection)
 
-        suspend(self.testconn)
+        suspend(self.connection)
 
         w.work(burst=True)
         assert q.count == 1
@@ -966,12 +966,12 @@ class TestWorker(RQTestCase):
         # Should not have created evidence of execution
         self.assertEqual(os.path.exists(SENTINEL_FILE), False)
 
-        resume(self.testconn)
+        resume(self.connection)
         w.work(burst=True)
         assert q.count == 0
         self.assertEqual(os.path.exists(SENTINEL_FILE), True)
 
-        suspend(self.testconn)
+        suspend(self.connection)
 
         # Suspend the worker, and then send resume command in the background
         q.enqueue(say_hello)
@@ -991,7 +991,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
 
         # This suspends workers for working for 2 second
-        suspend(self.testconn, 2)
+        suspend(self.connection, 2)
 
         # So when this burst of work happens the queue should remain at 5
         w.work(burst=True)
@@ -1036,32 +1036,32 @@ class TestWorker(RQTestCase):
 
     def test_clean_queue_registries(self):
         """worker.clean_registries sets last_cleaned_at and cleans registries."""
-        foo_queue = Queue('foo', connection=self.testconn)
-        foo_registry = StartedJobRegistry('foo', connection=self.testconn)
-        self.testconn.zadd(foo_registry.key, {'foo': 1})
-        self.assertEqual(self.testconn.zcard(foo_registry.key), 1)
+        foo_queue = Queue('foo', connection=self.connection)
+        foo_registry = StartedJobRegistry('foo', connection=self.connection)
+        self.connection.zadd(foo_registry.key, {'foo': 1})
+        self.assertEqual(self.connection.zcard(foo_registry.key), 1)
 
-        bar_queue = Queue('bar', connection=self.testconn)
-        bar_registry = StartedJobRegistry('bar', connection=self.testconn)
-        self.testconn.zadd(bar_registry.key, {'bar': 1})
-        self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
+        bar_queue = Queue('bar', connection=self.connection)
+        bar_registry = StartedJobRegistry('bar', connection=self.connection)
+        self.connection.zadd(bar_registry.key, {'bar': 1})
+        self.assertEqual(self.connection.zcard(bar_registry.key), 1)
 
         worker = Worker([foo_queue, bar_queue])
         self.assertEqual(worker.last_cleaned_at, None)
         worker.clean_registries()
         self.assertNotEqual(worker.last_cleaned_at, None)
-        self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
-        self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
+        self.assertEqual(self.connection.zcard(foo_registry.key), 0)
+        self.assertEqual(self.connection.zcard(bar_registry.key), 0)
 
         # worker.clean_registries() only runs once every 15 minutes
         # If we add another key, calling clean_registries() should do nothing
-        self.testconn.zadd(bar_registry.key, {'bar': 1})
+        self.connection.zadd(bar_registry.key, {'bar': 1})
         worker.clean_registries()
-        self.assertEqual(self.testconn.zcard(bar_registry.key), 1)
+        self.assertEqual(self.connection.zcard(bar_registry.key), 1)
 
     def test_should_run_maintenance_tasks(self):
         """Workers should run maintenance tasks on startup and every hour."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         worker = Worker(queue)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
@@ -1080,13 +1080,13 @@ class TestWorker(RQTestCase):
 
     def test_worker_calls_clean_registries(self):
         """Worker calls clean_registries when run."""
-        queue = Queue(connection=self.testconn)
-        registry = StartedJobRegistry(connection=self.testconn)
-        self.testconn.zadd(registry.key, {'foo': 1})
+        queue = Queue(connection=self.connection)
+        registry = StartedJobRegistry(connection=self.connection)
+        self.connection.zadd(registry.key, {'foo': 1})
 
-        worker = Worker(queue, connection=self.testconn)
+        worker = Worker(queue, connection=self.connection)
         worker.work(burst=True)
-        self.assertEqual(self.testconn.zcard(registry.key), 0)
+        self.assertEqual(self.connection.zcard(registry.key), 0)
 
     def test_job_dependency_race_condition(self):
         """Dependencies added while the job gets finished shouldn't get lost."""
@@ -1272,7 +1272,7 @@ class TestWorker(RQTestCase):
 
     def test_request_force_stop_ignores_consecutive_signals(self):
         """Ignore signals sent within 1 second of the last signal"""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
         worker._horse_pid = 1
         worker._shutdown_requested_date = utcnow()
@@ -1476,7 +1476,7 @@ def schedule_access_self():
 class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
         super().setUp()
-        db_num = self.testconn.connection_pool.connection_kwargs['db']
+        db_num = self.connection.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 
     def test_run_empty_queue(self):
