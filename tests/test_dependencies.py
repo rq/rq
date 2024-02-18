@@ -8,15 +8,17 @@ class TestDependencies(RQTestCase):
     def test_allow_failure_is_persisted(self):
         """Ensure that job.allow_dependency_failures is properly set
         when providing Dependency object to depends_on."""
-        dep_job = Job.create(func=say_hello)
+        dep_job = Job.create(func=say_hello, connection=self.connection)
 
         # default to False, maintaining current behavior
-        job = Job.create(func=say_hello, depends_on=Dependency([dep_job]))
+        job = Job.create(func=say_hello, connection=self.connection, depends_on=Dependency([dep_job]))
         job.save()
         Job.fetch(job.id, connection=self.connection)
         self.assertFalse(job.allow_dependency_failures)
 
-        job = Job.create(func=say_hello, depends_on=Dependency([dep_job], allow_failure=True))
+        job = Job.create(
+            func=say_hello, connection=self.connection, depends_on=Dependency([dep_job], allow_failure=True)
+        )
         job.save()
         job = Job.fetch(job.id, connection=self.connection)
         self.assertTrue(job.allow_dependency_failures)
@@ -141,9 +143,9 @@ class TestDependencies(RQTestCase):
         w = SimpleWorker([q], connection=q.connection)
 
         # enqueue dependent job when parent successfully finishes
-        parent_job = Job.create(say_hello)
+        parent_job = Job.create(say_hello, connection=self.connection)
         parent_job.save()
-        job = Job.create(say_hello, depends_on=parent_job)
+        job = Job.create(say_hello, connection=self.connection, depends_on=parent_job)
         q.enqueue_job(job)
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.DEFERRED)
