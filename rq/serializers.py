@@ -1,5 +1,5 @@
 import json
-import pickle
+import pickle  # nosec B403
 from functools import partial
 from typing import Optional, Type, Union
 
