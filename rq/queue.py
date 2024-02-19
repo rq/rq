@@ -253,6 +253,10 @@ class Queue:
             return False
         return lock_acquired
 
+    def release_maintenance_lock(self) -> None:
+        """Deletes the maintenance lock of this queue."""
+        self.connection.delete(self.registry_cleaning_key)
+
     def empty(self):
         """Removes all messages on the queue.
         This is currently being done using a Lua script,

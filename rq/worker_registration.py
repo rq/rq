@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional, Set
 
 if TYPE_CHECKING:
@@ -9,11 +10,25 @@ if TYPE_CHECKING:
 
 from rq.utils import split_list
 
-from .utils import as_text
+from .utils import as_text, utcformat, utcparse
 
 WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
 REDIS_WORKER_KEYS = 'rq:workers'
+REDIS_WORKER_LAST_CLEANED_AT = 'rq:workers:last_cleaned_at'
 MAX_KEYS = 1000
+
+
+def get_last_cleaned_at(connection: 'Redis') -> Optional[datetime]:
+    """Returns the last time maintenance task was run."""
+    last_cleaned_at = connection.get(REDIS_WORKER_LAST_CLEANED_AT)
+    if last_cleaned_at:
+        return utcparse(as_text(last_cleaned_at))
+    return None
+
+
+def set_last_cleaned_at(last_cleaned_at: datetime, connection: 'Redis'):
+    """Sets the last time maintenance task was run."""
+    connection.set('last_cleaned_at', utcformat(last_cleaned_at))
 
 
 def register(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
