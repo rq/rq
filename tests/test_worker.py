@@ -1510,7 +1510,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_immediate_shutdown(self):
         """Heroku work horse shutdown with immediate (0 second) kill"""
-        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 0))
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 0, self.connection))
         p.start()
         time.sleep(0.5)
 
@@ -1524,7 +1524,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_1_sec_shutdown(self):
         """Heroku work horse shutdown with 1 second kill"""
-        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 1))
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 1, self.connection))
         p.start()
         time.sleep(0.5)
 
@@ -1540,7 +1540,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_shutdown_double_sigrtmin(self):
         """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
-        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10))
+        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10, self.connection))
         p.start()
         time.sleep(0.5)
 
@@ -1558,7 +1558,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def test_handle_shutdown_request(self, mock_logger_info):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process
         and test handle_warm_shutdown_request"""
-        w = HerokuWorker('foo')
+        w = HerokuWorker('foo', connection=self.connection)
 
         path = os.path.join(self.sandbox, 'shouldnt_exist')
         p = Process(target=create_file_after_timeout_and_setpgrp, args=(path, 2))
@@ -1577,7 +1577,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     def test_handle_shutdown_request_no_horse(self):
         """Mutate HerokuWorker so _horse_pid refers to non existent process
         and test handle_warm_shutdown_request"""
-        w = HerokuWorker('foo')
+        w = HerokuWorker('foo', connection=self.connection)
 
         w._horse_pid = 19999
         w.handle_warm_shutdown_request()

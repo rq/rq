@@ -184,7 +184,7 @@ def long_running_job(timeout=10):
     return 'Done sleeping...'
 
 
-def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
+def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay, connection):
     """
     Run the work horse for a simplified heroku worker where perform_job just
     creates two sentinel files 2 seconds apart.
@@ -204,7 +204,7 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay):
                 time.sleep(0.1)
             create_file(os.path.join(sandbox, 'finished'))
 
-    w = TestHerokuWorker(Queue('dummy'))
+    w = TestHerokuWorker(Queue('dummy', connection=connection), connection=connection)
     w.main_work_horse(None, None)
 
 
