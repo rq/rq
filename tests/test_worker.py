@@ -28,7 +28,7 @@ from rq.suspension import resume, suspend
 from rq.utils import as_text, get_version, utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
-from tests import RQTestCase, slow
+from tests import find_empty_redis_database, RQTestCase, slow
 from tests.fixtures import (
     CustomJob,
     access_self,
@@ -1461,7 +1461,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
 
 def schedule_access_self():
-    q = Queue('default', connection=get_current_connection())
+    q = Queue('default', connection=find_empty_redis_database())
     q.enqueue(access_self)
 
 
