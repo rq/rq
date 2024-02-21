@@ -496,10 +496,10 @@ def clean_registries(queue: 'Queue'):
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
 
-    registry = StartedJobRegistry(
+    StartedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
 
-    registry = FailedJobRegistry(
+    FailedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()

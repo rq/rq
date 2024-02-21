@@ -1,7 +1,5 @@
 from unittest import mock
 
-from redis import Redis
-
 from rq.decorators import job
 from rq.job import Job, Retry
 from rq.queue import Queue

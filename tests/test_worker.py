@@ -28,7 +28,7 @@ from rq.suspension import resume, suspend
 from rq.utils import as_text, get_version, utcnow
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
-from tests import find_empty_redis_database, RQTestCase, slow
+from tests import RQTestCase, find_empty_redis_database, slow
 from tests.fixtures import (
     CustomJob,
     access_self,

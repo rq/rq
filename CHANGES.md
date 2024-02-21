@@ -54,7 +54,7 @@
 * RQ's source code is now black formatted. Thanks @aparcar!
 
 ### RQ 1.12.0 (2023-01-15)
-* RQ now stores multiple job execution results. This feature is only available on Redis >= 5.0 Redis Streams. Please refer to [the docs](https://python-rq.org/docs/results/) for more info. Thanks @selwin! 
+* RQ now stores multiple job execution results. This feature is only available on Redis >= 5.0 Redis Streams. Please refer to [the docs](https://python-rq.org/docs/results/) for more info. Thanks @selwin!
 * Improve performance when enqueueing many jobs at once. Thanks @rggjan!
 * Redis server version is now cached in connection object. Thanks @odarbelaeze!
 * Properly handle `at_front` argument when jobs are scheduled. Thanks @gabriels1234!
@@ -121,7 +121,7 @@
 * Added a new `STOPPED` job status so that you can differentiate between failed and manually stopped jobs. Thanks @dralley!
 * Fixed a serialization bug when used with job dependency feature. Thanks @jtfidje!
 * `clean_worker_registry()` now works in batches of 1,000 jobs to prevent modifying too many keys at once. Thanks @AxeOfMen and @TheSneak!
-* Workers will now wait and try to reconnect in case of Redis connection errors. Thanks @Asrst! 
+* Workers will now wait and try to reconnect in case of Redis connection errors. Thanks @Asrst!
 
 ### RQ 1.7.0 (2020-11-29)
 * Added `job.worker_name` attribute that tells you which worker is executing a job. Thanks @selwin!
@@ -150,7 +150,7 @@
 * Retries can now be set through @job decorator. Thanks @nerok!
 * Log messages below logging.ERROR is now sent to stdout. Thanks @selwin!
 * Better logger name for RQScheduler. Thanks @atainter!
-* Better handling of exceptions thrown by horses. Thanks @theambient! 
+* Better handling of exceptions thrown by horses. Thanks @theambient!
 
 ### RQ 1.5.0 (2020-07-26)
 * Failed jobs can now be retried. Thanks @selwin!
@@ -213,7 +213,7 @@
 - Passing `--disable-job-desc-logging` to `rq worker` now does what it's supposed to do. Thanks @janierdavila!
 - `StartedJobRegistry` now properly handles jobs with infinite timeout. Thanks @macintoshpie!
 - `rq info` CLI command now cleans up registries when it first runs. Thanks @selwin!
-- Replaced the use of `procname` with `setproctitle`. Thanks @j178! 
+- Replaced the use of `procname` with `setproctitle`. Thanks @j178!
 
 
 ### 1.0 (2019-04-06)
