@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
-from .connections import resolve_connection
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
@@ -72,7 +71,7 @@ class Queue:
     @classmethod
     def all(
         cls,
-        connection: Optional['Redis'] = None,
+        connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
         serializer=None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
@@ -88,7 +87,6 @@ class Queue:
         Returns:
             queues (List[Queue]): A list of all queues.
         """
-        connection = connection or resolve_connection()
 
         def to_queue(queue_key: Union[bytes, str]):
             return cls.from_queue_key(
@@ -107,7 +105,7 @@ class Queue:
     def from_queue_key(
         cls,
         queue_key: str,
-        connection: Optional['Redis'] = None,
+        connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
         serializer: Any = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
@@ -118,7 +116,7 @@ class Queue:
 
         Args:
             queue_key (str): The queue key
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            connection (Redis): Redis connection. Defaults to None.
             job_class (Optional[Job], optional): Job class. Defaults to None.
             serializer (Any, optional): Serializer. Defaults to None.
             death_penalty_class (Optional[BaseDeathPenalty], optional): Death penalty class. Defaults to None.
@@ -156,8 +154,8 @@ class Queue:
     def __init__(
         self,
         name: str = 'default',
+        connection: 'Redis' = None,
         default_timeout: Optional[int] = None,
-        connection: Optional['Redis'] = None,
         is_async: bool = True,
         job_class: Optional[Union[str, Type['Job']]] = None,
         serializer: Any = None,
@@ -178,7 +176,9 @@ class Queue:
             death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
                 Defaults to UnixSignalDeathPenalty.
         """
-        self.connection = connection or resolve_connection()
+        if not connection:
+            raise TypeError("Queue() missing 1 required positional argument: 'connection'")
+        self.connection = connection
         prefix = self.redis_queue_namespace_prefix
         self.name = name
         self._key = '{0}{1}'.format(prefix, name)
@@ -248,7 +248,7 @@ class Queue:
         Returns:
             lock_acquired (bool)
         """
-        lock_acquired = self.connection.set(self.registry_cleaning_key, 1, nx=1, ex=899)
+        lock_acquired = self.connection.set(self.registry_cleaning_key, 1, nx=True, ex=899)
         if not lock_acquired:
             return False
         return lock_acquired
@@ -1282,7 +1282,6 @@ class Queue:
         Returns:
             _type_: _description_
         """
-        connection = connection or resolve_connection()
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')

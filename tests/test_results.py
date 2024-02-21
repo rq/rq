@@ -104,7 +104,7 @@ class TestScheduledJobRegistry(RQTestCase):
         """Changes to job.result handling should be backwards compatible."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker.register_birth()
 
         self.assertEqual(worker.failed_job_count, 0)
@@ -147,7 +147,7 @@ class TestScheduledJobRegistry(RQTestCase):
         """Changes to job.result failure handling should be backwards compatible."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker.register_birth()
 
         self.assertEqual(worker.failed_job_count, 0)

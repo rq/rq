@@ -21,7 +21,7 @@ class FakeSentry:
 class TestSentry(RQTestCase):
     def setUp(self):
         super().setUp()
-        db_num = self.testconn.connection_pool.connection_kwargs['db']
+        db_num = self.connection.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
 
     def test_reading_dsn_from_file(self):
@@ -46,9 +46,9 @@ class TestSentry(RQTestCase):
 
         hub = Hub.current
         self.assertIsNone(hub.last_event_id())
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         queue.enqueue(div_by_zero)
-        worker = SimpleWorker(queues=[queue], connection=self.testconn)
+        worker = SimpleWorker(queues=[queue], connection=self.connection)
         register_sentry('https://123@sentry.io/123')
         worker.work(burst=True)
         self.assertIsNotNone(hub.last_event_id())
