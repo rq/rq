@@ -125,7 +125,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
 
 
 def utcnow():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(tz=datetime.timezone.utc)
 
 
 def now():
@@ -224,7 +224,7 @@ def current_timestamp() -> int:
     Returns:
         int: _description_
     """
-    return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+    return calendar.timegm(datetime.datetime.now(tz=datetime.timezone.utc).utctimetuple())
 
 
 def backend_class(holder, default_name, override=None) -> TypeVar('T'):
