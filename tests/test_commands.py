@@ -25,7 +25,7 @@ def start_work_burst(queue_name, worker_name, connection_kwargs):
 class TestCommands(RQTestCase):
     def test_shutdown_command(self):
         """Ensure that shutdown command works properly."""
-        connection = self.testconn
+        connection = self.connection
         worker = Worker('foo', connection=connection)
 
         p = Process(
@@ -37,7 +37,7 @@ class TestCommands(RQTestCase):
 
     def test_kill_horse_command(self):
         """Ensure that shutdown command works properly."""
-        connection = self.testconn
+        connection = self.connection
         queue = Queue('foo', connection=connection)
         job = queue.enqueue(long_running_job, 4)
         worker = Worker('foo', connection=connection)
@@ -64,7 +64,7 @@ class TestCommands(RQTestCase):
     def test_stop_job_command(self):
         """Ensure that stop_job command works properly."""
 
-        connection = self.testconn
+        connection = self.connection
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_running_job, 3)
         worker = Worker('foo', connection=connection, serializer=JSONSerializer)

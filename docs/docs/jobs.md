@@ -193,7 +193,7 @@ from rq import Queue
 from rq.job import Job
 from rq.serializers import JSONSerializer
 
-job = Job(connection=connection, serializer=JSONSerializer)
+job = Job(id="my-job", connection=connection, serializer=JSONSerializer)
 queue = Queue(connection=connection, serializer=JSONSerializer)
 ```
 

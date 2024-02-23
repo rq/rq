@@ -12,7 +12,7 @@ from typing import List, Type
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, Retry
+from rq import Retry
 from rq import __version__ as version
 from rq.cli.helpers import (
     parse_function_args,
@@ -27,7 +27,6 @@ from rq.cli.helpers import (
 )
 
 # from rq.cli.pool import pool
-from rq.contrib.legacy import cleanup_ghosts
 from rq.defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_DATE_FORMAT,
@@ -138,17 +137,20 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
         func = show_both
 
     try:
-        with Connection(cli_config.connection):
-            if queues:
-                qs = list(map(cli_config.queue_class, queues))
-            else:
-                qs = cli_config.queue_class.all()
+        if queues:
+            qs = []
+            for queue_name in queues:
+                qs.append(cli_config.queue_class(queue_name, connection=cli_config.connection))
+        else:
+            qs = cli_config.queue_class.all(connection=cli_config.connection)
 
-            for queue in qs:
-                clean_registries(queue)
-                clean_worker_registry(queue)
+        for queue in qs:
+            clean_registries(queue)
+            clean_worker_registry(queue)
 
-            refresh(interval, func, qs, raw, by_queue, cli_config.queue_class, cli_config.worker_class)
+        refresh(
+            interval, func, qs, raw, by_queue, cli_config.queue_class, cli_config.worker_class, cli_config.connection
+        )
     except ConnectionError as e:
         click.echo(e)
         sys.exit(1)
@@ -256,7 +258,6 @@ def worker(
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     try:
-        cleanup_ghosts(cli_config.connection, worker_class=cli_config.worker_class)
         exception_handlers = []
         for h in exception_handler:
             exception_handlers.append(import_attribute(h))
@@ -401,42 +402,41 @@ def enqueue(
 
     schedule = parse_schedule(schedule_in, schedule_at)
 
-    with Connection(cli_config.connection):
-        queue = cli_config.queue_class(queue, serializer=serializer)
+    queue = cli_config.queue_class(queue, serializer=serializer, connection=cli_config.connection)
 
-        if schedule is None:
-            job = queue.enqueue_call(
-                function,
-                args,
-                kwargs,
-                timeout,
-                result_ttl,
-                ttl,
-                failure_ttl,
-                description,
-                depends_on,
-                job_id,
-                at_front,
-                None,
-                retry,
-            )
-        else:
-            job = queue.create_job(
-                function,
-                args,
-                kwargs,
-                timeout,
-                result_ttl,
-                ttl,
-                failure_ttl,
-                description,
-                depends_on,
-                job_id,
-                None,
-                JobStatus.SCHEDULED,
-                retry,
-            )
-            queue.schedule_job(job, schedule)
+    if schedule is None:
+        job = queue.enqueue_call(
+            function,
+            args,
+            kwargs,
+            timeout,
+            result_ttl,
+            ttl,
+            failure_ttl,
+            description,
+            depends_on,
+            job_id,
+            at_front,
+            None,
+            retry,
+        )
+    else:
+        job = queue.create_job(
+            function,
+            args,
+            kwargs,
+            timeout,
+            result_ttl,
+            ttl,
+            failure_ttl,
+            description,
+            depends_on,
+            job_id,
+            None,
+            JobStatus.SCHEDULED,
+            retry,
+        )
+        queue.schedule_job(job, schedule)
 
     if not quiet:
         click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))

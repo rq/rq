@@ -11,7 +11,7 @@ from tests.fixtures import div_by_zero, say_hello
 class TestRetry(RQTestCase):
     def test_persistence_of_retry_data(self):
         """Retry related data is stored and restored properly"""
-        job = Job.create(func=fixtures.some_calculation)
+        job = Job.create(func=fixtures.some_calculation, connection=self.connection)
         job.retries_left = 3
         job.retry_intervals = [1, 2, 3]
         job.save()
@@ -43,7 +43,7 @@ class TestRetry(RQTestCase):
 
     def test_get_retry_interval(self):
         """get_retry_interval() returns the right retry interval"""
-        job = Job.create(func=fixtures.say_hello)
+        job = Job.create(func=fixtures.say_hello, connection=self.connection)
 
         # Handle case where self.retry_intervals is None
         job.retries_left = 2
@@ -68,11 +68,11 @@ class TestRetry(RQTestCase):
 
     def test_job_retry(self):
         """Test job.retry() works properly"""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         retry = Retry(max=3, interval=5)
         job = queue.enqueue(div_by_zero, retry=retry)
 
-        with self.testconn.pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             job.retry(queue, pipeline)
             pipeline.execute()
 
@@ -83,7 +83,7 @@ class TestRetry(RQTestCase):
         retry = Retry(max=3)
         job = queue.enqueue(div_by_zero, retry=retry)
 
-        with self.testconn.pipeline() as pipeline:
+        with self.connection.pipeline() as pipeline:
             job.retry(queue, pipeline)
 
             pipeline.execute()
@@ -94,7 +94,7 @@ class TestRetry(RQTestCase):
 
     def test_retry_interval(self):
         """Retries with intervals are scheduled"""
-        connection = self.testconn
+        connection = self.connection
         queue = Queue(connection=connection)
         retry = Retry(max=1, interval=5)
         job = queue.enqueue(div_by_zero, retry=retry)
@@ -117,20 +117,20 @@ class TestRetry(RQTestCase):
 
     def test_cleanup_handles_retries(self):
         """Expired jobs should also be retried"""
-        queue = Queue(connection=self.testconn)
-        registry = StartedJobRegistry(connection=self.testconn)
-        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.connection)
+        registry = StartedJobRegistry(connection=self.connection)
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
         job = queue.enqueue(say_hello, retry=Retry(max=1))
 
         # Add job to StartedJobRegistry with past expiration time
-        self.testconn.zadd(registry.key, {job.id: 2})
+        self.connection.zadd(registry.key, {job.id: 2})
 
         registry.cleanup()
         self.assertEqual(len(queue), 2)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
         self.assertNotIn(job, failed_job_registry)
 
-        self.testconn.zadd(registry.key, {job.id: 2})
+        self.connection.zadd(registry.key, {job.id: 2})
         # Job goes to FailedJobRegistry because it's only retried once
         registry.cleanup()
         self.assertEqual(len(queue), 2)
