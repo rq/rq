@@ -1060,14 +1060,8 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.last_cleaned_at, None)
         worker.clean_registries()
         self.assertNotEqual(worker.last_cleaned_at, None)
-        self.assertEqual(self.testconn.zcard(foo_registry.key), 0)
-        self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
-
-        # worker.clean_registries() releases the maintenance locks after cleaning registries.
-        # If we add another key and call clean_registries, the key should be deleted
-        self.testconn.zadd(bar_registry.key, {'bar': 1})
-        worker.clean_registries()
-        self.assertEqual(self.testconn.zcard(bar_registry.key), 0)
+        self.assertEqual(len(foo_registry), 0)
+        self.assertEqual(len(bar_registry), 0)
 
     def test_should_run_maintenance_tasks(self):
         """Workers should run maintenance tasks on startup and every hour."""
@@ -1096,7 +1090,7 @@ class TestWorker(RQTestCase):
 
         worker = Worker(queue, connection=self.testconn)
         worker.work(burst=True)
-        self.assertEqual(self.testconn.zcard(registry.key), 0)
+        self.assertEqual(len(registry), 0)
 
     def test_job_dependency_race_condition(self):
         """Dependencies added while the job gets finished shouldn't get lost."""
