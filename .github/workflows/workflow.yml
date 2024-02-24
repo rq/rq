@@ -1,6 +1,8 @@
 name: Test
 
 on:
+  push:
+    branches: [ ** ]
   pull_request:
     branches: [ master ]
 
