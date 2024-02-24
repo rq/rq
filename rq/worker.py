@@ -450,6 +450,7 @@ class BaseWorker:
                 clean_registries(queue)
                 worker_registration.clean_worker_registry(queue)
                 clean_intermediate_queue(self, queue)
+                queue.release_maintenance_lock()
         self.last_cleaned_at = utcnow()
 
     def get_redis_server_version(self):
