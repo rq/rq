@@ -1245,7 +1245,7 @@ class TestWorker(RQTestCase):
 
     def test_request_force_stop_ignores_consecutive_signals(self):
         """Ignore signals sent within 1 second of the last signal"""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         worker = Worker([queue])
         worker._horse_pid = 1
         worker._shutdown_requested_date = utcnow()
