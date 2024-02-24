@@ -157,9 +157,10 @@ for result in job.results():
     print(result.created_at, result.type)
 ```
 
+_New in version 1.16.0._
 To block until a result arrives, you can pass a timeout in seconds to `job.latest_result()`. If any results already exist, the latest result is returned immediately. If the timeout is reached without a result arriving, a `None` object is returned.
 
 ```python
 job = queue.enqueue(sleep_for_10_seconds)
-result = job.fetch_latest(timeout=60)  # Will hang for about 10 seconds.
+result = job.latest_result(timeout=60)  # Will hang for about 10 seconds.
 ```

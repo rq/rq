@@ -1,3 +1,10 @@
+### RQ 1.16 (2024-02-24)
+* Added a way for jobs to wait for latest result `job.latest_result(timeout=60)`. Thanks @ajnisbet!
+* Fixed an issue where `stopped_callback` is not respected when job is enqueued via `enqueue_many()`. Thanks @eswolinsky3241!
+* `worker-pool` no longer ignores `--quiet`. Thanks @Mindiell!
+* Added compatibility with AWS Serverless Redis. Thanks @peter-gy!
+* `worker-pool` now starts with scheduler. Thanks @chromium7!
+
 ### RQ 1.15.1 (2023-06-20)
 * Fixed a bug that may cause a crash when cleaning intermediate queue. Thanks @selwin!
 * Fixed a bug that may cause canceled jobs to still run dependent jobs. Thanks @fredsod!
