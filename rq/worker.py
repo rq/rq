@@ -680,10 +680,6 @@ class BaseWorker:
             else:
                 enqueue_dependents = True
 
-            if job.group_id:
-                group = Group.fetch(job.group_id, self.connection)
-                group.cleanup(pipeline=pipeline)
-
             try:
                 pipeline.execute()
                 if enqueue_dependents:
@@ -1492,10 +1488,6 @@ class Worker(BaseWorker):
                     # self.set_current_job_id(None, pipeline=pipeline)
                     # started_job_registry.remove(job, pipeline=pipeline)
                     # self.execution.delete(pipeline)  # type: ignore
-
-                    if job.group_id:
-                        group = Group.fetch(job.group_id, self.connection)
-                        group.cleanup(pipeline=pipeline)
 
                     pipeline.execute()
                     self.log.debug('Finished handling successful execution of job %s', job.id)
