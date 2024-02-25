@@ -21,7 +21,7 @@ class TestGroup(RQTestCase):
         group.enqueue_many(q, [self.job_1_data, self.job_2_data])
         assert isinstance(group, Group)
         assert len(group.get_jobs()) == 2
-        q.empty
+        q.empty()
 
     def test_group_jobs(self):
         q = Queue(connection=self.testconn)
