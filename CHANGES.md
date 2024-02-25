@@ -1,14 +1,22 @@
 ### RQ 2.0 (unreleased)
-* Dropped support for Python 3.6
-* Dropped support for Redis server < 4
-* Support for multiple job executions. A job can now properly manage multiple executions running simultaneously, allowing future support for long running scheduled jobs.
-* [DEPRECATED] `RoundRobinWorker` and `RandomWorker` are deprecated. Use  `--dequeue-strategy <round-robin/random>` instead.
 
-#### Breaking Changes
+New Features:
+* Support for multiple job executions. A job can now properly manage multiple executions running simultaneously, allowing future support for long running scheduled jobs.
+
+Breaking Changes:
+* Dropped support for Redis server < 4
+* `RoundRobinWorker` and `RandomWorker` are deprecated. Use  `--dequeue-strategy <round-robin/random>` instead.
 * `Job.__init__` requires both `id` and `connection` to be passed in.
 * `Job.exists()` requires `connection` argument to be passed in.
 * `Queue.all()` requires `connection` argument.
 * `@job` decorator now requires `connection` argument.
+
+### RQ 1.16 (2024-02-24)
+* Added a way for jobs to wait for latest result `job.latest_result(timeout=60)`. Thanks @ajnisbet!
+* Fixed an issue where `stopped_callback` is not respected when job is enqueued via `enqueue_many()`. Thanks @eswolinsky3241!
+* `worker-pool` no longer ignores `--quiet`. Thanks @Mindiell!
+* Added compatibility with AWS Serverless Redis. Thanks @peter-gy!
+* `worker-pool` now starts with scheduler. Thanks @chromium7!
 
 ### RQ 1.15.1 (2023-06-20)
 * Fixed a bug that may cause a crash when cleaning intermediate queue. Thanks @selwin!
