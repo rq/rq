@@ -28,7 +28,7 @@ redis_url = os.getenv('REDIS_URL')
 if not redis_url:
     raise RuntimeError("Set up Heroku Data For Redis first, \
     make sure its config var is named 'REDIS_URL'.")
-    
+
 conn = redis.from_url(redis_url)
 
 if __name__ == '__main__':
@@ -55,18 +55,21 @@ conn = redis.Redis(
     password=password,
     port=port,
     ssl=True,
-    ssl_cert_reqs=None
+    ssl_cert_reqs=None,
+    ssl_ca_data=ssl_cert_str
 )
 ```
+
 The details are from the 'settings' page of your Redis add-on on the Heroku dashboard.
 
 and for using the cli:
 
 ```console
 rq info --config rq_conf
-``````
+```
 
 Where the rq_conf.py file looks like:
+
 ```console
 REDIS_HOST = "host"
 REDIS_PORT = port
@@ -75,7 +78,8 @@ REDIS_SSL = True
 REDIS_SSL_CA_CERTS = None
 REDIS_DB = 0
 REDIS_SSL_CERT_REQS = None
-``````
+REDIS_SSL_CA_DATA = "-----BEGIN CERTIFICATE-----\n****"
+```
 
 ## Putting RQ under foreman
 

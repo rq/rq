@@ -247,4 +247,4 @@ def run_worker(
     worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
     worker.log.info("Starting worker started with PID %s", os.getpid())
     time.sleep(_sleep)
-    worker.work(burst=burst, logging_level=logging_level)
+    worker.work(burst=burst, with_scheduler=True, logging_level=logging_level)

@@ -75,7 +75,7 @@ _New in version 1.8.0._
 
 _New in version 1.14.0._
 * `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)
-* `--max-idle-time`: if specified, worker will wait for X seconds for a job to arrive before shuttind down.
+* `--max-idle-time`: if specified, worker will wait for X seconds for a job to arrive before shutting down.
 * `--maintenance-interval`: defaults to 600 seconds. Runs maintenance tasks every X seconds.
 
 
@@ -216,7 +216,7 @@ The default serializer used is `pickle`
 
 ```python
 from rq import Worker
-from rq.serialzers import JSONSerializer
+from rq.serializers import JSONSerializer
 
 job = Worker('foo', serializer=JSONSerializer)
 ```
@@ -225,7 +225,7 @@ or when creating from a queue
 
 ```python
 from rq import Queue, Worker
-from rq.serialzers import JSONSerializer
+from rq.serializers import JSONSerializer
 
 w = Queue('foo', serializer=JSONSerializer)
 ```

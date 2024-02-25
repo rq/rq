@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
     from rq.executions import Execution
 
-from .connections import resolve_connection
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
@@ -47,11 +46,11 @@ class BaseRegistry:
     ):
         if queue:
             self.name = queue.name
-            self.connection = queue.connection or resolve_connection()
+            self.connection = queue.connection
             self.serializer = queue.serializer
         else:
             self.name = name
-            self.connection = connection or resolve_connection()
+            self.connection = connection
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
@@ -493,16 +492,14 @@ def clean_registries(queue: 'Queue'):
     Args:
         queue (Queue): The queue to clean
     """
-    registry = FinishedJobRegistry(
+    FinishedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
-    )
-    registry.cleanup()
-    registry = StartedJobRegistry(
-        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
-    )
-    registry.cleanup()
+    ).cleanup()
 
-    registry = FailedJobRegistry(
+    StartedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
-    )
-    registry.cleanup()
+    ).cleanup()
+
+    FailedJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    ).cleanup()
