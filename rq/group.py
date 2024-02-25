@@ -30,8 +30,7 @@ class Group:
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
         pipe.sadd(self.REDIS_GROUP_KEY, self.name)
-        if pipeline is None:
-            pipe.execute()
+        pipe.execute()
 
     def cleanup(self, pipeline: Optional['Pipeline'] = None):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
