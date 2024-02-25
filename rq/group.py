@@ -39,10 +39,9 @@ class Group:
         pipe = pipeline if pipeline else self.connection.pipeline()
         job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
         expired_job_ids = []
-        with self.connection.pipeline() as p:
-            for job in job_ids:
-                p.exists(Job.key_for(job))
-            results = p.execute()
+        for job in job_ids:
+            pipe.exists(Job.key_for(job))
+        results = pipe.execute()
 
         for i, key_exists in enumerate(results):
             if not key_exists:
