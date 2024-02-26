@@ -3,7 +3,7 @@ import queue
 import time
 import unittest
 import zlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pickle import dumps, loads
 from uuid import uuid4
 
@@ -181,7 +181,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (3, 4))
         self.assertEqual(job.kwargs, dict(z=2))
-        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456))
+        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456, tzinfo=timezone.utc))
 
         # Job.fetch also works with execution IDs
         queue = Queue(connection=self.connection)

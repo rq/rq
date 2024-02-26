@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -52,8 +52,8 @@ class Execution:
         data = self.connection.hgetall(self.key)
         if not data:
             raise ValueError(f'Execution {self.id} not found in Redis')
-        self.created_at = datetime.fromtimestamp(float(data[b'created_at']))
-        self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']))
+        self.created_at = datetime.fromtimestamp(float(data[b'created_at']), tz=timezone.utc)
+        self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']), tz=timezone.utc)
 
     @classmethod
     def from_composite_key(cls, composite_key: str, connection: Redis) -> 'Execution':
