@@ -133,16 +133,13 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
-_TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
-
-
 def utcformat(dt: dt.datetime) -> str:
-    return dt.strftime(as_text(_TIMESTAMP_FORMAT))
+    return dt.isoformat()
 
 
 def utcparse(string: str) -> dt.datetime:
     try:
-        return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
+        return datetime.datetime.fromisoformat(string)
     except ValueError:
         # This catches any jobs remain with old datetime format
         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
