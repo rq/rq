@@ -16,9 +16,9 @@ from tests import RQTestCase
 class TestWorkerRegistry(RQTestCase):
     def test_worker_registration(self):
         """Ensure worker.key is correctly set in Redis."""
-        foo_queue = Queue(name='foo')
-        bar_queue = Queue(name='bar')
-        worker = Worker([foo_queue, bar_queue])
+        foo_queue = Queue(name='foo', connection=self.connection)
+        bar_queue = Queue(name='bar', connection=self.connection)
+        worker = Worker([foo_queue, bar_queue], connection=self.connection)
 
         register(worker)
         redis = worker.connection
@@ -37,13 +37,13 @@ class TestWorkerRegistry(RQTestCase):
 
     def test_get_keys_by_queue(self):
         """get_keys_by_queue only returns active workers for that queue"""
-        foo_queue = Queue(name='foo')
-        bar_queue = Queue(name='bar')
-        baz_queue = Queue(name='baz')
+        foo_queue = Queue(name='foo', connection=self.connection)
+        bar_queue = Queue(name='bar', connection=self.connection)
+        baz_queue = Queue(name='baz', connection=self.connection)
 
-        worker1 = Worker([foo_queue, bar_queue])
-        worker2 = Worker([foo_queue])
-        worker3 = Worker([baz_queue])
+        worker1 = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker2 = Worker([foo_queue], connection=self.connection)
+        worker3 = Worker([baz_queue], connection=self.connection)
 
         self.assertEqual(set(), get_keys(foo_queue))
 
@@ -67,8 +67,8 @@ class TestWorkerRegistry(RQTestCase):
 
     def test_clean_registry(self):
         """clean_registry removes worker keys that don't exist in Redis"""
-        queue = Queue(name='foo')
-        worker = Worker([queue])
+        queue = Queue(name='foo', connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
 
         register(worker)
         redis = worker.connection
@@ -90,9 +90,9 @@ class TestWorkerRegistry(RQTestCase):
         # srem is called twice per invalid key batch: once for WORKERS_BY_QUEUE_KEY; once for REDIS_WORKER_KEYS
         SREM_CALL_COUNT = 2
 
-        queue = Queue(name='foo')
+        queue = Queue(name='foo', connection=self.connection)
         for i in range(MAX_WORKERS):
-            worker = Worker([queue])
+            worker = Worker([queue], connection=self.connection)
             register(worker)
 
         with patch('rq.worker_registration.MAX_KEYS', MAX_KEYS), patch.object(

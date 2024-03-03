@@ -36,7 +36,6 @@ import redis.exceptions
 
 from . import worker_registration
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
-from .connections import get_current_connection, pop_connection, push_connection
 from .defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
     DEFAULT_LOGGING_DATE_FORMAT,
@@ -56,7 +55,17 @@ from .scheduler import RQScheduler
 from .serializers import resolve_serializer
 from .suspension import is_suspended
 from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
-from .utils import as_text, backend_class, compact, ensure_list, get_version, utcformat, utcnow, utcparse
+from .utils import (
+    as_text,
+    backend_class,
+    compact,
+    ensure_list,
+    get_connection_from_queues,
+    get_version,
+    utcformat,
+    utcnow,
+    utcparse,
+)
 from .version import VERSION
 
 try:
@@ -146,6 +155,9 @@ class BaseWorker:
         self.job_monitoring_interval = job_monitoring_interval
         self.maintenance_interval = maintenance_interval
 
+        if not connection:
+            connection = get_connection_from_queues(queues)
+
         connection = self._set_connection(connection)
         self.connection = connection
         self.redis_server_version = None
@@ -158,15 +170,17 @@ class BaseWorker:
         self.execution: Optional[Execution] = None
 
         queues = [
-            self.queue_class(
-                name=q,
-                connection=connection,
-                job_class=self.job_class,
-                serializer=self.serializer,
-                death_penalty_class=self.death_penalty_class,
+            (
+                self.queue_class(
+                    name=q,
+                    connection=connection,
+                    job_class=self.job_class,
+                    serializer=self.serializer,
+                    death_penalty_class=self.death_penalty_class,
+                )
+                if isinstance(q, str)
+                else q
             )
-            if isinstance(q, str)
-            else q
             for q in ensure_list(queues)
         ]
 
@@ -229,7 +243,7 @@ class BaseWorker:
     def find_by_key(
         cls,
         worker_key: str,
-        connection: Optional['Redis'] = None,
+        connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
         queue_class: Optional[Type['Queue']] = None,
         serializer=None,
@@ -255,8 +269,6 @@ class BaseWorker:
         if not worker_key.startswith(prefix):
             raise ValueError('Not a valid RQ worker key: %s' % worker_key)
 
-        if connection is None:
-            connection = get_current_connection()
         if not connection.exists(worker_key):
             connection.srem(cls.redis_workers_keys, worker_key)
             return None
@@ -291,8 +303,6 @@ class BaseWorker:
         """
         if queue:
             connection = queue.connection
-        elif connection is None:
-            connection = get_current_connection()
 
         worker_keys = worker_registration.get_keys(queue=queue, connection=connection)
         workers = [
@@ -408,7 +418,7 @@ class BaseWorker:
             return True
         return False
 
-    def _set_connection(self, connection: Optional['Redis']) -> 'Redis':
+    def _set_connection(self, connection: 'Redis') -> 'Redis':
         """Configures the Redis connection to have a socket timeout.
         This should timouet the connection in case any specific command hangs at any given time (eg. BLPOP).
         If the connection provided already has a `socket_timeout` defined, skips.
@@ -416,8 +426,6 @@ class BaseWorker:
         Args:
             connection (Optional[Redis]): The Redis Connection.
         """
-        if connection is None:
-            connection = get_current_connection()
         current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
         if current_socket_timeout is None:
             timeout_config = {"socket_timeout": self.connection_timeout}
@@ -442,6 +450,7 @@ class BaseWorker:
                 clean_registries(queue)
                 worker_registration.clean_worker_registry(queue)
                 clean_intermediate_queue(self, queue)
+                queue.release_maintenance_lock()
         self.last_cleaned_at = utcnow()
 
     def get_redis_server_version(self):
@@ -1511,7 +1520,6 @@ class Worker(BaseWorker):
         Returns:
             bool: True after finished.
         """
-        push_connection(self.connection)
         started_job_registry = queue.started_job_registry
         self.log.debug('Started Job Registry set.')
 
@@ -1556,9 +1564,6 @@ class Worker(BaseWorker):
             )
 
             return False
-
-        finally:
-            pop_connection()
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:

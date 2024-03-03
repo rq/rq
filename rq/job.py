@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from .queue import Queue
     from .results import Result
 
-from .connections import resolve_connection
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
@@ -96,7 +95,7 @@ yet been evaluated.
 """
 
 
-def cancel_job(job_id: str, connection: Optional['Redis'] = None, serializer=None, enqueue_dependents: bool = False):
+def cancel_job(job_id: str, connection: 'Redis', serializer=None, enqueue_dependents: bool = False):
     """Cancels the job with the given job ID, preventing execution.
     Use with caution. This will discard any job info (i.e. it can't be requeued later).
 
@@ -181,7 +180,7 @@ class Job:
                 callable.  Defaults to None, meaning no args being passed.
             kwargs (Optional[Dict], optional): A Dictionary of keyword arguments to pass the callable.
                 Defaults to None, meaning no kwargs being passed.
-            connection (Optional[Redis], optional): The Redis connection to use. Defaults to None.
+            connection (Redis): The Redis connection to use. Defaults to None.
                 This will be "resolved" using the `resolve_connection` function when initialzing the Job Class.
             result_ttl (Optional[int], optional): The amount of time in seconds the results should live.
                 Defaults to None.
@@ -567,7 +566,7 @@ class Job:
         self._data = UNEVALUATED
 
     @classmethod
-    def exists(cls, job_id: str, connection: Optional['Redis'] = None) -> bool:
+    def exists(cls, job_id: str, connection: 'Redis') -> bool:
         """Checks whether a Job Hash exists for the given Job ID
 
         Args:
@@ -577,8 +576,6 @@ class Job:
         Returns:
             job_exists (bool): Whether the Job exists
         """
-        if not connection:
-            connection = resolve_connection()
         job_key = cls.key_for(job_id)
         job_exists = connection.exists(job_key)
         return bool(job_exists)
@@ -634,11 +631,12 @@ class Job:
 
         return jobs
 
-    def __init__(self, id: Optional[str] = None, connection: Optional['Redis'] = None, serializer=None):
-        if connection:
-            self.connection = connection
-        else:
-            self.connection = resolve_connection()
+    def __init__(self, id: Optional[str] = None, connection: 'Redis' = None, serializer=None):
+        # Manually check for the presence of the connection argument to preserve
+        # backwards compatibility during the transition to RQ v2.0.0.
+        if not connection:
+            raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
+        self.connection = connection
         self._id = id
         self.created_at = utcnow()
         self._data = UNEVALUATED

@@ -406,7 +406,7 @@ from rq.decorators import job
 def add(x, y):
     return x + y
 
-job = add.delay(3, 4)
+job = add.delay(3, 4)  # Changed to add.enqueue() in RQ >= 2.0
 time.sleep(1)
 print(job.result)  # Changed to job.return_value() in RQ >= 1.12.0
 ```
