@@ -6,9 +6,9 @@ from redis import Redis
 
 from rq.exceptions import TimeoutFormatError
 from rq.utils import (
+    as_text,
     backend_class,
     ceildiv,
-    as_text,
     ensure_list,
     first,
     get_call_string,

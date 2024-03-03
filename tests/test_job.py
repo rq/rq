@@ -624,7 +624,7 @@ class TestJob(RQTestCase):
 
     def test_cleanup(self):
         """Test that jobs and results are expired properly."""
-        job = Job.create(func=fixtures.say_hello, connection=self.connection)
+        job = Job.create(func=fixtures.say_hello, connection=self.connection, status=JobStatus.QUEUED)
         job.save()
 
         # Jobs with negative TTLs don't expire
@@ -836,7 +836,11 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.connection, serializer=JSONSerializer)
         job = queue.enqueue(fixtures.say_hello)
         job2 = Job.create(
-            func=fixtures.say_hello, depends_on=job, serializer=JSONSerializer, connection=self.connection
+            func=fixtures.say_hello,
+            depends_on=job,
+            serializer=JSONSerializer,
+            connection=self.connection,
+            status=JobStatus.QUEUED,
         )
         job2.register_dependency()
         job2.save()
@@ -865,7 +869,11 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.connection, serializer=JSONSerializer)
         dependency_job = queue.enqueue(fixtures.say_hello)
         dependent_job = Job.create(
-            func=fixtures.say_hello, depends_on=dependency_job, serializer=JSONSerializer, connection=self.connection
+            func=fixtures.say_hello,
+            depends_on=dependency_job,
+            serializer=JSONSerializer,
+            connection=self.connection,
+            status=JobStatus.QUEUED,
         )
 
         dependent_job.register_dependency()

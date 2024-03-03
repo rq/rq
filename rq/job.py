@@ -321,18 +321,23 @@ class Job:
             return q.get_job_position(self._id)
         return None
 
-    def get_status(self, refresh: bool = True) -> Optional[JobStatus]:
+    def get_status(self, refresh: bool = True) -> JobStatus:
         """Gets the Job Status
 
         Args:
             refresh (bool, optional): Whether to refresh the Job. Defaults to True.
 
+        Raises:
+            InvalidJobOperation: If refreshing and nothing is returned from the `HGET` operation.
+
         Returns:
-            status (Optional[JobStatus]): Either the Job Status or None
+            status (JobStatus): The Job Status
         """
         if refresh:
             status = self.connection.hget(self.key, 'status')
-            self._status = JobStatus(as_text(status)) if status else None
+            if not status:
+                raise InvalidJobOperation(f"Failed to retrieve status for job: {self.id}")
+            self._status = JobStatus(as_text(status))
         return self._status
 
     def set_status(self, status: JobStatus, pipeline: Optional['Pipeline'] = None) -> None:
