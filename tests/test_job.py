@@ -553,6 +553,12 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(job.last_heartbeat)
         self.assertIsNotNone(job.started_at)
 
+    def test_unset_job_status_fails(self):
+        """None is an invalid status for Job."""
+        job = Job.create(func=fixtures.say_hello, connection=self.connection)
+        job.save()
+        self.assertRaises(InvalidJobOperation, job.get_status)
+
     def test_job_access_outside_job_fails(self):
         """The current job is accessible only within a job context."""
         self.assertIsNone(get_current_job())
