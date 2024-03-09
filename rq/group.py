@@ -102,19 +102,18 @@ class Group:
         If group still has jobs in its registry, delete those that have expired"""
         groups = Group.all(connection=connection)
         with connection.pipeline() as p:
-            if groups:
-                # Remove expired jobs from groups
-                for group in groups:
-                    group.cleanup(pipeline=p)
-                p.execute()
-                # Remove empty groups from group registry
-                for group in groups:
-                    p.exists(group.key)
-                results = p.execute()
-                expired_group_ids = []
-                for i, key_exists in enumerate(results):
-                    if not key_exists:
-                        expired_group_ids.append(groups[i].name)
-                if expired_group_ids:
-                    p.srem(cls.REDIS_GROUP_KEY, *expired_group_ids)
-                p.execute()
+            # Remove expired jobs from groups
+            for group in groups:
+                group.cleanup(pipeline=p)
+            p.execute()
+            # Remove empty groups from group registry
+            for group in groups:
+                p.exists(group.key)
+            results = p.execute()
+            expired_group_ids = []
+            for i, key_exists in enumerate(results):
+                if not key_exists:
+                    expired_group_ids.append(groups[i].name)
+            if expired_group_ids:
+                p.srem(cls.REDIS_GROUP_KEY, *expired_group_ids)
+            p.execute()
