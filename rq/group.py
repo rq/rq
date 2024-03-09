@@ -67,9 +67,6 @@ class Group:
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
         return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
-    def delete(self):
-        self.connection.delete(self.key)
-
     def delete_job(self, job_id: str, pipeline: Optional['Pipeline'] = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.srem(self.key, job_id)
