@@ -27,7 +27,6 @@ class Group:
 
     def _add_jobs(self, jobs: List[Job], pipeline: Pipeline):
         """Add jobs to the group"""
-        pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.sadd(self.key, *[job.id for job in jobs])
         pipe.sadd(self.REDIS_GROUP_KEY, self.name)
         pipe.execute()
