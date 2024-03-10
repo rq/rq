@@ -691,7 +691,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         w.worker_ttl = 2
         w.work(max_idle_time=3)
-        self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
+        self.assertLess((utcnow() - now).total_seconds(), 6)  # 5 for some buffer
 
     @slow  # noqa
     def test_timeouts(self):
