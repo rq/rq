@@ -125,7 +125,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
 
 
 def utcnow():
-    return datetime.datetime.now(tz=datetime.timezone.utc)
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def now():
