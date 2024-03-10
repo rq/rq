@@ -148,7 +148,7 @@ def utcparse(string: str) -> dt.datetime:
         try:
          return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
         except:
-         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
+         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
 
