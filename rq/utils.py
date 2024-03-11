@@ -125,7 +125,8 @@ def import_attribute(name: str) -> Callable[..., Any]:
 
 
 def utcnow():
-    return datetime.datetime.utcnow()
+    
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def now():
@@ -145,7 +146,11 @@ def utcparse(string: str) -> dt.datetime:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
         # This catches any jobs remain with old datetime format
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+        try:
+         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except:
+         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+
 
 
 def first(iterable: Iterable, default=None, key=None):
@@ -224,7 +229,7 @@ def current_timestamp() -> int:
     Returns:
         int: _description_
     """
-    return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+    return calendar.timegm(datetime.datetime.now(datetime.timezone.utc).utctimetuple())
 
 
 def backend_class(holder, default_name, override=None) -> TypeVar('T'):
