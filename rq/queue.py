@@ -25,7 +25,7 @@ from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, now
+from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
 
 logger = logging.getLogger("rq.queue")
 

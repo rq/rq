@@ -62,8 +62,8 @@ from .utils import (
     ensure_list,
     get_connection_from_queues,
     get_version,
-    utcformat,
     now,
+    utcformat,
     utcparse,
 )
 from .version import VERSION

@@ -143,7 +143,7 @@ def utcparse(string: str) -> dt.datetime:
         # This catches any jobs remain with old datetime format
         try:
             return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
-        except:
+        except ValueError:
             return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 

@@ -33,10 +33,10 @@ from .utils import (
     get_call_string,
     get_version,
     import_attribute,
+    now,
     parse_timeout,
     str_to_date,
     utcformat,
-    now,
 )
 
 logger = logging.getLogger("rq.job")
