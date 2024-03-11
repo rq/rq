@@ -25,7 +25,7 @@ from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, utcnow
+from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, now
 
 logger = logging.getLogger("rq.queue")
 
@@ -1121,7 +1121,7 @@ class Queue:
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
 
         job.origin = self.name
-        job.enqueued_at = utcnow()
+        job.enqueued_at = now()
 
         if job.timeout is None:
             job.timeout = self._default_timeout

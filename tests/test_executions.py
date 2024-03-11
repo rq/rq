@@ -37,9 +37,9 @@ class TestRegistry(RQTestCase):
         self.assertTrue(self.connection.ttl(execution.key) <= 100)
 
         execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
-        self.assertEqual(execution.created_at, created_at)
+        self.assertEqual(execution.created_at.timestamp(), created_at.timestamp())
         self.assertEqual(execution.composite_key, composite_key)
-        self.assertEqual(execution.last_heartbeat, created_at)
+        self.assertEqual(execution.last_heartbeat.timestamp(), created_at.timestamp())
 
         execution.delete(job=job, pipeline=pipeline)
         pipeline.execute()
