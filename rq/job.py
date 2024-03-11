@@ -33,10 +33,10 @@ from .utils import (
     get_call_string,
     get_version,
     import_attribute,
+    now,
     parse_timeout,
     str_to_date,
     utcformat,
-    utcnow,
 )
 
 logger = logging.getLogger("rq.job")
@@ -641,7 +641,7 @@ class Job:
             raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
         self.connection = connection
         self._id = id
-        self.created_at = utcnow()
+        self.created_at = now()
         self._data = UNEVALUATED
         self._func_name = UNEVALUATED
         self._instance = UNEVALUATED
@@ -1020,7 +1020,7 @@ class Job:
             dict: The Job serialized as a dictionary
         """
         obj = {
-            'created_at': utcformat(self.created_at or utcnow()),
+            'created_at': utcformat(self.created_at or now()),
             'data': zlib.compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
@@ -1320,7 +1320,7 @@ class Job:
             pipeline (Pipeline): The Redis' piipeline to use
         """
         self.worker_name = worker_name
-        self.last_heartbeat = utcnow()
+        self.last_heartbeat = now()
         self.started_at = self.last_heartbeat
         self._status = JobStatus.STARTED
         mapping = {
