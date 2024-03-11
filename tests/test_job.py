@@ -247,6 +247,7 @@ class TestJob(RQTestCase):
                 b'success_callback_name',
                 b'failure_callback_name',
                 b'stopped_callback_name',
+                b'group_id',
             },
             set(self.connection.hkeys(job.key)),
         )
