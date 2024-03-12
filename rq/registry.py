@@ -252,6 +252,19 @@ class StartedJobRegistry(BaseRegistry):
                         self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
                     )
 
+                    if exception_handlers:
+                        for handler in exception_handlers:
+                            fallthrough = handler(
+                                job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
+                            )
+                            # Only handlers with explicit return values should disable further
+                            # exc handling, so interpret a None return value as True.
+                            if fallthrough is None:
+                                fallthrough = True
+
+                            if not fallthrough:
+                                break
+
                     retry = job.retries_left and job.retries_left > 0
 
                     if retry:
@@ -269,18 +282,6 @@ class StartedJobRegistry(BaseRegistry):
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
-                        if exception_handlers:
-                            for handler in exception_handlers:
-                                fallthrough = handler(
-                                    job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
-                                )
-                                # Only handlers with explicit return values should disable further
-                                # exc handling, so interpret a None return value as True.
-                                if fallthrough is None:
-                                    fallthrough = True
-
-                                if not fallthrough:
-                                    break
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
