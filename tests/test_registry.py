@@ -168,7 +168,7 @@ class TestRegistry(RQTestCase):
             mock_handler.return_value = False
             mock_handler_no_return = mock.MagicMock()
             mock_handler_no_return.return_value = None
-            self.registry.cleanup(exception_handlers=[mock_handler, mock_handler_no_return])
+            self.registry.cleanup(exception_handlers=[mock_handler_no_return, mock_handler])
             mocked.assert_called_once_with(queue.death_penalty_class, AbandonedJobError, ANY, ANY)
             mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
             mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
