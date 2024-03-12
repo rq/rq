@@ -498,7 +498,7 @@ class CanceledJobRegistry(BaseRegistry):
         pass
 
 
-def clean_registries(queue: 'Queue', exception_handlers: list):
+def clean_registries(queue: 'Queue', exception_handlers: list = None):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue.
 
     Args:
