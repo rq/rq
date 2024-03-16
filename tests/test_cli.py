@@ -859,3 +859,19 @@ class WorkerPoolCLITestCase(CLITestCase):
         # --quiet and --verbose are mutually exclusive
         result = runner.invoke(main, args + ['--quiet', '--verbose'])
         self.assertNotEqual(result.exit_code, 0)
+
+    def test_worker_pool_without_scheduler(self):
+        """rq worker --no-scheduler disables scheduler"""
+        queue = Queue(connection=self.connection)
+        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
+        registry = ScheduledJobRegistry(queue=queue)
+
+        runner = CliRunner()
+
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--no-scheduler'])
+        self.assert_normal_execution(result)
+        self.assertEqual(len(registry), 1)  # 1 job still scheduled
+
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b'])
+        self.assert_normal_execution(result)
+        self.assertEqual(len(registry), 0)  # Job has been enqueued

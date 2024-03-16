@@ -42,6 +42,7 @@ class WorkerPool:
         worker_class: Type[BaseWorker] = Worker,
         serializer: Type[DefaultSerializer] = DefaultSerializer,
         job_class: Type[Job] = Job,
+        with_scheduler: bool = True,
         *args,
         **kwargs,
     ):
@@ -59,6 +60,7 @@ class WorkerPool:
         self.worker_class: Type[BaseWorker] = worker_class
         self.serializer: Type[DefaultSerializer] = serializer
         self.job_class: Type[Job] = job_class
+        self.with_scheduler = with_scheduler
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: Dict[str, WorkerData] = {}
@@ -159,6 +161,7 @@ class WorkerPool:
                 'worker_class': self.worker_class,
                 'job_class': self.job_class,
                 'serializer': self.serializer,
+                'with_scheduler': self.with_scheduler,
             },
             name=f'Worker {name} (WorkerPool {self.name})',
         )
@@ -249,6 +252,7 @@ def run_worker(
     burst: bool = True,
     logging_level: str = "INFO",
     _sleep: int = 0,
+    with_scheduler=True,
 ):
     connection = connection_class(
         connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
@@ -257,4 +261,4 @@ def run_worker(
     worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
     worker.log.info("Starting worker started with PID %s", os.getpid())
     time.sleep(_sleep)
-    worker.work(burst=burst, with_scheduler=True, logging_level=logging_level)
+    worker.work(burst=burst, with_scheduler=with_scheduler, logging_level=logging_level)
