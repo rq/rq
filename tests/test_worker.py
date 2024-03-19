@@ -1316,38 +1316,36 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(expected, sorted_ids)
 
-class TestWorkerConnection:
+class TestWorkerConnection(RQTestCase):
     @pytest.fixture
-    
     def test_set_connection_with_socket_timeout(self):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
-        connection = worker.connection.connection_pool.connection_kwargs = {}
+        worker.connection.connection_pool.connection_kwargs = {}
         worker.connection_timeout = 10
 
-        worker._set_connection(connection)
+        worker._set_connection(self.connection)
 
         assert worker.connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
 
     def test_set_connection_with_existing_socket_timeout(self):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
-        connection = worker.connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
+        worker.connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
         worker.connection_timeout = 10
 
-        worker._set_connection(connection)
+        worker._set_connection(self.connection)
 
         assert worker.connection.connection_pool.connection_kwargs == {"socket_timeout": 5}
 
     def test_set_connection_with_redis_cluster(self):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
-        worker.connection.get_nodes.return_value = [mocker.Mock(), mocker.Mock()]
         worker.connection_timeout = 10
 
-        worker._set_connection(connection)
+        worker._set_connection(self.connection)
 
-        for node in connection.get_nodes():
+        for node in self.connection.get_nodes():
             assert node.redis_connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
 
 
