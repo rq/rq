@@ -27,7 +27,7 @@ from rq.serializers import JSONSerializer
 from rq.suspension import resume, suspend
 from rq.utils import as_text, get_version, now
 from rq.version import VERSION
-from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
+from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus, Worker
 from tests import RQTestCase, find_empty_redis_database, slow
 from tests.fixtures import (
     CustomJob,
@@ -1664,3 +1664,36 @@ class TestRandomWorker(RQTestCase):
         sorted_ids.sort()
         expected_ser.sort()
         self.assertEqual(sorted_ids, expected_ser)
+
+class TestWorker:
+    @pytest.fixture
+    def worker(self):
+        return Worker()
+
+    def test_set_connection_with_socket_timeout(self, worker, mocker):
+        connection = mocker.Mock()
+        connection.connection_pool.connection_kwargs = {}
+        worker.connection_timeout = 10
+
+        worker._set_connection(connection)
+
+        assert connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
+
+    def test_set_connection_with_existing_socket_timeout(self, worker, mocker):
+        connection = mocker.Mock()
+        connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
+        worker.connection_timeout = 10
+
+        worker._set_connection(connection)
+
+        assert connection.connection_pool.connection_kwargs == {"socket_timeout": 5}
+
+    def test_set_connection_with_redis_cluster(self, worker, mocker):
+        connection = mocker.Mock()
+        connection.get_nodes.return_value = [mocker.Mock(), mocker.Mock()]
+        worker.connection_timeout = 10
+
+        worker._set_connection(connection)
+
+        for node in connection.get_nodes():
+            assert node.redis_connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
