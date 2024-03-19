@@ -433,7 +433,7 @@ class BaseWorker:
                 timeout_config = {"socket_timeout": self.connection_timeout}
                 connection.connection_pool.connection_kwargs.update(timeout_config)
             return connection
-        # If you are using RedisCluster you needs to pars all cluster nodes. 
+        # If you are using RedisCluster you needs to pars all cluster nodes.
         except AttributeError:
             nodes = connection.get_nodes()
             for node in nodes:

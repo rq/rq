@@ -1665,6 +1665,7 @@ class TestRandomWorker(RQTestCase):
         expected_ser.sort()
         self.assertEqual(sorted_ids, expected_ser)
 
+
 class TestWorker:
     @pytest.fixture
     def worker(self):
