@@ -4,7 +4,7 @@ import unittest
 
 import pytest
 from redis import Redis
-from redis.cluster import RedisCluster 
+from redis.cluster import RedisCluster
 
 
 def find_empty_redis_database(ssl=False):
@@ -23,6 +23,7 @@ def find_empty_redis_database(ssl=False):
             return testconn
     assert False, 'No empty Redis database found to run tests in.'
 
+
 def find_empty_redis_cluster(ssl=False):
     """Tries to connect to a random Redis database (starting from 4), and
     will use/connect it when no keys are in there.
@@ -38,6 +39,7 @@ def find_empty_redis_cluster(ssl=False):
         if empty:
             return testconn
     assert False, 'No empty Redis database found to run tests in.'
+
 
 def slow(f):
     f = pytest.mark.slow(f)
