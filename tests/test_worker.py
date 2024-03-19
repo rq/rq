@@ -1318,30 +1318,31 @@ class TestWorker(RQTestCase):
 
 class TestWorkerConnection:
     @pytest.fixture
-    def worker(self):
-        return Worker()
-
-    def test_set_connection_with_socket_timeout(self, worker, mocker):
-        connection = mocker.Mock()
-        connection.connection_pool.connection_kwargs = {}
+    
+    def test_set_connection_with_socket_timeout(self):
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        connection = worker.connection.connection_pool.connection_kwargs = {}
         worker.connection_timeout = 10
 
         worker._set_connection(connection)
 
-        assert connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
+        assert worker.connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
 
-    def test_set_connection_with_existing_socket_timeout(self, worker, mocker):
-        connection = mocker.Mock()
-        connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
+    def test_set_connection_with_existing_socket_timeout(self):
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        connection = worker.connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
         worker.connection_timeout = 10
 
         worker._set_connection(connection)
 
-        assert connection.connection_pool.connection_kwargs == {"socket_timeout": 5}
+        assert worker.connection.connection_pool.connection_kwargs == {"socket_timeout": 5}
 
-    def test_set_connection_with_redis_cluster(self, worker, mocker):
-        connection = mocker.Mock()
-        connection.get_nodes.return_value = [mocker.Mock(), mocker.Mock()]
+    def test_set_connection_with_redis_cluster(self):
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        worker.connection.get_nodes.return_value = [mocker.Mock(), mocker.Mock()]
         worker.connection_timeout = 10
 
         worker._set_connection(connection)
