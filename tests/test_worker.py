@@ -1322,7 +1322,6 @@ class TestWorkerConnection:
         return Worker()
 
     def test_set_connection_with_socket_timeout(self, worker, mocker):
-        w = Worker('foo', connection=self.connection)
         connection = mocker.Mock()
         connection.connection_pool.connection_kwargs = {}
         worker.connection_timeout = 10
