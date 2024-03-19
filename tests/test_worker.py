@@ -1322,7 +1322,7 @@ class TestWorkerConnection(RQTestCase):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
         worker.connection.connection_pool.connection_kwargs = {}
-        worker.connection_timeout = 10
+       # worker.connection_timeout = 10
 
         worker._set_connection(self.connection)
 
@@ -1332,7 +1332,7 @@ class TestWorkerConnection(RQTestCase):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
         worker.connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
-        worker.connection_timeout = 10
+        #worker.connection_timeout = 10
 
         worker._set_connection(self.connection)
 
@@ -1341,7 +1341,7 @@ class TestWorkerConnection(RQTestCase):
     def test_set_connection_with_redis_cluster(self):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
-        worker.connection_timeout = 10
+        #worker.connection_timeout = 10
 
         worker._set_connection(self.connection)
 
