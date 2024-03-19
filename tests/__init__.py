@@ -28,7 +28,7 @@ def find_empty_redis_cluster(ssl=False):
     will use/connect it when no keys are in there.
     """
     for dbnum in range(4, 17):
-        connection_kwargs = {'db': dbnum}
+        connection_kwargs = dict()
         if ssl:
             connection_kwargs['port'] = 9736
             connection_kwargs['ssl'] = True
