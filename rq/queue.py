@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Ty
 
 from redis import WatchError
 from redis.exceptions import RedisClusterException
+
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
 if TYPE_CHECKING:
