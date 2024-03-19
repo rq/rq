@@ -9,7 +9,7 @@ from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 from redis import WatchError
-
+from redis.exceptions import RedisClusterException
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
 if TYPE_CHECKING:
@@ -1371,7 +1371,11 @@ class Queue:
         while True:
             queue_keys = [q.key for q in queues]
             if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
-                result = cls.lmove(connection, queue_keys[0], timeout)
+                try:
+                    result = cls.lmove(connection, queue_keys[0], timeout)
+                    # If you using redis Cluster you can only use lpop
+                except RedisClusterException:
+                    result = cls.lpop(queue_keys, timeout, connection=connection)
             else:
                 result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:
