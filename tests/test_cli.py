@@ -861,14 +861,14 @@ class WorkerPoolCLITestCase(CLITestCase):
         self.assertNotEqual(result.exit_code, 0)
 
     def test_worker_pool_without_scheduler(self):
-        """rq worker --disable-scheduler disables scheduler"""
+        """rq worker --no-scheduler disables scheduler"""
         queue = Queue(connection=self.connection)
         queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
         registry = ScheduledJobRegistry(queue=queue)
 
         runner = CliRunner()
 
-        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--disable-scheduler'])
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--no-scheduler'])
         self.assert_normal_execution(result)
         self.assertEqual(len(registry), 1)  # 1 job still scheduled
 

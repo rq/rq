@@ -455,7 +455,7 @@ def enqueue(
 @click.option('--job-class', type=str, default=None, help='Dotted path to a Job class')
 @click.argument('queues', nargs=-1)
 @click.option('--num-workers', '-n', type=int, default=1, help='Number of workers to start')
-@click.option('--disable-scheduler', is_flag=True, help='Run worker pool with scheduler')
+@click.option('--no-scheduler', is_flag=True, help='Run worker pool without scheduler')
 @pass_cli_config
 def worker_pool(
     cli_config,
@@ -473,7 +473,7 @@ def worker_pool(
     worker_class,
     job_class,
     num_workers,
-    disable_scheduler,
+    no_scheduler,
     **options,
 ):
     """Starts a RQ worker pool"""
@@ -512,7 +512,7 @@ def worker_pool(
         serializer=serializer_class,
         worker_class=worker_class,
         job_class=job_class,
-        with_scheduler=not disable_scheduler,
+        with_scheduler=not no_scheduler,
     )
     pool.start(burst=burst, logging_level=logging_level)
 
