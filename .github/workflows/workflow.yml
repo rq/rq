@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read # to fetch code (actions/checkout)
 
+# cancel previous test builds if new commit is pushed.
+concurrency:
+  group: workflow-master-${{ github.event_name }}-${{ github.event.number }}
+  cancel-in-progress: true
+
 jobs:
   ssl-test:
     name: Run SSL tests
