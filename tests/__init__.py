@@ -24,23 +24,6 @@ def find_empty_redis_database(ssl=False):
     assert False, 'No empty Redis database found to run tests in.'
 
 
-def find_empty_redis_cluster(ssl=False):
-    """Tries to connect to a random Redis database (starting from 4), and
-    will use/connect it when no keys are in there.
-    """
-    for dbnum in range(4, 17):
-        connection_kwargs = dict()
-        if ssl:
-            connection_kwargs['port'] = 9736
-            connection_kwargs['ssl'] = True
-            connection_kwargs['ssl_cert_reqs'] = None  # disable certificate validation
-        testconn = RedisCluster(**connection_kwargs)
-        empty = testconn.dbsize() == 0
-        if empty:
-            return testconn
-    assert False, 'No empty Redis database found to run tests in.'
-
-
 def slow(f):
     f = pytest.mark.slow(f)
     return unittest.skipUnless(os.environ.get('RUN_SLOW_TESTS_TOO'), "Slow tests disabled")(f)

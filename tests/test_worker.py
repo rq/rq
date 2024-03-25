@@ -1316,43 +1316,6 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(expected, sorted_ids)
 
-<<<<<<< HEAD
-
-class TestWorkerConnection(RQTestCase):
-    @pytest.fixture
-    def test_set_connection_with_socket_timeout(self):
-        queue = Queue(connection=self.connection)
-        worker = Worker([queue], connection=self.connection)
-        worker.connection.connection_pool.connection_kwargs = {}
-        # worker.connection_timeout = 10
-
-        worker._set_connection(self.connection)
-
-        assert worker.connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
-
-    def test_set_connection_with_existing_socket_timeout(self):
-        queue = Queue(connection=self.connection)
-        worker = Worker([queue], connection=self.connection)
-        worker.connection.connection_pool.connection_kwargs = {"socket_timeout": 5}
-        # worker.connection_timeout = 10
-
-        worker._set_connection(self.connection)
-
-        assert worker.connection.connection_pool.connection_kwargs == {"socket_timeout": 5}
-
-    def test_set_connection_with_redis_cluster(self):
-        queue = Queue(connection=self.connection_cluster)
-        worker = Worker([queue], connection=self.connection_cluster)
-        # worker.connection_timeout = 10
-
-        worker._set_connection(self.connection_cluster)
-
-        for node in self.connection_cluster.get_nodes():
-            assert node.redis_connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
-
-
-=======
->>>>>>> 53e3fbb (Remove broken tests.)
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
     os.kill(pid, signal.SIGKILL)
