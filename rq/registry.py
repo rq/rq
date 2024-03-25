@@ -225,7 +225,7 @@ class StartedJobRegistry(BaseRegistry):
 
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: List = None):
         """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -251,6 +251,19 @@ class StartedJobRegistry(BaseRegistry):
                     job.execute_failure_callback(
                         self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
                     )
+
+                    if exception_handlers:
+                        for handler in exception_handlers:
+                            fallthrough = handler(
+                                job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
+                            )
+                            # Only handlers with explicit return values should disable further
+                            # exc handling, so interpret a None return value as True.
+                            if fallthrough is None:
+                                fallthrough = True
+
+                            if not fallthrough:
+                                break
 
                     retry = job.retries_left and job.retries_left > 0
 
@@ -486,7 +499,7 @@ class CanceledJobRegistry(BaseRegistry):
         pass
 
 
-def clean_registries(queue: 'Queue'):
+def clean_registries(queue: 'Queue', exception_handlers: list = None):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue.
 
     Args:
@@ -498,7 +511,7 @@ def clean_registries(queue: 'Queue'):
 
     StartedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
-    ).cleanup()
+    ).cleanup(exception_handlers=exception_handlers)
 
     FailedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer

@@ -164,8 +164,14 @@ class TestRegistry(RQTestCase):
         self.assertIn(job, self.registry)
 
         with mock.patch.object(Job, 'execute_failure_callback') as mocked:
-            self.registry.cleanup()
+            mock_handler = mock.MagicMock()
+            mock_handler.return_value = False
+            mock_handler_no_return = mock.MagicMock()
+            mock_handler_no_return.return_value = None
+            self.registry.cleanup(exception_handlers=[mock_handler_no_return, mock_handler])
             mocked.assert_called_once_with(queue.death_penalty_class, AbandonedJobError, ANY, ANY)
+            mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
+            mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()
