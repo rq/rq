@@ -4,6 +4,7 @@ import unittest
 
 import pytest
 from redis import Redis
+from redis.cluster import RedisCluster
 
 
 def find_empty_redis_database(ssl=False):
@@ -75,18 +76,15 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
-
         # Store the connection (for sanity checking)
         cls.testconn = testconn
         cls.connection = testconn
-
         # Shut up logging
         logging.disable(logging.ERROR)
 
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.connection.flushdb()
-
     def tearDown(self):
         # Flush afterwards
         self.connection.flushdb()
