@@ -93,23 +93,18 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         testconn = find_empty_redis_database()
-        testconn_cluster = find_empty_redis_cluster()
         # Store the connection (for sanity checking)
         cls.testconn = testconn
         cls.connection = testconn
-        cls.connection_cluster = testconn_cluster()
         # Shut up logging
         logging.disable(logging.ERROR)
 
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.connection.flushdb()
-        self.connection_cluster.flushdb()
-
     def tearDown(self):
         # Flush afterwards
         self.connection.flushdb()
-        self.connection_cluster.flushdb()
 
     # Implement assertIsNotNone for Python runtimes < 2.7 or < 3.1
     if not hasattr(unittest.TestCase, 'assertIsNotNone'):

@@ -1316,6 +1316,7 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(expected, sorted_ids)
 
+<<<<<<< HEAD
 
 class TestWorkerConnection(RQTestCase):
     @pytest.fixture
@@ -1350,6 +1351,8 @@ class TestWorkerConnection(RQTestCase):
             assert node.redis_connection.connection_pool.connection_kwargs == {"socket_timeout": 10}
 
 
+=======
+>>>>>>> 53e3fbb (Remove broken tests.)
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
     os.kill(pid, signal.SIGKILL)
