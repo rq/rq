@@ -471,6 +471,30 @@ To learn about workers, see the [workers][w] documentation.
 [w]: {{site.baseurl}}workers/
 
 
+## Suspending and resuming
+
+Sometimes you may want to suspend rq to prevent it from processing new jobs.
+A classic example is during the initial phase of a deployment script or in advance
+of putting your site into maintenance mode. This is particularly helpful when
+you have jobs that are relatively long-running and might otherwise be forcibly
+killed during the deploy.
+
+This stops work on _all_ queues from picking up new jobs. However the current job
+will continue until completion.
+
+```bash
+# Suspend indefinitely
+rq suspend
+
+# Suspend for a specific duration (in seconds) then automatically
+# resume work again.
+rq suspend --duration 300
+
+# Resume work again.
+rq resume
+```
+
+
 ## Considerations for jobs
 
 Technically, you can put any Python function call on a queue, but that does not
