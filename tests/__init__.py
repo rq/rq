@@ -85,6 +85,7 @@ class RQTestCase(unittest.TestCase):
     def setUp(self):
         # Flush beforewards (we like our hygiene)
         self.connection.flushdb()
+
     def tearDown(self):
         # Flush afterwards
         self.connection.flushdb()

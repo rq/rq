@@ -1316,6 +1316,7 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(expected, sorted_ids)
 
+
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
     os.kill(pid, signal.SIGKILL)
