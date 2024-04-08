@@ -4,7 +4,6 @@ import unittest
 
 import pytest
 from redis import Redis
-from redis.cluster import RedisCluster
 
 
 def find_empty_redis_database(ssl=False):
