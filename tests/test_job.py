@@ -22,7 +22,7 @@ from rq.registry import (
     StartedJobRegistry,
 )
 from rq.serializers import JSONSerializer
-from rq.utils import as_text, get_version, utcformat, utcnow
+from rq.utils import as_text, get_version, now, utcformat
 from rq.worker import Worker
 from tests import RQTestCase, fixtures
 
@@ -247,6 +247,7 @@ class TestJob(RQTestCase):
                 b'success_callback_name',
                 b'failure_callback_name',
                 b'stopped_callback_name',
+                b'group_id',
             },
             set(self.connection.hkeys(job.key)),
         )
@@ -254,7 +255,7 @@ class TestJob(RQTestCase):
         self.assertEqual(job.last_heartbeat, None)
         self.assertEqual(job.last_heartbeat, None)
 
-        ts = utcnow()
+        ts = now()
         job.heartbeat(ts, 0)
         self.assertEqual(job.last_heartbeat, ts)
 
@@ -1166,12 +1167,12 @@ class TestJob(RQTestCase):
         dependent_job._dependency_ids = [job.id for job in dependency_jobs]
         dependent_job.register_dependency()
 
-        now = utcnow()
+        right_now = now()
 
         # Set ended_at timestamps
         for i, job in enumerate(dependency_jobs):
             job._status = JobStatus.FINISHED
-            job.ended_at = now - timedelta(seconds=i)
+            job.ended_at = right_now - timedelta(seconds=i)
             job.save()
 
         dependencies_finished = dependent_job.dependencies_are_met()
@@ -1182,7 +1183,7 @@ class TestJob(RQTestCase):
         dependency_jobs = [Job.create(fixtures.say_hello, connection=self.connection) for _ in range(2)]
 
         dependency_jobs[0]._status = JobStatus.FINISHED
-        dependency_jobs[0].ended_at = utcnow()
+        dependency_jobs[0].ended_at = now()
         dependency_jobs[0].save()
 
         dependency_jobs[1]._status = JobStatus.STARTED

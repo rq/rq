@@ -124,11 +124,6 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
-def utcnow():
-    
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-
-
 def now():
     """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)
@@ -147,10 +142,9 @@ def utcparse(string: str) -> dt.datetime:
     except ValueError:
         # This catches any jobs remain with old datetime format
         try:
-         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
-        except:
-         return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
-
+            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
 def first(iterable: Iterable, default=None, key=None):

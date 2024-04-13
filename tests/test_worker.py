@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 import zlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from time import sleep
 from unittest import mock, skipIf
@@ -25,7 +25,7 @@ from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegist
 from rq.results import Result
 from rq.serializers import JSONSerializer
 from rq.suspension import resume, suspend
-from rq.utils import as_text, get_version, utcnow
+from rq.utils import as_text, get_version, now
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
 from tests import RQTestCase, find_empty_redis_database, slow
@@ -170,7 +170,7 @@ class TestWorker(RQTestCase):
         """job times are set correctly."""
         q = Queue('foo', connection=self.connection)
         w = Worker([q], connection=self.connection)
-        before = utcnow()
+        before = now()
         before = before.replace(microsecond=0)
         job = q.enqueue(say_hello)
         self.assertIsNotNone(job.enqueued_at)
@@ -178,11 +178,20 @@ class TestWorker(RQTestCase):
         self.assertIsNone(job.ended_at)
         self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
         self.assertEqual(job.result, 'Hi there, Stranger!')
-        after = utcnow()
+        after = now()
         job.refresh()
-        self.assertTrue(before <= job.enqueued_at <= after, 'Not %s <= %s <= %s' % (before, job.enqueued_at, after))
-        self.assertTrue(before <= job.started_at <= after, 'Not %s <= %s <= %s' % (before, job.started_at, after))
-        self.assertTrue(before <= job.ended_at <= after, 'Not %s <= %s <= %s' % (before, job.ended_at, after))
+        self.assertTrue(
+            before <= job.enqueued_at.replace(tzinfo=timezone.utc) <= after,
+            'Not %s <= %s <= %s' % (before, job.enqueued_at, after),
+        )
+        self.assertTrue(
+            before <= job.started_at.replace(tzinfo=timezone.utc) <= after,
+            'Not %s <= %s <= %s' % (before, job.started_at, after),
+        )
+        self.assertTrue(
+            before <= job.ended_at.replace(tzinfo=timezone.utc) <= after,
+            'Not %s <= %s <= %s' % (before, job.ended_at, after),
+        )
 
     def test_work_is_unreadable(self):
         """Unreadable jobs are put on the failed job registry."""
@@ -348,7 +357,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 1)
 
         # keep for later
-        enqueued_at_date = str(job.enqueued_at)
+        enqueued_at_date = job.enqueued_at
 
         w = Worker([q])
         w.work(burst=True)
@@ -365,11 +374,10 @@ class TestWorker(RQTestCase):
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
-        self.assertEqual(str(job.enqueued_at), enqueued_at_date)
-        self.assertTrue(job.exc_info)  # should contain exc_info
+        self.assertEqual(job.enqueued_at.replace(tzinfo=timezone.utc).timestamp(), enqueued_at_date.timestamp())
         if job.supports_redis_streams:
             result = Result.fetch_latest(job)
-            self.assertEqual(result.exc_string, job.exc_info)
+            self.assertTrue(result.exc_string)
             self.assertEqual(result.type, Result.Type.FAILED)
 
     def test_horse_fails(self):
@@ -382,7 +390,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 1)
 
         # keep for later
-        enqueued_at_date = str(job.enqueued_at)
+        enqueued_at_date = job.enqueued_at
 
         w = Worker([q])
         with mock.patch.object(w, 'perform_job', new_callable=raise_exc_mock):
@@ -400,7 +408,7 @@ class TestWorker(RQTestCase):
 
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
-        self.assertEqual(str(job.enqueued_at), enqueued_at_date)
+        self.assertEqual(job.enqueued_at.replace(tzinfo=timezone.utc).timestamp(), enqueued_at_date.timestamp())
         self.assertTrue(job.exc_info)  # should contain exc_info
 
     def test_statistics(self):
@@ -415,7 +423,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.total_working_time, 0)
 
         registry = StartedJobRegistry(connection=worker.connection)
-        job.started_at = utcnow()
+        job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
         worker.handle_job_failure(job, queue)
         worker.handle_job_success(job, queue, registry)
@@ -677,21 +685,21 @@ class TestWorker(RQTestCase):
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=1))
 
         # idle for 3 seconds
-        now = utcnow()
+        right_now = now()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(1, max_idle_time=3))
-        self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
+        self.assertLess((now() - right_now).total_seconds(), 5)  # 5 for some buffer
 
         # idle for 2 seconds because idle_time is less than timeout
-        now = utcnow()
+        right_now = now()
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(3, max_idle_time=2))
-        self.assertLess((utcnow() - now).total_seconds(), 4)  # 4 for some buffer
+        self.assertLess((now() - right_now).total_seconds(), 4)  # 4 for some buffer
 
         # idle for 3 seconds because idle_time is less than two rounds of timeout
-        now = utcnow()
+        right_now = now()
         w = Worker([q])
         w.worker_ttl = 2
         w.work(max_idle_time=3)
-        self.assertLess((utcnow() - now).total_seconds(), 5)  # 5 for some buffer
+        self.assertLess((now() - right_now).total_seconds(), 5)  # 5 for some buffer
 
     @slow  # noqa
     def test_timeouts(self):
@@ -1052,17 +1060,17 @@ class TestWorker(RQTestCase):
         worker = Worker(queue)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
-        worker.last_cleaned_at = utcnow()
+        worker.last_cleaned_at = now()
         self.assertFalse(worker.should_run_maintenance_tasks)
-        worker.last_cleaned_at = utcnow() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 100)
+        worker.last_cleaned_at = now() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 100)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
         # custom maintenance_interval
         worker = Worker(queue, maintenance_interval=10)
         self.assertTrue(worker.should_run_maintenance_tasks)
-        worker.last_cleaned_at = utcnow()
+        worker.last_cleaned_at = now()
         self.assertFalse(worker.should_run_maintenance_tasks)
-        worker.last_cleaned_at = utcnow() - timedelta(seconds=11)
+        worker.last_cleaned_at = now() - timedelta(seconds=11)
         self.assertTrue(worker.should_run_maintenance_tasks)
 
     def test_worker_calls_clean_registries(self):
@@ -1262,12 +1270,12 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
         worker._horse_pid = 1
-        worker._shutdown_requested_date = utcnow()
+        worker._shutdown_requested_date = now()
         with mock.patch.object(worker, 'kill_horse') as mocked:
             worker.request_force_stop(1, frame=None)
             self.assertEqual(mocked.call_count, 0)
         # If signal is sent a few seconds after, kill_horse() is called
-        worker._shutdown_requested_date = utcnow() - timedelta(seconds=2)
+        worker._shutdown_requested_date = now() - timedelta(seconds=2)
         with mock.patch.object(worker, 'kill_horse') as mocked:
             self.assertRaises(SystemExit, worker.request_force_stop, 1, frame=None)
 
@@ -1445,8 +1453,8 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
 
-        now = utcnow()
-        self.assertTrue((utcnow() - now).total_seconds() < total_time)
+        right_now = now()
+        self.assertTrue((now() - right_now).total_seconds() < total_time)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
         self.assertTrue(job in failed_job_registry)

@@ -134,6 +134,39 @@ with q.connection.pipeline() as pipe:
 
 `Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
 
+### Grouping jobs
+_New in version 2.0._  
+Multiple jobs can be added to a Group to allow them to be tracked by a single ID:
+
+```python
+from rq import Queue
+from rq.group import Group
+
+group = Group.create(connection=redis_conn)
+jobs = group.enqueue_many(
+  queue="my_queue",
+  [
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
+  ]
+)
+```
+
+You can then access jobs by calling the group's `get_jobs()` method:
+
+```python
+print(group.get_jobs())  # [Job('my_job_id'), Job('my_other_job_id')]
+```
+
+Existing groups can be fetched from Redis:
+
+```python
+from rq.group import Group
+group = Group.fetch(id='my_group', connection=redis_conn)
+```
+
+If all of a group's jobs expire or are deleted, the group is removed from Redis.
+
 ## Job dependencies
 
 RQ allows you to chain the execution of multiple jobs.

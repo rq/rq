@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
-from .utils import as_text, current_timestamp, utcnow
+from .utils import as_text, current_timestamp, now
 
 
 class Execution:
@@ -19,9 +19,9 @@ class Execution:
         self.id = id
         self.job_id = job_id
         self.connection = connection
-        now = utcnow()
-        self.created_at = now
-        self.last_heartbeat = now
+        right_now = now()
+        self.created_at = right_now
+        self.last_heartbeat = right_now
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):
@@ -94,7 +94,7 @@ class Execution:
     def heartbeat(self, started_job_registry: StartedJobRegistry, ttl: int, pipeline: 'Pipeline'):
         """Update execution heartbeat."""
         # TODO: worker heartbeat should be tied to execution heartbeat
-        self.last_heartbeat = utcnow()
+        self.last_heartbeat = now()
         pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
         pipeline.expire(self.key, ttl)
         started_job_registry.add(self.job, ttl, pipeline=pipeline, xx=True)

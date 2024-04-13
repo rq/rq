@@ -33,10 +33,10 @@ from .utils import (
     get_call_string,
     get_version,
     import_attribute,
+    now,
     parse_timeout,
     str_to_date,
     utcformat,
-    utcnow,
 )
 
 logger = logging.getLogger("rq.job")
@@ -164,6 +164,7 @@ class Job:
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
+        group_id: Optional[str] = None,
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
         on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
@@ -206,6 +207,7 @@ class Job:
                 fails. Defaults to None. Passing a callable is deprecated.
             on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
                 is stopped. Defaults to None. Passing a callable is deprecated.
+            group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -290,6 +292,7 @@ class Job:
         job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
+        job.group_id = group_id
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
@@ -638,7 +641,7 @@ class Job:
             raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
         self.connection = connection
         self._id = id
-        self.created_at = utcnow()
+        self.created_at = now()
         self._data = UNEVALUATED
         self._func_name = UNEVALUATED
         self._instance = UNEVALUATED
@@ -675,6 +678,7 @@ class Job:
         self.last_heartbeat: Optional[datetime] = None
         self.allow_dependency_failures: Optional[bool] = None
         self.enqueue_at_front: Optional[bool] = None
+        self.group_id: Optional[str] = None
 
         from .results import Result
 
@@ -936,6 +940,7 @@ class Job:
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
         self.last_heartbeat = str_to_date(obj.get('last_heartbeat'))
+        self.group_id = as_text(obj.get('group_id')) if obj.get('group_id') else None
         result = obj.get('result')
         if result:
             try:
@@ -1015,7 +1020,7 @@ class Job:
             dict: The Job serialized as a dictionary
         """
         obj = {
-            'created_at': utcformat(self.created_at or utcnow()),
+            'created_at': utcformat(self.created_at or now()),
             'data': zlib.compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
@@ -1024,6 +1029,7 @@ class Job:
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
             'worker_name': self.worker_name or '',
+            'group_id': self.group_id or '',
         }
 
         if self.retries_left is not None:
@@ -1265,6 +1271,12 @@ class Job:
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
         self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
+        if self.group_id:
+            from .group import Group
+
+            group = Group.fetch(self.group_id, self.connection)
+            group.delete_job(self.id, pipeline=pipeline)
+
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline: Optional['Pipeline'] = None):
@@ -1308,7 +1320,7 @@ class Job:
             pipeline (Pipeline): The Redis' piipeline to use
         """
         self.worker_name = worker_name
-        self.last_heartbeat = utcnow()
+        self.last_heartbeat = now()
         self.started_at = self.last_heartbeat
         self._status = JobStatus.STARTED
         mapping = {

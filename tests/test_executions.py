@@ -2,7 +2,7 @@ from time import sleep
 
 from rq.executions import Execution, ExecutionRegistry
 from rq.queue import Queue
-from rq.utils import current_timestamp, utcnow
+from rq.utils import current_timestamp, now
 from rq.worker import Worker
 from tests import RQTestCase
 from tests.fixtures import long_running_job, say_hello, start_worker_process
@@ -37,9 +37,9 @@ class TestRegistry(RQTestCase):
         self.assertTrue(self.connection.ttl(execution.key) <= 100)
 
         execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
-        self.assertEqual(execution.created_at, created_at)
+        self.assertEqual(execution.created_at.timestamp(), created_at.timestamp())
         self.assertEqual(execution.composite_key, composite_key)
-        self.assertEqual(execution.last_heartbeat, created_at)
+        self.assertEqual(execution.last_heartbeat.timestamp(), created_at.timestamp())
 
         execution.delete(job=job, pipeline=pipeline)
         pipeline.execute()
@@ -158,7 +158,7 @@ class TestRegistry(RQTestCase):
         self.assertIn(execution.composite_key, job.started_job_registry.get_job_ids())
 
         last_heartbeat = execution.last_heartbeat
-        last_heartbeat = utcnow()
+        last_heartbeat = now()
         self.assertTrue(30 < self.connection.ttl(execution.key) < 200)
 
         sleep(2)
