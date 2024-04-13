@@ -85,25 +85,19 @@ class TestWorkerRegistry(RQTestCase):
         clean_registry() splits invalid_keys into multiple lists for set removal to avoid sending more than redis can
         receive
         """
-        MAX_WORKERS = 41
-        MAX_KEYS = 37
-        # srem is called twice per invalid key batch: once for WORKERS_BY_QUEUE_KEY; once for REDIS_WORKER_KEYS
+        worker_count = 11
+        MAX_KEYS = 6
         SREM_CALL_COUNT = 2
 
-        queue = Queue(name='foo')
-        for i in range(MAX_WORKERS):
-            worker = Worker([queue])
+        queue = Queue(name='foo', connection=self.connection)
+        for i in range(worker_count):
+            worker = Worker([queue], connection=self.connection)
             register(worker)
 
-        with patch('rq.worker_registration.MAX_KEYS', MAX_KEYS), patch.object(
-            queue.connection, 'pipeline', wraps=queue.connection.pipeline
-        ) as pipeline_mock:
-            # clean_worker_registry creates a pipeline with a context manager. Configure the mock using the context
-            # manager entry method __enter__
-            pipeline_mock.return_value.__enter__.return_value.srem.return_value = None
-            pipeline_mock.return_value.__enter__.return_value.execute.return_value = [0] * MAX_WORKERS
-
+        # Since we registered 11 workers and set the maximum keys to be deleted in each command to 6,
+        # `srem` command should be called a total of 4 times.
+        # `srem` is called twice per invalid key group; once for WORKERS_BY_QUEUE_KEY and once for REDIS_WORKER_KEYS
+        with patch('rq.worker_registration.MAX_KEYS', MAX_KEYS), patch('redis.client.Pipeline.srem') as mock:
             clean_worker_registry(queue)
-
-            expected_call_count = (ceildiv(MAX_WORKERS, MAX_KEYS)) * SREM_CALL_COUNT
-            self.assertEqual(pipeline_mock.return_value.__enter__.return_value.srem.call_count, expected_call_count)
+            expected_call_count = (ceildiv(worker_count, MAX_KEYS)) * SREM_CALL_COUNT
+            self.assertEqual(mock.call_count, expected_call_count)
