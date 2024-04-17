@@ -45,7 +45,7 @@ class WorkerPool:
         connection: Redis,
         num_workers: int = 1,
         worker_class: Type[BaseWorker] = Worker,
-        serializer: Type['Serializer'] = DefaultSerializer,
+        serializer: 'Serializer' = DefaultSerializer,
         job_class: Type[Job] = Job,
         queue_class: Type[Queue] = Queue,
         *args,
@@ -63,7 +63,7 @@ class WorkerPool:
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
         self.worker_class: Type[BaseWorker] = worker_class
-        self.serializer: Type['Serializer'] = serializer
+        self.serializer: 'Serializer' = serializer
         self.job_class: Type[Job] = job_class
         self.queue_class: Type[Queue] = queue_class
 
@@ -251,7 +251,7 @@ def run_worker(
     connection_pool_class,
     connection_pool_kwargs: dict,
     worker_class: Type[BaseWorker] = Worker,
-    serializer: Type['Serializer'] = DefaultSerializer,
+    serializer: 'Serializer' = DefaultSerializer,
     job_class: Type[Job] = Job,
     queue_class: Type[Queue] = Queue,
     burst: bool = True,
