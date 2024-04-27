@@ -471,7 +471,7 @@ To learn about workers, see the [workers][w] documentation.
 [w]: {{site.baseurl}}workers/
 
 
-## Suspending and resuming
+## Suspending and Resuming
 
 Sometimes you may want to suspend rq to prevent it from processing new jobs.
 A classic example is during the initial phase of a deployment script or in advance
