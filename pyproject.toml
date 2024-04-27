@@ -85,7 +85,7 @@ dependencies = [
   "pytest",
   "pytest-cov",
   "ruff",
-  "sentry-sdk",
+  "sentry-sdk<2",
   "tox",
 ]
 [tool.hatch.envs.test.scripts]
