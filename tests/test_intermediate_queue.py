@@ -57,6 +57,9 @@ class TestWorker(RQTestCase):
 
         intermediate_queue = IntermediateQueue(queue.key, connection=self.connection)
 
+        # Ensure that the intermediate queue is empty
+        self.connection.delete(intermediate_queue.key)
+
         # Job ID is not in intermediate queue
         self.assertEqual(intermediate_queue.get_job_ids(), [])
         job, queue = Queue.dequeue_any([queue], timeout=None, connection=self.testconn)
