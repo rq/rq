@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 from redis import Redis
 
@@ -75,3 +75,11 @@ class IntermediateQueue(object):
         if not first_seen:
             return False
         return now() - first_seen > timedelta(minutes=1)
+
+    def get_job_ids(self) -> List[str]:
+        """Returns the job IDs in the intermediate queue.
+
+        Returns:
+            List[str]: The job IDs
+        """
+        return [job_id.decode() for job_id in self.connection.lrange(self.key, 0, -1)]
