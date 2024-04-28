@@ -83,3 +83,11 @@ class IntermediateQueue(object):
             List[str]: The job IDs
         """
         return [job_id.decode() for job_id in self.connection.lrange(self.key, 0, -1)]
+
+    def remove(self, job_id: str) -> None:
+        """Removes a job from the intermediate queue.
+
+        Args:
+            job_id (str): The job ID
+        """
+        self.connection.lrem(self.key, 1, job_id)
