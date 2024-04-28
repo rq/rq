@@ -219,6 +219,11 @@ class Queue:
         return IntermediateQueue.get_intermediate_queue_key(self._key)
 
     @property
+    def intermediate_queue(self) -> IntermediateQueue:
+        """Returns the IntermediateQueue instance for this Queue."""
+        return IntermediateQueue(self.key, connection=self.connection)
+
+    @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
         return 'rq:clean_registries:%s' % self.name

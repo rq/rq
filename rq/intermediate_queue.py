@@ -1,9 +1,13 @@
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from redis import Redis
 
 from rq.utils import now
+
+if TYPE_CHECKING:
+    from .queue import Queue
+    from .worker import BaseWorker
 
 
 class IntermediateQueue(object):
@@ -91,3 +95,25 @@ class IntermediateQueue(object):
             job_id (str): The job ID
         """
         self.connection.lrem(self.key, 1, job_id)
+
+    def cleanup(self, worker: 'BaseWorker', queue: 'Queue') -> None:
+        job_ids = self.get_job_ids()
+
+        for job_id in job_ids:
+            job = queue.fetch_job(job_id)
+
+            if job_id not in queue.started_job_registry:
+
+                if not job:
+                    # If the job doesn't exist in the queue, we can safely remove it from the intermediate queue.
+                    self.remove(job_id)
+                    continue
+
+                # If this is the first time we've seen this job, do nothing.
+                # `set_first_seen` will return `True` if the key was set, `False` if it already existed.
+                if self.set_first_seen(job_id):
+                    continue
+
+                if self.should_be_cleaned_up(job_id):
+                    worker.handle_job_failure(job, queue, exc_string='Job was stuck in intermediate queue.')
+                    self.remove(job_id)

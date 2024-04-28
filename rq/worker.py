@@ -48,7 +48,6 @@ from .defaults import (
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
-from .maintenance import clean_intermediate_queue
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
@@ -317,7 +316,7 @@ class BaseWorker:
                 self.log.info('Cleaning registries for queue: %s', queue.name)
                 clean_registries(queue)
                 worker_registration.clean_worker_registry(queue)
-                clean_intermediate_queue(self, queue)
+                queue.intermediate_queue.cleanup(self, queue)
                 queue.release_maintenance_lock()
         self.last_cleaned_at = utcnow()
 
