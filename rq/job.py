@@ -601,7 +601,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List['Job']:
+    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List[Optional['Job']]:
         """
         Bulk version of Job.fetch
 
@@ -614,7 +614,7 @@ class Job:
             serializer (Callable): A serializer
 
         Returns:
-            jobs (list[Job]): A list of Jobs instances.
+            jobs (list[Optional[Job]]): A list of Jobs instances, elements are None if a job_id does not exist.
         """
         parsed_ids = [parse_job_id(job_id) for job_id in job_ids]
         with connection.pipeline() as pipeline:
