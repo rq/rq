@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
+from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .serializers import resolve_serializer
@@ -139,18 +140,6 @@ class Queue:
             death_penalty_class=death_penalty_class,
         )
 
-    @classmethod
-    def get_intermediate_queue_key(cls, key: str) -> str:
-        """Returns the intermediate queue key for a given queue key.
-
-        Args:
-            key (str): The queue key
-
-        Returns:
-            str: The intermediate queue key
-        """
-        return f'{key}:intermediate'
-
     def __init__(
         self,
         name: str = 'default',
@@ -227,7 +216,12 @@ class Queue:
     @property
     def intermediate_queue_key(self):
         """Returns the Redis key for intermediate queue."""
-        return self.get_intermediate_queue_key(self._key)
+        return IntermediateQueue.get_intermediate_queue_key(self._key)
+
+    @property
+    def intermediate_queue(self) -> IntermediateQueue:
+        """Returns the IntermediateQueue instance for this Queue."""
+        return IntermediateQueue(self.key, connection=self.connection)
 
     @property
     def registry_cleaning_key(self):
@@ -1316,18 +1310,19 @@ class Queue:
         """Similar to lpop, but accepts only a single queue key and immediately pushes
         the result to an intermediate queue.
         """
+        intermediate_queue = IntermediateQueue(queue_key, connection)
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queue = green(queue_key)
             logger.debug(f"Starting BLMOVE operation for {colored_queue} with timeout of {timeout}")
-            result = connection.blmove(queue_key, cls.get_intermediate_queue_key(queue_key), timeout)
+            result = connection.blmove(queue_key, intermediate_queue.key, timeout)
             if result is None:
                 logger.debug(f"BLMOVE timeout, no jobs found on {colored_queue}")
                 raise DequeueTimeout(timeout, queue_key)
             return queue_key, result
         else:  # non-blocking variant
-            result = connection.lmove(queue_key, cls.get_intermediate_queue_key(queue_key))
+            result = connection.lmove(queue_key, intermediate_queue.key)
             if result is not None:
                 return queue_key, result
             return None
