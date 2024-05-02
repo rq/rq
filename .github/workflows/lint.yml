@@ -34,4 +34,4 @@ jobs:
     - name: Lint with ruff
       run: |
         # stop the build if there are Python syntax errors.
-        ruff check --show-source rq tests
+        ruff check --output-format=full rq tests

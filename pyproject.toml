@@ -85,7 +85,6 @@ dependencies = [
   "pytest",
   "pytest-cov",
   "ruff",
-  "sentry-sdk<2",
   "tox",
 ]
 [tool.hatch.envs.test.scripts]
@@ -99,7 +98,7 @@ skip-string-normalization = true
 [tool.ruff]
 # Set what ruff should check for.
 # See https://beta.ruff.rs/docs/rules/ for a list of rules.
-select = [
+lint.select = [
     "E", # pycodestyle errors
     "F", # pyflakes errors
     "I", # import sorting
@@ -108,7 +107,7 @@ select = [
 line-length = 120  # To match black.
 target-version = "py38"
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["rq"]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 

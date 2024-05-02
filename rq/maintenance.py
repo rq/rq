@@ -1,5 +1,4 @@
 import warnings
-
 from typing import TYPE_CHECKING
 
 from .intermediate_queue import IntermediateQueue
