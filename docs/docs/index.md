@@ -433,13 +433,21 @@ If you're familiar with Celery, you might be used to its `@task` decorator.
 Starting from RQ >= 0.3, there exists a similar decorator:
 
 ```python
+# jobs.py
+from redis import Redis
 from rq.decorators import job
+
+my_redis_conn = Redis()
 
 @job('low', connection=my_redis_conn, timeout=5)
 def add(x, y):
     return x + y
 
-job = add.enqueue(3, 4)
+# main.py
+import time
+from jobs import add
+
+job = add.delay(3, 4)
 time.sleep(1)
 print(job.return_value())
 ```
