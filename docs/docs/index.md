@@ -439,7 +439,7 @@ from rq.decorators import job
 def add(x, y):
     return x + y
 
-job = add.enqueue(3, 4)
+job = add.delay(3, 4)
 time.sleep(1)
 print(job.return_value())
 ```
