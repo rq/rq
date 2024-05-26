@@ -330,12 +330,17 @@ class Job:
         Args:
             refresh (bool, optional): Whether to refresh the Job. Defaults to True.
 
+        Raises:
+            InvalidJobOperation: If refreshing and nothing is returned from the `HGET` operation.
+
         Returns:
             status (JobStatus): The Job Status
         """
         if refresh:
             status = self.connection.hget(self.key, 'status')
-            self._status = as_text(status) if status else None
+            if not status:
+                raise InvalidJobOperation(f"Failed to retrieve status for job: {self.id}")
+            self._status = JobStatus(as_text(status))
         return self._status
 
     def set_status(self, status: JobStatus, pipeline: Optional['Pipeline'] = None) -> None:
@@ -950,7 +955,7 @@ class Job:
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
-        self._status = obj.get('status').decode() if obj.get('status') else None
+        self._status = JobStatus(as_text(obj.get('status'))) if obj.get('status') else None
 
         if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
