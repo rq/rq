@@ -1,7 +1,13 @@
 [run]
+source = rq
 omit =
-    rq/scripts/*
-    rq/compat/*
     rq/contrib/legacy.py
-    rq/dummy.py
     rq/local.py
+    rq/tests/*
+    tests/*
+
+[report]
+exclude_lines =
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    pragma: no cover

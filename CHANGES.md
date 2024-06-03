@@ -1,3 +1,108 @@
+### RQ 2.0 (unreleased)
+
+New Features:
+* Support for multiple job executions. A job can now properly manage multiple executions running simultaneously, allowing future support for long running scheduled jobs.
+
+Breaking Changes:
+* Dropped support for Redis server < 4
+* `RoundRobinWorker` and `RandomWorker` are deprecated. Use  `--dequeue-strategy <round-robin/random>` instead.
+* `Job.__init__` requires both `id` and `connection` to be passed in.
+* `Job.exists()` requires `connection` argument to be passed in.
+* `Queue.all()` requires `connection` argument.
+* `@job` decorator now requires `connection` argument.
+
+### RQ 1.16.2 (2024-05-01)
+* Fixed a bug that may cause jobs from intermediate queue to be moved to FailedJobRegistry. Thanks @selwin!
+
+### RQ 1.16.1 (2024-03-09)
+* Added `worker_pool.get_worker_process()` to make `WorkerPool` easier to extend. Thanks @selwin!
+
+### RQ 1.16 (2024-02-24)
+* Added a way for jobs to wait for latest result `job.latest_result(timeout=60)`. Thanks @ajnisbet!
+* Fixed an issue where `stopped_callback` is not respected when job is enqueued via `enqueue_many()`. Thanks @eswolinsky3241!
+* `worker-pool` no longer ignores `--quiet`. Thanks @Mindiell!
+* Added compatibility with AWS Serverless Redis. Thanks @peter-gy!
+* `worker-pool` now starts with scheduler. Thanks @chromium7!
+
+### RQ 1.15.1 (2023-06-20)
+* Fixed a bug that may cause a crash when cleaning intermediate queue. Thanks @selwin!
+* Fixed a bug that may cause canceled jobs to still run dependent jobs. Thanks @fredsod!
+
+### RQ 1.15 (2023-05-24)
+* Added `Callback(on_stopped='my_callback)`. Thanks @eswolinsky3241!
+* `Callback` now accepts dotted path to function as input. Thanks @rishabh-ranjan!
+* `queue.enqueue_many()` now supports job dependencies. Thanks @eswolinsky3241!
+* `rq worker` CLI script now configures logging based on `DICT_CONFIG` key present in config file. Thanks @juur!
+* Whenever possible, `Worker` now uses `lmove()` to implement [reliable queue pattern](https://redis.io/commands/lmove/). Thanks @selwin!
+* Require `redis>=4.0.0`
+* `Scheduler` should only release locks that it successfully acquires. Thanks @xzander!
+* Fixes crashes that may happen by changes to `as_text()` function in v1.14. Thanks @tchapi!
+* Various linting, CI and code quality improvements. Thanks @robhudson!
+
+### RQ 1.14.1 (2023-05-05)
+* Fixes a crash that happens if Redis connection uses SSL. Thanks @tchapi!
+* Fixes a crash if `job.meta()` is loaded using the wrong serializer. Thanks @gabriels1234!
+
+### RQ 1.14.0 (2023-05-01)
+* Added `WorkerPool` (beta) that manages multiple workers in a single CLI. Thanks @selwin!
+* Added a new `Callback` class that allows more flexibility in declaring job callbacks. Thanks @ronlut!
+* Fixed a regression where jobs with unserializable return value crashes RQ. Thanks @tchapi!
+* Added `--dequeue-strategy` option to RQ's CLI. Thanks @ccrvlh!
+* Added `--max-idle-time` option to RQ's worker CLI. Thanks @ronlut!
+* Added `--maintenance-interval` option to RQ's worker CLI. Thanks @ronlut!
+* Fixed RQ usage in Windows as well as various other refactorings. Thanks @ccrvlh!
+* Show more info on `rq info` CLI command. Thanks @iggeehu!
+* `queue.enqueue_jobs()` now properly account for job dependencies. Thanks @sim6!
+* `TimerDeathPenalty` now properly handles negative/infinite timeout. Thanks @marqueurs404!
+
+### RQ 1.13.0 (2023-02-19)
+* Added `work_horse_killed_handler` argument to `Worker`. Thanks @ronlut!
+* Fixed an issue where results aren't properly persisted on synchronous jobs. Thanks @selwin!
+* Fixed a bug where job results are not properly persisted when `result_ttl` is `-1`. Thanks @sim6!
+* Various documentation and logging fixes. Thanks @lowercase00!
+* Improve Redis connection reliability. Thanks @lowercase00!
+* Scheduler reliability improvements. Thanks @OlegZv and @lowercase00!
+* Fixed a bug where `dequeue_timeout` ignores `worker_ttl`. Thanks @ronlut!
+* Use `job.return_value()` instead of `job.result` when processing callbacks. Thanks @selwin!
+* Various internal refactorings to make `Worker` code more easily extendable. Thanks @lowercase00!
+* RQ's source code is now black formatted. Thanks @aparcar!
+
+### RQ 1.12.0 (2023-01-15)
+* RQ now stores multiple job execution results. This feature is only available on Redis >= 5.0 Redis Streams. Please refer to [the docs](https://python-rq.org/docs/results/) for more info. Thanks @selwin!
+* Improve performance when enqueueing many jobs at once. Thanks @rggjan!
+* Redis server version is now cached in connection object. Thanks @odarbelaeze!
+* Properly handle `at_front` argument when jobs are scheduled. Thanks @gabriels1234!
+* Add type hints to RQ's code base. Thanks @lowercase00!
+* Fixed a bug where exceptions are logged twice. Thanks @selwin!
+* Don't delete `job.worker_name` after job is finished. Thanks @eswolinsky3241!
+
+### RQ 1.11.1 (2022-09-25)
+* `queue.enqueue_many()` now supports `on_success` and on `on_failure` arguments. Thanks @y4n9squared!
+* You can now pass `enqueue_at_front` to `Dependency()` objects to put dependent jobs at the front when they are enqueued. Thanks @jtfidje!
+* Fixed a bug where workers may wrongly acquire scheduler locks. Thanks @milesjwinter!
+* Jobs should not be enqueued if any one of it's dependencies is canceled. Thanks @selwin!
+* Fixed a bug when handling jobs that have been stopped. Thanks @ronlut!
+* Fixed a bug in handling Redis connections that don't allow `SETNAME` command. Thanks @yilmaz-burak!
+
+### RQ 1.11 (2022-07-31)
+* This will be the last RQ version that supports Python 3.5.
+* Allow jobs to be enqueued even when their dependencies fail via `Dependency(allow_failure=True)`. Thanks @mattchan-tencent, @caffeinatedMike and @selwin!
+* When stopped jobs are deleted, they should also be removed from FailedJobRegistry. Thanks @selwin!
+* `job.requeue()` now supports `at_front()` argument. Thanks @buroa!
+* Added ssl support for sentinel connections. Thanks @nevious!
+* `SimpleWorker` now works better on Windows. Thanks @caffeinatedMike!
+* Added `on_failure` and `on_success` arguments to @job decorator. Thanks @nepta1998!
+* Fixed a bug in dependency handling. Thanks @th3hamm0r!
+* Minor fixes and optimizations by @xavfernandez, @olaure, @kusaku.
+
+### RQ 1.10.1 (2021-12-07)
+* **BACKWARDS INCOMPATIBLE**: synchronous execution of jobs now correctly mimics async job execution. Exception is no longer raised when a job fails, job status will now be correctly set to `FAILED` and failure callbacks are now properly called when job is run synchronously. Thanks @ericman93!
+* Fixes a bug that could cause job keys to be left over when `result_ttl=0`. Thanks @selwin!
+* Allow `ssl_cert_reqs` argument to be passed to Redis. Thanks @mgcdanny!
+* Better compatibility with Python 3.10. Thanks @rpkak!
+* `job.cancel()` should also remove itself from registries. Thanks @joshcoden!
+* Pubsub threads are now launched in `daemon` mode. Thanks @mik3y!
+
 ### RQ 1.10.0 (2021-09-09)
 * You can now enqueue jobs from CLI. Docs [here](https://python-rq.org/docs/#cli-enqueueing). Thanks @rpkak!
 * Added a new `CanceledJobRegistry` to keep track of canceled jobs. Thanks @selwin!
@@ -30,7 +135,7 @@
 * Added a new `STOPPED` job status so that you can differentiate between failed and manually stopped jobs. Thanks @dralley!
 * Fixed a serialization bug when used with job dependency feature. Thanks @jtfidje!
 * `clean_worker_registry()` now works in batches of 1,000 jobs to prevent modifying too many keys at once. Thanks @AxeOfMen and @TheSneak!
-* Workers will now wait and try to reconnect in case of Redis connection errors. Thanks @Asrst! 
+* Workers will now wait and try to reconnect in case of Redis connection errors. Thanks @Asrst!
 
 ### RQ 1.7.0 (2020-11-29)
 * Added `job.worker_name` attribute that tells you which worker is executing a job. Thanks @selwin!
@@ -59,7 +164,7 @@
 * Retries can now be set through @job decorator. Thanks @nerok!
 * Log messages below logging.ERROR is now sent to stdout. Thanks @selwin!
 * Better logger name for RQScheduler. Thanks @atainter!
-* Better handling of exceptions thrown by horses. Thanks @theambient! 
+* Better handling of exceptions thrown by horses. Thanks @theambient!
 
 ### RQ 1.5.0 (2020-07-26)
 * Failed jobs can now be retried. Thanks @selwin!
@@ -122,7 +227,7 @@
 - Passing `--disable-job-desc-logging` to `rq worker` now does what it's supposed to do. Thanks @janierdavila!
 - `StartedJobRegistry` now properly handles jobs with infinite timeout. Thanks @macintoshpie!
 - `rq info` CLI command now cleans up registries when it first runs. Thanks @selwin!
-- Replaced the use of `procname` with `setproctitle`. Thanks @j178! 
+- Replaced the use of `procname` with `setproctitle`. Thanks @j178!
 
 
 ### 1.0 (2019-04-06)

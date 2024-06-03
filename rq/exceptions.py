@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-
 class NoSuchJobError(Exception):
+    pass
+
+
+class NoSuchGroupError(Exception):
     pass
 
 
@@ -30,8 +29,12 @@ class DequeueTimeout(Exception):
 class ShutDownImminentException(Exception):
     def __init__(self, msg, extra_info):
         self.extra_info = extra_info
-        super(ShutDownImminentException, self).__init__(msg)
+        super().__init__(msg)
 
 
 class TimeoutFormatError(Exception):
+    pass
+
+
+class AbandonedJobError(Exception):
     pass

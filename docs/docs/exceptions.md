@@ -15,6 +15,7 @@ value, traceback).
 ```python
 from redis import Redis
 from rq import Queue
+from rq.job import Job
 from rq.registry import FailedJobRegistry
 
 redis = Redis()
@@ -91,12 +92,12 @@ def my_handler(job, *exc_info):
     # do custom things here
 ```
 
-{% highlight python %}
+```python
 from exception_handlers import foo_handler
 
 w = Worker([q], exception_handlers=[foo_handler],
            disable_default_exception_handler=True)
-{% endhighlight %}
+```
 
 
 ## Chaining Exception Handlers
@@ -107,7 +108,7 @@ The handler can indicate this by returning a boolean. `False` means stop
 processing exceptions, `True` means continue and fall through to the next
 exception handler on the stack.
 
-It's important to know for implementors that, by default, when the handler
+It's important to know for implementers that, by default, when the handler
 doesn't have an explicit return value (thus `None`), this will be interpreted
 as `True` (i.e.  continue with the next handler).
 
@@ -118,3 +119,36 @@ use a custom exception handler that doesn't fall through, for example:
 def black_hole(job, *exc_info):
     return False
 ```
+
+## Work Horse Killed Handler
+_New in version 1.13.0._
+
+In addition to job exception handler(s), RQ supports registering a handler for unexpected workhorse termination.
+This handler is called when a workhorse is unexpectedly terminated, for example due to OOM.
+
+This is how you set a workhorse termination handler to an RQ worker:
+
+```python
+from my_handlers import my_work_horse_killed_handler
+
+w = Worker([q], work_horse_killed_handler=my_work_horse_killed_handler)
+```
+
+The handler itself is a function that takes the following parameters: `job`,
+`retpid`, `ret_val` and `rusage`:
+
+```python
+from resource import struct_rusage
+from rq.job import Job
+def my_work_horse_killed_handler(job: Job, retpid: int, ret_val: int, rusage: struct_rusage):
+    # do your thing here, for example set job.retries_left to 0 
+
+```
+
+## Built-in Exceptions
+RQ Exceptions you can get in your job failure callbacks
+
+# AbandonedJobError
+This error means an unfinished job was collected by another worker's maintenance task.  
+This usually happens when a worker is busy with a job and is terminated before it finished that job.  
+Another worker collects this job and moves it to the FailedJobRegistry.

@@ -7,13 +7,17 @@ on:
   workflow_dispatch:
 
 
+permissions:
+  contents: write # to fetch code (actions/checkout)
+  packages: write
+
 jobs:
   push:
     if: github.repository == 'rq/rq'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Push
         run: |

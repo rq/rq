@@ -39,11 +39,11 @@ q = Queue(connection=redis_conn)  # no args implies the default queue
 
 # Delay execution of count_words_at_url('http://nvie.com')
 job = q.enqueue(count_words_at_url, 'http://nvie.com')
-print(job.result)   # => None
+print(job.result)   # => None  # Changed to job.return_value() in RQ >= 1.12.0
 
 # Now, wait a while, until the worker is finished
 time.sleep(2)
-print(job.result)   # => 889
+print(job.result)   # => 889  # Changed to job.return_value() in RQ >= 1.12.0
 ```
 
 If you want to put the work on a specific queue, simply specify its name:
@@ -77,6 +77,7 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `description` to add additional description to enqueued jobs.
 * `on_success` allows you to run a function after a job completes successfully
 * `on_failure` allows you to run a function after a job fails
+* `on_stopped` allows you to run a function after a job is stopped
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
@@ -111,8 +112,8 @@ You can also enqueue multiple jobs in bulk with `queue.enqueue_many()` and `Queu
 ```python
 jobs = q.enqueue_many(
   [
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-    Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
   ]
 )
 ```
@@ -123,16 +124,48 @@ which will enqueue all the jobs in a single redis `pipeline` which you can optio
 with q.connection.pipeline() as pipe:
   jobs = q.enqueue_many(
     [
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_job_id'),
-      Queue.prepare_data(count_words_at_url, 'http://nvie.com', job_id='my_other_job_id'),
-    ]
+      Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+      Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
+    ],
     pipeline=pipe
   )
   pipe.execute()
 ```
 
-`Queue.prepare_data` accepts all arguments that `Queue.parse_args` does **EXCEPT** for `depends_on`,
-which is not supported at this time, so dependencies will be up to you to setup.
+`Queue.prepare_data` accepts all arguments that `Queue.parse_args` does.
+
+### Grouping jobs
+_New in version 2.0._  
+Multiple jobs can be added to a Group to allow them to be tracked by a single ID:
+
+```python
+from rq import Queue
+from rq.group import Group
+
+group = Group.create(connection=redis_conn)
+jobs = group.enqueue_many(
+  queue="my_queue",
+  [
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
+    Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
+  ]
+)
+```
+
+You can then access jobs by calling the group's `get_jobs()` method:
+
+```python
+print(group.get_jobs())  # [Job('my_job_id'), Job('my_other_job_id')]
+```
+
+Existing groups can be fetched from Redis:
+
+```python
+from rq.group import Group
+group = Group.fetch(id='my_group', connection=redis_conn)
+```
+
+If all of a group's jobs expire or are deleted, the group is removed from Redis.
 
 ## Job dependencies
 
@@ -155,19 +188,70 @@ baz_job = queue.enqueue(baz, depends_on=[foo_job, bar_job])
 ```
 
 The ability to handle job dependencies allows you to split a big job into
-several smaller ones. A job that is dependent on another is enqueued only when
+several smaller ones. By default, a job that is dependent on another is enqueued only when
 its dependency finishes *successfully*.
+
+_New in 1.11.0._
+
+If you want a job's dependencies to execute regardless if the job completes or fails, RQ provides
+the `Dependency` class that will allow you to dictate how to handle job failures.
+
+The `Dependency(jobs=...)` parameter accepts:
+- a string representing a single job id
+- a Job object
+- an iteratable of job id strings and/or Job objects
+- `enqueue_at_front` boolean parameter to put dependents at the front when they are enqueued
+
+Example:
+
+```python
+from redis import Redis
+from rq.job import Dependency
+from rq import Queue
+
+queue = Queue(connection=Redis())
+job_1 = queue.enqueue(div_by_zero)
+dependency = Dependency(
+    jobs=[job_1],
+    allow_failure=True,    # allow_failure defaults to False
+    enqueue_at_front=True  # enqueue_at_front defaults to False  
+)
+job_2 = queue.enqueue(say_hello, depends_on=dependency)
+
+"""
+  job_2 will execute even though its dependency (job_1) fails,
+  and it will be enqueued at the front of the queue.
+"""
+```
 
 
 ## Job Callbacks
 _New in version 1.9.0._
 
-If you want to execute a function whenever a job completes or fails, RQ provides
-`on_success` and `on_failure` callbacks.
+If you want to execute a function whenever a job completes, fails, or is stopped, RQ provides
+`on_success`, `on_failure`, and `on_stopped` callbacks.
 
 ```python
-queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure)
+queue.enqueue(say_hello, on_success=report_success, on_failure=report_failure, on_stopped=report_stopped)
 ```
+
+### Callback Class and Callback Timeouts
+
+_New in version 1.14.0_
+
+RQ lets you configure the method and timeout for each callback - success, failure, and stopped.   
+To configure callback timeouts, use RQ's
+`Callback` object that accepts `func` and `timeout` arguments. For example:
+
+```python
+from rq import Callback
+queue.enqueue(say_hello, 
+              on_success=Callback(report_success),  # default callback timeout (60 seconds) 
+              on_failure=Callback(report_failure, timeout=10), # 10 seconds timeout
+              on_stopped=Callback(report_stopped, timeout="2m")) # 2 minute timeout  
+```
+
+You can also pass the function as a string reference: `Callback('my_package.my_module.my_func')`
 
 ### Success Callback
 
@@ -199,6 +283,19 @@ def report_failure(job, connection, type, value, traceback):
 ```
 
 Failure callbacks are limited to 60 seconds of execution time.
+
+
+### Stopped Callbacks
+
+Stopped callbacks are functions that accept `job` and `connection` arguments.
+
+```python
+def report_stopped(job, connection):
+  pass
+```
+
+Stopped callbacks are functions that are executed when a worker receives a command to stop
+a job that is currently executing. See [Stopping a Job](https://python-rq.org/docs/workers/#stopping-a-job).
 
 
 ### CLI Enqueueing
@@ -245,10 +342,10 @@ There are two options:
 
 #### Arguments:
 
-| | plain text | json | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
-|-|-|-|-|
-| keyword | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]` |
-| no keyword | `[value]` | `:[value]` | `%[value]` |
+|            | plain text      | json             | [literal-eval](https://docs.python.org/3/library/ast.html#ast.literal_eval) |
+| ---------- | --------------- | ---------------- | --------------------------------------------------------------------------- |
+| keyword    | `[key]=[value]` | `[key]:=[value]` | `[key]%=[value]`                                                            |
+| no keyword | `[value]`       | `:[value]`       | `%[value]`                                                                  |
 
 Where `[key]` is the keyword and `[value]` is the value which is parsed with the corresponding
 parsing method.
@@ -344,7 +441,7 @@ def add(x, y):
 
 job = add.delay(3, 4)
 time.sleep(1)
-print(job.result)
+print(job.return_value())
 ```
 
 
@@ -372,6 +469,31 @@ a redis instance for storing states related to job execution and completion.
 To learn about workers, see the [workers][w] documentation.
 
 [w]: {{site.baseurl}}workers/
+
+
+## Suspending and Resuming
+
+Sometimes you may want to suspend RQ to prevent it from processing new jobs.
+A classic example is during the initial phase of a deployment script or in advance
+of putting your site into maintenance mode. This is particularly helpful when
+you have jobs that are relatively long-running and might otherwise be forcibly
+killed during the deploy.
+
+The `suspend` command stops workers on _all_ queues (in a single Redis database)
+from picking up new jobs. However currently running jobs will continue until
+completion.
+
+```bash
+# Suspend indefinitely
+rq suspend
+
+# Suspend for a specific duration (in seconds) then automatically
+# resume work again.
+rq suspend --duration 300
+
+# Resume work again.
+rq resume
+```
 
 
 ## Considerations for jobs

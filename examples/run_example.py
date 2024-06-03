@@ -1,13 +1,9 @@
-# -*- coding: utf-8 -*-
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import os
 import time
 
-from rq import Connection, Queue
-
 from fib import slow_fib
+
+from rq import Connection, Queue
 
 
 def main():

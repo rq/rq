@@ -16,7 +16,10 @@ Vagrantfile
 .idea/
 .coverage*
 /.cache
+.python-version
 
 Gemfile
 Gemfile.lock
 _site/
+.venv/
+.vscode/
