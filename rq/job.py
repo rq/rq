@@ -1649,7 +1649,7 @@ _job_stack = LocalStack()
 
 
 class Retry:
-    def __init__(self, max: int, interval: Union[int, List[int]] = 0):
+    def __init__(self, max: int, interval: Union[int, Iterable[int]] = 0):
         """The main object to defined Retry logics for jobs.
 
         Args:
