@@ -274,7 +274,7 @@ class StartedJobRegistry(BaseRegistry):
                     else:
                         exc_string = f"due to {AbandonedJobError.__name__}"
                         logger.warning(
-                            f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
+                            f'{self.__class__.__name__} cleanup: Moving job {job.id} to {FailedJobRegistry.__name__} '
                             f'({exc_string})'
                         )
                         job.set_status(JobStatus.FAILED)
