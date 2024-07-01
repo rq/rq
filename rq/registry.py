@@ -23,6 +23,8 @@ from .utils import as_text, backend_class, current_timestamp
 logger = logging.getLogger("rq.registry")
 
 
+MAX_RETRIES_AFTER_ABANDONED=2
+
 class BaseRegistry:
     """
     Base implementation of a job registry, implemented in Redis sorted set.
@@ -267,6 +269,17 @@ class StartedJobRegistry(BaseRegistry):
                     job.execute_failure_callback(
                         self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
                     )
+
+                    # we did a job fetch so the meta is supposed to be there
+                    if job.meta:
+                        if ret := job.meta.get('_retried_after_abandonned', 0) < MAX_RETRIES_AFTER_ABANDONED:
+                            job.meta['_retried_after_abandonned'] = ret + 1
+                            job.retries_left = getattr(job, 'retries_left', 0) + 1
+                        else :
+                            logger.error(
+                                f'{self.__class__.__name__} retried to restart {MAX_RETRIES_AFTER_ABANDONED} times the job {job.id} after AbandonedJobError, giving up. Still {job.retries_left} retries left.'
+                            )
+
 
                     retry = job.retries_left and job.retries_left > 0
 
