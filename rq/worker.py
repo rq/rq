@@ -222,7 +222,7 @@ class BaseWorker:
                 warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
                 self.ip_address = 'unknown'
             else:
-                client_adresses = [client['addr'] for client in connection.client_list() if client['name'] == self.name]
+                client_adresses = [client['addr'] for client in connection.client_list() if client.get('name') == self.name]
                 if len(client_adresses) > 0:
                     self.ip_address = client_adresses[0]
                 else:
