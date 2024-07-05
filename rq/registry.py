@@ -213,6 +213,7 @@ class BaseRegistry:
     def cleanup(self):
         pass
 
+
 class StartedJobRegistry(BaseRegistry):
     """
     Registry of currently executing jobs. Each queue maintains a
@@ -479,7 +480,6 @@ class CanceledJobRegistry(BaseRegistry):
 
     def get_expired_job_ids(self, timestamp: Optional[datetime] = None):
         raise NotImplementedError
-
 
 
 def clean_registries(queue: 'Queue', exception_handlers: list = None):
