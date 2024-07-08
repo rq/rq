@@ -171,7 +171,7 @@ class BaseWorker:
         self.name: str = name or uuid4().hex
         self.queues = queues
         self.validate_queues()
-        self._ordered_queues = self.queues[:]
+        self._ordered_queues = self.reorder_queues(reference_queue=None)
         self._exc_handlers: List[Callable] = []
         self._work_horse_killed_handler = work_horse_killed_handler
         self._shutdown_requested_date: Optional[datetime] = None
