@@ -536,7 +536,7 @@ class BaseWorker:
 
         self._install_signal_handlers()
         try:
-            self._ordered_queues = self.reorder_queues(reference_queue=None)
+            self.reorder_queues(reference_queue=None)
         except:  # noqa
             self.log.error('Worker %s: could not order queues before starting work...', self.key, exc_info=True)
 
