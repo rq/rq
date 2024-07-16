@@ -116,6 +116,8 @@ If you use RQ, Check out these below repos which might be useful in your rq base
 - [rqmonitor](https://github.com/pranavgupta1234/rqmonitor)
 - [Flask-RQ2](https://github.com/rq/Flask-RQ2)
 - [rq-scheduler](https://github.com/rq/rq-scheduler)
+- [rq-dashboard-fastAPI](https://github.com/Hannes221/rq-dashboard-fast)
+
 
 
 ## Project history

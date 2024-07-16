@@ -125,6 +125,21 @@ for job in jobs:
     print('Job %s: %s' % (job.id, job.func_name))
 ```
 
+#### Job Status
+
+The status of a job can be one of the following:
+
+* `queued`: The default status for created jobs, except for those that have dependencies, which will be created as `deferred`. These jobs have been placed in a queue and are ready to be executed.
+* `finished`: The job has finished execution and is available through the finished job registry.
+* `failed`: Jobs that encountered errors during execution or expired before being executed.
+* `started`: The job has started execution. This status includes the job execution support mechanisms, such as setting the worker name and setting up heartbeat information.
+* `deferred`: The job is not ready for execution because its dependencies have not finished successfully yet.
+* `scheduled`: Jobs created to run at a future date or jobs that are retried after a retry interval.
+* `stopped`: The job was stopped because the worker was stopped.
+* `canceled`: The job has been manually canceled and will not be executed, even if it is part of a dependency chain.
+
+These statuses can also be accessed from the job object using boolean properties, such as `job.is_finished`.
+
 ## Stopping a Currently Executing Job
 _New in version 1.7.0_
 
@@ -193,7 +208,7 @@ from rq import Queue
 from rq.job import Job
 from rq.serializers import JSONSerializer
 
-job = Job(connection=connection, serializer=JSONSerializer)
+job = Job(id="my-job", connection=connection, serializer=JSONSerializer)
 queue = Queue(connection=connection, serializer=JSONSerializer)
 ```
 

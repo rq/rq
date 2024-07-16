@@ -18,7 +18,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v4.7.1
+      uses: actions/setup-python@v5.1.0
       with:
         python-version: 3.8
 
@@ -34,4 +34,4 @@ jobs:
     - name: Lint with ruff
       run: |
         # stop the build if there are Python syntax errors.
-        ruff check --show-source rq tests
+        ruff check --output-format=full rq tests

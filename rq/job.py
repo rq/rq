@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from .queue import Queue
     from .results import Result
 
-from .connections import resolve_connection
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
 from .serializers import resolve_serializer
@@ -34,10 +33,10 @@ from .utils import (
     get_call_string,
     get_version,
     import_attribute,
+    now,
     parse_timeout,
     str_to_date,
     utcformat,
-    utcnow,
 )
 
 logger = logging.getLogger("rq.job")
@@ -96,7 +95,7 @@ yet been evaluated.
 """
 
 
-def cancel_job(job_id: str, connection: Optional['Redis'] = None, serializer=None, enqueue_dependents: bool = False):
+def cancel_job(job_id: str, connection: 'Redis', serializer=None, enqueue_dependents: bool = False):
     """Cancels the job with the given job ID, preventing execution.
     Use with caution. This will discard any job info (i.e. it can't be requeued later).
 
@@ -165,6 +164,7 @@ class Job:
         meta: Optional[Dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
+        group_id: Optional[str] = None,
         *,
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
         on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
@@ -181,7 +181,7 @@ class Job:
                 callable.  Defaults to None, meaning no args being passed.
             kwargs (Optional[Dict], optional): A Dictionary of keyword arguments to pass the callable.
                 Defaults to None, meaning no kwargs being passed.
-            connection (Optional[Redis], optional): The Redis connection to use. Defaults to None.
+            connection (Redis): The Redis connection to use. Defaults to None.
                 This will be "resolved" using the `resolve_connection` function when initialzing the Job Class.
             result_ttl (Optional[int], optional): The amount of time in seconds the results should live.
                 Defaults to None.
@@ -207,6 +207,7 @@ class Job:
                 fails. Defaults to None. Passing a callable is deprecated.
             on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
                 is stopped. Defaults to None. Passing a callable is deprecated.
+            group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
         Raises:
             TypeError: If `args` is not a tuple/list
@@ -291,6 +292,7 @@ class Job:
         job.timeout = parse_timeout(timeout)
         job._status = status
         job.meta = meta or {}
+        job.group_id = group_id
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
@@ -328,12 +330,17 @@ class Job:
         Args:
             refresh (bool, optional): Whether to refresh the Job. Defaults to True.
 
+        Raises:
+            InvalidJobOperation: If refreshing and nothing is returned from the `HGET` operation.
+
         Returns:
             status (JobStatus): The Job Status
         """
         if refresh:
             status = self.connection.hget(self.key, 'status')
-            self._status = as_text(status) if status else None
+            if not status:
+                raise InvalidJobOperation(f"Failed to retrieve status for job: {self.id}")
+            self._status = JobStatus(as_text(status))
         return self._status
 
     def set_status(self, status: JobStatus, pipeline: Optional['Pipeline'] = None) -> None:
@@ -567,7 +574,7 @@ class Job:
         self._data = UNEVALUATED
 
     @classmethod
-    def exists(cls, job_id: str, connection: Optional['Redis'] = None) -> bool:
+    def exists(cls, job_id: str, connection: 'Redis') -> bool:
         """Checks whether a Job Hash exists for the given Job ID
 
         Args:
@@ -577,8 +584,6 @@ class Job:
         Returns:
             job_exists (bool): Whether the Job exists
         """
-        if not connection:
-            connection = resolve_connection()
         job_key = cls.key_for(job_id)
         job_exists = connection.exists(job_key)
         return bool(job_exists)
@@ -601,7 +606,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List['Job']:
+    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List[Optional['Job']]:
         """
         Bulk version of Job.fetch
 
@@ -614,7 +619,7 @@ class Job:
             serializer (Callable): A serializer
 
         Returns:
-            jobs (list[Job]): A list of Jobs instances.
+            jobs (list[Optional[Job]]): A list of Jobs instances, elements are None if a job_id does not exist.
         """
         parsed_ids = [parse_job_id(job_id) for job_id in job_ids]
         with connection.pipeline() as pipeline:
@@ -634,13 +639,14 @@ class Job:
 
         return jobs
 
-    def __init__(self, id: Optional[str] = None, connection: Optional['Redis'] = None, serializer=None):
-        if connection:
-            self.connection = connection
-        else:
-            self.connection = resolve_connection()
+    def __init__(self, id: Optional[str] = None, connection: 'Redis' = None, serializer=None):
+        # Manually check for the presence of the connection argument to preserve
+        # backwards compatibility during the transition to RQ v2.0.0.
+        if not connection:
+            raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
+        self.connection = connection
         self._id = id
-        self.created_at = utcnow()
+        self.created_at = now()
         self._data = UNEVALUATED
         self._func_name = UNEVALUATED
         self._instance = UNEVALUATED
@@ -677,6 +683,7 @@ class Job:
         self.last_heartbeat: Optional[datetime] = None
         self.allow_dependency_failures: Optional[bool] = None
         self.enqueue_at_front: Optional[bool] = None
+        self.group_id: Optional[str] = None
 
         from .results import Result
 
@@ -938,6 +945,7 @@ class Job:
         self.started_at = str_to_date(obj.get('started_at'))
         self.ended_at = str_to_date(obj.get('ended_at'))
         self.last_heartbeat = str_to_date(obj.get('last_heartbeat'))
+        self.group_id = as_text(obj.get('group_id')) if obj.get('group_id') else None
         result = obj.get('result')
         if result:
             try:
@@ -947,7 +955,7 @@ class Job:
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
-        self._status = obj.get('status').decode() if obj.get('status') else None
+        self._status = JobStatus(as_text(obj.get('status'))) if obj.get('status') else None
 
         if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
@@ -1017,7 +1025,7 @@ class Job:
             dict: The Job serialized as a dictionary
         """
         obj = {
-            'created_at': utcformat(self.created_at or utcnow()),
+            'created_at': utcformat(self.created_at or now()),
             'data': zlib.compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
             'failure_callback_name': self._failure_callback_name if self._failure_callback_name else '',
@@ -1026,6 +1034,7 @@ class Job:
             'ended_at': utcformat(self.ended_at) if self.ended_at else '',
             'last_heartbeat': utcformat(self.last_heartbeat) if self.last_heartbeat else '',
             'worker_name': self.worker_name or '',
+            'group_id': self.group_id or '',
         }
 
         if self.retries_left is not None:
@@ -1267,6 +1276,12 @@ class Job:
         if delete_dependents:
             self.delete_dependents(pipeline=pipeline)
         self.execution_registry.delete(job=self, pipeline=connection)  # type: ignore
+        if self.group_id:
+            from .group import Group
+
+            group = Group.fetch(self.group_id, self.connection)
+            group.delete_job(self.id, pipeline=pipeline)
+
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
     def delete_dependents(self, pipeline: Optional['Pipeline'] = None):
@@ -1310,7 +1325,7 @@ class Job:
             pipeline (Pipeline): The Redis' piipeline to use
         """
         self.worker_name = worker_name
-        self.last_heartbeat = utcnow()
+        self.last_heartbeat = now()
         self.started_at = self.last_heartbeat
         self._status = JobStatus.STARTED
         mapping = {
@@ -1446,7 +1461,7 @@ class Job:
             with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.failure_callback(self, self.connection, *exc_info)
         except Exception:  # noqa
-            logger.exception(f'Job {self.id}: error while executing failure callback')
+            logger.exception('Job %s: error while executing failure callback', self.id)
             raise
 
     def execute_stopped_callback(self, death_penalty_class: Type[BaseDeathPenalty]):
@@ -1456,7 +1471,7 @@ class Job:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.stopped_callback(self, self.connection)
         except Exception:  # noqa
-            logger.exception(f'Job {self.id}: error while executing stopped callback')
+            logger.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
@@ -1527,8 +1542,12 @@ class Job:
             scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+            logger.info(
+                'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
+            )
         else:
             queue._enqueue_job(self, pipeline=pipeline)
+            logger.info('Job %s: enqueued for retry, %s remaining')
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they

@@ -11,7 +11,7 @@ from rq.job import Job
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result, get_key
-from rq.utils import get_version, utcnow
+from rq.utils import get_version, now
 from rq.worker import Worker
 from tests import RQTestCase
 
@@ -104,7 +104,7 @@ class TestScheduledJobRegistry(RQTestCase):
         """Changes to job.result handling should be backwards compatible."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker.register_birth()
 
         self.assertEqual(worker.failed_job_count, 0)
@@ -113,7 +113,7 @@ class TestScheduledJobRegistry(RQTestCase):
 
         # These should only run on workers that supports Redis streams
         registry = StartedJobRegistry(connection=self.connection)
-        job.started_at = utcnow()
+        job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
         job._result = 'Success'
         worker.handle_job_success(job, queue, registry)
@@ -130,7 +130,7 @@ class TestScheduledJobRegistry(RQTestCase):
                 worker.register_birth()
                 job = queue.enqueue(say_hello)
                 job._result = 'Success'
-                job.started_at = utcnow()
+                job.started_at = now()
                 job.ended_at = job.started_at + timedelta(seconds=0.75)
 
                 # If `save_result_to_job` = True, result will be saved to job
@@ -147,7 +147,7 @@ class TestScheduledJobRegistry(RQTestCase):
         """Changes to job.result failure handling should be backwards compatible."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker = Worker([queue])
+        worker = Worker([queue], connection=self.connection)
         worker.register_birth()
 
         self.assertEqual(worker.failed_job_count, 0)
@@ -155,7 +155,7 @@ class TestScheduledJobRegistry(RQTestCase):
         self.assertEqual(worker.total_working_time, 0)
 
         registry = StartedJobRegistry(connection=self.connection)
-        job.started_at = utcnow()
+        job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
         worker.handle_job_failure(job, exc_string='Error', queue=queue, started_job_registry=registry)
 
@@ -172,7 +172,7 @@ class TestScheduledJobRegistry(RQTestCase):
                 worker.register_birth()
 
                 job = queue.enqueue(say_hello)
-                job.started_at = utcnow()
+                job.started_at = now()
                 job.ended_at = job.started_at + timedelta(seconds=0.75)
 
                 # If `save_result_to_job` = True, result will be saved to job

@@ -48,7 +48,7 @@ def as_text(v: Union[bytes, str]) -> str:
         ValueError: If the value is not bytes or string
 
     Returns:
-        value (Optional[str]): Either the decoded string or None
+        value (str): The decoded string
     """
     if isinstance(v, bytes):
         return v.decode('utf-8')
@@ -124,10 +124,6 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
-def utcnow():
-    return datetime.datetime.utcnow()
-
-
 def now():
     """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)
@@ -145,7 +141,10 @@ def utcparse(string: str) -> dt.datetime:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
         # This catches any jobs remain with old datetime format
-        return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+        try:
+            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
 def first(iterable: Iterable, default=None, key=None):
@@ -224,7 +223,7 @@ def current_timestamp() -> int:
     Returns:
         int: _description_
     """
-    return calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+    return calendar.timegm(datetime.datetime.now(datetime.timezone.utc).utctimetuple())
 
 
 def backend_class(holder, default_name, override=None) -> TypeVar('T'):
@@ -290,7 +289,7 @@ def get_version(connection: 'Redis') -> Tuple[int, int, int]:
             setattr(
                 connection,
                 "__rq_redis_server_version",
-                tuple(int(i) for i in connection.info("server")["redis_version"].split('.')[:3]),
+                tuple(int(i) for i in str(connection.info("server")["redis_version"]).split('.')[:3]),
             )
         return getattr(connection, "__rq_redis_server_version")
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
@@ -379,3 +378,13 @@ def parse_names(queues_or_names: List[Union[str, 'Queue']]) -> List[str]:
         else:
             names.append(str(queue_or_name))
     return names
+
+
+def get_connection_from_queues(queues_or_names: List[Union[str, 'Queue']]) -> Optional['Redis']:
+    """Given a list of strings or queues, returns a connection"""
+    from .queue import Queue
+
+    for queue_or_name in queues_or_names:
+        if isinstance(queue_or_name, Queue):
+            return queue_or_name.connection
+    return None

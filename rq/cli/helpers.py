@@ -80,6 +80,8 @@ def get_redis_from_config(settings, connection_class=Redis):
         'ssl_ca_certs': settings.get('REDIS_SSL_CA_CERTS', None),
         'ssl_cert_reqs': settings.get('REDIS_SSL_CERT_REQS', 'required'),
         'ssl_ca_data': settings.get('REDIS_SSL_CA_DATA', None),
+        'ssl_keyfile': settings.get('REDIS_SSL_KEYFILE', None),
+        'ssl_certfile': settings.get('REDIS_SSL_CERTFILE', None),
     }
 
     return connection_class(**kwargs)
@@ -111,7 +113,7 @@ def state_symbol(state):
         return state
 
 
-def show_queues(queues, raw, by_queue, queue_class, worker_class):
+def show_queues(queues, raw, by_queue, queue_class, worker_class, connection: Redis):
     num_jobs = 0
     termwidth = get_terminal_size().columns
     chartwidth = min(20, termwidth - 20)
@@ -154,14 +156,14 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class):
         click.echo('%d queues, %d jobs total' % (len(queues), num_jobs))
 
 
-def show_workers(queues, raw, by_queue, queue_class, worker_class):
+def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: Redis):
     workers = set()
     if queues:
         for queue in queues:
-            for worker in worker_class.all(queue=queue):
+            for worker in worker_class.all(queue=queue, connection=connection):
                 workers.add(worker)
     else:
-        for worker in worker_class.all():
+        for worker in worker_class.all(connection=connection):
             workers.add(worker)
 
     if not by_queue:
@@ -191,7 +193,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
         # Display workers by queue
         queue_dict = {}
         for queue in queues:
-            queue_dict[queue] = worker_class.all(queue=queue)
+            queue_dict[queue] = worker_class.all(queue=queue, connection=connection)
 
         if queue_dict:
             max_length = max(len(q.name) for q, in queue_dict.keys())
@@ -211,11 +213,11 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class):
         click.echo('%d workers, %d queues' % (len(workers), len(queues)))
 
 
-def show_both(queues, raw, by_queue, queue_class, worker_class):
-    show_queues(queues, raw, by_queue, queue_class, worker_class)
+def show_both(queues, raw, by_queue, queue_class, worker_class, connection: Redis):
+    show_queues(queues, raw, by_queue, queue_class, worker_class, connection)
     if not raw:
         click.echo('')
-    show_workers(queues, raw, by_queue, queue_class, worker_class)
+    show_workers(queues, raw, by_queue, queue_class, worker_class, connection)
     if not raw:
         click.echo('')
         import datetime
