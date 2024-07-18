@@ -274,7 +274,7 @@ class StartedJobRegistry(BaseRegistry):
                     if job.meta:
                         if ret := job.meta.get('_retried_after_abandonned', 0) < MAX_RETRIES_AFTER_ABANDONED:
                             job.meta['_retried_after_abandonned'] = ret + 1
-                            job.retries_left = getattr(job, 'retries_left', 0) + 1
+                            job.retries_left = (getattr(job, 'retries_left', 0) or 0) + 1
                         else :
                             logger.error(
                                 f'{self.__class__.__name__} retried to restart {MAX_RETRIES_AFTER_ABANDONED} times the job {job.id} after AbandonedJobError, giving up. Still {job.retries_left} retries left.'
