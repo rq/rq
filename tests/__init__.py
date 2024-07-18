@@ -77,7 +77,6 @@ class RQTestCase(unittest.TestCase):
         testconn = find_empty_redis_database()
 
         # Store the connection (for sanity checking)
-        cls.testconn = testconn
         cls.connection = testconn
 
         # Shut up logging

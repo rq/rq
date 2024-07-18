@@ -70,13 +70,13 @@ class TestIntermediateQueue(RQTestCase):
 
         # Job ID is not in intermediate queue
         self.assertEqual(intermediate_queue.get_job_ids(), [])
-        job, queue = Queue.dequeue_any([queue], timeout=None, connection=self.testconn)
+        job, queue = Queue.dequeue_any([queue], timeout=None, connection=self.connection)
         # After job is dequeued, the job ID is in the intermediate queue
         self.assertEqual(intermediate_queue.get_job_ids(), [job_1.id])
 
         # Test the blocking version
         job_2 = queue.enqueue(say_hello)
-        job, queue = Queue.dequeue_any([queue], timeout=1, connection=self.testconn)
+        job, queue = Queue.dequeue_any([queue], timeout=1, connection=self.connection)
         # After job is dequeued, the job ID is in the intermediate queue
         self.assertEqual(intermediate_queue.get_job_ids(), [job_1.id, job_2.id])
 
@@ -95,7 +95,7 @@ class TestIntermediateQueue(RQTestCase):
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # and it's status is still QUEUED
         with patch.object(Worker, 'execute_job'):
-            worker = Worker(queue, connection=self.testconn)
+            worker = Worker(queue, connection=self.connection)
             worker.work(burst=True)
 
             # If worker.execute_job() does nothing, job status should be `queued`
@@ -141,7 +141,7 @@ class TestIntermediateQueue(RQTestCase):
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # and it's status is still QUEUED
         with patch.object(Worker, 'execute_job'):
-            worker = Worker(queue, connection=self.testconn)
+            worker = Worker(queue, connection=self.connection)
             worker.work(burst=True)
 
             # If worker.execute_job() does nothing, job status should be `queued`
