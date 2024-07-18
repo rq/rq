@@ -263,6 +263,7 @@ class Job:
                 on_success = Callback(on_success)  # backward compatibility
             job._success_callback_name = on_success.name
             job._success_callback_timeout = on_success.timeout
+            job._success_callback_params = on_success.params
 
         if on_failure:
             if not isinstance(on_failure, Callback):
@@ -273,6 +274,7 @@ class Job:
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
+            job._success_callback_params = on_failure.params
 
         if on_stopped:
             if not isinstance(on_stopped, Callback):
@@ -283,6 +285,7 @@ class Job:
                 on_stopped = Callback(on_stopped)  # backward compatibility
             job._stopped_callback_name = on_stopped.name
             job._stopped_callback_timeout = on_stopped.timeout
+            job._success_callback_params = on_stopped.params
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -653,10 +656,13 @@ class Job:
         self._args = UNEVALUATED
         self._kwargs = UNEVALUATED
         self._success_callback_name = None
+        self._success_callback_params = None
         self._success_callback = UNEVALUATED
         self._failure_callback_name = None
+        self._failure_callback_params = None
         self._failure_callback = UNEVALUATED
         self._stopped_callback_name = None
+        self._stopped_callback_params = None
         self._stopped_callback = UNEVALUATED
         self.description: Optional[str] = None
         self.origin: str = ''
@@ -960,17 +966,26 @@ class Job:
         if obj.get('success_callback_name'):
             self._success_callback_name = obj.get('success_callback_name').decode()
 
+        if obj.get('success_callback_params'):
+            self._success_callback_params = json.loads(obj.get('success_callback_params').decode())
+
         if 'success_callback_timeout' in obj:
             self._success_callback_timeout = int(obj.get('success_callback_timeout'))
 
         if obj.get('failure_callback_name'):
             self._failure_callback_name = obj.get('failure_callback_name').decode()
 
+        if obj.get('failure_callback_params'):
+            self._failure_callback_params = json.loads(obj.get('failure_callback_params').decode())
+
         if 'failure_callback_timeout' in obj:
             self._failure_callback_timeout = int(obj.get('failure_callback_timeout'))
 
         if obj.get('stopped_callback_name'):
             self._stopped_callback_name = obj.get('stopped_callback_name').decode()
+
+        if obj.get('stopped_callback_params'):
+            self._stopped_callback_params = json.loads(obj.get('stopped_callback_params').decode())
 
         if 'stopped_callback_timeout' in obj:
             self._stopped_callback_timeout = int(obj.get('stopped_callback_timeout'))
@@ -1059,10 +1074,16 @@ class Job:
             obj['timeout'] = self.timeout
         if self._success_callback_timeout is not None:
             obj['success_callback_timeout'] = self._success_callback_timeout
+        if self._success_callback_params is not None:
+            obj['success_callback_params'] = json.dumps(self._success_callback_params)
         if self._failure_callback_timeout is not None:
             obj['failure_callback_timeout'] = self._failure_callback_timeout
+        if self._failure_callback_params is not None:
+            obj['failure_callback_params'] = json.dumps(self._failure_callback_params)
         if self._stopped_callback_timeout is not None:
             obj['stopped_callback_timeout'] = self._stopped_callback_timeout
+        if self._stopped_callback_params is not None:
+            obj['stopped_callback_params'] = json.dumps(self._stopped_callback_params)
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1449,7 +1470,7 @@ class Job:
 
         logger.debug('Running success callbacks for %s', self.id)
         with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
-            self.success_callback(self, self.connection, result)
+            self.success_callback(self, self.connection, result, self._success_callback_params)
 
     def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info):
         """Executes failure_callback with possible timeout"""
@@ -1459,7 +1480,7 @@ class Job:
         logger.debug('Running failure callbacks for %s', self.id)
         try:
             with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
-                self.failure_callback(self, self.connection, *exc_info)
+                self.failure_callback(self, self.connection, self._failure_callback_params, *exc_info)
         except Exception:  # noqa
             logger.exception('Job %s: error while executing failure callback', self.id)
             raise
@@ -1469,7 +1490,7 @@ class Job:
         logger.debug('Running stopped callbacks for %s', self.id)
         try:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
-                self.stopped_callback(self, self.connection)
+                self.stopped_callback(self, self.connection, self._stopped_callback_params)
         except Exception:  # noqa
             logger.exception('Job %s: error while executing stopped callback', self.id)
             raise
@@ -1680,12 +1701,18 @@ class Retry:
 
 
 class Callback:
-    def __init__(self, func: Union[str, Callable[..., Any]], timeout: Optional[Any] = None):
+    def __init__(
+        self,
+        func: Union[str, Callable[..., Any]],
+        timeout: Optional[Any] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ):
         if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
             raise ValueError('Callback `func` must be a string or function')
 
         self.func = func
         self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
+        self.params = params
 
     @property
     def name(self) -> str:

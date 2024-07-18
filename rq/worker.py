@@ -1530,6 +1530,7 @@ class Worker(BaseWorker):
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 self.log.debug('Performing Job...')
+                self.log.debug(f"custom job params: {job._success_callback_params}")
                 rv = job.perform()
                 self.log.debug('Finished performing Job ID %s', job.id)
 
