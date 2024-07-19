@@ -1096,6 +1096,11 @@ class Queue:
         """
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
+        # Add Queue key set
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe.sadd(self.redis_queues_keys, self.key)
+        if pipeline is None:
+            pipe.execute()
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front)
@@ -1116,8 +1121,6 @@ class Queue:
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-        # Add Queue key set
-        pipe.sadd(self.redis_queues_keys, self.key)
         job.redis_server_version = self.get_redis_server_version()
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
 
