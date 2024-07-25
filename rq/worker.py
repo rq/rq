@@ -428,11 +428,21 @@ class BaseWorker:
         Args:
             connection (Optional[Redis]): The Redis Connection.
         """
-        current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
-        if current_socket_timeout is None:
-            timeout_config = {"socket_timeout": self.connection_timeout}
-            connection.connection_pool.connection_kwargs.update(timeout_config)
-        return connection
+        try:
+            current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
+            if current_socket_timeout is None:
+                timeout_config = {"socket_timeout": self.connection_timeout}
+                connection.connection_pool.connection_kwargs.update(timeout_config)
+            return connection
+        # If you are using RedisCluster you needs to pars all cluster nodes.
+        except AttributeError:
+            nodes = connection.get_nodes()
+            for node in nodes:
+                current_socket_timeout = node.redis_connection.connection_pool.connection_kwargs.get("socket_timeout")
+                if current_socket_timeout is None:
+                    timeout_config = {"socket_timeout": self.connection_timeout}
+                    node.redis_connection.connection_pool.connection_kwargs.update(timeout_config)
+            return connection
 
     @property
     def dequeue_timeout(self) -> int:
