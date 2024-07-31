@@ -8,6 +8,8 @@ RQ requires Redis >= 3.0.0.
 [![Build status](https://github.com/rq/rq/workflows/Test%20rq/badge.svg)](https://github.com/rq/rq/actions?query=workflow%3A%22Test+rq%22)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
 [![Coverage](https://codecov.io/gh/rq/rq/branch/master/graph/badge.svg)](https://codecov.io/gh/rq/rq)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 
 Full documentation can be found [here][d].
 
@@ -36,8 +38,6 @@ def count_words_at_url(url):
     resp = requests.get(url)
     return len(resp.text.split())
 ```
-
-You do use the excellent [requests][r] package, don't you?
 
 Then, create an RQ queue:
 
@@ -109,13 +109,15 @@ If you want the cutting edge version (that may well be broken), use this:
 
 ## Related Projects
 
-Check out these below repos which might be useful in your rq based project.
+If you use RQ, Check out these below repos which might be useful in your rq based project.
 
+- [django-rq](https://github.com/rq/django-rq)
 - [rq-dashboard](https://github.com/Parallels/rq-dashboard)
 - [rqmonitor](https://github.com/pranavgupta1234/rqmonitor)
-- [django-rq](https://github.com/rq/django-rq)
 - [Flask-RQ2](https://github.com/rq/Flask-RQ2)
 - [rq-scheduler](https://github.com/rq/rq-scheduler)
+- [rq-dashboard-fastAPI](https://github.com/Hannes221/rq-dashboard-fast)
+
 
 
 ## Project history
@@ -125,7 +127,6 @@ and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
 
 
-[r]: http://python-requests.org
 [d]: http://python-rq.org/
 [m]: http://pypi.python.org/pypi/mailer
 [p]: http://docs.python.org/library/pickle.html

@@ -1,8 +1,8 @@
-from functools import partial
-import pickle
 import json
+import pickle
+from functools import partial
+from typing import Optional, Type, Union
 
-from .compat import string_types
 from .utils import import_attribute
 
 
@@ -11,7 +11,7 @@ class DefaultSerializer:
     loads = pickle.loads
 
 
-class JSONSerializer():
+class JSONSerializer:
     @staticmethod
     def dumps(*args, **kwargs):
         return json.dumps(*args, **kwargs).encode('utf-8')
@@ -21,16 +21,22 @@ class JSONSerializer():
         return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
-def resolve_serializer(serializer):
+def resolve_serializer(serializer: Optional[Union[Type[DefaultSerializer], str]] = None) -> Type[DefaultSerializer]:
     """This function checks the user defined serializer for ('dumps', 'loads') methods
     It returns a default pickle serializer if not found else it returns a MySerializer
     The returned serializer objects implement ('dumps', 'loads') methods
-    Also accepts a string path to serializer that will be loaded as the serializer
+    Also accepts a string path to serializer that will be loaded as the serializer.
+
+    Args:
+        serializer (Callable): The serializer to resolve.
+
+    Returns:
+        serializer (Callable): An object that implements the SerializerProtocol
     """
     if not serializer:
         return DefaultSerializer
 
-    if isinstance(serializer, string_types):
+    if isinstance(serializer, str):
         serializer = import_attribute(serializer)
 
     default_serializer_methods = ('dumps', 'loads')

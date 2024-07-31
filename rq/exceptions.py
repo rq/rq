@@ -2,6 +2,10 @@ class NoSuchJobError(Exception):
     pass
 
 
+class NoSuchGroupError(Exception):
+    pass
+
+
 class DeserializationError(Exception):
     pass
 
@@ -29,4 +33,8 @@ class ShutDownImminentException(Exception):
 
 
 class TimeoutFormatError(Exception):
+    pass
+
+
+class AbandonedJobError(Exception):
     pass

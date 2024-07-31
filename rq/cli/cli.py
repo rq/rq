@@ -2,88 +2,51 @@
 RQ command line tool
 """
 
-from functools import update_wrapper
+import logging
+import logging.config
 import os
 import sys
+import warnings
+from typing import List, Type
 
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Connection, Retry, __version__ as version
-from rq.cli.helpers import (read_config_file, refresh,
-                            setup_loghandlers_from_args,
-                            show_both, show_queues, show_workers, CliConfig, parse_function_args,
-                            parse_schedule)
-from rq.contrib.legacy import cleanup_ghosts
-from rq.defaults import (DEFAULT_CONNECTION_CLASS, DEFAULT_JOB_CLASS,
-                         DEFAULT_QUEUE_CLASS, DEFAULT_WORKER_CLASS,
-                         DEFAULT_RESULT_TTL, DEFAULT_WORKER_TTL,
-                         DEFAULT_JOB_MONITORING_INTERVAL,
-                         DEFAULT_LOGGING_FORMAT, DEFAULT_LOGGING_DATE_FORMAT,
-                         DEFAULT_SERIALIZER_CLASS)
+from rq import Retry
+from rq import __version__ as version
+from rq.cli.helpers import (
+    parse_function_args,
+    parse_schedule,
+    pass_cli_config,
+    read_config_file,
+    refresh,
+    setup_loghandlers_from_args,
+    show_both,
+    show_queues,
+    show_workers,
+)
+
+# from rq.cli.pool import pool
+from rq.defaults import (
+    DEFAULT_JOB_MONITORING_INTERVAL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
+    DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    DEFAULT_RESULT_TTL,
+    DEFAULT_WORKER_TTL,
+)
 from rq.exceptions import InvalidJobOperationError
+from rq.job import Job, JobStatus
+from rq.logutils import blue
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.utils import import_attribute, get_call_string, make_colorizer
 from rq.serializers import DefaultSerializer
-from rq.suspension import (suspend as connection_suspend,
-                           resume as connection_resume, is_suspended)
+from rq.suspension import is_suspended
+from rq.suspension import resume as connection_resume
+from rq.suspension import suspend as connection_suspend
+from rq.utils import get_call_string, import_attribute
+from rq.worker import Worker
+from rq.worker_pool import WorkerPool
 from rq.worker_registration import clean_worker_registry
-from rq.job import JobStatus
-
-blue = make_colorizer('darkblue')
-
-
-# Disable the warning that Click displays (as of Click version 5.0) when users
-# use unicode_literals in Python 2.
-# See http://click.pocoo.org/dev/python3/#unicode-literals for more details.
-click.disable_unicode_literals_warning = True
-
-
-shared_options = [
-    click.option('--url', '-u',
-                 envvar='RQ_REDIS_URL',
-                 help='URL describing Redis connection details.'),
-    click.option('--config', '-c',
-                 envvar='RQ_CONFIG',
-                 help='Module containing RQ settings.'),
-    click.option('--worker-class', '-w',
-                 envvar='RQ_WORKER_CLASS',
-                 default=DEFAULT_WORKER_CLASS,
-                 help='RQ Worker class to use'),
-    click.option('--job-class', '-j',
-                 envvar='RQ_JOB_CLASS',
-                 default=DEFAULT_JOB_CLASS,
-                 help='RQ Job class to use'),
-    click.option('--queue-class',
-                 envvar='RQ_QUEUE_CLASS',
-                 default=DEFAULT_QUEUE_CLASS,
-                 help='RQ Queue class to use'),
-    click.option('--connection-class',
-                 envvar='RQ_CONNECTION_CLASS',
-                 default=DEFAULT_CONNECTION_CLASS,
-                 help='Redis client class to use'),
-    click.option('--path', '-P',
-                 default=['.'],
-                 help='Specify the import path.',
-                 multiple=True),
-    click.option('--serializer', '-S',
-                 default=DEFAULT_SERIALIZER_CLASS,
-                 help='Path to serializer, defaults to rq.serializers.DefaultSerializer')
-]
-
-
-def pass_cli_config(func):
-    # add all the shared options to the command
-    for option in shared_options:
-        func = option(func)
-
-    # pass the cli config object into the command
-    def wrapper(*args, **kwargs):
-        ctx = click.get_current_context()
-        cli_config = CliConfig(**kwargs)
-        return ctx.invoke(func, cli_config, *args[1:], **kwargs)
-
-    return update_wrapper(wrapper, func)
 
 
 @click.group()
@@ -101,15 +64,19 @@ def empty(cli_config, all, queues, serializer, **options):
     """Empty given queues."""
 
     if all:
-        queues = cli_config.queue_class.all(connection=cli_config.connection,
-                                            job_class=cli_config.job_class,
-                                            serializer=serializer)
+        queues = cli_config.queue_class.all(
+            connection=cli_config.connection,
+            job_class=cli_config.job_class,
+            death_penalty_class=cli_config.death_penalty_class,
+            serializer=serializer,
+        )
     else:
-        queues = [cli_config.queue_class(queue,
-                                         connection=cli_config.connection,
-                                         job_class=cli_config.job_class,
-                                         serializer=serializer)
-                  for queue in queues]
+        queues = [
+            cli_config.queue_class(
+                queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
+            )
+            for queue in queues
+        ]
 
     if not queues:
         click.echo('Nothing to do')
@@ -128,10 +95,9 @@ def empty(cli_config, all, queues, serializer, **options):
 def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
     """Requeue failed jobs."""
 
-    failed_job_registry = FailedJobRegistry(queue,
-                                            connection=cli_config.connection,
-                                            job_class=job_class,
-                                            serializer=serializer)
+    failed_job_registry = FailedJobRegistry(
+        queue, connection=cli_config.connection, job_class=job_class, serializer=serializer
+    )
     if all:
         job_ids = failed_job_registry.get_job_ids()
 
@@ -160,8 +126,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
 @click.option('--by-queue', '-R', is_flag=True, help='Shows workers by queue')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
-         **options):
+def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues, **options):
     """RQ command-line monitor."""
 
     if only_queues:
@@ -172,19 +137,20 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
         func = show_both
 
     try:
-        with Connection(cli_config.connection):
+        if queues:
+            qs = []
+            for queue_name in queues:
+                qs.append(cli_config.queue_class(queue_name, connection=cli_config.connection))
+        else:
+            qs = cli_config.queue_class.all(connection=cli_config.connection)
 
-            if queues:
-                qs = list(map(cli_config.queue_class, queues))
-            else:
-                qs = cli_config.queue_class.all()
+        for queue in qs:
+            clean_registries(queue)
+            clean_worker_registry(queue)
 
-            for queue in qs:
-                clean_registries(queue)
-                clean_worker_registry(queue)
-
-            refresh(interval, func, qs, raw, by_queue,
-                    cli_config.queue_class, cli_config.worker_class)
+        refresh(
+            interval, func, qs, raw, by_queue, cli_config.queue_class, cli_config.worker_class, cli_config.connection
+        )
     except ConnectionError as e:
         click.echo(e)
         sys.exit(1)
@@ -200,44 +166,89 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
 @click.option('--results-ttl', type=int, default=DEFAULT_RESULT_TTL, help='Default results timeout to be used')
-@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Default worker timeout to be used')
-@click.option('--job-monitoring-interval', type=int, default=DEFAULT_JOB_MONITORING_INTERVAL, help='Default job monitoring interval to be used')
+@click.option('--worker-ttl', type=int, default=DEFAULT_WORKER_TTL, help='Worker timeout to be used')
+@click.option(
+    '--maintenance-interval',
+    type=int,
+    default=DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    help='Maintenance task interval (in seconds) to be used',
+)
+@click.option(
+    '--job-monitoring-interval',
+    type=int,
+    default=DEFAULT_JOB_MONITORING_INTERVAL,
+    help='Default job monitoring interval to be used',
+)
 @click.option('--disable-job-desc-logging', is_flag=True, help='Turn off description logging.')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
-@click.option('--sentry-ca-certs', envvar='RQ_SENTRY_CA_CERTS', help='Path to CRT file for Sentry DSN')
-@click.option('--sentry-debug', envvar='RQ_SENTRY_DEBUG', help='Enable debug')
-@click.option('--sentry-dsn', envvar='RQ_SENTRY_DSN', help='Report exceptions to this Sentry DSN')
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
 @click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
+@click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
 @click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
+@click.option(
+    '--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues'
+)
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def worker(cli_config, burst, logging_level, name, results_ttl,
-           worker_ttl, job_monitoring_interval, disable_job_desc_logging,
-           verbose, quiet, sentry_ca_certs, sentry_debug, sentry_dsn,
-           exception_handler, pid, disable_default_exception_handler, max_jobs,
-           with_scheduler, queues, log_format, date_format, serializer, **options):
+def worker(
+    cli_config,
+    burst,
+    logging_level,
+    name,
+    results_ttl,
+    worker_ttl,
+    maintenance_interval,
+    job_monitoring_interval,
+    disable_job_desc_logging,
+    verbose,
+    quiet,
+    exception_handler,
+    pid,
+    disable_default_exception_handler,
+    max_jobs,
+    max_idle_time,
+    with_scheduler,
+    queues,
+    log_format,
+    date_format,
+    serializer,
+    dequeue_strategy,
+    **options,
+):
     """Starts an RQ worker."""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
     queues = queues or settings.get('QUEUES', ['default'])
-    sentry_ca_certs = sentry_ca_certs or settings.get('SENTRY_CA_CERTS')
-    sentry_debug = sentry_debug or settings.get('SENTRY_DEBUG')
-    sentry_dsn = sentry_dsn or settings.get('SENTRY_DSN')
     name = name or settings.get('NAME')
+    dict_config = settings.get('DICT_CONFIG')
+
+    if dict_config:
+        logging.config.dictConfig(dict_config)
 
     if pid:
         with open(os.path.expanduser(pid), "w") as fp:
             fp.write(str(os.getpid()))
 
+    worker_name = cli_config.worker_class.__qualname__
+    if worker_name in ["RoundRobinWorker", "RandomWorker"]:
+        strategy_alternative = "random" if worker_name == "RandomWorker" else "round_robin"
+        msg = f"WARNING: {worker_name} is deprecated. Use `--dequeue-strategy {strategy_alternative}` instead."
+        warnings.warn(msg, DeprecationWarning)
+        click.secho(msg, fg='yellow')
+
+    if dequeue_strategy not in ("default", "random", "round_robin"):
+        click.secho(
+            "ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red'
+        )
+        sys.exit(1)
+
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     try:
-        cleanup_ghosts(cli_config.connection)
         exception_handlers = []
         for h in exception_handler:
             exception_handlers.append(import_attribute(h))
@@ -246,40 +257,44 @@ def worker(cli_config, burst, logging_level, name, results_ttl,
             click.secho('RQ is currently suspended, to resume job execution run "rq resume"', fg='red')
             sys.exit(1)
 
-        queues = [cli_config.queue_class(queue,
-                                         connection=cli_config.connection,
-                                         job_class=cli_config.job_class,
-                                         serializer=serializer)
-                  for queue in queues]
+        queues = [
+            cli_config.queue_class(
+                queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
+            )
+            for queue in queues
+        ]
         worker = cli_config.worker_class(
-            queues, name=name, connection=cli_config.connection,
-            default_worker_ttl=worker_ttl, default_result_ttl=results_ttl,
+            queues,
+            name=name,
+            connection=cli_config.connection,
+            default_worker_ttl=worker_ttl,
+            default_result_ttl=results_ttl,
+            maintenance_interval=maintenance_interval,
             job_monitoring_interval=job_monitoring_interval,
-            job_class=cli_config.job_class, queue_class=cli_config.queue_class,
+            job_class=cli_config.job_class,
+            queue_class=cli_config.queue_class,
             exception_handlers=exception_handlers or None,
             disable_default_exception_handler=disable_default_exception_handler,
             log_job_description=not disable_job_desc_logging,
-            serializer=serializer
+            serializer=serializer,
         )
-
-        # Should we configure Sentry?
-        if sentry_dsn:
-            sentry_opts = {
-                "ca_certs": sentry_ca_certs,
-                "debug": sentry_debug
-            }
-            from rq.contrib.sentry import register_sentry
-            register_sentry(sentry_dsn, **sentry_opts)
 
         # if --verbose or --quiet, override --logging_level
         if verbose or quiet:
             logging_level = None
 
-        worker.work(burst=burst, logging_level=logging_level,
-                    date_format=date_format, log_format=log_format,
-                    max_jobs=max_jobs, with_scheduler=with_scheduler)
+        worker.work(
+            burst=burst,
+            logging_level=logging_level,
+            date_format=date_format,
+            log_format=log_format,
+            max_jobs=max_jobs,
+            max_idle_time=max_idle_time,
+            with_scheduler=with_scheduler,
+            dequeue_strategy=dequeue_strategy,
+        )
     except ConnectionError as e:
-        print(e)
+        logging.error(e)
         sys.exit(1)
 
 
@@ -297,7 +312,9 @@ def suspend(cli_config, duration, **options):
 
     if duration:
         msg = """Suspending workers for {0} seconds.  No new jobs will be started during that time, but then will
-        automatically resume""".format(duration)
+        automatically resume""".format(
+            duration
+        )
         click.echo(msg)
     else:
         click.echo("Suspending workers.  No new jobs will be started.  But current jobs will be completed")
@@ -313,27 +330,51 @@ def resume(cli_config, **options):
 
 @main.command()
 @click.option('--queue', '-q', help='The name of the queue.', default='default')
-@click.option('--timeout',
-              help='Specifies the maximum runtime of the job before it is interrupted and marked as failed.')
+@click.option(
+    '--timeout', help='Specifies the maximum runtime of the job before it is interrupted and marked as failed.'
+)
 @click.option('--result-ttl', help='Specifies how long successful jobs and their results are kept.')
 @click.option('--ttl', help='Specifies the maximum queued time of the job before it is discarded.')
 @click.option('--failure-ttl', help='Specifies how long failed jobs are kept.')
 @click.option('--description', help='Additional description of the job')
-@click.option('--depends-on', help='Specifies another job id that must complete before this job will be queued.',
-              multiple=True)
+@click.option(
+    '--depends-on', help='Specifies another job id that must complete before this job will be queued.', multiple=True
+)
 @click.option('--job-id', help='The id of this job')
 @click.option('--at-front', is_flag=True, help='Will place the job at the front of the queue, instead of the end')
 @click.option('--retry-max', help='Maximum amount of retries', default=0, type=int)
 @click.option('--retry-interval', help='Interval between retries in seconds', multiple=True, type=int, default=[0])
 @click.option('--schedule-in', help='Delay until the function is enqueued (e.g. 10s, 5m, 2d).')
-@click.option('--schedule-at', help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
-              'timezone (e.g. 2021-05-27T21:45:00).')
+@click.option(
+    '--schedule-at',
+    help='Schedule job to be enqueued at a certain time formatted in ISO 8601 without '
+    'timezone (e.g. 2021-05-27T21:45:00).',
+)
 @click.option('--quiet', is_flag=True, help='Only logs errors.')
 @click.argument('function')
 @click.argument('arguments', nargs=-1)
 @pass_cli_config
-def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, description, depends_on, job_id, at_front,
-            retry_max, retry_interval, schedule_in, schedule_at, quiet, serializer, function, arguments, **options):
+def enqueue(
+    cli_config,
+    queue,
+    timeout,
+    result_ttl,
+    ttl,
+    failure_ttl,
+    description,
+    depends_on,
+    job_id,
+    at_front,
+    retry_max,
+    retry_interval,
+    schedule_in,
+    schedule_at,
+    quiet,
+    serializer,
+    function,
+    arguments,
+    **options,
+):
     """Enqueues a job from the command line"""
     args, kwargs = parse_function_args(arguments)
     function_string = get_call_string(function, args, kwargs)
@@ -345,16 +386,108 @@ def enqueue(cli_config, queue, timeout, result_ttl, ttl, failure_ttl, descriptio
 
     schedule = parse_schedule(schedule_in, schedule_at)
 
-    with Connection(cli_config.connection):
-        queue = cli_config.queue_class(queue, serializer=serializer)
+    queue = cli_config.queue_class(queue, serializer=serializer, connection=cli_config.connection)
 
-        if schedule is None:
-            job = queue.enqueue_call(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,
-                                     description, depends_on, job_id, at_front, None, retry)
-        else:
-            job = queue.create_job(function, args, kwargs, timeout, result_ttl, ttl, failure_ttl,
-                                   description, depends_on, job_id, None, JobStatus.SCHEDULED, retry)
-            queue.schedule_job(job, schedule)
+    if schedule is None:
+        job = queue.enqueue_call(
+            function,
+            args,
+            kwargs,
+            timeout,
+            result_ttl,
+            ttl,
+            failure_ttl,
+            description,
+            depends_on,
+            job_id,
+            at_front,
+            None,
+            retry,
+        )
+    else:
+        job = queue.create_job(
+            function,
+            args,
+            kwargs,
+            timeout,
+            result_ttl,
+            ttl,
+            failure_ttl,
+            description,
+            depends_on,
+            job_id,
+            None,
+            JobStatus.SCHEDULED,
+            retry,
+        )
+        queue.schedule_job(job, schedule)
 
     if not quiet:
         click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))
+
+
+@main.command()
+@click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
+@click.option('--logging-level', '-l', type=str, default="INFO", help='Set logging level')
+@click.option('--verbose', '-v', is_flag=True, help='Show more output')
+@click.option('--quiet', '-q', is_flag=True, help='Show less output')
+@click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
+@click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
+@click.option('--job-class', type=str, default=None, help='Dotted path to a Job class')
+@click.argument('queues', nargs=-1)
+@click.option('--num-workers', '-n', type=int, default=1, help='Number of workers to start')
+@pass_cli_config
+def worker_pool(
+    cli_config,
+    burst: bool,
+    logging_level,
+    queues,
+    serializer,
+    verbose,
+    quiet,
+    log_format,
+    date_format,
+    worker_class,
+    job_class,
+    num_workers,
+    **options,
+):
+    """Starts a RQ worker pool"""
+    settings = read_config_file(cli_config.config) if cli_config.config else {}
+    # Worker specific default arguments
+    queue_names: List[str] = queues or settings.get('QUEUES', ['default'])
+
+    setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
+
+    if serializer:
+        serializer_class: Type[DefaultSerializer] = import_attribute(serializer)
+    else:
+        serializer_class = DefaultSerializer
+
+    if worker_class:
+        worker_class = import_attribute(worker_class)
+    else:
+        worker_class = Worker
+
+    if job_class:
+        job_class = import_attribute(job_class)
+    else:
+        job_class = Job
+
+    # if --verbose or --quiet, override --logging_level
+    if verbose or quiet:
+        logging_level = None
+
+    pool = WorkerPool(
+        queue_names,
+        connection=cli_config.connection,
+        num_workers=num_workers,
+        serializer=serializer_class,
+        worker_class=worker_class,
+        job_class=job_class,
+    )
+    pool.start(burst=burst, logging_level=logging_level)
+
+
+if __name__ == '__main__':
+    main()
