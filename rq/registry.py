@@ -23,7 +23,7 @@ from .utils import as_text, backend_class, current_timestamp
 logger = logging.getLogger("rq.registry")
 
 
-MAX_RETRIES_AFTER_ABANDONED=2
+MAX_RETRIES_AFTER_ABANDONED=10
 
 class BaseRegistry:
     """
