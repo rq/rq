@@ -517,7 +517,6 @@ class Queue:
         on_failure: Optional[Union[Callback, Callable]] = None,
         on_stopped: Optional[Union[Callback, Callable]] = None,
         group_id: Optional[str] = None,
-        deferred_ttl: Optional[int] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -560,7 +559,6 @@ class Queue:
 
         result_ttl = parse_timeout(result_ttl)
         failure_ttl = parse_timeout(failure_ttl)
-        deferred_ttl = parse_timeout(deferred_ttl)
 
         ttl = parse_timeout(ttl)
         if ttl is not None and ttl <= 0:
@@ -586,7 +584,6 @@ class Queue:
             on_failure=on_failure,
             on_stopped=on_stopped,
             group_id=group_id,
-            deferred_ttl=deferred_ttl,
         )
 
         if retry:
@@ -671,7 +668,6 @@ class Queue:
         on_failure: Optional[Union[Callback, Callable[..., Any]]] = None,
         on_stopped: Optional[Union[Callback, Callable[..., Any]]] = None,
         pipeline: Optional['Pipeline'] = None,
-        deferred_ttl: Optional[int] = None,
     ) -> Job:
         """Creates a job to represent the delayed function call and enqueues it.
 
@@ -722,7 +718,6 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
-            deferred_ttl=deferred_ttl,
         )
         return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
 
@@ -913,7 +908,6 @@ class Queue:
         result_ttl = kwargs.pop('result_ttl', None)
         ttl = kwargs.pop('ttl', None)
         failure_ttl = kwargs.pop('failure_ttl', None)
-        deferred_ttl = kwargs.pop("deferred_ttl", None)
         depends_on = kwargs.pop('depends_on', None)
         job_id = kwargs.pop('job_id', None)
         at_front = kwargs.pop('at_front', False)
@@ -936,7 +930,6 @@ class Queue:
             result_ttl,
             ttl,
             failure_ttl,
-            deferred_ttl,
             depends_on,
             job_id,
             at_front,
@@ -969,7 +962,6 @@ class Queue:
             result_ttl,
             ttl,
             failure_ttl,
-            deferred_ttl,
             depends_on,
             job_id,
             at_front,
@@ -1001,7 +993,6 @@ class Queue:
             on_failure=on_failure,
             on_stopped=on_stopped,
             pipeline=pipeline,
-            deferred_ttl=deferred_ttl,
         )
 
     def enqueue_at(self, datetime: datetime, f, *args, **kwargs):
@@ -1021,7 +1012,6 @@ class Queue:
             result_ttl,
             ttl,
             failure_ttl,
-            deferred_ttl,
             depends_on,
             job_id,
             at_front,
@@ -1051,7 +1041,6 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
-            deferred_ttl=deferred_ttl,
         )
         if at_front:
             job.enqueue_at_front = True

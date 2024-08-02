@@ -32,7 +32,6 @@ class job:  # noqa
         on_failure: Optional[Union[Callback, Callable[..., Any]]] = None,
         on_success: Optional[Union[Callback, Callable[..., Any]]] = None,
         on_stopped: Optional[Union[Callback, Callable[..., Any]]] = None,
-        deferred_ttl: Optional[int] = None,
     ):
         """A decorator that adds a ``enqueue`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
@@ -83,7 +82,6 @@ class job:  # noqa
         self.on_success = on_success
         self.on_failure = on_failure
         self.on_stopped = on_stopped
-        self.deferred_ttl = deferred_ttl
 
     def __call__(self, f):
         @wraps(f)
@@ -120,7 +118,6 @@ class job:  # noqa
                 on_failure=self.on_failure,
                 on_success=self.on_success,
                 on_stopped=self.on_stopped,
-                deferred_ttl=self.deferred_ttl,
             )
 
         f.delay = delay  # TODO: Remove this in 3.0

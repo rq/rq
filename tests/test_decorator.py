@@ -242,20 +242,6 @@ class TestDecorator(RQTestCase):
         result = hello.enqueue()
         self.assertEqual(result.failure_ttl, 10)
 
-    def test_decorator_custom_deferred_ttl(self):
-        """Ensure that passing in deferred_ttl to the decorator sets the
-        deferred_ttl on the job
-        """
-        # Ensure default
-        result = decorated_job.delay(1, 2)
-        self.assertEqual(result.deferred_ttl, None)
-
-        @job('default', deferred_ttl=10)
-        def hello():
-            return 'Why hello'
-        result = hello.delay()
-        self.assertEqual(result.deferred_ttl, 10)
-
     def test_decorator_custom_retry(self):
         """Ensure that passing in retry to the decorator sets the
         retry on the job

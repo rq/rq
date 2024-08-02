@@ -169,7 +169,6 @@ class Job:
         on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
         on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
         on_stopped: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
-        deferred_ttl: Optional[int] = None,
     ) -> 'Job':
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -289,7 +288,6 @@ class Job:
         job.description = description or job.get_call_string()
         job.result_ttl = parse_timeout(result_ttl)
         job.failure_ttl = parse_timeout(failure_ttl)
-        job.deferred_ttl = parse_timeout(deferred_ttl)
         job.ttl = parse_timeout(ttl)
         job.timeout = parse_timeout(timeout)
         job._status = status
@@ -673,7 +671,6 @@ class Job:
         self._stopped_callback_timeout: Optional[int] = None
         self.result_ttl: Optional[int] = None
         self.failure_ttl: Optional[int] = None
-        self.deferred_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
         self.worker_name: Optional[str] = None
         self._status = None
@@ -958,7 +955,6 @@ class Job:
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj.get('result_ttl')) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj.get('failure_ttl')) if obj.get('failure_ttl') else None
-        self.deferred_ttl = int(obj.get("deferred_ttl")) if obj.get("deferred_ttl") else None
         self._status = JobStatus(as_text(obj.get('status'))) if obj.get('status') else None
 
         if obj.get('success_callback_name'):
@@ -1071,8 +1067,6 @@ class Job:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
             obj['failure_ttl'] = self.failure_ttl
-        if self.deferred_ttl is not None:
-            obj["deferred_ttl"] = self.deferred_ttl
         if self._status is not None:
             obj['status'] = self._status
         if self._dependency_ids:
@@ -1575,7 +1569,7 @@ class Job:
         registry = DeferredJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
-        registry.add(self, pipeline=pipeline, ttl=self.deferred_ttl)
+        registry.add(self, pipeline=pipeline, ttl=self.ttl)
 
         connection = pipeline if pipeline is not None else self.connection
 
