@@ -11,6 +11,12 @@ Breaking Changes:
 * `Queue.all()` requires `connection` argument.
 * `@job` decorator now requires `connection` argument.
 
+### RQ 1.16.2 (2024-05-01)
+* Fixed a bug that may cause jobs from intermediate queue to be moved to FailedJobRegistry. Thanks @selwin!
+
+### RQ 1.16.1 (2024-03-09)
+* Added `worker_pool.get_worker_process()` to make `WorkerPool` easier to extend. Thanks @selwin!
+
 ### RQ 1.16 (2024-02-24)
 * Added a way for jobs to wait for latest result `job.latest_result(timeout=60)`. Thanks @ajnisbet!
 * Fixed an issue where `stopped_callback` is not respected when job is enqueued via `enqueue_many()`. Thanks @eswolinsky3241!

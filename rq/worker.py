@@ -46,9 +46,9 @@ from .defaults import (
 )
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .executions import Execution
+from .group import Group
 from .job import Job, JobStatus
 from .logutils import blue, green, setup_loghandlers, yellow
-from .maintenance import clean_intermediate_queue
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
@@ -62,8 +62,8 @@ from .utils import (
     ensure_list,
     get_connection_from_queues,
     get_version,
+    now,
     utcformat,
-    utcnow,
     utcparse,
 )
 from .version import VERSION
@@ -222,7 +222,9 @@ class BaseWorker:
                 warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
                 self.ip_address = 'unknown'
             else:
-                client_adresses = [client['addr'] for client in connection.client_list() if client['name'] == self.name]
+                client_adresses = [
+                    client['addr'] for client in connection.client_list() if client.get('name') == self.name
+                ]
                 if len(client_adresses) > 0:
                     self.ip_address = client_adresses[0]
                 else:
@@ -414,7 +416,7 @@ class BaseWorker:
         """Maintenance tasks should run on first startup or every 10 minutes."""
         if self.last_cleaned_at is None:
             return True
-        if (utcnow() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_interval):
+        if (now() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_interval):
             return True
         return False
 
@@ -447,11 +449,11 @@ class BaseWorker:
             # to run clean_registries().
             if queue.acquire_maintenance_lock():
                 self.log.info('Cleaning registries for queue: %s', queue.name)
-                clean_registries(queue)
+                clean_registries(queue, self._exc_handlers)
                 worker_registration.clean_worker_registry(queue)
-                clean_intermediate_queue(self, queue)
+                queue.intermediate_queue.cleanup(self, queue)
                 queue.release_maintenance_lock()
-        self.last_cleaned_at = utcnow()
+        self.last_cleaned_at = now()
 
     def get_redis_server_version(self):
         """Return Redis server version of connection"""
@@ -818,9 +820,9 @@ class BaseWorker:
         queues = ','.join(self.queue_names())
         with self.connection.pipeline() as p:
             p.delete(key)
-            now = utcnow()
-            now_in_string = utcformat(now)
-            self.birth_date = now
+            right_now = now()
+            now_in_string = utcformat(right_now)
+            self.birth_date = right_now
 
             mapping = {
                 'birth': now_in_string,
@@ -845,7 +847,7 @@ class BaseWorker:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             worker_registration.unregister(self, p)
-            p.hset(self.key, 'death', utcformat(utcnow()))
+            p.hset(self.key, 'death', utcformat(now()))
             p.expire(self.key, 60)
             p.execute()
 
@@ -933,6 +935,7 @@ class BaseWorker:
             if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
+        Group.clean_registries(connection=self.connection)
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
@@ -991,7 +994,7 @@ class BaseWorker:
         self.procline('Listening on ' + qnames)
         self.log.debug('*** Listening on %s...', green(qnames))
         connection_wait_time = 1.0
-        idle_since = utcnow()
+        idle_since = now()
         idle_time_left = max_idle_time
         while True:
             try:
@@ -1025,7 +1028,7 @@ class BaseWorker:
                 break
             except DequeueTimeout:
                 if max_idle_time is not None:
-                    idle_for = (utcnow() - idle_since).total_seconds()
+                    idle_for = (now() - idle_since).total_seconds()
                     idle_time_left = math.ceil(max_idle_time - idle_for)
                     if idle_time_left <= 0:
                         break
@@ -1060,7 +1063,7 @@ class BaseWorker:
         timeout = timeout or self.worker_ttl + 60
         connection: Union[Redis, 'Pipeline'] = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
-        connection.hset(self.key, 'last_heartbeat', utcformat(utcnow()))
+        connection.hset(self.key, 'last_heartbeat', utcformat(now()))
         self.log.debug('Sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', timeout)
 
     def teardown(self):
@@ -1122,11 +1125,7 @@ class BaseWorker:
         self.log.debug('Handling exception for %s.', job.id)
         exc_string = ''.join(traceback.format_exception(*exc_info))
         try:
-            extra = {
-                'func': job.func_name,
-                'arguments': job.args,
-                'kwargs': job.kwargs,
-            }
+            extra = {'func': job.func_name, 'arguments': job.args, 'kwargs': job.kwargs}
             func_name = job.func_name
         except DeserializationError:
             extra = {}
@@ -1209,7 +1208,7 @@ class Worker(BaseWorker):
         # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
         # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
         # we ignore it.
-        if (utcnow() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
+        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
             self.log.debug('Shutdown signal ignored, received twice in less than 1 second')
             return
 
@@ -1231,7 +1230,7 @@ class Worker(BaseWorker):
             frame (Any): Frame
         """
         self.log.debug('Got signal %s', signal_name(signum))
-        self._shutdown_requested_date = utcnow()
+        self._shutdown_requested_date = now()
 
         signal.signal(signal.SIGINT, self.request_force_stop)
         signal.signal(signal.SIGTERM, self.request_force_stop)
@@ -1299,7 +1298,7 @@ class Worker(BaseWorker):
             queue (Queue): _description_
         """
         retpid = ret_val = rusage = None
-        job.started_at = utcnow()
+        job.started_at = now()
         while True:
             try:
                 with self.death_penalty_class(self.job_monitoring_interval, HorseMonitorTimeoutException):
@@ -1308,7 +1307,7 @@ class Worker(BaseWorker):
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
-                self.set_current_job_working_time((utcnow() - job.started_at).total_seconds())
+                self.set_current_job_working_time((now() - job.started_at).total_seconds())
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
@@ -1348,7 +1347,7 @@ class Worker(BaseWorker):
             self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             if not job.ended_at:
-                job.ended_at = utcnow()
+                job.ended_at = now()
 
             # Unhandled failure: move the job to the failed queue
             signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ''
@@ -1378,7 +1377,7 @@ class Worker(BaseWorker):
 
             self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
             # After transition to job execution is complete, `job.heartbeat()` is no longer needed
-            job.heartbeat(utcnow(), ttl, pipeline=pipeline, xx=True)
+            job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
 
             # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
@@ -1436,7 +1435,7 @@ class Worker(BaseWorker):
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
-            job.heartbeat(utcnow(), heartbeat_ttl, pipeline=pipeline)
+            job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
             if remove_from_intermediate_queue:
@@ -1506,8 +1505,8 @@ class Worker(BaseWorker):
 
     def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
         """Called after job has finished execution."""
-        job.ended_at = utcnow()
-        job.heartbeat(utcnow(), heartbeat_ttl)
+        job.ended_at = now()
+        job.heartbeat(now(), heartbeat_ttl)
 
     def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
         """Performs the actual work of a job.  Will/should only be called
@@ -1527,7 +1526,7 @@ class Worker(BaseWorker):
             remove_from_intermediate_queue = len(self.queues) == 1
             self.prepare_job_execution(job, remove_from_intermediate_queue)
 
-            job.started_at = utcnow()
+            job.started_at = now()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 self.log.debug('Performing Job...')

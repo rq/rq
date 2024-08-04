@@ -21,11 +21,12 @@ if TYPE_CHECKING:
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
+from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import as_text, backend_class, compact, get_version, import_attribute, parse_timeout, utcnow
+from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
 
 logger = logging.getLogger("rq.queue")
 
@@ -139,18 +140,6 @@ class Queue:
             death_penalty_class=death_penalty_class,
         )
 
-    @classmethod
-    def get_intermediate_queue_key(cls, key: str) -> str:
-        """Returns the intermediate queue key for a given queue key.
-
-        Args:
-            key (str): The queue key
-
-        Returns:
-            str: The intermediate queue key
-        """
-        return f'{key}:intermediate'
-
     def __init__(
         self,
         name: str = 'default',
@@ -227,7 +216,12 @@ class Queue:
     @property
     def intermediate_queue_key(self):
         """Returns the Redis key for intermediate queue."""
-        return self.get_intermediate_queue_key(self._key)
+        return IntermediateQueue.get_intermediate_queue_key(self._key)
+
+    @property
+    def intermediate_queue(self) -> IntermediateQueue:
+        """Returns the IntermediateQueue instance for this Queue."""
+        return IntermediateQueue(self.key, connection=self.connection)
 
     @property
     def registry_cleaning_key(self):
@@ -522,6 +516,7 @@ class Queue:
         on_success: Optional[Union[Callback, Callable]] = None,
         on_failure: Optional[Union[Callback, Callable]] = None,
         on_stopped: Optional[Union[Callback, Callable]] = None,
+        group_id: Optional[str] = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -546,6 +541,7 @@ class Queue:
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
         Raises:
             ValueError: If the timeout is 0
@@ -587,6 +583,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            group_id=group_id,
         )
 
         if retry:
@@ -789,7 +786,9 @@ class Queue:
             on_stopped,
         )
 
-    def enqueue_many(self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None) -> List[Job]:
+    def enqueue_many(
+        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: str = None
+    ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
 
@@ -823,6 +822,7 @@ class Queue:
                 "on_success": job_data.on_success,
                 "on_failure": job_data.on_failure,
                 "on_stopped": job_data.on_stopped,
+                "group_id": group_id,
             }
 
         # Enqueue jobs without dependencies
@@ -861,6 +861,7 @@ class Queue:
             ]
             if pipeline is None:
                 pipe.execute()
+
         return jobs_without_dependencies + jobs_with_unmet_dependencies + jobs_with_met_dependencies
 
     def run_job(self, job: 'Job') -> Job:
@@ -1095,6 +1096,11 @@ class Queue:
         """
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
+        # Add Queue key set
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe.sadd(self.redis_queues_keys, self.key)
+        if pipeline is None:
+            pipe.execute()
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front)
@@ -1115,13 +1121,11 @@ class Queue:
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-        # Add Queue key set
-        pipe.sadd(self.redis_queues_keys, self.key)
         job.redis_server_version = self.get_redis_server_version()
         job.set_status(JobStatus.QUEUED, pipeline=pipe)
 
         job.origin = self.name
-        job.enqueued_at = utcnow()
+        job.enqueued_at = now()
 
         if job.timeout is None:
             job.timeout = self._default_timeout
@@ -1309,18 +1313,19 @@ class Queue:
         """Similar to lpop, but accepts only a single queue key and immediately pushes
         the result to an intermediate queue.
         """
+        intermediate_queue = IntermediateQueue(queue_key, connection)
         if timeout is not None:  # blocking variant
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queue = green(queue_key)
             logger.debug(f"Starting BLMOVE operation for {colored_queue} with timeout of {timeout}")
-            result = connection.blmove(queue_key, cls.get_intermediate_queue_key(queue_key), timeout)
+            result = connection.blmove(queue_key, intermediate_queue.key, timeout)
             if result is None:
                 logger.debug(f"BLMOVE timeout, no jobs found on {colored_queue}")
                 raise DequeueTimeout(timeout, queue_key)
             return queue_key, result
         else:  # non-blocking variant
-            result = connection.lmove(queue_key, cls.get_intermediate_queue_key(queue_key))
+            result = connection.lmove(queue_key, intermediate_queue.key)
             if result is not None:
                 return queue_key, result
             return None

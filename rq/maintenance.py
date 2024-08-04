@@ -1,7 +1,8 @@
+import warnings
 from typing import TYPE_CHECKING
 
+from .intermediate_queue import IntermediateQueue
 from .queue import Queue
-from .utils import as_text
 
 if TYPE_CHECKING:
     from .worker import BaseWorker
@@ -17,10 +18,9 @@ def clean_intermediate_queue(worker: 'BaseWorker', queue: Queue) -> None:
 
     We consider a job to be stuck in the intermediate queue if it doesn't exist in the StartedJobRegistry.
     """
-    job_ids = [as_text(job_id) for job_id in queue.connection.lrange(queue.intermediate_queue_key, 0, -1)]
-    for job_id in job_ids:
-        if job_id not in queue.started_job_registry:
-            job = queue.fetch_job(job_id)
-            if job:
-                worker.handle_job_failure(job, queue, exc_string='Job was stuck in intermediate queue.')
-            queue.connection.lrem(queue.intermediate_queue_key, 1, job_id)
+    warnings.warn(
+        "clean_intermediate_queue is deprecated. Use IntermediateQueue.cleanup instead.",
+        DeprecationWarning,
+    )
+    intermediate_queue = IntermediateQueue(queue.key, connection=queue.connection)
+    intermediate_queue.cleanup(worker, queue)

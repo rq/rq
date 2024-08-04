@@ -23,6 +23,22 @@ A `Result` object that holds the result of the execution will be created. Both t
 will persist in Redis until the value of `result_ttl` is up. More details [here]( /docs/results/).
 
 
+#### Job Status
+
+The status of a job can be one of the following:
+
+* `queued`: The default status for created jobs, except for those that have dependencies, which will be created as `deferred`. These jobs have been placed in a queue and are ready to be executed.
+* `finished`: The job has finished execution and is available through the finished job registry.
+* `failed`: Jobs that encountered errors during execution or expired before being executed.
+* `started`: The job has started execution. This status includes the job execution support mechanisms, such as setting the worker name and setting up heartbeat information.
+* `deferred`: The job is not ready for execution because its dependencies have not finished successfully yet.
+* `scheduled`: Jobs created to run at a future date or jobs that are retried after a retry interval.
+* `stopped`: The job was stopped because the worker was stopped.
+* `canceled`: The job has been manually canceled and will not be executed, even if it is part of a dependency chain.
+
+These statuses can also be accessed from the job object using boolean properties, such as `job.is_finished`.
+
+
 ### Job Creation
 
 When you enqueue a function, a job will be returned.  You may then access the
@@ -164,6 +180,7 @@ print(execution.last_heartbeat)  # Worker's last heartbeat
 * `composite_key`: a combination of `job.id` and `execution.id`, formatted as `<job_id>:<execution_id>`
 * `created_at`: returns a datetime object representing the start of this execution
 * `last_heartbeat`: worker's last heartbeat
+
 
 ## Stopping a Currently Executing Job
 _New in version 1.7.0_

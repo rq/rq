@@ -458,6 +458,21 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(queues), 1)
         self.assertIs(queues[0].job_class, CustomJob)
 
+    def test_all_queues_with_only_deferred_jobs(self):
+        """All queues with only deferred jobs"""
+        queue_with_queued_jobs = Queue('queue_with_queued_jobs', connection=self.connection)
+        queue_with_deferred_jobs = Queue('queue_with_deferred_jobs', connection=self.connection)
+
+        parent_job = queue_with_queued_jobs.enqueue(say_hello)
+        queue_with_deferred_jobs.enqueue(say_hello, depends_on=parent_job)
+
+        # Ensure all queues are listed
+        self.assertEqual(len(Queue.all(connection=self.connection)), 2)
+        names = [q.name for q in Queue.all(connection=self.connection)]
+        # Verify names
+        self.assertTrue('queue_with_queued_jobs' in names)
+        self.assertTrue('queue_with_deferred_jobs' in names)
+
     def test_from_queue_key(self):
         """Ensure being able to get a Queue instance manually from Redis"""
         q = Queue(connection=self.connection)

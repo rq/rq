@@ -141,19 +141,15 @@ class WorkerPool:
                 for i in range(delta):
                     self.start_worker(burst=self._burst, _sleep=self._sleep)
 
-    def start_worker(
+    def get_worker_process(
         self,
-        count: Optional[int] = None,
-        burst: bool = True,
+        name: str,
+        burst: bool,
         _sleep: float = 0,
         logging_level: str = "INFO",
-    ):
-        """
-        Starts a worker and adds the data to worker_datas.
-        * sleep: waits for X seconds before creating worker, for testing purposes
-        """
-        name = uuid4().hex
-        process = Process(
+    ) -> Process:
+        """Returns the worker process"""
+        return Process(
             target=run_worker,
             args=(name, self._queue_names, self._connection_class, self._pool_class, self._pool_kwargs),
             kwargs={
@@ -166,6 +162,20 @@ class WorkerPool:
             },
             name=f'Worker {name} (WorkerPool {self.name})',
         )
+
+    def start_worker(
+        self,
+        count: Optional[int] = None,
+        burst: bool = True,
+        _sleep: float = 0,
+        logging_level: str = "INFO",
+    ):
+        """
+        Starts a worker and adds the data to worker_datas.
+        * sleep: waits for X seconds before creating worker, for testing purposes
+        """
+        name = uuid4().hex
+        process = self.get_worker_process(name, burst=burst, _sleep=_sleep, logging_level=logging_level)
         process.start()
         worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
         self.worker_dict[name] = worker_data

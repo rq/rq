@@ -225,7 +225,7 @@ class StartedJobRegistry(BaseRegistry):
 
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: List = None):
         """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -240,6 +240,7 @@ class StartedJobRegistry(BaseRegistry):
 
         if job_ids:
             failed_job_registry = FailedJobRegistry(self.name, self.connection, serializer=self.serializer)
+            queue = self.get_queue()
 
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
@@ -252,16 +253,28 @@ class StartedJobRegistry(BaseRegistry):
                         self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
                     )
 
+                    if exception_handlers:
+                        for handler in exception_handlers:
+                            fallthrough = handler(
+                                job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
+                            )
+                            # Only handlers with explicit return values should disable further
+                            # exc handling, so interpret a None return value as True.
+                            if fallthrough is None:
+                                fallthrough = True
+
+                            if not fallthrough:
+                                break
+
                     retry = job.retries_left and job.retries_left > 0
 
                     if retry:
-                        queue = self.get_queue()
                         job.retry(queue, pipeline)
 
                     else:
                         exc_string = f"due to {AbandonedJobError.__name__}"
                         logger.warning(
-                            f'{self.__class__.__name__} cleanup: Moving job to {FailedJobRegistry.__name__} '
+                            f'{self.__class__.__name__} cleanup: Moving job {job.id} to {FailedJobRegistry.__name__} '
                             f'({exc_string})'
                         )
                         job.set_status(JobStatus.FAILED)
@@ -269,6 +282,7 @@ class StartedJobRegistry(BaseRegistry):
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
+                        queue.enqueue_dependents(job)
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
@@ -486,7 +500,7 @@ class CanceledJobRegistry(BaseRegistry):
         pass
 
 
-def clean_registries(queue: 'Queue'):
+def clean_registries(queue: 'Queue', exception_handlers: list = None):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue.
 
     Args:
@@ -498,7 +512,7 @@ def clean_registries(queue: 'Queue'):
 
     StartedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
-    ).cleanup()
+    ).cleanup(exception_handlers=exception_handlers)
 
     FailedJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
