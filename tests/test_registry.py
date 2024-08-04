@@ -300,10 +300,10 @@ class TestRegistry(RQTestCase):
 
     def test_enqueue_dependents_when_parent_job_is_abandoned(self):
         """Enqueuing parent job's dependencies after moving it to FailedJobRegistry due to AbandonedJobError."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         worker = Worker([queue])
-        failed_job_registry = FailedJobRegistry(connection=self.testconn)
-        finished_job_registry = FinishedJobRegistry(connection=self.testconn)
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
+        finished_job_registry = FinishedJobRegistry(connection=self.connection)
         deferred_job_registry = DeferredJobRegistry(connection=self.connection)
 
         parent_job = queue.enqueue(say_hello)
@@ -314,7 +314,7 @@ class TestRegistry(RQTestCase):
         self.assertIn(job_to_be_executed, deferred_job_registry)
         self.assertIn(job_not_to_be_executed, deferred_job_registry)
 
-        self.testconn.zadd(self.registry.key, {parent_job.id: 2})
+        self.connection.zadd(self.registry.key, {parent_job.id: 2})
         queue.remove(parent_job.id)
 
         with mock.patch.object(Job, 'execute_failure_callback') as mocked:
