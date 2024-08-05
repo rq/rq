@@ -402,7 +402,7 @@ class DeferredJobRegistry(BaseRegistry):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
-        unspecified. Removed jobs are added to the global failed job queue.
+        unspecified. Removed jobs are added to the failed job registry.
         """
         score = timestamp if timestamp is not None else current_timestamp()
         job_ids = self.get_expired_job_ids(score)
