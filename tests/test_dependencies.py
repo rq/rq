@@ -1,5 +1,6 @@
 from rq import Queue, SimpleWorker, Worker
 from rq.job import Dependency, Job, JobStatus
+from rq.utils import current_timestamp
 from tests import RQTestCase
 from tests.fixtures import check_dependencies_are_met, div_by_zero, say_hello
 
@@ -153,6 +154,20 @@ class TestDependencies(RQTestCase):
         w.work(burst=True)
         self.assertEqual(parent_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_enqueue_job_dependency_sets_ttl(self):
+        """Ensures that the TTL of jobs in the deferred queue is set"""
+        q = Queue(connection=self.connection)
+        parent_job = Job.create(say_hello, connection=self.connection)
+        parent_job.save()
+
+        timestamp = current_timestamp()
+        ttl = 5
+        job = Job.create(say_hello, connection=self.connection, depends_on=parent_job, ttl=ttl)
+        q.enqueue_job(job)
+        score = self.connection.zscore(q.deferred_job_registry.key, job.id)
+        self.assertLess(score, timestamp + ttl + 2)
+        self.assertGreater(score, timestamp + ttl - 2)
 
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""

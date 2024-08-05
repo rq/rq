@@ -1569,7 +1569,7 @@ class Job:
         registry = DeferredJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
-        registry.add(self, pipeline=pipeline)
+        registry.add(self, pipeline=pipeline, ttl=self.ttl)
 
         connection = pipeline if pipeline is not None else self.connection
 

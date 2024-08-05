@@ -398,11 +398,43 @@ class DeferredJobRegistry(BaseRegistry):
 
     key_template = 'rq:deferred:{0}'
 
-    def cleanup(self):
-        """This method is only here to prevent errors because this method is
-        automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
-        pass
+    def cleanup(self, timestamp=None):
+        """Remove expired jobs from registry and add them to FailedJobRegistry.
+        Removes jobs with an expiry time earlier than timestamp, specified as
+        seconds since the Unix epoch. timestamp defaults to call time if
+        unspecified. Removed jobs are added to the failed job registry.
+        """
+        score = timestamp if timestamp is not None else current_timestamp()
+        job_ids = self.get_expired_job_ids(score)
+
+        if job_ids:
+            failed_job_registry = FailedJobRegistry(self.name, self.connection, serializer=self.serializer)
+
+            with self.connection.pipeline() as pipeline:
+                for job_id in job_ids:
+                    try:
+                        job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
+                    except NoSuchJobError:
+                        continue
+
+                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                    exc_info = "Expired in DeferredJobRegistry, moved to FailedJobRegistry at %s" % datetime.now()
+                    failed_job_registry.add(job, job.failure_ttl, exc_info, pipeline, True)
+
+                pipeline.zremrangebyscore(self.key, 0, score)
+                pipeline.execute()
+
+        return job_ids
+
+    def add(self, job, ttl=None, pipeline=None, xx=False):
+        """
+        Adds a job to a registry with expiry time of now + ttl.
+        Defaults to -1 (never expire).
+        """
+        if ttl is None:
+            ttl = -1
+
+        return super(DeferredJobRegistry, self).add(job, ttl, pipeline, xx)
 
 
 class ScheduledJobRegistry(BaseRegistry):
@@ -501,7 +533,7 @@ class CanceledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue: 'Queue', exception_handlers: list = None):
-    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry of a queue.
+    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry, and DeferredJobRegistry of a queue.
 
     Args:
         queue (Queue): The queue to clean
@@ -515,5 +547,9 @@ def clean_registries(queue: 'Queue', exception_handlers: list = None):
     ).cleanup(exception_handlers=exception_handlers)
 
     FailedJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    ).cleanup()
+
+    DeferredJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
