@@ -10,6 +10,14 @@ Breaking Changes:
 * `Job.exists()` requires `connection` argument to be passed in.
 * `Queue.all()` requires `connection` argument.
 * `@job` decorator now requires `connection` argument.
+* Built in Sentry integration has been removed. To use Sentry with RQ, please refer to [Sentry's docs](https://docs.sentry.io/platforms/python/integrations/rq/).
+
+Bug Fixes:
+* Fixed an issue where abandoned jobs are sometimes not enqueued. Thanks @Marishka17!
+* Fixes an issue where Redis connection does not expose `name` attribute. Thanks @wckao!
+* `job.get_status()` will now always return `JobStatus` enum. Thanks @indepndnt!
+* Queue key should always be created even if jobs are deferred. Thanks @sim6!
+* Minor fixes and improvements. Thanks @hongquan, @rbange, 
 
 ### RQ 1.16.2 (2024-05-01)
 * Fixed a bug that may cause jobs from intermediate queue to be moved to FailedJobRegistry. Thanks @selwin!
