@@ -419,7 +419,6 @@ class DeferredJobRegistry(BaseRegistry):
 
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
                     exc_info = "Expired in DeferredJobRegistry, moved to FailedJobRegistry at %s" % datetime.now()
-                    job.save(pipeline=pipeline, include_meta=False)
                     failed_job_registry.add(job, job.failure_ttl, exc_info, pipeline, True)
 
                 pipeline.zremrangebyscore(self.key, 0, score)
