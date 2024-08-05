@@ -165,7 +165,7 @@ class TestDependencies(RQTestCase):
         ttl = 5
         job = Job.create(say_hello, connection=self.connection, depends_on=parent_job, ttl=ttl)
         q.enqueue_job(job)
-        score = self.testconn.zscore(q.deferred_job_registry.key, job.id)
+        score = self.connection.zscore(q.deferred_job_registry.key, job.id)
         self.assertLess(score, timestamp + ttl + 2)
         self.assertGreater(score, timestamp + ttl - 2)
 

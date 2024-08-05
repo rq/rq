@@ -300,10 +300,10 @@ class TestRegistry(RQTestCase):
 
     def test_enqueue_dependents_when_parent_job_is_abandoned(self):
         """Enqueuing parent job's dependencies after moving it to FailedJobRegistry due to AbandonedJobError."""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         worker = Worker([queue])
-        failed_job_registry = FailedJobRegistry(connection=self.testconn)
-        finished_job_registry = FinishedJobRegistry(connection=self.testconn)
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
+        finished_job_registry = FinishedJobRegistry(connection=self.connection)
         deferred_job_registry = DeferredJobRegistry(connection=self.connection)
 
         parent_job = queue.enqueue(say_hello)
@@ -314,7 +314,7 @@ class TestRegistry(RQTestCase):
         self.assertIn(job_to_be_executed, deferred_job_registry)
         self.assertIn(job_not_to_be_executed, deferred_job_registry)
 
-        self.testconn.zadd(self.registry.key, {parent_job.id: 2})
+        self.connection.zadd(self.registry.key, {parent_job.id: 2})
         queue.remove(parent_job.id)
 
         with mock.patch.object(Job, 'execute_failure_callback') as mocked:
@@ -404,19 +404,19 @@ class TestDeferredRegistry(RQTestCase):
 
     def test_add_with_deferred_ttl(self):
         """Job TTL defaults to +inf"""
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
         key = self.registry.key
 
         self.registry.add(job)
-        score = self.testconn.zscore(key, job.id)
-        self.assertEqual(score, float('inf'))
+        score = self.connection.zscore(key, job.id)
+        self.assertEqual(score, float("inf"))
 
         timestamp = current_timestamp()
         ttl = 5
         self.registry.add(job, ttl=ttl)
-        score = self.testconn.zscore(key, job.id)
+        score = self.connection.zscore(key, job.id)
         self.assertLess(score, timestamp + ttl + 2)
         self.assertGreater(score, timestamp + ttl - 2)
 
@@ -434,7 +434,7 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(registry.get_job_ids(), [])
 
     def test_cleanup_supports_deleted_jobs(self):
-        queue = Queue(connection=self.testconn)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
         self.registry.add(job, ttl=10)
 
@@ -447,11 +447,11 @@ class TestDeferredRegistry(RQTestCase):
 
     def test_cleanup_moves_jobs_to_failed_job_registry(self):
         """Moving expired jobs to FailedJobRegistry."""
-        queue = Queue(connection=self.testconn)
-        failed_job_registry = FailedJobRegistry(connection=self.testconn)
+        queue = Queue(connection=self.connection)
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
         job = queue.enqueue(say_hello)
 
-        self.testconn.zadd(self.registry.key, {job.id: 2})
+        self.connection.zadd(self.registry.key, {job.id: 2})
 
         # Job has not been moved to FailedJobRegistry
         self.registry.cleanup(1)
