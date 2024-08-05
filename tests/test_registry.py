@@ -433,6 +433,18 @@ class TestDeferredRegistry(RQTestCase):
         job2.delete()
         self.assertEqual(registry.get_job_ids(), [])
 
+    def test_cleanup_supports_deleted_jobs(self):
+        queue = Queue(connection=self.testconn)
+        job = queue.enqueue(say_hello)
+        self.registry.add(job, ttl=10)
+
+        self.assertEqual(self.registry.count, 1)
+        job.delete(remove_from_queue=False)
+        self.assertEqual(self.registry.count, 1)
+
+        self.registry.cleanup(current_timestamp() + 100)
+        self.assertEqual(self.registry.count, 0)
+
     def test_cleanup_moves_jobs_to_failed_job_registry(self):
         """Moving expired jobs to FailedJobRegistry."""
         queue = Queue(connection=self.testconn)
