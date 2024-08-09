@@ -139,7 +139,8 @@ class BaseWorker:
         connection: Optional['Redis'] = None,
         exc_handler=None,
         exception_handlers=None,
-        default_worker_ttl=DEFAULT_WORKER_TTL,
+        default_worker_ttl=DEFAULT_WORKER_TTL,  # TODO remove this arg in 2.0
+        worker_ttl=DEFAULT_WORKER_TTL,
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         job_class: Optional[Type['Job']] = None,
         queue_class: Optional[Type['Queue']] = None,
@@ -150,8 +151,14 @@ class BaseWorker:
         serializer=None,
         work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
+
+        warnings.warn(
+            "default_worker_ttl is deprecated. Use worker_ttl instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.default_result_ttl = default_result_ttl
-        self.worker_ttl = default_worker_ttl
+        self.worker_ttl = worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
         self.maintenance_interval = maintenance_interval
 

@@ -742,7 +742,7 @@ class TestWorker(RQTestCase):
         w = Worker([q])
         self.assertEqual(w.dequeue_timeout, 405)
         self.assertEqual(w.connection_timeout, 415)
-        w = Worker([q], default_worker_ttl=500)
+        w = Worker([q], worker_ttl=500)
         self.assertEqual(w.dequeue_timeout, 485)
         self.assertEqual(w.connection_timeout, 495)
 

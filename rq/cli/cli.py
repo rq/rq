@@ -267,7 +267,8 @@ def worker(
             queues,
             name=name,
             connection=cli_config.connection,
-            default_worker_ttl=worker_ttl,
+            default_worker_ttl=worker_ttl,  # TODO remove this arg in 2.0
+            worker_ttl=worker_ttl,
             default_result_ttl=results_ttl,
             maintenance_interval=maintenance_interval,
             job_monitoring_interval=job_monitoring_interval,
