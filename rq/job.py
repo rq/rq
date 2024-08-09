@@ -274,6 +274,7 @@ class Job:
                     DeprecationWarning,
                 )
                 on_success = Callback(on_success)  # backward compatibility
+            on_success.assert_type(CallbackType.SUCCESS)
             job._success_callback_name = on_success.name
             job._success_callback_timeout = on_success.timeout
 
@@ -284,6 +285,7 @@ class Job:
                     DeprecationWarning,
                 )
                 on_failure = Callback(on_failure)  # backward compatibility
+            on_success.assert_type(CallbackType.FAILURE)
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
 
@@ -294,6 +296,7 @@ class Job:
                     DeprecationWarning,
                 )
                 on_stopped = Callback(on_stopped)  # backward compatibility
+            on_success.assert_type(CallbackType.STOPPED)
             job._stopped_callback_name = on_stopped.name
             job._stopped_callback_timeout = on_stopped.timeout
 
