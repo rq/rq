@@ -6,10 +6,23 @@ import warnings
 import zlib
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    Type,
+    Union,
+    runtime_checkable,
+)
 from uuid import uuid4
 
-from redis import WatchError
+from redis import Redis, WatchError
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
@@ -261,6 +274,7 @@ class Job:
                     DeprecationWarning,
                 )
                 on_success = Callback(on_success)  # backward compatibility
+            on_success.assert_type(CallbackType.SUCCESS)
             job._success_callback_name = on_success.name
             job._success_callback_timeout = on_success.timeout
 
@@ -271,6 +285,7 @@ class Job:
                     DeprecationWarning,
                 )
                 on_failure = Callback(on_failure)  # backward compatibility
+            on_success.assert_type(CallbackType.FAILURE)
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
 
@@ -281,6 +296,7 @@ class Job:
                     DeprecationWarning,
                 )
                 on_stopped = Callback(on_stopped)  # backward compatibility
+            on_success.assert_type(CallbackType.STOPPED)
             job._stopped_callback_name = on_stopped.name
             job._stopped_callback_timeout = on_stopped.timeout
 
@@ -1679,10 +1695,78 @@ class Retry:
         self.intervals = intervals
 
 
+
+class CallbackType(str, Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    STOPPED = "stopped"
+
+
+@runtime_checkable
+class SuccessCallbackFunc(Protocol):
+    def __call__(self, job: Job, connection: Redis, result: Any, *args: Any, **kwargs: Any) -> Any:
+        """
+        Callback function to be called when a job is successfully executed.
+
+        Args:
+            job (Job): the job that was executed
+            connection (Redis): the Redis connection
+            result (Any): the result of the job execution
+            *args (Any): additional positional arguments
+            **kwargs (Any): additional keyword arguments
+        """
+
+
+@runtime_checkable
+class FailureCallbackFunc(Protocol):
+    def __call__(
+        self, job: Job, connection: Redis, type: type[BaseException], value: BaseException, traceback: Any
+    ) -> Any:
+        """
+        Callback function to be called when a job fails during execution.
+
+        Args:
+            job (Job): the job that was executed
+            connection (Redis): the Redis connection
+            type (type[BaseException]): the type of the exception
+            value (BaseException): the exception instance
+            traceback (Any): the traceback of the exception
+        """
+
+
+@runtime_checkable
+class StoppedCallbackFunc(Protocol):
+    def __call__(self, job: Job, connection: Redis) -> Any:
+        """
+        Callback function to be called when a job is stopped before execution.
+
+        Args:
+            job (Job): the job that was executed
+            connection (Redis): the Redis connection
+        """
+
+
+CALLBACK_PROTOCOLS = {
+    CallbackType.SUCCESS: SuccessCallbackFunc,
+    CallbackType.FAILURE: FailureCallbackFunc,
+    CallbackType.STOPPED: StoppedCallbackFunc,
+}
+
+EXPECTED_SIGNATURE = {
+    CallbackType.SUCCESS: "(job: Job, connection: Redis, result: Any, *args: Any, **kwargs: Any) -> Any",
+    CallbackType.FAILURE: "(job: Job, connection: Redis, type: type[BaseException], value: BaseException, traceback: Any) -> Any",  # noqa: E501
+    CallbackType.STOPPED: "(job: Job, connection: Redis) -> Any",
+}
+
+
 class Callback:
-    def __init__(self, func: Union[str, Callable[..., Any]], timeout: Optional[Any] = None):
+    def __init__(
+        self,
+        func: Union[str, SuccessCallbackFunc, FailureCallbackFunc, StoppedCallbackFunc],
+        timeout: Optional[Any] = None,
+    ):
         if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
-            raise ValueError('Callback `func` must be a string or function')
+            raise ValueError("Callback `func` must be a string or function")
 
         self.func = func
         self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
@@ -1691,4 +1775,28 @@ class Callback:
     def name(self) -> str:
         if isinstance(self.func, str):
             return self.func
-        return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)
+        return "{0}.{1}".format(self.func.__module__, self.func.__qualname__)
+
+    def assert_type(self, callback_type: CallbackType) -> None:
+        """
+        Assert that the callback function matches the expected signature for the given callback type.
+
+        Args:
+            callback_type (CallbackType): target callback type
+
+        Raises:
+            InvalidCallbackException: if the callback function does not match the expected signature
+        """
+        if isinstance(self.func, str):
+            return
+
+        if not isinstance(self.func, CALLBACK_PROTOCOLS[callback_type]):
+            raise InvalidCallbackException(self, callback_type)
+
+
+class InvalidCallbackException(Exception):
+    def __init__(self, callback: Callback, callback_type: CallbackType) -> None:
+        super().__init__(
+            f"Callback {callback.name} does not match the expected signature\n"
+            f"Expected: def {callback.name}{EXPECTED_SIGNATURE[callback_type]}"
+        )
