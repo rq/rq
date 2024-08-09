@@ -152,11 +152,7 @@ class BaseWorker:
         work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
 
-        warnings.warn(
-            "default_worker_ttl is deprecated. Use worker_ttl instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
+        warnings.warn("default_worker_ttl is deprecated. Use worker_ttl instead.", DeprecationWarning, stacklevel=2)
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
