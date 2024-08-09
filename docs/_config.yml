@@ -1,5 +1,5 @@
 baseurl: /
-exclude: design
+exclude: [design]
 permalink: pretty
 
 navigation:
