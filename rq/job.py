@@ -1753,7 +1753,9 @@ CALLBACK_PROTOCOLS = {
 
 EXPECTED_SIGNATURE = {
     CallbackType.SUCCESS: "(job: Job, connection: Redis, result: Any, *args: Any, **kwargs: Any) -> Any",
-    CallbackType.FAILURE: "(job: Job, connection: Redis, type: type[BaseException], value: BaseException, traceback: Any) -> Any",
+    CallbackType.FAILURE: (
+        "(job: Job, connection: Redis, type: type[BaseException], " "value: BaseException, traceback: Any) -> Any"
+    ),
     CallbackType.STOPPED: "(job: Job, connection: Redis) -> Any",
 }
 
