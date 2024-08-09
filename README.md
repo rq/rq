@@ -112,6 +112,7 @@ If you want the cutting edge version (that may well be broken), use this:
 To build and run the docs, install [jekyll](https://jekyllrb.com/docs/) and run:
 
 ```shell
+cd docs
 jekyll serve
 ```
 
