@@ -124,10 +124,21 @@ SENTINEL: {
 ### Timeout
 
 To avoid potential issues with hanging Redis commands, specifically the blocking `BLPOP` command,
-RQ automatically sets a `socket_timeout` value that is 10 seconds higher than the `default_worker_ttl`.
+RQ automatically sets a `socket_timeout` value that is 10 seconds higher than the `dequeue_timeout`. The `dequeue_timeout` is computed as 15 seconds shorter than the `worker_ttl` value.
+
+Here are the following computed timeout values if you were not to adjust anything.
+
+| Setting              | Default Value |
+|:---------------------|:-------------:|
+| `worker_ttl`         |      420      |
+| `connection_timeout` |      415      |
+| `dequeue_timeout`    |      405      |
+|                      |               |
+
+
 
 If you prefer to manually set the `socket_timeout` value,
-make sure that the value being set is higher than the `default_worker_ttl` (which is 420 by default).
+make sure that the value being set is higher than the `dequeue_timeout` (which is 405 by default).
 
 ```python
 from redis import Redis
@@ -137,7 +148,7 @@ conn = Redis('localhost', 6379, socket_timeout=500)
 q = Queue(connection=conn)
 ```
 
-Setting a `socket_timeout` with a lower value than the `default_worker_ttl` will cause a `TimeoutError`
+Setting a `socket_timeout` with a lower value than the `dequeue_timeout` will cause a `TimeoutError`
 since it will interrupt the worker while it gets new jobs from the queue.
 
 
