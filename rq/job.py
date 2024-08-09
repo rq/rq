@@ -5,7 +5,7 @@ import logging
 import warnings
 import zlib
 from datetime import datetime, timedelta, timezone
-from enum import Enum, StrEnum
+from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1693,7 +1693,7 @@ class Retry:
 
 
 
-class CallbackType(StrEnum):
+class CallbackType(str, Enum):
     SUCCESS = "success"
     FAILURE = "failure"
     STOPPED = "stopped"
