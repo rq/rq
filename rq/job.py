@@ -1727,7 +1727,7 @@ class FailureCallbackFunc(Protocol):
         Args:
             job (Job): the job that was executed
             connection (Redis): the Redis connection
-            type (type[BaseException]): the type of the exception
+            Type (type[BaseException]): the type of the exception
             value (BaseException): the exception instance
             traceback (Any): the traceback of the exception
         """
@@ -1754,7 +1754,7 @@ CALLBACK_PROTOCOLS = {
 EXPECTED_SIGNATURE = {
     CallbackType.SUCCESS: "(job: Job, connection: Redis, result: Any, *args: Any, **kwargs: Any) -> Any",
     CallbackType.FAILURE: (
-        "(job: Job, connection: Redis, type: type[BaseException], " "value: BaseException, traceback: Any) -> Any"
+        "(job: Job, connection: Redis, type: Type[BaseException], " "value: BaseException, traceback: Any) -> Any"
     ),
     CallbackType.STOPPED: "(job: Job, connection: Redis) -> Any",
 }
