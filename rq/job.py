@@ -1719,7 +1719,7 @@ class SuccessCallbackFunc(Protocol):
 @runtime_checkable
 class FailureCallbackFunc(Protocol):
     def __call__(
-        self, job: Job, connection: Redis, type: type[BaseException], value: BaseException, traceback: Any
+        self, job: Job, connection: Redis, type: Type[BaseException], value: BaseException, traceback: Any
     ) -> Any:
         """
         Callback function to be called when a job fails during execution.
