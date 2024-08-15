@@ -1400,10 +1400,7 @@ class Worker(BaseWorker):
 
                     time_taken = job.ended_at - job.started_at
                     self.log.info(
-                        'Successfully completed %s job in %ss on worker %s',
-                        job.description,
-                        time_taken,
-                        self.name
+                        'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
                     )
 
                     self.log.debug('Finished handling successful execution of job %s', job.id)
