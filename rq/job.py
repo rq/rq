@@ -6,34 +6,13 @@ import warnings
 import zlib
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Protocol,
-    Tuple,
-    Type,
-    Union,
-    runtime_checkable,
-)
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 from redis import Redis, WatchError
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
-
-if TYPE_CHECKING:
-    from redis import Redis
-    from redis.client import Pipeline
-
-    from .executions import Execution, ExecutionRegistry
-    from .queue import Queue
-    from .results import Result
 
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .local import LocalStack
@@ -51,6 +30,20 @@ from .utils import (
     str_to_date,
     utcformat,
 )
+
+try:
+    from typing import Protocol
+except ImportError:
+    from typing_extensions import Protocol
+
+if TYPE_CHECKING:
+    from redis import Redis
+    from redis.client import Pipeline
+
+    from .executions import Execution, ExecutionRegistry
+    from .queue import Queue
+    from .results import Result
+
 
 logger = logging.getLogger("rq.job")
 
