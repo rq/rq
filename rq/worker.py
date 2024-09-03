@@ -158,6 +158,7 @@ class BaseWorker:
         if not connection:
             connection = get_connection_from_queues(queues)
 
+        assert connection
         connection = self._set_connection(connection)
         self.connection = connection
         self.redis_server_version = None
@@ -209,7 +210,7 @@ class BaseWorker:
         self.scheduler: Optional[RQScheduler] = None
         self.pubsub: Optional['PubSub'] = None
         self.pubsub_thread = None
-        self._dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT
+        self._dequeue_strategy: Optional[DequeueStrategy] = DequeueStrategy.DEFAULT
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
@@ -306,6 +307,7 @@ class BaseWorker:
         if queue:
             connection = queue.connection
 
+        assert connection
         worker_keys = worker_registration.get_keys(queue=queue, connection=connection)
         workers = [
             cls.find_by_key(
@@ -981,7 +983,7 @@ class BaseWorker:
 
     def dequeue_job_and_maintain_ttl(
         self, timeout: Optional[int], max_idle_time: Optional[int] = None
-    ) -> Tuple['Job', 'Queue']:
+    ) -> Optional[Tuple['Job', 'Queue']]:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
@@ -1039,8 +1041,6 @@ class BaseWorker:
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
                 connection_wait_time = min(connection_wait_time, self.max_connection_wait_time)
-            else:
-                connection_wait_time = 1.0
 
         self.heartbeat()
         return result
@@ -1499,6 +1499,8 @@ class Worker(BaseWorker):
 
                     pipeline.execute()
 
+                    assert job.started_at
+                    assert job.ended_at
                     time_taken = job.ended_at - job.started_at
                     self.log.info(
                         'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name

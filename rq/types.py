@@ -11,7 +11,7 @@ or a direct callable (function/method).
 """
 
 
-JobDependencyType = TypeVar('JobDependencyType', 'Dependency', 'Job', str, List[Union['Dependency', 'Job']])
+JobDependencyType = TypeVar('JobDependencyType', 'Dependency', 'Job', str, List[Union['Dependency', 'Job', str]])
 """Custom type definition for a job dependencies.
 A simple helper definition for the `depends_on` parameter when creating a job.
 """

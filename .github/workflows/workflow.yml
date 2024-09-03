@@ -67,3 +67,24 @@ jobs:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
+
+  mypy:
+    runs-on: ubuntu-latest
+    name: Type check
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v5.1.1
+      with:
+        python-version: "3.7"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install hatch
+
+    - name: Run Test
+      run: |
+        hatch run test:typing

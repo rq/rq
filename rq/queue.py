@@ -6,7 +6,7 @@ import warnings
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast
 
 from redis import WatchError
 
@@ -143,7 +143,7 @@ class Queue:
     def __init__(
         self,
         name: str = 'default',
-        connection: 'Redis' = None,
+        connection: Optional['Redis'] = None,
         default_timeout: Optional[int] = None,
         is_async: bool = True,
         job_class: Optional[Union[str, Type['Job']]] = None,
@@ -182,9 +182,10 @@ class Queue:
         # override class attribute job_class if one was passed
         if job_class is not None:
             if isinstance(job_class, str):
-                job_class = import_attribute(job_class)
-            self.job_class = job_class
-        self.death_penalty_class = death_penalty_class  # type: ignore
+                self.job_class = import_attribute(job_class)  # type: ignore[assignment]
+            else:
+                self.job_class = job_class
+        self.death_penalty_class = death_penalty_class  # type: ignore[assignment]
 
         self.serializer = resolve_serializer(serializer)
         self.redis_server_version: Optional[Tuple[int, int, int]] = None
@@ -229,7 +230,7 @@ class Queue:
         return 'rq:clean_registries:%s' % self.name
 
     @property
-    def scheduler_pid(self) -> int:
+    def scheduler_pid(self) -> Optional[int]:
         from rq.scheduler import RQScheduler
 
         pid = self.connection.get(RQScheduler.get_locking_key(self.name))
@@ -330,6 +331,8 @@ class Queue:
         else:
             if job.origin == self.name:
                 return job
+
+        return None
 
     def get_job_position(self, job_or_id: Union['Job', str]) -> Optional[int]:
         """Returns the position of a job within the queue
@@ -787,7 +790,7 @@ class Queue:
         )
 
     def enqueue_many(
-        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: str = None
+        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: Optional[str] = None
     ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
@@ -1165,10 +1168,10 @@ class Queue:
                 pipeline.execute()
 
             if job.failure_callback:
-                job.failure_callback(job, self.connection, *sys.exc_info())  # type: ignore
+                job.failure_callback(job, self.connection, *sys.exc_info())
         else:
             if job.success_callback:
-                job.success_callback(job, self.connection, job.return_value())  # type: ignore
+                job.success_callback(job, self.connection, job.return_value())
 
         return job
 
@@ -1198,7 +1201,7 @@ class Queue:
                 if pipeline is None:
                     pipe.watch(dependents_key)
 
-                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}
+                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # type: ignore[attr-defined]
 
                 # There's no dependents
                 if not dependent_job_ids:
@@ -1295,6 +1298,7 @@ class Queue:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queues = ', '.join(map(str, [green(str(queue)) for queue in queue_keys]))
             logger.debug(f"Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}")
+            assert connection
             result = connection.blpop(queue_keys, timeout)
             if result is None:
                 logger.debug(f"BLPOP timeout, no jobs found on queues {colored_queues}")
@@ -1303,6 +1307,7 @@ class Queue:
             return queue_key, job_id
         else:  # non-blocking variant
             for queue_key in queue_keys:
+                assert connection
                 blob = connection.lpop(queue_key)
                 if blob is not None:
                     return queue_key, blob
@@ -1319,13 +1324,13 @@ class Queue:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queue = green(queue_key)
             logger.debug(f"Starting BLMOVE operation for {colored_queue} with timeout of {timeout}")
-            result = connection.blmove(queue_key, intermediate_queue.key, timeout)
+            result: Optional[Any] = connection.blmove(queue_key, intermediate_queue.key, timeout)
             if result is None:
                 logger.debug(f"BLMOVE timeout, no jobs found on {colored_queue}")
                 raise DequeueTimeout(timeout, queue_key)
             return queue_key, result
         else:  # non-blocking variant
-            result = connection.lmove(queue_key, intermediate_queue.key)
+            result = cast(Optional[Any], connection.lmove(queue_key, intermediate_queue.key))
             if result is not None:
                 return queue_key, result
             return None
@@ -1364,7 +1369,7 @@ class Queue:
         Returns:
             job, queue (Tuple[Job, Queue]): A tuple of Job, Queue
         """
-        job_cls: Type[Job] = backend_class(cls, 'job_class', override=job_class)  # type: ignore
+        job_cls: Type[Job] = backend_class(cls, 'job_class', override=job_class)
 
         while True:
             queue_keys = [q.key for q in queues]
@@ -1391,11 +1396,10 @@ class Queue:
             except Exception as e:
                 # Attach queue information on the exception for improved error
                 # reporting
-                e.job_id = job_id
-                e.queue = queue
+                e.job_id = job_id  # type: ignore[attr-defined]
+                e.queue = queue  # type: ignore[attr-defined]
                 raise e
             return job, queue
-        return None, None
 
     # Total ordering definition (the rest of the required Python methods are
     # auto-generated by the @total_ordering decorator)

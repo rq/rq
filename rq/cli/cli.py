@@ -460,7 +460,7 @@ def worker_pool(
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     if serializer:
-        serializer_class: Type[DefaultSerializer] = import_attribute(serializer)
+        serializer_class: Type[DefaultSerializer] = import_attribute(serializer)  # type: ignore[assignment]
     else:
         serializer_class = DefaultSerializer
 
@@ -479,7 +479,7 @@ def worker_pool(
         logging_level = None
 
     pool = WorkerPool(
-        queue_names,
+        queue_names,  # type: ignore[arg-type]
         connection=cli_config.connection,
         num_workers=num_workers,
         serializer=serializer_class,

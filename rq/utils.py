@@ -12,7 +12,7 @@ import importlib
 import logging
 import numbers
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -104,7 +104,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
     if module is None:
         # maybe it's a builtin
         try:
-            return __builtins__[name]
+            return __builtins__[name]  # type: ignore[index]
         except KeyError:
             raise ValueError('Invalid attribute name: %s' % name)
 
@@ -124,7 +124,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
-def now():
+def now() -> datetime.datetime:
     """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)
 
@@ -226,7 +226,7 @@ def current_timestamp() -> int:
     return calendar.timegm(datetime.datetime.now(datetime.timezone.utc).utctimetuple())
 
 
-def backend_class(holder, default_name, override=None) -> TypeVar('T'):
+def backend_class(holder, default_name, override=None) -> Type:
     """Get a backend class using its default attribute name or an override
 
     Args:
@@ -240,14 +240,14 @@ def backend_class(holder, default_name, override=None) -> TypeVar('T'):
     if override is None:
         return getattr(holder, default_name)
     elif isinstance(override, str):
-        return import_attribute(override)
+        return import_attribute(override)  # type: ignore[return-value]
     else:
         return override
 
 
-def str_to_date(date_str: Optional[str]) -> Union[dt.datetime, Any]:
+def str_to_date(date_str: Optional[bytes]) -> Optional[dt.datetime]:
     if not date_str:
-        return
+        return None
     else:
         return utcparse(date_str.decode())
 
@@ -258,6 +258,7 @@ def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
         try:
             timeout = int(timeout)
         except ValueError:
+            assert isinstance(timeout, str)
             digit, unit = timeout[:-1], (timeout[-1:]).lower()
             unit_second = {'d': 86400, 'h': 3600, 'm': 60, 's': 1}
             try:
