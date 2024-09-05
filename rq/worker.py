@@ -1271,9 +1271,6 @@ class DynamicWorker(Worker):
             queues = Queue.all()
             if len(queues) == 0:
                 queues = Queue()
-            self.log.info('-------------------------------')
-            self.log.info(queues)
-            self.log.info('-------------------------------')
 
         self.queues = queues
         self._ordered_queues = self.queues[:]
