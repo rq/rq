@@ -1250,7 +1250,6 @@ class RoundRobinWorker(Worker):
     Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
     """
     def reorder_queues(self, reference_queue):
-        self.log.info(f"Working on {reference_queue}")
         pos = self._ordered_queues.index(reference_queue)
         self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]
 
@@ -1262,3 +1261,22 @@ class RandomWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         shuffle(self._ordered_queues)
+
+from rq import Connection, Queue
+class DynamicWorker(Worker):
+    
+    def reorder_queues(self, reference_queue):
+        self.log.info(f"Working on {reference_queue}")
+        with Connection(redis):
+            queues = Queue.all()
+            if len(queues) == 0:
+                queues = Queue()
+            self.log.info('-------------------------------')
+            self.log.info(queues)
+            self.log.info('-------------------------------')
+
+        self.queues = queues
+        self._ordered_queues = self.queues[:]
+        
+        pos = self._ordered_queues.index(reference_queue)
+        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]
