@@ -1261,18 +1261,3 @@ class RandomWorker(Worker):
 
     def reorder_queues(self, reference_queue):
         shuffle(self._ordered_queues)
-
-from rq import Connection, Queue
-class DynamicWorker(Worker):
-    
-    def reorder_queues(self, reference_queue):
-        with Connection(self.connection):
-            queues = Queue.all()
-            if len(queues) == 0:
-                queues = Queue()
-
-        self.queues = queues
-        self._ordered_queues = self.queues[:]
-        
-        pos = self._ordered_queues.index(reference_queue)
-        self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]
