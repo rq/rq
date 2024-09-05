@@ -1250,7 +1250,7 @@ class RoundRobinWorker(Worker):
     Modified version of Worker that dequeues jobs from the queues using a round-robin strategy.
     """
     def reorder_queues(self, reference_queue):
-        print("Working on", reference_queue)
+        self.log.info(f"Working on {reference_queue}")
         pos = self._ordered_queues.index(reference_queue)
         self._ordered_queues = self._ordered_queues[pos + 1:] + self._ordered_queues[:pos + 1]
 
