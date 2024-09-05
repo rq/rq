@@ -1267,7 +1267,7 @@ class DynamicWorker(Worker):
     
     def reorder_queues(self, reference_queue):
         self.log.info(f"Working on {reference_queue}")
-        with Connection(redis):
+        with Connection(self.connection):
             queues = Queue.all()
             if len(queues) == 0:
                 queues = Queue()
