@@ -694,10 +694,11 @@ class TestWorker(RQTestCase):
         self.assertIsNone(w.dequeue_job_and_maintain_ttl(3, max_idle_time=2))
         self.assertLess((now() - right_now).total_seconds(), 4)  # 4 for some buffer
 
-        # idle for 3 seconds because idle_time is less than two rounds of timeout
-        right_now = now()
         w = Worker([q])
         w.worker_ttl = 2
+        right_now = now()
+
+        # idle for 3 seconds because idle_time is less than two rounds of timeout
         w.work(max_idle_time=3)
         self.assertLess((now() - right_now).total_seconds(), 5)  # 5 for some buffer
 
