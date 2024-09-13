@@ -42,7 +42,7 @@ def parse_payload(payload: Dict[Any, Any]) -> Dict[Any, Any]:
     Args:
         payload (dict): Parses the payload dict.
     """
-    return json.loads(payload.get('data').decode())
+    return json.loads(payload['data'].decode())
 
 
 def send_shutdown_command(connection: 'Redis', worker_name: str):

@@ -3,11 +3,16 @@ import logging
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, Union, cast
 
 from rq.serializers import resolve_serializer
 
+from .defaults import DEFAULT_FAILURE_TTL
+from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
+from .job import Job, JobStatus
+from .queue import Queue
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
+from .utils import as_text, backend_class, current_timestamp
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -15,11 +20,6 @@ if TYPE_CHECKING:
 
     from rq.executions import Execution
 
-from .defaults import DEFAULT_FAILURE_TTL
-from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
-from .job import Job, JobStatus
-from .queue import Queue
-from .utils import as_text, backend_class, current_timestamp
 
 logger = logging.getLogger("rq.registry")
 
@@ -34,6 +34,7 @@ class BaseRegistry:
     job_class = Job
     death_penalty_class = UnixSignalDeathPenalty
     key_template = 'rq:registry:{0}'
+    cleanup: Callable[..., Any]
 
     def __init__(
         self,
@@ -50,7 +51,7 @@ class BaseRegistry:
             self.serializer = queue.serializer
         else:
             self.name = name
-            self.connection = connection
+            self.connection = connection  # type: ignore[assignment]
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
@@ -78,7 +79,7 @@ class BaseRegistry:
         job_id = item
         if isinstance(item, self.job_class):
             job_id = item.id
-        return self.connection.zscore(self.key, job_id) is not None
+        return self.connection.zscore(self.key, cast(str, job_id)) is not None
 
     @property
     def count(self) -> int:
@@ -106,11 +107,11 @@ class BaseRegistry:
         if score == -1:
             score = '+inf'
         if pipeline is not None:
-            return pipeline.zadd(self.key, {job.id: score}, xx=xx)
+            return cast(int, pipeline.zadd(self.key, {job.id: score}, xx=xx))
 
         return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
-    def remove(self, job: 'Job', pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
+    def remove(self, job: Union['Job', str], pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`
 
         Args:
@@ -176,7 +177,7 @@ class BaseRegistry:
             job (Job): The Job to get the expiration
         """
         score = self.connection.zscore(self.key, job.id)
-        return datetime.utcfromtimestamp(score)
+        return datetime.utcfromtimestamp(score)  # type: ignore[arg-type]
 
     def requeue(self, job_or_id: Union['Job', str], at_front: bool = False) -> 'Job':
         """Requeues the job with the given job ID.
@@ -225,7 +226,7 @@ class StartedJobRegistry(BaseRegistry):
 
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: List = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
         """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -361,7 +362,7 @@ class FailedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(
+    def add(  # type: ignore[override]
         self,
         job: 'Job',
         ttl=None,
@@ -478,7 +479,7 @@ class ScheduledJobRegistry(BaseRegistry):
             pipeline (Optional[Pipeline], optional): The Redis pipeline. Defaults to None.
         """
         connection = pipeline if pipeline is not None else self.connection
-        score = timestamp if timestamp is not None else current_timestamp()
+        score: Any = timestamp if timestamp is not None else current_timestamp()
         return connection.zremrangebyscore(self.key, 0, score)
 
     def get_jobs_to_schedule(self, timestamp: Optional[datetime] = None, chunk_size: int = 1000) -> List[str]:
@@ -491,7 +492,7 @@ class ScheduledJobRegistry(BaseRegistry):
         Returns:
             jobs (List[str]): A list of Job ids
         """
-        score = timestamp if timestamp is not None else current_timestamp()
+        score: Any = timestamp if timestamp is not None else current_timestamp()
         jobs_to_schedule = self.connection.zrangebyscore(self.key, 0, score, start=0, num=chunk_size)
         return [as_text(job_id) for job_id in jobs_to_schedule]
 
@@ -522,7 +523,7 @@ class ScheduledJobRegistry(BaseRegistry):
 class CanceledJobRegistry(BaseRegistry):
     key_template = 'rq:canceled:{0}'
 
-    def get_expired_job_ids(self, timestamp: Optional[datetime] = None):
+    def get_expired_job_ids(self, timestamp: Optional[float] = None):
         raise NotImplementedError
 
     def cleanup(self):
@@ -532,7 +533,7 @@ class CanceledJobRegistry(BaseRegistry):
         pass
 
 
-def clean_registries(queue: 'Queue', exception_handlers: list = None):
+def clean_registries(queue: 'Queue', exception_handlers: Optional[list] = None):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry, and DeferredJobRegistry of a queue.
 
     Args:

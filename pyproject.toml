@@ -80,20 +80,37 @@ include = [
 dependencies = [
   "black",
   "coverage",
+  "mypy",
   "packaging",
   "psutil",
   "pytest",
   "pytest-cov",
   "ruff",
   "tox",
+  "types-greenlet",
+  "types-redis",
 ]
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
+typing = "mypy --enable-incomplete-feature=Unpack rq"
 
 [tool.black]
 line-length = 120
 target-version = ["py38"]
 skip-string-normalization = true
+
+[tool.mypy]
+allow_redefinition = true
+pretty = true
+show_error_codes = true
+show_error_context = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "setproctitle.*"
+ignore_missing_imports = true
 
 [tool.ruff]
 # Set what ruff should check for.
