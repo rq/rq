@@ -19,7 +19,7 @@ import redis.exceptions
 from redis import Redis
 
 from rq import Queue, SimpleWorker, Worker
-from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
+from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
@@ -148,10 +148,21 @@ class TestWorker(RQTestCase):
     def test_worker_ttl(self):
         """Worker ttl."""
         w = Worker([], connection=self.connection)
+
+        # worker_ttl defaults to DEFAULT_WORKER_TTL
+        self.assertEqual(w.worker_ttl, DEFAULT_WORKER_TTL)
         w.register_birth()
         [worker_key] = self.connection.smembers(Worker.redis_workers_keys)
         self.assertIsNotNone(self.connection.ttl(worker_key))
         w.register_death()
+
+        # worker_ttl can be set to a custom value through default_worker_ttl
+        w = Worker([], connection=self.connection, default_worker_ttl=10)
+        self.assertEqual(w.worker_ttl, 10)
+
+        # If `worker_ttl` is specified, it will override the deprecated `default_worker_ttl`
+        w = Worker([], connection=self.connection, worker_ttl=20)
+        self.assertEqual(w.worker_ttl, 20)
 
     def test_work_via_string_argument(self):
         """Worker processes work fed via string arguments."""
