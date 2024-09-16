@@ -107,6 +107,15 @@ If you want the cutting edge version (that may well be broken), use this:
     pip install git+https://github.com/rq/rq.git@master#egg=rq
 
 
+## Docs
+
+To build and run the docs, install [jekyll](https://jekyllrb.com/docs/) and run:
+
+```shell
+cd docs
+jekyll serve
+```
+
 ## Related Projects
 
 If you use RQ, Check out these below repos which might be useful in your rq based project.
