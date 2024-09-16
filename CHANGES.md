@@ -2,7 +2,7 @@
 
 New Features:
 * Multiple job executions: a job can now have multiple executions running simultaneously. This will enable RQ to support long running scheduled jobs. Thanks @selwin!
-* `Worker(default_worker_ttl=10)` is deprecated in favor of `Worker(worker_ttl=10)`.
+* `Worker(default_worker_ttl=10)` is deprecated in favor of `Worker(worker_ttl=10)`. Thanks @stv8!
 
 Breaking Changes:
 * Dropped support for Redis server < 4
