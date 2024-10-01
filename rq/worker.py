@@ -1384,8 +1384,8 @@ class Worker(BaseWorker):
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
             ttl = int(self.get_heartbeat_ttl(job))
-            # Also need to update execution's heartbeat
 
+            # Also need to update execution's heartbeat
             self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
             # After transition to job execution is complete, `job.heartbeat()` is no longer needed
             job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)

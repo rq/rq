@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -32,7 +33,7 @@ class Execution:
     def key(self) -> str:
         return f'rq:execution:{self.composite_key}'
 
-    @property
+    @cached_property
     def job(self) -> Job:
         return Job.fetch(id=self.job_id, connection=self.connection)
 
@@ -97,7 +98,7 @@ class Execution:
         self.last_heartbeat = now()
         pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
         pipeline.expire(self.key, ttl)
-        started_job_registry.add(self.job, ttl, pipeline=pipeline, xx=True)
+        started_job_registry.add_execution(self, ttl=ttl, pipeline=pipeline, xx=True)
         ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(execution=self, ttl=ttl, pipeline=pipeline)
 
 
@@ -130,7 +131,6 @@ class ExecutionRegistry(BaseRegistry):
             execution (Execution): The Execution to add
             ttl (int, optional): The time to live. Defaults to 0.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
-            xx (bool, optional): .... Defaults to False.
 
         Returns:
             result (int): The ZADD command result
