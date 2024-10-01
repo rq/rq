@@ -170,3 +170,18 @@ class TestRegistry(RQTestCase):
         # When job is done, execution should be removed from started job registry
         self.assertNotIn(execution.composite_key, job.started_job_registry.get_job_ids())
         self.assertEqual(job.get_status(), 'finished')
+
+    def test_fetch_execution(self):
+        """Ensure Execution.fetch() fetches the correct execution"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue], connection=self.connection)
+        execution = worker.prepare_execution(job=job)
+
+        fetched_execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
+        self.assertEqual(execution, fetched_execution)
+
+        self.connection.delete(execution.key)
+        # Execution.fetch raises ValueError if execution is not found
+        with self.assertRaises(ValueError):
+            Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
