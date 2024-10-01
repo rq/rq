@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -33,9 +32,12 @@ class Execution:
     def key(self) -> str:
         return f'rq:execution:{self.composite_key}'
 
-    @cached_property
+    @property
     def job(self) -> Job:
-        return Job.fetch(id=self.job_id, connection=self.connection)
+        if self._job:
+            return self._job
+        self._job = Job.fetch(id=self.job_id, connection=self.connection)
+        return self._job
 
     @property
     def composite_key(self):
