@@ -22,6 +22,7 @@ class Execution:
         right_now = now()
         self.created_at = right_now
         self.last_heartbeat = right_now
+        self._job: Optional[Job] = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):
