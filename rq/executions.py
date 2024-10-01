@@ -34,7 +34,7 @@ class Execution:
 
     @property
     def job(self) -> Job:
-        return Job(id=self.job_id, connection=self.connection)
+        return Job.fetch(id=self.job_id, connection=self.connection)
 
     @property
     def composite_key(self):
