@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -22,6 +22,7 @@ class Execution:
         right_now = now()
         self.created_at = right_now
         self.last_heartbeat = right_now
+        self._job: Optional[Job] = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):
@@ -34,7 +35,10 @@ class Execution:
 
     @property
     def job(self) -> Job:
-        return Job(id=self.job_id, connection=self.connection)
+        if self._job:
+            return self._job
+        self._job = Job.fetch(id=self.job_id, connection=self.connection)
+        return self._job
 
     @property
     def composite_key(self):
@@ -52,8 +56,8 @@ class Execution:
         data = self.connection.hgetall(self.key)
         if not data:
             raise ValueError(f'Execution {self.id} not found in Redis')
-        self.created_at = datetime.fromtimestamp(float(data[b'created_at']))
-        self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']))
+        self.created_at = datetime.fromtimestamp(float(data[b'created_at']), tz=timezone.utc)
+        self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']), tz=timezone.utc)
 
     @classmethod
     def from_composite_key(cls, composite_key: str, connection: Redis) -> 'Execution':
@@ -97,7 +101,7 @@ class Execution:
         self.last_heartbeat = now()
         pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
         pipeline.expire(self.key, ttl)
-        started_job_registry.add(self.job, ttl, pipeline=pipeline, xx=True)
+        started_job_registry.add_execution(self, ttl=ttl, pipeline=pipeline, xx=True)
         ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(execution=self, ttl=ttl, pipeline=pipeline)
 
 
@@ -130,7 +134,6 @@ class ExecutionRegistry(BaseRegistry):
             execution (Execution): The Execution to add
             ttl (int, optional): The time to live. Defaults to 0.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
-            xx (bool, optional): .... Defaults to False.
 
         Returns:
             result (int): The ZADD command result
