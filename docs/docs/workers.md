@@ -79,7 +79,7 @@ _New in version 1.14.0._
 * `--maintenance-interval`: defaults to 600 seconds. Runs maintenance tasks every X seconds.
 
 
-## Inside the worker
+## Inside the Worker
 
 ### The Worker Lifecycle
 
@@ -348,8 +348,6 @@ To implement this strategy use `-ds round_robin` argument.
 
 To dequeue jobs from the different queues randomly,  use `-ds random` argument.
 
-Deprecation Warning: Those strategies were formely being implemented by using the custom classes `rq.worker.RoundRobinWorker`
-and `rq.worker.RandomWorker`. As the `--dequeue-strategy` argument allows for this option to be used with any worker, those worker classes are deprecated and will be removed from future versions. 
 
 ## Custom Job and Queue Classes
 
