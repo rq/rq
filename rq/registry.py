@@ -153,7 +153,7 @@ class BaseRegistry:
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
         return [as_text(job_id) for job_id in expired_jobs]
 
-    def get_job_ids(self, start: int = 0, end: int = -1):
+    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False):
         """Returns list of all job ids.
 
         Args:
@@ -164,7 +164,7 @@ class BaseRegistry:
             _type_: _description_
         """
         self.cleanup()
-        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
+        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end, desc=desc)]
 
     def get_queue(self):
         """Returns Queue object associated with this registry."""

@@ -612,7 +612,7 @@ class BaseWorker:
 
     def cleanup_execution(self, job: 'Job', pipeline: 'Pipeline'):
         """Cleans up the execution of a job.
-        It will remove the job from the `StartedJobRegistry` and deleting the Execution object.
+        It will remove the job from the `StartedJobRegistry` and delete the Execution object.
         """
         started_job_registry = StartedJobRegistry(
             job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
@@ -1548,9 +1548,9 @@ class Worker(BaseWorker):
             job.started_at = now()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
-                self.log.debug('Performing Job...')
+                self.log.debug('Performing Job %s ...', job.id)
                 rv = job.perform()
-                self.log.debug('Finished performing Job ID %s', job.id)
+                self.log.debug('Finished performing Job %s', job.id)
 
             self.handle_execution_ended(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
