@@ -35,6 +35,20 @@ class TestCommands(RQTestCase):
         worker.work()
         p.join(1)
 
+    def test_pubsub_thread_survives_connection_error(self):
+        """Ensure that the"""
+        connection = self.connection
+        worker = Worker('foo', connection=connection)
+        worker.subscribe()
+
+        assert worker.pubsub_thread.is_alive()
+
+        for client in connection.client_list():
+            connection.client_kill(client["addr"])
+
+        time.sleep(0.0)  # Allow other threads to run
+        assert worker.pubsub_thread.is_alive()
+
     def test_kill_horse_command(self):
         """Ensure that shutdown command works properly."""
         connection = self.connection
