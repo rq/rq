@@ -112,6 +112,20 @@ class TestUtils(RQTestCase):
 
         self.assertEqual(get_version(DummyRedis()), (3, 0, 7))
 
+        # Parses 2 digit version numbers correctly (Seen in AWS ElastiCache Redis)
+        class DummyRedis(Redis):
+            def info(*args):
+                return {'redis_version': '7.1'}
+
+        self.assertEqual(get_version(DummyRedis()), (7, 1, 0))
+
+        # Parses 2 digit float version numbers correctly (Seen in AWS ElastiCache Redis)
+        class DummyRedis(Redis):
+            def info(*args):
+                return {'redis_version': 7.1}
+
+        self.assertEqual(get_version(DummyRedis()), (7, 1, 0))
+
     def test_get_redis_version_gets_cached(self):
         """Ensure get_version works properly"""
         # Parses 3 digit version numbers correctly
