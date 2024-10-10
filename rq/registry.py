@@ -83,12 +83,22 @@ class BaseRegistry:
 
     @property
     def count(self) -> int:
-        """Returns the number of jobs in this registry
+        """Returns the number of jobs in this registry and runs cleanup
 
         Returns:
             int: _description_
         """
         self.cleanup()
+        return self.connection.zcard(self.key)
+
+    def get_job_count(self) -> int:
+        """Returns the number of jobs in this registry without a cleanup.
+
+        Note, since no clean up was run, the returned number maybe inaccurate.
+
+        Returns:
+            int: _description_
+        """
         return self.connection.zcard(self.key)
 
     def add(self, job: 'Job', ttl=0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
@@ -153,7 +163,7 @@ class BaseRegistry:
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
         return [as_text(job_id) for job_id in expired_jobs]
 
-    def get_job_ids(self, start: int = 0, end: int = -1):
+    def get_job_ids(self, start: int = 0, end: int = -1, cleanup: bool = True):
         """Returns list of all job ids.
 
         Args:
@@ -163,7 +173,8 @@ class BaseRegistry:
         Returns:
             _type_: _description_
         """
-        self.cleanup()
+        if cleanup:
+            self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
 
     def get_queue(self):
