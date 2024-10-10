@@ -131,9 +131,18 @@ class TestRegistry(RQTestCase):
     def test_get_job_ids(self):
         """Getting job ids from StartedJobRegistry."""
         timestamp = current_timestamp()
+        self.connection.zadd(self.registry.key, {'will-be-cleaned-up': 1})
         self.connection.zadd(self.registry.key, {'foo': timestamp + 10})
         self.connection.zadd(self.registry.key, {'bar': timestamp + 20})
         self.assertEqual(self.registry.get_job_ids(), ['foo', 'bar'])
+
+    def test_get_job_ids_does_not_cleanup(self):
+        """Getting job ids from StartedJobRegistry without a cleanup."""
+        timestamp = current_timestamp()
+        self.connection.zadd(self.registry.key, {'will-be-returned-despite-outdated': 1})
+        self.connection.zadd(self.registry.key, {'foo': timestamp + 10})
+        self.connection.zadd(self.registry.key, {'bar': timestamp + 20})
+        self.assertEqual(self.registry.get_job_ids(cleanup=False), ['will-be-returned-despite-outdated', 'foo', 'bar'])
 
     def test_get_expired_job_ids(self):
         """Getting expired job ids form StartedJobRegistry."""
@@ -242,15 +251,28 @@ class TestRegistry(RQTestCase):
         pipeline.execute()
         self.assertNotIn(execution.composite_key, registry.get_job_ids())
 
-    def test_get_job_count(self):
+    def test_count(self):
         """StartedJobRegistry returns the right number of job count."""
         timestamp = current_timestamp() + 10
+        self.connection.zadd(self.registry.key, {'will-be-cleaned-up': 1})
         self.connection.zadd(self.registry.key, {'foo': timestamp})
         self.connection.zadd(self.registry.key, {'bar': timestamp})
         self.assertEqual(self.registry.count, 2)
         self.assertEqual(len(self.registry), 2)
 
-        # Make sure
+    def test_get_job_count(self):
+        """Ensure cleanup is not called and does not affect the reported number of jobs.
+
+        Note, the original motivation to stop calling cleanup was to make the count operation O(1) to allow usage of
+        monitoring tools and avoid side effects of failure callbacks that cleanup triggers.
+        """
+        timestamp = current_timestamp() + 10
+        self.connection.zadd(self.registry.key, {'will-be-counted-despite-outdated': 1})
+        self.connection.zadd(self.registry.key, {'foo': timestamp})
+        self.connection.zadd(self.registry.key, {'bar': timestamp})
+        with mock.patch.object(self.registry, 'cleanup') as mock_cleanup:
+            self.assertEqual(self.registry.get_job_count(cleanup=False), 3)
+        mock_cleanup.assert_not_called()
 
     def test_clean_registries(self):
         """clean_registries() cleans Started and Finished job registries."""
