@@ -159,6 +159,7 @@ class BaseRegistry:
         Args:
             start (int, optional): _description_. Defaults to 0.
             end (int, optional): _description_. Defaults to -1.
+            end (bool, optional): _description_. Defaults to False.
 
         Returns:
             _type_: _description_
@@ -207,7 +208,7 @@ class BaseRegistry:
             queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
-            job._exc_info = ''
+            job._exc_info = ''  # TODO: this should be removed
             job.save()
             job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
