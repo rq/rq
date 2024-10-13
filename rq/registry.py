@@ -159,7 +159,7 @@ class BaseRegistry:
         Args:
             start (int, optional): _description_. Defaults to 0.
             end (int, optional): _description_. Defaults to -1.
-            end (bool, optional): _description_. Defaults to False.
+            desc (bool, optional): _description_. Defaults to False.
 
         Returns:
             _type_: _description_
