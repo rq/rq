@@ -153,18 +153,19 @@ class BaseRegistry:
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
         return [as_text(job_id) for job_id in expired_jobs]
 
-    def get_job_ids(self, start: int = 0, end: int = -1):
+    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False):
         """Returns list of all job ids.
 
         Args:
             start (int, optional): _description_. Defaults to 0.
             end (int, optional): _description_. Defaults to -1.
+            end (bool, optional): _description_. Defaults to False.
 
         Returns:
             _type_: _description_
         """
         self.cleanup()
-        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
+        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end, desc=desc)]
 
     def get_queue(self):
         """Returns Queue object associated with this registry."""
@@ -207,7 +208,7 @@ class BaseRegistry:
             queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
-            job._exc_info = ''
+            job._exc_info = ''  # TODO: this should be removed
             job.save()
             job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
