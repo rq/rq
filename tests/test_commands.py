@@ -1,5 +1,6 @@
 import time
 from multiprocessing import Process
+from unittest import mock
 
 from redis import Redis
 
@@ -9,7 +10,7 @@ from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.serializers import JSONSerializer
 from rq.worker import WorkerStatus
 from tests import RQTestCase
-from tests.fixtures import _send_kill_horse_command, _send_shutdown_command, long_running_job
+from tests.fixtures import _send_kill_horse_command, _send_shutdown_command, long_running_job, raise_exc_mock
 
 
 def start_work(queue_name, worker_name, connection_kwargs):
@@ -36,7 +37,7 @@ class TestCommands(RQTestCase):
         p.join(1)
 
     def test_pubsub_thread_survives_connection_error(self):
-        """Ensure that the"""
+        """Ensure that the pubsub thread is still alive after its Redis connection is killed"""
         connection = self.connection
         worker = Worker('foo', connection=connection)
         worker.subscribe()
@@ -48,6 +49,17 @@ class TestCommands(RQTestCase):
 
         time.sleep(0.0)  # Allow other threads to run
         assert worker.pubsub_thread.is_alive()
+
+    def test_pubsub_thread_exits_other_error(self):
+        """Ensure that the pubsub thread  exits on other than redis.exceptions.ConnectionError"""
+        connection = self.connection
+        worker = Worker('foo', connection=connection)
+
+        with mock.patch("redis.client.PubSub.get_message", new_callable=raise_exc_mock):
+            worker.subscribe()
+
+        worker.pubsub_thread.join()
+        assert not worker.pubsub_thread.is_alive()
 
     def test_kill_horse_command(self):
         """Ensure that shutdown command works properly."""

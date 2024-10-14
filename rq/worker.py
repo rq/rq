@@ -964,9 +964,9 @@ class BaseWorker:
                 exc,
                 2,
             )
-            print("Connection Error, waiting 2 seconds before retry")
             time.sleep(2.0)
         else:
+            self.log.warning("Pubsub thread exitin on %s" % exc)
             raise
 
     def subscribe(self):

@@ -47,7 +47,7 @@ def do_nothing():
     pass
 
 
-def raise_exc():
+def raise_exc(*args, **kwargs):
     raise Exception('raise_exc error')
 
 
