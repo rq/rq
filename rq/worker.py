@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     except ImportError:
         pass
     from redis import Redis
-    from redis.client import Pipeline, PubSub
+    from redis.client import Pipeline, PubSub, PubSubWorkerThread
 
 try:
     from signal import SIGKILL
@@ -950,12 +950,33 @@ class BaseWorker:
         self.clean_registries()
         Group.clean_registries(connection=self.connection)
 
+    def _pubsub_exception_handler(self, exc: Exception, pubsub: "PubSub", pubsub_thread: "PubSubWorkerThread") -> None:
+        """
+        This exception handler allows the pubsub_thread to continue & retry to
+        connect after a connection problem the same way the main worker loop
+        indefinitely retries.
+        redis-py internal mechanism will restore the channels subscriptions
+        once the connection is re-established.
+        """
+        if isinstance(exc, (redis.exceptions.ConnectionError)):
+            self.log.error(
+                "Could not connect to Redis instance: %s Retrying in %d seconds...",
+                exc,
+                2,
+            )
+            time.sleep(2.0)
+        else:
+            self.log.warning("Pubsub thread exitin on %s" % exc)
+            raise
+
     def subscribe(self):
         """Subscribe to this worker's channel"""
         self.log.info('Subscribing to channel %s', self.pubsub_channel_name)
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
-        self.pubsub_thread = self.pubsub.run_in_thread(sleep_time=0.2, daemon=True)
+        self.pubsub_thread = self.pubsub.run_in_thread(
+            sleep_time=0.2, daemon=True, exception_handler=self._pubsub_exception_handler
+        )
 
     def get_heartbeat_ttl(self, job: 'Job') -> int:
         """Get's the TTL for the next heartbeat.
