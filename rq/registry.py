@@ -83,12 +83,24 @@ class BaseRegistry:
 
     @property
     def count(self) -> int:
-        """Returns the number of jobs in this registry
+        """Returns the number of jobs in this registry after running cleanup
 
         Returns:
             int: _description_
         """
-        self.cleanup()
+        return self.get_job_count(cleanup=True)
+
+    def get_job_count(self, cleanup=True) -> int:
+        """Returns the number of jobs in this registry after optional cleanup.
+
+        Args:
+            cleanup (bool, optional): _description_. Defaults to True.
+
+        Returns:
+            int: _description_
+        """
+        if cleanup:
+            self.cleanup()
         return self.connection.zcard(self.key)
 
     def add(self, job: 'Job', ttl=0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
@@ -153,18 +165,20 @@ class BaseRegistry:
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
         return [as_text(job_id) for job_id in expired_jobs]
 
-    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False):
+    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True) -> List[str]:
         """Returns list of all job ids.
 
         Args:
             start (int, optional): _description_. Defaults to 0.
             end (int, optional): _description_. Defaults to -1.
             desc (bool, optional): _description_. Defaults to False.
+            cleanup (bool, optional): _description_. Defaults to True.
 
         Returns:
             _type_: _description_
         """
-        self.cleanup()
+        if cleanup:
+            self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end, desc=desc)]
 
     def get_queue(self):
