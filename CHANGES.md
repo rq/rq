@@ -1,8 +1,13 @@
 ### RQ 2.0 (unreleased)
 
 New Features:
-* Multiple job executions: a job can now have multiple executions running simultaneously. This will enable RQ to support long running scheduled jobs. Thanks @selwin!
+* Multiple job executions: a job can now have multiple executions running simultaneously. This will enable future support for long running scheduled jobs. Thanks @selwin!
 * `Worker(default_worker_ttl=10)` is deprecated in favor of `Worker(worker_ttl=10)`. Thanks @stv8!
+* Added a `cleanup` parameter to `registry.get_job_ids()` and `registry.get_job_count()`. Thanks @anton-daneyko-ultramarin!
+* Added support for AWS Elasticache Serverless Redis. Thanks @bobbywatson3!
+* You can now specify TTL for deferred jobs. Thanks @hberntsen!
+* RQ's code base is now typed (mostly). Thanks @terencehonles!
+* Other minor fixes and improvements. Thanks @hongquan, @rbange, @jackkinsella, @terencehonles, @wckao, @sim6!
 
 Breaking Changes:
 * Dropped support for Redis server < 4
@@ -18,7 +23,7 @@ Bug Fixes:
 * Fixes an issue where Redis connection does not expose `name` attribute. Thanks @wckao!
 * `job.get_status()` will now always return `JobStatus` enum. Thanks @indepndnt!
 * Queue key should always be created even if jobs are deferred. Thanks @sim6!
-* Minor fixes and improvements. Thanks @hongquan, @rbange.
+* RQ's pubsub thread will now attempt to reconnect on Redis connection errors. Thanks @fcharlier!
 
 ### RQ 1.16.2 (2024-05-01)
 * Fixed a bug that may cause jobs from intermediate queue to be moved to FailedJobRegistry. Thanks @selwin!
