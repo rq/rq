@@ -10,6 +10,35 @@ jobs.
 
 ## RQ's Job Object
 
+### The Job Lifecycle
+
+The life-cycle of a worker consists of a few phases:
+
+1. _Queued_. When `queue.enqueue(foo)` is called, a `Job` will be created and it's ID
+pushed into the queue. `job.get_status()` will return `queued`.
+2. _Started_. When a worker picks up a job from queue, the job status will be set to `started`.
+In this phase an `Execution` object will be created and it's `composite_key` put in `StartedJobRegistry`.
+3. _Finished_. After an execution has ended, `execution` will be removed from `StartedJobRegistry`.
+A `Result` object that holds the result of the execution will be created. Both the `Job` and `Result` key
+will persist in Redis until the value of `result_ttl` is up. More details [here]( /docs/results/).
+
+
+#### Job Status
+
+The status of a job can be one of the following:
+
+* `queued`: The default status for created jobs, except for those that have dependencies, which will be created as `deferred`. These jobs have been placed in a queue and are ready to be executed.
+* `finished`: The job has finished execution and is available through the finished job registry.
+* `failed`: Jobs that encountered errors during execution or expired before being executed.
+* `started`: The job has started execution. This status includes the job execution support mechanisms, such as setting the worker name and setting up heartbeat information.
+* `deferred`: The job is not ready for execution because its dependencies have not finished successfully yet.
+* `scheduled`: Jobs created to run at a future date or jobs that are retried after a retry interval.
+* `stopped`: The job was stopped because the worker was stopped.
+* `canceled`: The job has been manually canceled and will not be executed, even if it is part of a dependency chain.
+
+These statuses can also be accessed from the job object using boolean properties, such as `job.is_finished`.
+
+
 ### Job Creation
 
 When you enqueue a function, a job will be returned.  You may then access the
@@ -125,20 +154,33 @@ for job in jobs:
     print('Job %s: %s' % (job.id, job.func_name))
 ```
 
-#### Job Status
 
-The status of a job can be one of the following:
+## Job Executions
 
-* `queued`: The default status for created jobs, except for those that have dependencies, which will be created as `deferred`. These jobs have been placed in a queue and are ready to be executed.
-* `finished`: The job has finished execution and is available through the finished job registry.
-* `failed`: Jobs that encountered errors during execution or expired before being executed.
-* `started`: The job has started execution. This status includes the job execution support mechanisms, such as setting the worker name and setting up heartbeat information.
-* `deferred`: The job is not ready for execution because its dependencies have not finished successfully yet.
-* `scheduled`: Jobs created to run at a future date or jobs that are retried after a retry interval.
-* `stopped`: The job was stopped because the worker was stopped.
-* `canceled`: The job has been manually canceled and will not be executed, even if it is part of a dependency chain.
+_New in 2.0_
 
-These statuses can also be accessed from the job object using boolean properties, such as `job.is_finished`.
+When a job is being executed, RQ stores it's execution data in Redis. You can access this data
+via `Execution` objects.
+
+```python
+from redis import Redis
+from rq.job import Job
+
+redis = Redis()
+job = Job.fetch('my_job_id', connection=redis)
+executions = job.get_executions()  # Returns all current executions
+execution = job.get_executions()[0]  # Retrieves a single execution
+print(execution.created_at)  # When did this execution start?
+print(execution.last_heartbeat)  # Worker's last heartbeat
+```
+
+`Execution` objects have a few properties:
+* `id`: ID of an execution.
+* `job`: the `Job` object that owns this execution instance
+* `composite_key`: a combination of `job.id` and `execution.id`, formatted as `<job_id>:<execution_id>`
+* `created_at`: returns a datetime object representing the start of this execution
+* `last_heartbeat`: worker's last heartbeat
+
 
 ## Stopping a Currently Executing Job
 _New in version 1.7.0_
