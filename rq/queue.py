@@ -348,7 +348,7 @@ class Queue:
         Returns:
             _type_: _description_
         """
-        job_id = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
+        job_id = cast(str, job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id)
 
         if self.get_redis_server_version() >= (6, 0, 6):
             try:
@@ -461,7 +461,7 @@ class Queue:
         Returns:
             _type_: _description_
         """
-        job_id: str = job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id
+        job_id = cast(str, job_or_id.id if isinstance(job_or_id, self.job_class) else job_or_id)
 
         if pipeline is not None:
             return pipeline.lrem(self.key, 1, job_id)
