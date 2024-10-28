@@ -75,6 +75,7 @@ def get_redis_from_config(settings, connection_class=Redis):
         'host': settings.get('REDIS_HOST', 'localhost'),
         'port': settings.get('REDIS_PORT', 6379),
         'db': settings.get('REDIS_DB', 0),
+        'username': settings.get('REDIS_USERNAME', None),
         'password': settings.get('REDIS_PASSWORD', None),
         'ssl': ssl,
         'ssl_ca_certs': settings.get('REDIS_SSL_CA_CERTS', None),
