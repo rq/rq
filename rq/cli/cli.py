@@ -7,7 +7,7 @@ import logging.config
 import os
 import sys
 import warnings
-from typing import List, Type
+from typing import TYPE_CHECKING, List, Type, cast
 
 import click
 from redis.exceptions import ConnectionError
@@ -47,6 +47,9 @@ from rq.utils import get_call_string, import_attribute
 from rq.worker import Worker
 from rq.worker_pool import WorkerPool
 from rq.worker_registration import clean_worker_registry
+
+if TYPE_CHECKING:
+    from rq.serializers import Serializer
 
 
 @click.group()
@@ -461,7 +464,7 @@ def worker_pool(
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     if serializer:
-        serializer_class: Type[DefaultSerializer] = import_attribute(serializer)  # type: ignore[assignment]
+        serializer_class = cast(Type['Serializer'], import_attribute(serializer))
     else:
         serializer_class = DefaultSerializer
 

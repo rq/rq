@@ -60,7 +60,7 @@ class WorkerPool:
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
         self.worker_class: Type[BaseWorker] = worker_class
-        self.serializer: Type[DefaultSerializer] = serializer
+        self.serializer: Type['Serializer'] = serializer
         self.job_class: Type[Job] = job_class
 
         # A dictionary of WorkerData keyed by worker name
@@ -247,7 +247,7 @@ def run_worker(
     connection_pool_class,
     connection_pool_kwargs: dict,
     worker_class: Type[BaseWorker] = Worker,
-    serializer: Type[DefaultSerializer] = DefaultSerializer,
+    serializer: Type['Serializer'] = DefaultSerializer,
     job_class: Type[Job] = Job,
     burst: bool = True,
     logging_level: str = "INFO",
