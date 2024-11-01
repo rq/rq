@@ -6,7 +6,7 @@ import signal
 import time
 from enum import Enum
 from multiprocessing import Process
-from typing import Dict, List, NamedTuple, Optional, Type, Union
+from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Type, Union
 from uuid import uuid4
 
 from redis import ConnectionPool, Redis
@@ -20,6 +20,9 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .utils import parse_names
 from .worker import BaseWorker, Worker
+
+if TYPE_CHECKING:
+    from rq.serializers import Serializer
 
 
 class WorkerData(NamedTuple):
@@ -40,7 +43,7 @@ class WorkerPool:
         connection: Redis,
         num_workers: int = 1,
         worker_class: Type[BaseWorker] = Worker,
-        serializer: Type[DefaultSerializer] = DefaultSerializer,
+        serializer: Type['Serializer'] = DefaultSerializer,
         job_class: Type[Job] = Job,
         *args,
         **kwargs,
@@ -57,7 +60,7 @@ class WorkerPool:
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
         self.worker_class: Type[BaseWorker] = worker_class
-        self.serializer: Type[DefaultSerializer] = serializer
+        self.serializer: Type['Serializer'] = serializer
         self.job_class: Type[Job] = job_class
 
         # A dictionary of WorkerData keyed by worker name
@@ -244,7 +247,7 @@ def run_worker(
     connection_pool_class,
     connection_pool_kwargs: dict,
     worker_class: Type[BaseWorker] = Worker,
-    serializer: Type[DefaultSerializer] = DefaultSerializer,
+    serializer: Type['Serializer'] = DefaultSerializer,
     job_class: Type[Job] = Job,
     burst: bool = True,
     logging_level: str = "INFO",
