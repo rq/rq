@@ -729,6 +729,10 @@ class Job:
         """
         if not isinstance(value, str):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
+
+        if ":" in value:
+            raise ValueError('id must not contain ":"')
+
         self._id = value
 
     def heartbeat(self, timestamp: datetime, ttl: int, pipeline: Optional['Pipeline'] = None, xx: bool = False):
