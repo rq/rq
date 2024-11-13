@@ -877,6 +877,7 @@ class Queue:
             Job: _description_
         """
         job.perform()
+        job.ended_at = now()
         result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL)
         with self.connection.pipeline() as pipeline:
             job._handle_success(result_ttl=result_ttl, pipeline=pipeline)
