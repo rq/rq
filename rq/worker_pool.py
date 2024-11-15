@@ -6,6 +6,7 @@ import signal
 import time
 from enum import Enum
 from multiprocessing import Process
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Type, Union
 from uuid import uuid4
 
@@ -39,7 +40,7 @@ class WorkerPool:
 
     def __init__(
         self,
-        queues: List[Union[str, Queue]],
+        queues: Iterable[Union[str, Queue]],
         connection: Redis,
         num_workers: int = 1,
         worker_class: Type[BaseWorker] = Worker,
@@ -242,7 +243,7 @@ class WorkerPool:
 
 def run_worker(
     worker_name: str,
-    queue_names: List[str],
+    queue_names: Iterable[str],
     connection_class,
     connection_pool_class,
     connection_pool_kwargs: dict,

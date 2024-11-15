@@ -11,8 +11,8 @@ import datetime as dt
 import importlib
 import logging
 import numbers
-from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from collections.abc import Iterable, Hashable
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Sequence, Generator, Type, Union, TypeVar
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -25,8 +25,10 @@ from .exceptions import TimeoutFormatError
 
 logger = logging.getLogger(__name__)
 
+_T = TypeVar('T')
 
-def compact(lst: List[Any]) -> List[Any]:
+
+def compact(lst: Iterable[_T]) -> List[_T]:
     """Excludes `None` values from a list-like object.
 
     Args:
@@ -58,7 +60,7 @@ def as_text(v: Union[bytes, str]) -> str:
         raise ValueError('Unknown type %r' % type(v))
 
 
-def decode_redis_hash(h) -> Dict[str, Any]:
+def decode_redis_hash(h: Dict[Hashable, _T]) -> Dict[str, _T]:
     """Decodes the Redis hash, ensuring that keys are strings
     Most importantly, decodes bytes strings, ensuring the dict has str keys.
 
@@ -68,7 +70,7 @@ def decode_redis_hash(h) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: The decoded Redis data (Dictionary)
     """
-    return dict((as_text(k), h[k]) for k in h)
+    return dict((as_text(k), v) for k, v in h.items())
 
 
 def import_attribute(name: str) -> Callable[..., Any]:
@@ -316,11 +318,11 @@ def ceildiv(a, b):
     return -(-a // b)
 
 
-def split_list(a_list: List[Any], segment_size: int):
+def split_list(a_list: Sequence[_T], segment_size: int) -> Generator[Sequence[_T], None, None]:
     """Splits a list into multiple smaller lists having size `segment_size`
 
     Args:
-        a_list (List[Any]): A list to split
+        a_list (Sequence[Any]): A sequence to split
         segment_size (int): The segment size to split into
 
     Yields:
@@ -374,8 +376,8 @@ def get_call_string(
     return '{0}({1})'.format(func_name, args)
 
 
-def parse_names(queues_or_names: List[Union[str, 'Queue']]) -> List[str]:
-    """Given a list of strings or queues, returns queue names"""
+def parse_names(queues_or_names: Iterable[Union[str, 'Queue']]) -> List[str]:
+    """Given a iterable  of strings or queues, returns queue names"""
     from .queue import Queue
 
     names = []
@@ -387,7 +389,7 @@ def parse_names(queues_or_names: List[Union[str, 'Queue']]) -> List[str]:
     return names
 
 
-def get_connection_from_queues(queues_or_names: List[Union[str, 'Queue']]) -> Optional['Redis']:
+def get_connection_from_queues(queues_or_names: Iterable[Union[str, 'Queue']]) -> Optional['Redis']:
     """Given a list of strings or queues, returns a connection"""
     from .queue import Queue
 
