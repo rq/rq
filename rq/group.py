@@ -1,4 +1,5 @@
-from typing import List, Iterable, Optional
+from collections.abc import Iterable
+from typing import List, Optional
 from uuid import uuid4
 
 from redis import Redis

@@ -11,8 +11,8 @@ import datetime as dt
 import importlib
 import logging
 import numbers
-from collections.abc import Iterable, Hashable
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Sequence, Generator, Type, Union, TypeVar
+from collections.abc import Generator, Hashable, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 if TYPE_CHECKING:
     from redis import Redis

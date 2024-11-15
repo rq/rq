@@ -4,9 +4,10 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Iterable, Sequence, Type, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast
 
 from redis import WatchError
 

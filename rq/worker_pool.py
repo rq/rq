@@ -4,9 +4,9 @@ import logging
 import os
 import signal
 import time
+from collections.abc import Iterable
 from enum import Enum
 from multiprocessing import Process
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Type, Union
 from uuid import uuid4
 
