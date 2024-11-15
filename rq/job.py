@@ -69,11 +69,13 @@ def parse_job_id(job_or_execution_id: str) -> str:
 
 
 class Dependency:
-    def __init__(self, jobs: List[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
+    dependencies: List[Union['Job', str]]
+
+    def __init__(self, jobs: Iterable[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
         """The definition of a Dependency.
 
         Args:
-            jobs (List[Union[Job, str]]): A list of Job instances or Job IDs.
+            jobs (Iterable[Union[Job, str]]): An iterable of Job instances or Job IDs.
                 Anything different will raise a ValueError
             allow_failure (bool, optional): Whether to allow for failure when running the depency,
                 meaning, the dependencies should continue running even after one of them failed.
