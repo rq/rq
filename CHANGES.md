@@ -1,4 +1,4 @@
-### RQ 2.0 (unreleased)
+### RQ 2.0 (2024-10-28)
 
 New Features:
 * Multiple job executions: a job can now have multiple executions running simultaneously. This will enable future support for long running scheduled jobs. Thanks @selwin!
