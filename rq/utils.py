@@ -11,7 +11,7 @@ import datetime as dt
 import importlib
 import logging
 import numbers
-from collections.abc import Generator, Hashable, Iterable, Sequence
+from collections.abc import Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ def as_text(v: Union[bytes, str]) -> str:
         raise ValueError('Unknown type %r' % type(v))
 
 
-def decode_redis_hash(h: Dict[Hashable, _T]) -> Dict[str, _T]:
+def decode_redis_hash(h: Dict[Union[bytes, str], _T]) -> Dict[str, _T]:
     """Decodes the Redis hash, ensuring that keys are strings
     Most importantly, decodes bytes strings, ensuring the dict has str keys.
 
@@ -149,7 +149,7 @@ def utcparse(string: str) -> dt.datetime:
             return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
-def first(iterable: Iterable, default=None, key=None):
+def first(iterable: Iterable[_T], default: Optional[_T] = None, key: Optional[Callable[[_T], bool]] = None) -> Optional[_T]:
     """Return first element of `iterable` that evaluates true, else return None
     (or an optional default value).
 
@@ -206,14 +206,14 @@ def is_nonstring_iterable(obj: Any) -> bool:
     return isinstance(obj, Iterable) and not isinstance(obj, str)
 
 
-def ensure_list(obj: Any) -> List:
+def ensure_list(obj: Union[Iterable[_T], _T]) -> List[_T]:
     """When passed an iterable of objects, does nothing, otherwise, it returns
     a list with just that object in it.
 
     Args:
         obj (Any): _description_
 
-    Returns:
+    returns:
         List: _description_
     """
     return obj if is_nonstring_iterable(obj) else [obj]
