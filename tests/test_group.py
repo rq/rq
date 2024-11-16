@@ -142,3 +142,11 @@ class TestGroup(RQTestCase):
         assert len(all_groups) == 1
         assert "group1" in [group.name for group in all_groups]
         assert "group2" not in [group.name for group in all_groups]
+
+    def test_all_deletes_missing_groups(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        jobs = group.enqueue_many(q, [self.job_1_data])
+        jobs[0].delete()
+        assert not self.connection.exists(Group.get_key(group.name))
+        assert Group.all(connection=self.connection) == []
