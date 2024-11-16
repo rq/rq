@@ -1,3 +1,8 @@
+### RQ 2.0.1 (Unreleased)
+* `job.id` must not contain `:`. Thanks @sanurielf!
+* Various type hint improvements by @terencehonles!
+* `job.ended_at` should be set when job is run synchronously. Thanks @alexprabhat99!
+
 ### RQ 2.0 (2024-10-28)
 
 New Features:
