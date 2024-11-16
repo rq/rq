@@ -71,8 +71,8 @@ class TestUtils(RQTestCase):
         """Ensure function ensure_list works correctly"""
         self.assertEqual([], ensure_list([]))
         self.assertEqual(['test'], ensure_list('test'))
-        self.assertEqual({}, ensure_list({}))
-        self.assertEqual((), ensure_list(()))
+        self.assertEqual([], ensure_list({}))
+        self.assertEqual([], ensure_list(()))
 
     def test_utcparse(self):
         """Ensure function utcparse works correctly"""

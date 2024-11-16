@@ -4,9 +4,11 @@ import logging
 import os
 import signal
 import time
-from collections.abc import Iterable
 from enum import Enum
 from multiprocessing import Process
+
+# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from typing import Iterable
 from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Type, Union
 from uuid import uuid4
 

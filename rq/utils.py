@@ -11,8 +11,22 @@ import datetime as dt
 import importlib
 import logging
 import numbers
-from collections.abc import Generator, Iterable, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
+
+# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from typing import Generator, Iterable, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -23,9 +37,12 @@ from redis.exceptions import ResponseError
 
 from .exceptions import TimeoutFormatError
 
-logger = logging.getLogger(__name__)
 
-_T = TypeVar('T')
+_T = TypeVar('_T')
+BasicType = Union[bool, int, float, str, bytes, object]
+
+
+logger = logging.getLogger(__name__)
 
 
 def compact(lst: Iterable[_T]) -> List[_T]:
@@ -206,8 +223,12 @@ def is_nonstring_iterable(obj: Any) -> bool:
     return isinstance(obj, Iterable) and not isinstance(obj, str)
 
 
-def ensure_list(obj: Union[Iterable[_T], _T]) -> List[_T]:
-    """When passed an iterable of objects, does nothing, otherwise, it returns
+@overload
+def ensure_list(obj: str) -> List[str]: ...
+@overload
+def ensure_list(obj: Union[BasicType, Iterable[BasicType]]) -> List[BasicType]: ...
+def ensure_list(obj):
+    """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.
 
     Args:
@@ -216,7 +237,9 @@ def ensure_list(obj: Union[Iterable[_T], _T]) -> List[_T]:
     returns:
         List: _description_
     """
-    return obj if is_nonstring_iterable(obj) else [obj]
+    # Note: To reuse is_nonstring_iterable, we need TypeGuard of Python 3.10+,
+    # but we are dragged by Python 3.8.
+    return list(obj) if isinstance(obj, Iterable) and not isinstance(obj, str) else [obj]
 
 
 def current_timestamp() -> int:

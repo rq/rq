@@ -1,4 +1,5 @@
-from collections.abc import Iterable
+# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from typing import Iterable
 from typing import List, Optional
 from uuid import uuid4
 

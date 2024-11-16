@@ -4,10 +4,23 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
-from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+
+# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from typing import Iterable, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 from redis import WatchError
 
