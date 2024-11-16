@@ -900,6 +900,13 @@ class BaseWorker:
             p.expire(self.key, 60)
             p.execute()
 
+    @property
+    def horse_pid(self):
+        """The horse's process ID.  Only available in the worker.  Will return
+        0 in the horse part of the fork.
+        """
+        return self._horse_pid
+
     def bootstrap(
         self,
         logging_level: str = "INFO",
@@ -1229,14 +1236,11 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
+    def kill_horse(self, sig: signal.Signals = SIGKILL):
+        raise NotImplementedError()
+
 
 class Worker(BaseWorker):
-    @property
-    def horse_pid(self):
-        """The horse's process ID.  Only available in the worker.  Will return
-        0 in the horse part of the fork.
-        """
-        return self._horse_pid
 
     @property
     def is_horse(self):
