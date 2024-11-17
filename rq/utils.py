@@ -166,7 +166,9 @@ def utcparse(string: str) -> dt.datetime:
             return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
 
 
-def first(iterable: Iterable[_T], default: Optional[_T] = None, key: Optional[Callable[[_T], bool]] = None) -> Optional[_T]:
+def first(
+    iterable: Iterable[_T], default: Optional[_T] = None, key: Optional[Callable[[_T], bool]] = None
+) -> Optional[_T]:
     """Return first element of `iterable` that evaluates true, else return None
     (or an optional default value).
 
