@@ -39,7 +39,8 @@ from .exceptions import TimeoutFormatError
 
 
 _T = TypeVar('_T')
-BasicType = Union[bool, int, float, str, bytes, object]
+_O = TypeVar('_O', bound=object)
+_BT = TypeVar('_BT', bool, int, float, str, bytes)
 
 
 logger = logging.getLogger(__name__)
@@ -227,8 +228,12 @@ def is_nonstring_iterable(obj: Any) -> bool:
 
 @overload
 def ensure_list(obj: str) -> List[str]: ...
+# @overload
+# def ensure_list(obj: Iterable[Union[_O, str]]) -> List[Union[_O, str]]: ...
 @overload
-def ensure_list(obj: Union[BasicType, Iterable[BasicType]]) -> List[BasicType]: ...
+def ensure_list(obj: Union[_BT, Iterable[_BT]]) -> List[_BT]: ...
+@overload
+def ensure_list(obj: Union[_O, Iterable[_O]]) -> List[_O]: ...
 def ensure_list(obj):
     """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.

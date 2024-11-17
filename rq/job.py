@@ -69,6 +69,8 @@ def parse_job_id(job_or_execution_id: str) -> str:
 
 
 class Dependency:
+    dependencies: List[Union['Job', str]]
+
     def __init__(self, jobs: Iterable[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
         """The definition of a Dependency.
 
