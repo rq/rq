@@ -8,14 +8,15 @@ from datetime import datetime, timedelta, timezone
 from functools import total_ordering
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import Iterable, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     Dict,
+    Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
     Type,
     Union,
