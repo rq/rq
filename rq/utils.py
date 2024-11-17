@@ -313,19 +313,19 @@ def get_version(connection: 'Redis') -> Tuple[int, int, int]:
     """
     try:
         # Getting the connection info for each job tanks performance, we can cache it on the connection object
-        if not getattr(connection, "__rq_redis_server_version", None):
+        if not getattr(connection, '__rq_redis_server_version', None):
             # Cast the version string to a tuple of integers. Some Redis implementations may return a float.
-            version_str = str(connection.info("server")["redis_version"])
+            version_str = str(connection.info('server')['redis_version'])
             version_parts = [int(i) for i in version_str.split('.')[:3]]
             # Ensure the version tuple has exactly three elements
             while len(version_parts) < 3:
                 version_parts.append(0)
             setattr(
                 connection,
-                "__rq_redis_server_version",
+                '__rq_redis_server_version',
                 tuple(version_parts),
             )
-        return getattr(connection, "__rq_redis_server_version")
+        return getattr(connection, '__rq_redis_server_version')
     except ResponseError:  # fakeredis doesn't implement Redis' INFO command
         return (5, 0, 9)
 
