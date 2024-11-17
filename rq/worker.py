@@ -511,6 +511,42 @@ class BaseWorker:
         """Only supported by Redis server >= 5.0 is required."""
         return self.get_redis_server_version() >= (5, 0, 0)
 
+    def request_stop(self, signum, frame):
+        """Stops the current worker loop but waits for child processes to
+        end gracefully (warm shutdown).
+
+        Args:
+            signum (Any): Signum
+            frame (Any): Frame
+        """
+        self.log.debug('Got signal %s', signal_name(signum))
+        self._shutdown_requested_date = now()
+
+        signal.signal(signal.SIGINT, self.request_force_stop)
+        signal.signal(signal.SIGTERM, self.request_force_stop)
+
+        self.handle_warm_shutdown_request()
+        self._shutdown()
+
+    def _shutdown(self):
+        """
+        If shutdown is requested in the middle of a job, wait until
+        finish before shutting down and save the request in redis
+        """
+        if self.get_state() == WorkerStatus.BUSY:
+            self._stop_requested = True
+            self.set_shutdown_requested_date()
+            self.log.debug('Stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.')
+            if self.scheduler:
+                self.stop_scheduler()
+        else:
+            if self.scheduler:
+                self.stop_scheduler()
+            raise StopRequested()
+
+    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
+        raise NotImplementedError()
+
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
         signal.signal(signal.SIGINT, self.request_stop)
@@ -864,6 +900,13 @@ class BaseWorker:
             p.expire(self.key, 60)
             p.execute()
 
+    @property
+    def horse_pid(self):
+        """The horse's process ID.  Only available in the worker.  Will return
+        0 in the horse part of the fork.
+        """
+        return self._horse_pid
+
     def bootstrap(
         self,
         logging_level: str = "INFO",
@@ -968,6 +1011,12 @@ class BaseWorker:
         else:
             self.log.warning("Pubsub thread exitin on %s" % exc)
             raise
+
+    def handle_payload(self, message):
+        """Handle external commands"""
+        self.log.debug('Received message: %s', message)
+        payload = parse_payload(message)
+        handle_command(self, payload)
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
@@ -1187,14 +1236,11 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
+    def kill_horse(self, sig: signal.Signals = SIGKILL):
+        raise NotImplementedError()
+
 
 class Worker(BaseWorker):
-    @property
-    def horse_pid(self):
-        """The horse's process ID.  Only available in the worker.  Will return
-        0 in the horse part of the fork.
-        """
-        return self._horse_pid
 
     @property
     def is_horse(self):
@@ -1252,39 +1298,6 @@ class Worker(BaseWorker):
             self.kill_horse()
             self.wait_for_horse()
         raise SystemExit()
-
-    def request_stop(self, signum, frame):
-        """Stops the current worker loop but waits for child processes to
-        end gracefully (warm shutdown).
-
-        Args:
-            signum (Any): Signum
-            frame (Any): Frame
-        """
-        self.log.debug('Got signal %s', signal_name(signum))
-        self._shutdown_requested_date = now()
-
-        signal.signal(signal.SIGINT, self.request_force_stop)
-        signal.signal(signal.SIGTERM, self.request_force_stop)
-
-        self.handle_warm_shutdown_request()
-        self._shutdown()
-
-    def _shutdown(self):
-        """
-        If shutdown is requested in the middle of a job, wait until
-        finish before shutting down and save the request in redis
-        """
-        if self.get_state() == WorkerStatus.BUSY:
-            self._stop_requested = True
-            self.set_shutdown_requested_date()
-            self.log.debug('Stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.')
-            if self.scheduler:
-                self.stop_scheduler()
-        else:
-            if self.scheduler:
-                self.stop_scheduler()
-            raise StopRequested()
 
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -1638,12 +1651,6 @@ class Worker(BaseWorker):
     def __hash__(self):
         """The hash does not take the database/connection into account"""
         return hash(self.name)
-
-    def handle_payload(self, message):
-        """Handle external commands"""
-        self.log.debug('Received message: %s', message)
-        payload = parse_payload(message)
-        handle_command(self, payload)
 
 
 class SimpleWorker(Worker):

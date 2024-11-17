@@ -134,7 +134,7 @@ following attributes:
 ```python
 job = Job.fetch(id='my_id', connection=redis)
 result = job.latest_result()  #  returns Result(id=uid, type=SUCCESSFUL)
-if result == result.Type.SUCCESSFUL: 
+if result.type == result.Type.SUCCESSFUL: 
     print(result.return_value) 
 else: 
     print(result.exc_string)

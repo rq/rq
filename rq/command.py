@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict
 if TYPE_CHECKING:
     from redis import Redis
 
-    from .worker import Worker
+    from .worker import BaseWorker
 
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job
@@ -82,7 +82,7 @@ def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
     send_command(connection, job.worker_name, 'stop-job', job_id=job_id)
 
 
-def handle_command(worker: 'Worker', payload: Dict[Any, Any]):
+def handle_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
     """Parses payload and routes commands to the worker.
 
     Args:
@@ -97,7 +97,7 @@ def handle_command(worker: 'Worker', payload: Dict[Any, Any]):
         handle_kill_worker_command(worker, payload)
 
 
-def handle_shutdown_command(worker: 'Worker'):
+def handle_shutdown_command(worker: 'BaseWorker'):
     """Perform shutdown command.
 
     Args:
@@ -108,7 +108,7 @@ def handle_shutdown_command(worker: 'Worker'):
     os.kill(pid, signal.SIGINT)
 
 
-def handle_kill_worker_command(worker: 'Worker', payload: Dict[Any, Any]):
+def handle_kill_worker_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
     """
     Stops work horse
 
@@ -125,7 +125,7 @@ def handle_kill_worker_command(worker: 'Worker', payload: Dict[Any, Any]):
         worker.log.info('Worker is not working, kill horse command ignored')
 
 
-def handle_stop_job_command(worker: 'Worker', payload: Dict[Any, Any]):
+def handle_stop_job_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
     """Handles stop job command.
 
     Args:

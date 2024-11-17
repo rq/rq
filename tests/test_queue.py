@@ -389,6 +389,11 @@ class TestQueue(RQTestCase):
         keep_job = queue.enqueue(echo, result_ttl=100)
         self.assertLessEqual(queue.connection.ttl(keep_job.key), 100)
 
+    def test_synchronous_ended_at(self):
+        queue = Queue(is_async=False, connection=self.connection)
+        echo_job = queue.enqueue(echo)
+        self.assertIsNotNone(echo_job.ended_at)
+
     def test_enqueue_explicit_args(self):
         """enQueue(connection=self.connection) works for both implicit/explicit args."""
         q = Queue(connection=self.connection)
