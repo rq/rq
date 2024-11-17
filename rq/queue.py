@@ -292,11 +292,7 @@ class Queue:
                 count = count + 1
             end
             return count
-        """.format(
-            self.job_class.redis_job_namespace_prefix
-        ).encode(
-            'utf-8'
-        )
+        """.format(self.job_class.redis_job_namespace_prefix).encode('utf-8')
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 

@@ -1,6 +1,5 @@
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import Iterable
-from typing import List, Optional
+from typing import Iterable, List, Optional
 from uuid import uuid4
 
 from redis import Redis

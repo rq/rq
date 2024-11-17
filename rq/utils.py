@@ -13,14 +13,16 @@ import logging
 import numbers
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import Generator, Iterable, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     Dict,
+    Generator,
+    Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
     Type,
     TypeVar,
@@ -36,7 +38,6 @@ if TYPE_CHECKING:
 from redis.exceptions import ResponseError
 
 from .exceptions import TimeoutFormatError
-
 
 _T = TypeVar('_T')
 _O = TypeVar('_O', bound=object)

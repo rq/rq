@@ -77,7 +77,6 @@ include = [
 
 [tool.hatch.envs.test]
 dependencies = [
-  "black",
   "coverage",
   "mypy",
   "packaging",
@@ -92,11 +91,6 @@ dependencies = [
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
 typing = "mypy --enable-incomplete-feature=Unpack rq"
-
-[tool.black]
-line-length = 120
-target-version = ["py38"]
-skip-string-normalization = true
 
 [tool.mypy]
 allow_redefinition = true
@@ -120,12 +114,15 @@ lint.select = [
     "I", # import sorting
     "W", # pycodestyle warnings
 ]
-line-length = 120  # To match black.
+line-length = 120
 target-version = "py38"
 
 [tool.ruff.lint.isort]
 known-first-party = ["rq"]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+quote-style = "single"
 
 [tool.pyright]
 reportOptionalMemberAccess = false
