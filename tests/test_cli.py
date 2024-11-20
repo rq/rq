@@ -32,10 +32,10 @@ class CLITestCase(RQTestCase):
         if result.exit_code == 0:
             return True
         else:
-            print("Non normal execution")
-            print("Exit Code: {}".format(result.exit_code))
-            print("Output: {}".format(result.output))
-            print("Exception: {}".format(result.exception))
+            print('Non normal execution')
+            print('Exit Code: {}'.format(result.exit_code))
+            print('Output: {}'.format(result.output))
+            print('Exception: {}'.format(result.exception))
             self.assertEqual(result.exit_code, 0)
 
 
@@ -48,10 +48,10 @@ class TestRQCli(CLITestCase):
         if result.exit_code == 0:
             return True
         else:
-            print("Non normal execution")
-            print("Exit Code: {}".format(result.exit_code))
-            print("Output: {}".format(result.output))
-            print("Exception: {}".format(result.exception))
+            print('Non normal execution')
+            print('Exit Code: {}'.format(result.exit_code))
+            print('Output: {}'.format(result.output))
+            print('Exception: {}'.format(result.exception))
             self.assertEqual(result.exit_code, 0)
 
     """Test rq_cli script"""
@@ -108,7 +108,7 @@ class TestRQCli(CLITestCase):
         self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['password'], '123')
 
     def test_config_env_vars(self):
-        os.environ['REDIS_HOST'] = "testhost.example.com"
+        os.environ['REDIS_HOST'] = 'testhost.example.com'
 
         cli_config = CliConfig()
 
@@ -414,7 +414,7 @@ class TestRQCli(CLITestCase):
         result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 0])
 
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("Duration must be an integer greater than 1", result.output)
+        self.assertIn('Duration must be an integer greater than 1', result.output)
 
     def test_serializer(self):
         """rq worker -u <url> --serializer <serializer>"""
@@ -434,8 +434,8 @@ class TestRQCli(CLITestCase):
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello'])
         self.assert_normal_execution(result)
 
-        prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
-        suffix = '\'.\n'
+        prefix = "Enqueued tests.fixtures.say_hello() with job-id '"
+        suffix = "'.\n"
 
         self.assertTrue(result.output.startswith(prefix))
         self.assertTrue(result.output.endswith(suffix))
@@ -460,8 +460,8 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
 
-        prefix = 'Enqueued tests.fixtures.say_hello() with job-id \''
-        suffix = '\'.\n'
+        prefix = "Enqueued tests.fixtures.say_hello() with job-id '"
+        suffix = "'.\n"
 
         self.assertTrue(result.output.startswith(prefix))
         self.assertTrue(result.output.endswith(suffix))
@@ -508,7 +508,7 @@ class TestRQCli(CLITestCase):
 
         args, kwargs = Job(job_id, connection=self.connection).result
 
-        self.assertEqual(args, ('hello', [1, {'key': 'value'}], {"test": True}, (1, 2)))
+        self.assertEqual(args, ('hello', [1, {'key': 'value'}], {'test': True}, (1, 2)))
         self.assertEqual(kwargs, {'json': [3.0, True], 'nojson': 'abc', 'file': '{"test": true}\n'})
 
     def test_cli_enqueue_schedule_in(self):
@@ -653,7 +653,7 @@ class TestRQCli(CLITestCase):
 
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'key=value', 'key=value'])
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIn('You can\'t specify multiple values for the same keyword.', result.output)
+        self.assertIn("You can't specify multiple values for the same keyword.", result.output)
 
         result = runner.invoke(
             main,
@@ -669,7 +669,7 @@ class TestRQCli(CLITestCase):
             ],
         )
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIn('You can\'t specify both --schedule-in and --schedule-at', result.output)
+        self.assertIn("You can't specify both --schedule-in and --schedule-at", result.output)
 
         result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '@not_existing_file'])
         self.assertNotEqual(result.exit_code, 0)
@@ -763,7 +763,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([], {'key': {"foo": True}}))
+        self.assertEqual((job.args, job.kwargs), ([], {'key': {'foo': True}}))
 
         id = str(uuid4())
         result = runner.invoke(

@@ -143,7 +143,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(0, q.get_job_position(job.id))
         self.assertEqual(1, q.get_job_position(job2.id))
         self.assertEqual(2, q.get_job_position(job3))
-        self.assertEqual(None, q.get_job_position("no_real_job"))
+        self.assertEqual(None, q.get_job_position('no_real_job'))
 
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
@@ -516,8 +516,8 @@ class TestQueue(RQTestCase):
     def test_enqueue_dependents_on_multiple_queues(self):
         """Enqueueing dependent jobs on multiple queues pushes jobs in the queues
         and removes them from DeferredJobRegistry for each different queue."""
-        q_1 = Queue("queue_1", connection=self.connection)
-        q_2 = Queue("queue_2", connection=self.connection)
+        q_1 = Queue('queue_1', connection=self.connection)
+        q_2 = Queue('queue_2', connection=self.connection)
         parent_job = Job.create(func=say_hello, connection=self.connection)
         parent_job.save()
         job_1 = q_1.enqueue(say_hello, depends_on=parent_job)

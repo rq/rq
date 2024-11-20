@@ -32,8 +32,8 @@ class TestJob(RQTestCase):
         """Unicode in job description [issue405]"""
         job = Job.create(
             'myfunc',
-            args=[12, "☃"],
-            kwargs=dict(snowman="☃", null=None),
+            args=[12, '☃'],
+            kwargs=dict(snowman='☃', null=None),
             connection=self.connection,
         )
         self.assertEqual(
@@ -49,7 +49,7 @@ class TestJob(RQTestCase):
         # Jobs have a random UUID and a creation date
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
-        self.assertEqual(str(job), "<Job %s: test job>" % job.id)
+        self.assertEqual(str(job), '<Job %s: test job>' % job.id)
 
         # ...and nothing else
         self.assertEqual(job.origin, '')
@@ -70,8 +70,8 @@ class TestJob(RQTestCase):
 
     def test_create_param_errors(self):
         """Creation of jobs may result in errors"""
-        self.assertRaises(TypeError, Job.create, fixtures.say_hello, args="string")
-        self.assertRaises(TypeError, Job.create, fixtures.say_hello, kwargs="string")
+        self.assertRaises(TypeError, Job.create, fixtures.say_hello, args='string')
+        self.assertRaises(TypeError, Job.create, fixtures.say_hello, kwargs='string')
         self.assertRaises(TypeError, Job.create, func=42)
 
     def test_create_typical_job(self):
@@ -507,8 +507,8 @@ class TestJob(RQTestCase):
     def test_multiple_dependencies_are_accepted_and_persisted(self):
         """Ensure job._dependency_ids accepts different input formats, and
         is set and restored properly"""
-        job_A = Job.create(func=fixtures.some_calculation, args=(3, 1, 4), id="A", connection=self.connection)
-        job_B = Job.create(func=fixtures.some_calculation, args=(2, 7, 2), id="B", connection=self.connection)
+        job_A = Job.create(func=fixtures.some_calculation, args=(3, 1, 4), id='A', connection=self.connection)
+        job_B = Job.create(func=fixtures.some_calculation, args=(2, 7, 2), id='B', connection=self.connection)
 
         # No dependencies
         job = Job.create(func=fixtures.say_hello, connection=self.connection)
@@ -518,22 +518,22 @@ class TestJob(RQTestCase):
 
         # Various ways of specifying dependencies
         cases = [
-            ["A", ["A"]],
-            [job_A, ["A"]],
-            [["A", "B"], ["A", "B"]],
-            [[job_A, job_B], ["A", "B"]],
-            [["A", job_B], ["A", "B"]],
-            [("A", "B"), ["A", "B"]],
-            [(job_A, job_B), ["A", "B"]],
-            [(job_A, "B"), ["A", "B"]],
-            [Dependency("A"), ["A"]],
-            [Dependency(job_A), ["A"]],
-            [Dependency(["A", "B"]), ["A", "B"]],
-            [Dependency([job_A, job_B]), ["A", "B"]],
-            [Dependency(["A", job_B]), ["A", "B"]],
-            [Dependency(("A", "B")), ["A", "B"]],
-            [Dependency((job_A, job_B)), ["A", "B"]],
-            [Dependency((job_A, "B")), ["A", "B"]],
+            ['A', ['A']],
+            [job_A, ['A']],
+            [['A', 'B'], ['A', 'B']],
+            [[job_A, job_B], ['A', 'B']],
+            [['A', job_B], ['A', 'B']],
+            [('A', 'B'), ['A', 'B']],
+            [(job_A, job_B), ['A', 'B']],
+            [(job_A, 'B'), ['A', 'B']],
+            [Dependency('A'), ['A']],
+            [Dependency(job_A), ['A']],
+            [Dependency(['A', 'B']), ['A', 'B']],
+            [Dependency([job_A, job_B]), ['A', 'B']],
+            [Dependency(['A', job_B]), ['A', 'B']],
+            [Dependency(('A', 'B')), ['A', 'B']],
+            [Dependency((job_A, job_B)), ['A', 'B']],
+            [Dependency((job_A, 'B')), ['A', 'B']],
         ]
         for given, expected in cases:
             job = Job.create(func=fixtures.say_hello, depends_on=given, connection=self.connection)
@@ -546,10 +546,10 @@ class TestJob(RQTestCase):
         job = Job.create(func=fixtures.say_hello, connection=self.connection)
         job.save()
         with self.connection.pipeline() as pipeline:
-            job.prepare_for_execution("worker_name", pipeline)
+            job.prepare_for_execution('worker_name', pipeline)
             pipeline.execute()
         job.refresh()
-        self.assertEqual(job.worker_name, "worker_name")
+        self.assertEqual(job.worker_name, 'worker_name')
         self.assertEqual(job.get_status(), JobStatus.STARTED)
         self.assertIsNotNone(job.last_heartbeat)
         self.assertIsNotNone(job.started_at)
@@ -894,8 +894,8 @@ class TestJob(RQTestCase):
     def test_create_job_with_id(self):
         """test creating jobs with a custom ID"""
         queue = Queue(connection=self.connection)
-        job = queue.enqueue(fixtures.say_hello, job_id="1234")
-        self.assertEqual(job.id, "1234")
+        job = queue.enqueue(fixtures.say_hello, job_id='1234')
+        self.assertEqual(job.id, '1234')
         job.perform()
 
         self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
@@ -905,17 +905,17 @@ class TestJob(RQTestCase):
         queue = Queue(connection=self.connection)
 
         with self.assertRaises(ValueError):
-            queue.enqueue(fixtures.say_hello, job_id="1234:4321")
+            queue.enqueue(fixtures.say_hello, job_id='1234:4321')
 
     def test_create_job_with_async(self):
         """test creating jobs with async function"""
         queue = Queue(connection=self.connection)
 
-        async_job = queue.enqueue(fixtures.say_hello_async, job_id="async_job")
-        sync_job = queue.enqueue(fixtures.say_hello, job_id="sync_job")
+        async_job = queue.enqueue(fixtures.say_hello_async, job_id='async_job')
+        sync_job = queue.enqueue(fixtures.say_hello, job_id='sync_job')
 
-        self.assertEqual(async_job.id, "async_job")
-        self.assertEqual(sync_job.id, "sync_job")
+        self.assertEqual(async_job.id, 'async_job')
+        self.assertEqual(sync_job.id, 'sync_job')
 
         async_task_result = async_job.perform()
         sync_task_result = sync_job.perform()
@@ -941,14 +941,14 @@ class TestJob(RQTestCase):
     def test_create_job_with_ttl_should_have_ttl_after_enqueued(self):
         """test creating jobs with ttl and checks if get_jobs returns it properly [issue502]"""
         queue = Queue(connection=self.connection)
-        queue.enqueue(fixtures.say_hello, job_id="1234", ttl=10)
+        queue.enqueue(fixtures.say_hello, job_id='1234', ttl=10)
         job = queue.get_jobs()[0]
         self.assertEqual(job.ttl, 10)
 
     def test_create_job_with_ttl_should_expire(self):
         """test if a job created with ttl expires [issue502]"""
         queue = Queue(connection=self.connection)
-        queue.enqueue(fixtures.say_hello, job_id="1234", ttl=1)
+        queue.enqueue(fixtures.say_hello, job_id='1234', ttl=1)
         time.sleep(1.1)
         self.assertEqual(0, len(queue.get_jobs()))
 
@@ -1102,7 +1102,7 @@ class TestJob(RQTestCase):
     def test_dependencies_key_should_have_prefixed_job_id(self):
         job_id = 'random'
         job = Job(id=job_id, connection=self.connection)
-        expected_key = Job.redis_job_namespace_prefix + ":" + job_id + ':dependencies'
+        expected_key = Job.redis_job_namespace_prefix + ':' + job_id + ':dependencies'
 
         assert job.dependencies_key == expected_key
 
@@ -1247,68 +1247,68 @@ class TestJob(RQTestCase):
         connection_kwargs = self.connection.connection_pool.connection_kwargs
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         # Worker 1 will be busy with the slow job, so worker 2 will complete both fast jobs.
-        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", connection_kwargs, True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", connection_kwargs, True])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True])
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_kwargs, True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_kwargs, True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 2)]
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow, job_A, job_B]))
-        self.assertEqual(jobs_completed, ["A:w2", "B:w2", "slow:w1"])
+        self.assertEqual(jobs_completed, ['A:w2', 'B:w2', 'slow:w1'])
         self.connection.delete(key)
 
         # When job "A" depends on the slow job, then job "B" finishes before "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow = queue.enqueue(fixtures.rpush, args=[key, "slow", connection_kwargs, True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", connection_kwargs, False], depends_on='slow_job')
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True])
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_kwargs, True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_kwargs, False], depends_on='slow_job')
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 2)]
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow, job_A, job_B]))
-        self.assertEqual(jobs_completed, ["B:w2", "slow:w1", "A"])
+        self.assertEqual(jobs_completed, ['B:w2', 'slow:w1', 'A'])
 
     def test_execution_order_with_dual_dependency(self):
         queue = Queue(connection=self.connection)
         key = 'test_job:job_order'
         connection_kwargs = self.connection.connection_pool.connection_kwargs
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", connection_kwargs, True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", connection_kwargs, True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, "A", connection_kwargs, True])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True])
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_kwargs, True, 0.5], job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_kwargs, True, 0.75], job_id='slow_2')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_kwargs, True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 3)]
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
-        self.assertEqual(jobs_completed, ["slow_1:w1", "A:w1", "B:w1", "slow_2:w2"])
+        self.assertEqual(jobs_completed, ['slow_1:w1', 'A:w1', 'B:w1', 'slow_2:w2'])
         self.connection.delete(key)
 
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
         # the two. Job "B" should be completed before job "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, "slow_1", connection_kwargs, True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, "slow_2", connection_kwargs, True, 0.75], job_id='slow_2')
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_kwargs, True, 0.5], job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_kwargs, True, 0.75], job_id='slow_2')
         job_A = queue.enqueue(
-            fixtures.rpush, args=[key, "A", connection_kwargs, False], depends_on=['slow_1', 'slow_2']
+            fixtures.rpush, args=[key, 'A', connection_kwargs, False], depends_on=['slow_1', 'slow_2']
         )
-        job_B = queue.enqueue(fixtures.rpush, args=[key, "B", connection_kwargs, True], depends_on=['slow_1'])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True], depends_on=['slow_1'])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 3)]
         self.assertEqual(queue.count, 0)
         self.assertTrue(all(job.is_finished for job in [job_slow_1, job_slow_2, job_A, job_B]))
-        self.assertEqual(jobs_completed, ["slow_1:w1", "B:w1", "slow_2:w2", "A"])
+        self.assertEqual(jobs_completed, ['slow_1:w1', 'B:w1', 'slow_2:w2', 'A'])
 
     @unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
     def test_blocking_result_fetch(self):
         # Ensure blocking waits for the time to run the job, but not right up until the timeout.
         job_sleep_seconds = 2
         block_seconds = 5
-        queue_name = "test_blocking_queue"
+        queue_name = 'test_blocking_queue'
         q = Queue(queue_name, connection=self.connection)
         job = q.enqueue(fixtures.long_running_job, job_sleep_seconds)
         started_at = time.time()

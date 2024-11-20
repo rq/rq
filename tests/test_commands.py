@@ -45,7 +45,7 @@ class TestCommands(RQTestCase):
         assert worker.pubsub_thread.is_alive()
 
         for client in connection.client_list():
-            connection.client_kill(client["addr"])
+            connection.client_kill(client['addr'])
 
         time.sleep(0.0)  # Allow other threads to run
         assert worker.pubsub_thread.is_alive()
@@ -55,7 +55,7 @@ class TestCommands(RQTestCase):
         connection = self.connection
         worker = Worker('foo', connection=connection)
 
-        with mock.patch("redis.client.PubSub.get_message", new_callable=raise_exc_mock):
+        with mock.patch('redis.client.PubSub.get_message', new_callable=raise_exc_mock):
             worker.subscribe()
 
         worker.pubsub_thread.join()

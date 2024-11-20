@@ -167,23 +167,23 @@ class TestUtils(RQTestCase):
 
     def test_truncate_long_string(self):
         """Ensure truncate_long_string works properly"""
-        assert truncate_long_string("12", max_length=3) == "12"
-        assert truncate_long_string("123", max_length=3) == "123"
-        assert truncate_long_string("1234", max_length=3) == "123..."
-        assert truncate_long_string("12345", max_length=3) == "123..."
+        assert truncate_long_string('12', max_length=3) == '12'
+        assert truncate_long_string('123', max_length=3) == '123'
+        assert truncate_long_string('1234', max_length=3) == '123...'
+        assert truncate_long_string('12345', max_length=3) == '123...'
 
-        s = "long string but no max_length provided so no truncating should occur" * 10
+        s = 'long string but no max_length provided so no truncating should occur' * 10
         assert truncate_long_string(s) == s
 
     def test_get_call_string(self):
         """Ensure a case, when func_name, args and kwargs are not None, works properly"""
-        cs = get_call_string("f", ('some', 'args', 42), {"key1": "value1", "key2": True})
+        cs = get_call_string('f', ('some', 'args', 42), {'key1': 'value1', 'key2': True})
         assert cs == "f('some', 'args', 42, key1='value1', key2=True)"
 
     def test_get_call_string_with_max_length(self):
         """Ensure get_call_string works properly when max_length is provided"""
-        func_name = "f"
+        func_name = 'f'
         args = (1234, 12345, 123456)
-        kwargs = {"len4": 1234, "len5": 12345, "len6": 123456}
+        kwargs = {'len4': 1234, 'len5': 12345, 'len6': 123456}
         cs = get_call_string(func_name, args, kwargs, max_length=5)
-        assert cs == "f(1234, 12345, 12345..., len4=1234, len5=12345, len6=12345...)"
+        assert cs == 'f(1234, 12345, 12345..., len4=1234, len5=12345, len6=12345...)'

@@ -14,7 +14,6 @@ from tests.fixtures import say_hello
 
 @unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
 class TestIntermediateQueue(RQTestCase):
-
     def test_set_first_seen(self):
         """Ensure that the first_seen attribute is set correctly."""
         queue = Queue('foo', connection=self.connection)

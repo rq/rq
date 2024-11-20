@@ -146,18 +146,18 @@ class Number:
 
 class CallableObject:
     def __call__(self):
-        return u"I'm callable"
+        return "I'm callable"
 
 
 class UnicodeStringObject:
     def __repr__(self):
-        return u'é'
+        return 'é'
 
 
 class ClassWithAStaticMethod:
     @staticmethod
     def static_method():
-        return u"I'm a static method"
+        return "I'm a static method"
 
 
 def black_hole(job, *exc_info):
@@ -298,7 +298,7 @@ def save_exception(job, connection, type, value, traceback):
     connection.set('failure_callback:%s' % job.id, str(value), ex=60)
 
 
-def save_result_if_not_stopped(job, connection, result=""):
+def save_result_if_not_stopped(job, connection, result=''):
     connection.set('stopped_callback:%s' % job.id, result, ex=60)
 
 

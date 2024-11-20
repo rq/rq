@@ -484,7 +484,7 @@ class TestQueue(RQTestCase):
             connection_pool=redis.ConnectionPool(
                 connection_class=CustomRedisConnection,
                 db=4,
-                custom_arg="foo",
+                custom_arg='foo',
             )
         )
 
@@ -494,7 +494,7 @@ class TestQueue(RQTestCase):
         scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
 
         self.assertEqual(scheduler_connection.__class__, CustomRedisConnection)
-        self.assertEqual(scheduler_connection.get_custom_arg(), "foo")
+        self.assertEqual(scheduler_connection.get_custom_arg(), 'foo')
 
     def test_no_custom_connection_pool(self):
         """Connection pool customizing must not interfere if we're using a standard

@@ -76,7 +76,7 @@ except ImportError:
         pass
 
 
-logger = logging.getLogger("rq.worker")
+logger = logging.getLogger('rq.worker')
 
 
 class StopRequested(Exception):
@@ -102,9 +102,9 @@ def signal_name(signum):
 
 
 class DequeueStrategy(str, Enum):
-    DEFAULT = "default"
-    ROUND_ROBIN = "round_robin"
-    RANDOM = "random"
+    DEFAULT = 'default'
+    ROUND_ROBIN = 'round_robin'
+    RANDOM = 'random'
 
 
 class WorkerStatus(str, Enum):
@@ -151,13 +151,12 @@ class BaseWorker:
         serializer=None,
         work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
-
         self.default_result_ttl = default_result_ttl
 
         if worker_ttl:
             self.worker_ttl = worker_ttl
         elif default_worker_ttl:
-            warnings.warn("default_worker_ttl is deprecated, use worker_ttl.", DeprecationWarning, stacklevel=2)
+            warnings.warn('default_worker_ttl is deprecated, use worker_ttl.', DeprecationWarning, stacklevel=2)
             self.worker_ttl = default_worker_ttl
         else:
             self.worker_ttl = DEFAULT_WORKER_TTL
@@ -441,9 +440,9 @@ class BaseWorker:
         Args:
             connection (Optional[Redis]): The Redis Connection.
         """
-        current_socket_timeout = connection.connection_pool.connection_kwargs.get("socket_timeout")
+        current_socket_timeout = connection.connection_pool.connection_kwargs.get('socket_timeout')
         if current_socket_timeout is None or current_socket_timeout < self.connection_timeout:
-            timeout_config = {"socket_timeout": self.connection_timeout}
+            timeout_config = {'socket_timeout': self.connection_timeout}
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
 
@@ -559,7 +558,7 @@ class BaseWorker:
     def work(
         self,
         burst: bool = False,
-        logging_level: str = "INFO",
+        logging_level: str = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
         max_jobs: Optional[int] = None,
@@ -674,9 +673,9 @@ class BaseWorker:
         if self._dequeue_strategy is None:
             self._dequeue_strategy = DequeueStrategy.DEFAULT
 
-        if self._dequeue_strategy not in ("default", "random", "round_robin"):
+        if self._dequeue_strategy not in ('default', 'random', 'round_robin'):
             raise ValueError(
-                f"Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`."
+                f'Dequeue strategy {self._dequeue_strategy} is not allowed. Use `default`, `random` or `round_robin`.'
             )
         if self._dequeue_strategy == DequeueStrategy.DEFAULT:
             return
@@ -810,7 +809,7 @@ class BaseWorker:
 
     def _set_state(self, state):
         """Raise a DeprecationWarning if ``worker.state = X`` is used"""
-        warnings.warn("worker.state is deprecated, use worker.set_state() instead.", DeprecationWarning)
+        warnings.warn('worker.state is deprecated, use worker.set_state() instead.', DeprecationWarning)
         self.set_state(state)
 
     def get_state(self) -> str:
@@ -818,7 +817,7 @@ class BaseWorker:
 
     def _get_state(self):
         """Raise a DeprecationWarning if ``worker.state == X`` is used"""
-        warnings.warn("worker.state is deprecated, use worker.get_state() instead.", DeprecationWarning)
+        warnings.warn('worker.state is deprecated, use worker.get_state() instead.', DeprecationWarning)
         return self.get_state()
 
     state = property(_get_state, _set_state)
@@ -826,7 +825,7 @@ class BaseWorker:
     def _start_scheduler(
         self,
         burst: bool = False,
-        logging_level: str = "INFO",
+        logging_level: str = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -909,7 +908,7 @@ class BaseWorker:
 
     def bootstrap(
         self,
-        logging_level: str = "INFO",
+        logging_level: str = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -993,7 +992,7 @@ class BaseWorker:
         self.clean_registries()
         Group.clean_registries(connection=self.connection)
 
-    def _pubsub_exception_handler(self, exc: Exception, pubsub: "PubSub", pubsub_thread: "PubSubWorkerThread") -> None:
+    def _pubsub_exception_handler(self, exc: Exception, pubsub: 'PubSub', pubsub_thread: 'PubSubWorkerThread') -> None:
         """
         This exception handler allows the pubsub_thread to continue & retry to
         connect after a connection problem the same way the main worker loop
@@ -1003,13 +1002,13 @@ class BaseWorker:
         """
         if isinstance(exc, (redis.exceptions.ConnectionError)):
             self.log.error(
-                "Could not connect to Redis instance: %s Retrying in %d seconds...",
+                'Could not connect to Redis instance: %s Retrying in %d seconds...',
                 exc,
                 2,
             )
             time.sleep(2.0)
         else:
-            self.log.warning("Pubsub thread exitin on %s" % exc)
+            self.log.warning('Pubsub thread exitin on %s' % exc)
             raise
 
     def handle_payload(self, message):
@@ -1241,7 +1240,6 @@ class BaseWorker:
 
 
 class Worker(BaseWorker):
-
     @property
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
@@ -1395,8 +1393,8 @@ class Worker(BaseWorker):
                 job.ended_at = now()
 
             # Unhandled failure: move the job to the failed queue
-            signal_msg = f" (signal {os.WTERMSIG(ret_val)})" if ret_val and os.WIFSIGNALED(ret_val) else ''
-            exc_string = f"Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; "
+            signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
+            exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
             self.log.warning('Moving job to FailedJobRegistry (%s)', exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
@@ -1532,7 +1530,7 @@ class Worker(BaseWorker):
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        self.log.debug('Saving job %s\'s successful execution result', job.id)
+                        self.log.debug("Saving job %s's successful execution result", job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
 
                     job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)

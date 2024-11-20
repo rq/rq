@@ -45,7 +45,7 @@ from .utils import (
     utcformat,
 )
 
-logger = logging.getLogger("rq.job")
+logger = logging.getLogger('rq.job')
 
 
 class JobStatus(str, Enum):
@@ -86,9 +86,9 @@ class Dependency:
         """
         dependent_jobs = ensure_list(jobs)
         if not all(isinstance(job, Job) or isinstance(job, str) for job in dependent_jobs if job):
-            raise ValueError("jobs: must contain objects of type Job and/or strings representing Job ids")
+            raise ValueError('jobs: must contain objects of type Job and/or strings representing Job ids')
         elif len(dependent_jobs) < 1:
-            raise ValueError("jobs: cannot be empty.")
+            raise ValueError('jobs: cannot be empty.')
 
         self.dependencies = dependent_jobs
         self.allow_failure = allow_failure
@@ -126,9 +126,9 @@ def get_current_job(connection: Optional['Redis'] = None, job_class: Optional['J
         job (Optional[Job]): The current Job running
     """
     if connection:
-        warnings.warn("connection argument for get_current_job is deprecated.", DeprecationWarning)
+        warnings.warn('connection argument for get_current_job is deprecated.', DeprecationWarning)
     if job_class:
-        warnings.warn("job_class argument for get_current_job is deprecated.", DeprecationWarning)
+        warnings.warn('job_class argument for get_current_job is deprecated.', DeprecationWarning)
     return _job_stack.top
 
 
@@ -397,7 +397,7 @@ class Job:
         if refresh:
             status = self.connection.hget(self.key, 'status')
             if not status:
-                raise InvalidJobOperation(f"Failed to retrieve status for job: {self.id}")
+                raise InvalidJobOperation(f'Failed to retrieve status for job: {self.id}')
             self._status = JobStatus(as_text(status))
         return self._status
 
@@ -730,7 +730,7 @@ class Job:
         if not isinstance(value, str):
             raise TypeError('id must be a string, not {0}'.format(type(value)))
 
-        if ":" in value:
+        if ':' in value:
             raise ValueError('id must not contain ":"')
 
         self._id = value
@@ -822,7 +822,7 @@ class Job:
         """
         Get the latest result and returns `exc_info` only if the latest result is a failure.
         """
-        warnings.warn("job.exc_info is deprecated, use job.latest_result() instead.", DeprecationWarning)
+        warnings.warn('job.exc_info is deprecated, use job.latest_result() instead.', DeprecationWarning)
 
         from .results import Result
 
@@ -886,7 +886,7 @@ class Job:
         seconds by default).
         """
 
-        warnings.warn("job.result is deprecated, use job.return_value instead.", DeprecationWarning)
+        warnings.warn('job.result is deprecated, use job.return_value instead.', DeprecationWarning)
 
         from .results import Result
 
@@ -1064,7 +1064,7 @@ class Job:
             try:
                 obj['result'] = self.serializer.dumps(self._result)
             except:  # noqa
-                obj['result'] = "Unserializable return value"
+                obj['result'] = 'Unserializable return value'
         if self._exc_info is not None and include_result:
             obj['exc_info'] = zlib.compress(str(self._exc_info).encode('utf-8'))
         if self.timeout is not None:
@@ -1091,10 +1091,10 @@ class Job:
 
         if self.allow_dependency_failures is not None:
             # convert boolean to integer to avoid redis.exception.DataError
-            obj["allow_dependency_failures"] = int(self.allow_dependency_failures)
+            obj['allow_dependency_failures'] = int(self.allow_dependency_failures)
 
         if self.enqueue_at_front is not None:
-            obj["enqueue_at_front"] = int(self.enqueue_at_front)
+            obj['enqueue_at_front'] = int(self.enqueue_at_front)
 
         return obj
 
@@ -1158,7 +1158,7 @@ class Job:
             InvalidJobOperation: If the job has already been cancelled.
         """
         if self.is_canceled:
-            raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
+            raise InvalidJobOperation('Cannot cancel already canceled job: {}'.format(self.get_id()))
         from .queue import Queue
         from .registry import CanceledJobRegistry
 

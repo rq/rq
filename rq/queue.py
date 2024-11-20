@@ -28,29 +28,29 @@ from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
 
-logger = logging.getLogger("rq.queue")
+logger = logging.getLogger('rq.queue')
 
 
 class EnqueueData(
     namedtuple(
         'EnqueueData',
         [
-            "func",
-            "args",
-            "kwargs",
-            "timeout",
-            "result_ttl",
-            "ttl",
-            "failure_ttl",
-            "description",
-            "depends_on",
-            "job_id",
-            "at_front",
-            "meta",
-            "retry",
-            "on_success",
-            "on_failure",
-            "on_stopped",
+            'func',
+            'args',
+            'kwargs',
+            'timeout',
+            'result_ttl',
+            'ttl',
+            'failure_ttl',
+            'description',
+            'depends_on',
+            'job_id',
+            'at_front',
+            'meta',
+            'retry',
+            'on_success',
+            'on_failure',
+            'on_stopped',
         ],
     )
 ):
@@ -278,11 +278,7 @@ class Queue:
                 count = count + 1
             end
             return count
-        """.format(
-            self.job_class.redis_job_namespace_prefix
-        ).encode(
-            "utf-8"
-        )
+        """.format(self.job_class.redis_job_namespace_prefix).encode('utf-8')
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
@@ -809,23 +805,23 @@ class Queue:
 
         def get_job_kwargs(job_data, initial_status):
             return {
-                "func": job_data.func,
-                "args": job_data.args,
-                "kwargs": job_data.kwargs,
-                "result_ttl": job_data.result_ttl,
-                "ttl": job_data.ttl,
-                "failure_ttl": job_data.failure_ttl,
-                "description": job_data.description,
-                "depends_on": job_data.depends_on,
-                "job_id": job_data.job_id,
-                "meta": job_data.meta,
-                "status": initial_status,
-                "timeout": job_data.timeout,
-                "retry": job_data.retry,
-                "on_success": job_data.on_success,
-                "on_failure": job_data.on_failure,
-                "on_stopped": job_data.on_stopped,
-                "group_id": group_id,
+                'func': job_data.func,
+                'args': job_data.args,
+                'kwargs': job_data.kwargs,
+                'result_ttl': job_data.result_ttl,
+                'ttl': job_data.ttl,
+                'failure_ttl': job_data.failure_ttl,
+                'description': job_data.description,
+                'depends_on': job_data.depends_on,
+                'job_id': job_data.job_id,
+                'meta': job_data.meta,
+                'status': initial_status,
+                'timeout': job_data.timeout,
+                'retry': job_data.retry,
+                'on_success': job_data.on_success,
+                'on_failure': job_data.on_failure,
+                'on_stopped': job_data.on_stopped,
+                'group_id': group_id,
             }
 
         # Enqueue jobs without dependencies
@@ -1298,11 +1294,11 @@ class Queue:
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queues = ', '.join(map(str, [green(str(queue)) for queue in queue_keys]))
-            logger.debug(f"Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}")
+            logger.debug(f'Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}')
             assert connection
             result = connection.blpop(queue_keys, timeout)
             if result is None:
-                logger.debug(f"BLPOP timeout, no jobs found on queues {colored_queues}")
+                logger.debug(f'BLPOP timeout, no jobs found on queues {colored_queues}')
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
             return queue_key, job_id
@@ -1324,10 +1320,10 @@ class Queue:
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queue = green(queue_key)
-            logger.debug(f"Starting BLMOVE operation for {colored_queue} with timeout of {timeout}")
+            logger.debug(f'Starting BLMOVE operation for {colored_queue} with timeout of {timeout}')
             result: Optional[Any] = connection.blmove(queue_key, intermediate_queue.key, timeout)
             if result is None:
-                logger.debug(f"BLMOVE timeout, no jobs found on {colored_queue}")
+                logger.debug(f'BLMOVE timeout, no jobs found on {colored_queue}')
                 raise DequeueTimeout(timeout, queue_key)
             return queue_key, result
         else:  # non-blocking variant
