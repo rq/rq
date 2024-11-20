@@ -1,1 +1,1 @@
-REDIS_HOST = "testhost.example.com"
+REDIS_HOST = 'testhost.example.com'

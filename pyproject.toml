@@ -68,7 +68,6 @@ include = [
 
 [tool.hatch.envs.test]
 dependencies = [
-    "black",
     "coverage",
     "mypy",
     "packaging",
@@ -83,11 +82,6 @@ dependencies = [
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
 typing = "mypy --enable-incomplete-feature=Unpack rq"
-
-[tool.black]
-line-length = 120
-target-version = ["py38"]
-skip-string-normalization = true
 
 [tool.mypy]
 allow_redefinition = true
@@ -105,13 +99,14 @@ ignore_missing_imports = true
 [tool.ruff]
 # Set what ruff should check for.
 # See https://beta.ruff.rs/docs/rules/ for a list of rules.
+
 lint.select = [
     "E", # pycodestyle errors
     "F", # pyflakes errors
     "I", # import sorting
     "W", # pycodestyle warnings
 ]
-line-length = 120 # To match black.
+line-length = 120
 target-version = "py38"
 
 [tool.ruff.format]

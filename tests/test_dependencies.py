@@ -104,7 +104,7 @@ class TestDependencies(RQTestCase):
         q.enqueue(say_hello, job_id='fake_job_id_2', depends_on=Dependency(jobs=[parent_job], enqueue_at_front=True))
         w.work(burst=True, max_jobs=1)
 
-        self.assertEqual(q.job_ids, ["fake_job_id_2", "fake_job_id_1"])
+        self.assertEqual(q.job_ids, ['fake_job_id_2', 'fake_job_id_1'])
 
     def test_multiple_jobs_with_dependencies(self):
         """Enqueue dependent jobs only when appropriate"""
@@ -205,9 +205,9 @@ class TestDependencies(RQTestCase):
     def test_dependencies_are_met_at_execution_time(self):
         queue = Queue(connection=self.connection)
         queue.empty()
-        queue.enqueue(say_hello, job_id="A")
-        queue.enqueue(say_hello, job_id="B")
-        job_c = queue.enqueue(check_dependencies_are_met, job_id="C", depends_on=["A", "B"])
+        queue.enqueue(say_hello, job_id='A')
+        queue.enqueue(say_hello, job_id='B')
+        job_c = queue.enqueue(check_dependencies_are_met, job_id='C', depends_on=['A', 'B'])
 
         job_c.dependencies_are_met()
         w = Worker([queue], connection=self.connection)

@@ -196,13 +196,13 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: R
             queue_dict[queue] = worker_class.all(queue=queue, connection=connection)
 
         if queue_dict:
-            max_length = max(len(q.name) for q, in queue_dict.keys())
+            max_length = max(len(q.name) for (q,) in queue_dict.keys())
         else:
             max_length = 0
 
         for queue in queue_dict:
             if queue_dict[queue]:
-                queues_str = ", ".join(
+                queues_str = ', '.join(
                     sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queue_dict[queue]))
                 )
             else:
@@ -238,7 +238,7 @@ def refresh(interval, func, *args):
 
 def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     if verbose and quiet:
-        raise RuntimeError("Flags --verbose and --quiet are mutually exclusive.")
+        raise RuntimeError('Flags --verbose and --quiet are mutually exclusive.')
 
     if verbose:
         level = 'DEBUG'
@@ -312,7 +312,7 @@ def parse_function_args(arguments):
         keyword, value = parse_function_arg(argument, len(args) + 1)
         if keyword is not None:
             if keyword in kwargs:
-                raise click.BadParameter('You can\'t specify multiple values for the same keyword.')
+                raise click.BadParameter("You can't specify multiple values for the same keyword.")
             kwargs[keyword] = value
         else:
             args.append(value)
@@ -322,7 +322,7 @@ def parse_function_args(arguments):
 def parse_schedule(schedule_in, schedule_at):
     if schedule_in is not None:
         if schedule_at is not None:
-            raise click.BadArgumentUsage('You can\'t specify both --schedule-in and --schedule-at')
+            raise click.BadArgumentUsage("You can't specify both --schedule-in and --schedule-at")
         return datetime.now(timezone.utc) + timedelta(seconds=parse_timeout(schedule_in))
     elif schedule_at is not None:
         return datetime.strptime(schedule_at, '%Y-%m-%dT%H:%M:%S')

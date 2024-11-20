@@ -433,7 +433,7 @@ class TestDeferredRegistry(RQTestCase):
 
         self.registry.add(job)
         score = self.connection.zscore(key, job.id)
-        self.assertEqual(score, float("inf"))
+        self.assertEqual(score, float('inf'))
 
         timestamp = current_timestamp()
         ttl = 5

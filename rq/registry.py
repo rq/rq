@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from rq.executions import Execution
 
 
-logger = logging.getLogger("rq.registry")
+logger = logging.getLogger('rq.registry')
 
 
 class BaseRegistry:
@@ -288,13 +288,13 @@ class StartedJobRegistry(BaseRegistry):
                         job.retry(queue, pipeline)
 
                     else:
-                        exc_string = f"due to {AbandonedJobError.__name__}"
+                        exc_string = f'due to {AbandonedJobError.__name__}'
                         logger.warning(
                             f'{self.__class__.__name__} cleanup: Moving job {job.id} to {FailedJobRegistry.__name__} '
                             f'({exc_string})'
                         )
                         job.set_status(JobStatus.FAILED)
-                        job._exc_info = f"Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}"
+                        job._exc_info = f'Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}'
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
@@ -434,7 +434,7 @@ class DeferredJobRegistry(BaseRegistry):
                         continue
 
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                    exc_info = "Expired in DeferredJobRegistry, moved to FailedJobRegistry at %s" % datetime.now()
+                    exc_info = 'Expired in DeferredJobRegistry, moved to FailedJobRegistry at %s' % datetime.now()
                     failed_job_registry.add(job, job.failure_ttl, exc_info, pipeline, True)
 
                 pipeline.zremrangebyscore(self.key, 0, score)

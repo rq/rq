@@ -281,7 +281,7 @@ class TestWorker(RQTestCase):
         w.perform_job(job, queue)
 
         # An exception should be logged here at ERROR level
-        self.assertIn("Traceback", mock_logger_error.call_args[0][3])
+        self.assertIn('Traceback', mock_logger_error.call_args[0][3])
 
     def test_heartbeat(self):
         """Heartbeat saves last_heartbeat"""
@@ -642,10 +642,10 @@ class TestWorker(RQTestCase):
         """Cancel job and verify that when the parent job is finished,
         the dependent job is not started."""
 
-        q = Queue("low", connection=self.connection)
-        parent_job = q.enqueue(long_running_job, 5, job_id="parent_job")
-        job = q.enqueue(say_hello, depends_on=parent_job, job_id="job1")
-        job2 = q.enqueue(say_hello, depends_on=job, job_id="job2")
+        q = Queue('low', connection=self.connection)
+        parent_job = q.enqueue(long_running_job, 5, job_id='parent_job')
+        job = q.enqueue(say_hello, depends_on=parent_job, job_id='job1')
+        job2 = q.enqueue(say_hello, depends_on=job, job_id='job2')
         job.cancel()
 
         w = Worker([q])
@@ -663,11 +663,11 @@ class TestWorker(RQTestCase):
     def test_cancel_job_enqueue_dependent(self):
         """Cancel a job in a chain and enqueue the dependent jobs."""
 
-        q = Queue("low", connection=self.connection)
-        parent_job = q.enqueue(long_running_job, 5, job_id="parent_job")
-        job = q.enqueue(say_hello, depends_on=parent_job, job_id="job1")
-        job2 = q.enqueue(say_hello, depends_on=job, job_id="job2")
-        job3 = q.enqueue(say_hello, depends_on=job2, job_id="job3")
+        q = Queue('low', connection=self.connection)
+        parent_job = q.enqueue(long_running_job, 5, job_id='parent_job')
+        job = q.enqueue(say_hello, depends_on=parent_job, job_id='job1')
+        job2 = q.enqueue(say_hello, depends_on=job, job_id='job2')
+        job3 = q.enqueue(say_hello, depends_on=job2, job_id='job3')
 
         job.cancel(enqueue_dependents=True)
 
@@ -1019,9 +1019,9 @@ class TestWorker(RQTestCase):
     def test_worker_hash_(self):
         """Workers are hashed by their .name attribute"""
         q = Queue('foo', connection=self.connection)
-        w1 = Worker([q], name="worker1")
-        w2 = Worker([q], name="worker2")
-        w3 = Worker([q], name="worker1")
+        w1 = Worker([q], name='worker1')
+        w2 = Worker([q], name='worker2')
+        w3 = Worker([q], name='worker1')
         worker_set = set([w1, w2, w3])
         self.assertEqual(len(worker_set), 2)
 
@@ -1200,7 +1200,7 @@ class TestWorker(RQTestCase):
         w = Worker([q], connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
-        self.assertIn("Frank", mock_logger_info.call_args[0][2])
+        self.assertIn('Frank', mock_logger_info.call_args[0][2])
 
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_false(self, mock_logger_info):
@@ -1209,14 +1209,14 @@ class TestWorker(RQTestCase):
         w = Worker([q], log_job_description=False, connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
-        self.assertNotIn("Frank", mock_logger_info.call_args[0][2])
+        self.assertNotIn('Frank', mock_logger_info.call_args[0][2])
 
     def test_worker_configures_socket_timeout(self):
         """Ensures that the worker correctly updates Redis client connection to have a socket_timeout"""
         q = Queue(connection=self.connection)
         _ = Worker([q], connection=self.connection)
         connection_kwargs = q.connection.connection_pool.connection_kwargs
-        self.assertEqual(connection_kwargs["socket_timeout"], 415)
+        self.assertEqual(connection_kwargs['socket_timeout'], 415)
 
     def test_worker_version(self):
         q = Queue(connection=self.connection)
@@ -1255,7 +1255,7 @@ class TestWorker(RQTestCase):
                 qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
 
         w = Worker(qs, connection=self.connection)
-        w.work(burst=True, dequeue_strategy="random")
+        w.work(burst=True, dequeue_strategy='random')
 
         start_times = []
         for i in range(5):
@@ -1299,7 +1299,7 @@ class TestWorker(RQTestCase):
                 qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
 
         w = Worker(qs)
-        w.work(burst=True, dequeue_strategy="round_robin")
+        w.work(burst=True, dequeue_strategy='round_robin')
 
         start_times = []
         for i in range(5):
@@ -1598,14 +1598,13 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
 
 class TestExceptionHandlerMessageEncoding(RQTestCase):
-
     def test_handle_exception_handles_non_ascii_in_exception_message(self):
         """worker.handle_exception doesn't crash on non-ascii in exception message."""
-        worker = Worker("foo", connection=self.connection)
+        worker = Worker('foo', connection=self.connection)
         worker._exc_handlers = []
         # Mimic how exception info is actually passed forwards
         try:
-            raise Exception(u"💪")
+            raise Exception('💪')
         except Exception:
             exc_info = sys.exc_info()
         worker.handle_exception(Mock(), *exc_info)

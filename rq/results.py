@@ -164,7 +164,7 @@ class Result:
             # Unlike blpop, xread timeout is in miliseconds. "0-0" is the special value for the
             # first item in the stream, like '-' for xrevrange.
             timeout_ms = timeout * 1000
-            response = job.connection.xread({cls.get_key(job.id): "0-0"}, block=timeout_ms)
+            response = job.connection.xread({cls.get_key(job.id): '0-0'}, block=timeout_ms)
             if not response:
                 return None
             response = response[0]  # Querying single stream only.

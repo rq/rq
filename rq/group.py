@@ -23,7 +23,7 @@ class Group:
         self.key = '{0}{1}'.format(self.REDIS_GROUP_NAME_PREFIX, self.name)
 
     def __repr__(self):
-        return "Group(id={})".format(self.name)
+        return 'Group(id={})'.format(self.name)
 
     def _add_jobs(self, jobs: List[Job], pipeline: Pipeline):
         """Add jobs to the group"""
