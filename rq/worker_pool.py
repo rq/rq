@@ -149,7 +149,7 @@ class WorkerPool:
         name: str,
         burst: bool,
         _sleep: float = 0,
-        logging_level: str = "INFO",
+        logging_level: str = 'INFO',
     ) -> Process:
         """Returns the worker process"""
         return Process(
@@ -171,7 +171,7 @@ class WorkerPool:
         count: Optional[int] = None,
         burst: bool = True,
         _sleep: float = 0,
-        logging_level: str = "INFO",
+        logging_level: str = 'INFO',
     ):
         """
         Starts a worker and adds the data to worker_datas.
@@ -184,7 +184,7 @@ class WorkerPool:
         self.worker_dict[name] = worker_data
         self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
-    def start_workers(self, burst: bool = True, _sleep: float = 0, logging_level: str = "INFO"):
+    def start_workers(self, burst: bool = True, _sleep: float = 0, logging_level: str = 'INFO'):
         """
         Run the workers
         * sleep: waits for X seconds before creating worker, only for testing purposes
@@ -214,7 +214,7 @@ class WorkerPool:
         for worker_data in worker_datas:
             self.stop_worker(worker_data)
 
-    def start(self, burst: bool = False, logging_level: str = "INFO"):
+    def start(self, burst: bool = False, logging_level: str = 'INFO'):
         self._burst = burst
         respawn = not burst  # Don't respawn workers if burst mode is on
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
@@ -250,7 +250,7 @@ def run_worker(
     serializer: Type['Serializer'] = DefaultSerializer,
     job_class: Type[Job] = Job,
     burst: bool = True,
-    logging_level: str = "INFO",
+    logging_level: str = 'INFO',
     _sleep: int = 0,
 ):
     connection = connection_class(
@@ -258,6 +258,6 @@ def run_worker(
     )
     queues = [Queue(name, connection=connection) for name in queue_names]
     worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
-    worker.log.info("Starting worker started with PID %s", os.getpid())
+    worker.log.info('Starting worker started with PID %s', os.getpid())
     time.sleep(_sleep)
     worker.work(burst=burst, with_scheduler=True, logging_level=logging_level)

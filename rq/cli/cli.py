@@ -122,7 +122,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
 
 
 @main.command()
-@click.option('--interval', '-i', type=float, help='Updates stats every N seconds (default: don\'t poll)')
+@click.option('--interval', '-i', type=float, help="Updates stats every N seconds (default: don't poll)")
 @click.option('--raw', '-r', is_flag=True, help='Print only the raw numbers, no bar charts')
 @click.option('--only-queues', '-Q', is_flag=True, help='Show only queue info')
 @click.option('--only-workers', '-W', is_flag=True, help='Show only worker info')
@@ -164,7 +164,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
-@click.option('--logging_level', type=str, default="INFO", help='Set logging level')
+@click.option('--logging_level', type=str, default='INFO', help='Set logging level')
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
@@ -187,7 +187,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--pid', help='Write the process ID number to a file at the specified path')
-@click.option('--disable-default-exception-handler', '-d', is_flag=True, help='Disable RQ\'s default exception handler')
+@click.option('--disable-default-exception-handler', '-d', is_flag=True, help="Disable RQ's default exception handler")
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
@@ -233,19 +233,19 @@ def worker(
         logging.config.dictConfig(dict_config)
 
     if pid:
-        with open(os.path.expanduser(pid), "w") as fp:
+        with open(os.path.expanduser(pid), 'w') as fp:
             fp.write(str(os.getpid()))
 
     worker_name = cli_config.worker_class.__qualname__
-    if worker_name in ["RoundRobinWorker", "RandomWorker"]:
-        strategy_alternative = "random" if worker_name == "RandomWorker" else "round_robin"
-        msg = f"WARNING: {worker_name} is deprecated. Use `--dequeue-strategy {strategy_alternative}` instead."
+    if worker_name in ['RoundRobinWorker', 'RandomWorker']:
+        strategy_alternative = 'random' if worker_name == 'RandomWorker' else 'round_robin'
+        msg = f'WARNING: {worker_name} is deprecated. Use `--dequeue-strategy {strategy_alternative}` instead.'
         warnings.warn(msg, DeprecationWarning)
         click.secho(msg, fg='yellow')
 
-    if dequeue_strategy not in ("default", "random", "round_robin"):
+    if dequeue_strategy not in ('default', 'random', 'round_robin'):
         click.secho(
-            "ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.", err=True, fg='red'
+            'ERROR: Dequeue Strategy can only be one of `default`, `random` or `round_robin`.', err=True, fg='red'
         )
         sys.exit(1)
 
@@ -309,19 +309,17 @@ def suspend(cli_config, duration, **options):
     """Suspends all workers, to resume run `rq resume`"""
 
     if duration is not None and duration < 1:
-        click.echo("Duration must be an integer greater than 1")
+        click.echo('Duration must be an integer greater than 1')
         sys.exit(1)
 
     connection_suspend(cli_config.connection, duration)
 
     if duration:
         msg = """Suspending workers for {0} seconds.  No new jobs will be started during that time, but then will
-        automatically resume""".format(
-            duration
-        )
+        automatically resume""".format(duration)
         click.echo(msg)
     else:
-        click.echo("Suspending workers.  No new jobs will be started.  But current jobs will be completed")
+        click.echo('Suspending workers.  No new jobs will be started.  But current jobs will be completed')
 
 
 @main.command()
@@ -329,7 +327,7 @@ def suspend(cli_config, duration, **options):
 def resume(cli_config, **options):
     """Resumes processing of queues, that were suspended with `rq suspend`"""
     connection_resume(cli_config.connection)
-    click.echo("Resuming workers.")
+    click.echo('Resuming workers.')
 
 
 @main.command()
@@ -427,12 +425,12 @@ def enqueue(
         queue.schedule_job(job, schedule)
 
     if not quiet:
-        click.echo('Enqueued %s with job-id \'%s\'.' % (blue(function_string), job.id))
+        click.echo("Enqueued %s with job-id '%s'." % (blue(function_string), job.id))
 
 
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
-@click.option('--logging-level', '-l', type=str, default="INFO", help='Set logging level')
+@click.option('--logging-level', '-l', type=str, default='INFO', help='Set logging level')
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')

@@ -1,13 +1,14 @@
 # ruff: noqa: E731
 """
-    werkzeug.local
-    ~~~~~~~~~~~~~~
+werkzeug.local
+~~~~~~~~~~~~~~
 
-    This module implements context-local objects.
+This module implements context-local objects.
 
-    :copyright: (c) 2011 by the Werkzeug Team, see AUTHORS for more details.
-    :license: BSD, see LICENSE for more details.
+:copyright: (c) 2011 by the Werkzeug Team, see AUTHORS for more details.
+:license: BSD, see LICENSE for more details.
 """
+
 # Since each thread has its own greenlet we can just use those as identifiers
 # for the context.  If greenlets are not available we fall back to the
 # current thread ident.

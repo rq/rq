@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
 
 class IntermediateQueue(object):
-
     def __init__(self, queue_key: str, connection: Redis):
         self.queue_key = queue_key
         self.key = self.get_intermediate_queue_key(queue_key)
@@ -103,7 +102,6 @@ class IntermediateQueue(object):
             job = queue.fetch_job(job_id)
 
             if job_id not in queue.started_job_registry:
-
                 if not job:
                     # If the job doesn't exist in the queue, we can safely remove it from the intermediate queue.
                     self.remove(job_id)

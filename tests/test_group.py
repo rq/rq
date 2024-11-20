@@ -24,8 +24,8 @@ class TestGroup(RQTestCase):
         q.empty()
 
     def test_group_repr(self):
-        group = Group.create(name="foo", connection=self.connection)
-        assert group.__repr__() == "Group(id=foo)"
+        group = Group.create(name='foo', connection=self.connection)
+        assert group.__repr__() == 'Group(id=foo)'
 
     def test_group_jobs(self):
         q = Queue(connection=self.connection)
@@ -84,7 +84,7 @@ class TestGroup(RQTestCase):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
         group.enqueue_many(q, [self.job_1_data])
-        redis_groups = {as_text(group) for group in self.connection.smembers("rq:groups")}
+        redis_groups = {as_text(group) for group in self.connection.smembers('rq:groups')}
         assert group.name in redis_groups
         q.empty()
 
@@ -113,7 +113,7 @@ class TestGroup(RQTestCase):
         w.work(burst=True, max_jobs=1)
         sleep(2)
         w.run_maintenance_tasks()
-        redis_groups = {as_text(group) for group in self.connection.smembers("rq:groups")}
+        redis_groups = {as_text(group) for group in self.connection.smembers('rq:groups')}
         assert group.name not in redis_groups
 
     @pytest.mark.slow
@@ -130,18 +130,18 @@ class TestGroup(RQTestCase):
         q.empty()
 
     def test_get_group_key(self):
-        group = Group(name="foo", connection=self.connection)
-        self.assertEqual(Group.get_key(group.name), "rq:group:foo")
+        group = Group(name='foo', connection=self.connection)
+        self.assertEqual(Group.get_key(group.name), 'rq:group:foo')
 
     def test_all_returns_all_groups(self):
         q = Queue(connection=self.connection)
-        group1 = Group.create(name="group1", connection=self.connection)
-        Group.create(name="group2", connection=self.connection)
+        group1 = Group.create(name='group1', connection=self.connection)
+        Group.create(name='group2', connection=self.connection)
         group1.enqueue_many(q, [self.job_1_data, self.job_2_data])
         all_groups = Group.all(self.connection)
         assert len(all_groups) == 1
-        assert "group1" in [group.name for group in all_groups]
-        assert "group2" not in [group.name for group in all_groups]
+        assert 'group1' in [group.name for group in all_groups]
+        assert 'group2' not in [group.name for group in all_groups]
 
     def test_all_deletes_missing_groups(self):
         q = Queue(connection=self.connection)
