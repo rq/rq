@@ -9,7 +9,7 @@ from rq.utils import (
     as_text,
     backend_class,
     ceildiv,
-    ensure_list,
+    ensure_job_list,
     first,
     get_call_string,
     get_version,
@@ -69,10 +69,10 @@ class TestUtils(RQTestCase):
 
     def test_ensure_list(self):
         """Ensure function ensure_list works correctly"""
-        self.assertEqual([], ensure_list([]))
-        self.assertEqual(['test'], ensure_list('test'))
-        self.assertEqual([], ensure_list({}))
-        self.assertEqual([], ensure_list(()))
+        self.assertEqual([], ensure_job_list([]))
+        self.assertEqual(['test'], ensure_job_list('test'))
+        self.assertEqual([], ensure_job_list({}))
+        self.assertEqual([], ensure_job_list(()))
 
     def test_utcparse(self):
         """Ensure function utcparse works correctly"""

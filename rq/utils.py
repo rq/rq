@@ -48,7 +48,7 @@ ObjOrStr = Union[_O, str]
 logger = logging.getLogger(__name__)
 
 
-def compact(lst: Iterable[_T]) -> List[_T]:
+def compact(lst: Iterable[Optional[_T]]) -> List[_T]:
     """Excludes `None` values from a list-like object.
 
     Args:
@@ -229,14 +229,10 @@ def is_nonstring_iterable(obj: Any) -> bool:
 
 
 @overload
-def ensure_list(obj: str) -> List[str]: ...
+def ensure_job_list(obj: ObjOrStr) -> List[ObjOrStr]: ...
 @overload
-def ensure_list(obj: Iterable[ObjOrStr]) -> List[ObjOrStr]: ...
-@overload
-def ensure_list(obj: Union[_BT, Iterable[_BT]]) -> List[_BT]: ...
-@overload
-def ensure_list(obj: Union[_O, Iterable[_O]]) -> List[_O]: ...
-def ensure_list(obj):
+def ensure_job_list(obj: Iterable[ObjOrStr]) -> List[ObjOrStr]: ...
+def ensure_job_list(obj):
     """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.
 
