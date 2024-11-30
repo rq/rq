@@ -68,7 +68,7 @@ class BaseRegistry:
             and self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
         )
 
-    def __contains__(self, item: Union[str, 'Job']) -> bool:
+    def __contains__(self, item: Any) -> bool:
         """
         Returns a boolean indicating registry contains the given
         job instance or job id.
