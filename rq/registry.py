@@ -523,7 +523,7 @@ class ScheduledJobRegistry(BaseRegistry):
         Returns:
             datetime (datetime): The scheduled time as datetime object
         """
-        if isinstance(job_or_id, self.job_class):
+        if isinstance(job_or_id, 'Job'):
             job_id = job_or_id.id
         else:
             job_id = job_or_id
