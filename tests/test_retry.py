@@ -4,7 +4,6 @@ from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
 from rq.worker import Worker
-
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 

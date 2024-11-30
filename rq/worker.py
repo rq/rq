@@ -1506,7 +1506,6 @@ class Worker(BaseWorker):
             # If max retries exceeded, treat as failure
             self.log.warning('Job %s has exceeded maximum retry attempts (%d)', job.id, retry.max)
             exc_string = f'Job failed after {retry.max} retry attempts'
-            # TODO: this should bypass retry logic and go straight to failure handling
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
             return
 
