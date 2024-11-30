@@ -151,7 +151,6 @@ class BaseWorker:
         serializer=None,
         work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
-
         self.default_result_ttl = default_result_ttl
 
         if worker_ttl:
@@ -1239,7 +1238,6 @@ class BaseWorker:
 
 
 class Worker(BaseWorker):
-
     @property
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
@@ -1516,7 +1514,6 @@ class Worker(BaseWorker):
         retry_interval = Retry.get_interval(job.number_of_retries or 0, retry.intervals)
 
         with self.connection.pipeline() as pipeline:
-
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
@@ -1527,12 +1524,15 @@ class Worker(BaseWorker):
                 queue.schedule_job(job, scheduled_time, pipeline=pipeline)
                 self.log.debug(
                     'Job %s: scheduled for retry at %s, %s attempts remaining',
-                    job.id, scheduled_time, retry.max - (job.number_of_retries or 0)
+                    job.id,
+                    scheduled_time,
+                    retry.max - (job.number_of_retries or 0),
                 )
             else:
                 self.log.debug(
                     'Job %s: enqueued for retry, %s attempts remaining',
-                    job.id, retry.max - (job.number_of_retries or 0)
+                    job.id,
+                    retry.max - (job.number_of_retries or 0),
                 )
                 job._handle_retry_result(queue=queue, pipeline=pipeline)
 
@@ -1642,7 +1642,9 @@ class Worker(BaseWorker):
             if isinstance(return_value, Retry):
                 # Retry the job
                 self.log.debug('Job %s returns a Retry object', job.id)
-                self.handle_job_retry(job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry)
+                self.handle_job_retry(
+                    job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry
+                )
                 return True
             else:
                 job.execute_success_callback(self.death_penalty_class, return_value)
