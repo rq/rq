@@ -649,6 +649,7 @@ class BaseWorker:
         """Cleans up the execution of a job.
         It will remove the job from the `StartedJobRegistry` and delete the Execution object.
         """
+        self.log.debug('Cleaning up execution of job %s', job.id)
         started_job_registry = StartedJobRegistry(
             job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
         )
@@ -716,9 +717,6 @@ class BaseWorker:
                 if not retry:
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
-            # started_job_registry.remove(job, pipeline=pipeline)
-            # self.execution.delete(pipeline=pipeline)  # type: ignore
-            # self.set_current_job_id(None, pipeline=pipeline)
             self.cleanup_execution(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
@@ -1538,7 +1536,6 @@ class Worker(BaseWorker):
                 )
                 job._handle_retry_result(queue=queue, pipeline=pipeline)
 
-            self.log.debug('Removing job %s from StartedJobRegistry', job.id)
             self.cleanup_execution(job, pipeline=pipeline)
 
             pipeline.execute()
