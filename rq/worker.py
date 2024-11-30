@@ -10,7 +10,7 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from random import shuffle
 from types import FrameType
@@ -47,7 +47,7 @@ from .defaults import (
 from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
 from .executions import Execution
 from .group import Group
-from .job import Job, JobStatus
+from .job import Job, JobStatus, Retry
 from .logutils import blue, green, setup_loghandlers, yellow
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
@@ -706,7 +706,7 @@ class BaseWorker:
             # check whether a job was stopped intentionally and set the job
             # status appropriately if it was this job.
             job_is_stopped = self._stopped_job_id == job.id
-            retry = job.retries_left and job.retries_left > 0 and not job_is_stopped
+            retry = job.should_retry and not job_is_stopped
 
             if job_is_stopped:
                 job.set_status(JobStatus.STOPPED, pipeline=pipeline)
@@ -1492,6 +1492,57 @@ class Worker(BaseWorker):
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
+    def handle_job_retry(self, job: 'Job', queue: 'Queue', retry: Retry, started_job_registry: StartedJobRegistry):
+        """Handles the retry of certain job.
+        It will remove the job from the `StartedJobRegistry` and requeue or reschedule the job.
+
+        Args:
+            job (Job): The job that will be retried.
+            queue (Queue): The queue
+            started_job_registry (StartedJobRegistry): The started registry
+        """
+        self.log.debug('Handling retry of job %s', job.id)
+
+        # Check if job has exceeded max retries
+        if job.number_of_retries and job.number_of_retries >= retry.max:
+            # If max retries exceeded, treat as failure
+            self.log.warning('Job %s has exceeded maximum retry attempts (%d)', job.id, retry.max)
+            exc_string = f'Job failed after {retry.max} retry attempts'
+            # TODO: this should bypass retry logic and go straight to failure handling
+            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+            return
+
+        # Calculate retry interval based on retry count
+        retry_interval = Retry.get_interval(job.number_of_retries or 0, retry.intervals)
+
+        with self.connection.pipeline() as pipeline:
+
+            self.increment_failed_job_count(pipeline=pipeline)
+            self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+
+            if retry_interval > 0:
+                # Schedule job for later if there's an interval
+                scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+                job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
+                queue.schedule_job(job, scheduled_time, pipeline=pipeline)
+                self.log.debug(
+                    'Job %s: scheduled for retry at %s, %s attempts remaining',
+                    job.id, scheduled_time, retry.max - (job.number_of_retries or 0)
+                )
+            else:
+                self.log.debug(
+                    'Job %s: enqueued for retry, %s attempts remaining',
+                    job.id, retry.max - (job.number_of_retries or 0)
+                )
+                job._handle_retry_result(queue=queue, pipeline=pipeline)
+
+            self.log.debug('Removing job %s from StartedJobRegistry', job.id)
+            self.cleanup_execution(job, pipeline=pipeline)
+
+            pipeline.execute()
+
+            self.log.debug('Finished handling retry of job %s', job.id)
+
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
         It will remove the job from the `StartedJobRegistry`, adding it to the `SuccessfulJobRegistry`,
@@ -1581,17 +1632,23 @@ class Worker(BaseWorker):
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
                 self.log.debug('Performing Job %s ...', job.id)
-                rv = job.perform()
+                return_value = job.perform()
                 self.log.debug('Finished performing Job %s', job.id)
 
             self.handle_execution_ended(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
             # to use the same exc handling when pickling fails
-            job._result = rv
+            job._result = return_value
 
-            job.execute_success_callback(self.death_penalty_class, rv)
+            if isinstance(return_value, Retry):
+                # Retry the job
+                self.log.debug('Job %s returns a Retry object', job.id)
+                self.handle_job_retry(job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry)
+                return True
+            else:
+                job.execute_success_callback(self.death_penalty_class, return_value)
+                self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
 
-            self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
         except:  # NOQA
             self.log.debug('Job %s raised an exception.', job.id)
             job._status = JobStatus.FAILED
@@ -1616,8 +1673,8 @@ class Worker(BaseWorker):
             return False
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
-        if rv is not None:
-            self.log.debug('Result: %r', yellow(as_text(str(rv))))
+        if return_value is not None:
+            self.log.debug('Result: %r', yellow(str(return_value)))
 
         if self.log_result_lifespan:
             result_ttl = job.get_result_ttl(self.default_result_ttl)

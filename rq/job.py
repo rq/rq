@@ -194,6 +194,7 @@ class Job:
         self.meta: Dict[str, Any] = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left: Optional[int] = None
+        self.number_of_retries: Optional[int] = None
         self.retry_intervals: Optional[List[int]] = None
         self.redis_server_version: Optional[Tuple[int, int, int]] = None
         self.last_heartbeat: Optional[datetime] = None
@@ -999,6 +1000,7 @@ class Job:
         except Exception:  # depends on the serializer
             self.meta = {'unserialized': obj.get('meta', {})}
 
+        self.number_of_retries = int(obj['number_of_retries']) if obj.get('number_of_retries') else None
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
@@ -1048,6 +1050,9 @@ class Job:
             'worker_name': self.worker_name or '',
             'group_id': self.group_id or '',
         }
+
+        if self.number_of_retries is not None:
+            obj['number_of_retries'] = self.number_of_retries
 
         if self.retries_left is not None:
             obj['retries_left'] = self.retries_left
@@ -1524,6 +1529,13 @@ class Job:
 
             Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
 
+    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline'):
+        if self.supports_redis_streams:
+            from .results import Result
+            Result.create_retried(self, self.failure_ttl, pipeline=pipeline)
+        self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
+        queue._enqueue_job(self, pipeline=pipeline)
+
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
         If number of retries is bigger than length of intervals, the first
@@ -1538,6 +1550,10 @@ class Job:
         assert self.retries_left
         index = max(number_of_intervals - self.retries_left, 0)
         return self.retry_intervals[index]
+
+    @property
+    def should_retry(self) -> bool:
+        return (self.retries_left is not None and self.retries_left > 0)
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
         """Requeue or schedule this job for execution.
@@ -1691,6 +1707,33 @@ class Retry:
 
         self.max = max
         self.intervals = intervals
+
+    @classmethod
+    def get_interval(cls, count: int, intervals: Union[int, List[int], None]) -> int:
+        """Returns the appropriate retry interval based on retry count and intervals.
+        If intervals is an integer, returns that value directly.
+        If intervals is a list and retry count is bigger than length of intervals,
+        the first value in the list will be used.
+
+        Args:
+            count (int): The current retry count
+            intervals (Union[int, List[int]]): Either a single interval value or list of intervals to use
+
+        Returns:
+            retry_interval (int): The appropriate retry interval
+        """
+        # If intervals is an integer, return it directly
+        if isinstance(intervals, int):
+            return intervals
+
+        # If intervals is an empty list or None, return 0
+        if not intervals:
+            return 0
+
+        # Calculate appropriate interval from list
+        number_of_intervals = len(intervals)
+        index = min(number_of_intervals - 1, count)
+        return intervals[index]
 
 
 class Callback:
