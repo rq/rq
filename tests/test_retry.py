@@ -4,11 +4,14 @@ from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
 from rq.worker import Worker
+
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
+
 def return_retry(max: int = 1, interval: int = 0):
     return Retry(max=max, interval=interval)
+
 
 class TestRetry(RQTestCase):
     """Tests from test_retry.py"""
