@@ -40,11 +40,13 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = ["click>=5", "redis>=3.5"]
+
 [project.urls]
 changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
 documentation = "https://python-rq.org/docs/"
 homepage = "https://python-rq.org/"
 repository = "https://github.com/rq/rq/"
+
 [project.scripts]
 rq = "rq.cli:main"
 rqinfo = "rq.cli:info"     # TODO [v2]: Remove
@@ -79,6 +81,7 @@ dependencies = [
     "types-greenlet",
     "types-redis",
 ]
+
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
 typing = "mypy --enable-incomplete-feature=Unpack rq"
@@ -106,6 +109,7 @@ lint.select = [
     "I", # import sorting
     "W", # pycodestyle warnings
 ]
+
 line-length = 120
 target-version = "py38"
 
@@ -113,6 +117,7 @@ target-version = "py38"
 quote-style = "preserve"
 
 [tool.ruff.lint.isort]
+
 known-first-party = ["rq"]
 section-order = [
     "future",
