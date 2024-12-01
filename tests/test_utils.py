@@ -1,5 +1,4 @@
 import datetime
-import re
 from unittest.mock import Mock
 
 from redis import Redis
