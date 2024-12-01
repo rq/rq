@@ -21,6 +21,7 @@ class Result:
         SUCCESSFUL = 1
         FAILED = 2
         STOPPED = 3
+        RETRIED = 4
 
     def __init__(
         self,
@@ -55,7 +56,7 @@ class Result:
         return bool(self.id)
 
     @classmethod
-    def create(cls, job, type, ttl, return_value=None, exc_string=None, pipeline=None):
+    def create(cls, job, type, ttl, return_value=None, exc_string=None, pipeline=None) -> 'Result':
         result = cls(
             job_id=job.id,
             type=type,
@@ -68,12 +69,23 @@ class Result:
         return result
 
     @classmethod
-    def create_failure(cls, job, ttl, exc_string, pipeline=None):
+    def create_failure(cls, job, ttl, exc_string, pipeline=None) -> 'Result':
         result = cls(
             job_id=job.id,
             type=cls.Type.FAILED,
             connection=job.connection,
             exc_string=exc_string,
+            serializer=job.serializer,
+        )
+        result.save(ttl=ttl, pipeline=pipeline)
+        return result
+
+    @classmethod
+    def create_retried(cls, job, ttl, pipeline=None) -> 'Result':
+        result = cls(
+            job_id=job.id,
+            type=cls.Type.RETRIED,
+            connection=job.connection,
             serializer=job.serializer,
         )
         result.save(ttl=ttl, pipeline=pipeline)
