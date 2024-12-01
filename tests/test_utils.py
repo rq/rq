@@ -10,7 +10,6 @@ from rq.utils import (
     backend_class,
     ceildiv,
     ensure_job_list,
-    first,
     get_call_string,
     get_version,
     import_attribute,
@@ -42,14 +41,6 @@ class TestUtils(RQTestCase):
         with self.assertRaises(TimeoutFormatError):
             for timeout in timeouts:
                 parse_timeout(timeout)
-
-    def test_first(self):
-        """Ensure function first works correctly"""
-        self.assertEqual(42, first([0, False, None, [], (), 42]))
-        self.assertEqual(None, first([0, False, None, [], ()]))
-        self.assertEqual('ohai', first([0, False, None, [], ()], default='ohai'))
-        self.assertEqual('bc', first(re.match(regex, 'abc') for regex in ['b.*', 'a(.*)']).group(1))
-        self.assertEqual(4, first([1, 1, 3, 4, 5], key=lambda x: x % 2 == 0))
 
     def test_is_nonstring_iterable(self):
         """Ensure function is_nonstring_iterable works correctly"""
