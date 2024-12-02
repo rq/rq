@@ -1092,9 +1092,16 @@ class BaseWorker:
         extra.update({'queue': job.origin, 'job_id': job.id})
 
         # func_name
-        self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
-        )
+        job_status = job.get_status(refresh=False)
+        if job_status == JobStatus.FAILED or job_status == JobStatus.STOPPED:
+            # the job has NOT been retried (i.e. it is still in failed / stopped status)
+            self.log.error(
+                '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
+            )
+        else:
+            self.log.warning(
+                '[Job %s]: exception raised while executing (%s). Job will be retried.\n%s', job.id, func_name, exc_string, extra=extra
+            )
 
         for handler in self._exc_handlers:
             self.log.debug('Invoking exception handler %s', handler)
