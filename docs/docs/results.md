@@ -3,24 +3,64 @@ title: "RQ: Results"
 layout: docs
 ---
 
-Enqueueing jobs is delayed execution of function calls.  This means we're
-solving a problem, but are getting back a few in return.
+Enqueueing jobs is delayed execution of function calls. This means we're offloading work
+to be processed later, which solves one problem but introduces others - namely,
+how do we handle the results and output of these delayed function calls?
 
+In RQ, the return value of a job is stored in Redis. You can inspect each execution via the
+`Result` object.
 
-## Dealing with Results
+## Job Results
+_New in version 1.12.0._
 
-Python functions may have return values, so jobs can have them, too.  If a job
-returns a non-`None` return value, the worker will write that return value back
-to the job's Redis hash under the `result` key. The job's Redis hash itself
-will expire after 500 seconds by default after the job is finished.
+Job executions results are stored in a `Result` object. If a job is executed multiple times,
+you can access its execution history by calling `job.results()`.
+RQ will store up to 10 latest execution results.
 
-The party that enqueued the job gets back a `Job` instance as a result of the
-enqueueing itself. Such a `Job` object is a proxy object that is tied to the
-job's ID, to be able to poll for results.
+Calling `job.latest_result()` will return the latest `Result` object, which has the
+following attributes:
+* `type` - an enum of `SUCCESSFUL`, `FAILED`, `RETRIED` or `STOPPED`
+* `created_at` - the time at which result is created
+* `return_value` - job's return value, only present if result type is `SUCCESSFUL`
+* `exc_string` - the exception raised by job, only present if result type is `FAILED`
+* `job_id`
 
+```python
+job = Job.fetch(id='my_id', connection=redis)
+result = job.latest_result()  #  returns Result(id=uid, type=SUCCESSFUL)
+if result.type == result.Type.SUCCESSFUL:
+    print(result.return_value)
+elif result.type == result.Type.FAILED:
+    print(result.exc_string)
+```
 
-### Return Value TTL
-Return values are written back to Redis with a limited lifetime (via a Redis
+Alternatively, you can also use `job.return_value()` as a shortcut to accessing
+the return value of the latest result. Note that `job.return_value` will only
+return a not-`None` object if the latest result is a successful execution.
+
+```python
+job = Job.fetch(id='my_id', connection=redis)
+print(job.return_value())  # Shortcut for job.latest_result().return_value
+```
+
+To access multiple results, use `job.results()`.
+
+```python
+job = Job.fetch(id='my_id', connection=redis)
+for result in job.results():
+    print(result.created_at, result.type)
+```
+
+_New in version 1.16.0._
+To block until a result arrives, you can pass a timeout in seconds to `job.latest_result()`. If any results already exist, the latest result is returned immediately. If the timeout is reached without a result arriving, a `None` object is returned.
+
+```python
+job = queue.enqueue(sleep_for_10_seconds)
+result = job.latest_result(timeout=60)  # Will hang for about 10 seconds.
+```
+
+### Result TTL
+Results are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
 The TTL value of the job result can be specified using the
@@ -41,31 +81,30 @@ values, which would be deleted immediately by default.
     q.enqueue(func_without_rv, result_ttl=500)  # job kept explicitly
 
 
+## Asking RQ to Retry
+_New in version 2.1.0._
+
+RQ lets you easily retry jobs by returning a special `Retry` result from your job function.
+
+```python
+from rq import Retry
+
+def return_retry(max=1, interval=60):
+    return Retry(max=max, interval=interval)
+
+job = queue.enqueue(return_retry, max=3, interval=60)
+```
+
+The above job will be retried up to 3 times, with 60 seconds interval in between executions.
+Please note that the retry count returned by job executions will be treated differently from the
+`Retry` parameter passed to `enqueue()`, which will be used in cases where jobs fail due to
+[exceptions](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
+
+
 ## Dealing with Exceptions
 
-Jobs can fail and throw exceptions. This is a fact of life. RQ deals with
-this in the following way.
-
-Furthermore, it should be possible to retry failed
-jobs. Typically, this is something that needs manual interpretation, since
-there is no automatic or reliable way of letting RQ judge whether it is safe
-for certain tasks to be retried or not.
-
-When an exception is thrown inside a job, it is caught by the worker,
-serialized and stored under the job's Redis hash's `exc_info` key. A reference
-to the job is put in the `FailedJobRegistry`. By default, failed jobs will be
-kept for 1 year.
-
-The job itself has some useful properties that can be used to aid inspection:
-
-* the original creation time of the job
-* the last enqueue date
-* the originating queue
-* a textual description of the desired function invocation
-* the exception information
-
-This makes it possible to inspect and interpret the problem manually and
-possibly resubmit the job.
+Jobs can fail due to exceptions occurring. RQ provides several ways to handle failed jobs.
+For detailed information about exceptions and retries, see [Exceptions & Retries](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
 
 
 ## Dealing with Interruptions
@@ -82,8 +121,7 @@ damage. Just sayin'.
 
 If the worker gets killed while a job is running, it will eventually end up in
 `FailedJobRegistry` because a cleanup task will raise an `AbandonedJobError`.
-Before 0.14 the behavor was the same, but the cleanup task raised a
-`Moved to FailedJobRegistry at` error message instead.
+
 
 ## Dealing with Job Timeouts
 
@@ -96,7 +134,7 @@ can be loosened (or tightened), by specifying it as a keyword argument to the
 `enqueue()` call, like so:
 
 ```python
-q = Queue()
+q = Queue(connection=Redis())
 q.enqueue(mytask, args=(foo,), kwargs={'bar': qux}, job_timeout=600)  # 10 mins
 ```
 
@@ -106,8 +144,8 @@ queue instances at once, which can be useful for patterns like this:
 ```python
 # High prio jobs should end in 8 secs, while low prio
 # work may take up to 10 mins
-high = Queue('high', default_timeout=8)  # 8 secs
-low = Queue('low', default_timeout=600)  # 10 mins
+high = Queue('high', connection=Redis(), default_timeout=8)  # 8 secs
+low = Queue('low', connection=Redis(), default_timeout=600)  # 10 mins
 
 # Individual jobs can still override these defaults
 low.enqueue(really_really_slow, job_timeout=3600)  # 1 hr
@@ -115,52 +153,3 @@ low.enqueue(really_really_slow, job_timeout=3600)  # 1 hr
 
 Individual jobs can still specify an alternative timeout, as workers will
 respect these.
-
-
-## Job Results
-_New in version 1.12.0._
-
-If a job is executed multiple times, you can access its execution history by calling
-`job.results()`. RQ will store up to 10 latest execution results.
-
-Calling `job.latest_result()` will return the latest `Result` object, which has the
-following attributes:
-* `type` - an enum of `SUCCESSFUL`, `FAILED` or `STOPPED`
-* `created_at` - the time at which result is created
-* `return_value` - job's return value, only present if result type is `SUCCESSFUL`
-* `exc_string` - the exception raised by job, only present if result type is `FAILED`
-* `job_id`
-
-```python
-job = Job.fetch(id='my_id', connection=redis)
-result = job.latest_result()  #  returns Result(id=uid, type=SUCCESSFUL)
-if result.type == result.Type.SUCCESSFUL: 
-    print(result.return_value) 
-else: 
-    print(result.exc_string)
-```
-
-Alternatively, you can also use `job.return_value()` as a shortcut to accessing
-the return value of the latest result. Note that `job.return_value` will only
-return a not-`None` object if the latest result is a successful execution.
-
-```python
-job = Job.fetch(id='my_id', connection=redis)
-print(job.return_value())  # Shortcut for job.latest_result().return_value
-```
-
-To access multiple results, use `job.results()`.
-
-```python
-job = Job.fetch(id='my_id', connection=redis)
-for result in job.results(): 
-    print(result.created_at, result.type)
-```
-
-_New in version 1.16.0._
-To block until a result arrives, you can pass a timeout in seconds to `job.latest_result()`. If any results already exist, the latest result is returned immediately. If the timeout is reached without a result arriving, a `None` object is returned.
-
-```python
-job = queue.enqueue(sleep_for_10_seconds)
-result = job.latest_result(timeout=60)  # Will hang for about 10 seconds.
-```
