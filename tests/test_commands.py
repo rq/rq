@@ -44,6 +44,8 @@ class TestCommands(RQTestCase):
 
         assert worker.pubsub_thread.is_alive()
 
+        time.sleep(0.5)
+        # Kill the Redis connection
         for client in connection.client_list():
             connection.client_kill(client['addr'])
 
