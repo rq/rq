@@ -44,7 +44,7 @@ from .defaults import (
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
-from .exceptions import DequeueTimeout, DeserializationError, ShutDownImminentException
+from .exceptions import DequeueTimeout, DeserializationError, InvalidJobOperation, ShutDownImminentException
 from .executions import Execution
 from .group import Group
 from .job import Job, JobStatus, Retry
@@ -1376,11 +1376,12 @@ class Worker(BaseWorker):
         if ret_val == os.EX_OK:  # The process exited normally.
             return
 
-        job_status = job.get_status()
+        try:
+            job_status = job.get_status()
+        except InvalidJobOperation:
+            return # Job completed and its ttl has expired
 
-        if job_status is None:  # Job completed and its ttl has expired
-            return
-        elif self._stopped_job_id == job.id:
+        if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
             self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
             if job.stopped_callback:
