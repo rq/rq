@@ -84,6 +84,12 @@ values, which would be deleted immediately by default.
 ## Asking RQ to Retry
 _New in version 2.1.0._
 
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
+    <strong>Note:</strong>
+    <p>This feature is still in beta, use at your own risk!</p>
+</div>
+
 RQ lets you easily retry jobs by returning a special `Retry` result from your job function.
 
 ```python
