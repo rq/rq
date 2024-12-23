@@ -1,7 +1,9 @@
-### RQ 2.0.1 (Unreleased)
+### RQ 2.1.0 (2024-12-23)
 * `job.id` must not contain `:`. Thanks @sanurielf!
 * Various type hint improvements by @terencehonles!
 * `job.ended_at` should be set when job is run synchronously. Thanks @alexprabhat99!
+* `Group.all()` now properly handles non existing group. Thanks @eswolinsky3241!
+* Use `ruff` instead of `black` as formatter. Thanks @hongquan!
 
 ### RQ 2.0 (2024-10-28)
 
