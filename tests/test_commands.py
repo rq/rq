@@ -7,6 +7,7 @@ from redis import Redis
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
+from redis.exceptions import ResponseError
 from rq.serializers import JSONSerializer
 from rq.worker import WorkerStatus
 from tests import RQTestCase
@@ -44,11 +45,13 @@ class TestCommands(RQTestCase):
 
         assert worker.pubsub_thread.is_alive()
 
-        time.sleep(0.5)
         # Kill the Redis connection
         for client in connection.client_list():
             print(client['addr'])
-            connection.client_kill(client['addr'])
+            try:
+                connection.client_kill(client['addr'])
+            except ResponseError:
+                pass
 
         time.sleep(0.0)  # Allow other threads to run
         assert worker.pubsub_thread.is_alive()
