@@ -47,6 +47,7 @@ class TestCommands(RQTestCase):
         time.sleep(0.5)
         # Kill the Redis connection
         for client in connection.client_list():
+            print(client['addr'])
             connection.client_kill(client['addr'])
 
         time.sleep(0.0)  # Allow other threads to run
