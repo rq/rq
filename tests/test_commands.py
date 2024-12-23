@@ -3,11 +3,11 @@ from multiprocessing import Process
 from unittest import mock
 
 from redis import Redis
+from redis.exceptions import ResponseError
 
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
-from redis.exceptions import ResponseError
 from rq.serializers import JSONSerializer
 from rq.worker import WorkerStatus
 from tests import RQTestCase
@@ -47,7 +47,6 @@ class TestCommands(RQTestCase):
 
         # Kill the Redis connection
         for client in connection.client_list():
-            print(client['addr'])
             try:
                 connection.client_kill(client['addr'])
             except ResponseError:
