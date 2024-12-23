@@ -3,6 +3,7 @@ from multiprocessing import Process
 from unittest import mock
 
 from redis import Redis
+from redis.exceptions import ResponseError
 
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
@@ -44,8 +45,12 @@ class TestCommands(RQTestCase):
 
         assert worker.pubsub_thread.is_alive()
 
+        # Kill the Redis connection
         for client in connection.client_list():
-            connection.client_kill(client['addr'])
+            try:
+                connection.client_kill(client['addr'])
+            except ResponseError:
+                pass
 
         time.sleep(0.0)  # Allow other threads to run
         assert worker.pubsub_thread.is_alive()
