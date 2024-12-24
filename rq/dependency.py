@@ -1,4 +1,4 @@
-from typing import List
+from typing import Iterable
 
 from redis.client import Pipeline
 from redis.exceptions import WatchError
@@ -8,7 +8,7 @@ from .job import Job
 
 class Dependency:
     @classmethod
-    def get_jobs_with_met_dependencies(cls, jobs: List['Job'], pipeline: Pipeline):
+    def get_jobs_with_met_dependencies(cls, jobs: Iterable['Job'], pipeline: Pipeline):
         jobs_with_met_dependencies = []
         jobs_with_unmet_dependencies = []
         for job in jobs:

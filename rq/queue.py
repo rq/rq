@@ -6,7 +6,22 @@ import warnings
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+
+# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 from redis import WatchError
 
@@ -786,7 +801,7 @@ class Queue:
         )
 
     def enqueue_many(
-        self, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: Optional[str] = None
+        self, job_datas: Iterable['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: Optional[str] = None
     ) -> List[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
@@ -1264,8 +1279,10 @@ class Queue:
         """
         return as_text(self.connection.lpop(self.key))
 
+    # The queue_keys type is Sequence[str] instead of Iterable[str]
+    # because we loop over it twice, and we don't want user to pass a generator.
     @classmethod
-    def lpop(cls, queue_keys: List[str], timeout: Optional[int], connection: Optional['Redis'] = None):
+    def lpop(cls, queue_keys: Sequence[str], timeout: Optional[int], connection: Optional['Redis'] = None):
         """Helper method to abstract away from some Redis API details
         where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -1279,7 +1296,7 @@ class Queue:
              > 0 - maximum number of seconds to block
 
         Args:
-            queue_keys (_type_): _description_
+            queue_keys (Sequence[str]): _description_
             timeout (Optional[int]): _description_
             connection (Optional[Redis], optional): _description_. Defaults to None.
 
@@ -1294,11 +1311,11 @@ class Queue:
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queues = ', '.join(map(str, [green(str(queue)) for queue in queue_keys]))
-            logger.debug(f'Starting BLPOP operation for queues {colored_queues} with timeout of {timeout}')
+            logger.debug("Starting BLPOP operation for queues %s with timeout of %d", colored_queues, timeout)
             assert connection
             result = connection.blpop(queue_keys, timeout)
             if result is None:
-                logger.debug(f'BLPOP timeout, no jobs found on queues {colored_queues}')
+                logger.debug('BLPOP timeout, no jobs found on queues %s', colored_queues)
                 raise DequeueTimeout(timeout, queue_keys)
             queue_key, job_id = result
             return queue_key, job_id
@@ -1335,7 +1352,7 @@ class Queue:
     @classmethod
     def dequeue_any(
         cls,
-        queues: List['Queue'],
+        queues: Iterable['Queue'],
         timeout: Optional[int],
         connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
@@ -1353,7 +1370,7 @@ class Queue:
         See the documentation of cls.lpop for the interpretation of timeout.
 
         Args:
-            queues (List[Queue]): List of queue objects
+            queues (Iterable[Queue]): Iterable of queue objects
             timeout (Optional[int]): Timeout for the LPOP
             connection (Optional[Redis], optional): Redis Connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class. Defaults to None.
