@@ -627,6 +627,7 @@ class TestQueue(RQTestCase):
         # Only in registry after execute, since passed in pipeline
         self.assertEqual(len(q), 3)
         self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
+        self.assertEqual(len(Queue.all(connection=self.connection)), 1)
 
     def test_enqueue_many_with_passed_pipeline(self):
         """Jobs should be enqueued in bulk with a passed pipeline, enqueued in order provided
