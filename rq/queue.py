@@ -801,7 +801,7 @@ class Queue:
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
         # Add Queue key set
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe.sadd(self.redis_queues_keys, self.key)
 
         jobs_without_dependencies = []
         jobs_with_unmet_dependencies = []
