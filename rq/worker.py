@@ -75,8 +75,10 @@ except ImportError:
     def setprocname(title: str) -> None:
         pass
 
-
+# Set initial level to INFO. 
 logger = logging.getLogger('rq.worker')
+if logger.level == logging.NOTSET:
+    logger.setLevel(logging.INFO)
 
 
 class StopRequested(Exception):
@@ -558,7 +560,7 @@ class BaseWorker:
     def work(
         self,
         burst: bool = False,
-        logging_level: str = 'INFO',
+        logging_level: Optional[str] = None,
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
         max_jobs: Optional[int] = None,
@@ -577,7 +579,8 @@ class BaseWorker:
 
         Args:
             burst (bool, optional): Whether to work on burst mode. Defaults to False.
-            logging_level (str, optional): Logging level to use. Defaults to "INFO".
+            logging_level (Optional[str], optional): Logging level to use. 
+                If not provided, defaults to "INFO" unless a class-level logging level is already set.
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
@@ -843,7 +846,7 @@ class BaseWorker:
         self.scheduler = RQScheduler(
             self.queues,
             connection=self.connection,
-            logging_level=logging_level,
+            logging_level=logging_level if logging_level is not None else self.log.level,
             date_format=date_format,
             log_format=log_format,
             serializer=self.serializer,
