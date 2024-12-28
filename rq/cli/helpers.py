@@ -245,7 +245,8 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     elif quiet:
         level = 'WARNING'
     else:
-        level = 'INFO'
+        # Pass None not to set logging level explicitly
+        level = None
     setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
