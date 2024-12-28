@@ -75,7 +75,7 @@ except ImportError:
     def setprocname(title: str) -> None:
         pass
 
-# Set initial level to INFO. 
+# Set initial level to INFO.
 logger = logging.getLogger('rq.worker')
 if logger.level == logging.NOTSET:
     logger.setLevel(logging.INFO)
@@ -579,7 +579,7 @@ class BaseWorker:
 
         Args:
             burst (bool, optional): Whether to work on burst mode. Defaults to False.
-            logging_level (Optional[str], optional): Logging level to use. 
+            logging_level (Optional[str], optional): Logging level to use.
                 If not provided, defaults to "INFO" unless a class-level logging level is already set.
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
@@ -826,7 +826,7 @@ class BaseWorker:
     def _start_scheduler(
         self,
         burst: bool = False,
-        logging_level: str = 'INFO',
+        logging_level: Optional[str] = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -909,7 +909,7 @@ class BaseWorker:
 
     def bootstrap(
         self,
-        logging_level: str = 'INFO',
+        logging_level: Optional[str] = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
