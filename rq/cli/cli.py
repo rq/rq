@@ -481,7 +481,7 @@ def worker_pool(
         logging_level = None
 
     pool = WorkerPool(
-        queue_names,  # type: ignore[arg-type]
+        queue_names,
         connection=cli_config.connection,
         num_workers=num_workers,
         serializer=serializer_class,
