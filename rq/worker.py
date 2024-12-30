@@ -1021,7 +1021,7 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(
-            sleep_time=0.2, daemon=True, exception_handler=self._pubsub_exception_handler
+            sleep_time=None, daemon=True, exception_handler=self._pubsub_exception_handler
         )
 
     def get_heartbeat_ttl(self, job: 'Job') -> int:
@@ -1054,9 +1054,9 @@ class BaseWorker:
         """Unsubscribe from pubsub channel"""
         if self.pubsub_thread:
             self.log.info('Unsubscribing from channel %s', self.pubsub_channel_name)
-            self.pubsub_thread.stop()
-            self.pubsub_thread.join()
             self.pubsub.unsubscribe()
+            self.pubsub_thread.stop()
+            self.pubsub_thread.join(timeout=1)
             self.pubsub.close()
 
     def dequeue_job_and_maintain_ttl(
