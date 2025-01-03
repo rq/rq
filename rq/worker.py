@@ -1519,7 +1519,7 @@ class Worker(BaseWorker):
 
             if retry_interval > 0:
                 # Schedule job for later if there's an interval
-                scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+                scheduled_time = now() + timedelta(seconds=retry_interval)
                 job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
                 queue.schedule_job(job, scheduled_time, pipeline=pipeline)
                 self.log.debug(

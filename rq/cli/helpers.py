@@ -22,7 +22,7 @@ from rq.defaults import (
     DEFAULT_WORKER_CLASS,
 )
 from rq.logutils import setup_loghandlers
-from rq.utils import import_attribute, parse_timeout
+from rq.utils import import_attribute, now, parse_timeout
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
@@ -323,7 +323,7 @@ def parse_schedule(schedule_in, schedule_at):
     if schedule_in is not None:
         if schedule_at is not None:
             raise click.BadArgumentUsage("You can't specify both --schedule-in and --schedule-at")
-        return datetime.now(timezone.utc) + timedelta(seconds=parse_timeout(schedule_in))
+        return now() + timedelta(seconds=parse_timeout(schedule_in))
     elif schedule_at is not None:
         return datetime.strptime(schedule_at, '%Y-%m-%dT%H:%M:%S')
 

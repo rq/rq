@@ -1085,7 +1085,7 @@ class Queue:
         Returns:
             job (Job): The enqueued Job
         """
-        return self.enqueue_at(datetime.now(timezone.utc) + time_delta, func, *args, **kwargs)
+        return self.enqueue_at(now() + time_delta, func, *args, **kwargs)
 
     def enqueue_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None, at_front: bool = False) -> Job:
         """Enqueues a job for delayed execution checking dependencies.

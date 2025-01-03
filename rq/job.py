@@ -1569,7 +1569,7 @@ class Job:
         assert self.retries_left
         self.retries_left = self.retries_left - 1
         if retry_interval:
-            scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+            scheduled_datetime = now() + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
             logger.info(
