@@ -1328,6 +1328,17 @@ class TestWorker(RQTestCase):
 
         self.assertEqual(expected, sorted_ids)
 
+    def test_monitor_work_horse_handles_performed_job_with_non_zero_exit_code_and_result_ttl_0(self):
+        q = Queue(connection=self.connection)
+        w = Worker([q])
+        perform_job = w.perform_job
+        def p(*args, **kwargs):
+            perform_job(*args, **kwargs)
+            raise Exception
+
+        w.perform_job = p
+        q.enqueue(say_hello, args=('ccc',), result_ttl=0)
+        self.assertTrue(w.work(burst=True))
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
