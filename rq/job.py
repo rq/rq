@@ -1532,6 +1532,7 @@ class Job:
     def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline'):
         if self.supports_redis_streams:
             from .results import Result
+
             Result.create_retried(self, self.failure_ttl, pipeline=pipeline)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         queue._enqueue_job(self, pipeline=pipeline)
@@ -1553,7 +1554,7 @@ class Job:
 
     @property
     def should_retry(self) -> bool:
-        return (self.retries_left is not None and self.retries_left > 0)
+        return self.retries_left is not None and self.retries_left > 0
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
         """Requeue or schedule this job for execution.

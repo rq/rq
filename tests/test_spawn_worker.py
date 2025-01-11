@@ -1,53 +1,22 @@
-import json
 import os
-import shutil
 import signal
-import subprocess
-import sys
-import threading
 import time
-import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import timezone
 from multiprocessing import Process
-from time import sleep
-from unittest import mock, skipIf
-from unittest.mock import Mock
+from unittest import mock
 
-import psutil
-import pytest
-import redis.exceptions
-from redis import Redis
-
-from rq import Queue, SimpleWorker, Worker
-from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
-from rq.job import Job, JobStatus, Retry
-from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
+from rq import Queue, Worker
+from rq.job import Job
+from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
-from rq.serializers import JSONSerializer
-from rq.suspension import resume, suspend
-from rq.utils import as_text, get_version, now
-from rq.version import VERSION
-from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus, SpawnWorker
-from tests import RQTestCase, find_empty_redis_database, slow
+from rq.worker import SpawnWorker
+from tests import RQTestCase, slow
 from tests.fixtures import (
-    CustomJob,
-    access_self,
-    create_file,
     create_file_after_timeout,
-    create_file_after_timeout_and_setpgrp,
     div_by_zero,
-    do_nothing,
     kill_worker,
-    launch_process_within_worker_and_store_pid,
-    long_running_job,
-    modify_self,
-    modify_self_and_error,
     raise_exc_mock,
-    resume_worker,
-    run_dummy_heroku_worker,
-    save_key_ttl,
     say_hello,
-    say_pid,
 )
 
 
@@ -56,7 +25,6 @@ class CustomQueue(Queue):
 
 
 class TestWorker(RQTestCase):
-
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
         queue = Queue('foo', connection=self.connection)
@@ -65,8 +33,9 @@ class TestWorker(RQTestCase):
 
         job = queue.enqueue(say_hello, name='Frank')
         worker.work(burst=True)
-        result = job.latest_result()
-        self.assertEqual(result.type, Result.Type.SUCCESSFUL)
+
+        registry = FinishedJobRegistry(queue=queue)
+        self.assertEqual(registry.get_job_ids(), [job.id])
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""

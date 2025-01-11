@@ -75,6 +75,7 @@ except ImportError:
     def setprocname(title: str) -> None:
         pass
 
+
 # Set initial level to INFO.
 logger = logging.getLogger('rq.worker')
 if logger.level == logging.NOTSET:
@@ -1382,7 +1383,7 @@ class Worker(BaseWorker):
         try:
             job_status = job.get_status()
         except InvalidJobOperation:
-            return # Job completed and its ttl has expired
+            return  # Job completed and its ttl has expired
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
@@ -1721,10 +1722,13 @@ class SpawnWorker(Worker):
         """Spawns a work horse to perform the actual work using os.spawn()."""
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
-        child_pid = os.spawnv(os.P_NOWAIT, sys.executable, [
+        child_pid = os.spawnv(
+            os.P_NOWAIT,
             sys.executable,
-            '-c',
-            f'''
+            [
+                sys.executable,
+                '-c',
+                f"""
 import os
 import sys
 from redis import Redis
@@ -1745,8 +1749,9 @@ queue = Queue("{queue.name}", connection=worker.connection)
 os.setpgrp()
 worker._is_horse = True
 worker.main_work_horse(job, queue)
-'''
-        ])
+""",
+            ],
+        )
 
         self._horse_pid = child_pid
         self.procline(f'Spawned {child_pid} at {time.time()}')
