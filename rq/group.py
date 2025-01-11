@@ -1,4 +1,5 @@
-from typing import List, Optional
+# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from typing import Iterable, List, Optional
 from uuid import uuid4
 
 from redis import Redis
@@ -25,7 +26,7 @@ class Group:
     def __repr__(self):
         return 'Group(id={})'.format(self.name)
 
-    def _add_jobs(self, jobs: List[Job], pipeline: Pipeline):
+    def _add_jobs(self, jobs: Iterable[Job], pipeline: Pipeline):
         """Add jobs to the group"""
         pipeline.sadd(self.key, *[job.id for job in jobs])
         pipeline.sadd(self.REDIS_GROUP_KEY, self.name)
@@ -49,7 +50,7 @@ class Group:
         if pipeline is None:
             pipe.execute()
 
-    def enqueue_many(self, queue: Queue, job_datas: List['EnqueueData'], pipeline: Optional['Pipeline'] = None):
+    def enqueue_many(self, queue: Queue, job_datas: Iterable['EnqueueData'], pipeline: Optional['Pipeline'] = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
 
         jobs = queue.enqueue_many(job_datas, group_id=self.name, pipeline=pipe)
