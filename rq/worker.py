@@ -1712,6 +1712,46 @@ class Worker(BaseWorker):
         return hash(self.name)
 
 
+class SpawnWorker(Worker):
+    """Worker implementation that uses os.spawn() instead of os.fork().
+    This implementation is intended for environments where `os.fork()` is not available.
+    """
+
+    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse to perform the actual work using os.spawn()."""
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
+        child_pid = os.spawnv(os.P_NOWAIT, sys.executable, [
+            sys.executable,
+            '-c',
+            f'''
+import os
+import sys
+from redis import Redis
+from rq import Worker, Queue
+from rq.job import Job
+
+# Recreate worker instance
+redis = Redis(**{self.connection.connection_pool.connection_kwargs})
+worker = Worker.find_by_key("{self.key}", connection=redis)
+if not worker:
+    sys.exit(1)
+
+# Reconstruct job and queue
+job = Job.fetch("{job.id}", connection=worker.connection)
+queue = Queue("{queue.name}", connection=worker.connection)
+
+# Set up work horse
+os.setpgrp()
+worker._is_horse = True
+worker.main_work_horse(job, queue)
+'''
+        ])
+
+        self._horse_pid = child_pid
+        self.procline(f'Spawned {child_pid} at {time.time()}')
+
+
 class SimpleWorker(Worker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
