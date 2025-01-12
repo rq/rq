@@ -30,6 +30,12 @@ try:
 except ImportError:
     from signal import SIGTERM as SIGKILL
 
+try:
+    from signal import SIGRTMIN  # type: ignore
+except ImportError:
+    # Use a fallback signal on platforms without SIGRTMIN
+    SIGRTMIN = signal.SIGUSR1
+
 from contextlib import suppress
 
 import redis.exceptions
@@ -1793,7 +1799,7 @@ class HerokuWorker(Worker):
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
-        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
+        signal.signal(SIGRTMIN, self.request_stop_sigrtmin)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
@@ -1801,7 +1807,7 @@ class HerokuWorker(Worker):
         """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
             self.log.info('Worker %s: warm shut down requested, sending horse SIGRTMIN signal', self.key)
-            self.kill_horse(sig=signal.SIGRTMIN)
+            self.kill_horse(sig=SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')
 
@@ -1813,7 +1819,7 @@ class HerokuWorker(Worker):
             self.log.warning(
                 'Imminent shutdown, raising ShutDownImminentException in %d seconds', self.imminent_shutdown_delay
             )
-            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
+            signal.signal(SIGRTMIN, self.request_force_stop_sigrtmin)
             signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
             signal.alarm(self.imminent_shutdown_delay)
 
