@@ -31,7 +31,7 @@ except ImportError:
     from signal import SIGTERM as SIGKILL
 
 try:
-    from signal import SIGRTMIN  # type: ignore
+    from signal import SIGRTMIN
 except ImportError:
     # Use a fallback signal on platforms without SIGRTMIN
     SIGRTMIN = signal.SIGUSR1
