@@ -221,7 +221,7 @@ class WorkerPool:
         respawn = not burst  # Don't respawn workers if burst mode is on
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
-        self.status = self.Status.IDLE
+        self.status = self.Status.STARTED
         self.start_workers(burst=self._burst, logging_level=logging_level)
         self._install_signal_handlers()
         while True:
