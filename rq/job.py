@@ -35,7 +35,7 @@ from .types import FunctionReferenceType, JobDependencyType
 from .utils import (
     as_text,
     decode_redis_hash,
-    ensure_list,
+    ensure_job_list,
     get_call_string,
     get_version,
     import_attribute,
@@ -69,11 +69,13 @@ def parse_job_id(job_or_execution_id: str) -> str:
 
 
 class Dependency:
-    def __init__(self, jobs: List[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
+    dependencies: List[Union['Job', str]]
+
+    def __init__(self, jobs: Iterable[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
         """The definition of a Dependency.
 
         Args:
-            jobs (List[Union[Job, str]]): A list of Job instances or Job IDs.
+            jobs (Iterable[Union[Job, str]]): An iterable of Job instances or Job IDs.
                 Anything different will raise a ValueError
             allow_failure (bool, optional): Whether to allow for failure when running the depency,
                 meaning, the dependencies should continue running even after one of them failed.
@@ -84,7 +86,7 @@ class Dependency:
         Raises:
             ValueError: If the `jobs` param has anything different than `str` or `Job` class or the job list is empty
         """
-        dependent_jobs = ensure_list(jobs)
+        dependent_jobs = ensure_job_list(jobs)
         if not all(isinstance(job, Job) or isinstance(job, str) for job in dependent_jobs if job):
             raise ValueError('jobs: must contain objects of type Job and/or strings representing Job ids')
         elif len(dependent_jobs) < 1:
@@ -357,7 +359,7 @@ class Job:
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
             depends_on_list = []
-            for depends_on_item in ensure_list(depends_on):
+            for depends_on_item in ensure_job_list(depends_on):
                 if isinstance(depends_on_item, Dependency):
                     # If a Dependency has enqueue_at_front or allow_failure set to True, these behaviors are used for
                     # all dependencies.
@@ -365,7 +367,7 @@ class Job:
                     job.allow_dependency_failures = job.allow_dependency_failures or depends_on_item.allow_failure
                     depends_on_list.extend(depends_on_item.dependencies)
                 else:
-                    depends_on_list.extend(ensure_list(depends_on_item))
+                    depends_on_list.extend(ensure_job_list(depends_on_item))
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
         return job

@@ -1,5 +1,4 @@
 import datetime
-import re
 from unittest.mock import Mock
 
 from redis import Redis
@@ -9,8 +8,7 @@ from rq.utils import (
     as_text,
     backend_class,
     ceildiv,
-    ensure_list,
-    first,
+    ensure_job_list,
     get_call_string,
     get_version,
     import_attribute,
@@ -43,14 +41,6 @@ class TestUtils(RQTestCase):
             for timeout in timeouts:
                 parse_timeout(timeout)
 
-    def test_first(self):
-        """Ensure function first works correctly"""
-        self.assertEqual(42, first([0, False, None, [], (), 42]))
-        self.assertEqual(None, first([0, False, None, [], ()]))
-        self.assertEqual('ohai', first([0, False, None, [], ()], default='ohai'))
-        self.assertEqual('bc', first(re.match(regex, 'abc') for regex in ['b.*', 'a(.*)']).group(1))
-        self.assertEqual(4, first([1, 1, 3, 4, 5], key=lambda x: x % 2 == 0))
-
     def test_is_nonstring_iterable(self):
         """Ensure function is_nonstring_iterable works correctly"""
         self.assertEqual(True, is_nonstring_iterable([]))
@@ -69,10 +59,10 @@ class TestUtils(RQTestCase):
 
     def test_ensure_list(self):
         """Ensure function ensure_list works correctly"""
-        self.assertEqual([], ensure_list([]))
-        self.assertEqual(['test'], ensure_list('test'))
-        self.assertEqual({}, ensure_list({}))
-        self.assertEqual((), ensure_list(()))
+        self.assertEqual([], ensure_job_list([]))
+        self.assertEqual(['test'], ensure_job_list('test'))
+        self.assertEqual([], ensure_job_list({}))
+        self.assertEqual([], ensure_job_list(()))
 
     def test_utcparse(self):
         """Ensure function utcparse works correctly"""

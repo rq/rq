@@ -65,7 +65,7 @@ from .utils import (
     as_text,
     backend_class,
     compact,
-    ensure_list,
+    ensure_job_list,
     get_connection_from_queues,
     get_version,
     now,
@@ -200,7 +200,7 @@ class BaseWorker:
                 if isinstance(q, str)
                 else q
             )
-            for q in ensure_list(queues)
+            for q in ensure_job_list(queues)
         ]
 
         self.name: str = name or uuid4().hex
@@ -316,7 +316,7 @@ class BaseWorker:
         queue_class: Optional[Type['Queue']] = None,
         queue: Optional['Queue'] = None,
         serializer=None,
-    ) -> List['Worker']:
+    ) -> List['BaseWorker']:
         """Returns an iterable of all Workers.
 
         Returns:
