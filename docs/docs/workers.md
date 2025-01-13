@@ -70,7 +70,6 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
-_New in version 1.8.0._
 * `--serializer`: Path to serializer object (e.g "rq.serializers.DefaultSerializer" or "rq.serializers.JSONSerializer")
 
 _New in version 1.14.0._
@@ -210,7 +209,7 @@ workers = Worker.all(queue=queue)
 ## Worker with Custom Serializer
 
 When creating a worker, you can pass in a custom serializer that will be implicitly passed to the queue.
-Serializers used should have at least `loads` and `dumps` method. An example of creating a custom serializer 
+Serializers used should have at least `loads` and `dumps` method. An example of creating a custom serializer
 class can be found in serializers.py (rq.serializers.JSONSerializer).
 The default serializer used is `pickle`
 
@@ -234,7 +233,7 @@ Queues will now use custom serializer
 
 
 ## Better worker process title
-Worker process will have a better title (as displayed by system tools such as ps and top) 
+Worker process will have a better title (as displayed by system tools such as ps and top)
 after you installed a third-party package `setproctitle`:
 ```sh
 pip install setproctitle
@@ -324,7 +323,7 @@ more common requests so far are:
 2. Using a job execution model that does not require `os.fork`.
 3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
-4. Using a custom strategy for dequeuing jobs from different queues. 
+4. Using a custom strategy for dequeuing jobs from different queues.
    See [link](#round-robin-and-random-strategies-for-dequeuing-jobs-from-queues).
 
 You can use the `-w` option to specify a different worker class to use:
@@ -333,21 +332,112 @@ You can use the `-w` option to specify a different worker class to use:
 $ rq worker -w 'path.to.GeventWorker'
 ```
 
+By default, RQ also ships with a few worker classes.
 
-## Strategies for Dequeuing Jobs from Queues
+### SimpleWorker
 
-The default worker considers the order of queues as their priority order.
-That's to say if the supplied queues are `rq worker high low`, the worker will
-prioritize dequeueing jobs from `high` before `low`. To choose a different strategy,
-`rq` provides the `--dequeue-strategy / -ds` option.
+A worker implementation that executes jobs in the same process, without using `fork()`, useful for:
+- Testing and debugging jobs
+- Environments where `fork()` is not available or desired
 
-In certain circumstances, you may want to dequeue jobs in a round robin fashion. For example,
-when you have `q1`,`q2`,`q3`, the 1st dequeued job is taken from `q1`, the 2nd from `q2`,
-the 3rd from `q3`, the 4th from `q1`, the 5th from `q2` and so on.
-To implement this strategy use `-ds round_robin` argument.
+`SimpleWorker` does not provide periodic heartbeats during job execution.
+This means long-running jobs may appear to be "stuck" from monitoring tools' perspective.
+`SimpleWorker` is not recommended for production use unless you fully understand these limitations.
 
-To dequeue jobs from the different queues randomly,  use `-ds random` argument.
+Usage:
+```python
+from rq import SimpleWorker, Queue
 
+queue = Queue('default')
+worker = SimpleWorker([queue])
+worker.work()
+```
+
+Or via CLI:
+```bash
+rq worker -w rq.worker.SimpleWorker
+```
+
+### RoundRobinWorker
+
+The `RoundRobinWorker` dequeues jobs from multiple queues in a round-robin fashion.
+For example, if you have queues `q1`, `q2`, `q3`:
+
+- First job is taken from `q1`
+- Second job from `q2`
+- Third job from `q3`
+- Fourth job from `q1` again
+- And so on...
+
+This provides fair scheduling across queues rather than strict priority ordering.
+
+Usage:
+```python
+from rq import RoundRobinWorker, Queue
+
+queues = [Queue('q1'), Queue('q2'), Queue('q3')]
+worker = RoundRobinWorker(queues)
+worker.work()
+```
+
+Or via CLI:
+```bash
+rq worker -w rq.worker.RoundRobinWorker q1 q2 q3
+```
+
+### RandomWorker
+The `RandomWorker` dequeues jobs from queues randomly rather than in a fixed order.
+This can be useful for load balancing across queues.
+
+Usage:
+```python
+from rq import RandomWorker, Queue
+
+queues = [Queue('q1'), Queue('q2'), Queue('q3')]
+worker = RandomWorker(queues)
+worker.work()
+```
+
+Or via CLI:
+```bash
+rq worker -w rq.worker.RandomWorker q1 q2 q3
+```
+
+### SpawnWorker
+_New in version 2.2.0._
+
+The `SpawnWorker` uses `os.spawn()` instead of `os.fork()` to run jobs. This is useful in environments
+where `fork()` is not available, like Windows or MacOS (`os.fork()` is discouraged).
+
+Usage:
+```python
+from rq import SpawnWorker, Queue
+
+queue = Queue('default')
+worker = SpawnWorker([queue])
+worker.work()
+```
+
+Or via CLI:
+```bash
+rq worker -w rq.worker.SpawnWorker
+```
+
+<div class="warning">
+    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
+    <strong>Note:</strong>
+    <p>`SpawnWorker` is still in beta, use at your own risk!</p>
+</div>
+
+
+The main differences between these workers are:
+
+- SimpleWorker: No process forking, simpler but less isolated execution. Also no periodic heartbeats during job executions.
+- RoundRobinWorker: Fair scheduling across queues
+- RandomWorker: Random queue selection for load balancing
+- SpawnWorker: Windows compatibility using spawn() instead of fork()
+
+Choose the appropriate worker type based on your needs for job isolation, queue scheduling, and platform compatibility.
 
 ## Custom Job and Queue Classes
 

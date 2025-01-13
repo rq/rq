@@ -1332,6 +1332,7 @@ class TestWorker(RQTestCase):
         q = Queue(connection=self.connection)
         w = Worker([q])
         perform_job = w.perform_job
+
         def p(*args, **kwargs):
             perform_job(*args, **kwargs)
             raise Exception
@@ -1339,6 +1340,7 @@ class TestWorker(RQTestCase):
         w.perform_job = p
         q.enqueue(say_hello, args=('ccc',), result_ttl=0)
         self.assertTrue(w.work(burst=True))
+
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
