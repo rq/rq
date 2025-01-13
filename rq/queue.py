@@ -113,8 +113,8 @@ class Queue:
                 death_penalty_class=death_penalty_class,
             )
 
-        all_registerd_queues = connection.smembers(cls.redis_queues_keys)
-        all_queues = [to_queue(rq_key) for rq_key in all_registerd_queues if rq_key]
+        all_registered_queues = connection.smembers(cls.redis_queues_keys)
+        all_queues = [to_queue(rq_key) for rq_key in all_registered_queues if rq_key]
         return all_queues
 
     @classmethod
@@ -438,7 +438,7 @@ class Queue:
         """Returns this queue's FinishedJobRegistry."""
         from rq.registry import FinishedJobRegistry
 
-        # TODO: Why was job_class only ommited here before?  Was it intentional?
+        # TODO: Why was job_class only omitted here before?  Was it intentional?
         return FinishedJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
@@ -915,7 +915,7 @@ class Queue:
         Args:
             f (FunctionReferenceType): The function reference
             args (*args): function args
-            kwargs (*kwargs): function kargs
+            kwargs (**kwargs): function kwargs
         """
         if not isinstance(f, str) and f.__module__ == '__main__':
             raise ValueError('Functions from the __main__ module cannot be processed by workers')
@@ -969,7 +969,7 @@ class Queue:
         Args:
             f (FunctionReferenceType): The function reference
             args (*args): function args
-            kwargs (*kwargs): function kargs
+            kwargs (**kwargs): function kwargs
 
         Returns:
             job (Job): The created Job
@@ -1111,7 +1111,7 @@ class Queue:
             at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
 
         Returns:
-            Job: The enqued job
+            Job: The enqueued job
         """
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
@@ -1136,7 +1136,7 @@ class Queue:
             at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
 
         Returns:
-            Job: The enqued job
+            Job: The enqueued job
         """
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
