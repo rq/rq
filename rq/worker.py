@@ -2,6 +2,7 @@ import contextlib
 import errno
 import logging
 import math
+import multiprocessing as mp
 import os
 import random
 import signal
@@ -17,12 +18,13 @@ from types import FrameType
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
+from redis import Redis
+
 if TYPE_CHECKING:
     try:
         from resource import struct_rusage
     except ImportError:
         pass
-    from redis import Redis
     from redis.client import Pipeline, PubSub, PubSubWorkerThread
 
 try:
@@ -1761,6 +1763,125 @@ worker.main_work_horse(job, queue)
 
         self._horse_pid = child_pid
         self.procline(f'Spawned {child_pid} at {time.time()}')
+
+
+class MultiProcessingWorker(Worker):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mp_context = mp.get_context('spawn')
+
+        # Capture important environment information at initialization
+        self.python_path = sys.path[:]
+        self.worker_path = os.getcwd()
+        self.env_vars = {
+            key: value
+            for key, value in os.environ.items()
+            if key in {'PYTHONPATH', 'PATH', 'VIRTUAL_ENV'}  # Add other important env vars
+        }
+
+    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse process using multiprocessing."""
+        # Worker configuration
+        worker_data = {
+            'name': self.name,
+            'connection_kwargs': self.connection.connection_pool.connection_kwargs,
+            'job_class': self.job_class,
+            'queue_class': self.queue_class,
+            'log_level': self.log.level,
+            'serializer': self.serializer,
+            'default_result_ttl': self.default_result_ttl,
+            'job_monitoring_interval': self.job_monitoring_interval,
+            'maintenance_interval': self.maintenance_interval,
+            'worker_ttl': self.worker_ttl,
+            'log_job_description': self.log_job_description,
+        }
+
+        # Environment configuration
+        env_data = {
+            'python_path': sys.path[:],
+            'working_dir': os.getcwd(),
+            'env_vars': {
+                key: value
+                for key, value in os.environ.items()
+                # Add any other important env vars your jobs might need
+                if key in {
+                    'PYTHONPATH',
+                    'PATH',
+                    'VIRTUAL_ENV',
+                    'PYTHONHOME',
+                    'LD_LIBRARY_PATH',
+                    'LANG',
+                    'LC_ALL',
+                }
+            }
+        }
+
+        process = self.mp_context.Process(
+            target=self._run_work_horse,
+            args=(worker_data, env_data, job.id, queue.name),
+            name=f"WorkHorse-{job.id}"
+        )
+        process.start()
+        os.setpgid(process.pid, process.pid)  # Set up process group
+        assert(process.pid)
+        self._horse_pid = process.pid
+        self.procline(f'Spawned {self._horse_pid} at {time.time()}')
+
+    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
+        """Terminates the application (cold shutdown)."""
+        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):
+            self.log.debug('Shutdown signal ignored, received twice in less than 1 second')
+            return
+
+        self.log.warning('Cold shut down')
+
+        # Take down the horse with the worker
+        if self.horse_pid:
+            self.log.debug('Taking down horse %s with me', self.horse_pid)
+            try:
+                os.killpg(os.getpgid(self.horse_pid), signal.SIGTERM)  # Kill the process group
+            except ProcessLookupError:
+                pass
+            self.wait_for_horse()
+        raise SystemExit()
+
+    @staticmethod
+    def _run_work_horse(worker_data: dict, env_data: dict, job_id: str, queue_name: str):
+        """Entry point for the work horse process."""
+        # Set up environment first
+        os.environ.update(env_data['env_vars'])
+        sys.path = env_data['python_path']
+        os.chdir(env_data['working_dir'])
+
+        # Create Redis connection
+        connection = Redis(**worker_data['connection_kwargs'])
+
+        # Create worker instance
+        worker = Worker(
+            [],  # Empty queue list as we'll reconstruct the queue
+            connection=connection,
+            name=worker_data['name'],
+            job_class=worker_data['job_class'],
+            queue_class=worker_data['queue_class'],
+            serializer=worker_data['serializer'],
+            default_result_ttl=worker_data['default_result_ttl'],
+            job_monitoring_interval=worker_data['job_monitoring_interval'],
+            maintenance_interval=worker_data['maintenance_interval'],
+            worker_ttl=worker_data['worker_ttl'],
+            log_job_description=worker_data['log_job_description'],
+        )
+
+        # Set up environment variables for RQ
+        os.environ['RQ_WORKER_ID'] = worker.name
+
+        # Reconstruct job and queue objects
+        job = worker.job_class.fetch(job_id, connection=connection)
+        queue = worker.queue_class(queue_name, connection=connection)
+
+        os.environ['RQ_JOB_ID'] = job.id
+
+        # Use main_work_horse which handles the rest
+        worker.main_work_horse(job, queue)
 
 
 class SimpleWorker(Worker):
