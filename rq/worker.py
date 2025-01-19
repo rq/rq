@@ -183,8 +183,8 @@ class BaseWorker:
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
-        self.version = VERSION
-        self.python_version = sys.version
+        self.version: str = VERSION
+        self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)
         self.execution: Optional[Execution] = None
 

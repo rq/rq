@@ -407,7 +407,7 @@ rq worker -w rq.worker.RandomWorker q1 q2 q3
 _New in version 2.2.0._
 
 The `SpawnWorker` uses `os.spawn()` instead of `os.fork()` to run jobs. This is useful in environments
-where `fork()` is not available, like Windows or MacOS (`os.fork()` is discouraged).
+where `fork()` is not available, like Windows or newer versions of MacOS.
 
 Usage:
 ```python

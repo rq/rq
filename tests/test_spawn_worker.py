@@ -18,10 +18,6 @@ from tests.fixtures import (
 )
 
 
-class CustomQueue(Queue):
-    pass
-
-
 class TestWorker(RQTestCase):
     def test_work_and_quit(self):
         """SpawnWorker processes work, then quits."""
