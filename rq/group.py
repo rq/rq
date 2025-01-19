@@ -88,7 +88,7 @@ class Group:
 
     @classmethod
     def all(cls, connection: 'Redis') -> List['Group']:
-        "Returns an iterable of all Groupes."
+        "Returns an iterable of all Groups."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         groups = []
         for key in group_keys:

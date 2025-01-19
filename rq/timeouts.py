@@ -45,7 +45,7 @@ class BaseDeathPenalty:
             # body done.
             pass
 
-        # __exit__ may return True to supress further exception handling.  We
+        # __exit__ may return True to suppress further exception handling. We
         # don't want to suppress any exceptions here, since all errors should
         # just pass through, BaseTimeoutException being handled normally to the
         # invoking context.

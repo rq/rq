@@ -56,9 +56,9 @@ class job:  # noqa
             queue_class (Optional[Queue], optional): A custom class that inherits from `Queue`. Defaults to None.
             depends_on (Optional[List[Any]], optional): A list of dependents jobs. Defaults to None.
             at_front (Optional[bool], optional): Whether to enqueue the job at front of the queue. Defaults to None.
-            meta (Optional[Dict[Any, Any]], optional): Arbitraty metadata about the job. Defaults to None.
+            meta (Optional[Dict[Any, Any]], optional): Arbitrary metadata about the job. Defaults to None.
             description (Optional[str], optional): Job description. Defaults to None.
-            failure_ttl (Optional[int], optional): Failture time to live. Defaults to None.
+            failure_ttl (Optional[int], optional): Failure time to live. Defaults to None.
             retry (Optional[Retry], optional): A Retry object. Defaults to None.
             on_failure (Optional[Union[Callback, Callable[..., Any]]], optional): Callable to run on failure. Defaults
                 to None.

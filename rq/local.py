@@ -256,7 +256,7 @@ class LocalProxy:
         session = LocalProxy(lambda: get_current_request().session)
 
     .. versionchanged:: 0.6.1
-       The class can be instanciated with a callable as well now.
+       The class can be instantiated with a callable as well now.
     """
 
     __slots__ = ('__local', '__dict__', '__name__')

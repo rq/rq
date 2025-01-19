@@ -77,10 +77,10 @@ class Dependency:
         Args:
             jobs (Iterable[Union[Job, str]]): An iterable of Job instances or Job IDs.
                 Anything different will raise a ValueError
-            allow_failure (bool, optional): Whether to allow for failure when running the depency,
+            allow_failure (bool, optional): Whether to allow for failure when running the dependency,
                 meaning, the dependencies should continue running even after one of them failed.
                 Defaults to False.
-            enqueue_at_front (bool, optional): Whether this dependecy should be enqueued at the front of the queue.
+            enqueue_at_front (bool, optional): Whether this dependency should be enqueued at the front of the queue.
                 Defaults to False.
 
         Raises:
@@ -244,27 +244,27 @@ class Job:
             kwargs (Optional[Dict], optional): A Dictionary of keyword arguments to pass the callable.
                 Defaults to None, meaning no kwargs being passed.
             connection (Redis): The Redis connection to use. Defaults to None.
-                This will be "resolved" using the `resolve_connection` function when initialzing the Job Class.
+                This will be "resolved" using the `resolve_connection` function when initializing the Job Class.
             result_ttl (Optional[int], optional): The amount of time in seconds the results should live.
                 Defaults to None.
             ttl (Optional[int], optional): The Time To Live (TTL) for the job itself. Defaults to None.
             status (JobStatus, optional): The Job Status. Defaults to None.
             description (Optional[str], optional): The Job Description. Defaults to None.
             depends_on (Union['Dependency', List[Union['Dependency', 'Job']]], optional): What the jobs depends on.
-                This accepts a variaty of different arguments including a `Dependency`, a list of `Dependency` or a
+                This accepts a variety of different arguments including a `Dependency`, a list of `Dependency` or a
                 `Job` list of `Job`. Defaults to None.
             timeout (Optional[int], optional): The amount of time in seconds that should be a hardlimit for a job
                 execution. Defaults to None.
             id (Optional[str], optional): An Optional ID (str) for the Job. Defaults to None.
             origin (Optional[str], optional): The queue of origin. Defaults to None.
-            meta (Optional[Dict[str, Any]], optional): Custom metadata about the job, takes a dictioanry.
+            meta (Optional[Dict[str, Any]], optional): Custom metadata about the job, takes a dictionary.
                 Defaults to None.
-            failure_ttl (Optional[int], optional): THe time to live in seconds for failed-jobs information.
+            failure_ttl (Optional[int], optional): The time to live in seconds for failed-jobs information.
                 Defaults to None.
             serializer (Optional[str], optional): The serializer class path to use. Should be a string with the import
                 path for the serializer to use. eg. `mymodule.myfile.MySerializer` Defaults to None.
             on_success (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
-                finishes sucessfully. Defaults to None. Passing a callable is deprecated.
+                finishes successfully. Defaults to None. Passing a callable is deprecated.
             on_failure (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
                 fails. Defaults to None. Passing a callable is deprecated.
             on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
@@ -803,7 +803,7 @@ class Job:
         If a job has been deleted from redis, it is not returned.
 
         Args:
-            watch (bool, optional): Wether to WATCH the keys. Defaults to False.
+            watch (bool, optional): Whether to WATCH the keys. Defaults to False.
             pipeline (Optional[Pipeline]): The Redis' pipeline to use. Defaults to None.
 
         Returns:
@@ -1284,7 +1284,7 @@ class Job:
         on this job can optionally be deleted as well.
 
         Args:
-            pipeline (Optional[Pipeline], optional): Redis' piepline. Defaults to None.
+            pipeline (Optional[Pipeline], optional): Redis' pipeline. Defaults to None.
             remove_from_queue (bool, optional): Whether the job should be removed from the queue. Defaults to True.
             delete_dependents (bool, optional): Whether job dependents should also be deleted. Defaults to False.
         """
@@ -1307,7 +1307,7 @@ class Job:
         """Delete jobs depending on this job.
 
         Args:
-            pipeline (Optional[Pipeline], optional): Redis' piepline. Defaults to None.
+            pipeline (Optional[Pipeline], optional): Redis' pipeline. Defaults to None.
         """
         connection = pipeline if pipeline is not None else self.connection
         for dependent_id in self.dependent_ids:
@@ -1341,7 +1341,7 @@ class Job:
 
         Args:
             worker_name (str): The worker that will perform the job
-            pipeline (Pipeline): The Redis' piipeline to use
+            pipeline (Pipeline): The Redis' pipeline to use
         """
         self.worker_name = worker_name
         self.last_heartbeat = now()
@@ -1559,9 +1559,9 @@ class Job:
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
         """Requeue or schedule this job for execution.
-        If the the `retry_interval` was set on the job itself,
+        If the `retry_interval` was set on the job itself,
         it will calculate a scheduled time for the job to run, and instead
-        of just regularly `enqueing` the job, it will `schedule` it.
+        of just regularly `enqueuing` the job, it will `schedule` it.
 
         Args:
             queue (Queue): The queue to retry the job on

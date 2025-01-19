@@ -234,11 +234,11 @@ class BaseWorker:
                 warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
                 self.ip_address = 'unknown'
             else:
-                client_adresses = [
+                client_addresses = [
                     client['addr'] for client in connection.client_list() if client.get('name') == self.name
                 ]
-                if len(client_adresses) > 0:
-                    self.ip_address = client_adresses[0]
+                if len(client_addresses) > 0:
+                    self.ip_address = client_addresses[0]
                 else:
                     warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
                     self.ip_address = 'unknown'
@@ -832,7 +832,7 @@ class BaseWorker:
     ):
         """Starts the scheduler process.
         This is specifically designed to be run by the worker when running the `work()` method.
-        Instanciates the RQScheduler and tries to acquire a lock.
+        Instantiates the RQScheduler and tries to acquire a lock.
         If the lock is acquired, start scheduler.
         If worker is on burst mode just enqueues scheduled jobs and quits,
         otherwise, starts the scheduler in a separate process.
@@ -916,7 +916,7 @@ class BaseWorker:
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
         Used so that new workers can focus on the work loop implementation rather
-        than the full bootstraping process.
+        than the full bootstrapping process.
 
         Args:
             logging_level (str, optional): Logging level to use. Defaults to "INFO".
@@ -1009,7 +1009,7 @@ class BaseWorker:
             )
             time.sleep(2.0)
         else:
-            self.log.warning('Pubsub thread exitin on %s' % exc)
+            self.log.warning('Pubsub thread exiting on %s', exc)
             raise
 
     def handle_payload(self, message):
@@ -1189,7 +1189,7 @@ class BaseWorker:
 
     def increment_total_working_time(self, job_execution_time: timedelta, pipeline: 'Pipeline'):
         """Used to keep the worker stats up to date in Redis.
-        Increments the time the worker has been workig for (in seconds).
+        Increments the time the worker has been working for (in seconds).
 
         Args:
             job_execution_time (timedelta): A timedelta object.
