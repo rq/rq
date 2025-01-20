@@ -59,7 +59,7 @@ from .utils import (
     as_text,
     backend_class,
     compact,
-    ensure_list,
+    ensure_job_list,
     get_connection_from_queues,
     get_version,
     now,
@@ -75,8 +75,10 @@ except ImportError:
     def setprocname(title: str) -> None:
         pass
 
-
+# Set initial level to INFO.
 logger = logging.getLogger('rq.worker')
+if logger.level == logging.NOTSET:
+    logger.setLevel(logging.INFO)
 
 
 class StopRequested(Exception):
@@ -191,7 +193,7 @@ class BaseWorker:
                 if isinstance(q, str)
                 else q
             )
-            for q in ensure_list(queues)
+            for q in ensure_job_list(queues)
         ]
 
         self.name: str = name or uuid4().hex
@@ -307,7 +309,7 @@ class BaseWorker:
         queue_class: Optional[Type['Queue']] = None,
         queue: Optional['Queue'] = None,
         serializer=None,
-    ) -> List['Worker']:
+    ) -> List['BaseWorker']:
         """Returns an iterable of all Workers.
 
         Returns:
@@ -558,7 +560,7 @@ class BaseWorker:
     def work(
         self,
         burst: bool = False,
-        logging_level: str = 'INFO',
+        logging_level: Optional[str] = None,
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
         max_jobs: Optional[int] = None,
@@ -577,7 +579,8 @@ class BaseWorker:
 
         Args:
             burst (bool, optional): Whether to work on burst mode. Defaults to False.
-            logging_level (str, optional): Logging level to use. Defaults to "INFO".
+            logging_level (Optional[str], optional): Logging level to use.
+                If not provided, defaults to "INFO" unless a class-level logging level is already set.
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
             max_jobs (Optional[int], optional): Max number of jobs. Defaults to None.
@@ -823,7 +826,7 @@ class BaseWorker:
     def _start_scheduler(
         self,
         burst: bool = False,
-        logging_level: str = 'INFO',
+        logging_level: Optional[str] = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -843,7 +846,7 @@ class BaseWorker:
         self.scheduler = RQScheduler(
             self.queues,
             connection=self.connection,
-            logging_level=logging_level,
+            logging_level=logging_level if logging_level is not None else self.log.level,
             date_format=date_format,
             log_format=log_format,
             serializer=self.serializer,
@@ -906,7 +909,7 @@ class BaseWorker:
 
     def bootstrap(
         self,
-        logging_level: str = 'INFO',
+        logging_level: Optional[str] = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -1021,7 +1024,7 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(
-            sleep_time=0.2, daemon=True, exception_handler=self._pubsub_exception_handler
+            sleep_time=None, daemon=True, exception_handler=self._pubsub_exception_handler
         )
 
     def get_heartbeat_ttl(self, job: 'Job') -> int:
@@ -1054,9 +1057,9 @@ class BaseWorker:
         """Unsubscribe from pubsub channel"""
         if self.pubsub_thread:
             self.log.info('Unsubscribing from channel %s', self.pubsub_channel_name)
-            self.pubsub_thread.stop()
-            self.pubsub_thread.join()
             self.pubsub.unsubscribe()
+            self.pubsub_thread.stop()
+            self.pubsub_thread.join(timeout=1)
             self.pubsub.close()
 
     def dequeue_job_and_maintain_ttl(

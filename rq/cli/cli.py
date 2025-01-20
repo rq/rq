@@ -164,7 +164,7 @@ def info(cli_config, interval, raw, only_queues, only_workers, by_queue, queues,
 
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
-@click.option('--logging_level', type=str, default='INFO', help='Set logging level')
+@click.option('--logging_level', type=str, default=None, help='Set logging level')
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.option('--name', '-n', help='Specify a different name')
@@ -481,7 +481,7 @@ def worker_pool(
         logging_level = None
 
     pool = WorkerPool(
-        queue_names,  # type: ignore[arg-type]
+        queue_names,
         connection=cli_config.connection,
         num_workers=num_workers,
         serializer=serializer_class,
