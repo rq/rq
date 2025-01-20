@@ -3,7 +3,7 @@ import os
 import sys
 import time
 from ast import literal_eval
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
 from functools import partial, update_wrapper
 from json import JSONDecodeError, loads
