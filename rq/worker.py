@@ -30,6 +30,12 @@ try:
 except ImportError:
     from signal import SIGTERM as SIGKILL
 
+try:
+    from signal import SIGRTMIN
+except ImportError:
+    # Use a fallback signal on platforms without SIGRTMIN
+    SIGRTMIN = signal.SIGUSR1
+
 from contextlib import suppress
 
 import redis.exceptions
@@ -74,6 +80,7 @@ except ImportError:
 
     def setprocname(title: str) -> None:
         pass
+
 
 # Set initial level to INFO.
 logger = logging.getLogger('rq.worker')
@@ -176,8 +183,8 @@ class BaseWorker:
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
-        self.version = VERSION
-        self.python_version = sys.version
+        self.version: str = VERSION
+        self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)
         self.execution: Optional[Execution] = None
 
@@ -1382,7 +1389,7 @@ class Worker(BaseWorker):
         try:
             job_status = job.get_status()
         except InvalidJobOperation:
-            return # Job completed and its ttl has expired
+            return  # Job completed and its ttl has expired
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
@@ -1712,6 +1719,50 @@ class Worker(BaseWorker):
         return hash(self.name)
 
 
+class SpawnWorker(Worker):
+    """Worker implementation that uses os.spawn() instead of os.fork().
+    This implementation is intended for environments where `os.fork()` is not available.
+    """
+
+    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse to perform the actual work using os.spawn()."""
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
+        child_pid = os.spawnv(
+            os.P_NOWAIT,
+            sys.executable,
+            [
+                sys.executable,
+                '-c',
+                f"""
+import os
+import sys
+from redis import Redis
+from rq import Worker, Queue
+from rq.job import Job
+
+# Recreate worker instance
+redis = Redis(**{self.connection.connection_pool.connection_kwargs})
+worker = Worker.find_by_key("{self.key}", connection=redis)
+if not worker:
+    sys.exit(1)
+
+# Reconstruct job and queue
+job = Job.fetch("{job.id}", connection=worker.connection)
+queue = Queue("{queue.name}", connection=worker.connection)
+
+# Set up work horse
+os.setpgrp()
+worker._is_horse = True
+worker.main_work_horse(job, queue)
+""",
+            ],
+        )
+
+        self._horse_pid = child_pid
+        self.procline(f'Spawned {child_pid} at {time.time()}')
+
+
 class SimpleWorker(Worker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
@@ -1748,7 +1799,7 @@ class HerokuWorker(Worker):
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
-        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
+        signal.signal(SIGRTMIN, self.request_stop_sigrtmin)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
@@ -1756,7 +1807,7 @@ class HerokuWorker(Worker):
         """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
             self.log.info('Worker %s: warm shut down requested, sending horse SIGRTMIN signal', self.key)
-            self.kill_horse(sig=signal.SIGRTMIN)
+            self.kill_horse(sig=SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')
 
@@ -1768,7 +1819,7 @@ class HerokuWorker(Worker):
             self.log.warning(
                 'Imminent shutdown, raising ShutDownImminentException in %d seconds', self.imminent_shutdown_delay
             )
-            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
+            signal.signal(SIGRTMIN, self.request_force_stop_sigrtmin)
             signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
             signal.alarm(self.imminent_shutdown_delay)
 
