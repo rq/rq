@@ -51,7 +51,7 @@ def compact(lst: Iterable[Optional[_T]]) -> List[_T]:
     """Excludes `None` values from a list-like object.
 
     Args:
-        lst (list): A list (or list-like) oject
+        lst (list): A list (or list-like) object
 
     Returns:
         object (list): The list without None values
@@ -336,13 +336,13 @@ def get_call_string(
     arguments with representation longer than max_length.
 
     Args:
-        func_name (str): The funtion name
+        func_name (str): The function name
         args (Any): The function arguments
         kwargs (Dict[Any, Any]): The function kwargs
         max_length (int, optional): The max length. Defaults to None.
 
     Returns:
-        str: A String representation of the function call.
+        str: A string representation of the function call.
     """
     if func_name is None:
         return None
