@@ -4,7 +4,7 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import total_ordering
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8

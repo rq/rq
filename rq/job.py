@@ -4,7 +4,7 @@ import json
 import logging
 import warnings
 import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
 from uuid import uuid4
