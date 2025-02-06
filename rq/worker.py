@@ -487,6 +487,7 @@ class BaseWorker:
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
+        self.log.info("Installing signal handlers on main process")
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
@@ -1035,8 +1036,8 @@ class BaseWorker:
         if self.scheduler._process and self.scheduler._process.pid:
             try:
                 os.kill(self.scheduler._process.pid, signal.SIGTERM)
-            except OSError:
-                pass
+            except OSError as e:
+                self.log.error("Error while SIGTERM-ing scheduler process pid=%d", self.scheduler._process.pid, exc_info=True)
             self.scheduler._process.join()
 
     def increment_failed_job_count(self, pipeline: Optional['Pipeline'] = None):
@@ -1193,7 +1194,7 @@ class Worker(BaseWorker):
             signum (Any): Signum
             frame (Any): Frame
         """
-        self.log.debug('Got signal %s', signal_name(signum))
+        self.log.info('Got signal %s', signal_name(signum))
         self._shutdown_requested_date = utcnow()
 
         signal.signal(signal.SIGINT, self.request_force_stop)
@@ -1210,7 +1211,7 @@ class Worker(BaseWorker):
         if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
-            self.log.debug('Stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.')
+            self.log.info('Stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.')
             if self.scheduler:
                 self.stop_scheduler()
         else:
