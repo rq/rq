@@ -190,7 +190,7 @@ class BaseRegistry:
         score = self.connection.zscore(self.key, job.id)
         return datetime.utcfromtimestamp(score)
 
-    def requeue(self, job_or_id: Union['Job', str], at_front: bool = False) -> 'Job':
+    def requeue(self, job_or_id: Union['Job', str], at_front: bool = False, timeout: int | None = None) -> 'Job':
         """Requeues the job with the given job ID.
 
         Args:
@@ -222,6 +222,8 @@ class BaseRegistry:
             job.started_at = None
             job.ended_at = None
             job._exc_info = ''
+            if timeout is not None:
+                job.timeout = timeout
             job.save()
             job = queue._enqueue_job(job, pipeline=pipeline, at_front=at_front)
             pipeline.execute()
