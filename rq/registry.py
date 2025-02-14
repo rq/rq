@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import calendar
 import logging
 import time
@@ -12,7 +14,7 @@ from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import Queue
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
-from .utils import as_text, backend_class, current_timestamp
+from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -286,7 +288,6 @@ class StartedJobRegistry(BaseRegistry):
 
                     if retry:
                         job.retry(queue, pipeline)
-
                     else:
                         exc_string = f'due to {AbandonedJobError.__name__}'
                         logger.warning(
@@ -294,7 +295,7 @@ class StartedJobRegistry(BaseRegistry):
                             f'({exc_string})'
                         )
                         job.set_status(JobStatus.FAILED)
-                        job._exc_info = f'Moved to {FailedJobRegistry.__name__}, {exc_string}, at {datetime.now()}'
+                        job._exc_info = f'Moved to {FailedJobRegistry.__name__}, {exc_string}, at {now()}'
                         job.save(pipeline=pipeline, include_meta=False)
                         job.cleanup(ttl=-1, pipeline=pipeline)
                         failed_job_registry.add(job, job.failure_ttl)
@@ -337,6 +338,24 @@ class StartedJobRegistry(BaseRegistry):
         # if delete_job:
         #     job.delete()
         return result
+
+    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True) -> list[str]:
+        """Returns list of all job ids.
+
+        Args:
+            start (int, optional): start rank. Defaults to 0.
+            end (int, optional): end rank. Defaults to -1.
+            desc (bool, optional): sort in reversed order. Defaults to False.
+            cleanup (bool, optional): whether to perform the cleanup. Defaults to True.
+
+        Returns:
+            list[str]: list of the job ids in the registry
+        """
+        if cleanup:
+            self.cleanup()
+        return [
+            parse_composite_key(as_text(entry))[0] for entry in self.connection.zrange(self.key, start, end, desc=desc)
+        ]
 
     # TODO: needs to add a method to cleanup executions
 

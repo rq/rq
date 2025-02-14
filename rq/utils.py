@@ -5,9 +5,10 @@ The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
 
+from __future__ import annotations
+
 import calendar
 import datetime
-import datetime as dt
 import importlib
 import logging
 import numbers
@@ -153,11 +154,11 @@ def now() -> datetime.datetime:
 _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
-def utcformat(dt: dt.datetime) -> str:
+def utcformat(dt: datetime.datetime) -> str:
     return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
-def utcparse(string: str) -> dt.datetime:
+def utcparse(string: str) -> datetime.datetime:
     try:
         return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
@@ -205,7 +206,7 @@ def current_timestamp() -> int:
     Returns:
         int: _description_
     """
-    return calendar.timegm(datetime.datetime.now(datetime.timezone.utc).utctimetuple())
+    return calendar.timegm(now().utctimetuple())
 
 
 def backend_class(holder, default_name, override=None) -> Type:
@@ -227,7 +228,7 @@ def backend_class(holder, default_name, override=None) -> Type:
         return override
 
 
-def str_to_date(date_str: Optional[bytes]) -> Optional[dt.datetime]:
+def str_to_date(date_str: Optional[bytes]) -> Optional[datetime.datetime]:
     if not date_str:
         return None
     else:
@@ -377,3 +378,16 @@ def get_connection_from_queues(queues_or_names: Iterable[Union[str, 'Queue']]) -
         if isinstance(queue_or_name, Queue):
             return queue_or_name.connection
     return None
+
+
+def parse_composite_key(composite_key: str) -> tuple[str, str]:
+    """Method returns a parsed composite key.
+
+    Args:
+        composite_key (str): the composite key to parse
+
+    Returns:
+        tuple[str, str]: tuple of job id and the execution id
+    """
+    job_id, execution_id = composite_key.split(':')
+    return (job_id, execution_id)
