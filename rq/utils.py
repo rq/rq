@@ -159,13 +159,11 @@ def utcformat(dt: dt.datetime) -> str:
 
 def utcparse(string: str) -> dt.datetime:
     try:
-        return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
+        parsed = datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
         # This catches any jobs remain with old datetime format
-        try:
-            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
-        except ValueError:
-            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+        parsed = datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+    return parsed.replace(tzinfo=datetime.timezone.utc)
 
 
 def is_nonstring_iterable(obj: Any) -> bool:
@@ -205,7 +203,7 @@ def current_timestamp() -> int:
     Returns:
         int: _description_
     """
-    return calendar.timegm(datetime.datetime.now(datetime.timezone.utc).utctimetuple())
+    return calendar.timegm(now().utctimetuple())
 
 
 def backend_class(holder, default_name, override=None) -> Type:

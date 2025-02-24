@@ -4,7 +4,7 @@ import json
 import logging
 import warnings
 import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
 from uuid import uuid4
@@ -1572,7 +1572,7 @@ class Job:
         assert self.retries_left
         self.retries_left = self.retries_left - 1
         if retry_interval:
-            scheduled_datetime = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+            scheduled_datetime = now() + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
             logger.info(
