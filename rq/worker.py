@@ -1608,7 +1608,7 @@ class Worker(BaseWorker):
 
                     if self.log_job_description:
                         self.log.info(
-                            'Successfully completed % job in %ss on worker %s', job.description, time_taken, self.name
+                            'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
                         )
                     else:
                         self.log.info(
