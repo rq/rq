@@ -1580,7 +1580,7 @@ class Job:
             )
         else:
             queue._enqueue_job(self, pipeline=pipeline)
-            logger.info('Job %s: enqueued for retry, %s remaining')
+            logger.info('Job %s: enqueued for retry, %s remaining', self.id, self.retries_left)
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they
