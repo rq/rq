@@ -45,6 +45,7 @@ class RQScheduler:
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,
+        queue_class=None,
     ):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks: Set[str] = set()
@@ -65,6 +66,7 @@ class RQScheduler:
             log_format=log_format,
             date_format=date_format,
         )
+        self.queue_class = queue_class or Queue
 
     @property
     def connection(self):
@@ -146,7 +148,8 @@ class RQScheduler:
             if not job_ids:
                 continue
 
-            queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
+            queue_cls = self.queue_class
+            queue = queue_cls(registry.name, connection=self.connection, serializer=self.serializer)
 
             with self.connection.pipeline() as pipeline:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)

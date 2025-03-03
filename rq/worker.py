@@ -778,6 +778,7 @@ class BaseWorker:
             date_format=date_format,
             log_format=log_format,
             serializer=self.serializer,
+            queue_class=self.queue_class
         )
         self.scheduler.acquire_locks()
         if self.scheduler.acquired_locks:
