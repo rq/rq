@@ -1612,7 +1612,7 @@ class Worker(BaseWorker):
                         )
                     else:
                         self.log.info(
-                            'Successfully completed job in %ss on worker %s', time_taken, self.name
+                            'Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name
                         )
 
                     self.log.debug('Finished handling successful execution of job %s', job.id)
