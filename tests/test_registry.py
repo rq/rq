@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
 
@@ -15,7 +15,7 @@ from rq.registry import (
     clean_registries,
 )
 from rq.serializers import JSONSerializer
-from rq.utils import as_text, current_timestamp
+from rq.utils import as_text, current_timestamp, now
 from rq.worker import Worker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -71,7 +71,7 @@ class TestRegistry(RQTestCase):
 
         registry.add(job, 5)
         time = registry.get_expiration_time(job)
-        expected_time = (datetime.utcnow() + timedelta(seconds=5)).replace(microsecond=0)
+        expected_time = (now() + timedelta(seconds=5)).replace(microsecond=0)
         self.assertGreaterEqual(time, expected_time - timedelta(seconds=2))
         self.assertLessEqual(time, expected_time + timedelta(seconds=2))
 

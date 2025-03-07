@@ -192,7 +192,7 @@ class BaseRegistry:
             job (Job): The Job to get the expiration
         """
         score = self.connection.zscore(self.key, job.id)
-        return datetime.utcfromtimestamp(score)  # type: ignore[arg-type]
+        return datetime.fromtimestamp(score, timezone.utc)  # type: ignore[arg-type]
 
     def requeue(self, job_or_id: Union['Job', str], at_front: bool = False) -> 'Job':
         """Requeues the job with the given job ID.
