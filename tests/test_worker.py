@@ -342,7 +342,11 @@ class TestWorker(RQTestCase):
         worker.work(burst=True)
         self.assertIn(job, job.failed_job_registry)
         job.refresh()
-        self.assertIn('rq.timeouts.JobTimeoutException', job.exc_info)
+        if job.supports_redis_streams:
+            self.assertIsNotNone(job.latest_result().exc_string)
+            self.assertIn('rq.timeouts.JobTimeoutException', job.latest_result().exc_string)
+        else:
+            self.assertIn('rq.timeouts.JobTimeoutException', job.exc_info)
 
     @slow
     def test_heartbeat_busy(self):
@@ -420,7 +424,10 @@ class TestWorker(RQTestCase):
         # Should be the original enqueued_at date, not the date of enqueueing
         # to the failed queue
         self.assertEqual(job.enqueued_at.replace(tzinfo=timezone.utc).timestamp(), enqueued_at_date.timestamp())
-        self.assertTrue(job.exc_info)  # should contain exc_info
+        if job.supports_redis_streams:
+            self.assertTrue(job.latest_result().exc_string)  # should contain exc_info
+        else:
+            self.assertTrue(job.exc_info)  # should contain exc_info
 
     def test_statistics(self):
         """Successful and failed job counts are saved properly"""
@@ -615,7 +622,6 @@ class TestWorker(RQTestCase):
         def cancel_parent_job(job):
             while job.is_queued:
                 time.sleep(1)
-
             job.cancel()
             return
 
@@ -624,6 +630,7 @@ class TestWorker(RQTestCase):
 
         job = q.enqueue(say_hello, depends_on=parent_job)
         job2 = q.enqueue(say_hello, depends_on=job)
+
         status_thread = threading.Thread(target=cancel_parent_job, args=(parent_job,))
         status_thread.start()
 
@@ -736,7 +743,12 @@ class TestWorker(RQTestCase):
 
         # TODO: Having to do the manual refresh() here is really ugly!
         res.refresh()
-        self.assertIn('JobTimeoutException', as_text(res.exc_info))
+        if w.supports_redis_streams:
+            latest_result = res.latest_result()
+            self.assertIsNotNone(latest_result)
+            self.assertIn('JobTimeoutException', as_text(latest_result.exc_string))
+        else:
+            self.assertIn('JobTimeoutException', as_text(res.exc_info))
 
     def test_dequeue_job_and_maintain_ttl_non_blocking(self):
         """Not passing a timeout should return immediately with None as a result"""
@@ -886,8 +898,8 @@ class TestWorker(RQTestCase):
 
         # Updates working queue, job execution should be there
         registry = StartedJobRegistry(connection=self.connection)
-        # self.assertTrue(job.id in registry.get_job_ids())
-        self.assertTrue(worker.execution.composite_key in registry.get_job_ids())
+        self.assertTrue(job.id in registry.get_job_ids())
+        self.assertTrue((worker.execution.job_id, worker.execution.id) in registry.get_job_and_execution_ids())
 
         # Updates worker's current job
         self.assertEqual(worker.get_current_job_id(), job.id)
@@ -1332,6 +1344,7 @@ class TestWorker(RQTestCase):
         q = Queue(connection=self.connection)
         w = Worker([q])
         perform_job = w.perform_job
+
         def p(*args, **kwargs):
             perform_job(*args, **kwargs)
             raise Exception
@@ -1339,6 +1352,7 @@ class TestWorker(RQTestCase):
         w.perform_job = p
         q.enqueue(say_hello, args=('ccc',), result_ttl=0)
         self.assertTrue(w.work(burst=True))
+
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)

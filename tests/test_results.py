@@ -162,7 +162,12 @@ class TestScheduledJobRegistry(RQTestCase):
         job = Job.fetch(job.id, connection=self.connection)
         payload = self.connection.hgetall(job.key)
         self.assertFalse(b'exc_info' in payload.keys())
-        self.assertEqual(job.exc_info, 'Error')
+        if job.supports_redis_streams:
+            latest_result = job.latest_result()
+            self.assertIsNotNone(latest_result)
+            self.assertEqual(latest_result.exc_string, 'Error')
+        else:
+            self.assertEqual(job._exc_info)
 
         with patch('rq.worker.Worker.supports_redis_streams', new_callable=PropertyMock) as mock:
             with patch('rq.job.Job.supports_redis_streams', new_callable=PropertyMock) as job_mock:

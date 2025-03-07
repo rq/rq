@@ -12,6 +12,7 @@ import datetime
 import importlib
 import logging
 import numbers
+import warnings
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
@@ -389,5 +390,15 @@ def parse_composite_key(composite_key: str) -> tuple[str, str]:
     Returns:
         tuple[str, str]: tuple of job id and the execution id
     """
-    job_id, execution_id = composite_key.split(':')
+    result = composite_key.split(':')
+    if len(result) == 1:
+        # StartedJobRegistry contains a composite key under the sorted set
+        # a single job_id should've never ended up in the set, but
+        # just in case there's a regression (tests don't show any)
+        warnings.warn(
+            f'Composite key must contain job_id:execution_id, got {composite_key}',
+            DeprecationWarning,
+        )
+        return (result[0], '')
+    job_id, execution_id = result
     return (job_id, execution_id)

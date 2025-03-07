@@ -4,8 +4,9 @@ import calendar
 import logging
 import time
 import traceback
+import warnings
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, Union, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Type, Union, cast
 
 from rq.serializers import resolve_serializer
 
@@ -36,7 +37,6 @@ class BaseRegistry:
     job_class = Job
     death_penalty_class = UnixSignalDeathPenalty
     key_template = 'rq:registry:{0}'
-    cleanup: Callable[..., Any]
 
     def __init__(
         self,
@@ -105,11 +105,11 @@ class BaseRegistry:
             self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job: 'Job', ttl=0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
+    def add(self, job: Job | str, ttl: int = 0, pipeline: Pipeline | None = None, xx: bool = False) -> int:
         """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
-            job (Job): The Job to add
+            job (Job): The Job to add, or job_id
             ttl (int, optional): The time to live. Defaults to 0.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             xx (bool, optional): .... Defaults to False.
@@ -117,20 +117,21 @@ class BaseRegistry:
         Returns:
             result (int): The ZADD command result
         """
-        score = ttl if ttl < 0 else current_timestamp() + ttl
+        score: int | str = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
             score = '+inf'
+        job_id = job.id if isinstance(job, self.job_class) else job
         if pipeline is not None:
-            return cast(int, pipeline.zadd(self.key, {job.id: score}, xx=xx))
+            return cast(int, pipeline.zadd(self.key, {job_id: score}, xx=xx))
 
-        return self.connection.zadd(self.key, {job.id: score}, xx=xx)
+        return self.connection.zadd(self.key, {job_id: score}, xx=xx)
 
-    def remove(self, job: Union['Job', str], pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
+    def remove(self, job: Job | str, pipeline: Pipeline | None = None, delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`
 
         Args:
-            job (Job): The Job to remove from the registry
-            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            job (Job|str): The Job to remove from the registry, or job_id
+            pipeline (Pipeline|None): The Redis Pipeline. Defaults to None.
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
@@ -144,18 +145,6 @@ class BaseRegistry:
             job_instance.delete()
         return result
 
-    def remove_executions(self, job: 'Job', pipeline: Optional['Pipeline'] = None):
-        """Removes job executions from registry
-
-        Args:
-            job (Job): The Job to remove from the registry
-            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        execution_ids = [execution.composite_key for execution in job.get_executions()]
-        if execution_ids:
-            return connection.zrem(self.key, *execution_ids)
-
     def get_expired_job_ids(self, timestamp: Optional[float] = None):
         """Returns job ids whose score are less than current timestamp.
 
@@ -165,23 +154,23 @@ class BaseRegistry:
         """
         score = timestamp if timestamp is not None else current_timestamp()
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
-        return [as_text(job_id) for job_id in expired_jobs]
+        return [self.parse_job_id(job_id) for job_id in expired_jobs]
 
     def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True) -> List[str]:
         """Returns list of all job ids.
 
         Args:
-            start (int, optional): _description_. Defaults to 0.
-            end (int, optional): _description_. Defaults to -1.
-            desc (bool, optional): _description_. Defaults to False.
-            cleanup (bool, optional): _description_. Defaults to True.
+            start (int, optional): start rank. Defaults to 0.
+            end (int, optional): end rank. Defaults to -1.
+            desc (bool, optional): sort in reversed order. Defaults to False.
+            cleanup (bool, optional): whether to perform the cleanup. Defaults to True.
 
         Returns:
-            _type_: _description_
+            list[str]: list of the job ids in the registry
         """
         if cleanup:
             self.cleanup()
-        return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end, desc=desc)]
+        return [self.parse_job_id(job_id) for job_id in self.connection.zrange(self.key, start, end, desc=desc)]
 
     def get_queue(self):
         """Returns Queue object associated with this registry."""
@@ -230,6 +219,26 @@ class BaseRegistry:
             pipeline.execute()
         return job
 
+    @staticmethod
+    def parse_job_id(entry: str) -> str:
+        """Generic function to retrieve the job id from the stored entry.
+        Some Registries might have a different entry format.
+
+        Args:
+            entry (str): the entry from the registry
+
+        Returns:
+            str: the job_id parsed from the registry.
+        """
+        # base registry only stores job_ids as is.
+        if not isinstance(entry, str):
+            entry = as_text(entry)  # type: ignore
+        return entry
+
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
+        """This method is automatically called by `count()` and `get_job_ids()` methods
+        implemented in BaseRegistry. Base registry doesn't have any special cleanup instructions"""
+
 
 class StartedJobRegistry(BaseRegistry):
     """
@@ -239,6 +248,8 @@ class StartedJobRegistry(BaseRegistry):
 
     Jobs are added to registry right before they are executed and removed
     right after completion (success or failure).
+
+    Each entry is a {job_id}:{execution_id}
     """
 
     key_template = 'rq:wip:{0}'
@@ -257,7 +268,6 @@ class StartedJobRegistry(BaseRegistry):
         job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
-            failed_job_registry = FailedJobRegistry(self.name, self.connection, serializer=self.serializer)
             queue = self.get_queue()
 
             with self.connection.pipeline() as pipeline:
@@ -289,17 +299,14 @@ class StartedJobRegistry(BaseRegistry):
                     if retry:
                         job.retry(queue, pipeline)
                     else:
-                        exc_string = f'due to {AbandonedJobError.__name__}'
-                        logger.warning(
-                            f'{self.__class__.__name__} cleanup: Moving job {job.id} to {FailedJobRegistry.__name__} '
-                            f'({exc_string})'
+                        exc_string = (
+                            f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
                         )
-                        job.set_status(JobStatus.FAILED)
-                        job._exc_info = f'Moved to {FailedJobRegistry.__name__}, {exc_string}, at {now()}'
-                        job.save(pipeline=pipeline, include_meta=False)
-                        job.cleanup(ttl=-1, pipeline=pipeline)
-                        failed_job_registry.add(job, job.failure_ttl)
-                        queue.enqueue_dependents(job)
+                        logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
+                        job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                        job._handle_failure(exc_string, pipeline)
+                        # don't refresh the job status, because the job state is still in the pipeline
+                        queue.enqueue_dependents(job, refresh_job_status=False)
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
@@ -324,7 +331,9 @@ class StartedJobRegistry(BaseRegistry):
 
         return pipeline.zadd(self.key, {execution.composite_key: score}, xx=xx)  # type: ignore
 
-    def remove_execution(self, execution: 'Execution', job: 'Job', pipeline: 'Pipeline', delete_job: bool = False):
+    def remove_execution(
+        self, execution: 'Execution | str', job: 'Job| None', pipeline: 'Pipeline', delete_job: bool = False
+    ):
         """Removes job from registry and deletes it if `delete_job == True`
 
         Args:
@@ -334,12 +343,15 @@ class StartedJobRegistry(BaseRegistry):
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        result = connection.zrem(self.key, execution.composite_key)
+        to_delete = execution if isinstance(execution, str) else execution.composite_key
+        result = connection.zrem(self.key, to_delete)
         # if delete_job:
         #     job.delete()
         return result
 
-    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True) -> list[str]:
+    def get_job_and_execution_ids(
+        self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True
+    ) -> list[tuple[str, str]]:
         """Returns list of all job ids.
 
         Args:
@@ -354,10 +366,66 @@ class StartedJobRegistry(BaseRegistry):
         if cleanup:
             self.cleanup()
         return [
-            parse_composite_key(as_text(entry))[0] for entry in self.connection.zrange(self.key, start, end, desc=desc)
+            parse_composite_key(as_text(entry)) for entry in self.connection.zrange(self.key, start, end, desc=desc)
         ]
 
-    # TODO: needs to add a method to cleanup executions
+    def __contains__(self, item: Any) -> bool:
+        """Method to check if the item is in the registry.
+
+        Args:
+            item (Any): Either a Job (instance of job_class) or a job id.
+
+        Returns:
+            bool: True if the item is in the registry.
+        """
+        job_id = item
+        if isinstance(item, self.job_class):
+            job_id = item.id
+        return cast(str, job_id) in self.get_job_ids(cleanup=False)
+
+    def add(self, job: Job | str, ttl: int = 0, pipeline: Pipeline | None = None, xx: bool = False) -> int:
+        warnings.warn(
+            'StartedJobRegistry can only contain execution records. Use add_execution method.', DeprecationWarning
+        )
+        # in the future will raise
+        # raise NotImplementedError('')
+        job_id = job.id if isinstance(job, self.job_class) else job
+        # use job_id: so the stored record is always a tuple, when split by ':'
+        return super().add(f'{job_id}:', ttl, pipeline, xx)
+
+    def remove(self, job: Job | str, pipeline: Pipeline | None = None, delete_job: bool = False):
+        warnings.warn(
+            'StartedJobRegistry can only contain execution records. Use remove_execution method.', DeprecationWarning
+        )
+
+        # in the future will raise
+        # raise NotImplementedError('')
+        job_id = job.id if isinstance(job, self.job_class) else job
+        # if delete job is True, the following would fail. Prohibit deleting the job this way.
+        if delete_job:
+            raise RuntimeError('StartedJobRegistry.remove() method cannot auto-delete the job.')
+        return super().remove(f'{job_id}:', pipeline, delete_job)
+
+    @staticmethod
+    def parse_job_id(entry: str) -> str:
+        # other classes might have a different entry format
+        # base registry stores just the job id
+        if not isinstance(entry, str):
+            entry = as_text(entry)  # type: ignore
+        job_id, _execution_id = parse_composite_key(entry)
+        return job_id
+
+    def remove_executions(self, job: Job, pipeline: Pipeline | None = None):
+        """Removes job executions from registry
+
+        Args:
+            job (Job): The Job to remove from the registry
+            pipeline (Pipeline | None): The Redis Pipeline. Defaults to None.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        execution_ids = [execution.composite_key for execution in job.get_executions()]
+        if execution_ids:
+            return connection.zrem(self.key, *execution_ids)
 
 
 class FinishedJobRegistry(BaseRegistry):
@@ -368,7 +436,7 @@ class FinishedJobRegistry(BaseRegistry):
 
     key_template = 'rq:finished:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None):
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -386,7 +454,7 @@ class FailedJobRegistry(BaseRegistry):
 
     key_template = 'rq:failed:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None):
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -433,7 +501,7 @@ class DeferredJobRegistry(BaseRegistry):
 
     key_template = 'rq:deferred:{0}'
 
-    def cleanup(self, timestamp=None):
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
@@ -443,8 +511,6 @@ class DeferredJobRegistry(BaseRegistry):
         job_ids = self.get_expired_job_ids(score)
 
         if job_ids:
-            failed_job_registry = FailedJobRegistry(self.name, self.connection, serializer=self.serializer)
-
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
                     try:
@@ -453,13 +519,11 @@ class DeferredJobRegistry(BaseRegistry):
                         continue
 
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                    exc_info = 'Expired in DeferredJobRegistry, moved to FailedJobRegistry at %s' % datetime.now()
-                    failed_job_registry.add(job, job.failure_ttl, exc_info, pipeline, True)
+                    exc_info = f'Expired in DeferredJobRegistry, moved to FailedJobRegistry at {now}'
+                    job._handle_failure(exc_string=exc_info, pipeline=pipeline)
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
-
-        return job_ids
 
     def add(self, job, ttl=None, pipeline=None, xx=False):
         """
@@ -498,12 +562,6 @@ class ScheduledJobRegistry(BaseRegistry):
 
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         return self.connection.zadd(self.key, {job.id: timestamp})
-
-    def cleanup(self):
-        """This method is only here to prevent errors because this method is
-        automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
-        pass
 
     def remove_jobs(self, timestamp: Optional[datetime] = None, pipeline: Optional['Pipeline'] = None):
         """Remove jobs whose timestamp is in the past from registry.
@@ -559,12 +617,6 @@ class CanceledJobRegistry(BaseRegistry):
 
     def get_expired_job_ids(self, timestamp: Optional[float] = None):
         raise NotImplementedError
-
-    def cleanup(self):
-        """This method is only here to prevent errors because this method is
-        automatically called by `count()` and `get_job_ids()` methods
-        implemented in BaseRegistry."""
-        pass
 
 
 def clean_registries(queue: 'Queue', exception_handlers: Optional[list] = None):

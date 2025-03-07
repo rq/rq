@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import uuid4
@@ -118,7 +120,7 @@ class ExecutionRegistry(BaseRegistry):
         self.job_id = job_id
         self.key = self.key_template.format(job_id)
 
-    def cleanup(self, timestamp: Optional[float] = None):
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as

@@ -77,10 +77,10 @@ class Dependency:
         Args:
             jobs (Iterable[Union[Job, str]]): An iterable of Job instances or Job IDs.
                 Anything different will raise a ValueError
-            allow_failure (bool, optional): Whether to allow for failure when running the depency,
+            allow_failure (bool, optional): Whether to allow for failure when running the dependency,
                 meaning, the dependencies should continue running even after one of them failed.
                 Defaults to False.
-            enqueue_at_front (bool, optional): Whether this dependecy should be enqueued at the front of the queue.
+            enqueue_at_front (bool, optional): Whether this dependency should be enqueued at the front of the queue.
                 Defaults to False.
 
         Raises:
@@ -825,11 +825,11 @@ class Job:
         """
         Get the latest result and returns `exc_info` only if the latest result is a failure.
         """
-        warnings.warn('job.exc_info is deprecated, use job.latest_result() instead.', DeprecationWarning)
 
         from .results import Result
 
         if self.supports_redis_streams:
+            warnings.warn('job.exc_info is deprecated, use job.latest_result() instead.', DeprecationWarning)
             if not self._cached_result:
                 self._cached_result = self.latest_result()
 
@@ -1534,6 +1534,7 @@ class Job:
     def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline'):
         if self.supports_redis_streams:
             from .results import Result
+
             Result.create_retried(self, self.failure_ttl, pipeline=pipeline)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         queue._enqueue_job(self, pipeline=pipeline)
@@ -1555,7 +1556,7 @@ class Job:
 
     @property
     def should_retry(self) -> bool:
-        return (self.retries_left is not None and self.retries_left > 0)
+        return self.retries_left is not None and self.retries_left > 0
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
         """Requeue or schedule this job for execution.
@@ -1620,6 +1621,7 @@ class Job:
         parent_job: Optional['Job'] = None,
         pipeline: Optional['Pipeline'] = None,
         exclude_job_id: Optional[str] = None,
+        refresh_job_status: bool = True,
     ) -> bool:
         """Returns a boolean indicating if all of this job's dependencies are `FINISHED`
 
@@ -1633,7 +1635,8 @@ class Job:
         Args:
             parent_job (Optional[Job], optional): The parent Job. Defaults to None.
             pipeline (Optional[Pipeline], optional): The Redis' pipeline. Defaults to None.
-            exclude_job_id (Optional[str], optional): Whether to exclude the job id.. Defaults to None.
+            exclude_job_id (Optional[str], optional): Whether to exclude the job id..Defaults to None.
+            refresh_job_status (bool): whether to refresh job status when checking for dependencies. Defaults to True.
 
         Returns:
             are_met (bool): Whether the dependencies were met.
@@ -1655,9 +1658,9 @@ class Job:
             # If parent job is not finished, we should only continue
             # if this job allows parent job to fail
             dependencies_ids.discard(parent_job.id)
-            if parent_job.get_status() == JobStatus.CANCELED:
+            if parent_job.get_status(refresh=refresh_job_status) == JobStatus.CANCELED:
                 return False
-            elif parent_job._status == JobStatus.FAILED and not self.allow_dependency_failures:
+            elif parent_job.get_status(refresh=False) == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False
 
             # If the only dependency is parent job, dependency has been met
