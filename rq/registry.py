@@ -4,9 +4,10 @@ import calendar
 import logging
 import time
 import traceback
-import warnings
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, List, Optional, Type, Union, cast
+
+from typing_extensions import deprecated
 
 from rq.serializers import resolve_serializer
 
@@ -381,7 +382,7 @@ class StartedJobRegistry(BaseRegistry):
             job_id = item.id
         return cast(str, job_id) in self.get_job_ids(cleanup=False)
 
-    @warnings.deprecated('StartedJobRegistry can only contain execution records. Use add_execution method.')
+    @deprecated('StartedJobRegistry can only contain execution records. Use add_execution method.')
     def add(self, job: Job | str, ttl: int = 0, pipeline: Pipeline | None = None, xx: bool = False) -> int:
         # in the future will raise
         # raise NotImplementedError('')
@@ -389,7 +390,7 @@ class StartedJobRegistry(BaseRegistry):
         # use job_id: so the stored record is always a tuple, when split by ':'
         return super().add(f'{job_id}:', ttl, pipeline, xx)
 
-    @warnings.deprecated('StartedJobRegistry can only contain execution records. Use remove_execution method.')
+    @deprecated('StartedJobRegistry can only contain execution records. Use remove_execution method.')
     def remove(self, job: Job | str, pipeline: Pipeline | None = None, delete_job: bool = False):
         # in the future will raise
         # raise NotImplementedError('')
@@ -556,7 +557,7 @@ class ScheduledJobRegistry(BaseRegistry):
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         return self.connection.zadd(self.key, {job.id: timestamp})
 
-    @warnings.deprecated('ScheduledJobRegistry.remove_jobs() is deprecated and will be removed in the future.')
+    @deprecated('ScheduledJobRegistry.remove_jobs() is deprecated and will be removed in the future.')
     def remove_jobs(self, timestamp: int | None = None, pipeline: Pipeline | None = None):
         """Remove jobs whose timestamp is in the past from registry.
 
