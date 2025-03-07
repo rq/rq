@@ -48,6 +48,7 @@ dynamic = [
 dependencies = [
   "click>=5",
   "redis>=3.5",
+  "typing-extensions>=4.12.2",
 ]
 [project.urls]
 changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
