@@ -87,6 +87,8 @@ include = [
   "requirements.txt",
   "tox.ini",
 ]
+[tool.hatch.envs.default]
+installer = "uv"
 
 [tool.hatch.envs.test]
 dependencies = [
