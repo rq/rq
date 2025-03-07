@@ -1,6 +1,9 @@
+import re
 from datetime import timedelta, timezone
 from unittest import mock
 from unittest.mock import ANY
+
+import pytest
 
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import AbandonedJobError, InvalidJobOperation
@@ -566,6 +569,22 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertTrue(job in self.registry)
         self.assertTrue(job.id in self.registry)
 
+    def test_infinite_score(self):
+        """Test the StartedJobRegistry __contains__ method. It is slightly different
+        because the entries in the registry are {job_id}:{execution_id} format."""
+        job = self.q.enqueue(say_hello)
+
+        self.assertFalse(job in self.registry)
+        self.assertFalse(job.id in self.registry)
+
+        with self.connection.pipeline() as pipe:
+            execution = Execution(id='execution', job_id=job.id, connection=self.connection)
+            self.registry.add_execution(execution=execution, pipeline=pipe, ttl=-1)
+            pipe.execute()
+        self.assertTrue(job in self.registry)
+        self.assertTrue(job.id in self.registry)
+        self.assertTrue(self.connection.zscore(self.registry.key, execution.composite_key), '+inf')
+
     def test_remove_executions(self):
         """Ensure all executions for a job are removed from registry."""
         worker = Worker([self.q], connection=self.connection)
@@ -709,3 +728,28 @@ class TestStartedJobRegistry(RQTestCase):
 
         self.assertFalse(job_not_to_be_executed.is_finished)
         self.assertNotIn(job_not_to_be_executed, finished_job_registry)
+
+    def test_warnings_on_add_remove_and_exception(self):
+        """Test backwards compatibility of the .add and .remove methods for
+        the StartedJobRegistry."""
+        with pytest.deprecated_call():
+            self.registry.add('job_id')
+
+        self.assertIn('job_id', self.registry.get_job_ids(cleanup=False))
+        with pytest.deprecated_call():
+            self.registry.remove('job_id')
+        self.assertNotIn('job_id', self.registry.get_job_ids(cleanup=False))
+
+        job = self.q.enqueue(say_hello)
+        with pytest.deprecated_call():
+            self.registry.add(job)
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+
+        with pytest.deprecated_call():
+            self.registry.remove(job)
+        self.assertNotIn(job.id, self.registry.get_job_ids(cleanup=False))
+
+        with pytest.raises(
+            RuntimeError, match=re.escape('StartedJobRegistry.remove() method cannot auto-delete the job.')
+        ) as _raise_check, pytest.deprecated_call() as _deprecation_check:
+            self.registry.remove('job_id', delete_job=True)

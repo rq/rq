@@ -311,21 +311,19 @@ class StartedJobRegistry(BaseRegistry):
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
-        return job_ids
-
-    def add_execution(self, execution: 'Execution', pipeline: 'Pipeline', ttl=0, xx: bool = False) -> int:
+    def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
             execution (Execution): The Execution to add
+            pipeline (Pipeline): The Redis Pipeline. Defaults to None.
             ttl (int, optional): The time to live. Defaults to 0.
-            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             xx (bool, optional): .... Defaults to False.
 
         Returns:
             result (int): The ZADD command result
         """
-        score = ttl if ttl < 0 else current_timestamp() + ttl
+        score: int | str = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
             score = '+inf'
 
@@ -383,21 +381,16 @@ class StartedJobRegistry(BaseRegistry):
             job_id = item.id
         return cast(str, job_id) in self.get_job_ids(cleanup=False)
 
+    @warnings.deprecated('StartedJobRegistry can only contain execution records. Use add_execution method.')
     def add(self, job: Job | str, ttl: int = 0, pipeline: Pipeline | None = None, xx: bool = False) -> int:
-        warnings.warn(
-            'StartedJobRegistry can only contain execution records. Use add_execution method.', DeprecationWarning
-        )
         # in the future will raise
         # raise NotImplementedError('')
         job_id = job.id if isinstance(job, self.job_class) else job
         # use job_id: so the stored record is always a tuple, when split by ':'
         return super().add(f'{job_id}:', ttl, pipeline, xx)
 
+    @warnings.deprecated('StartedJobRegistry can only contain execution records. Use remove_execution method.')
     def remove(self, job: Job | str, pipeline: Pipeline | None = None, delete_job: bool = False):
-        warnings.warn(
-            'StartedJobRegistry can only contain execution records. Use remove_execution method.', DeprecationWarning
-        )
-
         # in the future will raise
         # raise NotImplementedError('')
         job_id = job.id if isinstance(job, self.job_class) else job
@@ -563,15 +556,17 @@ class ScheduledJobRegistry(BaseRegistry):
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
         return self.connection.zadd(self.key, {job.id: timestamp})
 
-    def remove_jobs(self, timestamp: Optional[datetime] = None, pipeline: Optional['Pipeline'] = None):
+    @warnings.deprecated('ScheduledJobRegistry.remove_jobs() is deprecated and will be removed in the future.')
+    def remove_jobs(self, timestamp: int | None = None, pipeline: Pipeline | None = None):
         """Remove jobs whose timestamp is in the past from registry.
 
         Args:
-            timestamp (Optional[datetime], optional): The timestamp. Defaults to None.
-            pipeline (Optional[Pipeline], optional): The Redis pipeline. Defaults to None.
+            timestamp (int|None, optional): The timestamp. Defaults to None.
+            pipeline (Pipeline|None, optional): The Redis pipeline. Defaults to None.
         """
+
         connection = pipeline if pipeline is not None else self.connection
-        score: Any = timestamp if timestamp is not None else current_timestamp()
+        score: int = timestamp if timestamp is not None else current_timestamp()
         return connection.zremrangebyscore(self.key, 0, score)
 
     def get_jobs_to_schedule(self, timestamp: Optional[int] = None, chunk_size: int = 1000) -> List[str]:
