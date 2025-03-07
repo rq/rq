@@ -14,7 +14,7 @@ permissions:
 jobs:
   ssl-test:
     name: Run SSL tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker test image for tox
@@ -31,7 +31,7 @@ jobs:
 
   test:
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       matrix:
