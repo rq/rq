@@ -10,7 +10,7 @@ import sys
 import time
 import traceback
 import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from types import FrameType
@@ -29,6 +29,12 @@ try:
     from signal import SIGKILL
 except ImportError:
     from signal import SIGTERM as SIGKILL
+
+try:
+    from signal import SIGRTMIN
+except ImportError:
+    # Use a fallback signal on platforms without SIGRTMIN
+    SIGRTMIN = signal.SIGUSR1
 
 from contextlib import suppress
 
@@ -74,6 +80,7 @@ except ImportError:
 
     def setprocname(title: str) -> None:
         pass
+
 
 # Set initial level to INFO.
 logger = logging.getLogger('rq.worker')
@@ -176,8 +183,8 @@ class BaseWorker:
 
         self.job_class = backend_class(self, 'job_class', override=job_class)
         self.queue_class = backend_class(self, 'queue_class', override=queue_class)
-        self.version = VERSION
-        self.python_version = sys.version
+        self.version: str = VERSION
+        self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)
         self.execution: Optional[Execution] = None
 
@@ -234,11 +241,11 @@ class BaseWorker:
                 warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
                 self.ip_address = 'unknown'
             else:
-                client_adresses = [
+                client_addresses = [
                     client['addr'] for client in connection.client_list() if client.get('name') == self.name
                 ]
-                if len(client_adresses) > 0:
-                    self.ip_address = client_adresses[0]
+                if len(client_addresses) > 0:
+                    self.ip_address = client_addresses[0]
                 else:
                     warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
                     self.ip_address = 'unknown'
@@ -832,7 +839,7 @@ class BaseWorker:
     ):
         """Starts the scheduler process.
         This is specifically designed to be run by the worker when running the `work()` method.
-        Instanciates the RQScheduler and tries to acquire a lock.
+        Instantiates the RQScheduler and tries to acquire a lock.
         If the lock is acquired, start scheduler.
         If worker is on burst mode just enqueues scheduled jobs and quits,
         otherwise, starts the scheduler in a separate process.
@@ -916,7 +923,7 @@ class BaseWorker:
         """Bootstraps the worker.
         Runs the basic tasks that should run when the worker actually starts working.
         Used so that new workers can focus on the work loop implementation rather
-        than the full bootstraping process.
+        than the full bootstrapping process.
 
         Args:
             logging_level (str, optional): Logging level to use. Defaults to "INFO".
@@ -1009,7 +1016,7 @@ class BaseWorker:
             )
             time.sleep(2.0)
         else:
-            self.log.warning('Pubsub thread exitin on %s' % exc)
+            self.log.warning('Pubsub thread exiting on %s', exc)
             raise
 
     def handle_payload(self, message):
@@ -1189,7 +1196,7 @@ class BaseWorker:
 
     def increment_total_working_time(self, job_execution_time: timedelta, pipeline: 'Pipeline'):
         """Used to keep the worker stats up to date in Redis.
-        Increments the time the worker has been workig for (in seconds).
+        Increments the time the worker has been working for (in seconds).
 
         Args:
             job_execution_time (timedelta): A timedelta object.
@@ -1382,7 +1389,7 @@ class Worker(BaseWorker):
         try:
             job_status = job.get_status()
         except InvalidJobOperation:
-            return # Job completed and its ttl has expired
+            return  # Job completed and its ttl has expired
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
@@ -1522,7 +1529,7 @@ class Worker(BaseWorker):
 
             if retry_interval > 0:
                 # Schedule job for later if there's an interval
-                scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=retry_interval)
+                scheduled_time = now() + timedelta(seconds=retry_interval)
                 job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
                 queue.schedule_job(job, scheduled_time, pipeline=pipeline)
                 self.log.debug(
@@ -1712,6 +1719,50 @@ class Worker(BaseWorker):
         return hash(self.name)
 
 
+class SpawnWorker(Worker):
+    """Worker implementation that uses os.spawn() instead of os.fork().
+    This implementation is intended for environments where `os.fork()` is not available.
+    """
+
+    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse to perform the actual work using os.spawn()."""
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
+        child_pid = os.spawnv(
+            os.P_NOWAIT,
+            sys.executable,
+            [
+                sys.executable,
+                '-c',
+                f"""
+import os
+import sys
+from redis import Redis
+from rq import Worker, Queue
+from rq.job import Job
+
+# Recreate worker instance
+redis = Redis(**{self.connection.connection_pool.connection_kwargs})
+worker = Worker.find_by_key("{self.key}", connection=redis)
+if not worker:
+    sys.exit(1)
+
+# Reconstruct job and queue
+job = Job.fetch("{job.id}", connection=worker.connection)
+queue = Queue("{queue.name}", connection=worker.connection)
+
+# Set up work horse
+os.setpgrp()
+worker._is_horse = True
+worker.main_work_horse(job, queue)
+""",
+            ],
+        )
+
+        self._horse_pid = child_pid
+        self.procline(f'Spawned {child_pid} at {time.time()}')
+
+
 class SimpleWorker(Worker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
@@ -1748,7 +1799,7 @@ class HerokuWorker(Worker):
 
     def setup_work_horse_signals(self):
         """Modified to ignore SIGINT and SIGTERM and only handle SIGRTMIN"""
-        signal.signal(signal.SIGRTMIN, self.request_stop_sigrtmin)
+        signal.signal(SIGRTMIN, self.request_stop_sigrtmin)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
@@ -1756,7 +1807,7 @@ class HerokuWorker(Worker):
         """If horse is alive send it SIGRTMIN"""
         if self.horse_pid != 0:
             self.log.info('Worker %s: warm shut down requested, sending horse SIGRTMIN signal', self.key)
-            self.kill_horse(sig=signal.SIGRTMIN)
+            self.kill_horse(sig=SIGRTMIN)
         else:
             self.log.warning('Warm shut down requested, no horse found')
 
@@ -1768,7 +1819,7 @@ class HerokuWorker(Worker):
             self.log.warning(
                 'Imminent shutdown, raising ShutDownImminentException in %d seconds', self.imminent_shutdown_delay
             )
-            signal.signal(signal.SIGRTMIN, self.request_force_stop_sigrtmin)
+            signal.signal(SIGRTMIN, self.request_force_stop_sigrtmin)
             signal.signal(signal.SIGALRM, self.request_force_stop_sigrtmin)
             signal.alarm(self.imminent_shutdown_delay)
 

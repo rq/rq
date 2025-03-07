@@ -119,7 +119,7 @@ def setup_loghandlers(
         date_format (str, optional): The date format to use. Defaults to DEFAULT_LOGGING_DATE_FORMAT ('%H:%M:%S').
         log_format (str, optional): The log format to use.
             Defaults to DEFAULT_LOGGING_FORMAT ('%(asctime)s %(message)s').
-        name (str, optional): The looger name. Defaults to 'rq.worker'.
+        name (str, optional): The logger name. Defaults to 'rq.worker'.
     """
     logger = logging.getLogger(name)
 

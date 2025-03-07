@@ -4,7 +4,7 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import total_ordering
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
@@ -535,7 +535,7 @@ class Queue:
         """Creates a job based on parameters given
 
         Args:
-            func (FunctionReferenceType): The function referce: a callable or the path.
+            func (FunctionReferenceType): The function reference: a callable or the path.
             args (Union[Tuple, List, None], optional): The `*args` to pass to the function. Defaults to None.
             kwargs (Optional[Dict], optional): The `**kwargs` to pass to the function. Defaults to None.
             timeout (Optional[int], optional): Function timeout. Defaults to None, use -1 for infinite timeout.
@@ -691,8 +691,8 @@ class Queue:
 
         Args:
             func (FunctionReferenceType): The reference to the function
-            args (Union[Tuple, List, None], optional): THe `*args` to pass to the function. Defaults to None.
-            kwargs (Optional[Dict], optional): THe `**kwargs` to pass to the function. Defaults to None.
+            args (Union[Tuple, List, None], optional): The `*args` to pass to the function. Defaults to None.
+            kwargs (Optional[Dict], optional): The `**kwargs` to pass to the function. Defaults to None.
             timeout (Optional[int], optional): Function timeout. Defaults to None.
             result_ttl (Optional[int], optional): Result time to live. Defaults to None.
             ttl (Optional[int], optional): Time to live. Defaults to None.
@@ -759,8 +759,8 @@ class Queue:
 
         Args:
             func (FunctionReferenceType): The reference to the function
-            args (Union[Tuple, List, None], optional): THe `*args` to pass to the function. Defaults to None.
-            kwargs (Optional[Dict], optional): THe `**kwargs` to pass to the function. Defaults to None.
+            args (Union[Tuple, List, None], optional): The `*args` to pass to the function. Defaults to None.
+            kwargs (Optional[Dict], optional): The `**kwargs` to pass to the function. Defaults to None.
             timeout (Optional[int], optional): Function timeout. Defaults to None.
             result_ttl (Optional[int], optional): Result time to live. Defaults to None.
             ttl (Optional[int], optional): Time to live. Defaults to None.
@@ -1100,7 +1100,7 @@ class Queue:
         Returns:
             job (Job): The enqueued Job
         """
-        return self.enqueue_at(datetime.now(timezone.utc) + time_delta, func, *args, **kwargs)
+        return self.enqueue_at(now() + time_delta, func, *args, **kwargs)
 
     def enqueue_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None, at_front: bool = False) -> Job:
         """Enqueues a job for delayed execution checking dependencies.

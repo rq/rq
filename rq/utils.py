@@ -51,7 +51,7 @@ def compact(lst: Iterable[Optional[_T]]) -> List[_T]:
     """Excludes `None` values from a list-like object.
 
     Args:
-        lst (list): A list (or list-like) oject
+        lst (list): A list (or list-like) object
 
     Returns:
         object (list): The list without None values
@@ -159,13 +159,11 @@ def utcformat(dt: dt.datetime) -> str:
 
 def utcparse(string: str) -> dt.datetime:
     try:
-        return datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
+        parsed = datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
         # This catches any jobs remain with old datetime format
-        try:
-            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%S.%fZ')
-        except ValueError:
-            return datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+        parsed = datetime.datetime.strptime(string, '%Y-%m-%dT%H:%M:%SZ')
+    return parsed.replace(tzinfo=datetime.timezone.utc)
 
 
 def is_nonstring_iterable(obj: Any) -> bool:
@@ -205,7 +203,7 @@ def current_timestamp() -> int:
     Returns:
         int: _description_
     """
-    return calendar.timegm(datetime.datetime.now(datetime.timezone.utc).utctimetuple())
+    return calendar.timegm(now().utctimetuple())
 
 
 def backend_class(holder, default_name, override=None) -> Type:
@@ -336,13 +334,13 @@ def get_call_string(
     arguments with representation longer than max_length.
 
     Args:
-        func_name (str): The funtion name
+        func_name (str): The function name
         args (Any): The function arguments
         kwargs (Dict[Any, Any]): The function kwargs
         max_length (int, optional): The max length. Defaults to None.
 
     Returns:
-        str: A String representation of the function call.
+        str: A string representation of the function call.
     """
     if func_name is None:
         return None

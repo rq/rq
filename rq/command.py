@@ -17,7 +17,7 @@ PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
 def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
     """
     Sends a command to a worker.
-    A command is just a string, availble commands are:
+    A command is just a string, available commands are:
         - `shutdown`: Shuts down a worker
         - `kill-horse`: Command for the worker to kill the current working horse
         - `stop-job`: A command for the worker to stop the currently running job
@@ -119,7 +119,7 @@ def handle_kill_worker_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
 
     worker.log.info('Received kill horse command.')
     if worker.horse_pid:
-        worker.log.info('Kiling horse...')
+        worker.log.info('Killing horse...')
         worker.kill_horse()
     else:
         worker.log.info('Worker is not working, kill horse command ignored')
