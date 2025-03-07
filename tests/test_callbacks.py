@@ -233,7 +233,6 @@ class WorkerCallbackTestCase(RQTestCase):
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
-        print(job.exc_info)
         self.assertIn('div_by_zero', self.connection.get('failure_callback:%s' % job.id).decode())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
@@ -246,7 +245,6 @@ class WorkerCallbackTestCase(RQTestCase):
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
-        print(job.exc_info)
         self.assertIn('div_by_zero', self.connection.get('failure_callback:%s' % job.id).decode())
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))

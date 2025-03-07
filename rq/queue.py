@@ -1192,7 +1192,11 @@ class Queue:
         return job
 
     def enqueue_dependents(
-        self, job: 'Job', pipeline: Optional['Pipeline'] = None, exclude_job_id: Optional[str] = None
+        self,
+        job: 'Job',
+        pipeline: Optional['Pipeline'] = None,
+        exclude_job_id: Optional[str] = None,
+        refresh_job_status: bool = True,
     ):
         """Enqueues all jobs in the given job's dependents set and clears it.
 
@@ -1204,6 +1208,7 @@ class Queue:
             job (Job): The Job to enqueue the dependents
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             exclude_job_id (Optional[str], optional): Whether to exclude the job id. Defaults to None.
+            refresh_job_status (bool): whether to refresh job status when checking for dependencies. Defaults to True.
         """
         from .registry import DeferredJobRegistry
 
@@ -1233,6 +1238,7 @@ class Queue:
                         parent_job=job,
                         pipeline=pipe,
                         exclude_job_id=exclude_job_id,
+                        refresh_job_status=refresh_job_status,
                     )
                     and dependent_job.get_status(refresh=False) != JobStatus.CANCELED
                 ]
@@ -1315,7 +1321,7 @@ class Queue:
             if timeout == 0:
                 raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
             colored_queues = ', '.join(map(str, [green(str(queue)) for queue in queue_keys]))
-            logger.debug("Starting BLPOP operation for queues %s with timeout of %d", colored_queues, timeout)
+            logger.debug('Starting BLPOP operation for queues %s with timeout of %d', colored_queues, timeout)
             assert connection
             result = connection.blpop(queue_keys, timeout)
             if result is None:

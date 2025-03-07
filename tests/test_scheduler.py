@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from unittest import mock
 
+import pytest
 import redis
 
 from rq import Queue
@@ -129,6 +130,24 @@ class TestScheduledJobRegistry(RQTestCase):
             self.assertEqual(
                 self.connection.zscore(registry.key, job.id), 1546300800
             )  # 2019-01-01 UTC in Unix timestamp
+
+    def test_remove_jobs(self):
+        """Removing job ids from ScheduledJobRegistry. Will be deprecated in the future."""
+        queue = Queue(connection=self.connection)
+        registry = ScheduledJobRegistry(queue=queue)
+        timestamp = current_timestamp()
+
+        self.connection.zadd(registry.key, {'foo': 1})
+        self.connection.zadd(registry.key, {'bar': timestamp + 10})
+        self.connection.zadd(registry.key, {'baz': timestamp + 30})
+
+        with pytest.deprecated_call():
+            # without timestamp it should remove everything till the current timestamp
+            registry.remove_jobs()
+            self.assertListEqual(registry.get_jobs_to_schedule(timestamp=timestamp + 100), ['bar', 'baz'])
+            registry.remove_jobs(timestamp=timestamp + 15)
+            # should remove bar job
+            self.assertListEqual(registry.get_jobs_to_schedule(timestamp=timestamp + 100), ['baz'])
 
 
 class TestScheduler(RQTestCase):

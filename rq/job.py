@@ -825,11 +825,11 @@ class Job:
         """
         Get the latest result and returns `exc_info` only if the latest result is a failure.
         """
-        warnings.warn('job.exc_info is deprecated, use job.latest_result() instead.', DeprecationWarning)
 
         from .results import Result
 
         if self.supports_redis_streams:
+            warnings.warn('job.exc_info is deprecated, use job.latest_result() instead.', DeprecationWarning)
             if not self._cached_result:
                 self._cached_result = self.latest_result()
 
@@ -1621,6 +1621,7 @@ class Job:
         parent_job: Optional['Job'] = None,
         pipeline: Optional['Pipeline'] = None,
         exclude_job_id: Optional[str] = None,
+        refresh_job_status: bool = True,
     ) -> bool:
         """Returns a boolean indicating if all of this job's dependencies are `FINISHED`
 
@@ -1634,7 +1635,8 @@ class Job:
         Args:
             parent_job (Optional[Job], optional): The parent Job. Defaults to None.
             pipeline (Optional[Pipeline], optional): The Redis' pipeline. Defaults to None.
-            exclude_job_id (Optional[str], optional): Whether to exclude the job id.. Defaults to None.
+            exclude_job_id (Optional[str], optional): Whether to exclude the job id..Defaults to None.
+            refresh_job_status (bool): whether to refresh job status when checking for dependencies. Defaults to True.
 
         Returns:
             are_met (bool): Whether the dependencies were met.
@@ -1656,9 +1658,9 @@ class Job:
             # If parent job is not finished, we should only continue
             # if this job allows parent job to fail
             dependencies_ids.discard(parent_job.id)
-            if parent_job.get_status() == JobStatus.CANCELED:
+            if parent_job.get_status(refresh=refresh_job_status) == JobStatus.CANCELED:
                 return False
-            elif parent_job._status == JobStatus.FAILED and not self.allow_dependency_failures:
+            elif parent_job.get_status(refresh=False) == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False
 
             # If the only dependency is parent job, dependency has been met
