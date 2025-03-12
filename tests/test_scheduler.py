@@ -7,7 +7,7 @@ import redis
 
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
-from rq.exceptions import NoSuchJobError
+from rq.exceptions import NoSuchJobError, DeserializationError
 from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
@@ -301,6 +301,49 @@ class TestScheduler(RQTestCase):
         registry.schedule(job, datetime(2100, 1, 1, tzinfo=timezone.utc))
         scheduler.enqueue_scheduled_jobs()
         self.assertEqual(len(queue), 1)
+
+    def test_enqueue_scheduled_jobs_deserialization_error(self):
+        """Scheduler continues processing after a DeserializationError"""
+        queue = Queue(connection=self.testconn)
+        registry = ScheduledJobRegistry(queue=queue)
+        
+        # Create and schedule two jobs
+        job1 = Job.create('myfunc1', connection=self.testconn)
+        job1.save()
+        registry.schedule(job1, datetime(2019, 1, 1, tzinfo=timezone.utc))
+        
+        job2 = Job.create('myfunc2', connection=self.testconn)
+        job2.save()
+        registry.schedule(job2, datetime(2019, 1, 1, tzinfo=timezone.utc))
+        
+        # Patch Queue._enqueue_job to raise a DeserializationError for the first job only
+        original_enqueue_job = Queue._enqueue_job
+        
+        def mock_enqueue_job(self, job, pipeline=None, at_front=False):
+            if job.id == job1.id:
+                raise DeserializationError("Simulated deserialization error")
+            return original_enqueue_job(self, job, pipeline=pipeline, at_front=at_front)
+        
+        # Apply the mock
+        with mock.patch.object(Queue, '_enqueue_job', mock_enqueue_job):
+            scheduler = RQScheduler([queue], connection=self.testconn)
+            scheduler.acquire_locks()
+            
+            # Verify that the mock raises the exception when called directly
+            mock_queue = Queue(connection=self.testconn)
+            with self.assertRaises(DeserializationError):
+                mock_enqueue_job(mock_queue, job1)
+            
+            # Run the scheduler - it should handle the DeserializationError and continue
+            scheduler.enqueue_scheduled_jobs()
+            
+            # Both jobs should be removed from the registry
+            self.assertEqual(len(registry), 0)
+            
+            # Only the second job should be in the queue
+            self.assertEqual(len(queue), 1)
+            queued_job = queue.jobs[0]
+            self.assertEqual(queued_job.id, job2.id)
 
     def test_prepare_registries(self):
         """prepare_registries() creates self._scheduled_job_registries"""

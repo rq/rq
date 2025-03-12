@@ -10,6 +10,8 @@ from typing import List, Set
 
 from redis import ConnectionPool, Redis
 
+from rq.exceptions import DeserializationError
+
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
 from .job import Job
@@ -155,7 +157,10 @@ class RQScheduler:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
                 for job in jobs:
                     if job is not None:
-                        queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
+                        try:
+                            queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
+                        except DeserializationError:
+                            self.log.error('Deserialization error while trying to enqueueing job %d', job.id, exc_info=True, stack_info=True)
                         registry.remove(job, pipeline=pipeline)
                 pipeline.execute()
         self._status = self.Status.STARTED
