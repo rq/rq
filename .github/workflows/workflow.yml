@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   ssl-test:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: Run SSL tests
     runs-on: ubuntu-latest
     steps:
@@ -27,7 +26,6 @@ jobs:
           run: stunnel & redis-server & RUN_SSL_TESTS=1 hatch run tox run -e ssl
 
   test:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -68,7 +66,6 @@ jobs:
   mypy:
     runs-on: ubuntu-latest
     name: Type check
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
