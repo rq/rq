@@ -11,6 +11,7 @@ from redis import Redis, WatchError
 
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
+from rq.executions import Execution
 from rq.job import Callback, Dependency, Job, JobStatus, cancel_job, get_current_job
 from rq.queue import Queue
 from rq.registry import (
@@ -49,7 +50,7 @@ class TestJob(RQTestCase):
         # Jobs have a random UUID and a creation date
         self.assertIsNotNone(job.id)
         self.assertIsNotNone(job.created_at)
-        self.assertEqual(str(job), '<Job %s: test job>' % job.id)
+        self.assertEqual(str(job), f'<Job {job.id}: test job>')
 
         # ...and nothing else
         self.assertEqual(job.origin, '')
@@ -57,7 +58,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.started_at)
         self.assertIsNone(job.ended_at)
         self.assertIsNone(job.result)
-        self.assertIsNone(job.exc_info)
+        self.assertIsNone(job._exc_info)
 
         with self.assertRaises(DeserializationError):
             job.func
@@ -181,8 +182,7 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (3, 4))
         self.assertEqual(job.kwargs, dict(z=2))
-        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456,
-                         tzinfo=timezone.utc))
+        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456, tzinfo=timezone.utc))
 
         # Job.fetch also works with execution IDs
         queue = Queue(connection=self.connection)
@@ -315,7 +315,7 @@ class TestJob(RQTestCase):
     def test_store_then_fetch(self):
         """Store, then fetch."""
         job = Job.create(
-            func=fixtures.some_calculation, timeout='1h', args=(3, 4), kwargs=dict(z=2), connection=self.connection
+            func=fixtures.some_calculation, timeout=3600, args=(3, 4), kwargs=dict(z=2), connection=self.connection
         )
         job.save()
 
@@ -749,7 +749,10 @@ class TestJob(RQTestCase):
         job.save()
 
         registry = StartedJobRegistry(connection=self.connection, serializer=JSONSerializer)
-        registry.add(job, 500)
+        with self.connection.pipeline() as pipe:
+            # this will also add the execution to the registry
+            Execution.create(job, ttl=500, pipeline=pipe)
+            pipe.execute()
 
         job.delete()
         self.assertFalse(job in registry)
