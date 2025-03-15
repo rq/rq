@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
-from .utils import as_text, current_timestamp, now
+from .utils import as_text, current_timestamp, now, parse_composite_key
 
 
 # TODO: add execution.worker
@@ -63,8 +63,8 @@ class Execution:
     @classmethod
     def from_composite_key(cls, composite_key: str, connection: Redis) -> 'Execution':
         """A combination of job_id and execution_id separated by a colon."""
-        job_id, id = composite_key.split(':')
-        return cls(id=id, job_id=job_id, connection=connection)
+        job_id, execution_id = parse_composite_key(composite_key)
+        return cls(id=execution_id, job_id=job_id, connection=connection)
 
     @classmethod
     def create(cls, job: Job, ttl: int, pipeline: 'Pipeline') -> 'Execution':
@@ -118,7 +118,7 @@ class ExecutionRegistry(BaseRegistry):
         self.job_id = job_id
         self.key = self.key_template.format(job_id)
 
-    def cleanup(self, timestamp: Optional[float] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[List] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as

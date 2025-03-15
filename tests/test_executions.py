@@ -118,14 +118,14 @@ class TestRegistry(RQTestCase):
         worker = Worker([queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
-        self.assertIn(execution.composite_key, job.started_job_registry.get_job_ids())
+        self.assertIn(execution.job_id, job.started_job_registry.get_job_ids())
 
         registry = job.execution_registry
         pipeline = self.connection.pipeline()
         registry.delete(job=job, pipeline=pipeline)
         pipeline.execute()
 
-        self.assertNotIn(execution.composite_key, job.started_job_registry.get_job_ids())
+        self.assertNotIn(execution.job_id, job.started_job_registry.get_job_ids())
         self.assertFalse(self.connection.exists(registry.key))
 
     def test_get_execution_ids(self):
@@ -155,7 +155,7 @@ class TestRegistry(RQTestCase):
         # Execution should be registered in started job registry
         execution = job.get_executions()[0]
         self.assertEqual(len(job.get_executions()), 1)
-        self.assertIn(execution.composite_key, job.started_job_registry.get_job_ids())
+        self.assertIn(execution.job_id, job.started_job_registry.get_job_ids())
 
         last_heartbeat = execution.last_heartbeat
         last_heartbeat = now()
