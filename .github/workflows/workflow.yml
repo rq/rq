@@ -59,12 +59,11 @@ jobs:
       - name: Test with pytest
         run: |
           RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5.4.0
-      with:
-        files: ./coverage.xml
-        fail_ci_if_error: false
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5.4.0
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
 
   mypy:
     runs-on: ubuntu-latest
