@@ -127,7 +127,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
         try:
             return __builtins__[name]  # type: ignore[index]
         except KeyError:
-            raise ValueError('Invalid attribute name: %s' % name)
+            raise ValueError(f'Invalid attribute name: {name}')
 
     attribute_name = '.'.join(attribute_bits)
     if hasattr(module, attribute_name):
