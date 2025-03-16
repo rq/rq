@@ -1679,6 +1679,17 @@ class Job:
 
         return all(status.decode() in allowed_statuses for status in dependencies_statuses if status)
 
+    def remove_executions(self, pipeline: Optional['Pipeline'] = None) -> None:
+        """Method to remove all job executions.
+
+        Args:
+            pipeline (Optional[Pipeline]): a pipeline or a connection to use. Defaults to None.
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        execution_ids = [execution.composite_key for execution in self.get_executions()]
+        if execution_ids:
+            connection.zrem(self.started_job_registry.key, *execution_ids)
+
 
 _job_stack = LocalStack()
 

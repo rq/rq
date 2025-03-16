@@ -309,8 +309,6 @@ class StartedJobRegistry(BaseRegistry):
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
-        return job_ids
-
     def add_execution(self, execution: 'Execution', pipeline: 'Pipeline', ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
@@ -331,30 +329,29 @@ class StartedJobRegistry(BaseRegistry):
 
     def remove_execution(
         self,
-        execution: 'Union[Execution, str]',
+        execution: 'Execution',
         job: Optional[Job] = None,
         pipeline: Optional['Pipeline'] = None,
         delete_job: bool = False,
-    ):
+    ) -> None:
         """Removes job from registry and deletes it if `delete_job == True`
 
         Args:
-            execution (Union[Execution,str]): The Execution to add
+            execution (Execution): The Execution to remove
             job (Optional[Job]): The Job to remove from the registry
             pipeline (Optional['Pipeline'], optional): The Redis Pipeline. Defaults to None.
             delete_job (bool, optional): If should delete the job.. Defaults to False.
         """
         connection = pipeline if pipeline is not None else self.connection
-        to_delete = execution if isinstance(execution, str) else execution.composite_key
-        result = connection.zrem(self.key, to_delete)
+        connection.zrem(self.key, execution.composite_key)
         # if delete_job:
         #     job.delete()
-        return result
 
     def get_job_and_execution_ids(
         self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True
     ) -> List[Tuple[str, str]]:
-        """Returns list of all job ids.
+        """Function to retrieve a list of tuples where the first item is the job id and
+            the second is the execution id.
 
         Args:
             start (int, optional): start rank. Defaults to 0.
@@ -363,7 +360,8 @@ class StartedJobRegistry(BaseRegistry):
             cleanup (bool, optional): whether to perform the cleanup. Defaults to True.
 
         Returns:
-            List[Tuple[str, str]]: list of the job ids in the registry
+            List[Tuple[str, str]]: a list of tuples where the first item is the job id and
+            the second is the execution id.
         """
         if cleanup:
             self.cleanup()
@@ -417,17 +415,17 @@ class StartedJobRegistry(BaseRegistry):
         job_id, _execution_id = parse_composite_key(entry)
         return job_id
 
-    def remove_executions(self, job: Job, pipeline: Optional['Pipeline'] = None):
+    def remove_executions(self, job: Job, pipeline: Optional['Pipeline'] = None) -> None:
         """Removes job executions from registry
 
         Args:
             job (Job): The Job to remove from the registry
             pipeline (Optional['Pipeline']): The Redis Pipeline. Defaults to None.
         """
-        connection = pipeline if pipeline is not None else self.connection
-        execution_ids = [execution.composite_key for execution in job.get_executions()]
-        if execution_ids:
-            return connection.zrem(self.key, *execution_ids)
+        warnings.warn(
+            'StartedJobRegistry.remove_executions() is deprecated. Use Job.remove_executions()', DeprecationWarning
+        )
+        job.remove_executions(pipeline)
 
 
 class FinishedJobRegistry(BaseRegistry):

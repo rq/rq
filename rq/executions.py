@@ -86,7 +86,7 @@ class Execution:
     def delete(self, job: Job, pipeline: 'Pipeline'):
         """Delete an execution from Redis."""
         pipeline.delete(self.key)
-        job.started_job_registry.remove_execution(execution=self, job=job, pipeline=pipeline)
+        job.started_job_registry.remove_execution(execution=self, pipeline=pipeline)
         ExecutionRegistry(job_id=self.job_id, connection=self.connection).remove(execution=self, pipeline=pipeline)
 
     def serialize(self) -> Dict:
