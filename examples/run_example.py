@@ -28,7 +28,7 @@ def main(connection):
             result = job.return_value()
             if result is None:
                 done = False
-                status = job.get_status()
+                status = job.get_status(refresh=False)
                 result = '(%s)' % status.name
             print('fib(%d) = %s' % (x, result))
         print('')
