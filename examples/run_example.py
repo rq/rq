@@ -39,5 +39,5 @@ def main(connection):
 
 if __name__ == '__main__':
     # Tell RQ what Redis connection to use
-    with Redis() as connection:
-        main(connection)
+    with Redis() as redis_conn:
+        main(redis_conn)
