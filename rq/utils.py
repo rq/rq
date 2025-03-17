@@ -11,6 +11,7 @@ import datetime as dt
 import importlib
 import logging
 import numbers
+import warnings
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
@@ -375,3 +376,121 @@ def get_connection_from_queues(queues_or_names: Iterable[Union[str, 'Queue']]) -
         if isinstance(queue_or_name, Queue):
             return queue_or_name.connection
     return None
+
+
+def from_unix(timestamp: Union[int, float, str]) -> datetime.datetime:
+    """Convert a unix timestamp into a UTC datetime
+    
+    Args:
+        timestamp (Union[int, float, str]): Unix timestamp
+        
+    Returns:
+        datetime.datetime: UTC datetime object
+    """
+    return datetime.datetime.fromtimestamp(float(timestamp), tz=datetime.timezone.utc)
+
+
+def to_unix(dt: datetime.datetime) -> int:
+    """Converts a datetime object to unixtime
+    
+    Args:
+        dt (datetime.datetime): Datetime object
+        
+    Returns:
+        int: Unix timestamp
+    """
+    return calendar.timegm(dt.utctimetuple())
+
+
+def get_next_scheduled_time(cron_string: str, use_local_timezone: bool = False) -> datetime.datetime:
+    """Calculate the next scheduled time based on a cron string
+    
+    This function requires the croniter package. If it's not installed,
+    a warning will be issued and a fallback will be used.
+    
+    Args:
+        cron_string (str): Cron expression (e.g. "0 0 * * *")
+        use_local_timezone (bool, optional): Whether to use local timezone. Defaults to False.
+        
+    Returns:
+        datetime.datetime: Next scheduled time
+        
+    Raises:
+        ImportError: If croniter is not installed and no fallback is available
+    """
+    try:
+        import croniter
+        import pytz
+    except ImportError:
+        warnings.warn(
+            "croniter package not installed. Please install it with: pip install croniter pytz",
+            ImportWarning
+        )
+        # Fallback: schedule for 1 minute from now
+        if use_local_timezone:
+            try:
+                import tzlocal
+                tz = tzlocal.get_localzone()
+                return datetime.datetime.now(tz) + datetime.timedelta(minutes=1)
+            except ImportError:
+                warnings.warn(
+                    "tzlocal package not installed. Using UTC timezone.",
+                    ImportWarning
+                )
+        
+        return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1)
+    
+    # Get the current time
+    if use_local_timezone:
+        try:
+            import tzlocal
+            tz = tzlocal.get_localzone()
+            now = datetime.datetime.now(tz)
+        except ImportError:
+            warnings.warn(
+                "tzlocal package not installed. Using UTC timezone.",
+                ImportWarning
+            )
+            now = datetime.datetime.now(datetime.timezone.utc)
+    else:
+        now = datetime.datetime.now(datetime.timezone.utc)
+    
+    # Calculate the next scheduled time
+    cron = croniter.croniter(cron_string, now)
+    next_time = cron.get_next(datetime.datetime)
+    
+    # Ensure timezone is set
+    if next_time.tzinfo is None:
+        if use_local_timezone:
+            try:
+                import tzlocal
+                tz = tzlocal.get_localzone()
+                next_time = next_time.replace(tzinfo=tz)
+            except ImportError:
+                next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+        else:
+            next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+    
+    return next_time
+
+
+def rationalize_until(until=None):
+    """
+    Rationalizes the `until` argument used by other functions. This function
+    accepts datetime and timedelta instances as well as integers representing
+    epoch values.
+    
+    Args:
+        until (Optional[Union[datetime.datetime, datetime.timedelta, int]]): 
+            Until value to rationalize
+            
+    Returns:
+        Union[str, int]: Rationalized until value
+    """
+    if until is None:
+        until = "+inf"
+    elif isinstance(until, datetime.datetime):
+        until = to_unix(until)
+    elif isinstance(until, datetime.timedelta):
+        until = to_unix(datetime.datetime.now(datetime.timezone.utc) + until)
+    return until
