@@ -3,21 +3,24 @@ import os
 import signal
 import time
 import traceback
+import datetime as dt
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
-from typing import Iterable, List, Optional, Set, Union
+from typing import Any, Callable, Iterable, List, Optional, Set, Union
 
 from redis import ConnectionPool, Redis
 
+from rq.types import FunctionReferenceType, JobDependencyType
+
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
-from .job import Job
+from .job import Callback, Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp, parse_names
+from .utils import current_timestamp, parse_names, get_next_scheduled_time, to_unix
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
@@ -25,15 +28,14 @@ SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
 
 class SchedulerStatus(str, Enum):
     STARTED = 'started'
+    """Scheduler has been started but sleeping"""
     WORKING = 'working'
+    """Scheduler is in the midst of scheduling jobs"""
     STOPPED = 'stopped'
+    """Scheduler is in stopped condition"""
 
 
 class RQScheduler:
-    # STARTED: scheduler has been started but sleeping
-    # WORKING: scheduler is in the midst of scheduling jobs
-    # STOPPED: scheduler is in stopped condition
-
     Status = SchedulerStatus
 
     def __init__(
@@ -129,34 +131,201 @@ class RQScheduler:
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
 
+    def cron(
+        self,
+        cron_string: str,
+        func: FunctionReferenceType,
+        args: Optional[List] = None,
+        kwargs: Optional[dict] = None,
+        repeat: Optional[int] = None,
+        queue_name: Optional[str] = None,
+        result_ttl: int = -1,
+        ttl: Optional[int] = None,
+        job_id: Optional[str] = None,
+        timeout: Optional[int] = None,
+        description: Optional[str] = None,
+        meta: Optional[dict] = None,
+        use_local_timezone: bool = False,
+        depends_on: Optional[JobDependencyType] = None,
+        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
+        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
+        at_front: bool = False,
+    ) -> Job:
+        """
+        Schedule a job to be run periodically based on a cron string.
+        
+        This method requires the croniter package. If it's not installed,
+        a warning will be issued and the job will be scheduled to run once
+        after a short delay.
+        
+        Args:
+            cron_string (str): Cron expression (e.g. "0 0 * * *")
+            func (callable): Function to execute
+            args (list, optional): Arguments to pass to the function
+            kwargs (dict, optional): Keyword arguments to pass to the function
+            repeat (int, optional): Number of times to repeat the job
+            queue_name (str, optional): Queue to place the job in
+            result_ttl (int, optional): Time to retain the job result
+            ttl (int, optional): Maximum queued time before the job is discarded
+            job_id (str, optional): Custom ID for the job
+            timeout (int, optional): Maximum job execution time
+            description (str, optional): Description of the job
+            meta (dict, optional): Additional metadata for the job
+            use_local_timezone (bool, optional): Whether to use local timezone. Defaults to False.
+            depends_on (str, optional): Job ID that this job depends on
+            on_success (callable, optional): Function to call on success
+            on_failure (callable, optional): Function to call on failure
+            at_front (bool, optional): Whether to place the job at the front of the queue
+            
+        Returns:
+            Job: The scheduled job instance
+        """
+        scheduled_time = get_next_scheduled_time(cron_string, use_local_timezone=use_local_timezone)
+        job = Job.create(
+            func,
+            args=args or (),
+            kwargs=kwargs or {},
+            connection=self.connection,
+            result_ttl=result_ttl,
+            ttl=ttl,
+            id=job_id,
+            description=description,
+            timeout=timeout,
+            meta=meta or {},
+            depends_on=depends_on,
+            on_success=on_success,
+            on_failure=on_failure,
+            serializer=self.serializer,
+        )
+        
+        if queue_name:
+            job.origin = queue_name
+        else:
+            job.origin = next(iter(self._queue_names)) if self._queue_names else 'default'
+        
+        job.meta['cron_string'] = cron_string
+        job.meta['use_local_timezone'] = use_local_timezone
+
+        if repeat is not None:
+            job.meta['repeat'] = int(repeat)
+        
+        if at_front:
+            job.enqueue_at_front = True
+        
+        job.save()
+        registry = ScheduledJobRegistry(job.origin, connection=self.connection, serializer=self.serializer)
+        registry.schedule(job, to_unix(scheduled_time))
+        
+        return job
+
     def enqueue_scheduled_jobs(self):
-        """Enqueue jobs whose timestamp is in the past"""
+        """
+        Enqueue jobs whose timestamp is in the past and reschedule recurring jobs.
+        
+        This method:
+        1. Fetches jobs that are due to be executed
+        2. Enqueues them in their respective queues
+        3. Reschedules recurring jobs (cron jobs or interval jobs)
+        """
         self._status = self.Status.WORKING
+        self.log.debug("Checking for scheduled jobs")
 
         if not self._scheduled_job_registries and self._acquired_locks:
             self.prepare_registries()
 
         for registry in self._scheduled_job_registries:
-            timestamp = current_timestamp()
-
-            # TODO: try to use Lua script to make get_jobs_to_schedule()
-            # and remove_jobs() atomic
-            job_ids = registry.get_jobs_to_schedule(timestamp)
-
-            if not job_ids:
-                continue
-
-            queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
-
-            with self.connection.pipeline() as pipeline:
+            try:
+                timestamp = current_timestamp()
+                job_ids = registry.get_jobs_to_schedule(timestamp)
+                
+                if not job_ids:
+                    continue
+                    
+                queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
-                for job in jobs:
-                    if job is not None:
+                valid_jobs = [job for job in jobs if job is not None]
+
+                with self.connection.pipeline() as pipeline:
+                    for job in valid_jobs:
                         queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
-                for job_id in job_ids:
-                    registry.remove(job_id, pipeline=pipeline)
-                pipeline.execute()
+                        self._reschedule_recurring_job(job, registry, pipeline)
+                    
+                    for job_id in job_ids:
+                        registry.remove(job_id, pipeline=pipeline)
+                    
+                    pipeline.execute()
+                    
+                self.log.debug(f"Enqueued {len(valid_jobs)} jobs from {registry.name} queue")
+                
+            except Exception as e:
+                self.log.error(f"Error processing scheduled jobs for {registry.name}: {str(e)}")
+                self.log.debug(traceback.format_exc())
+        
         self._status = self.Status.STARTED
+
+    def _reschedule_recurring_job(self, job, registry, pipeline=None):
+        """
+        Reschedule a recurring job (cron or interval) if needed.
+        
+        Args:
+            job (Job): The job to potentially reschedule
+            registry (ScheduledJobRegistry): The registry to schedule the job in
+            pipeline (Pipeline, optional): Redis pipeline to use. Defaults to None.
+        
+        Returns:
+            bool: True if job was rescheduled, False otherwise
+        """
+        if job is None:
+            return False
+            
+        execute_pipeline = False
+        if pipeline is None:
+            pipeline = self.connection.pipeline()
+            execute_pipeline = True
+        
+        rescheduled = False
+        
+        try:
+            if 'cron_string' in job.meta:
+                cron_string = job.meta['cron_string']
+                use_local_timezone = job.meta.get('use_local_timezone', False)
+                repeat = job.meta.get('repeat')
+                
+                if repeat is not None:
+                    job.meta['repeat'] = int(repeat) - 1
+                    job.save(pipeline=pipeline)
+                    if job.meta['repeat'] < 0:
+                        return False
+                
+                next_scheduled_time = get_next_scheduled_time(
+                    cron_string, use_local_timezone=use_local_timezone
+                )
+                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                rescheduled = True
+                
+            elif 'interval' in job.meta:
+                interval = int(job.meta['interval'])
+                repeat = job.meta.get('repeat')
+                
+                if repeat is not None:
+                    job.meta['repeat'] = int(repeat) - 1
+                    job.save(pipeline=pipeline)
+                    
+                    if job.meta['repeat'] < 0:
+                        return False
+                
+                next_scheduled_time = datetime.now(dt.UTC) + dt.timedelta(seconds=interval)
+                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                rescheduled = True
+        
+        except Exception as e:
+            self.log.error(f"Error rescheduling job {job.id}: {str(e)}")
+            self.log.debug(traceback.format_exc())
+        
+        if execute_pipeline:
+            pipeline.execute()
+        
+        return rescheduled
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM
