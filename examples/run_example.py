@@ -31,7 +31,7 @@ def main(connection):
             print('fib(%d) = %s' % (x, result))
         print('')
         print('To start the actual in the background, run a worker:')
-        print('    python examples/run_worker.py')
+        print('    $ rq worker')
         time.sleep(0.2)
 
     print('Done')
