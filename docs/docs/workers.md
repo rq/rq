@@ -177,7 +177,7 @@ print('Failed jobs: ' + worker.failed_job_count)
 print('Total working time: '+ worker.total_working_time)  # In seconds
 ```
 
-Aside from `worker.name`, worker also have the following properties:
+`worker` also have the following properties:
 * `hostname` - the host where this worker is run
 * `pid` - worker's process ID
 * `queues` - queues on which this worker is listening for jobs
