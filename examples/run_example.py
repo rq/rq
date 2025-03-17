@@ -24,7 +24,7 @@ def main(connection):
         print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
         done = True
         for x in fib_range:
-            result = async_results[x].return_value
+            result = async_results[x].return_value()
             if result is None:
                 done = False
                 result = '(calculating)'
