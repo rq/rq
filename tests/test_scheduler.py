@@ -400,7 +400,7 @@ class TestScheduler(RQTestCase):
             )
             
             # Reschedule the job
-            registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+            registry.schedule(job, next_scheduled_time, pipeline=pipeline)
             
             # Execute all commands
             pipeline.execute()
@@ -560,7 +560,7 @@ class TestScheduler(RQTestCase):
                 )
                 
                 # Schedule the job for the next time
-                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                registry.schedule(job, next_scheduled_time, pipeline=pipeline)
             
             pipeline.execute()
         
@@ -590,7 +590,7 @@ class TestScheduler(RQTestCase):
                 )
                 
                 # Schedule the job for the next time
-                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                registry.schedule(job, next_scheduled_time, pipeline=pipeline)
             
             pipeline.execute()
         
@@ -625,7 +625,7 @@ class TestScheduler(RQTestCase):
                 )
                 
                 # Schedule the job for the next time
-                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                registry.schedule(job, next_scheduled_time, pipeline=pipeline)
             
             pipeline.execute()
         
@@ -660,7 +660,7 @@ class TestScheduler(RQTestCase):
                 )
                 
                 # Schedule the job for the next time
-                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                registry.schedule(job, next_scheduled_time, pipeline=pipeline)
             
             pipeline.execute()
         

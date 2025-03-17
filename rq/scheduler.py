@@ -147,8 +147,8 @@ class RQScheduler:
         meta: Optional[dict] = None,
         use_local_timezone: bool = False,
         depends_on: Optional[JobDependencyType] = None,
-        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
-        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,  # Callable is deprecated
+        on_success: Optional[Union['Callback', Callable[..., Any]]] = None,
+        on_failure: Optional[Union['Callback', Callable[..., Any]]] = None,
         at_front: bool = False,
     ) -> Job:
         """
@@ -181,6 +181,8 @@ class RQScheduler:
             Job: The scheduled job instance
         """
         scheduled_time = get_next_scheduled_time(cron_string, use_local_timezone=use_local_timezone)
+        self.log.debug(f"Scheduling job with cron string: {cron_string}, scheduled time: {scheduled_time}")
+        
         job = Job.create(
             func,
             args=args or (),
@@ -214,7 +216,7 @@ class RQScheduler:
         
         job.save()
         registry = ScheduledJobRegistry(job.origin, connection=self.connection, serializer=self.serializer)
-        registry.schedule(job, to_unix(scheduled_time))
+        registry.schedule(job, scheduled_time)
         
         return job
 
@@ -263,7 +265,7 @@ class RQScheduler:
         
         self._status = self.Status.STARTED
 
-    def _reschedule_recurring_job(self, job, registry, pipeline=None):
+    def _reschedule_recurring_job(self, job: Optional['Job'], registry: 'ScheduledJobRegistry', pipeline=None):
         """
         Reschedule a recurring job (cron or interval) if needed.
         
@@ -297,10 +299,8 @@ class RQScheduler:
                     if job.meta['repeat'] < 0:
                         return False
                 
-                next_scheduled_time = get_next_scheduled_time(
-                    cron_string, use_local_timezone=use_local_timezone
-                )
-                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                next_scheduled_time = get_next_scheduled_time(cron_string, use_local_timezone=use_local_timezone)
+                registry.schedule(job, next_scheduled_time, pipeline=pipeline)
                 rescheduled = True
                 
             elif 'interval' in job.meta:
@@ -315,7 +315,7 @@ class RQScheduler:
                         return False
                 
                 next_scheduled_time = datetime.now(dt.UTC) + dt.timedelta(seconds=interval)
-                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+                registry.schedule(job, next_scheduled_time, pipeline=pipeline)
                 rescheduled = True
         
         except Exception as e:

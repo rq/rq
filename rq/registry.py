@@ -467,7 +467,7 @@ class ScheduledJobRegistry(BaseRegistry):
         # make sense in this context
         self.get_jobs_to_enqueue = self.get_expired_job_ids
 
-    def schedule(self, job: 'Job', scheduled_datetime, pipeline: Optional['Pipeline'] = None):
+    def schedule(self, job: 'Job', scheduled_datetime: datetime, pipeline: Optional['Pipeline'] = None):
         """
         Adds job to registry, scored by its execution time (in UTC).
         If datetime has no tzinfo, it will assume localtimezone.
@@ -478,7 +478,8 @@ class ScheduledJobRegistry(BaseRegistry):
             scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
 
         timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
-        return self.connection.zadd(self.key, {job.id: timestamp})
+        connection = pipeline if pipeline is not None else self.connection
+        return connection.zadd(self.key, {job.id: timestamp})
 
     def cleanup(self):
         """This method is only here to prevent errors because this method is
