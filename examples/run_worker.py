@@ -1,4 +1,5 @@
 from redis import Redis
+
 from rq import Queue, Worker
 
 if __name__ == '__main__':
