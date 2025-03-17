@@ -24,10 +24,12 @@ def main(connection):
         print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
         done = True
         for x in fib_range:
-            result = jobs[x].return_value()
+            job = jobs[x]
+            result = job.return_value()
             if result is None:
                 done = False
-                result = '(calculating)'
+                status = job.get_status()
+                result = '(%s)' % status.name
             print('fib(%d) = %s' % (x, result))
         print('')
         print('To start the actual in the background, run a worker:')
