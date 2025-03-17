@@ -203,7 +203,7 @@ workers = Worker.count(connection=redis)
 
 # Count the number of workers for a specific queue
 queue = Queue('queue_name', connection=redis)
-workers = Worker.all(queue=queue)
+workers = Worker.count(queue=queue)
 ```
 
 ## Worker with Custom Serializer
