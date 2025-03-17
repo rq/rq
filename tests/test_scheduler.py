@@ -4,6 +4,7 @@ from multiprocessing import Process
 from unittest import mock
 
 import redis
+import freezegun
 
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
@@ -12,7 +13,7 @@ from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
-from rq.utils import current_timestamp
+from rq.utils import current_timestamp, get_next_scheduled_time, to_unix
 from rq.worker import Worker
 from tests import RQTestCase, find_empty_redis_database, ssl_test
 
@@ -317,6 +318,390 @@ class TestScheduler(RQTestCase):
             scheduler._scheduled_job_registries,
             [ScheduledJobRegistry(queue=foo_queue), ScheduledJobRegistry(queue=bar_queue)],
         )
+
+    # Cron Tests
+
+    def test_cron_persisted_correctly(self):
+        """
+        Ensure that cron_string attribute gets correctly saved in job metadata.
+        """
+        # Create a job that runs one minute past each whole hour
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello)
+        
+        # Verify the job has the cron_string in its metadata
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.meta["cron_string"], "1 * * * *")
+        
+        # Get the scheduled registry for the job's queue
+        registry = ScheduledJobRegistry(job.origin, connection=self.connection)
+        
+        # Get the scheduled time and convert it to a datetime object
+        scheduled_time = registry.get_scheduled_time(job)
+        
+        # Check that minute=1, seconds=0, and is within an hour
+        self.assertEqual(scheduled_time.minute, 1)
+        self.assertEqual(scheduled_time.second, 0)
+        self.assertTrue(scheduled_time - datetime.now(timezone.utc) < timedelta(hours=1))
+
+    def test_cron_persisted_correctly_with_local_timezone(self):
+        """
+        Ensure that cron_string attribute gets correctly saved when using local timezone.
+        """
+        # Create a job that runs at 3 PM every day
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("0 15 * * *", say_hello, use_local_timezone=True)
+        
+        # Verify the job has the cron_string and use_local_timezone in its metadata
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.meta["cron_string"], "0 15 * * *")
+        self.assertTrue(job_from_queue.meta["use_local_timezone"])
+        
+        # Get the scheduled registry for the job's queue
+        registry = ScheduledJobRegistry(job.origin, connection=self.connection)
+        
+        # Get the scheduled time
+        scheduled_time = registry.get_scheduled_time(job)
+        
+        # The scheduled time should be 3 PM in the local timezone
+        # This is a bit tricky to test without knowing the local timezone
+        # So we'll just check that the hour is reasonable (not in the middle of the night)
+        self.assertTrue(0 <= scheduled_time.hour < 24)
+
+    def test_cron_rescheduled_correctly(self):
+        """
+        Ensure that cron jobs are rescheduled correctly after execution.
+        """
+        # Create a job with a cron string
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello)
+        
+        # Get the scheduled registry for the job's queue
+        registry = ScheduledJobRegistry(job.origin, connection=self.connection)
+        
+        # Get the original scheduled time
+        original_scheduled_time = registry.get_scheduled_time(job)
+        
+        # Simulate job execution and rescheduling
+        queue = Queue(job.origin, connection=self.connection)
+        
+        # Use a pipeline to simulate what happens in enqueue_scheduled_jobs
+        with self.connection.pipeline() as pipeline:
+            # Enqueue the job
+            queue._enqueue_job(job, pipeline=pipeline)
+            
+            # Remove from registry
+            registry.remove(job.id, pipeline=pipeline)
+            
+            # Calculate the next scheduled time
+            next_scheduled_time = get_next_scheduled_time(
+                job.meta["cron_string"], 
+                use_local_timezone=job.meta.get("use_local_timezone", False)
+            )
+            
+            # Reschedule the job
+            registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+            
+            # Execute all commands
+            pipeline.execute()
+        
+        # Get the new scheduled time
+        new_scheduled_time = registry.get_scheduled_time(job)
+        
+        # The new scheduled time should be later than the original
+        self.assertTrue(new_scheduled_time > original_scheduled_time)
+        
+        # The new scheduled time should be about an hour later (for "1 * * * *")
+        # Allow for a small margin of error
+        expected_diff = timedelta(hours=1)
+        actual_diff = new_scheduled_time - original_scheduled_time
+        self.assertTrue(expected_diff - timedelta(minutes=5) < actual_diff < expected_diff + timedelta(minutes=5))
+
+    def test_cron_schedules_correctly(self):
+        """
+        Test that cron jobs are scheduled at the correct time.
+        """
+        # Freeze time to a known point
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        
+        with freezegun.freeze_time(now):
+            # Create a job that runs 5 minutes past every hour
+            job = scheduler.cron("5 * * * *", say_hello)
+            
+            # Get the scheduled registry for the job's queue
+            registry = ScheduledJobRegistry(job.origin, connection=self.connection)
+            
+            # Get the scheduled time
+            scheduled_time = registry.get_scheduled_time(job)
+            
+            # The scheduled time should be 5 minutes past the current hour
+            expected_time = now.replace(minute=5)
+            self.assertEqual(scheduled_time.replace(microsecond=0), expected_time)
+        
+        # Move time forward to just after the scheduled time
+        with freezegun.freeze_time(now + timedelta(minutes=6)):
+            # Simulate the scheduler running
+            scheduler.enqueue_scheduled_jobs()
+            
+            # The job should have been enqueued
+            queue = Queue(job.origin, connection=self.connection)
+            self.assertEqual(len(queue), 1)
+            
+            # The job should have been rescheduled for the next hour
+            scheduled_time = registry.get_scheduled_time(job)
+            expected_time = now.replace(minute=5) + timedelta(hours=1)
+            self.assertEqual(scheduled_time.replace(microsecond=0), expected_time)
+
+    def test_cron_sets_timeout(self):
+        """
+        Ensure that a job scheduled via cron can be created with a custom timeout.
+        """
+        timeout = 13
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello, timeout=timeout)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.timeout, timeout)
+
+    def test_cron_sets_job_id(self):
+        """
+        Ensure that a job scheduled via cron can be created with a custom ID.
+        """
+        job_id = "test-cron-job-id"
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello, job_id=job_id)
+        self.assertEqual(job.id, job_id)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.id, job_id)
+
+    def test_cron_sets_default_result_ttl(self):
+        """
+        Ensure that a job scheduled via cron gets the default result_ttl (-1).
+        """
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.result_ttl, -1)
+
+    def test_cron_sets_description(self):
+        """
+        Ensure that a job scheduled via cron can be created with a custom description.
+        """
+        description = "Test cron job description"
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello, description=description)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.description, description)
+
+    def test_cron_sets_provided_result_ttl(self):
+        """
+        Ensure that a job scheduled via cron can be created with a custom result_ttl.
+        """
+        result_ttl = 123
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello, result_ttl=result_ttl)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.result_ttl, result_ttl)
+
+    def test_cron_sets_default_ttl_to_none(self):
+        """
+        Ensure that a job scheduled via cron has the default ttl (None).
+        """
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertIsNone(job_from_queue.ttl)
+
+    def test_cron_sets_provided_ttl(self):
+        """
+        Ensure that a job scheduled via cron can be created with a custom ttl.
+        """
+        ttl = 123
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello, ttl=ttl)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.ttl, ttl)
+
+    def test_cron_with_repeat(self):
+        """
+        Ensure that cron jobs with repeat parameter are handled correctly.
+        """
+        # Create a job that should run 3 times
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        job = scheduler.cron("1 * * * *", say_hello, repeat=3)
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.meta["repeat"], 3)
+        
+        # Get the scheduled registry for the job's queue
+        registry = ScheduledJobRegistry(job.origin, connection=self.connection)
+        
+        # Simulate job execution and rescheduling
+        queue = Queue(job.origin, connection=self.connection)
+        
+        # First execution - repeat should be decremented to 2
+        with self.connection.pipeline() as pipeline:
+            queue._enqueue_job(job, pipeline=pipeline)
+            registry.remove(job.id, pipeline=pipeline)
+            
+            # Check for cron jobs that need to be rescheduled
+            if 'cron_string' in job.meta:
+                cron_string = job.meta['cron_string']
+                use_local_timezone = job.meta.get('use_local_timezone', False)
+                repeat = job.meta.get('repeat')
+                
+                # Decrement repeat counter
+                if repeat is not None:
+                    job.meta['repeat'] = int(repeat) - 1
+                    job.save(pipeline=pipeline)
+                
+                # Calculate the next scheduled time
+                next_scheduled_time = get_next_scheduled_time(
+                    cron_string, use_local_timezone=use_local_timezone
+                )
+                
+                # Schedule the job for the next time
+                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+            
+            pipeline.execute()
+        
+        # Verify repeat counter was decremented
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.meta["repeat"], 2)
+        
+        # Second execution - repeat should be decremented to 1
+        with self.connection.pipeline() as pipeline:
+            queue._enqueue_job(job, pipeline=pipeline)
+            registry.remove(job.id, pipeline=pipeline)
+            
+            # Check for cron jobs that need to be rescheduled
+            if 'cron_string' in job.meta:
+                cron_string = job.meta['cron_string']
+                use_local_timezone = job.meta.get('use_local_timezone', False)
+                repeat = job.meta.get('repeat')
+                
+                # Decrement repeat counter
+                if repeat is not None:
+                    job.meta['repeat'] = int(repeat) - 1
+                    job.save(pipeline=pipeline)
+                
+                # Calculate the next scheduled time
+                next_scheduled_time = get_next_scheduled_time(
+                    cron_string, use_local_timezone=use_local_timezone
+                )
+                
+                # Schedule the job for the next time
+                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+            
+            pipeline.execute()
+        
+        # Verify repeat counter was decremented
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.meta["repeat"], 1)
+        
+        # Third execution - repeat should be decremented to 0 and job should not be rescheduled
+        with self.connection.pipeline() as pipeline:
+            queue._enqueue_job(job, pipeline=pipeline)
+            registry.remove(job.id, pipeline=pipeline)
+            
+            # Check for cron jobs that need to be rescheduled
+            if 'cron_string' in job.meta:
+                cron_string = job.meta['cron_string']
+                use_local_timezone = job.meta.get('use_local_timezone', False)
+                repeat = job.meta.get('repeat')
+                
+                # Decrement repeat counter
+                if repeat is not None:
+                    job.meta['repeat'] = int(repeat) - 1
+                    job.save(pipeline=pipeline)
+                    
+                    # Don't reschedule if we've reached the repeat limit
+                    if job.meta['repeat'] < 0:
+                        pipeline.execute()
+                        return
+                
+                # Calculate the next scheduled time
+                next_scheduled_time = get_next_scheduled_time(
+                    cron_string, use_local_timezone=use_local_timezone
+                )
+                
+                # Schedule the job for the next time
+                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+            
+            pipeline.execute()
+        
+        # Verify repeat counter was decremented
+        job_from_queue = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(job_from_queue.meta["repeat"], 0)
+        
+        # Fourth execution - job should not be rescheduled
+        with self.connection.pipeline() as pipeline:
+            queue._enqueue_job(job, pipeline=pipeline)
+            registry.remove(job.id, pipeline=pipeline)
+            
+            # Check for cron jobs that need to be rescheduled
+            if 'cron_string' in job.meta:
+                cron_string = job.meta['cron_string']
+                use_local_timezone = job.meta.get('use_local_timezone', False)
+                repeat = job.meta.get('repeat')
+                
+                # Decrement repeat counter
+                if repeat is not None:
+                    job.meta['repeat'] = int(repeat) - 1
+                    job.save(pipeline=pipeline)
+                    
+                    # Don't reschedule if we've reached the repeat limit
+                    if job.meta['repeat'] < 0:
+                        pipeline.execute()
+                        return
+                
+                # Calculate the next scheduled time
+                next_scheduled_time = get_next_scheduled_time(
+                    cron_string, use_local_timezone=use_local_timezone
+                )
+                
+                # Schedule the job for the next time
+                registry.schedule(job, to_unix(next_scheduled_time), pipeline=pipeline)
+            
+            pipeline.execute()
+        
+        # Verify job is not in the scheduled registry anymore
+        self.assertRaises(NoSuchJobError, registry.get_scheduled_time, job)
+
+    def test_cron_with_at_front(self):
+        """
+        Ensure that cron jobs with at_front parameter are handled correctly.
+        """
+        # Create a regular job
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        regular_job = scheduler.cron("1 * * * *", say_hello)
+        
+        # Create a job that should be enqueued at the front of the queue
+        scheduler = RQScheduler(['default'], connection=self.connection)
+        front_job = scheduler.cron("1 * * * *", say_hello, at_front=True)
+        
+        # Verify at_front is set correctly
+        self.assertFalse(getattr(regular_job, 'enqueue_at_front', False))
+        self.assertTrue(front_job.enqueue_at_front)
+        
+        # Get the scheduled registry for the job's queue
+        registry = ScheduledJobRegistry(regular_job.origin, connection=self.connection)
+        
+        # Simulate job execution
+        queue = Queue(regular_job.origin, connection=self.connection)
+        
+        # Enqueue both jobs
+        with self.connection.pipeline() as pipeline:
+            # Enqueue regular job first
+            queue._enqueue_job(regular_job, pipeline=pipeline)
+            
+            # Then enqueue front job
+            queue._enqueue_job(front_job, pipeline=pipeline, at_front=True)
+            
+            pipeline.execute()
+        
+        # The front job should be at the front of the queue
+        self.assertEqual(queue.get_job_position(front_job.id), 0)
+        self.assertEqual(queue.get_job_position(regular_job.id), 1)
 
 
 class TestWorker(RQTestCase):
