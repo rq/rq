@@ -12,10 +12,10 @@ def main(connection):
     fib_range = range(20, 34)
 
     # Kick off the tasks asynchronously
-    async_results = {}
+    jobs = {}
     q = Queue(connection=connection)
     for x in fib_range:
-        async_results[x] = q.enqueue(slow_fib, x)
+        jobs[x] = q.enqueue(slow_fib, x)
 
     start_time = time.time()
     done = False
@@ -24,7 +24,7 @@ def main(connection):
         print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
         done = True
         for x in fib_range:
-            result = async_results[x].return_value()
+            result = jobs[x].return_value()
             if result is None:
                 done = False
                 result = '(calculating)'
