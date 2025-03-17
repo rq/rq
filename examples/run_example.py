@@ -7,15 +7,17 @@ from redis import Redis
 from rq import Queue
 
 
-def main(connection):
+def enqueue(connection):
     # Range of Fibonacci numbers to compute
     fib_range = range(20, 34)
 
     # Kick off the tasks asynchronously
     q = Queue(connection=connection)
     jobs = [q.enqueue(slow_fib, arg) for arg in fib_range]
+    return jobs
 
 
+def wait_for_all(jobs):
     start_time = time.time()
     done = False
     while not done:
@@ -41,4 +43,5 @@ def main(connection):
 if __name__ == '__main__':
     # Tell RQ what Redis connection to use
     with Redis() as redis_conn:
-        main(redis_conn)
+        jobs = enqueue(redis_conn)
+        wait_for_all(jobs)
