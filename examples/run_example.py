@@ -28,7 +28,7 @@ def wait_for_all(jobs):
             result = job.return_value()
             if result is None:
                 done = False
-                status = job.get_status(refresh=False)
+                status = job.get_status()
                 result = '(%s)' % status.name
             (arg,) = job.args
             print('fib(%d) = %s' % (arg, result))
