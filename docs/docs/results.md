@@ -76,7 +76,7 @@ You can do the following:
     q.enqueue(foo, result_ttl=-1)  # result never expires--you should delete jobs manually
 
 Additionally, you can use this for keeping around finished jobs without return
-values, which would be deleted immediately by default.
+values (the function returned None), which would be deleted immediately by default.
 
     q.enqueue(func_without_rv, result_ttl=500)  # job kept explicitly
 
