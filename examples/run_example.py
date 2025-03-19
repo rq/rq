@@ -7,31 +7,34 @@ from redis import Redis
 from rq import Queue
 
 
-def main(connection):
+def enqueue(connection):
     # Range of Fibonacci numbers to compute
     fib_range = range(20, 34)
 
     # Kick off the tasks asynchronously
-    async_results = {}
     q = Queue(connection=connection)
-    for x in fib_range:
-        async_results[x] = q.enqueue(slow_fib, x)
+    jobs = [q.enqueue(slow_fib, arg) for arg in fib_range]
+    return jobs
 
+
+def wait_for_all(jobs):
     start_time = time.time()
     done = False
     while not done:
         os.system('clear')
         print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
         done = True
-        for x in fib_range:
-            result = async_results[x].return_value
+        for job in jobs:
+            result = job.return_value()
             if result is None:
                 done = False
-                result = '(calculating)'
-            print('fib(%d) = %s' % (x, result))
+                status = job.get_status(refresh=False)
+                result = '(%s)' % status.name
+            (arg,) = job.args
+            print('fib(%d) = %s' % (arg, result))
         print('')
         print('To start the actual in the background, run a worker:')
-        print('    python examples/run_worker.py')
+        print('    $ rq worker')
         time.sleep(0.2)
 
     print('Done')
@@ -39,5 +42,6 @@ def main(connection):
 
 if __name__ == '__main__':
     # Tell RQ what Redis connection to use
-    with Redis() as connection:
-        main(connection)
+    with Redis() as redis_conn:
+        jobs = enqueue(redis_conn)
+        wait_for_all(jobs)
