@@ -103,7 +103,7 @@ class BaseRegistry:
             self.cleanup()
         return self.connection.zcard(self.key)
 
-    def add(self, job: Union[Job, str], ttl: int = 0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
+    def add(self, job: Job, ttl: int = 0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
         """Adds a job to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
@@ -118,11 +118,10 @@ class BaseRegistry:
         score: Union[int, str] = ttl if ttl < 0 else current_timestamp() + ttl
         if score == -1:
             score = '+inf'
-        job_id = job.id if isinstance(job, self.job_class) else job
         if pipeline is not None:
-            return cast(int, pipeline.zadd(self.key, {job_id: score}, xx=xx))
+            return cast(int, pipeline.zadd(self.key, {job.id: score}, xx=xx))
 
-        return self.connection.zadd(self.key, {job_id: score}, xx=xx)
+        return self.connection.zadd(self.key, {job.id: score}, xx=xx)
 
     def remove(self, job: Union[Job, str], pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
         """Removes job from registry and deletes it if `delete_job == True`
@@ -383,7 +382,7 @@ class StartedJobRegistry(BaseRegistry):
             job_id = item.id
         return cast(str, job_id) in self.get_job_ids(cleanup=False)
 
-    def add(self, job: Union[Job, str], ttl: int = 0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
+    def add(self, job: Job, ttl: int = 0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
         raise NotImplementedError()
 
     def remove(self, job: Union[Job, str], pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
