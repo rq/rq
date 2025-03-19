@@ -64,7 +64,7 @@ Results are written back to Redis with a limited lifetime (via a Redis
 expiring key), which is merely to avoid ever-growing Redis databases.
 
 The TTL value of the job result can be specified using the
-`result_ttl` keyword argument to `enqueue()` and `enqueue_call()` calls.  It
+`result_ttl` keyword argument to `enqueue()` call.  It
 can also be used to disable the expiry altogether.  You then are responsible
 for cleaning up jobs yourself, though, so be careful to use that.
 
