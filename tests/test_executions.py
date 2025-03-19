@@ -15,11 +15,11 @@ class TestRegistry(RQTestCase):
 
     def setUp(self):
         super().setUp()
-        self.q = Queue(connection=self.connection)
+        self.queue = Queue(connection=self.connection)
 
     def test_equality(self):
         """Test equality between Execution objects"""
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
         pipeline = self.connection.pipeline()
         execution_1 = Execution.create(job=job, ttl=100, pipeline=pipeline)
         execution_2 = Execution.create(job=job, ttl=100, pipeline=pipeline)
@@ -30,7 +30,7 @@ class TestRegistry(RQTestCase):
 
     def test_add_delete_executions(self):
         """Test adding and deleting executions"""
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
         pipeline = self.connection.pipeline()
         execution = Execution.create(job=job, ttl=100, pipeline=pipeline)
         pipeline.execute()
@@ -51,7 +51,7 @@ class TestRegistry(RQTestCase):
 
     def test_execution_registry(self):
         """Test the ExecutionRegistry class"""
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
         registry = ExecutionRegistry(job_id=job.id, connection=self.connection)
 
         pipeline = self.connection.pipeline()
@@ -68,16 +68,16 @@ class TestRegistry(RQTestCase):
 
     def test_ttl(self):
         """Execution registry and job execution should follow heartbeat TTL"""
-        job = self.q.enqueue(say_hello, timeout=-1)
-        worker = Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(say_hello, timeout=-1)
+        worker = Worker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
         self.assertTrue(self.connection.ttl(job.execution_registry.key) >= worker.get_heartbeat_ttl(job))
         self.assertTrue(self.connection.ttl(execution.key) >= worker.get_heartbeat_ttl(job))
 
     def test_heartbeat(self):
         """Test heartbeat should refresh execution as well as registry TTL"""
-        job = self.q.enqueue(say_hello, timeout=1)
-        worker = Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(say_hello, timeout=1)
+        worker = Worker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
         # The actual TTL should be 150 seconds
@@ -93,8 +93,8 @@ class TestRegistry(RQTestCase):
 
     def test_registry_cleanup(self):
         """ExecutionRegistry.cleanup() should remove expired executions."""
-        job = self.q.enqueue(say_hello)
-        worker = Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
         worker.prepare_execution(job=job)
 
         registry = job.execution_registry
@@ -112,8 +112,8 @@ class TestRegistry(RQTestCase):
 
     def test_delete_registry(self):
         """ExecutionRegistry.delete() should delete registry and its executions."""
-        job = self.q.enqueue(say_hello)
-        worker = Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
         self.assertIn(execution.job_id, job.started_job_registry.get_job_ids())
@@ -128,8 +128,8 @@ class TestRegistry(RQTestCase):
 
     def test_get_execution_ids(self):
         """ExecutionRegistry.get_execution_ids() should return a list of execution IDs"""
-        job = self.q.enqueue(say_hello)
-        worker = Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
 
         execution = worker.prepare_execution(job=job)
         execution_2 = worker.prepare_execution(job=job)
@@ -139,12 +139,12 @@ class TestRegistry(RQTestCase):
 
     def test_execution_added_to_started_job_registry(self):
         """Ensure worker adds execution to started job registry"""
-        job = self.q.enqueue(long_running_job, timeout=3)
-        Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(long_running_job, timeout=3)
+        Worker([self.queue], connection=self.connection)
 
         # Start worker process in background with 1 second monitoring interval
         process = start_worker_process(
-            self.q.name, worker_name='w1', connection=self.connection, burst=True, job_monitoring_interval=1
+            self.queue.name, worker_name='w1', connection=self.connection, burst=True, job_monitoring_interval=1
         )
 
         sleep(0.5)
@@ -169,8 +169,8 @@ class TestRegistry(RQTestCase):
 
     def test_fetch_execution(self):
         """Ensure Execution.fetch() fetches the correct execution"""
-        job = self.q.enqueue(say_hello)
-        worker = Worker([self.q], connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
         fetched_execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
@@ -190,7 +190,7 @@ class TestRegistry(RQTestCase):
 
     def test_job_auto_fetch(self):
         """Ensure that if the job is not set, the Job.fetch is not called"""
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
         execution = Execution('execution_id', job.id, connection=self.connection)
 
         with patch.object(Job, 'fetch') as mock:

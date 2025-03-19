@@ -1,4 +1,3 @@
-import re
 from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
@@ -523,13 +522,13 @@ class TestStartedJobRegistry(RQTestCase):
     def setUp(self):
         super().setUp()
         self.registry = StartedJobRegistry(connection=self.connection)
-        self.q = Queue(connection=self.connection)
+        self.queue = Queue(connection=self.connection)
 
     def test_job_deletion(self):
         """Ensure job is removed from StartedJobRegistry when deleted."""
-        worker = Worker([self.q], connection=self.connection)
+        worker = Worker([self.queue], connection=self.connection)
 
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
 
         execution = worker.prepare_execution(job)
@@ -544,7 +543,7 @@ class TestStartedJobRegistry(RQTestCase):
     def test_contains(self):
         """Test the StartedJobRegistry __contains__ method. It is slightly different
         because the entries in the registry are {job_id}:{execution_id} format."""
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
 
         self.assertFalse(job in self.registry)
         self.assertFalse(job.id in self.registry)
@@ -560,7 +559,7 @@ class TestStartedJobRegistry(RQTestCase):
     def test_infinite_score(self):
         """Test the StartedJobRegistry __contains__ method. It is slightly different
         because the entries in the registry are {job_id}:{execution_id} format."""
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
 
         self.assertFalse(job in self.registry)
         self.assertFalse(job.id in self.registry)
@@ -575,8 +574,8 @@ class TestStartedJobRegistry(RQTestCase):
 
     def test_remove_executions(self):
         """Ensure all executions for a job are removed from registry."""
-        worker = Worker([self.q], connection=self.connection)
-        job = self.q.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        job = self.queue.enqueue(say_hello)
 
         execution_1 = worker.prepare_execution(job)
         execution_2 = worker.prepare_execution(job)
@@ -592,9 +591,9 @@ class TestStartedJobRegistry(RQTestCase):
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
-        worker = Worker([self.q], connection=self.connection)
+        worker = Worker([self.queue], connection=self.connection)
 
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
         execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
@@ -602,19 +601,19 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
         self.assertTrue(job.is_started)
 
-        worker.perform_job(job, self.q)
+        worker.perform_job(job, self.queue)
         self.assertNotIn(job.id, self.registry.get_job_ids())
         self.assertNotIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
         self.assertTrue(job.is_finished)
 
         # Job that fails
-        job = self.q.enqueue(div_by_zero)
+        job = self.queue.enqueue(div_by_zero)
         execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
         self.assertIn(job.id, self.registry.get_job_ids())
         self.assertIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
 
-        worker.perform_job(job, self.q)
+        worker.perform_job(job, self.queue)
         self.assertNotIn(job.id, self.registry.get_job_ids())
         self.assertNotIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
 
@@ -647,7 +646,7 @@ class TestStartedJobRegistry(RQTestCase):
         """Moving expired jobs to FailedJobRegistry."""
 
         failed_job_registry = FailedJobRegistry(connection=self.connection)
-        job = self.q.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello)
 
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 100})
 
@@ -662,7 +661,7 @@ class TestStartedJobRegistry(RQTestCase):
             mock_handler_no_return = mock.MagicMock()
             mock_handler_no_return.return_value = None
             self.registry.cleanup(exception_handlers=[mock_handler_no_return, mock_handler])
-            mocked.assert_called_once_with(self.q.death_penalty_class, AbandonedJobError, ANY, ANY)
+            mocked.assert_called_once_with(self.queue.death_penalty_class, AbandonedJobError, ANY, ANY)
             mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
             mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
         self.assertIn(job.id, failed_job_registry)
@@ -720,24 +719,8 @@ class TestStartedJobRegistry(RQTestCase):
     def test_warnings_on_add_remove_and_exception(self):
         """Test backwards compatibility of the .add and .remove methods for
         the StartedJobRegistry."""
-        with pytest.deprecated_call():
+        with pytest.raises(NotImplementedError):
             self.registry.add('job_id')
 
-        self.assertIn('job_id', self.registry.get_job_ids(cleanup=False))
-        with pytest.deprecated_call():
+        with pytest.raises(NotImplementedError):
             self.registry.remove('job_id')
-        self.assertNotIn('job_id', self.registry.get_job_ids(cleanup=False))
-
-        job = self.q.enqueue(say_hello)
-        with pytest.deprecated_call():
-            self.registry.add(job)
-        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
-
-        with pytest.deprecated_call():
-            self.registry.remove(job)
-        self.assertNotIn(job.id, self.registry.get_job_ids(cleanup=False))
-
-        with pytest.raises(
-            RuntimeError, match=re.escape('StartedJobRegistry.remove() method cannot auto-delete the job.')
-        ) as _raise_check, pytest.deprecated_call() as _deprecation_check:
-            self.registry.remove('job_id', delete_job=True)

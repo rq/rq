@@ -384,27 +384,10 @@ class StartedJobRegistry(BaseRegistry):
         return cast(str, job_id) in self.get_job_ids(cleanup=False)
 
     def add(self, job: Union[Job, str], ttl: int = 0, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
-        warnings.warn(
-            'StartedJobRegistry can only contain execution records. Use add_execution method.', DeprecationWarning
-        )
-        # in the future will raise
-        # raise NotImplementedError('')
-        job_id = job.id if isinstance(job, self.job_class) else job
-        # use job_id: so the stored record is always a tuple, when split by ':'
-        return super().add(f'{job_id}:', ttl, pipeline, xx)
+        raise NotImplementedError()
 
     def remove(self, job: Union[Job, str], pipeline: Optional['Pipeline'] = None, delete_job: bool = False):
-        warnings.warn(
-            'StartedJobRegistry can only contain execution records. Use remove_execution method.', DeprecationWarning
-        )
-
-        # in the future will raise
-        # raise NotImplementedError('')
-        job_id = job.id if isinstance(job, self.job_class) else job
-        # if delete job is True, the following would fail. Prohibit deleting the job this way.
-        if delete_job:
-            raise RuntimeError('StartedJobRegistry.remove() method cannot auto-delete the job.')
-        return super().remove(f'{job_id}:', pipeline, delete_job)
+        raise NotImplementedError()
 
     @staticmethod
     def parse_job_id(entry: str) -> str:
@@ -416,16 +399,16 @@ class StartedJobRegistry(BaseRegistry):
         return job_id
 
     def remove_executions(self, job: Job, pipeline: Optional['Pipeline'] = None) -> None:
-        """Removes job executions from registry
+        """Removes job executions from the started job registry.
 
         Args:
             job (Job): The Job to remove from the registry
             pipeline (Optional['Pipeline']): The Redis Pipeline. Defaults to None.
         """
-        warnings.warn(
-            'StartedJobRegistry.remove_executions() is deprecated. Use Job.remove_executions()', DeprecationWarning
-        )
-        job.remove_executions(pipeline)
+        connection = pipeline if pipeline is not None else self.connection
+        execution_ids = [execution.composite_key for execution in job.get_executions()]
+        if execution_ids:
+            connection.zrem(self.key, *execution_ids)
 
 
 class FinishedJobRegistry(BaseRegistry):

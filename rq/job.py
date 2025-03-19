@@ -1250,12 +1250,10 @@ class Job:
             from .registry import StartedJobRegistry
 
             # TODO: need to cleanup job executions too
-
             registry = StartedJobRegistry(
                 self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
             )
             registry.remove_executions(self, pipeline=pipeline)
-            registry.remove(self, pipeline=pipeline)
 
         elif self.is_scheduled:
             from .registry import ScheduledJobRegistry
@@ -1678,17 +1676,6 @@ class Job:
             allowed_statuses.append(JobStatus.FAILED)
 
         return all(status.decode() in allowed_statuses for status in dependencies_statuses if status)
-
-    def remove_executions(self, pipeline: Optional['Pipeline'] = None) -> None:
-        """Method to remove all job executions.
-
-        Args:
-            pipeline (Optional[Pipeline]): a pipeline or a connection to use. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        execution_ids = [execution.composite_key for execution in self.get_executions()]
-        if execution_ids:
-            connection.zrem(self.started_job_registry.key, *execution_ids)
 
 
 _job_stack = LocalStack()
