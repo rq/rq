@@ -4,13 +4,12 @@ Miscellaneous helper functions.
 The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
-
 import calendar
 import datetime
-import datetime as dt
 import importlib
 import logging
 import numbers
+import warnings
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
@@ -153,11 +152,11 @@ def now() -> datetime.datetime:
 _TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 
-def utcformat(dt: dt.datetime) -> str:
+def utcformat(dt: datetime.datetime) -> str:
     return dt.strftime(as_text(_TIMESTAMP_FORMAT))
 
 
-def utcparse(string: str) -> dt.datetime:
+def utcparse(string: str) -> datetime.datetime:
     try:
         parsed = datetime.datetime.strptime(string, _TIMESTAMP_FORMAT)
     except ValueError:
@@ -225,7 +224,7 @@ def backend_class(holder, default_name, override=None) -> Type:
         return override
 
 
-def str_to_date(date_str: Optional[bytes]) -> Optional[dt.datetime]:
+def str_to_date(date_str: Optional[bytes]) -> Optional[datetime.datetime]:
     if not date_str:
         return None
     else:
@@ -375,3 +374,26 @@ def get_connection_from_queues(queues_or_names: Iterable[Union[str, 'Queue']]) -
         if isinstance(queue_or_name, Queue):
             return queue_or_name.connection
     return None
+
+
+def parse_composite_key(composite_key: str) -> Tuple[str, str]:
+    """Method returns a parsed composite key.
+
+    Args:
+        composite_key (str): the composite key to parse
+
+    Returns:
+        tuple[str, str]: tuple of job id and the execution id
+    """
+    result = composite_key.split(':')
+    if len(result) == 1:
+        # StartedJobRegistry contains a composite key under the sorted set
+        # a single job_id should've never ended up in the set, but
+        # just in case there's a regression (tests don't show any)
+        warnings.warn(
+            f'Composite key must contain job_id:execution_id, got {composite_key}',
+            DeprecationWarning,
+        )
+        return (result[0], '')
+    job_id, execution_id = result
+    return (job_id, execution_id)
