@@ -94,11 +94,16 @@ RQ lets you easily retry jobs by returning a special `Retry` result from your jo
 
 ```python
 from rq import Retry
+import requests
 
-def return_retry(max=1, interval=60):
-    return Retry(max=max, interval=interval)
+def count_words_at_url(url, max=1, interval=60):
+    try:
+        resp = requests.get(url)
+    except requests.exceptions.ConnectionError:
+        return Retry(max=max, interval=interval)
+    return len(resp.text.split())
 
-job = queue.enqueue(return_retry, max=3, interval=60)
+job = queue.enqueue(count_words_at_url, 'https://python-rq.org', max=3, interval=60)
 ```
 
 The above job will be retried up to 3 times, with 60 seconds interval in between executions.
