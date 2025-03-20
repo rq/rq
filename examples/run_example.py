@@ -5,6 +5,7 @@ from fib import slow_fib
 from redis import Redis
 
 from rq import Queue
+from rq.job import JobStatus
 
 
 def enqueue(connection):
@@ -25,11 +26,12 @@ def wait_for_all(jobs):
         print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
         done = True
         for job in jobs:
-            result = job.return_value()
-            if result is None:
-                done = False
-                status = job.get_status()
+            status = job.get_status()
+            if status is JobStatus.FINISHED:
+                result = job.return_value()
+            else:
                 result = '(%s)' % status.name
+                done = False
             (arg,) = job.args
             print('fib(%d) = %s' % (arg, result))
         print('')
