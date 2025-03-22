@@ -1,3 +1,14 @@
+### RQ 2.2.0 (2025-03-22)
+* Added `SpawnWorker` that uses `multiprocessing.spawn` to spawn worker processes. This makes RQ usable in operating systems without `os.fork()` like Windows. Thanks @selwin!
+* RQ now always use timezone aware timestamps. Thanks @deathtracktor!
+* `StartedJobRegistry.cleanup()` now properly creates job results. Thanks @OlegZv!
+* Fixed a bug in worker logging configuration. Thanks @rlaminseok0824!
+* Reworked RQ's pubsub thread to not use polling. Thanks @ankush!
+* Fixed a bug where `WorkerPool` status is never set to `STARTED`. Thanks @taleinat!
+* `Worker.monitor_work_horse()` now properly handles `InvalidJobOperation`. Thanks @fancyweb!
+* `queue.enqueue_many` now always registers the queue in RQ's queue registry. Thanks @eswolinsky3241!
+* Minor fixes and improvements. Thanks @hongquan, @OlegZv, @victorb, @rparini!
+
 ### RQ 2.1.0 (2024-12-23)
 * `job.id` must not contain `:`. Thanks @sanurielf!
 * Various type hint improvements by @terencehonles!
