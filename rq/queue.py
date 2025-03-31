@@ -660,7 +660,9 @@ class Queue:
                         # if pipeline comes from caller, re-raise to them
                         raise
         elif pipeline is not None:
-            pipeline.multi()  # Ensure pipeline in multi mode before returning to caller
+            # Ensure pipeline in multi mode before returning to caller (if not set before)
+            if not pipeline.explicit_transaction:
+                pipeline.multi()
         return job
 
     def enqueue_call(
