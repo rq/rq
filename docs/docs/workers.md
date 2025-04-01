@@ -177,7 +177,7 @@ print('Failed jobs: ' + worker.failed_job_count)
 print('Total working time: '+ worker.total_working_time)  # In seconds
 ```
 
-Aside from `worker.name`, worker also have the following properties:
+`worker` also have the following properties:
 * `hostname` - the host where this worker is run
 * `pid` - worker's process ID
 * `queues` - queues on which this worker is listening for jobs
@@ -203,7 +203,7 @@ workers = Worker.count(connection=redis)
 
 # Count the number of workers for a specific queue
 queue = Queue('queue_name', connection=redis)
-workers = Worker.all(queue=queue)
+workers = Worker.count(queue=queue)
 ```
 
 ## Worker with Custom Serializer
@@ -324,7 +324,6 @@ more common requests so far are:
 3. The ability to use different concurrency models such as
    `multiprocessing` or `gevent`.
 4. Using a custom strategy for dequeuing jobs from different queues.
-   See [link](#round-robin-and-random-strategies-for-dequeuing-jobs-from-queues).
 
 You can use the `-w` option to specify a different worker class to use:
 
