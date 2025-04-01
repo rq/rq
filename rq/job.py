@@ -204,6 +204,9 @@ class Job:
         self.enqueue_at_front: Optional[bool] = None
         self.group_id: Optional[str] = None
 
+        self.repeats_left: Optional[int] = None
+        self.repeat_intervals: Optional[List[int]] = None
+
         from .results import Result
 
         self._cached_result: Optional[Result] = None
@@ -1007,6 +1010,10 @@ class Job:
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
 
+        self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
+        if obj.get('repeat_intervals'):
+            self.repeat_intervals = json.loads(obj['repeat_intervals'].decode())
+
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
             try:
@@ -1066,6 +1073,11 @@ class Job:
             obj['description'] = self.description
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
+
+        if self.repeats_left is not None:
+            obj['repeats_left'] = self.repeats_left
+        if self.repeat_intervals is not None:
+            obj['repeat_intervals'] = json.dumps(self.repeat_intervals)
 
         if self._result is not None and include_result:
             try:
