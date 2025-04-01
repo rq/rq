@@ -1,5 +1,12 @@
 from dataclasses import dataclass
-from typing import List, Union, Iterable
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Iterable, List, Optional, Union
+
+if TYPE_CHECKING:
+    from redis.client import Pipeline
+
+    from .job import Job
+    from .queue import Queue
 
 
 @dataclass
@@ -60,3 +67,48 @@ class Repeat:
             return intervals[-1]  # Use the last interval if we've run out
 
         return intervals[count]
+
+    @classmethod
+    def schedule(cls, job: 'Job', queue: 'Queue', pipeline: Optional['Pipeline'] = None):
+        """Schedules a job to repeat based on its repeat configuration.
+
+        This decrements the job's repeats_left counter and either enqueues
+        it immediately (if interval is 0) or schedules it to run after the
+        specified interval.
+
+        Args:
+            job (Job): The job to repeat
+            queue (Queue): The queue to enqueue/schedule the job on
+            pipeline (Optional[Pipeline], optional): Redis pipeline to use. Defaults to None.
+
+        Returns:
+            scheduled_time (Optional[datetime]): When the job was scheduled to run, or None if not scheduled
+        """
+
+        if job.repeats_left <= 0:
+            raise ValueError(f"Cannot schedule job {job.id}: no repeats left")
+
+        pipe = pipeline if pipeline is not None else job.connection.pipeline()
+
+        # Get the interval for this repeat based on remaining repeats
+        repeat_count = job.repeats_left - 1  # Count from the end (0-indexed)
+        interval = 0
+
+        if job.repeat_intervals:
+            interval = cls.get_interval(repeat_count, job.repeat_intervals)
+
+        # Decrement repeats_left
+        job.repeats_left = job.repeats_left - 1
+        job.save(pipeline=pipe)
+
+        if interval == 0:
+            # Enqueue the job immediately
+            queue._enqueue_job(job, pipeline=pipe)
+        else:
+            # Schedule the job to run after the interval
+            scheduled_time = datetime.now() + timedelta(seconds=interval)
+            queue.schedule_job(job, scheduled_time, pipeline=pipe)
+
+        # Execute the pipeline if we created it
+        if pipeline is None:
+            pipe.execute()

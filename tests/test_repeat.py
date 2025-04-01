@@ -1,8 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from rq import Queue
 from rq.job import Job
+from rq.registry import ScheduledJobRegistry
 from rq.repeat import Repeat
+from rq.utils import now
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -109,7 +111,7 @@ class TestRepeatEnqueue(RQTestCase):
 
         # Use enqueue_at method
         job = self.queue.enqueue_at(
-            datetime.now(),
+            now(),
             say_hello,
             repeat=repeat
         )
@@ -125,13 +127,11 @@ class TestRepeatEnqueue(RQTestCase):
         # Prepare job data with repeat parameters
         job_data1 = self.queue.prepare_data(
             func=say_hello,
-            args=("Alice",),
             repeat=Repeat(times=3, interval=10)
         )
 
         job_data2 = self.queue.prepare_data(
             func=say_hello,
-            args=("Bob",),
             repeat=Repeat(times=2, interval=[30, 60])
         )
 
@@ -144,3 +144,61 @@ class TestRepeatEnqueue(RQTestCase):
 
         self.assertEqual(job_2.repeats_left, 2)
         self.assertEqual(job_2.repeat_intervals, [30, 60])
+
+    def test_repeat_schedule_interval_zero(self):
+        """Test the Repeat.schedule method properly schedules job repeats"""
+
+        # Test 1: Job with zero interval should be executed immediately
+        repeat = Repeat(times=2, interval=0)
+        job = self.queue.enqueue(say_hello, repeat=repeat)
+
+        Repeat.schedule(job, self.queue)
+
+        # Job was enqueued immediately since interval is 0
+        self.assertIn(job.id, self.queue.get_job_ids())
+        job.refresh()
+        self.assertEqual(job.repeats_left, 1)
+
+        Repeat.schedule(job, self.queue)
+        self.assertEqual(job.repeats_left, 0)
+
+        # Job can only be repeated twice
+        with self.assertRaises(ValueError):
+            Repeat.schedule(job, self.queue)
+
+    def test_repeat_schedule_interval_greater_than_zero(self):
+        """Test the Repeat.schedule method properly schedules job repeats"""
+
+        queue = self.queue
+        registry = ScheduledJobRegistry(queue=queue)
+
+        repeat = Repeat(times=3, interval=30)  # 30 second interval
+        job = queue.enqueue(say_hello, repeat=repeat)
+
+        # Clear the queue so we can verify the job is not enqueued immediately
+        queue.empty()
+        # Get current time for reference
+        before_schedule = now()
+
+        # Schedule the job
+        Repeat.schedule(job, queue)
+
+        after_schedule = now()
+
+        # Verify job was not enqueued immediately
+        self.assertNotIn(job.id, queue.get_job_ids())
+
+        # Verify job was added to scheduled registry
+        self.assertIn(job.id, registry.get_job_ids())
+
+        # Scheduled time should be approximately 30 seconds from now
+        scheduled_time = registry.get_scheduled_time(job.id)
+        expected_min = before_schedule + timedelta(seconds=25)  # Allow 1 sec buffer
+        expected_max = after_schedule + timedelta(seconds=35)  # Allow 1 sec buffer
+
+        self.assertTrue(expected_min <= scheduled_time <= expected_max,
+                    f"Job not scheduled in expected window: {expected_min} <= {scheduled_time} <= {expected_max}")
+
+        # Check repeats_left was decremented
+        job.refresh()
+        self.assertEqual(job.repeats_left, 2)
