@@ -39,6 +39,7 @@ from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
+from .repeat import Repeat
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
@@ -66,6 +67,7 @@ class EnqueueData(
             'on_success',
             'on_failure',
             'on_stopped',
+            'repeat',
         ],
     )
 ):
@@ -526,6 +528,7 @@ class Queue:
         meta: Optional[Dict] = None,
         status: JobStatus = JobStatus.QUEUED,
         retry: Optional['Retry'] = None,
+        repeat: Optional['Repeat'] = None,
         *,
         on_success: Optional[Union[Callback, Callable]] = None,
         on_failure: Optional[Union[Callback, Callable]] = None,
@@ -548,6 +551,7 @@ class Queue:
             meta (Optional[Dict], optional): Job metadata. Defaults to None.
             status (JobStatus, optional): Job status. Defaults to JobStatus.QUEUED.
             retry (Optional[Retry], optional): The Retry Object. Defaults to None.
+            repeat (Optional[Repeat], optional): The Repeat Object. Defaults to None.
             on_success (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on success. Defaults to
                 None. Callable is deprecated.
             on_failure (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on failure. Defaults to
@@ -603,6 +607,10 @@ class Queue:
         if retry:
             job.retries_left = retry.max
             job.retry_intervals = retry.intervals
+
+        if repeat:
+            job.repeats_left = repeat.times
+            job.repeat_intervals = repeat.intervals
 
         return job
 
@@ -678,6 +686,7 @@ class Queue:
         at_front: bool = False,
         meta: Optional[Dict] = None,
         retry: Optional['Retry'] = None,
+        repeat: Optional['Repeat'] = None,
         on_success: Optional[Union[Callback, Callable[..., Any]]] = None,
         on_failure: Optional[Union[Callback, Callable[..., Any]]] = None,
         on_stopped: Optional[Union[Callback, Callable[..., Any]]] = None,
@@ -729,6 +738,7 @@ class Queue:
             status=JobStatus.QUEUED,
             timeout=timeout,
             retry=retry,
+            repeat=repeat,
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
@@ -753,6 +763,7 @@ class Queue:
         on_success: Optional[Union[Callback, Callable]] = None,
         on_failure: Optional[Union[Callback, Callable]] = None,
         on_stopped: Optional[Union[Callback, Callable]] = None,
+        repeat: Optional['Repeat'] = None,
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -777,6 +788,7 @@ class Queue:
                 None. Callable is deprecated.
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
+            repeat (Optional[Repeat], optional): Repeat object. Defaults to None.
 
         Returns:
             EnqueueData: The EnqueueData
@@ -798,6 +810,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            repeat,
         )
 
     def enqueue_many(
@@ -841,6 +854,7 @@ class Queue:
                 'on_failure': job_data.on_failure,
                 'on_stopped': job_data.on_stopped,
                 'group_id': group_id,
+                'repeat': job_data.repeat
             }
 
         # Enqueue jobs without dependencies
@@ -932,6 +946,7 @@ class Queue:
         at_front = kwargs.pop('at_front', False)
         meta = kwargs.pop('meta', None)
         retry = kwargs.pop('retry', None)
+        repeat = kwargs.pop('repeat', None)
         on_success = kwargs.pop('on_success', None)
         on_failure = kwargs.pop('on_failure', None)
         on_stopped = kwargs.pop('on_stopped', None)
@@ -954,6 +969,7 @@ class Queue:
             at_front,
             meta,
             retry,
+            repeat,
             on_success,
             on_failure,
             on_stopped,
@@ -986,6 +1002,7 @@ class Queue:
             at_front,
             meta,
             retry,
+            repeat,
             on_success,
             on_failure,
             on_stopped,
@@ -1008,6 +1025,7 @@ class Queue:
             at_front=at_front,
             meta=meta,
             retry=retry,
+            repeat=repeat,
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
@@ -1036,6 +1054,7 @@ class Queue:
             at_front,
             meta,
             retry,
+            repeat,
             on_success,
             on_failure,
             on_stopped,
@@ -1057,6 +1076,7 @@ class Queue:
             job_id=job_id,
             meta=meta,
             retry=retry,
+            repeat=repeat,
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
@@ -1184,10 +1204,10 @@ class Queue:
                 pipeline.execute()
 
             if job.failure_callback:
-                job.failure_callback(job, self.connection, *sys.exc_info())
+                job.failure_callback(job, self.connection, *sys.exc_info())  # type: ignore[arg-type]
         else:
             if job.success_callback:
-                job.success_callback(job, self.connection, job.return_value())
+                job.success_callback(job, self.connection, job.return_value())  # type: ignore[arg-type]
 
         return job
 

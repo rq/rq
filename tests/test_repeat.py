@@ -1,3 +1,6 @@
+from datetime import datetime
+
+from rq import Queue
 from rq.job import Job
 from rq.repeat import Repeat
 from tests import RQTestCase
@@ -74,3 +77,70 @@ class TestRepeat(RQTestCase):
         # Verify the repeat settings were restored correctly
         self.assertEqual(job.repeats_left, 3)
         self.assertEqual(job.repeat_intervals, [5, 10, 15])
+
+
+class TestRepeatEnqueue(RQTestCase):
+    """Test that Repeat objects are correctly handled when enqueuing jobs"""
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(name="test_queue", connection=self.connection)
+
+    def test_enqueue_with_repeat(self):
+        """Test that repeat parameters are stored when enqueuing a job with Repeat object"""
+        repeat = Repeat(times=3, interval=[5, 10, 15])
+
+        # Enqueue a job with a Repeat object
+        job = self.queue.enqueue(say_hello, repeat=repeat)
+
+        # Verify the job has the repeat attributes set correctly
+        self.assertEqual(job.repeats_left, 3)
+        self.assertEqual(job.repeat_intervals, [5, 10, 15])
+
+        # Verify the job is persisted with the repeat attributes
+        job_id = job.id
+        loaded_job = Job.fetch(job_id, connection=self.connection)
+        self.assertEqual(loaded_job.repeats_left, 3)
+        self.assertEqual(loaded_job.repeat_intervals, [5, 10, 15])
+
+    def test_enqueue_at_with_repeat(self):
+        """Test that repeat parameters are stored when using enqueue_at with Repeat object"""
+        repeat = Repeat(times=2, interval=[60, 120])
+
+        # Use enqueue_at method
+        job = self.queue.enqueue_at(
+            datetime.now(),
+            say_hello,
+            repeat=repeat
+        )
+
+        # Verify the job has the repeat attributes set correctly
+        self.assertEqual(job.repeats_left, 2)
+        self.assertEqual(job.repeat_intervals, [60, 120])
+
+    def test_enqueue_many_with_repeat(self):
+        """Test that repeat parameters are stored when using enqueue_many with Repeat objects"""
+        # Create different Repeat objects
+
+        # Prepare job data with repeat parameters
+        job_data1 = self.queue.prepare_data(
+            func=say_hello,
+            args=("Alice",),
+            repeat=Repeat(times=3, interval=10)
+        )
+
+        job_data2 = self.queue.prepare_data(
+            func=say_hello,
+            args=("Bob",),
+            repeat=Repeat(times=2, interval=[30, 60])
+        )
+
+        # Enqueue multiple jobs
+        job_1, job_2 = self.queue.enqueue_many([job_data1, job_data2])
+
+        job_1.refresh()
+        self.assertEqual(job_1.repeats_left, 3)
+        self.assertEqual(job_1.repeat_intervals, [10])
+
+        self.assertEqual(job_2.repeats_left, 2)
+        self.assertEqual(job_2.repeat_intervals, [30, 60])
