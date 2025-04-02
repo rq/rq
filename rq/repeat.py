@@ -85,7 +85,7 @@ class Repeat:
             scheduled_time (Optional[datetime]): When the job was scheduled to run, or None if not scheduled
         """
 
-        if job.repeats_left <= 0:
+        if job.repeats_left is None or job.repeats_left <= 0:
             raise ValueError(f"Cannot schedule job {job.id}: no repeats left")
 
         pipe = pipeline if pipeline is not None else job.connection.pipeline()

@@ -1204,10 +1204,10 @@ class Queue:
                 pipeline.execute()
 
             if job.failure_callback:
-                job.failure_callback(job, self.connection, *sys.exc_info())  # type: ignore[arg-type]
+                job.failure_callback(job, self.connection, *sys.exc_info())
         else:
             if job.success_callback:
-                job.success_callback(job, self.connection, job.return_value())  # type: ignore[arg-type]
+                job.success_callback(job, self.connection, job.return_value())
 
         return job
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from rq import Queue, Worker
 from rq.job import Job

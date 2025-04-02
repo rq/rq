@@ -13,6 +13,7 @@ from redis import WatchError
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
+from .types import FailureCallbackType, SuccessCallbackType
 
 if TYPE_CHECKING:
     from _typeshed import ExcInfo
@@ -504,7 +505,7 @@ class Job:
         return import_attribute(self.func_name)
 
     @property
-    def success_callback(self):
+    def success_callback(self) -> SuccessCallbackType:
         if self._success_callback is UNEVALUATED:
             if self._success_callback_name:
                 self._success_callback = import_attribute(self._success_callback_name)
@@ -521,7 +522,7 @@ class Job:
         return self._success_callback_timeout
 
     @property
-    def failure_callback(self):
+    def failure_callback(self) -> FailureCallbackType:
         if self._failure_callback is UNEVALUATED:
             if self._failure_callback_name:
                 self._failure_callback = import_attribute(self._failure_callback_name)
