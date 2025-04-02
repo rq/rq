@@ -505,7 +505,7 @@ class Job:
         return import_attribute(self.func_name)
 
     @property
-    def success_callback(self) -> SuccessCallbackType:
+    def success_callback(self) -> Optional[SuccessCallbackType]:
         if self._success_callback is UNEVALUATED:
             if self._success_callback_name:
                 self._success_callback = import_attribute(self._success_callback_name)
@@ -522,7 +522,7 @@ class Job:
         return self._success_callback_timeout
 
     @property
-    def failure_callback(self) -> FailureCallbackType:
+    def failure_callback(self) -> Optional[FailureCallbackType]:
         if self._failure_callback is UNEVALUATED:
             if self._failure_callback_name:
                 self._failure_callback = import_attribute(self._failure_callback_name)
