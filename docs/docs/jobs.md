@@ -20,7 +20,7 @@ pushed into the queue. `job.get_status()` will return `queued`.
 In this phase an `Execution` object will be created and it's `composite_key` put in `StartedJobRegistry`.
 3. _Finished_. After an execution has ended, `execution` will be removed from `StartedJobRegistry`.
 A `Result` object that holds the result of the execution will be created. Both the `Job` and `Result` key
-will persist in Redis until the value of `result_ttl` is up. More details [here]( /docs/results/).
+will persist in Redis until the value of `result_ttl` is up. More details [here](/docs/results/).
 
 
 #### Job Status
@@ -185,7 +185,7 @@ print(execution.last_heartbeat)  # Worker's last heartbeat
 ## Stopping a Currently Executing Job
 _New in version 1.7.0_
 
-You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](https://python-rq.org/docs/results/#dealing-with-exceptions).
+You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](/docs/results/#dealing-with-exceptions).
 
 ```python
 from redis import Redis
@@ -228,7 +228,7 @@ Canceling a job will remove:
 Note that `job.cancel()` does **not** delete the job itself from Redis. If you want to
 delete the job from Redis and reclaim memory, use `job.delete()`.
 
-Note: if you want to enqueue the dependents of the job you 
+Note: if you want to enqueue the dependents of the job you
 are trying to cancel use the following:
 
 ```python
@@ -396,7 +396,7 @@ assert len(registry) == 0  # Registry will be empty when job is requeued
 ```
 
 Starting from version 1.5.0, RQ also allows you to [automatically retry
-failed jobs](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
+failed jobs](/docs/exceptions/#retrying-failed-jobs).
 
 
 ### Requeuing Failed Jobs via CLI
