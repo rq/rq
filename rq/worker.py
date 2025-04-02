@@ -1555,6 +1555,7 @@ class Worker(BaseWorker):
             - Enqueue dependents
             - Incrementing the job count and working time
             - Handling of the job successful execution
+            - If job.repeats_left > 0, it will be scheduled for the next execution.
 
         Runs within a loop with the `watch` method so that protects interactions
         with dependents keys.
@@ -1588,12 +1589,15 @@ class Worker(BaseWorker):
                         self.log.debug("Saving job %s's successful execution result", job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
 
-                    job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
-                    self.log.debug('Removing job %s from StartedJobRegistry', job.id)
+                    if job.repeats_left is not None and job.repeats_left > 0:
+                        from .repeat import Repeat
+                        self.log.info('Job %s scheduled to repeat (%s left)', job.id, job.repeats_left)
+                        Repeat.schedule(job, queue, pipeline=pipeline)
+                    else:
+                        job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
+
+                    self.log.debug('Cleaning up execution of job %s', job.id)
                     self.cleanup_execution(job, pipeline=pipeline)
-                    # self.set_current_job_id(None, pipeline=pipeline)
-                    # started_job_registry.remove(job, pipeline=pipeline)
-                    # self.execution.delete(pipeline)  # type: ignore
 
                     pipeline.execute()
 

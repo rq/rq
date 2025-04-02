@@ -22,13 +22,13 @@ class Repeat:
     times: int
     intervals: List[int]
 
-    def __init__(self, times: int, interval: Union[int, Iterable[int]]):
+    def __init__(self, times: int, interval: Optional[Union[int, Iterable[int]]] = 0):
         """Initialize a Repeat instance.
 
         Args:
             times (int): The number of times to repeat the job. Must be greater than 0.
-            interval (Union[int, Iterable[int]]): The intervals between job executions in seconds.
-                Can be a single integer value or a list of intervals.
+            interval (Optional[Union[int, Iterable[int]]], optional): The intervals between job executions in seconds.
+                Can be a single integer value or a list of intervals. Defaults to 0 (immediately repeated).
 
         Raises:
             ValueError: If times is less than 1 or if intervals contains negative values.

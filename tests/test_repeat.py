@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 
-from rq import Queue
+from rq import Queue, Worker
 from rq.job import Job
 from rq.registry import ScheduledJobRegistry
 from rq.repeat import Repeat
 from rq.utils import now
 from tests import RQTestCase
-from tests.fixtures import say_hello
+from tests.fixtures import div_by_zero, say_hello
 
 
 class TestRepeat(RQTestCase):
@@ -86,7 +86,7 @@ class TestRepeatEnqueue(RQTestCase):
 
     def setUp(self):
         super().setUp()
-        self.queue = Queue(name="test_queue", connection=self.connection)
+        self.queue = Queue(connection=self.connection)
 
     def test_enqueue_with_repeat(self):
         """Test that repeat parameters are stored when enqueuing a job with Repeat object"""
@@ -202,3 +202,32 @@ class TestRepeatEnqueue(RQTestCase):
         # Check repeats_left was decremented
         job.refresh()
         self.assertEqual(job.repeats_left, 2)
+
+
+class TestWorkerRepeat(RQTestCase):
+
+        def test_successful_job_repeat(self):
+            """Test that successful jobs are repeated according to Repeat settings"""
+            queue = Queue(connection=self.connection)
+
+            job = queue.enqueue(say_hello, repeat=Repeat(times=1))
+
+            worker = Worker([queue], connection=self.connection)
+            worker.work(burst=True, max_jobs=1)
+
+            # The original job should have been processed and repeated
+            self.assertIn(job.id, queue.get_job_ids())
+
+            worker = Worker([queue], connection=self.connection)
+            worker.work(burst=True, max_jobs=1)
+
+            # No repeats left
+            self.assertNotIn(job.id, queue.get_job_ids())
+
+            # Failed jobs don't trigger repeats
+            job = queue.enqueue(div_by_zero, repeat=Repeat(times=1))
+
+            self.assertEqual(job.repeats_left, 1)
+            worker.work(burst=True)
+            # Job shouldn't be repeated
+            self.assertNotIn(job.id, queue.get_job_ids())
