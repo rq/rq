@@ -510,9 +510,9 @@ class Job:
             if self._success_callback_name:
                 self._success_callback = import_attribute(self._success_callback_name)
             else:
-                self._success_callback = None
+                return None
 
-        return self._success_callback
+        return self._success_callback  # type: ignore[return-value]
 
     @property
     def success_callback_timeout(self) -> int:
@@ -527,9 +527,9 @@ class Job:
             if self._failure_callback_name:
                 self._failure_callback = import_attribute(self._failure_callback_name)
             else:
-                self._failure_callback = None
+                return None
 
-        return self._failure_callback
+        return self._failure_callback  # type: ignore[return-value]
 
     @property
     def failure_callback_timeout(self) -> int:
