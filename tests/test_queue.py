@@ -647,6 +647,29 @@ class TestQueue(RQTestCase):
             self.assertEqual(len(q), 3)
             self.assertEqual(q.job_ids, ['fake_job_id_3', 'fake_job_id_1', 'fake_job_id_2'])
 
+    def test_enqueue_different_queues_with_passed_pipeline(self):
+        """Jobs should be enqueued into different queues in a provided pipeline"""
+        q1 = Queue(name='q1', connection=self.connection)
+        q2 = Queue(name='q2', connection=self.connection)
+        q3 = Queue(name='q3', connection=self.connection)
+
+        queues = [q1, q2, q3]
+        jobs = []
+        with self.connection.pipeline() as pipe:
+            for idx, q in enumerate(queues):
+                jobs.append(q.enqueue_call(say_hello, job_id=f'fake_job_id_{idx}', pipeline=pipe))
+            for job in jobs:
+                self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
+            pipe.execute()
+
+        self.assertEqual(len(jobs), 3)
+        for idx, (job, q) in enumerate(zip(jobs, queues)):
+            # Check job is in the correct queue
+            self.assertEqual(job.id, f'fake_job_id_{idx}')
+            self.assertEqual(job.origin, q.name)
+            # Check queue contains the job
+            self.assertIn(job.id, q.job_ids)
+
     def test_enqueue_job_with_dependency_by_id(self):
         """Can specify job dependency with job object or job id."""
         parent_job = Job.create(func=say_hello, connection=self.connection)
