@@ -1,9 +1,10 @@
 RQ (_Redis Queue_) is a simple Python library for queueing jobs and processing
-them in the background with workers.  It is backed by Redis and it is designed
-to have a low barrier to entry.  It should be integrated in your web stack
-easily.
+them in the background with workers. It is backed by Redis or Valkey and is designed
+to have a low barrier to entry while scaling incredibly well for large applications.
+It can be integrated into your web stack easily, making it suitable for projects
+of any size—from simple applications to high-volume enterprise systems.
 
-RQ requires Redis >= 3.0.0.
+RQ requires Redis >= 4 or Valkey >= 7.2.
 
 [![Build status](https://github.com/rq/rq/workflows/Test/badge.svg)](https://github.com/rq/rq/actions?query=workflow%3A%22Test%22)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
@@ -114,7 +115,7 @@ Job result = 818
 To run multiple workers in production, use process managers like `systemd`. RQ also ships with a beta version of `worker-pool` that lets you run multiple worker processes with a single command.
 
 ```console
-rq worker-pool -n 4 queue-name
+rq worker-pool -n 4
 ```
 
 More options are documented on [python-rq.org](https://python-rq.org/docs/workers/).
