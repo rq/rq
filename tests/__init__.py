@@ -15,8 +15,9 @@ def find_empty_redis_database(ssl=False):
         if ssl:
             connection_kwargs['port'] = 9736
             connection_kwargs['ssl'] = True
-            connection_kwargs['ssl_cert_reqs'] = None  # disable certificate validation
-        testconn = Redis(**connection_kwargs)
+            # disable certificate validation
+            connection_kwargs['ssl_cert_reqs'] = None  # type: ignore
+        testconn = Redis(**connection_kwargs)  # type: ignore
         empty = testconn.dbsize() == 0
         if empty:
             return testconn
@@ -86,12 +87,6 @@ class RQTestCase(unittest.TestCase):
     def tearDown(self):
         # Flush afterwards
         self.connection.flushdb()
-
-    # Implement assertIsNotNone for Python runtimes < 2.7 or < 3.1
-    if not hasattr(unittest.TestCase, 'assertIsNotNone'):
-
-        def assertIsNotNone(self, value, *args):  # noqa
-            self.assertNotEqual(value, None, *args)
 
     @classmethod
     def tearDownClass(cls):

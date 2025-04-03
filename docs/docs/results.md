@@ -103,13 +103,13 @@ job = queue.enqueue(count_words_at_url, 'https://python-rq.org', max=3, interval
 The above job will be retried up to 3 times, with 60 seconds interval in between executions.
 Please note that the retry count returned by job executions will be treated differently from the
 `Retry` parameter passed to `enqueue()`, which will be used in cases where jobs fail due to
-[exceptions](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
+[exceptions](/docs/exceptions/#retrying-failed-jobs).
 
 
 ## Dealing with Exceptions
 
 Jobs can fail due to exceptions occurring. RQ provides several ways to handle failed jobs.
-For detailed information about exceptions and retries, see [Exceptions & Retries](https://python-rq.org/docs/exceptions/#retrying-failed-jobs).
+For detailed information about exceptions and retries, see [Exceptions & Retries](/docs/exceptions/#retrying-failed-jobs).
 
 
 ## Dealing with Interruptions

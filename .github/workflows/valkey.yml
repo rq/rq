@@ -2,10 +2,16 @@ name: Valkey Test
 
 on:
   push:
+    branches:
+      - master
   pull_request:
 
 permissions:
   contents: read # to fetch code (actions/checkout)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   valkey-test:

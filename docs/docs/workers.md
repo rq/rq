@@ -540,7 +540,7 @@ for worker in workers:
 ### Stopping a Job
 _New in version 1.7.0._
 
-You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](https://python-rq.org/docs/results/#dealing-with-exceptions).
+You can use `send_stop_job_command()` to tell a worker to immediately stop a currently executing job. A job that's stopped will be sent to [FailedJobRegistry](/docs/results/#dealing-with-exceptions).
 
 ```python
 from redis import Redis
