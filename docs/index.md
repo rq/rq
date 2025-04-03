@@ -39,6 +39,7 @@ from my_module import count_words_at_url
 result = q.enqueue(count_words_at_url, 'http://nvie.com')
 ```
 
+### Scheduling Jobs
 Scheduling jobs are similarly easy:
 
 ```python
@@ -49,6 +50,23 @@ job = queue.enqueue_at(datetime(2019, 10, 8, 9, 15), say_hello)
 job = queue.enqueue_in(timedelta(seconds=10), say_hello)
 ```
 
+## Repeating Jobs
+
+To repeat jobs multiple times:
+
+```python
+from rq.repeat import Repeat
+
+# Repeat job 3 times after successful completion, with 60 second intervals
+job = queue.enqueue(say_hello, repeat=Repeat(times=3, interval=60))
+
+# Use different intervals between repetitions
+job = queue.enqueue(say_hello, repeat=Repeat(times=3, interval=[10, 30, 60]))
+```
+
+Note that jobs will only repeat after successful executions. To retry failed jobs, use `Retry`.
+
+### Retrying Failed Jobs
 You can also ask RQ to retry failed jobs:
 
 ```python
