@@ -1,3 +1,6 @@
+### RQ 2.3.1 (2025-04-03)
+* Fixes an issue running RQ on Windows. Thanks @selwin!
+
 ### RQ 2.3.0 (2025-04-03)
 * Added the feature to repeat jobs. Thanks @selwin!
 * Officially support Valkey. Thanks @selwin!
