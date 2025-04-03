@@ -657,16 +657,11 @@ class BaseWorker:
 
     def cleanup_execution(self, job: 'Job', pipeline: 'Pipeline'):
         """Cleans up the execution of a job.
-        It will remove the job from the `StartedJobRegistry` and delete the Execution object.
+        It will remove the job execution record from the `StartedJobRegistry` and delete the Execution object.
         """
         self.log.debug('Cleaning up execution of job %s', job.id)
-        started_job_registry = StartedJobRegistry(
-            job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
-        )
         self.set_current_job_id(None, pipeline=pipeline)
-        started_job_registry.remove(job, pipeline=pipeline)
-        if self.execution:
-            started_job_registry.remove_execution(self.execution, job=job, pipeline=pipeline)
+        if self.execution is not None:
             self.execution.delete(job=job, pipeline=pipeline)
             self.execution = None
 

@@ -10,11 +10,11 @@ description = "RQ is a simple, lightweight, library for creating background jobs
 readme = "README.md"
 license = "BSD-2-Clause"
 maintainers = [
-    {name = "Selwin Ong"},
+  { name = "Selwin Ong" },
 ]
 authors = [
-    { name = "Selwin Ong", email = "selwin.ong@gmail.com" },
-    { name = "Vincent Driessen", email = "vincent@3rdcloud.com" },
+  { name = "Selwin Ong", email = "selwin.ong@gmail.com" },
+  { name = "Vincent Driessen", email = "vincent@3rdcloud.com" },
 ]
 requires-python = ">=3.8"
 classifiers = [
@@ -35,6 +35,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Internet",
   "Topic :: Scientific/Engineering",
   "Topic :: Software Development :: Libraries :: Python Modules",
@@ -49,31 +50,45 @@ dependencies = [
   "click>=5",
   "redis>=3.5",
 ]
-[project.urls]
-changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
-documentation = "https://python-rq.org/docs/"
-homepage = "https://python-rq.org/"
-repository = "https://github.com/rq/rq/"
-[project.scripts]
-rq = "rq.cli:main"
-rqinfo = "rq.cli:info"  # TODO [v2]: Remove
-rqworker = "rq.cli:worker"  # TODO [v2]: Remove
+urls.changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
+urls.documentation = "https://python-rq.org/docs/"
+urls.homepage = "https://python-rq.org/"
+urls.repository = "https://github.com/rq/rq/"
+scripts.rq = "rq.cli:main"
+scripts.rqinfo = "rq.cli:info" # TODO [v2]: Remove
+scripts.rqworker = "rq.cli:worker" # TODO [v2]: Remove
+
+[dependency-groups]
+dev = [
+  "coverage>=7.6.1",
+  "mypy>=1.14.1",
+  "packaging>=24.2",
+  "psutil>=7",
+  "pytest>=8.3.5",
+  "pytest-cov>=5",
+  "ruff>=0.9.9",
+  "tox>=4.24.1",
+  "types-greenlet>=3.1.0.20241221",
+  "types-redis>=4.6.0.20241004",
+]
 
 [tool.hatch.version]
 path = "rq/version.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/docs",
-    "/rq",
-    "/tests",
-    "CHANGES.md",
-    "LICENSE",
-    "pyproject.toml",
-    "README.md",
-    "requirements.txt",
-    "tox.ini",
+  "/docs",
+  "/rq",
+  "/tests",
+  "CHANGES.md",
+  "LICENSE",
+  "pyproject.toml",
+  "README.md",
+  "requirements.txt",
+  "tox.ini",
 ]
+[tool.hatch.envs.default]
+installer = "uv"
 
 [tool.hatch.envs.test]
 dependencies = [
@@ -92,6 +107,22 @@ dependencies = [
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
 typing = "mypy --enable-incomplete-feature=Unpack rq"
 
+[tool.ruff]
+target-version = "py38"
+
+# Set what ruff should check for.
+# See https://beta.ruff.rs/docs/rules/ for a list of rules.
+line-length = 120
+format.quote-style = "single"
+lint.select = [
+  "E", # pycodestyle errors
+  "F", # pyflakes errors
+  "I", # import sorting
+  "W", # pycodestyle warnings
+]
+lint.isort.known-first-party = [ "rq" ]
+lint.isort.section-order = [ "future", "standard-library", "third-party", "first-party", "local-folder" ]
+
 [tool.mypy]
 allow_redefinition = true
 pretty = true
@@ -104,25 +135,6 @@ warn_unreachable = true
 [[tool.mypy.overrides]]
 module = "setproctitle.*"
 ignore_missing_imports = true
-
-[tool.ruff]
-# Set what ruff should check for.
-# See https://beta.ruff.rs/docs/rules/ for a list of rules.
-lint.select = [
-    "E", # pycodestyle errors
-    "F", # pyflakes errors
-    "I", # import sorting
-    "W", # pycodestyle warnings
-]
-line-length = 120
-target-version = "py38"
-
-[tool.ruff.lint.isort]
-known-first-party = ["rq"]
-section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
-
-[tool.ruff.format]
-quote-style = "single"
 
 [tool.pyright]
 reportOptionalMemberAccess = false
