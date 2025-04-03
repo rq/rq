@@ -1,9 +1,7 @@
 
 from datetime import datetime, timedelta
 
-from redis import Redis
-
-from rq import Queue, Worker
+from rq import Queue
 from rq.job import Job
 from rq.cron import Cron, CronJob
 from tests import RQTestCase

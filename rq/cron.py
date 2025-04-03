@@ -134,3 +134,62 @@ class Cron:
     def get_jobs(self) -> List[CronJob]:
         """Get all registered cron jobs"""
         return self._cron_jobs
+
+
+# Global registry to store job data before Cron instance is created
+_job_data_registry: List[Dict] = []
+
+
+def register(
+    func: F,
+    queue_name: str = "default",
+    args: Optional[Tuple] = None,
+    kwargs: Optional[Dict] = None,
+    interval: Optional[int] = None,
+    timeout: Optional[int] = None,
+    result_ttl: int = 500,
+    ttl: Optional[int] = None,
+    failure_ttl: Optional[int] = None,
+    meta: Optional[dict] = None,
+) -> Dict:
+    """
+    Register a function to be run as a cron job.
+
+    Example:
+        from rq import cron
+
+        cron_job = cron.register(my_func, interval=60)  # Run every 60 seconds
+
+    Returns:
+        CronJob: The created CronJob object
+    """
+    # Store the job data in the registry
+    job_data = {
+        'func': func,
+        'queue_name': queue_name,
+        'args': args,
+        'kwargs': kwargs,
+        'interval': interval,
+        'timeout': timeout,
+        'result_ttl': result_ttl,
+        'ttl': ttl,
+        'failure_ttl': failure_ttl,
+        'meta': meta,
+    }
+
+    # Add to the registry
+    _job_data_registry.append(job_data)
+
+    # Create and return a CronJob instance for immediate use if needed
+    return job_data
+
+
+def create_cron(connection: Redis) -> Cron:
+    """Create a Cron instance with all registered jobs"""
+    cron_instance = Cron(connection=connection)
+
+    # Register all previously registered jobs with the Cron instance
+    for job_data in _job_data_registry:
+        cron_instance.register(**job_data)
+
+    return cron_instance
