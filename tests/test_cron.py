@@ -397,7 +397,6 @@ class TestCron(RQTestCase):
         Simulates one iteration where sleep occurs (interval > 0) and one
         iteration where sleep is skipped (interval == 0), then breaks the loop.
         """
-        # --- Mock Configuration ---
         # Simulate:
         # 1st iteration: Calculate interval > 0 (e.g., 15.5), should sleep.
         # 2nd iteration: Calculate interval == 0, should NOT sleep.
@@ -406,9 +405,6 @@ class TestCron(RQTestCase):
 
         # Enqueue can return an empty list for simplicity in this test
         mock_enqueue.return_value = []
-
-        # Sleep mock doesn't need a complex side_effect here,
-        # we verify its calls based on calculate_interval's return.
 
         # Run start() and expect it to break when calculate_interval raises BreakLoop
         with self.assertRaises(BreakLoop):
