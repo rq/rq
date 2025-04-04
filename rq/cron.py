@@ -1,6 +1,8 @@
+import importlib.util
 import logging
+import os
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from redis import Redis
 
@@ -8,9 +10,6 @@ from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
-
-# Type variable for any callable
-F = TypeVar('F', bound=Callable)
 
 
 class CronJob:
@@ -96,7 +95,7 @@ class Cron:
 
     def register(
         self,
-        func: F,
+        func: Callable,
         queue_name: str,
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
@@ -125,7 +124,7 @@ class Cron:
 
         job_key = f"{func.__module__}.{func.__name__}"
         if interval is not None:
-            self.log.info(f"Registered cron job '{job_key}' to run every {interval} seconds")
+            self.log.info(f"Registered cron job '{job_key}' to run on {queue_name} every {interval} seconds")
         else:
             self.log.info(f"Registered cron job '{job_key}' for manual execution only")
 
@@ -141,8 +140,8 @@ _job_data_registry: List[Dict] = []
 
 
 def register(
-    func: F,
-    queue_name: str = "default",
+    func: Callable,
+    queue_name: str,
     args: Optional[Tuple] = None,
     kwargs: Optional[Dict] = None,
     interval: Optional[int] = None,
@@ -189,7 +188,99 @@ def create_cron(connection: Redis) -> Cron:
     cron_instance = Cron(connection=connection)
 
     # Register all previously registered jobs with the Cron instance
-    for job_data in _job_data_registry:
-        cron_instance.register(**job_data)
+    for data in _job_data_registry:
+        logging.debug(f"Registering job: {data['func'].__name__}")
+        cron_instance.register(**data)
+
+    return cron_instance
+
+
+def load_confic(config_path: str, connection: Redis) -> Cron:
+    """
+    Dynamically load a cron config file and register all jobs with a Cron instance.
+
+    Supports both dotted import paths (e.g. 'app.cron_config') and file paths
+    (e.g. 'app/cron_config.py'). The .py extension is optional for file paths.
+
+    Args:
+        config_path: Path to the cron_config.py file
+        connection: Redis connection to use for the Cron instance
+
+    Returns:
+        Cron instance with all jobs registered
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Loading cron configuration from {config_path}")
+
+    global _job_data_registry
+    _job_data_registry = []
+
+    # Track all attempted paths for better error reporting
+    attempted_paths = []
+    last_error = None
+
+    # Try to interpret config_path as a module path
+    try:
+        attempted_paths.append(f"Module import: '{config_path}'")
+        importlib.import_module(config_path)
+        # If we reach here, the import was successful
+    except ImportError as e:
+        last_error = e
+
+        # Try as a file path with .py extension
+        if not config_path.endswith('.py'):
+            file_path = f"{config_path}.py"
+        else:
+            file_path = config_path
+
+        abs_path = os.path.abspath(file_path)
+        attempted_paths.append(f"File path: '{abs_path}'")
+
+        if not os.path.exists(abs_path):
+            # Try as a file path without .py extension if the original had it
+            if config_path.endswith('.py'):
+                base_path = config_path[:-3]  # Remove .py
+                abs_base_path = os.path.abspath(base_path)
+                attempted_paths.append(f"File path without extension: '{abs_base_path}'")
+                if os.path.exists(abs_base_path) and os.path.isfile(abs_base_path):
+                    abs_path = abs_base_path
+                else:
+                    error_msg = (
+                        f"Could not load cron configuration. Tried the following:\n"
+                        f"{chr(10).join('- ' + path for path in attempted_paths)}\n"
+                        f"Last error: {str(last_error)}"
+                    )
+                    raise FileNotFoundError(error_msg)
+            else:
+                error_msg = (
+                    f"Could not load cron configuration. Tried the following:\n"
+                    f"{chr(10).join('- ' + path for path in attempted_paths)}\n"
+                    f"Last error: {str(last_error)}"
+                )
+                raise FileNotFoundError(error_msg)
+
+        # Load the module dynamically from file path
+        module_name = "cron_config"
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, abs_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Could not create module spec for {abs_path}")
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        except Exception as e:
+            attempted_paths.append(f"Dynamic loading of file: '{abs_path}' as module '{module_name}'")
+            error_msg = (
+                f"Failed to load cron configuration. Tried the following:\n"
+                f"{chr(10).join('- ' + path for path in attempted_paths)}\n"
+                f"Last error: {str(e)}"
+            )
+            raise ImportError(error_msg) from e
+
+    # Now that the module has been loaded and executed, all register() calls
+    # have populated the _job_data_registry, so we can create the Cron instance
+    cron_instance = create_cron(connection)
+
+    logger.info(f"Successfully registered {len(cron_instance.get_jobs())} cron jobs")
 
     return cron_instance

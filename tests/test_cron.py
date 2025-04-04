@@ -1,11 +1,12 @@
-
+import os
+import sys
 from datetime import datetime, timedelta
 
 from rq import Queue
+from rq.cron import Cron, CronJob, load_confic
 from rq.job import Job
-from rq.cron import Cron, CronJob
 from tests import RQTestCase
-from tests.fixtures import say_hello, echo
+from tests.fixtures import div_by_zero, do_nothing, say_hello
 
 
 class TestCronJob(RQTestCase):
@@ -100,7 +101,7 @@ class TestCronJob(RQTestCase):
     def test_enqueue(self):
         """Test that enqueue correctly creates a job in the queue"""
         cron_job = CronJob(
-            func=echo,
+            func=say_hello,
             queue_name=self.queue.name,
             args=("Hello",),
             interval=60,
@@ -147,7 +148,7 @@ class TestCron(RQTestCase):
         # Register job with an interval
         interval = 60
         cron_job = self.cron.register(
-            func=echo,
+            func=say_hello,
             queue_name=self.queue_name,
             args=("Periodic job",),
             interval=interval
@@ -180,3 +181,72 @@ class TestCron(RQTestCase):
         self.assertEqual(cron_job.job_options['timeout'], timeout)
         self.assertEqual(cron_job.job_options['result_ttl'], result_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
+
+    def test_load_confic(self):
+        """Test loading cron configuration from a file"""
+        # Load configuration
+        cron = load_confic('tests/cron_config.py', self.connection)
+
+        # Check all jobs were registered
+        jobs = cron.get_jobs()
+        self.assertEqual(len(jobs), 4)
+
+        # Verify specific job properties
+        job_functions = [job.func for job in jobs]
+        job_intervals = [job.interval for job in jobs]
+
+        self.assertIn(say_hello, job_functions)
+        self.assertIn(div_by_zero, job_functions)
+        self.assertIn(do_nothing, job_functions)
+        self.assertIn(30, job_intervals)
+        self.assertIn(180, job_intervals)
+
+        # Find job with kwargs
+        kwargs_job = next((job for job in jobs if job.kwargs.get('name') == 'RQ Cron'), None)
+        self.assertIsNotNone(kwargs_job)
+        self.assertEqual(kwargs_job.interval, 120)
+
+        # Find job with args
+        args_job = next((job for job in jobs if job.args == (10,)), None)
+        self.assertIsNotNone(args_job)
+        self.assertEqual(args_job.func, div_by_zero)
+
+    def test_cron_config_path_finding(self):
+        """Test different ways to load cron configuration files using path finding"""
+        # Setup: Make sure we have a clean registry before each test
+        from rq.cron import _job_data_registry
+
+        # Test 1: Loading with a direct file path (absolute path)
+        abs_path = os.path.abspath('tests/cron_config.py')
+        _job_data_registry.clear()  # Reset registry
+        cron1 = load_confic(abs_path, self.connection)
+        self.assertEqual(len(cron1.get_jobs()), 4)
+
+        # Test 2: Loading with a file path without .py extension
+        _job_data_registry.clear()  # Reset registry
+        cron2 = load_confic('tests/cron_config', self.connection)
+        self.assertEqual(len(cron2.get_jobs()), 4)
+
+        # Test 3: Loading with a module path
+        if '' not in sys.path:
+            sys.path.insert(0, '')  # Make sure current directory is in path
+
+        _job_data_registry.clear()  # Reset registry
+        cron3 = load_confic('tests.cron_config', self.connection)
+        self.assertEqual(len(cron3.get_jobs()), 4)
+
+        # Test 4: Test error handling with a non-existent path
+        with self.assertRaises(Exception) as context:
+            load_confic('path/does/not/exist', self.connection)
+
+        # Test 5: Test error handling with a valid file path but invalid content
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w+') as invalid_file:
+            # Write some invalid Python content
+            invalid_file.write("this is not valid python code :")
+            invalid_file.flush()
+
+            with self.assertRaises(Exception) as context:
+                load_confic(invalid_file.name, self.connection)
+
+            self.assertIn("Failed to load cron configuration", str(context.exception))
