@@ -3,7 +3,8 @@ import sys
 from datetime import datetime, timedelta
 
 from rq import Queue
-from rq.cron import Cron, CronJob, load_confic
+from rq import utils
+from rq.cron import Cron, CronJob, load_config
 from rq.job import Job
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
@@ -72,14 +73,15 @@ class TestCronJob(RQTestCase):
         interval = 60  # 60 seconds
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=interval)
 
-        now = datetime.now()
-        next_run = cron_job.get_next_run_time()
+        now = utils.now()
+        cron_job.set_run_time(now)
+        next_run_time = cron_job.get_next_run_time()
 
-        # Check that next_run is about interval seconds from now
+        # Check that next_run_time is about interval seconds from now
         # Allow 2 seconds tolerance for test execution time
         self.assertTrue(
-            now + timedelta(seconds=interval - 5) <= next_run <= now + timedelta(seconds=interval + 5),
-            f"Next run time {next_run} not within expected range"
+            now + timedelta(seconds=interval - 5) <= next_run_time <= now + timedelta(seconds=interval + 5),
+            f"Next run time {next_run_time} not within expected range"
         )
 
     def test_should_run(self):
@@ -88,14 +90,14 @@ class TestCronJob(RQTestCase):
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=None)
         self.assertFalse(cron_job.should_run())
 
-        # Job with future next_run should not run yet
+        # Job with future next_run_time should not run yet
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=3600)  # 1 hour
-        cron_job.next_run = datetime.now() + timedelta(minutes=5)
+        cron_job.next_run_time = utils.now() + timedelta(minutes=5)
         self.assertFalse(cron_job.should_run())
 
-        # Job with past next_run should run
+        # Job with past next_run_time should run
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
-        cron_job.next_run = datetime.now() - timedelta(seconds=5)
+        cron_job.next_run_time = utils.now() - timedelta(seconds=5)
         self.assertTrue(cron_job.should_run())
 
     def test_enqueue(self):
@@ -106,23 +108,48 @@ class TestCronJob(RQTestCase):
             args=("Hello",),
             interval=60,
         )
-
-        # Capture the original next_run
-        original_next_run = cron_job.next_run
-
-        # Enqueue the job
         job = cron_job.enqueue(self.connection)
-
-        # Check job was created correctly
-        self.assertIsInstance(job, Job)
 
         # Fetch job from queue and verify
         jobs = self.queue.get_jobs()
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0].id, job.id)
 
-        # Verify next_run was updated
-        self.assertGreater(cron_job.next_run, original_next_run)
+    def test_set_run_time(self):
+        """Test that set_run_time correctly sets latest run time and updates next run time"""
+        # Test with no interval
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=None)
+        test_time = utils.now()
+        cron_job.set_run_time(test_time)
+
+        # Check latest_run_time is set correctly
+        self.assertEqual(cron_job.latest_run_time, test_time)
+
+        # Since interval is None, next_run_time should not be set
+        self.assertIsNone(cron_job.next_run_time)
+
+        # Test with an interval
+        interval = 60  # 60 seconds
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=interval)
+        cron_job.set_run_time(test_time)
+
+        # Check latest_run_time is set correctly
+        self.assertEqual(cron_job.latest_run_time, test_time)
+
+        # Check that next_run_time is calculated correctly
+        next_run_time = test_time + timedelta(seconds=interval)
+        self.assertEqual(cron_job.next_run_time, next_run_time)
+
+        # Test updating the run time
+        test_time = test_time + timedelta(seconds=30)
+        cron_job.set_run_time(test_time)
+
+        # Check latest_run_time is updated
+        self.assertEqual(cron_job.latest_run_time, test_time)
+
+        # Check that next_run_time is recalculated
+        new_expected_next_run = test_time + timedelta(seconds=interval)
+        self.assertEqual(cron_job.next_run_time, new_expected_next_run)
 
 
 class TestCron(RQTestCase):
@@ -182,10 +209,10 @@ class TestCron(RQTestCase):
         self.assertEqual(cron_job.job_options['result_ttl'], result_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
 
-    def test_load_confic(self):
+    def test_load_config(self):
         """Test loading cron configuration from a file"""
         # Load configuration
-        cron = load_confic('tests/cron_config.py', self.connection)
+        cron = load_config('tests/cron_config.py', self.connection)
 
         # Check all jobs were registered
         jobs = cron.get_jobs()
@@ -219,12 +246,12 @@ class TestCron(RQTestCase):
         # Test 1: Loading with a direct file path (absolute path)
         abs_path = os.path.abspath('tests/cron_config.py')
         _job_data_registry.clear()  # Reset registry
-        cron1 = load_confic(abs_path, self.connection)
+        cron1 = load_config(abs_path, self.connection)
         self.assertEqual(len(cron1.get_jobs()), 4)
 
         # Test 2: Loading with a file path without .py extension
         _job_data_registry.clear()  # Reset registry
-        cron2 = load_confic('tests/cron_config', self.connection)
+        cron2 = load_config('tests/cron_config', self.connection)
         self.assertEqual(len(cron2.get_jobs()), 4)
 
         # Test 3: Loading with a module path
@@ -232,12 +259,12 @@ class TestCron(RQTestCase):
             sys.path.insert(0, '')  # Make sure current directory is in path
 
         _job_data_registry.clear()  # Reset registry
-        cron3 = load_confic('tests.cron_config', self.connection)
+        cron3 = load_config('tests.cron_config', self.connection)
         self.assertEqual(len(cron3.get_jobs()), 4)
 
         # Test 4: Test error handling with a non-existent path
         with self.assertRaises(Exception) as context:
-            load_confic('path/does/not/exist', self.connection)
+            load_config('path/does/not/exist', self.connection)
 
         # Test 5: Test error handling with a valid file path but invalid content
         import tempfile
@@ -247,6 +274,6 @@ class TestCron(RQTestCase):
             invalid_file.flush()
 
             with self.assertRaises(Exception) as context:
-                load_confic(invalid_file.name, self.connection)
+                load_config(invalid_file.name, self.connection)
 
             self.assertIn("Failed to load cron configuration", str(context.exception))

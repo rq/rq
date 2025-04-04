@@ -10,6 +10,7 @@ from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
+from .utils import now
 
 
 class CronJob:
@@ -33,7 +34,8 @@ class CronJob:
         self.kwargs: Dict = kwargs or {}
         self.interval: Optional[int] = interval
         self.queue_name: str = queue_name
-        self.next_run: datetime = datetime.now()  # Start immediately by default
+        self.next_run_time: Optional[datetime] = None
+        self.latest_run_time: Optional[datetime] = None
         self.job_options: Dict[str, Any] = {
             'timeout': timeout,
             'result_ttl': result_ttl,
@@ -53,10 +55,9 @@ class CronJob:
             **self.kwargs,
             **self.job_options
         )
-
-        # Update next run time if interval is set
-        if self.interval is not None:
-            self.next_run = self.get_next_run_time()
+        logging.getLogger(__name__).info(
+            f"Enqueued job {self.func.__name__}to queue {self.queue_name}"
+        )
 
         return job
 
@@ -64,14 +65,22 @@ class CronJob:
         """Calculate the next run time based on the current time and interval"""
         if self.interval is None:
             return datetime.max  # Far future if no interval set
-        return datetime.now() + timedelta(seconds=self.interval)
+        assert self.latest_run_time
+        return self.latest_run_time + timedelta(seconds=self.interval)
 
     def should_run(self) -> bool:
         """Check if this job should run now"""
-        # If no interval set, job only runs when explicitly triggered
-        if self.interval is None:
-            return False
-        return datetime.now() >= self.next_run
+        if self.next_run_time:
+            return now() >= self.next_run_time
+        return False
+
+    def set_run_time(self, time: datetime) -> None:
+        """Set latest run time to a given time and update next run time"""
+        self.latest_run_time = time
+
+        # Update next run time if interval is set
+        if self.interval is not None:
+            self.next_run_time = self.get_next_run_time()
 
 
 class Cron:
@@ -134,6 +143,21 @@ class Cron:
         """Get all registered cron jobs"""
         return self._cron_jobs
 
+    def enqueue_jobs(self) -> None:
+        """Enqueue all jobs that are due to run"""
+        enqueue_time = now()
+        for job in self._cron_jobs:
+            if job.should_run():
+                job.enqueue(self.connection)
+                job.set_run_time(enqueue_time)
+
+    def calculate_sleep_interval(self) -> float:
+        """Calculate how long to sleep until the next job is due.
+
+        Returns the number of seconds to sleep.
+        """
+        return 1
+
 
 # Global registry to store job data before Cron instance is created
 _job_data_registry: List[Dict] = []
@@ -195,7 +219,7 @@ def create_cron(connection: Redis) -> Cron:
     return cron_instance
 
 
-def load_confic(config_path: str, connection: Redis) -> Cron:
+def load_config(config_path: str, connection: Redis) -> Cron:
     """
     Dynamically load a cron config file and register all jobs with a Cron instance.
 
