@@ -1598,9 +1598,15 @@ class Worker(BaseWorker):
                     assert job.started_at
                     assert job.ended_at
                     time_taken = job.ended_at - job.started_at
-                    self.log.info(
-                        'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
-                    )
+
+                    if self.log_job_description:
+                        self.log.info(
+                            'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
+                        )
+                    else:
+                        self.log.info(
+                            'Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name
+                        )
 
                     self.log.debug('Finished handling successful execution of job %s', job.id)
                     break
