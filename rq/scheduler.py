@@ -155,13 +155,18 @@ class RQScheduler:
 
             with self.connection.pipeline() as pipeline:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
-                for job in jobs:
+                job_ids_to_job = dict(zip(job_ids, jobs))
+                for job_id, job in job_ids_to_job.items():
                     if job is not None:
                         try:
                             queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
                         except DeserializationError:
                             self.log.error('Deserialization error while trying to enqueueing job %d', job.id, exc_info=True, stack_info=True)
                         registry.remove(job, pipeline=pipeline)
+                    else:
+                        self.log.error("Scheduled job %s didn't exist while trying to enqueue it. Cleaning it up", job_id, exc_info=True, stack_info=True)
+                        # pass the job_id, not the job, it works, the remove code is able to cope
+                        registry.remove(job_id, pipeline=pipeline)
                 pipeline.execute()
         self._status = self.Status.STARTED
 
