@@ -3,27 +3,13 @@ title: "RQ: Scheduling Jobs"
 layout: docs
 ---
 
-_New in version 1.2.0._
-
-If you need a battle tested version of RQ job scheduling, please take a look at
-https://github.com/rq/rq-scheduler instead.
-
-New in RQ 1.2.0 is `RQScheduler`, a built-in component that allows you to schedule jobs
-for future execution.
-
-This component is developed based on prior experience of developing the external
-`rq-scheduler` library. The goal of taking this component in house is to allow
-RQ to have job scheduling capabilities without:
-1. Running a separate `rqscheduler` CLI command.
-2. Worrying about a separate `Scheduler` class.
-
 Running RQ workers with the scheduler component is simple:
 
 ```console
 $ rq worker --with-scheduler
 ```
 
-## Scheduling Jobs for Execution
+## Scheduling Jobs
 
 There are two main APIs to schedule jobs for execution, `enqueue_at()` and `enqueue_in()`.
 
@@ -69,9 +55,7 @@ from redis import Redis
 from rq import Queue
 from rq.registry import ScheduledJobRegistry
 
-redis = Redis()
-
-queue = Queue(name='default', connection=redis)
+queue = Queue(name='default', connection=Redis())
 job = queue.enqueue_in(timedelta(seconds=10), say_nothing)
 print(job in queue)  # Outputs False as job is not enqueued
 
@@ -79,9 +63,76 @@ registry = ScheduledJobRegistry(queue=queue)
 print(job in registry)  # Outputs True as job is placed in ScheduledJobRegistry
 ```
 
+## Repeating Jobs
+
+_New in version 2.2.0._
+
+RQ allows you to easily repeat job executions using the `Repeat` class. This functionality lets you specify how many times a job should be repeated and at what intervals.
+
+### Using the Repeat Class
+
+The `Repeat` class takes two main arguments:
+- `times`: the number of times to repeat the job (must be at least 1)
+- `interval`: the time interval between job repetitions (in seconds). This can be either a single value or a list of intervals. Defaults to 0.
+
+```python
+from redis import Redis
+from rq import Queue, Repeat
+
+queue = Queue(connection=Redis())
+
+# Repeat a job 3 times with the same interval of 30 seconds
+job = queue.enqueue(my_function, repeat=Repeat(times=3, interval=30))
+
+# Or use different intervals between repetitions
+job = queue.enqueue(my_function, repeat=Repeat(times=3, interval=[5, 10, 15]))
+```
+
+### How Repeat Works
+
+When a job with a `Repeat` configuration completes successfully, it will be scheduled to run again after the specified interval. The job maintains a counter of remaining repeats, which decreases after each repetition.
+
+`Repeat` only affects jobs that complete successfully. Failed jobs will not be repeated. To handle failed jobs, use RQ's [retry functionality](/docs/scheduling/) instead.
+
+### Repeat Interval
+
+If you specify an interval of zero, the job will be immediately re-enqueued after completion:
+
+```python
+# This job will repeat 3 times with no delay between executions
+job = queue.enqueue(my_function, repeat=Repeat(times=3, interval=0))
+```
+
+If you provide a list of intervals that is shorter than the number of repetition, the last interval in the list will be used for any remaining repetitions.
+
+```python
+# This job will repeat 5 times with these intervals:
+# 1st repetition: after 5 seconds
+# 2nd repetition: after 10 seconds
+# 3rd repetition: after 15 seconds
+# 4th repetition: after 15 seconds
+# 5th repetition: after 15 seconds
+job = queue.enqueue(my_function, repeat=Repeat(times=5, interval=[5, 10, 15]))
+```
+
+### Checking Job Repeat Status
+
+You can check whether a job will repeat by examining these attributes:
+
+```python
+job = queue.enqueue(my_function, repeat=Repeat(times=3, interval=30))
+
+# Check how many repeats are remaining
+# job.repeats_left will decrement with each repetition
+print(job.repeats_left)  # 3
+
+# Check the intervals
+print(job.repeat_intervals)  # [30]
+```
+
 ## Running the Scheduler
 
-If you use RQ's scheduling features, you need to run RQ workers with the
+If you use RQ's scheduling and repeating features, you need to run RQ workers with the
 scheduler component enabled.
 
 ```console
@@ -113,7 +164,7 @@ working. This way, if a worker with active scheduler dies, the scheduling work w
 up by other workers with the scheduling component enabled.
 
 
-## Safe importing of the worker module
+## Safe Importing of the Worker Module
 
 When running the worker programmatically with the scheduler, you must keep in mind that the
 import must be protected with `if __name__ == '__main__'`. The scheduler runs on it's own process
@@ -135,4 +186,3 @@ worker.work()
 ```
 
 More information on the Python official docs [here](https://docs.python.org/3.7/library/multiprocessing.html#the-spawn-and-forkserver-start-methods).
-

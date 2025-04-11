@@ -13,6 +13,7 @@ from redis import WatchError
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
+from .types import FailureCallbackType, SuccessCallbackType
 
 if TYPE_CHECKING:
     from _typeshed import ExcInfo
@@ -203,6 +204,9 @@ class Job:
         self.allow_dependency_failures: Optional[bool] = None
         self.enqueue_at_front: Optional[bool] = None
         self.group_id: Optional[str] = None
+
+        self.repeats_left: Optional[int] = None
+        self.repeat_intervals: Optional[List[int]] = None
 
         from .results import Result
 
@@ -501,14 +505,14 @@ class Job:
         return import_attribute(self.func_name)
 
     @property
-    def success_callback(self):
+    def success_callback(self) -> Optional[SuccessCallbackType]:
         if self._success_callback is UNEVALUATED:
             if self._success_callback_name:
                 self._success_callback = import_attribute(self._success_callback_name)
             else:
-                self._success_callback = None
+                return None
 
-        return self._success_callback
+        return self._success_callback  # type: ignore[return-value]
 
     @property
     def success_callback_timeout(self) -> int:
@@ -518,14 +522,14 @@ class Job:
         return self._success_callback_timeout
 
     @property
-    def failure_callback(self):
+    def failure_callback(self) -> Optional[FailureCallbackType]:
         if self._failure_callback is UNEVALUATED:
             if self._failure_callback_name:
                 self._failure_callback = import_attribute(self._failure_callback_name)
             else:
-                self._failure_callback = None
+                return None
 
-        return self._failure_callback
+        return self._failure_callback  # type: ignore[return-value]
 
     @property
     def failure_callback_timeout(self) -> int:
@@ -1007,6 +1011,10 @@ class Job:
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
 
+        self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
+        if obj.get('repeat_intervals'):
+            self.repeat_intervals = json.loads(obj['repeat_intervals'].decode())
+
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
             try:
@@ -1066,6 +1074,11 @@ class Job:
             obj['description'] = self.description
         if self.enqueued_at is not None:
             obj['enqueued_at'] = utcformat(self.enqueued_at)
+
+        if self.repeats_left is not None:
+            obj['repeats_left'] = self.repeats_left
+        if self.repeat_intervals is not None:
+            obj['repeat_intervals'] = json.dumps(self.repeat_intervals)
 
         if self._result is not None and include_result:
             try:

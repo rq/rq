@@ -1,6 +1,9 @@
-from typing import TYPE_CHECKING, Any, Callable, List, TypeVar, Union
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Type, TypeVar, Union
 
 if TYPE_CHECKING:
+    from redis import Redis
+
     from .job import Dependency, Job
 
 
@@ -15,3 +18,8 @@ JobDependencyType = TypeVar('JobDependencyType', 'Dependency', 'Job', str, List[
 """Custom type definition for a job dependencies.
 A simple helper definition for the `depends_on` parameter when creating a job.
 """
+
+SuccessCallbackType = Callable[['Job', 'Redis', Any], Any]
+FailureCallbackType = Callable[
+    ['Job', 'Redis', Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]], Any
+]

@@ -1,3 +1,11 @@
+### RQ 2.3.1 (2025-04-03)
+* Fixes an issue running RQ on Windows. Thanks @selwin!
+
+### RQ 2.3.0 (2025-04-03)
+* Added the feature to repeat jobs. Thanks @selwin!
+* Officially support Valkey. Thanks @selwin!
+* Fixes an issue that prevents jobs from being enqueued across multiple with using Redis pipeline. Thanks @Nativu5!
+
 ### RQ 2.2.0 (2025-03-22)
 * Added `SpawnWorker` that uses `multiprocessing.spawn` to spawn worker processes. This makes RQ usable in operating systems without `os.fork()` like Windows. Thanks @selwin!
 * RQ now always use timezone aware timestamps. Thanks @deathtracktor!

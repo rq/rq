@@ -3,56 +3,56 @@ exclude: [design]
 permalink: pretty
 
 navigation:
-- text: Home
-  url: /
-- text: Docs
-  url: /docs/
-  subs:
-  - text: Queues
+  - text: Home
+    url: /
+  - text: Docs
     url: /docs/
-  - text: Workers
-    url: /docs/workers/
-  - text: Results
-    url: /docs/results/
-  - text: Jobs
-    url: /docs/jobs/
-  - text: Exceptions & Retries
-    url: /docs/exceptions/
-  - text: Scheduling Jobs
-    url: /docs/scheduling/
-  - text: Job Registries
-    url: /docs/job_registries/
-  - text: Monitoring
-    url: /docs/monitoring/
-  - text: Connections
-    url: /docs/connections/  
-  - text: Testing
-    url: /docs/testing/
-- text: Patterns
-  url: /patterns/
-  subs:
-  - text: Heroku
+    subs:
+      - text: Queues
+        url: /docs/
+      - text: Workers
+        url: /docs/workers/
+      - text: Results
+        url: /docs/results/
+      - text: Jobs
+        url: /docs/jobs/
+      - text: Exceptions & Retries
+        url: /docs/exceptions/
+      - text: Scheduling & Repeating Jobs
+        url: /docs/scheduling/
+      - text: Job Registries
+        url: /docs/job_registries/
+      - text: Monitoring
+        url: /docs/monitoring/
+      - text: Connections
+        url: /docs/connections/
+      - text: Testing
+        url: /docs/testing/
+  - text: Patterns
     url: /patterns/
-  - text: Django
-    url: /patterns/django/
-  - text: Sentry
-    url: /patterns/sentry/
-  - text: Supervisor
-    url: /patterns/supervisor/
-  - text: Systemd
-    url: /patterns/systemd/
-- text: Contributing
-  url: /contrib/
-  subs:
-  - text: Internals
+    subs:
+      - text: Heroku
+        url: /patterns/
+      - text: Django
+        url: /patterns/django/
+      - text: Sentry
+        url: /patterns/sentry/
+      - text: Supervisor
+        url: /patterns/supervisor/
+      - text: Systemd
+        url: /patterns/systemd/
+  - text: Contributing
     url: /contrib/
-  - text: GitHub
-    url: /contrib/github/
-  - text: Documentation
-    url: /contrib/docs/
-  - text: Testing
-    url: /contrib/testing/
-  - text: Vagrant
-    url: /contrib/vagrant/
-- text: Chat
-  url: /chat/
+    subs:
+      - text: Internals
+        url: /contrib/
+      - text: GitHub
+        url: /contrib/github/
+      - text: Documentation
+        url: /contrib/docs/
+      - text: Testing
+        url: /contrib/testing/
+      - text: Vagrant
+        url: /contrib/vagrant/
+  - text: Chat
+    url: /chat/

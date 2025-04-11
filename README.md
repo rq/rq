@@ -1,9 +1,10 @@
 RQ (_Redis Queue_) is a simple Python library for queueing jobs and processing
-them in the background with workers.  It is backed by Redis and it is designed
-to have a low barrier to entry.  It should be integrated in your web stack
-easily.
+them in the background with workers. It is backed by Redis or Valkey and is designed
+to have a low barrier to entry while scaling incredibly well for large applications.
+It can be integrated into your web stack easily, making it suitable for projects
+of any size—from simple applications to high-volume enterprise systems.
 
-RQ requires Redis >= 3.0.0.
+RQ requires Redis >= 4 or Valkey >= 7.2.
 
 [![Build status](https://github.com/rq/rq/workflows/Test/badge.svg)](https://github.com/rq/rq/actions?query=workflow%3A%22Test%22)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
@@ -55,7 +56,9 @@ from my_module import count_words_at_url
 job = queue.enqueue(count_words_at_url, 'http://nvie.com')
 ```
 
-Scheduling jobs are also similarly easy:
+## Scheduling Jobs
+
+Scheduling jobs is also easy:
 
 ```python
 # Schedule job to run at 9:15, October 10th
@@ -64,6 +67,22 @@ job = queue.enqueue_at(datetime(2019, 10, 10, 9, 15), say_hello)
 # Schedule job to run in 10 seconds
 job = queue.enqueue_in(timedelta(seconds=10), say_hello)
 ```
+
+## Repeating Jobs
+
+To execute a `Job` multiple times, use the `Repeat` class:
+
+```python
+from rq import Queue, Repeat
+
+# Repeat job 3 times after successful execution, with 30 second intervals
+queue.enqueue(my_function, repeat=Repeat(times=3, interval=30))
+
+# Repeat job 3 times with different intervals between runs
+queue.enqueue(my_function, repeat=Repeat(times=3, interval=[5, 10, 15]))
+```
+
+## Retrying Failed Jobs
 
 Retrying failed jobs is also supported:
 
@@ -80,7 +99,7 @@ queue.enqueue(say_hello, retry=Retry(max=3, interval=[10, 30, 60]))
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
 
-### The worker
+### The Worker
 
 To start executing enqueued function calls in the background, start a worker
 from your project's directory:
@@ -93,7 +112,13 @@ Job result = 818
 *** Listening for work on default
 ```
 
-That's about it.
+To run multiple workers in production, use process managers like `systemd`. RQ also ships with a beta version of `worker-pool` that lets you run multiple worker processes with a single command.
+
+```console
+rq worker-pool -n 4
+```
+
+More options are documented on [python-rq.org](https://python-rq.org/docs/workers/).
 
 
 ## Installation
@@ -134,6 +159,8 @@ If you use RQ, Check out these below repos which might be useful in your rq base
 This project has been inspired by the good parts of [Celery][1], [Resque][2]
 and [this snippet][3], and has been created as a lightweight alternative to the
 heaviness of Celery or other AMQP-based queueing implementations.
+
+RQ is maintained by [Stamps](https://stamps.id), an Indonesian based company that provides enterprise grade CRM and order management systems.
 
 
 [d]: http://python-rq.org/
