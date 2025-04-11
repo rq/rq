@@ -1020,7 +1020,7 @@ class BaseWorker:
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(
-            sleep_time=None, daemon=True, exception_handler=self._pubsub_exception_handler
+            sleep_time=60, daemon=True, exception_handler=self._pubsub_exception_handler
         )
 
     def get_heartbeat_ttl(self, job: 'Job') -> int:
