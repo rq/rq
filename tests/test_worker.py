@@ -1194,8 +1194,8 @@ class TestWorker(RQTestCase):
         self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
 
     @mock.patch('rq.worker.logger.info')
-    def test_log_job_description_true(self, mock_logger_info):
-        """Check that log_job_description True causes job lifespan to be logged."""
+    def test_log_job_description_on_dequeue_true(self, mock_logger_info):
+        """Check that log_job_description True causes job lifespan to be logged on dequeue."""
         q = Queue(connection=self.connection)
         w = Worker([q], connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
@@ -1203,13 +1203,31 @@ class TestWorker(RQTestCase):
         self.assertIn('Frank', mock_logger_info.call_args[0][2])
 
     @mock.patch('rq.worker.logger.info')
-    def test_log_job_description_false(self, mock_logger_info):
-        """Check that log_job_description False causes job lifespan to not be logged."""
+    def test_log_job_description_on_dequeue_false(self, mock_logger_info):
+        """Check that log_job_description False causes job lifespan to not be logged on dequeue."""
         q = Queue(connection=self.connection)
         w = Worker([q], log_job_description=False, connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
         self.assertNotIn('Frank', mock_logger_info.call_args[0][2])
+
+    @mock.patch('rq.worker.logger.info')
+    def test_log_job_description_on_success_true(self, mock_logger_info):
+        """Check that log_job_description True causes job lifespan to be logged on success."""
+        q = Queue(connection=self.connection)
+        w = Worker([q], connection=self.connection)
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w.perform_job(job, q)
+        self.assertIn('Frank', mock_logger_info.call_args_list[0][0][1])
+
+    @mock.patch('rq.worker.logger.info')
+    def test_log_job_description_on_success_false(self, mock_logger_info):
+        """Check that log_job_description False causes job lifespan to not be logged on success."""
+        q = Queue(connection=self.connection)
+        w = Worker([q], log_job_description=False, connection=self.connection)
+        job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
+        w.perform_job(job, q)
+        self.assertNotIn('Frank', mock_logger_info.call_args_list[0][0][1])
 
     def test_worker_configures_socket_timeout(self):
         """Ensures that the worker correctly updates Redis client connection to have a socket_timeout"""
