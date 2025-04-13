@@ -5,7 +5,7 @@ layout: contrib
 
 ### Testing RQ locally
 
-To run tests locally you can use `tox`, which will run the tests with all supported Python versions (3.7 - 3.11)
+To run tests locally you can use `tox`, which will run the tests with all supported Python versions (3.8 - 3.12)
 
 ```
 tox
@@ -23,7 +23,6 @@ pytest .
 
 It should automatically pickup the `tests` directory and run the test suite.
 Bear in mind that some tests may be be skipped in your local environment - make sure to look at which tests are being skipped.
-
 
 ### Skipped Tests
 
