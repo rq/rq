@@ -23,8 +23,9 @@ from .utils import parse_names
 from .worker import BaseWorker, Worker
 
 if TYPE_CHECKING:
-    from .queue import Queue
     from rq.serializers import Serializer
+
+    from .queue import Queue
 
 
 class WorkerData(NamedTuple):
