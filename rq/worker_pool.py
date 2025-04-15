@@ -19,12 +19,12 @@ from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
-from .queue import Queue
 from .utils import parse_names
 from .worker import BaseWorker, Worker
 
 if TYPE_CHECKING:
     from rq.serializers import Serializer
+    from .queue import Queue
 
 
 class WorkerData(NamedTuple):
@@ -72,7 +72,7 @@ class WorkerPool:
     @property
     def queues(self) -> List[Queue]:
         """Returns a list of Queue objects"""
-        return [Queue(name, connection=self.connection) for name in self._queue_names]
+        return [self.worker_class.queue_class(name, connection=self.connection) for name in self._queue_names]
 
     @property
     def number_of_active_workers(self) -> int:
@@ -258,7 +258,7 @@ def run_worker(
     connection = connection_class(
         connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
     )
-    queues = [Queue(name, connection=connection) for name in queue_names]
+    queues = [worker_class.queue_class(name, connection=connection) for name in queue_names]
     worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
     worker.log.info('Starting worker started with PID %s', os.getpid())
     time.sleep(_sleep)
