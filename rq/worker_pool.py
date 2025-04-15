@@ -23,8 +23,8 @@ from .utils import parse_names
 from .worker import BaseWorker, Worker
 
 if TYPE_CHECKING:
-    from rq.serializers import Serializer
     from .queue import Queue
+    from rq.serializers import Serializer
 
 
 class WorkerData(NamedTuple):
@@ -41,7 +41,7 @@ class WorkerPool:
 
     def __init__(
         self,
-        queues: Iterable[Union[str, Queue]],
+        queues: Iterable[Union[str, 'Queue']],
         connection: Redis,
         num_workers: int = 1,
         worker_class: Type[BaseWorker] = Worker,
@@ -70,7 +70,7 @@ class WorkerPool:
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
 
     @property
-    def queues(self) -> List[Queue]:
+    def queues(self) -> List['Queue']:
         """Returns a list of Queue objects"""
         return [self.worker_class.queue_class(name, connection=self.connection) for name in self._queue_names]
 
