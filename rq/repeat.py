@@ -19,6 +19,7 @@ class Repeat:
             Can be a single integer value or a list of intervals. If a list is provided and it's
             shorter than (times-1), the last interval will be reused for remaining repeats.
     """
+
     times: int
     intervals: List[int]
 
@@ -86,7 +87,7 @@ class Repeat:
         """
 
         if job.repeats_left is None or job.repeats_left <= 0:
-            raise ValueError(f"Cannot schedule job {job.id}: no repeats left")
+            raise ValueError(f'Cannot schedule job {job.id}: no repeats left')
 
         pipe = pipeline if pipeline is not None else job.connection.pipeline()
 

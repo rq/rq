@@ -34,7 +34,7 @@ class TestRepeat(RQTestCase):
         self.assertRaises(ValueError, Repeat, times=3, interval=[5, -10])
 
         # interval must be int or iterable
-        self.assertRaises(TypeError, Repeat, times=3, interval="not_a_number")
+        self.assertRaises(TypeError, Repeat, times=3, interval='not_a_number')
 
     def test_get_interval(self):
         """get_interval() returns the right repeat interval"""
@@ -110,11 +110,7 @@ class TestRepeatEnqueue(RQTestCase):
         repeat = Repeat(times=2, interval=[60, 120])
 
         # Use enqueue_at method
-        job = self.queue.enqueue_at(
-            now(),
-            say_hello,
-            repeat=repeat
-        )
+        job = self.queue.enqueue_at(now(), say_hello, repeat=repeat)
 
         # Verify the job has the repeat attributes set correctly
         self.assertEqual(job.repeats_left, 2)
@@ -125,15 +121,9 @@ class TestRepeatEnqueue(RQTestCase):
         # Create different Repeat objects
 
         # Prepare job data with repeat parameters
-        job_data1 = self.queue.prepare_data(
-            func=say_hello,
-            repeat=Repeat(times=3, interval=10)
-        )
+        job_data1 = self.queue.prepare_data(func=say_hello, repeat=Repeat(times=3, interval=10))
 
-        job_data2 = self.queue.prepare_data(
-            func=say_hello,
-            repeat=Repeat(times=2, interval=[30, 60])
-        )
+        job_data2 = self.queue.prepare_data(func=say_hello, repeat=Repeat(times=2, interval=[30, 60]))
 
         # Enqueue multiple jobs
         job_1, job_2 = self.queue.enqueue_many([job_data1, job_data2])
@@ -196,8 +186,10 @@ class TestRepeatEnqueue(RQTestCase):
         expected_min = before_schedule + timedelta(seconds=25)  # Allow 1 sec buffer
         expected_max = after_schedule + timedelta(seconds=35)  # Allow 1 sec buffer
 
-        self.assertTrue(expected_min <= scheduled_time <= expected_max,
-                    f"Job not scheduled in expected window: {expected_min} <= {scheduled_time} <= {expected_max}")
+        self.assertTrue(
+            expected_min <= scheduled_time <= expected_max,
+            f'Job not scheduled in expected window: {expected_min} <= {scheduled_time} <= {expected_max}',
+        )
 
         # Check repeats_left was decremented
         job.refresh()
@@ -205,29 +197,28 @@ class TestRepeatEnqueue(RQTestCase):
 
 
 class TestWorkerRepeat(RQTestCase):
+    def test_successful_job_repeat(self):
+        """Test that successful jobs are repeated according to Repeat settings"""
+        queue = Queue(connection=self.connection)
 
-        def test_successful_job_repeat(self):
-            """Test that successful jobs are repeated according to Repeat settings"""
-            queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello, repeat=Repeat(times=1))
 
-            job = queue.enqueue(say_hello, repeat=Repeat(times=1))
+        worker = Worker([queue], connection=self.connection)
+        worker.work(burst=True, max_jobs=1)
 
-            worker = Worker([queue], connection=self.connection)
-            worker.work(burst=True, max_jobs=1)
+        # The original job should have been processed and repeated
+        self.assertIn(job.id, queue.get_job_ids())
 
-            # The original job should have been processed and repeated
-            self.assertIn(job.id, queue.get_job_ids())
+        worker = Worker([queue], connection=self.connection)
+        worker.work(burst=True, max_jobs=1)
 
-            worker = Worker([queue], connection=self.connection)
-            worker.work(burst=True, max_jobs=1)
+        # No repeats left
+        self.assertNotIn(job.id, queue.get_job_ids())
 
-            # No repeats left
-            self.assertNotIn(job.id, queue.get_job_ids())
+        # Failed jobs don't trigger repeats
+        job = queue.enqueue(div_by_zero, repeat=Repeat(times=1))
 
-            # Failed jobs don't trigger repeats
-            job = queue.enqueue(div_by_zero, repeat=Repeat(times=1))
-
-            self.assertEqual(job.repeats_left, 1)
-            worker.work(burst=True)
-            # Job shouldn't be repeated
-            self.assertNotIn(job.id, queue.get_job_ids())
+        self.assertEqual(job.repeats_left, 1)
+        worker.work(burst=True)
+        # Job shouldn't be repeated
+        self.assertNotIn(job.id, queue.get_job_ids())

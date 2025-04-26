@@ -67,15 +67,13 @@ class TestUtils(RQTestCase):
     def test_utcparse(self):
         """Ensure function utcparse works correctly"""
         utc_formatted_time = '2017-08-31T10:14:02.123456Z'
-        expected_time = datetime.datetime(2017, 8, 31, 10, 14, 2, 123456,
-                                          tzinfo=datetime.timezone.utc)
+        expected_time = datetime.datetime(2017, 8, 31, 10, 14, 2, 123456, tzinfo=datetime.timezone.utc)
         self.assertEqual(expected_time, utcparse(utc_formatted_time))
 
     def test_utcparse_legacy(self):
         """Ensure function utcparse works correctly"""
         utc_formatted_time = '2017-08-31T10:14:02Z'
-        expected_time = datetime.datetime(2017, 8, 31, 10, 14, 2,
-                                          tzinfo=datetime.timezone.utc)
+        expected_time = datetime.datetime(2017, 8, 31, 10, 14, 2, tzinfo=datetime.timezone.utc)
         self.assertEqual(expected_time, utcparse(utc_formatted_time))
 
     def test_backend_class(self):
