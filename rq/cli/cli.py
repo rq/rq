@@ -3,7 +3,6 @@ RQ command line tool
 """
 
 import sys
-from typing import TYPE_CHECKING
 
 import click
 from redis.exceptions import ConnectionError
