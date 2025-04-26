@@ -1585,6 +1585,7 @@ class Worker(BaseWorker):
 
                     if job.repeats_left is not None and job.repeats_left > 0:
                         from .repeat import Repeat
+
                         self.log.info('Job %s scheduled to repeat (%s left)', job.id, job.repeats_left)
                         Repeat.schedule(job, queue, pipeline=pipeline)
                     else:
