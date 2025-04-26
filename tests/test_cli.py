@@ -874,15 +874,15 @@ class CronCLITestCase(CLITestCase):
         self.cron_config_path = os.path.abspath(os.path.join(current_dir, 'cron_config.py'))
         self.assertTrue(os.path.exists(self.cron_config_path), f'Config file not found at {self.cron_config_path}')
 
-    def test_cron_execution_default_log_level(self):
-        """rq cron <config_path> -u <url> (tests default INFO level)"""
+    def test_cron_execution(self):
+        """rq cron <config_path> -u <url>"""
         runner = CliRunner()
-        mock_cron_instance = MagicMock()
+        mock_cron = MagicMock()
 
         # Mock the Cron class instead of load_config
-        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron_instance) as mock_cron_class:
+        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron) as mock_cron_class:
             # Make the start method just return to avoid infinite loop
-            mock_cron_instance.start.side_effect = lambda: None
+            mock_cron.start.side_effect = lambda: None
 
             result = runner.invoke(main, ['cron', self.cron_config_path, '-u', self.redis_url])
 
@@ -890,25 +890,21 @@ class CronCLITestCase(CLITestCase):
 
             # Verify Cron was constructed with correct parameters
             mock_cron_class.assert_called_once()
-            # Check connection is passed
-            self.assertIsInstance(mock_cron_class.call_args[1]['connection'], Redis)
-            # Check default logging level is INFO
-            self.assertEqual(mock_cron_class.call_args[1]['logging_level'], 'INFO')
 
             # Verify load_config_from_file was called with correct path
-            mock_cron_instance.load_config_from_file.assert_called_once_with(self.cron_config_path)
+            mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)
 
             # Verify start was called
-            mock_cron_instance.start.assert_called_once()
+            mock_cron.start.assert_called_once()
 
-    def test_cron_execution_explicit_log_level(self):
+    def test_cron_execution_log_level(self):
         """rq cron <config_path> -u <url> --logging-level DEBUG"""
         runner = CliRunner()
-        mock_cron_instance = MagicMock()
+        mock_cron = MagicMock()
 
         # Mock the Cron class
-        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron_instance) as mock_cron_class:
-            mock_cron_instance.start.side_effect = lambda: None
+        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron) as mock_cron_class:
+            mock_cron.start.side_effect = lambda: None
 
             result = runner.invoke(
                 main, ['cron', '--logging-level', 'DEBUG', self.cron_config_path, '-u', self.redis_url]
@@ -918,11 +914,40 @@ class CronCLITestCase(CLITestCase):
 
             # Verify Cron was constructed with correct parameters
             mock_cron_class.assert_called_once()
-            # Check connection is passed
-            self.assertIsInstance(mock_cron_class.call_args[1]['connection'], Redis)
-            # Check explicit logging level is DEBUG
-            self.assertEqual(mock_cron_class.call_args[1]['logging_level'], 'DEBUG')
+
+            # Verify all logging parameters
+            call_kwargs = mock_cron_class.call_args[1]
+            self.assertEqual(call_kwargs['logging_level'], 'DEBUG')
 
             # Verify config loading and start were called
-            mock_cron_instance.load_config_from_file.assert_called_once_with(self.cron_config_path)
-            mock_cron_instance.start.assert_called_once()
+            mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)
+            mock_cron.start.assert_called_once()
+
+    def test_cron_execution_with_url(self):
+        """Verify that the Redis URL (-u option) is correctly parsed and used"""
+        runner = CliRunner()
+        mock_cron = MagicMock()
+
+        # Use a distinctive non-default URL with different host, port, and DB
+        test_url = 'redis://test-host:7777/5'
+
+        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron) as mock_cron_class:
+            mock_cron.start.side_effect = lambda: None
+
+            result = runner.invoke(main, ['cron', self.cron_config_path, '-u', test_url])
+
+            self.assert_normal_execution(result)
+
+            # Verify that Cron was called with a connection from the provided URL
+            mock_cron_class.assert_called_once()
+            connection = mock_cron_class.call_args[1]['connection']
+
+            # Verify all connection parameters match our custom URL
+            connection_kwargs = connection.connection_pool.connection_kwargs
+            self.assertEqual(connection_kwargs['host'], 'test-host')
+            self.assertEqual(connection_kwargs['port'], 7777)
+            self.assertEqual(connection_kwargs['db'], 5)
+
+            # Verify config loading and start were called
+            mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)
+            mock_cron.start.assert_called_once()

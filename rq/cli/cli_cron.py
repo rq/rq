@@ -11,10 +11,6 @@ from rq.cli.helpers import (
     # setup_loghandlers_from_args is not used when only --logging-level is present
 )
 from rq.cron import Cron
-from rq.defaults import (
-    DEFAULT_LOGGING_DATE_FORMAT,
-    DEFAULT_LOGGING_FORMAT,
-)
 
 
 @main.command()
@@ -26,23 +22,11 @@ from rq.defaults import (
     show_default=True,  # Explicitly show the default in help text
     help='Set logging level.',
 )
-@click.option(
-    '--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, show_default=True, help='Set the format for logs.'
-)
-@click.option(
-    '--date-format',
-    type=str,
-    default=DEFAULT_LOGGING_DATE_FORMAT,
-    show_default=True,
-    help='Set the date format for logs.',
-)
 @click.argument('config_path')
 @pass_cli_config
 def cron(
     cli_config,
     logging_level,
-    log_format,
-    date_format,
     # verbose and quiet parameters are removed
     config_path,
     **options,

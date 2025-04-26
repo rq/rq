@@ -187,7 +187,7 @@ class Cron:
             self.enqueue_jobs()
             sleep_time = self.calculate_sleep_interval()
             if sleep_time > 0:
-                self.log.info(f'Sleeping for {sleep_time} seconds')
+                self.log.info(f'Sleeping for {sleep_time} seconds...')
                 time.sleep(sleep_time)
 
     def load_config_from_file(self, config_path: str):
