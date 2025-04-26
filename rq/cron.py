@@ -51,15 +51,8 @@ class CronJob:
     def enqueue(self, connection: Redis) -> Job:
         """Enqueue this job to its queue and update the next run time"""
         queue = Queue(self.queue_name, connection=connection)
-        job = queue.enqueue(
-            self.func,
-            *self.args,
-            **self.kwargs,
-            **self.job_options
-        )
-        logging.getLogger(__name__).info(
-            f"Enqueued job {self.func.__name__} to queue {self.queue_name}"
-        )
+        job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options)
+        logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
 
         return job
 
@@ -137,7 +130,7 @@ class Cron:
 
         self._cron_jobs.append(cron_job)
 
-        job_key = f"{func.__module__}.{func.__name__}"
+        job_key = f'{func.__module__}.{func.__name__}'
         if interval is not None:
             self.log.info(f"Registered cron job '{job_key}' to run on {queue_name} every {interval} seconds")
         else:
@@ -189,13 +182,97 @@ class Cron:
 
     def start(self):
         """Start the cron scheduler"""
-        self.log.info("Starting cron scheduler...")
+        self.log.info('Starting cron scheduler...')
         while True:
             self.enqueue_jobs()
             sleep_time = self.calculate_sleep_interval()
             if sleep_time > 0:
-                self.log.info(f"Sleeping for {sleep_time} seconds")
+                self.log.info(f'Sleeping for {sleep_time} seconds')
                 time.sleep(sleep_time)
+
+    def load_config_from_file(self, config_path: str):
+        """
+        Dynamically load a cron config file and register all jobs with this Cron instance.
+
+        Supports both dotted import paths (e.g. 'app.cron_config') and file paths
+        (e.g. '/path/to/app/cron_config.py', 'app/cron_config.py'). The .py
+        extension is recommended for file paths for clarity.
+
+        Jobs defined in the config file must use the global `rq.cron.register` function.
+
+        Args:
+            config_path: Path to the cron_config.py file or module path.
+        """
+        self.log.info(f'Loading cron configuration from {config_path}')
+
+        global _job_data_registry
+        _job_data_registry = []  # Clear global registry before loading module
+
+        is_file_path = os.path.sep in config_path or config_path.endswith('.py')
+        module_loaded = False
+        error = None
+
+        if is_file_path:
+            # --- Handle as a file path ---
+            abs_path = os.path.abspath(config_path)
+            self.log.debug(f'Attempting to load as file path: {abs_path}')
+            if not os.path.exists(abs_path):
+                error = FileNotFoundError(f"Configuration file not found at '{abs_path}'")
+            elif not os.path.isfile(abs_path):
+                error = IsADirectoryError(f"Configuration path points to a directory, not a file: '{abs_path}'")
+            else:
+                module_name = f'rq_cron_config_{os.path.basename(config_path).replace(".", "_")}'
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, abs_path)
+                    if spec is None or spec.loader is None:
+                        raise ImportError(f'Could not create module spec for {abs_path}')
+
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = module
+                    spec.loader.exec_module(module)
+                    module_loaded = True
+                    self.log.debug(f'Successfully loaded config from file: {abs_path}')
+                except Exception as e:
+                    if module_name in sys.modules:
+                        del sys.modules[module_name]
+                    error = ImportError(f"Failed to load configuration file '{abs_path}': {e}")
+
+        else:
+            # --- Handle as a module path ---
+            self.log.debug(f'Attempting to load as module path: {config_path}')
+            try:
+                importlib.import_module(config_path)
+                module_loaded = True
+                self.log.debug(f'Successfully loaded config from module: {config_path}')
+            except ImportError as e:
+                error = ImportError(f"Failed to import configuration module '{config_path}': {e}")
+            except Exception as e:
+                error = Exception(f"An error occurred while importing configuration module '{config_path}': {e}")
+
+        if not module_loaded or error:
+            final_error = error or RuntimeError('Unknown error occurred during configuration loading.')
+            self.log.error(f"Failed to load cron configuration from '{config_path}': {final_error}")
+            raise final_error
+
+        # Now that the module has been loaded (which populated _job_data_registry
+        # via the global `register` function), register the jobs with *this* instance.
+        jobs_registered_count = 0
+        # Iterate over a copy, as register might theoretically modify it elsewhere (unlikely)
+        registry_copy = list(_job_data_registry)
+        _job_data_registry = []  # Clear the global registry after copying
+
+        for data in registry_copy:
+            self.log.debug(f'Registering job from config: {data["func"].__name__}')
+            try:
+                self.register(**data)  # Calls the instance's register method
+                jobs_registered_count += 1
+            except Exception as e:
+                self.log.error(f'Failed to register job {data["func"].__name__} from config: {e}', exc_info=True)
+                # Decide if loading should fail entirely or just skip the job
+                # For now, log the error and continue
+
+        self.log.info(f"Successfully registered {jobs_registered_count} cron jobs from '{config_path}'")
+        # Method modifies the instance, no need to return self unless chaining is desired
 
 
 # Global registry to store job data before Cron instance is created
@@ -215,17 +292,22 @@ def register(
     meta: Optional[dict] = None,
 ) -> Dict:
     """
-    Register a function to be run as a cron job.
+    Register a function to be run as a cron job by adding its definition
+    to a temporary global registry.
 
-    Example:
+    This function should typically be called from within a cron configuration file
+    that will be loaded using `Cron.load_config_from_file()`.
+
+    Example (in your cron_config.py):
         from rq import cron
+        from my_app.tasks import my_func
 
-        cron_job = cron.register(my_func, interval=60)  # Run every 60 seconds
+        cron.register(my_func, 'default', interval=60)  # Run every 60 seconds
 
     Returns:
-        CronJob: The created CronJob object
+        dict: The job data dictionary added to the registry.
     """
-    # Store the job data in the registry
+    # Store the job data in the global registry
     job_data = {
         'func': func,
         'queue_name': queue_name,
@@ -238,11 +320,14 @@ def register(
         'failure_ttl': failure_ttl,
         'meta': meta,
     }
-
-    # Add to the registry
+    # Add to the global registry
     _job_data_registry.append(job_data)
 
-    # Create and return a CronJob instance for immediate use if needed
+    # Log the registration attempt (optional)
+    logger = logging.getLogger(__name__)
+    job_key = f'{func.__module__}.{func.__name__}'
+    logger.debug(f"Cron config: Adding job '{job_key}' to registry for queue {queue_name}")
+
     return job_data
 
 
@@ -252,95 +337,7 @@ def create_cron(connection: Redis) -> Cron:
 
     # Register all previously registered jobs with the Cron instance
     for data in _job_data_registry:
-        logging.debug(f"Registering job: {data['func'].__name__}")
+        logging.debug(f'Registering job: {data["func"].__name__}')
         cron_instance.register(**data)
-
-    return cron_instance
-
-
-def load_config(config_path: str, connection: Redis) -> Cron:
-    """
-    Dynamically load a cron config file and register all jobs with a Cron instance.
-
-    Supports both dotted import paths (e.g. 'app.cron_config') and file paths
-    (e.g. '/path/to/app/cron_config.py', 'app/cron_config.py'). The .py
-    extension is recommended for file paths for clarity.
-
-    Args:
-        config_path: Path to the cron_config.py file or module path.
-        connection: Redis connection to use for the Cron instance
-
-    Returns:
-        Cron instance with all jobs registered
-    """
-    logger = logging.getLogger(__name__)
-    logger.info(f"Loading cron configuration from {config_path}")
-
-    global _job_data_registry
-    _job_data_registry = []  # Clear registry before loading
-
-    is_file_path = os.path.sep in config_path or config_path.endswith('.py')
-    module_loaded = False
-    error = None
-
-    if is_file_path:
-        # --- Handle as a file path ---
-        abs_path = os.path.abspath(config_path)
-        logger.debug(f"Attempting to load as file path: {abs_path}")
-        if not os.path.exists(abs_path):
-            error = FileNotFoundError(f"Configuration file not found at '{abs_path}'")
-        elif not os.path.isfile(abs_path):
-             error = IsADirectoryError(f"Configuration path points to a directory, not a file: '{abs_path}'")
-        else:
-            # Derive a unique module name to avoid conflicts if loading multiple files
-            # Or use a fixed name if you prefer, but be aware of potential sys.modules clashes
-            module_name = f"rq_cron_config_{os.path.basename(config_path).replace('.', '_')}"
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, abs_path)
-                if spec is None or spec.loader is None:
-                    raise ImportError(f"Could not create module spec for {abs_path}")
-
-                module = importlib.util.module_from_spec(spec)
-                # Important: Add to sys.modules *before* exec_module to handle potential
-                # relative imports within the config file itself.
-                sys.modules[module_name] = module
-                spec.loader.exec_module(module)
-                module_loaded = True
-                logger.debug(f"Successfully loaded config from file: {abs_path}")
-            except Exception as e:
-                # Clean up from sys.modules if loading failed
-                if module_name in sys.modules:
-                    del sys.modules[module_name]
-                error = ImportError(f"Failed to load configuration file '{abs_path}': {e}")
-
-    else:
-        # --- Handle as a module path ---
-        logger.debug(f"Attempting to load as module path: {config_path}")
-        try:
-            # Check if already loaded (e.g., by a previous import somewhere else)
-            if config_path in sys.modules:
-                 logger.warning(f"Module '{config_path}' already loaded. Re-importing might not re-execute registration if module hasn't changed.")
-                 # You might want importlib.reload here if re-execution is desired,
-                 # but be cautious about side effects. Standard import is usually safer.
-            importlib.import_module(config_path)
-            module_loaded = True
-            logger.debug(f"Successfully loaded config from module: {config_path}")
-        except ImportError as e:
-            error = ImportError(f"Failed to import configuration module '{config_path}': {e}")
-        except Exception as e: # Catch other potential errors during import
-             error = Exception(f"An error occurred while importing configuration module '{config_path}': {e}")
-
-
-    if not module_loaded or error:
-        # Raise the specific error encountered
-        final_error = error or RuntimeError("Unknown error occurred during configuration loading.")
-        logger.error(f"Failed to load cron configuration from '{config_path}': {final_error}")
-        raise final_error
-
-    # Now that the module has been loaded and executed exactly once,
-    # create the Cron instance using the populated registry.
-    cron_instance = create_cron(connection)
-
-    logger.info(f"Successfully registered {len(cron_instance.get_jobs())} cron jobs from '{config_path}'")
 
     return cron_instance

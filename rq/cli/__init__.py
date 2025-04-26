@@ -5,3 +5,4 @@ from .cli import main
 # `rqworkers` commands in favor of just shipping the `rq` command.
 from .cli import info
 from .workers import worker
+from .cli_cron import cron
