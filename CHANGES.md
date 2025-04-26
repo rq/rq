@@ -1,3 +1,7 @@
+### RQ 2.3.2 (2025-04-13)
+* Don't log job description when `log_job_description` is set to False. Thanks @danilopeixoto!
+* Fixes an issue where `pubsub_thread` may die in the background. Thanks @ankush!
+
 ### RQ 2.3.1 (2025-04-03)
 * Fixes an issue running RQ on Windows. Thanks @selwin!
 
