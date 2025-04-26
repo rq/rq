@@ -2,12 +2,8 @@
 RQ command line tool
 """
 
-import logging
-import logging.config
-import os
 import sys
-import warnings
-from typing import TYPE_CHECKING, List, Type, cast
+from typing import TYPE_CHECKING
 
 import click
 from redis.exceptions import ConnectionError
@@ -18,36 +14,21 @@ from rq.cli.helpers import (
     parse_function_args,
     parse_schedule,
     pass_cli_config,
-    read_config_file,
     refresh,
-    setup_loghandlers_from_args,
     show_both,
     show_queues,
     show_workers,
 )
 
 # from rq.cli.pool import pool
-from rq.defaults import (
-    DEFAULT_JOB_MONITORING_INTERVAL,
-    DEFAULT_LOGGING_DATE_FORMAT,
-    DEFAULT_LOGGING_FORMAT,
-    DEFAULT_MAINTENANCE_TASK_INTERVAL,
-    DEFAULT_RESULT_TTL,
-    DEFAULT_WORKER_TTL,
-)
 from rq.exceptions import InvalidJobOperationError
-from rq.job import Job, JobStatus
+from rq.job import JobStatus
 from rq.logutils import blue
 from rq.registry import FailedJobRegistry, clean_registries
-from rq.serializers import DefaultSerializer
-from rq.suspension import is_suspended
 from rq.suspension import resume as connection_resume
 from rq.suspension import suspend as connection_suspend
-from rq.utils import get_call_string, import_attribute
+from rq.utils import get_call_string
 from rq.worker_registration import clean_worker_registry
-
-if TYPE_CHECKING:
-    from rq.serializers import Serializer
 
 
 @click.group()

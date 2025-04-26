@@ -11,10 +11,10 @@ from redis.exceptions import ConnectionError
 from rq import Worker
 from rq.cli.cli import main
 from rq.cli.helpers import (
+    import_attribute,
     pass_cli_config,
     read_config_file,
     setup_loghandlers_from_args,
-    import_attribute,
 )
 from rq.defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,

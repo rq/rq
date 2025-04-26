@@ -856,7 +856,7 @@ class Queue:
                 'on_failure': job_data.on_failure,
                 'on_stopped': job_data.on_stopped,
                 'group_id': group_id,
-                'repeat': job_data.repeat
+                'repeat': job_data.repeat,
             }
 
         # Enqueue jobs without dependencies
