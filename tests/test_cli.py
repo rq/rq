@@ -27,7 +27,7 @@ class CLITestCase(RQTestCase):
         super().setUp()
         db_num = self.connection.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
-        self.connection = Redis.from_url(self.redis_url)
+        self.connection: Redis = Redis.from_url(self.redis_url)
 
     def assert_normal_execution(self, result):
         if result.exit_code == 0:
@@ -81,7 +81,7 @@ class TestRQCli(CLITestCase):
             'testhost.example.com',
         )
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '--config', cli_config.config])
+        result = runner.invoke(main, ['info', '--config', str(cli_config.config)])
         self.assertEqual(result.exit_code, 1)
 
     def test_config_file_default_options(self):
@@ -406,13 +406,13 @@ class TestRQCli(CLITestCase):
     def test_suspend_with_ttl(self):
         """rq suspend -u <url> --duration=2"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 1])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '1'])
         self.assert_normal_execution(result)
 
     def test_suspend_with_invalid_ttl(self):
         """rq suspend -u <url> --duration=0"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 0])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '0'])
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Duration must be an integer greater than 1', result.output)
@@ -683,7 +683,7 @@ class TestRQCli(CLITestCase):
         start = datetime.now(timezone.utc) + timedelta(minutes=5)
         middle = parse_schedule('5m', None)
         end = datetime.now(timezone.utc) + timedelta(minutes=5)
-
+        assert middle is not None and start is not None
         self.assertGreater(middle, start)
         self.assertLess(middle, end)
 

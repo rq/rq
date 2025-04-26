@@ -238,14 +238,15 @@ class TestCron(RQTestCase):
 
         # Check that the run times were updated for the enqueued jobs
         self.assertIsNotNone(job1.latest_run_time)
-        self.assertGreater(job1.latest_run_time, job_2_latest_run_time)  # Updated
+        assert job1.latest_run_time is not None and job_2_latest_run_time is not None
+        self.assertTrue(job1.latest_run_time > job_2_latest_run_time)
         self.assertIsNotNone(job1.next_run_time)
-        self.assertGreaterEqual(job1.next_run_time, now_time)  # Should be calculated based on new latest
+        self.assertGreaterEqual(job1.next_run_time, now_time)
 
         self.assertIsNotNone(job3.latest_run_time)
-        self.assertGreater(job3.latest_run_time, job_2_latest_run_time)  # Updated
+        self.assertTrue(job3.latest_run_time > job_2_latest_run_time)
         self.assertIsNotNone(job3.next_run_time)
-        self.assertGreaterEqual(job3.next_run_time, now_time)  # Should be calculated based on new latest
+        self.assertGreaterEqual(job3.next_run_time, now_time)
 
         # job2 should not be updated since it wasn't run
         self.assertEqual(job2.latest_run_time, job_2_latest_run_time)  # Check it wasn't updated

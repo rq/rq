@@ -264,22 +264,21 @@ class Cron:
 
         # Now that the module has been loaded (which populated _job_data_registry
         # via the global `register` function), register the jobs with *this* instance.
-        jobs_registered_count = 0
-        # Iterate over a copy, as register might theoretically modify it elsewhere (unlikely)
-        registry_copy = list(_job_data_registry)
-        _job_data_registry = []  # Clear the global registry after copying
+        job_count = 0
 
-        for data in registry_copy:
+        for data in _job_data_registry:
             self.log.debug(f'Registering job from config: {data["func"].__name__}')
             try:
                 self.register(**data)  # Calls the instance's register method
-                jobs_registered_count += 1
+                job_count += 1
             except Exception as e:
                 self.log.error(f'Failed to register job {data["func"].__name__} from config: {e}', exc_info=True)
                 # Decide if loading should fail entirely or just skip the job
                 # For now, log the error and continue
 
-        self.log.info(f"Successfully registered {jobs_registered_count} cron jobs from '{config_path}'")
+        # Clear the global registry after we're done
+        _job_data_registry = []
+        self.log.info(f"Successfully registered {job_count} cron jobs from '{config_path}'")
         # Method modifies the instance, no need to return self unless chaining is desired
 
 
