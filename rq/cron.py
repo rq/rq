@@ -209,50 +209,58 @@ class Cron:
         _job_data_registry = []  # Clear global registry before loading module
 
         is_file_path = os.path.sep in config_path or config_path.endswith('.py')
-        module_loaded = False
-        error = None
 
         if is_file_path:
             # --- Handle as a file path ---
             abs_path = os.path.abspath(config_path)
             self.log.debug(f'Attempting to load as file path: {abs_path}')
-            if not os.path.exists(abs_path):
-                error = FileNotFoundError(f"Configuration file not found at '{abs_path}'")
-            elif not os.path.isfile(abs_path):
-                error = IsADirectoryError(f"Configuration path points to a directory, not a file: '{abs_path}'")
-            else:
-                module_name = f'rq_cron_config_{os.path.basename(config_path).replace(".", "_")}'
-                try:
-                    spec = importlib.util.spec_from_file_location(module_name, abs_path)
-                    if spec is None or spec.loader is None:
-                        raise ImportError(f'Could not create module spec for {abs_path}')
 
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[module_name] = module
-                    spec.loader.exec_module(module)
-                    module_loaded = True
-                    self.log.debug(f'Successfully loaded config from file: {abs_path}')
-                except Exception as e:
-                    if module_name in sys.modules:
-                        del sys.modules[module_name]
-                    error = ImportError(f"Failed to load configuration file '{abs_path}': {e}")
+            # Immediately check if file exists
+            if not os.path.exists(abs_path):
+                error_msg = f"Configuration file not found at '{abs_path}'"
+                self.log.error(error_msg)
+                raise FileNotFoundError(error_msg)
+
+            # Check if it's actually a file and not a directory
+            if not os.path.isfile(abs_path):
+                error_msg = f"Configuration path points to a directory, not a file: '{abs_path}'"
+                self.log.error(error_msg)
+                raise IsADirectoryError(error_msg)
+
+            # Load the file as a module
+            module_name = f'rq_cron_config_{os.path.basename(config_path).replace(".", "_")}'
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, abs_path)
+                if spec is None or spec.loader is None:
+                    error_msg = f'Could not create module spec for {abs_path}'
+                    self.log.error(error_msg)
+                    raise ImportError(error_msg)
+
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                self.log.debug(f'Successfully loaded config from file: {abs_path}')
+            except Exception as e:
+                if module_name in sys.modules:
+                    del sys.modules[module_name]
+                error_msg = f"Failed to load configuration file '{abs_path}': {e}"
+                self.log.error(error_msg)
+                raise ImportError(error_msg) from e
 
         else:
             # --- Handle as a module path ---
             self.log.debug(f'Attempting to load as module path: {config_path}')
             try:
                 importlib.import_module(config_path)
-                module_loaded = True
                 self.log.debug(f'Successfully loaded config from module: {config_path}')
             except ImportError as e:
-                error = ImportError(f"Failed to import configuration module '{config_path}': {e}")
+                error_msg = f"Failed to import configuration module '{config_path}': {e}"
+                self.log.error(error_msg)
+                raise ImportError(error_msg) from e
             except Exception as e:
-                error = Exception(f"An error occurred while importing configuration module '{config_path}': {e}")
-
-        if not module_loaded or error:
-            final_error = error or RuntimeError('Unknown error occurred during configuration loading.')
-            self.log.error(f"Failed to load cron configuration from '{config_path}': {final_error}")
-            raise final_error
+                error_msg = f"An error occurred while importing configuration module '{config_path}': {e}"
+                self.log.error(error_msg)
+                raise Exception(error_msg) from e
 
         # Now that the module has been loaded (which populated _job_data_registry
         # via the global `register` function), register the jobs with *this* instance.
