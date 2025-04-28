@@ -206,7 +206,10 @@ class BaseWorker:
                 warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
                 self.ip_address = 'unknown'
             else:
-                client_adresses = [client['addr'] for client in connection.client_list() if client['name'] == self.name]
+                try:
+                    client_adresses = [client['addr'] for client in connection.client_list() if client['name'] == self.name]
+                except redis.exceptions.ResponseError:
+                    client_adresses = []
                 if len(client_adresses) > 0:
                     self.ip_address = client_adresses[0]
                 else:
