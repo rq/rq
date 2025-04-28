@@ -19,13 +19,12 @@ from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
+from .queue import Queue
 from .utils import parse_names
 from .worker import BaseWorker, Worker
 
 if TYPE_CHECKING:
     from rq.serializers import Serializer
-
-    from .queue import Queue
 
 
 class WorkerData(NamedTuple):
@@ -42,12 +41,13 @@ class WorkerPool:
 
     def __init__(
         self,
-        queues: Iterable[Union[str, 'Queue']],
+        queues: Iterable[Union[str, Queue]],
         connection: Redis,
         num_workers: int = 1,
         worker_class: Type[BaseWorker] = Worker,
         serializer: Type['Serializer'] = DefaultSerializer,
         job_class: Type[Job] = Job,
+        queue_class: Type[Queue] = Queue,
         *args,
         **kwargs,
     ):
@@ -65,15 +65,16 @@ class WorkerPool:
         self.worker_class: Type[BaseWorker] = worker_class
         self.serializer: Type['Serializer'] = serializer
         self.job_class: Type[Job] = job_class
+        self.queue_class: Type[Queue] = queue_class
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: Dict[str, WorkerData] = {}
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
 
     @property
-    def queues(self) -> List['Queue']:
+    def queues(self) -> List[Queue]:
         """Returns a list of Queue objects"""
-        return [self.worker_class.queue_class(name, connection=self.connection) for name in self._queue_names]
+        return [self.queue_class(name, connection=self.connection) for name in self._queue_names]
 
     @property
     def number_of_active_workers(self) -> int:
@@ -252,6 +253,7 @@ def run_worker(
     worker_class: Type[BaseWorker] = Worker,
     serializer: Type['Serializer'] = DefaultSerializer,
     job_class: Type[Job] = Job,
+    queue_class: Type[Queue] = Queue,
     burst: bool = True,
     logging_level: str = 'INFO',
     _sleep: int = 0,
@@ -259,8 +261,15 @@ def run_worker(
     connection = connection_class(
         connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
     )
-    queues = [worker_class.queue_class(name, connection=connection) for name in queue_names]
-    worker = worker_class(queues, name=worker_name, connection=connection, serializer=serializer, job_class=job_class)
+    queues = [queue_class(name, connection=connection) for name in queue_names]
+    worker = worker_class(
+        queues,
+        name=worker_name,
+        connection=connection,
+        serializer=serializer,
+        job_class=job_class,
+        queue_class=queue_class,
+    )
     worker.log.info('Starting worker started with PID %s', os.getpid())
     time.sleep(_sleep)
     worker.work(burst=burst, with_scheduler=True, logging_level=logging_level)
