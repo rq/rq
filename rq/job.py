@@ -1199,11 +1199,7 @@ class Job:
 
                 # Go through all dependencies and remove the current job from each dependency's dependents_key
                 for dependency in self.fetch_dependencies(pipeline=pipe):
-                    if not dependency:
-                        continue
-
-                    dependents_key = dependency.dependents_key
-                    pipe.srem(dependents_key, self.id)
+                    pipe.srem(dependency.dependents_key, self.id)
 
                 self._remove_from_registries(pipeline=pipe, remove_from_queue=True)
 
