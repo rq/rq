@@ -1728,6 +1728,7 @@ class SpawnWorker(Worker):
         """Spawns a work horse to perform the actual work using os.spawn()."""
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
+        connection_kwargs = {k: v for k, v in self.connection.connection_pool.connection_kwargs.items() if k != 'retry'}
         child_pid = os.spawnv(
             os.P_NOWAIT,
             sys.executable,
@@ -1742,7 +1743,7 @@ from rq import Worker, Queue
 from rq.job import Job
 
 # Recreate worker instance
-redis = Redis(**{self.connection.connection_pool.connection_kwargs})
+redis = Redis(**{connection_kwargs})
 worker = Worker.find_by_key("{self.key}", connection=redis)
 if not worker:
     sys.exit(1)
