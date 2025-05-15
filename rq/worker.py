@@ -869,6 +869,7 @@ class BaseWorker:
             if burst:
                 self.log.info('Suspended in burst mode, exiting')
                 self.log.info('Note: There could still be unfinished jobs on the queue')
+                self._stop_requested = True
                 raise StopRequested
 
             if not notified:
@@ -1219,6 +1220,7 @@ class Worker(BaseWorker):
             if self.scheduler:
                 self.stop_scheduler()
         else:
+            self._stop_requested = True
             if self.scheduler:
                 self.stop_scheduler()
             raise StopRequested()
