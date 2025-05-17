@@ -106,7 +106,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         sentinel_file = '/tmp/.rq_sentinel_cold'
         self.assertFalse(
-            os.path.exists(sentinel_file), '{sentinel_file} file should not exist yet, delete that file and try again.'
+            os.path.exists(sentinel_file), f'{sentinel_file} file should not exist yet, delete that file and try again.'
         )
         fooq.enqueue(create_file_after_timeout, sentinel_file, 5)
         self.assertFalse(w._stop_requested)

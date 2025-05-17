@@ -1423,7 +1423,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
         sentinel_file = '/tmp/.rq_sentinel_cold'
         self.assertFalse(
-            os.path.exists(sentinel_file), '{sentinel_file} file should not exist yet, delete that file and try again.'
+            os.path.exists(sentinel_file), f'{sentinel_file} file should not exist yet, delete that file and try again.'
         )
         fooq.enqueue(create_file_after_timeout, sentinel_file, 5)
         self.assertFalse(w._stop_requested)
@@ -1442,7 +1442,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
     @slow
     def test_work_horse_death_sets_job_failed(self):
-        """worker with an ongoing job whose work horse dies unexpectadly (before
+        """worker with an ongoing job whose work horse dies unexpectedly (before
         completing the job) should set the job's status to FAILED
         """
         fooq = Queue('foo', connection=self.connection)
