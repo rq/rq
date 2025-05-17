@@ -1089,6 +1089,23 @@ class TestJob(RQTestCase):
         cancel_job(job.id, serializer=JSONSerializer, connection=self.connection)
         self.assertEqual(0, len(queue.get_jobs()))
 
+    def test_canceling_job_removes_it_from_dependency_dependents_key(self):
+        """Cancel child jobs and verify their IDs are removed from the parent's dependents_key."""
+
+        q = Queue('low', connection=self.connection)
+        parent_job = q.enqueue(fixtures.say_hello, job_id='parent_job')
+        child_job_1 = q.enqueue(fixtures.say_hello, depends_on=parent_job, job_id='child_job_1')
+        child_job_2 = q.enqueue(fixtures.say_hello, depends_on=parent_job, job_id='child_job_2')
+
+        dependents_key = parent_job.dependents_key
+        self.assertEqual(
+            {as_text(_id) for _id in self.connection.smembers(dependents_key)}, {child_job_1.id, child_job_2.id}
+        )
+        child_job_1.cancel()
+        self.assertEqual({as_text(_id) for _id in self.connection.smembers(dependents_key)}, {child_job_2.id})
+        child_job_2.cancel()
+        self.assertEqual({as_text(_id) for _id in self.connection.smembers(dependents_key)}, set())
+
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""
         job_id = 'random'
