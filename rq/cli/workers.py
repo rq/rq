@@ -62,7 +62,6 @@ if TYPE_CHECKING:
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
-@click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
 @click.option(
     '--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues'
 )
