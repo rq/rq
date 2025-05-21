@@ -52,7 +52,7 @@ from .logutils import blue, green, setup_loghandlers, yellow
 from .queue import Queue
 from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
-from .serializers import resolve_serializer
+from .serializers import Serializer, resolve_serializer
 from .suspension import is_suspended
 from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
 from .utils import (
@@ -151,7 +151,7 @@ class BaseWorker:
         job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
-        serializer=None,
+        serializer: Optional[Union[Serializer, str]] = None,
         work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
     ):  # noqa
         self.default_result_ttl = default_result_ttl
@@ -261,7 +261,7 @@ class BaseWorker:
         connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
         queue_class: Optional[Type['Queue']] = None,
-        serializer=None,
+        serializer: Optional[Union[Serializer, str]] = None,
     ) -> Optional['BaseWorker']:
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
@@ -272,7 +272,7 @@ class BaseWorker:
             connection (Optional[Redis], optional): Redis connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class if custom class is being used. Defaults to None.
             queue_class (Optional[Type[Queue]]): The queue class if a custom class is being used. Defaults to None.
-            serializer (Any, optional): The serializer to use. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): The serializer to use. Defaults to None.
 
         Raises:
             ValueError: If the key doesn't start with `rq:worker:`, the default worker namespace prefix.

@@ -40,7 +40,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .repeat import Repeat
-from .serializers import resolve_serializer
+from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
 
@@ -125,7 +125,7 @@ class Queue:
         queue_key: str,
         connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
-        serializer: Any = None,
+        serializer: Optional[Union[Serializer, str]] = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
     ) -> 'Queue':
         """Returns a Queue instance, based on the naming conventions for naming
@@ -136,7 +136,7 @@ class Queue:
             queue_key (str): The queue key
             connection (Redis): Redis connection. Defaults to None.
             job_class (Optional[Job], optional): Job class. Defaults to None.
-            serializer (Any, optional): Serializer. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Optional[BaseDeathPenalty], optional): Death penalty class. Defaults to None.
 
         Raises:
@@ -164,7 +164,7 @@ class Queue:
         default_timeout: Optional[int] = None,
         is_async: bool = True,
         job_class: Optional[Union[str, Type['Job']]] = None,
-        serializer: Any = None,
+        serializer: Optional[Union[Serializer, str]] = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = UnixSignalDeathPenalty,
         **kwargs,
     ):
@@ -178,7 +178,7 @@ class Queue:
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
             job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
                 Defaults to None.
-            serializer (Any, optional): Serializer. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
                 Defaults to UnixSignalDeathPenalty.
         """
@@ -1388,7 +1388,7 @@ class Queue:
         timeout: Optional[int],
         connection: 'Redis',
         job_class: Optional[Type['Job']] = None,
-        serializer: Any = None,
+        serializer: Optional[Union[Serializer, str]] = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
     ) -> Optional[Tuple['Job', 'Queue']]:
         """Class method returning the job_class instance at the front of the given
@@ -1406,7 +1406,7 @@ class Queue:
             timeout (Optional[int]): Timeout for the LPOP
             connection (Optional[Redis], optional): Redis Connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class. Defaults to None.
-            serializer (Any, optional): Serializer to use. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): Serializer to use. Defaults to None.
             death_penalty_class (Optional[Type[BaseDeathPenalty]], optional): The death penalty class. Defaults to None.
 
         Raises:

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from redis.client import Pipeline
 
     from rq.executions import Execution
+    from rq.serializers import Serializer
 
 
 logger = logging.getLogger('rq.registry')
@@ -42,7 +43,7 @@ class BaseRegistry:
         connection: Optional['Redis'] = None,
         job_class: Optional[Type['Job']] = None,
         queue: Optional['Queue'] = None,
-        serializer: Any = None,
+        serializer: Optional[Union['Serializer', str]] = None,
         death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
     ):
         if queue:
