@@ -25,11 +25,6 @@ RUN apt-get install -y \
     redis-server \
     python3-pip \
     stunnel \
-    python3.7 \
-    python3.7-dev \
-    python3.7-distutils \
-    python3.8 \
-    python3.8-dev \
     python3.9 \
     python3.9-dev \
     python3.10 \
