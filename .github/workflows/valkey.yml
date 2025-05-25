@@ -17,7 +17,7 @@ jobs:
   valkey-test:
     # Descriptive name for the job runs in the UI
     name: Py${{ matrix.python-version }}/Valkey${{ matrix.valkey-version }}/redis-py${{ matrix.redis-py-version }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     # Define the service container for Valkey
