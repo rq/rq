@@ -16,7 +16,7 @@ concurrency:
 jobs:
   ssl-test:
     name: Run SSL tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Build the Docker test image for tox
