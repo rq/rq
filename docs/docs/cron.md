@@ -21,15 +21,13 @@ RQ Cron provides a lightweight way to schedule recurring jobs without the comple
 - Data Pipeline and ETL Tasks
 - Running Maintenance Tasks
 
-Unlike system cron, RQ Cron integrates seamlessly with your RQ workers, uses the same Redis connection, and benefits from RQ's job management features like retries, timeouts, and monitoring.
-
-Advantages over Traditional Cron:
+Advantages over traditional cron:
 
 1. **Sub-Minute Precision**: schedule jobs to run every few seconds (e.g., every 10 seconds), traditional cron is limited to one minute intervals
-2. **RQ Integration**: leverages existing RQ infrastructure, workers and monitoring
-3. **Fault Tolerance**: jobs benefit from RQ's retry mechanisms and failure handling
-4. **Scalability**: you can route functions to run in different queues, allowing for better resource management and scaling
-5. **Dynamic Configuration**: easy to modify intervals without touching system cron
+2. **RQ Integration**: plugs into your existing RQ infrastructure, workers and monitoring
+3. **Fault Tolerance**: jobs benefit from RQ's retry mechanisms and failure handling (soon)
+4. **Scalability**: route functions to run in different queues, allowing for better resource management and scaling
+5. **Dynamic Configuration**: easy to configure functions and intervals without touching system cron
 6. **Job Control**: jobs can have timeouts, TTLs and custom failure/success handling
 
 ## Quick Start
@@ -87,7 +85,7 @@ That's it! Your jobs will now be automatically enqueued at the specified interva
 
 ### How It Works
 
-RQ Cron is **not** a job executor - it's a class to enqueue functions periodically. Here's how the system works:
+RQ's cron functionality is not a job executor - it's a scheduler to enqueue functions periodically. Here's how the system works:
 
 1. **Registration**: Functions are registered with `CronScheduler` along with their intervals and target queues
 2. **First run**: `CronScheduler` enqueues registered interval based jobs immediately when started
@@ -97,10 +95,9 @@ RQ Cron is **not** a job executor - it's a class to enqueue functions periodical
 
 ### Key Concepts
 
-- **Interval-based**: Jobs run every X seconds (e.g., every 300 seconds for a 5-minute interval). Cron string based job enqueueing is planned for future releases.
-- **Separation of concerns**: The CronScheduler only enqueues jobs; RQ workers handle execution
-- **Standard RQ integration**: Uses regular RQ queues, jobs, and workers - no special infrastructure needed
-- **Intelligent scheduling**: The scheduler calculates optimal sleep times to minimize CPU usage
+- **Interval-based**: jobs run every X seconds (e.g., every 300 seconds for a 5-minute interval). Cron string based job enqueueing is planned for future releases.
+- **Separation of concerns**: `CronScheduler` only enqueues jobs; RQ workers handle execution
+- **Standard RQ integration**: uses regular RQ queues, jobs, and workers - no special infrastructure needed
 
 ## Configuration Files
 
@@ -167,19 +164,19 @@ $ rq cron myapp.cron_config
 
 RQ Cron accepts the following options:
 
-- **--url**, **-u**: Redis connection URL (env: RQ_REDIS_URL)
-- **--config**, **-c**: Python module with RQ settings (env: RQ_CONFIG)
-- **--path**, **-P**: Additional Python import paths (can be specified multiple times)
-- **--logging-level**, **-l**: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL; default: INFO)
-- **--worker-class**, **-w**: Dotted path to RQ Worker class
-- **--job-class**, **-j**: Dotted path to RQ Job class
-- **--queue-class**: Dotted path to RQ Queue class
-- **--connection-class**: Dotted path to Redis client class
-- **--serializer**, **-S**: Dotted path to serializer class
+- `--url`, `-u`: Redis connection URL (env: RQ_REDIS_URL)
+- `--config`, `-c`: Python module with RQ settings (env: RQ_CONFIG)
+- `--path`, `-P`: Additional Python import paths (can be specified multiple times)
+- `--logging-level`, `-l`: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL; default: INFO)
+- `--worker-class`, `-w`: Dotted path to RQ Worker class
+- `--job-class`, `-j`: Dotted path to RQ Job class
+- `--queue-class`: Dotted path to RQ Queue class
+- `--connection-class`: Dotted path to Redis client class
+- `--serializer`, `-S`: Dotted path to serializer class
 
 **Positional argument:**
 
-- **config_path**: File path or module path to your cron configuration
+- `config_path`: File path or module path to your cron configuration
 
 **Example:**
 
