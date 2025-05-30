@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 try:
     from signal import SIGKILL
 except ImportError:
-    from signal import SIGTERM as SIGKILL
+    from signal import SIGTERM as SIGKILL  # type: ignore[assignment]
 
 from contextlib import suppress
 

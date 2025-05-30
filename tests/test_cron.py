@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from rq import Queue, utils
-from rq.cron import CronScheduler, CronJob, _job_data_registry
+from rq.cron import CronJob, CronScheduler, _job_data_registry
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
