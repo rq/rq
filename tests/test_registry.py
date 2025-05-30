@@ -1,3 +1,4 @@
+import math
 from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
@@ -570,7 +571,7 @@ class TestStartedJobRegistry(RQTestCase):
             pipe.execute()
         self.assertIn(job, self.registry)
         self.assertIn(job.id, self.registry)
-        self.assertTrue(self.connection.zscore(self.registry.key, execution.composite_key), '+inf')
+        self.assertEqual(self.connection.zscore(self.registry.key, execution.composite_key), math.inf)
 
     def test_remove_executions(self):
         """Ensure all executions for a job are removed from registry."""

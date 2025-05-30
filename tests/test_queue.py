@@ -850,4 +850,4 @@ class TestJobScheduling(RQTestCase):
         job = queue.enqueue_at(scheduled_time, say_hello)
         registry = ScheduledJobRegistry(queue=queue)
         self.assertIn(job, registry)
-        self.assertTrue(registry.get_expiration_time(job), scheduled_time)
+        self.assertEqual(registry.get_expiration_time(job), scheduled_time.replace(microsecond=0))
