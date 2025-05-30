@@ -3,7 +3,7 @@ title: "RQ: Cron Scheduler"
 layout: docs
 ---
 
-RQ Cron is a simple interval-based job scheduler for RQ. It allows you to define functions that should be executed at regular intervals and automatically enqueues them to the appropriate queues at the scheduled times.
+RQ Cron is a simple interval-based job scheduler for RQ that allows you to schedule existing functions to be enqueued at regular intervals. It automatically enqueues jobs to the defined queues at specified intervals, making it perfect for recurring tasks like health checks and data synchronization.
 
 _New in version 2.4.0._
 
@@ -13,140 +13,216 @@ _New in version 2.4.0._
     <p>`Cron` is still in beta, use at your own risk!</p>
 </div>
 
+## Overview
+
+RQ Cron provides a lightweight way to schedule recurring jobs without the complexity of traditional cron systems. It's perfect for:
+
+- Running maintenance tasks (database cleanup, cache clearing)
+- Generating periodic reports
+- Sending scheduled notifications
+- Data synchronization tasks
+- Health checks and monitoring
+
+Unlike system cron, RQ Cron integrates seamlessly with your RQ workers, uses the same Redis connection, and benefits from RQ's job management features like retries, timeouts, and monitoring.
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Understanding RQ Cron](#understanding-rq-cron)
+- [Configuration Files](#configuration-files)
+- [Command Line Usage](#command-line-usage)
+- [Programmatic API](#programmatic-api)
+- [Job Parameters](#job-parameters)
+- [Examples](#examples)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+- [Performance Considerations](#performance-considerations)
+
 ## Quick Start
 
-Create a cron configuration (`cron_config.py`):
+### 1. Create a Cron Configuration
+
+Create a cron configuration file (`cron_config.py`):
 
 ```python
 from rq import cron
-from myapp import cleanup_database
+from myapp import cleanup_database, send_notifications, send_daily_report
 
-# Run `cleanup_database` every 60 seconds on the 'maintenance' queue
+# Run database cleanup every 5 minutes
 cron.register(
     cleanup_database,
-    queue_name='maintenance',
-    interval=60
+    queue_name='repeating_tasks',
+    interval=300  # 5 minutes in seconds
+)
+
+# Send notifications every hour
+cron.register(
+    send_notifications,
+    queue_name='repeating_tasks',
+    interval=3600  # 1 hour in seconds
+)
+
+# Send daily reports every 24 hours
+cron.register(
+    send_daily_report,
+    queue_name='repeating_tasks',
+    args=('daily',),
+    kwargs={'format': 'pdf'},
+    interval=86400  # 24 hours in seconds
 )
 ```
 
-Start the scheduler:
+### 2. Start the Scheduler
 
 ```sh
 rq cron cron_config.py
 ```
 
-## Cron Configuration File
+### 3. Run RQ Workers
 
-You can configure multiple jobs and schedules in a single file using the `register` function.
-This is especially convenient when your web or application needs to run several background tasks.
+In separate terminals, start workers to process the scheduled jobs:
 
-Here's an example:
+```sh
+# Worker for maintenance queue
+rq worker repeating_tasks
+```
+
+That's it! Your jobs will now be automatically enqueued at the specified intervals.
+
+## Understanding RQ Cron
+
+### How It Works
+
+RQ Cron is **not** a job executor - it's a class to enqueue functions periodically. Here's how the system works:
+
+1. **Registration**: Functions are registered with the `Cron`` scheduler along with their intervals and target queues
+2. **First run**: The `Cron` scheduler enqueues registered interval based jobs immediately when started
+3. **Enqueuing**: When a job's interval has elapsed, the scheduler enqueues it to the specified RQ queue
+4. **Worker execution**: Standard RQ workers pick up and execute the jobs from their queues
+5. **Sleep**: The `Cron` scheduler sleeps until the next job is due
+
+### Key Concepts
+
+- **Interval-based**: Jobs run every X seconds (e.g., every 300 seconds for a 5-minute interval). Cron string based job enqueueing is planned for future releases.
+- **Separation of concerns**: The CronScheduler only enqueues jobs; RQ workers handle execution
+- **Standard RQ integration**: Uses regular RQ queues, jobs, and workers - no special infrastructure needed
+- **Intelligent scheduling**: The scheduler calculates optimal sleep times to minimize CPU usage
+
+## Configuration Files
+
+### Basic Configuration
+
+Configuration files use the global `register` function to define scheduled jobs:
 
 ```python
 # my_cron_config.py
 from rq.cron import register
-from myapp.tasks import cleanup_database, send_reports
+from myapp.tasks import cleanup_database, generate_reports, backup_files
 
-# Register a job to run every 60 seconds
+# Simple job - runs every 60 seconds
 register(cleanup_database, queue_name='maintenance', interval=60)
 
-# Register a job with arguments to run every 3600 seconds (1 hour)
+# Job with arguments
 register(
-    send_reports,
+    generate_reports,
     queue_name='reports',
     args=('daily',),
-    kwargs={'format': 'pdf'},
+    kwargs={'format': 'pdf', 'email': True},
     interval=3600
+)
+
+# Job with custom timeout and TTL settings
+register(
+    backup_files,
+    queue_name='backup',
+    interval=86400,  # Once per day
+    timeout=1800,    # 30 minutes max execution time
+    result_ttl=3600, # Keep results for 1 hour
+    failure_ttl=86400 # Keep failed jobs for 1 day
 )
 ```
 
-The cron scheduler will load this file and queue all the jobs with the specified intervals.
+Since configuration files are standard Python modules, you can include conditional logic. For example:
 
-### Note on Cron Syntax
+```python
+import os
+from rq.cron import register
+from myapp.tasks import cleanup
 
-While this feature is named "cron", it currently only supports interval-based scheduling (running jobs every X seconds). Support for cron syntax (e.g., `0 0 * * *`) is planned for a future release.
+if os.getenv("ENABLE_CLEANUP") == "true":
+    register(cleanup, queue_name="maintenance", interval=600)
+```
 
-### Register Parameters
+## Command Line Usage
 
-When registering a job, you can specify the following parameters:
-
-* `func`: The function to execute (required)
-* `queue_name`: Name of the queue to enqueue the job to (required)
-* `args`: Tuple of positional arguments to pass to the function (default: `()`)
-* `kwargs`: Dictionary of keyword arguments to pass to the function (default: `{}`)
-* `interval`: Time in seconds between job executions (default: `None`)
-* `timeout`: Maximum runtime of the job before it's marked as failed (default: `None`)
-* `result_ttl`: How long (in seconds) successful job results are kept (default: `500`)
-* `ttl`: Maximum queued time for the job before it's discarded (default: `None`)
-* `failure_ttl`: How long (in seconds) failed jobs are kept (default: `None`)
-* `meta`: Additional metadata to store with the job (default: `None`)
-
-
-## Starting the Cron Scheduler
-
-To start the RQ cron scheduler, use the `rq cron` command followed by the path to your cron configuration file:
+### Basic Command
 
 ```console
 $ rq cron my_cron_config.py
 ```
 
-You can also specify a dotted module path:
+### Using Module Paths
+
+You can specify a dotted module path instead of a file path:
 
 ```console
 $ rq cron myapp.cron_config
 ```
 
-### Command Line Options
+### Options
 
-The cron scheduler supports the following command line options:
+RQ Cron accepts the following options:
 
-* `--logging-level` or `-l`: set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default is INFO.
-* `--path` or `-P`: specify additional import paths to look for modules. You can specify this option multiple times (e.g., `--path app --path lib`).
-* `--url` or `-u`: URL describing Redis connection details (e.g., `redis://username:password@host:port/db`).
-* `--config` or `-c`: module containing RQ settings.
-* `--serializer` or `-S`: path to serializer (defaults to `rq.serializers.DefaultSerializer`).
+- **--url**, **-u**: Redis connection URL (env: RQ_REDIS_URL)
+- **--config**, **-c**: Python module with RQ settings (env: RQ_CONFIG)
+- **--path**, **-P**: Additional Python import paths (can be specified multiple times)
+- **--logging-level**, **-l**: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL; default: INFO)
+- **--worker-class**, **-w**: Dotted path to RQ Worker class
+- **--job-class**, **-j**: Dotted path to RQ Job class
+- **--queue-class**: Dotted path to RQ Queue class
+- **--connection-class**: Dotted path to Redis client class
+- **--serializer**, **-S**: Dotted path to serializer class
 
-The `--path` option is particularly important when your cron configuration or jobs are in a package that's not in the default Python path.
+**Positional argument:**
 
-## Using the Cron API Programmatically
+- **config_path**: File path or module path to your cron configuration
 
-You can also create and manage cron jobs programmatically:
+**Example:**
+
+```console
+$ rq cron myapp.cron_config --url redis://localhost:6379/1 --path src
+```
+
+## Programmatic API
+
+### Basic Usage
 
 ```python
 from redis import Redis
 from rq.cron import Cron
-from myapp.tasks import cleanup_database
+from myapp.tasks import cleanup_database, send_reports
 
 # Create a cron scheduler
-cron = Cron(connection=Redis())
+redis_conn = Redis(host='localhost', port=6379, db=0)
+cron = Cron(connection=redis_conn, logging_level='INFO')
 
-# Register a job to run every 60 seconds
-cron_job = cron.register(
+# Register jobs
+cron.register(
     cleanup_database,
     queue_name='maintenance',
-    interval=60
+    interval=3600
+)
+
+cron.register(
+    send_reports,
+    queue_name='reports',
+    args=('daily',),
+    interval=86400
 )
 
 # Start the scheduler (this will block until interrupted)
-cron.start()
-```
-
-### Loading Configuration Files
-
-If you need to load your cron configuration from a file programmatically:
-
-```python
-from redis import Redis
-from rq.cron import Cron
-
-cron = Cron(connection=Redis())
-
-# Load cron jobs from a configuration file
-cron.load_config_from_file('cron_config.py')
-
-# Load cron jobs from a module path
-cron.load_config_from_file('myapp.cron_config')
-
-# Start the scheduler
-cron.start()
+try:
+    cron.start()
+except KeyboardInterrupt:
+    print("Shutting down cron scheduler...")
 ```
