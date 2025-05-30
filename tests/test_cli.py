@@ -880,7 +880,7 @@ class CronCLITestCase(CLITestCase):
         mock_cron = MagicMock()
 
         # Mock the Cron class instead of load_config
-        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron) as mock_cron_class:
+        with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
             # Make the start method just return to avoid infinite loop
             mock_cron.start.side_effect = lambda: None
 
@@ -903,7 +903,7 @@ class CronCLITestCase(CLITestCase):
         mock_cron = MagicMock()
 
         # Mock the Cron class
-        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron) as mock_cron_class:
+        with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
             mock_cron.start.side_effect = lambda: None
 
             result = runner.invoke(
@@ -931,7 +931,7 @@ class CronCLITestCase(CLITestCase):
         # Use a distinctive non-default URL with different host, port, and DB
         test_url = 'redis://test-host:7777/5'
 
-        with patch('rq.cli.cli_cron.Cron', return_value=mock_cron) as mock_cron_class:
+        with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
             mock_cron.start.side_effect = lambda: None
 
             result = runner.invoke(main, ['cron', self.cron_config_path, '-u', test_url])
