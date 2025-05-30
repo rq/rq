@@ -25,11 +25,6 @@ if TYPE_CHECKING:
     from redis import Redis
     from redis.client import Pipeline, PubSub, PubSubWorkerThread
 
-try:
-    from signal import SIGKILL
-except ImportError:
-    from signal import SIGTERM as SIGKILL
-
 from contextlib import suppress
 
 import redis.exceptions
@@ -1232,7 +1227,7 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
-    def kill_horse(self, sig: signal.Signals = SIGKILL):
+    def kill_horse(self, sig: signal.Signals = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL):
         raise NotImplementedError()
 
 
@@ -1242,7 +1237,7 @@ class Worker(BaseWorker):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
 
-    def kill_horse(self, sig: signal.Signals = SIGKILL):
+    def kill_horse(self, sig: signal.Signals = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
 
         Args:
