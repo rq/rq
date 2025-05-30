@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from rq import Queue, utils
-from rq.cron import Cron, CronJob, _job_data_registry
+from rq.cron import CronScheduler, CronJob, _job_data_registry
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
@@ -155,7 +155,7 @@ class TestCronJob(RQTestCase):
         self.assertEqual(cron_job.next_run_time, new_expected_next_run)
 
 
-class TestCron(RQTestCase):
+class TestCronScheduler(RQTestCase):
     """Tests for the Cron class"""
 
     def setUp(self):
@@ -167,7 +167,7 @@ class TestCron(RQTestCase):
 
     def test_register_job(self):
         """Test registering jobs with different configurations"""
-        cron = Cron(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)  # Create instance for test
 
         # Register job with no interval (manual execution only)
         cron_job_manual = cron.register(  # Renamed variable
@@ -195,7 +195,7 @@ class TestCron(RQTestCase):
 
     def test_enqueue_jobs(self):
         """Test that enqueue_jobs correctly enqueues jobs that are due to run"""
-        cron = Cron(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)  # Create instance for test
 
         # Register jobs with different intervals
         job1 = cron.register(func=say_hello, queue_name=self.queue_name, args=('Job 1',), interval=60)
@@ -255,7 +255,7 @@ class TestCron(RQTestCase):
     @patch('rq.cron.now')
     def test_calculate_sleep_interval(self, mock_now):
         """Tests calculate_sleep_interval across various explicit scenarios."""
-        cron = Cron(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)  # Create instance for test
         base_time = datetime(2023, 10, 27, 12, 0, 0)
         mock_now.return_value = base_time
 
@@ -312,7 +312,7 @@ class TestCron(RQTestCase):
 
     def test_register_with_job_options(self):
         """Test registering a job with various job options"""
-        cron = Cron(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)  # Create instance for test
         timeout = 180
         result_ttl = 600
         meta = {'purpose': 'testing'}
@@ -328,7 +328,7 @@ class TestCron(RQTestCase):
     def test_load_config_from_file_method(self):  # Renamed test
         """Test loading cron configuration using the instance method"""
         # Create a Cron instance first
-        cron = Cron(connection=self.connection)
+        cron = CronScheduler(connection=self.connection)
 
         # Load configuration using the method
         config_file_path = 'tests/cron_config.py'
@@ -372,20 +372,20 @@ class TestCron(RQTestCase):
         self.assertTrue(os.path.exists(config_file_abs), f'Test config file not found at {config_file_abs}')
 
         # Test 1: Loading with a direct file path (absolute path)
-        cron = Cron(connection=self.connection)
+        cron = CronScheduler(connection=self.connection)
         # _job_data_registry is cleared inside the method, no need here
         cron.load_config_from_file(config_file_abs)
         self.assertEqual(len(cron.get_jobs()), 4, 'Failed loading with absolute path')
         self.assertEqual(len(_job_data_registry), 0, 'Registry not cleared after absolute path load')
 
         # Test 2: Loading with a module path
-        cron = Cron(connection=self.connection)
+        cron = CronScheduler(connection=self.connection)
         cron.load_config_from_file('tests.cron_config')
         self.assertEqual(len(cron.get_jobs()), 4, 'Failed loading with module path')
         self.assertEqual(len(_job_data_registry), 0, 'Registry not cleared after module path load')
 
         # Test 3: Test error handling with a non-existent path
-        cron = Cron(connection=self.connection)
+        cron = CronScheduler(connection=self.connection)
         with self.assertRaises(Exception) as context:  # Expect FileNotFoundError or ImportError
             cron.load_config_from_file('path/does/not/exist.py')
         self.assertIn('not found', str(context.exception).lower())
@@ -408,8 +408,8 @@ class TestCron(RQTestCase):
             os.remove(invalid_file_path)  # Clean up temp file
 
     @patch('rq.cron.time.sleep')
-    @patch('rq.cron.Cron.calculate_sleep_interval')
-    @patch('rq.cron.Cron.enqueue_jobs')
+    @patch('rq.cron.CronScheduler.calculate_sleep_interval')
+    @patch('rq.cron.CronScheduler.enqueue_jobs')
     def test_start_loop(self, mock_enqueue, mock_calculate_interval, mock_sleep):
         """
         Tests cron.start() loop for both sleeping and non-sleeping scenarios.
@@ -417,7 +417,7 @@ class TestCron(RQTestCase):
         Simulates one iteration where sleep occurs (interval > 0) and one
         iteration where sleep is skipped (interval == 0), then breaks the loop.
         """
-        cron = Cron(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)  # Create instance for test
 
         # Simulate:
         # 1st iteration: Calculate interval > 0 (e.g., 15.5), should sleep.

@@ -10,33 +10,27 @@ _New in version 2.4.0._
 <div class="warning">
     <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
     <strong>Note:</strong>
-    <p>`Cron` is still in beta, use at your own risk!</p>
+    <p>`CronScheduler` is still in beta, use at your own risk!</p>
 </div>
 
 ## Overview
 
 RQ Cron provides a lightweight way to schedule recurring jobs without the complexity of traditional cron systems. It's perfect for:
 
-- Running maintenance tasks (database cleanup, cache clearing)
-- Generating periodic reports
-- Sending scheduled notifications
-- Data synchronization tasks
-- Health checks and monitoring
+- Health Checks and Monitoring
+- Data Pipeline and ETL Tasks
+- Running Maintenance Tasks
 
 Unlike system cron, RQ Cron integrates seamlessly with your RQ workers, uses the same Redis connection, and benefits from RQ's job management features like retries, timeouts, and monitoring.
 
-## Table of Contents
+Advantages over Traditional Cron:
 
-- [Quick Start](#quick-start)
-- [Understanding RQ Cron](#understanding-rq-cron)
-- [Configuration Files](#configuration-files)
-- [Command Line Usage](#command-line-usage)
-- [Programmatic API](#programmatic-api)
-- [Job Parameters](#job-parameters)
-- [Examples](#examples)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
-- [Performance Considerations](#performance-considerations)
+1. **Sub-Minute Precision**: schedule jobs to run every few seconds (e.g., every 10 seconds), traditional cron is limited to one minute intervals
+2. **RQ Integration**: leverages existing RQ infrastructure, workers and monitoring
+3. **Fault Tolerance**: jobs benefit from RQ's retry mechanisms and failure handling
+4. **Scalability**: you can route functions to run in different queues, allowing for better resource management and scaling
+5. **Dynamic Configuration**: easy to modify intervals without touching system cron
+6. **Job Control**: jobs can have timeouts, TTLs and custom failure/success handling
 
 ## Quick Start
 
@@ -95,11 +89,11 @@ That's it! Your jobs will now be automatically enqueued at the specified interva
 
 RQ Cron is **not** a job executor - it's a class to enqueue functions periodically. Here's how the system works:
 
-1. **Registration**: Functions are registered with the `Cron`` scheduler along with their intervals and target queues
-2. **First run**: The `Cron` scheduler enqueues registered interval based jobs immediately when started
+1. **Registration**: Functions are registered with `CronScheduler` along with their intervals and target queues
+2. **First run**: `CronScheduler` enqueues registered interval based jobs immediately when started
 3. **Enqueuing**: When a job's interval has elapsed, the scheduler enqueues it to the specified RQ queue
 4. **Worker execution**: Standard RQ workers pick up and execute the jobs from their queues
-5. **Sleep**: The `Cron` scheduler sleeps until the next job is due
+5. **Sleep**: `CronScheduler` sleeps until the next job is due
 
 ### Key Concepts
 
@@ -199,12 +193,12 @@ $ rq cron myapp.cron_config --url redis://localhost:6379/1 --path src
 
 ```python
 from redis import Redis
-from rq.cron import Cron
+from rq.cron import CronScheduler
 from myapp.tasks import cleanup_database, send_reports
 
 # Create a cron scheduler
 redis_conn = Redis(host='localhost', port=6379, db=0)
-cron = Cron(connection=redis_conn, logging_level='INFO')
+cron = CronScheduler(connection=redis_conn, logging_level='INFO')
 
 # Register jobs
 cron.register(

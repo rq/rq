@@ -80,7 +80,7 @@ class CronJob:
             self.next_run_time = self.get_next_run_time()
 
 
-class Cron:
+class CronScheduler:
     """Simple interval-based job scheduler for RQ"""
 
     def __init__(
@@ -303,7 +303,7 @@ def register(
     to a temporary global registry.
 
     This function should typically be called from within a cron configuration file
-    that will be loaded using `Cron.load_config_from_file()`.
+    that will be loaded using `CronScheduler.load_config_from_file()`.
 
     Example (in your cron_config.py):
         from rq import cron
@@ -338,11 +338,11 @@ def register(
     return job_data
 
 
-def create_cron(connection: Redis) -> Cron:
-    """Create a Cron instance with all registered jobs"""
-    cron_instance = Cron(connection=connection)
+def create_cron(connection: Redis) -> CronScheduler:
+    """Create a CronScheduler instance with all registered jobs"""
+    cron_instance = CronScheduler(connection=connection)
 
-    # Register all previously registered jobs with the Cron instance
+    # Register all previously registered jobs with the CronScheduler instance
     for data in _job_data_registry:
         logging.debug(f'Registering job: {data["func"].__name__}')
         cron_instance.register(**data)
