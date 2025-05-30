@@ -1,8 +1,8 @@
 FROM ubuntu:20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # See: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa for supported versions of Python.
 RUN apt-get update && \
