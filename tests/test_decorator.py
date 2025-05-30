@@ -27,7 +27,7 @@ class TestDecorator(RQTestCase):
         """
         self.assertTrue(hasattr(self.decorated_job, 'delay'))
         job = self.decorated_job.enqueue(1, 2)
-        self.assertTrue(isinstance(job, Job))
+        self.assertIsInstance(job, Job)
 
     def test_decorator_accepts_queue_name_as_argument(self):
         """Ensure that passing in queue name to the decorator puts the job in

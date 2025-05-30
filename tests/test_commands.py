@@ -80,7 +80,7 @@ class TestCommands(RQTestCase):
         worker.work(burst=True)
         p.join(1)
         job.refresh()
-        self.assertTrue(job.id in queue.failed_job_registry)
+        self.assertIn(job.id, queue.failed_job_registry)
 
         p = Process(target=start_work, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy()))
         p.start()
