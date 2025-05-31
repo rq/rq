@@ -8,11 +8,10 @@ from .utils import import_attribute
 
 @runtime_checkable
 class Serializer(Protocol):
-    def dumps(self, obj: Any, /) -> bytes:
-        ...  # pragma: no cover
+    def dumps(self, obj: Any, /) -> bytes: ...  # pragma: no cover
 
-    def loads(self, data: bytes, /) -> Any:
-        ...  # pragma: no cover
+    def loads(self, data: bytes, /) -> Any: ...  # pragma: no cover
+
 
 class DefaultSerializer:
     dumps: ClassVar[Callable[[Any], bytes]] = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)

@@ -1091,20 +1091,18 @@ class TestJob(RQTestCase):
 
     def test_canceling_job_removes_it_from_dependency_dependents_key(self):
         """Cancel child jobs and verify their IDs are removed from the parent's dependents_key."""
+        connection = self.connection
+        queue = Queue(connection=connection)
+        parent_job = queue.enqueue(fixtures.say_hello, job_id='parent_job')
+        child_job_1 = queue.enqueue(fixtures.say_hello, depends_on=parent_job, job_id='child_job_1')
+        child_job_2 = queue.enqueue(fixtures.say_hello, depends_on=parent_job, job_id='child_job_2')
 
-        q = Queue('low', connection=self.connection)
-        parent_job = q.enqueue(fixtures.say_hello, job_id='parent_job')
-        child_job_1 = q.enqueue(fixtures.say_hello, depends_on=parent_job, job_id='child_job_1')
-        child_job_2 = q.enqueue(fixtures.say_hello, depends_on=parent_job, job_id='child_job_2')
-
-        dependents_key = parent_job.dependents_key
-        self.assertEqual(
-            {as_text(_id) for _id in self.connection.smembers(dependents_key)}, {child_job_1.id, child_job_2.id}
-        )
-        child_job_1.cancel()
-        self.assertEqual({as_text(_id) for _id in self.connection.smembers(dependents_key)}, {child_job_2.id})
-        child_job_2.cancel()
-        self.assertEqual({as_text(_id) for _id in self.connection.smembers(dependents_key)}, set())
+        self.assertEqual(set(parent_job.dependent_ids), {child_job_1.id, child_job_2.id})
+        child_job_1.cancel(remove_from_dependencies=True)
+        self.assertEqual(set(parent_job.dependent_ids), {child_job_2.id})
+        # child_job_2 still in dependents_key since remove_from_dependencies = False
+        child_job_2.cancel(remove_from_dependencies=False)
+        self.assertEqual(set(parent_job.dependent_ids), {child_job_2.id})
 
     def test_dependents_key_for_should_return_prefixed_job_id(self):
         """test redis key to store job dependents hash under"""
