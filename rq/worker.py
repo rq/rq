@@ -145,8 +145,8 @@ class BaseWorker:
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         default_worker_ttl: Optional[int] = None,  # TODO remove this arg in 3.0
         worker_ttl: Optional[int] = None,
-        job_class: Optional[type['Job']] = None,
-        queue_class: Optional[type['Queue']] = None,
+        job_class: Optional[type[Job]] = None,
+        queue_class: Optional[type[Queue]] = None,
         log_job_description: bool = True,
         job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
         disable_default_exception_handler: bool = False,
@@ -175,8 +175,8 @@ class BaseWorker:
         self.connection = connection
         self.redis_server_version = None
 
-        self.job_class = backend_class(self, 'job_class', override=job_class)
-        self.queue_class = backend_class(self, 'queue_class', override=queue_class)
+        self.job_class = job_class if job_class else Job
+        self.queue_class = queue_class if queue_class else Queue
         self.version: str = VERSION
         self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)

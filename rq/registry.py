@@ -56,8 +56,8 @@ class BaseRegistry:
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
-        self.job_class = backend_class(self, 'job_class', override=job_class)
-        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)
+        self.job_class = job_class if job_class else Job
+        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)  # type: ignore[assignment]
 
     def __len__(self):
         """Returns the number of jobs in this registry"""

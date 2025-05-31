@@ -68,7 +68,7 @@ class job:  # noqa
                 to None.
         """
         self.queue = queue
-        self.queue_class = backend_class(self, 'queue_class', override=queue_class)
+        self.queue_class = queue_class if queue_class else Queue
         self.connection = connection
         self.timeout = timeout
         self.result_ttl = result_ttl
