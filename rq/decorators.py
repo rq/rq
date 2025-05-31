@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 from .defaults import DEFAULT_RESULT_TTL
 from .job import Callback
 from .queue import Queue
-from .utils import backend_class
 
 
 class job:  # noqa

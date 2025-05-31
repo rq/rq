@@ -57,7 +57,6 @@ from .suspension import is_suspended
 from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
 from .utils import (
     as_text,
-    backend_class,
     compact,
     ensure_job_list,
     get_connection_from_queues,

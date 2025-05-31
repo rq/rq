@@ -13,7 +13,7 @@ from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import Queue
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
-from .utils import as_text, backend_class, current_timestamp, import_job_class, now, parse_composite_key
+from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
 if TYPE_CHECKING:
     from redis import Redis
