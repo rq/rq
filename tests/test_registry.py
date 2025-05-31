@@ -1,3 +1,4 @@
+import math
 from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
@@ -54,19 +55,19 @@ class TestRegistry(RQTestCase):
 
     def test_custom_job_class(self):
         registry = BaseRegistry(job_class=CustomJob)
-        self.assertFalse(registry.job_class == self.registry.job_class)
+        self.assertIsNot(registry.job_class, self.registry.job_class)
 
     def test_contains(self):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
-        self.assertFalse(job in self.registry)
-        self.assertFalse(job.id in self.registry)
+        self.assertNotIn(job, self.registry)
+        self.assertNotIn(job.id, self.registry)
 
         self.registry.add(job, 5)
 
-        self.assertTrue(job in self.registry)
-        self.assertTrue(job.id in self.registry)
+        self.assertIn(job, self.registry)
+        self.assertIn(job.id, self.registry)
 
     def test_get_expiration_time(self):
         """registry.get_expiration_time() returns correct datetime objects"""
@@ -391,10 +392,10 @@ class TestFailedJobRegistry(RQTestCase):
         worker.work(burst=True)
 
         registry = FailedJobRegistry(connection=worker.connection)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         registry.requeue(job.id)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
@@ -403,33 +404,33 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertEqual(job.ended_at, None)
 
         worker.work(burst=True)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # Should also work with job instance
         registry.requeue(job)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # requeue_job should work the same way
         requeue_job(job.id, connection=self.connection)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # And so does job.requeue()
         job.requeue()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
@@ -444,10 +445,10 @@ class TestFailedJobRegistry(RQTestCase):
         worker.work(burst=True)
 
         registry = FailedJobRegistry(connection=worker.connection, serializer=JSONSerializer)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         registry.requeue(job.id)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
@@ -456,33 +457,33 @@ class TestFailedJobRegistry(RQTestCase):
         self.assertEqual(job.ended_at, None)
 
         worker.work(burst=True)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # Should also work with job instance
         registry.requeue(job)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # requeue_job should work the same way
         requeue_job(job.id, connection=self.connection, serializer=JSONSerializer)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         worker.work(burst=True)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # And so does job.requeue()
         job.requeue()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         self.assertIn(job.id, queue.get_job_ids())
 
         job.refresh()
@@ -545,32 +546,32 @@ class TestStartedJobRegistry(RQTestCase):
         because the entries in the registry are {job_id}:{execution_id} format."""
         job = self.queue.enqueue(say_hello)
 
-        self.assertFalse(job in self.registry)
-        self.assertFalse(job.id in self.registry)
+        self.assertNotIn(job, self.registry)
+        self.assertNotIn(job.id, self.registry)
 
         with self.connection.pipeline() as pipe:
             self.registry.add_execution(
                 Execution(id='execution', job_id=job.id, connection=self.connection), pipeline=pipe, ttl=5
             )
             pipe.execute()
-        self.assertTrue(job in self.registry)
-        self.assertTrue(job.id in self.registry)
+        self.assertIn(job, self.registry)
+        self.assertIn(job.id, self.registry)
 
     def test_infinite_score(self):
         """Test the StartedJobRegistry __contains__ method. It is slightly different
         because the entries in the registry are {job_id}:{execution_id} format."""
         job = self.queue.enqueue(say_hello)
 
-        self.assertFalse(job in self.registry)
-        self.assertFalse(job.id in self.registry)
+        self.assertNotIn(job, self.registry)
+        self.assertNotIn(job.id, self.registry)
 
         with self.connection.pipeline() as pipe:
             execution = Execution(id='execution', job_id=job.id, connection=self.connection)
             self.registry.add_execution(execution=execution, pipeline=pipe, ttl=-1)
             pipe.execute()
-        self.assertTrue(job in self.registry)
-        self.assertTrue(job.id in self.registry)
-        self.assertTrue(self.connection.zscore(self.registry.key, execution.composite_key), '+inf')
+        self.assertIn(job, self.registry)
+        self.assertIn(job.id, self.registry)
+        self.assertEqual(self.connection.zscore(self.registry.key, execution.composite_key), math.inf)
 
     def test_remove_executions(self):
         """Ensure all executions for a job are removed from registry."""

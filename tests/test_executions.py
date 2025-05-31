@@ -37,7 +37,7 @@ class TestRegistry(RQTestCase):
         created_at = execution.created_at
         composite_key = execution.composite_key
         self.assertTrue(execution.composite_key.startswith(job.id))  # Composite key is prefixed by job ID
-        self.assertTrue(self.connection.ttl(execution.key) <= 100)
+        self.assertLessEqual(self.connection.ttl(execution.key), 100)
 
         execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
         self.assertEqual(execution.created_at.timestamp(), created_at.timestamp())
@@ -71,8 +71,8 @@ class TestRegistry(RQTestCase):
         job = self.queue.enqueue(say_hello, timeout=-1)
         worker = Worker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
-        self.assertTrue(self.connection.ttl(job.execution_registry.key) >= worker.get_heartbeat_ttl(job))
-        self.assertTrue(self.connection.ttl(execution.key) >= worker.get_heartbeat_ttl(job))
+        self.assertGreaterEqual(self.connection.ttl(job.execution_registry.key), worker.get_heartbeat_ttl(job))
+        self.assertGreaterEqual(self.connection.ttl(execution.key), worker.get_heartbeat_ttl(job))
 
     def test_heartbeat(self):
         """Test heartbeat should refresh execution as well as registry TTL"""
