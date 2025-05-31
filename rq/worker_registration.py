@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional, Set
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -52,7 +52,7 @@ def unregister(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
         connection.execute()
 
 
-def get_keys(queue: Optional['Queue'] = None, connection: Optional['Redis'] = None) -> Set[str]:
+def get_keys(queue: Optional['Queue'] = None, connection: Optional['Redis'] = None) -> set[str]:
     """Returns a list of worker keys for a given queue.
 
     Args:

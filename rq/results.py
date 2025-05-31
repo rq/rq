@@ -203,7 +203,7 @@ class Result:
         return self.id
 
     def serialize(self):
-        data = {'type': self.type.value}
+        data: dict[str, Any] = {'type': self.type.value}
 
         if self.exc_string is not None:
             data['exc_string'] = b64encode(zlib.compress(self.exc_string.encode())).decode()

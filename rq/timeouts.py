@@ -60,7 +60,7 @@ class BaseDeathPenalty:
 
 class UnixSignalDeathPenalty(BaseDeathPenalty):
     def handle_death_penalty(self, signum, frame):
-        raise self._exception('Task exceeded maximum timeout value ({0} seconds)'.format(self._timeout))
+        raise self._exception(f'Task exceeded maximum timeout value ({self._timeout} seconds)')
 
     def setup_death_penalty(self):
         """Sets up an alarm signal and a signal handler that raises
@@ -86,7 +86,7 @@ class TimerDeathPenalty(BaseDeathPenalty):
         # Monkey-patch exception with the message ahead of time
         # since PyThreadState_SetAsyncExc can only take a class
         def init_with_message(self, *args, **kwargs):  # noqa
-            super(exception, self).__init__('Task exceeded maximum timeout value ({0} seconds)'.format(timeout))
+            super(exception, self).__init__(f'Task exceeded maximum timeout value ({timeout} seconds)')
 
         self._exception.__init__ = init_with_message
 
@@ -103,7 +103,7 @@ class TimerDeathPenalty(BaseDeathPenalty):
             ctypes.c_long(self._target_thread_id), ctypes.py_object(self._exception)
         )
         if ret == 0:
-            raise ValueError('Invalid thread ID {}'.format(self._target_thread_id))
+            raise ValueError(f'Invalid thread ID {self._target_thread_id}')
         elif ret > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(self._target_thread_id), 0)
             raise SystemError('PyThreadState_SetAsyncExc failed')

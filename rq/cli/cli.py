@@ -65,7 +65,7 @@ def empty(cli_config, all, queues, serializer, **options):
 
     for queue in queues:
         num_jobs = queue.empty()
-        click.echo('{0} jobs removed from {1} queue'.format(num_jobs, queue.name))
+        click.echo(f'{num_jobs} jobs removed from {queue.name} queue')
 
 
 @main.command()
@@ -77,7 +77,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
     """Requeue failed jobs."""
 
     failed_job_registry = FailedJobRegistry(
-        queue, connection=cli_config.connection, job_class=job_class, serializer=serializer
+        queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
     )
     if all:
         job_ids = failed_job_registry.get_job_ids()
@@ -86,7 +86,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
         click.echo('Nothing to do')
         sys.exit(0)
 
-    click.echo('Requeueing {0} jobs from failed queue'.format(len(job_ids)))
+    click.echo(f'Requeueing {len(job_ids)} jobs from failed queue')
     fail_count = 0
     with click.progressbar(job_ids) as job_ids:
         for job_id in job_ids:
@@ -96,7 +96,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
                 fail_count += 1
 
     if fail_count > 0:
-        click.secho('Unable to requeue {0} jobs from failed job registry'.format(fail_count), fg='red')
+        click.secho(f'Unable to requeue {fail_count} jobs from failed job registry', fg='red')
 
 
 @main.command()
@@ -153,8 +153,8 @@ def suspend(cli_config, duration, **options):
     connection_suspend(cli_config.connection, duration)
 
     if duration:
-        msg = """Suspending workers for {0} seconds.  No new jobs will be started during that time, but then will
-        automatically resume""".format(duration)
+        msg = f"""Suspending workers for {duration} seconds. No new jobs will be started during that time, but then will
+        automatically resume"""
         click.echo(msg)
     else:
         click.echo('Suspending workers.  No new jobs will be started.  But current jobs will be completed')

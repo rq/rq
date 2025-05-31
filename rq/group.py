@@ -1,5 +1,6 @@
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Optional
 from uuid import uuid4
 
 from redis import Redis
@@ -21,10 +22,10 @@ class Group:
     def __init__(self, connection: Redis, name: Optional[str] = None):
         self.name = name if name else str(uuid4().hex)
         self.connection = connection
-        self.key = '{0}{1}'.format(self.REDIS_GROUP_NAME_PREFIX, self.name)
+        self.key = f'{self.REDIS_GROUP_NAME_PREFIX}{self.name}'
 
     def __repr__(self):
-        return 'Group(id={})'.format(self.name)
+        return f'Group(id={self.name})'
 
     def _add_jobs(self, jobs: Iterable[Job], pipeline: Pipeline):
         """Add jobs to the group"""
@@ -87,7 +88,7 @@ class Group:
         return group
 
     @classmethod
-    def all(cls, connection: 'Redis') -> List['Group']:
+    def all(cls, connection: 'Redis') -> list['Group']:
         "Returns an iterable of all Groups."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         groups = []
