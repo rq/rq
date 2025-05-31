@@ -430,7 +430,7 @@ class Job:
         """
         if refresh:
             meta = self.connection.hget(self.key, 'meta')
-            self.meta = self.serializer.loads(meta) if meta else {}  # type: ignore[assignment]
+            self.meta = self.serializer.loads(meta) if meta else {}
 
         return self.meta
 
@@ -1002,7 +1002,7 @@ class Job:
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj['ttl']) if obj.get('ttl') else None
         try:
-            self.meta = self.serializer.loads(obj['meta']) if obj.get('meta') else {}  # type: ignore[assignment]
+            self.meta = self.serializer.loads(obj['meta']) if obj.get('meta') else {}
         except Exception:  # depends on the serializer
             self.meta = {'unserialized': obj.get('meta', {})}
 
@@ -1196,6 +1196,11 @@ class Job:
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
                     q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
+
+                # Go through all dependencies and remove the current job from each dependency's dependents_key
+                for dependency in self.fetch_dependencies(pipeline=pipe):
+                    pipe.srem(dependency.dependents_key, self.id)
+
                 self._remove_from_registries(pipeline=pipe, remove_from_queue=True)
 
                 registry = CanceledJobRegistry(
