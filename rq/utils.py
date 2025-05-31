@@ -32,6 +32,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from redis import Redis
+
     from .job import Job
     from .queue import Queue
     from .worker import Worker
@@ -154,6 +155,7 @@ def import_worker_class(name: str) -> Type['Worker']:
         raise ValueError(f'Invalid worker class: {name}')
 
     from .worker import Worker
+
     if not issubclass(cls, Worker):
         raise ValueError(f'Invalid worker class: {name}')
 
@@ -168,6 +170,7 @@ def import_job_class(name: str) -> Type['Job']:
         raise ValueError(f'Invalid job class: {name}')
 
     from .job import Job
+
     if not issubclass(cls, Job):
         raise ValueError(f'Invalid job class: {name}')
 

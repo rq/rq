@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from redis import Redis
 
 from rq.exceptions import TimeoutFormatError
+from rq.job import Job
 from rq.utils import (
     as_text,
     backend_class,
@@ -20,7 +21,6 @@ from rq.utils import (
     truncate_long_string,
     utcparse,
 )
-from rq.job import Job
 from rq.worker import SimpleWorker
 from tests import RQTestCase, fixtures
 
@@ -188,15 +188,15 @@ class TestUtils(RQTestCase):
         # Test importing a valid job class
         job_class = import_job_class('rq.job.Job')
         self.assertEqual(job_class, Job)
-        
+
         # Test importing a non-existent module
         with self.assertRaises(ValueError):
             import_job_class('non.existent.module')
-        
+
         # Test importing a non-class attribute
         with self.assertRaises(ValueError):
             import_job_class('rq.utils.get_version')
-        
+
         # Test importing a class that's not a Job subclass
         with self.assertRaises(ValueError):
             import_job_class('datetime.datetime')
