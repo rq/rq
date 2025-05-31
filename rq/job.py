@@ -1160,7 +1160,12 @@ class Job:
         meta = self.serializer.dumps(self.meta)
         self.connection.hset(self.key, 'meta', meta)
 
-    def cancel(self, pipeline: Optional['Pipeline'] = None, enqueue_dependents: bool = False):
+    def cancel(
+        self,
+        pipeline: Optional['Pipeline'] = None,
+        enqueue_dependents: bool = False,
+        remove_from_dependencies: bool = False,
+    ):
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
 
@@ -1198,9 +1203,10 @@ class Job:
                         pipe.watch(self.dependents_key)
                     q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
 
-                # Go through all dependencies and remove the current job from each dependency's dependents_key
-                for dependency in self.fetch_dependencies(pipeline=pipe):
-                    pipe.srem(dependency.dependents_key, self.id)
+                if remove_from_dependencies:
+                    # Go through all dependencies and remove the current job from each dependency's dependents_key
+                    for dependency in self.fetch_dependencies(pipeline=pipe):
+                        pipe.srem(dependency.dependents_key, self.id)
 
                 self._remove_from_registries(pipeline=pipe, remove_from_queue=True)
 
