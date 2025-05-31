@@ -1164,7 +1164,7 @@ class Job:
         self,
         pipeline: Optional['Pipeline'] = None,
         enqueue_dependents: bool = False,
-        remove_from_dependencies: bool = True,
+        remove_from_dependencies: bool = False,
     ):
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
