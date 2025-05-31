@@ -11,20 +11,14 @@ import importlib
 import logging
 import numbers
 import warnings
+from collections.abc import Generator, Iterable, Sequence
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Generator,
-    Iterable,
-    List,
     Optional,
-    Sequence,
-    Tuple,
-    Type,
     TypeVar,
     Union,
     overload,
@@ -33,7 +27,9 @@ from typing import (
 if TYPE_CHECKING:
     from redis import Redis
 
+    from .job import Job
     from .queue import Queue
+    from .worker import Worker
 
 from redis.exceptions import ResponseError
 
@@ -47,7 +43,7 @@ ObjOrStr = Union[_O, str]
 logger = logging.getLogger(__name__)
 
 
-def compact(lst: Iterable[Optional[_T]]) -> List[_T]:
+def compact(lst: Iterable[Optional[_T]]) -> list[_T]:
     """Excludes `None` values from a list-like object.
 
     Args:
@@ -79,7 +75,7 @@ def as_text(v: Union[bytes, str]) -> str:
         raise ValueError('Unknown type %r' % type(v))
 
 
-def decode_redis_hash(h: Dict[Union[bytes, str], _T]) -> Dict[str, _T]:
+def decode_redis_hash(h: dict[Union[bytes, str], _T]) -> dict[str, _T]:
     """Decodes the Redis hash, ensuring that keys are strings
     Most importantly, decodes bytes strings, ensuring the dict has str keys.
 
@@ -145,6 +141,36 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
+def import_worker_class(name: str) -> type['Worker']:
+    """Import a worker class from a dotted path name."""
+    cls = import_attribute(name)
+
+    if not isinstance(cls, type):
+        raise ValueError(f'Invalid worker class: {name}')
+
+    from .worker import Worker
+
+    if not issubclass(cls, Worker):
+        raise ValueError(f'Invalid worker class: {name}')
+
+    return cls
+
+
+def import_job_class(name: str) -> type['Job']:
+    """Import a job class from a dotted path name."""
+    cls = import_attribute(name)
+
+    if not isinstance(cls, type):
+        raise ValueError(f'Invalid job class: {name}')
+
+    from .job import Job
+
+    if not issubclass(cls, Job):
+        raise ValueError(f'Invalid job class: {name}')
+
+    return cls
+
+
 def now() -> datetime.datetime:
     """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)
@@ -179,9 +205,9 @@ def is_nonstring_iterable(obj: Any) -> bool:
 
 
 @overload
-def ensure_job_list(obj: ObjOrStr) -> List[ObjOrStr]: ...
+def ensure_job_list(obj: ObjOrStr) -> list[ObjOrStr]: ...
 @overload
-def ensure_job_list(obj: Iterable[ObjOrStr]) -> List[ObjOrStr]: ...
+def ensure_job_list(obj: Iterable[ObjOrStr]) -> list[ObjOrStr]: ...
 def ensure_job_list(obj):
     """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.
@@ -206,7 +232,7 @@ def current_timestamp() -> int:
     return calendar.timegm(now().utctimetuple())
 
 
-def backend_class(holder, default_name, override=None) -> Type:
+def backend_class(holder, default_name, override=None) -> type:
     """Get a backend class using its default attribute name or an override
 
     Args:
@@ -253,7 +279,7 @@ def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
     return timeout
 
 
-def get_version(connection: 'Redis') -> Tuple[int, int, int]:
+def get_version(connection: 'Redis') -> tuple[int, int, int]:
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
@@ -326,7 +352,7 @@ def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
 
 
 def get_call_string(
-    func_name: Optional[str], args: Any, kwargs: Dict[Any, Any], max_length: Optional[int] = None
+    func_name: Optional[str], args: Any, kwargs: dict[Any, Any], max_length: Optional[int] = None
 ) -> Optional[str]:
     """
     Returns a string representation of the call, formatted as a regular
@@ -347,14 +373,14 @@ def get_call_string(
 
     arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
 
-    list_kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
+    list_kwargs = [f'{k}={as_text(truncate_long_string(repr(v), max_length))}' for k, v in kwargs.items()]
     arg_list += sorted(list_kwargs)
     args = ', '.join(arg_list)
 
-    return '{0}({1})'.format(func_name, args)
+    return f'{func_name}({args})'
 
 
-def parse_names(queues_or_names: Iterable[Union[str, 'Queue']]) -> List[str]:
+def parse_names(queues_or_names: Iterable[Union[str, 'Queue']]) -> list[str]:
     """Given a iterable  of strings or queues, returns queue names"""
     from .queue import Queue
 
@@ -377,7 +403,7 @@ def get_connection_from_queues(queues_or_names: Iterable[Union[str, 'Queue']]) -
     return None
 
 
-def parse_composite_key(composite_key: str) -> Tuple[str, str]:
+def parse_composite_key(composite_key: str) -> tuple[str, str]:
     """Method returns a parsed composite key.
 
     Args:

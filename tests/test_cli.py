@@ -33,9 +33,9 @@ class CLITestCase(RQTestCase):
             return True
         else:
             print('Non normal execution')
-            print('Exit Code: {}'.format(result.exit_code))
-            print('Output: {}'.format(result.output))
-            print('Exception: {}'.format(result.exception))
+            print(f'Exit Code: {result.exit_code}')
+            print(f'Output: {result.output}')
+            print(f'Exception: {result.exception}')
             self.assertEqual(result.exit_code, 0)
 
 
@@ -49,9 +49,9 @@ class TestRQCli(CLITestCase):
             return True
         else:
             print('Non normal execution')
-            print('Exit Code: {}'.format(result.exit_code))
-            print('Output: {}'.format(result.output))
-            print('Exception: {}'.format(result.exception))
+            print(f'Exit Code: {result.exit_code}')
+            print(f'Output: {result.output}')
+            print(f'Exception: {result.exception}')
             self.assertEqual(result.exit_code, 0)
 
     """Test rq_cli script"""
@@ -771,7 +771,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([open('tests/test.json', 'r').read()], {}))
+        self.assertEqual((job.args, job.kwargs), ([open('tests/test.json').read()], {}))
 
         id = str(uuid4())
         result = runner.invoke(
@@ -779,7 +779,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json', 'r').read()}))
+        self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json').read()}))
 
         id = str(uuid4())
         result = runner.invoke(
@@ -787,7 +787,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json', 'r').read())], {}))
+        self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json').read())], {}))
 
         id = str(uuid4())
         result = runner.invoke(
@@ -795,7 +795,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json', 'r').read())}))
+        self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json').read())}))
 
 
 class WorkerPoolCLITestCase(CLITestCase):

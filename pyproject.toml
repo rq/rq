@@ -12,7 +12,7 @@ authors = [
     { name = "Selwin Ong", email = "selwin.ong@gmail.com" },
     { name = "Vincent Driessen", email = "vincent@3rdcloud.com" },
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -26,7 +26,6 @@ classifiers = [
     "Operating System :: Unix",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -99,7 +98,7 @@ cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
 typing = "mypy --enable-incomplete-feature=Unpack rq"
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py39"
 
 # Set what ruff should check for.
 # See https://beta.ruff.rs/docs/rules/ for a list of rules.
