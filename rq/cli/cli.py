@@ -77,7 +77,7 @@ def requeue(cli_config, queue, all, job_class, serializer, job_ids, **options):
     """Requeue failed jobs."""
 
     failed_job_registry = FailedJobRegistry(
-        queue, connection=cli_config.connection, job_class=job_class, serializer=serializer
+        queue, connection=cli_config.connection, job_class=cli_config.job_class, serializer=serializer
     )
     if all:
         job_ids = failed_job_registry.get_job_ids()
