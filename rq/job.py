@@ -4,9 +4,10 @@ import json
 import logging
 import warnings
 import zlib
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 from uuid import uuid4
 
 from redis import WatchError
@@ -70,7 +71,7 @@ def parse_job_id(job_or_execution_id: str) -> str:
 
 
 class Dependency:
-    dependencies: List[Union['Job', str]]
+    dependencies: list[Union['Job', str]]
 
     def __init__(self, jobs: Iterable[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
         """The definition of a Dependency.
@@ -165,18 +166,18 @@ class Job:
         self._id = id
         self.created_at = now()
         self._data = UNEVALUATED
-        self._func_name: Union[str, 'UnevaluatedType'] = UNEVALUATED
-        self._instance: Optional[Union[object, 'UnevaluatedType']] = UNEVALUATED
-        self._args: Union[tuple, list, 'UnevaluatedType'] = UNEVALUATED
-        self._kwargs: Union[Dict[str, Any], 'UnevaluatedType'] = UNEVALUATED
+        self._func_name: Union[str, UnevaluatedType] = UNEVALUATED
+        self._instance: Optional[Union[object, UnevaluatedType]] = UNEVALUATED
+        self._args: Union[tuple, list, UnevaluatedType] = UNEVALUATED
+        self._kwargs: Union[dict[str, Any], UnevaluatedType] = UNEVALUATED
         self._success_callback_name: Optional[str] = None
-        self._success_callback: Union[Callable[['Job', 'Redis', Any], Any], 'UnevaluatedType'] = UNEVALUATED
+        self._success_callback: Union[Callable[[Job, Redis, Any], Any], UnevaluatedType] = UNEVALUATED
         self._failure_callback_name: Optional[str] = None
-        self._failure_callback: Union[Callable[['Job', 'Redis', Unpack[Tuple['ExcInfo']]], Any], 'UnevaluatedType'] = (
+        self._failure_callback: Union[Callable[[Job, Redis, Unpack[tuple[ExcInfo]]], Any], UnevaluatedType] = (
             UNEVALUATED
         )
         self._stopped_callback_name: Optional[str] = None
-        self._stopped_callback: Union[Callable[['Job', 'Redis'], Any], 'UnevaluatedType'] = UNEVALUATED
+        self._stopped_callback: Union[Callable[[Job, Redis], Any], UnevaluatedType] = UNEVALUATED
         self.description: Optional[str] = None
         self.origin: str = ''
         self.enqueued_at: Optional[datetime] = None
@@ -193,20 +194,20 @@ class Job:
         self.ttl: Optional[int] = None
         self.worker_name: Optional[str] = None
         self._status: Optional[JobStatus] = None
-        self._dependency_ids: List[str] = []
-        self.meta: Dict[str, Any] = {}
+        self._dependency_ids: list[str] = []
+        self.meta: dict[str, Any] = {}
         self.serializer = resolve_serializer(serializer)
         self.retries_left: Optional[int] = None
         self.number_of_retries: Optional[int] = None
-        self.retry_intervals: Optional[List[int]] = None
-        self.redis_server_version: Optional[Tuple[int, int, int]] = None
+        self.retry_intervals: Optional[list[int]] = None
+        self.redis_server_version: Optional[tuple[int, int, int]] = None
         self.last_heartbeat: Optional[datetime] = None
         self.allow_dependency_failures: Optional[bool] = None
         self.enqueue_at_front: Optional[bool] = None
         self.group_id: Optional[str] = None
 
         self.repeats_left: Optional[int] = None
-        self.repeat_intervals: Optional[List[int]] = None
+        self.repeat_intervals: Optional[list[int]] = None
 
         from .results import Result
 
@@ -217,7 +218,7 @@ class Job:
         cls,
         func: FunctionReferenceType,
         args: Optional[Union[list, tuple]] = None,
-        kwargs: Optional[Dict[str, Any]] = None,
+        kwargs: Optional[dict[str, Any]] = None,
         connection: Optional['Redis'] = None,
         result_ttl: Optional[int] = None,
         ttl: Optional[int] = None,
@@ -227,7 +228,7 @@ class Job:
         timeout: Optional[int] = None,
         id: Optional[str] = None,
         origin: str = '',
-        meta: Optional[Dict[str, Any]] = None,
+        meta: Optional[dict[str, Any]] = None,
         failure_ttl: Optional[int] = None,
         serializer=None,
         group_id: Optional[str] = None,
@@ -292,9 +293,9 @@ class Job:
             kwargs = {}
 
         if not isinstance(args, (tuple, list)):
-            raise TypeError('{0!r} is not a valid args list'.format(args))
+            raise TypeError(f'{args!r} is not a valid args list')
         if not isinstance(kwargs, dict):
-            raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
+            raise TypeError(f'{kwargs!r} is not a valid kwargs dict')
 
         job = cls(connection=connection, serializer=serializer)
         if id is not None:
@@ -309,14 +310,14 @@ class Job:
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '{0}.{1}'.format(func.__module__, func.__qualname__)
+            job._func_name = f'{func.__module__}.{func.__qualname__}'
         elif isinstance(func, str):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
             job._instance = func
             job._func_name = '__call__'
         else:
-            raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
+            raise TypeError(f'Expected a callable or a string, but got: {func}')
         job._args = args
         job._kwargs = kwargs
 
@@ -416,10 +417,10 @@ class Job:
             pipeline (Optional[Pipeline], optional): Optional Redis Pipeline to use. Defaults to None.
         """
         self._status = status
-        connection: 'Redis' = pipeline if pipeline is not None else self.connection
+        connection: Redis = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
-    def get_meta(self, refresh: bool = True) -> Dict:
+    def get_meta(self, refresh: bool = True) -> dict:
         """Get's the metadata for a Job, an arbitrary dictionary.
 
         Args:
@@ -488,7 +489,7 @@ class Job:
         return job
 
     @property
-    def dependent_ids(self) -> List[str]:
+    def dependent_ids(self) -> list[str]:
         """Returns a list of ids of jobs whose execution depends on this
         job's successful execution."""
         return list(map(as_text, self.connection.smembers(self.dependents_key)))
@@ -628,7 +629,7 @@ class Job:
         self._data = UNEVALUATED
 
     @property
-    def kwargs(self) -> Dict[str, Any]:
+    def kwargs(self) -> dict[str, Any]:
         if self._kwargs is UNEVALUATED:
             self._deserialize_data()
         return self._kwargs  # type: ignore[return-value]
@@ -671,7 +672,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> List[Optional['Job']]:
+    def fetch_many(cls, job_ids: Iterable[str], connection: 'Redis', serializer=None) -> list[Optional['Job']]:
         """
         Bulk version of Job.fetch
 
@@ -692,7 +693,7 @@ class Job:
                 pipeline.hgetall(cls.key_for(job_id))
             results = pipeline.execute()
 
-        jobs: List[Optional['Job']] = []
+        jobs: list[Optional[Job]] = []
         for i, job_id in enumerate(parsed_ids):
             if not results[i]:
                 jobs.append(None)
@@ -705,10 +706,10 @@ class Job:
         return jobs
 
     def __repr__(self):  # noqa  # pragma: no cover
-        return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__, self._id, self.enqueued_at)
+        return f'{self.__class__.__name__}({self._id!r}, enqueued_at={self.enqueued_at!r})'
 
     def __str__(self):
-        return '<{0} {1}: {2}>'.format(self.__class__.__name__, self.id, self.description)
+        return f'<{self.__class__.__name__} {self.id}: {self.description}>'
 
     def __eq__(self, other):  # noqa
         return isinstance(other, self.__class__) and self.id == other.id
@@ -735,7 +736,7 @@ class Job:
             value (str): The value to set as Job ID
         """
         if not isinstance(value, str):
-            raise TypeError('id must be a string, not {0}'.format(type(value)))
+            raise TypeError(f'id must be a string, not {type(value)}')
 
         if ':' in value:
             raise ValueError('id must not contain ":"')
@@ -782,7 +783,7 @@ class Job:
         Returns:
             dependents_key (str): The dependents key
         """
-        return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
+        return f'{cls.redis_job_namespace_prefix}{job_id}:dependents'
 
     @property
     def key(self):
@@ -796,9 +797,9 @@ class Job:
 
     @property
     def dependencies_key(self):
-        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+        return f'{self.redis_job_namespace_prefix}:{self.id}:dependencies'
 
-    def fetch_dependencies(self, watch: bool = False, pipeline: Optional['Pipeline'] = None) -> List['Job']:
+    def fetch_dependencies(self, watch: bool = False, pipeline: Optional['Pipeline'] = None) -> list['Job']:
         """Fetch all of a job's dependencies. If a pipeline is supplied, and
         watch is true, then set WATCH on all the keys of all dependencies.
 
@@ -912,7 +913,7 @@ class Job:
                 self._result = self.serializer.loads(rv)
         return self._result
 
-    def results(self) -> List['Result']:
+    def results(self) -> list['Result']:
         """Returns all Result objects
 
         Returns:
@@ -948,7 +949,7 @@ class Job:
         try:
             raw_data = obj['data']
         except KeyError:
-            raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+            raise NoSuchJobError(f'Unexpected job format: {obj}')
 
         try:
             self.data = zlib.decompress(raw_data)
@@ -1032,7 +1033,7 @@ class Job:
         """
         data = self.connection.hgetall(self.key)
         if not data:
-            raise NoSuchJobError('No such job: {0}'.format(self.key))
+            raise NoSuchJobError(f'No such job: {self.key}')
         self.restore(data)
 
     def to_dict(self, include_meta: bool = True, include_result: bool = True) -> dict:
@@ -1048,7 +1049,7 @@ class Job:
         Returns:
             dict: The Job serialized as a dictionary
         """
-        obj: Dict[str, Any] = {
+        obj: dict[str, Any] = {
             'created_at': utcformat(self.created_at or now()),
             'data': zlib.compress(self.data),
             'success_callback_name': self._success_callback_name if self._success_callback_name else '',
@@ -1143,7 +1144,7 @@ class Job:
         """Only supported by Redis server >= 5.0 is required."""
         return self.get_redis_server_version() >= (5, 0, 0)
 
-    def get_redis_server_version(self) -> Tuple[int, int, int]:
+    def get_redis_server_version(self) -> tuple[int, int, int]:
         """Return Redis server version of connection
 
         Returns:
@@ -1178,7 +1179,7 @@ class Job:
             InvalidJobOperation: If the job has already been cancelled.
         """
         if self.is_canceled:
-            raise InvalidJobOperation('Cannot cancel already canceled job: {}'.format(self.get_id()))
+            raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.get_id()}')
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
@@ -1236,7 +1237,7 @@ class Job:
 
         return ExecutionRegistry(self.id, connection=self.connection)
 
-    def get_executions(self) -> List['Execution']:
+    def get_executions(self) -> list['Execution']:
         return self.execution_registry.get_executions()
 
     def _remove_from_registries(self, pipeline: Optional['Pipeline'] = None, remove_from_queue: bool = True):
@@ -1471,7 +1472,7 @@ class Job:
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
 
-    def execute_success_callback(self, death_penalty_class: Type[BaseDeathPenalty], result: Any):
+    def execute_success_callback(self, death_penalty_class: type[BaseDeathPenalty], result: Any):
         """Executes success_callback for a job.
         with timeout .
 
@@ -1486,7 +1487,7 @@ class Job:
         with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
             self.success_callback(self, self.connection, result)
 
-    def execute_failure_callback(self, death_penalty_class: Type[BaseDeathPenalty], *exc_info):
+    def execute_failure_callback(self, death_penalty_class: type[BaseDeathPenalty], *exc_info):
         """Executes failure_callback with possible timeout"""
         if not self.failure_callback:
             return
@@ -1499,7 +1500,7 @@ class Job:
             logger.exception('Job %s: error while executing failure callback', self.id)
             raise
 
-    def execute_stopped_callback(self, death_penalty_class: Type[BaseDeathPenalty]):
+    def execute_stopped_callback(self, death_penalty_class: type[BaseDeathPenalty]):
         """Executes stopped_callback with possible timeout"""
         logger.debug('Running stopped callbacks for %s', self.id)
         try:
@@ -1628,7 +1629,7 @@ class Job:
             connection.sadd(self.dependencies_key, dependency_id)
 
     @property
-    def dependency_ids(self) -> List[bytes]:
+    def dependency_ids(self) -> list[bytes]:
         dependencies = self.connection.smembers(self.dependencies_key)
         return [Job.key_for(_id.decode()) for _id in dependencies]
 
@@ -1730,7 +1731,7 @@ class Retry:
         self.intervals = intervals
 
     @classmethod
-    def get_interval(cls, count: int, intervals: Union[int, List[int], None]) -> int:
+    def get_interval(cls, count: int, intervals: Union[int, list[int], None]) -> int:
         """Returns the appropriate retry interval based on retry count and intervals.
         If intervals is an integer, returns that value directly.
         If intervals is a list and retry count is bigger than length of intervals,
@@ -1769,4 +1770,4 @@ class Callback:
     def name(self) -> str:
         if isinstance(self.func, str):
             return self.func
-        return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)
+        return f'{self.func.__module__}.{self.func.__qualname__}'

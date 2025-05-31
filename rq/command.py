@@ -1,7 +1,7 @@
 import json
 import os
 import signal
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -35,7 +35,7 @@ def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
     connection.publish(PUBSUB_CHANNEL_TEMPLATE % worker_name, json.dumps(payload))
 
 
-def parse_payload(payload: Dict[Any, Any]) -> Dict[Any, Any]:
+def parse_payload(payload: dict[Any, Any]) -> dict[Any, Any]:
     """
     Returns a dict of command data
 
@@ -82,7 +82,7 @@ def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
     send_command(connection, job.worker_name, 'stop-job', job_id=job_id)
 
 
-def handle_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
+def handle_command(worker: 'BaseWorker', payload: dict[Any, Any]):
     """Parses payload and routes commands to the worker.
 
     Args:
@@ -108,7 +108,7 @@ def handle_shutdown_command(worker: 'BaseWorker'):
     os.kill(pid, signal.SIGINT)
 
 
-def handle_kill_worker_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
+def handle_kill_worker_command(worker: 'BaseWorker', payload: dict[Any, Any]):
     """
     Stops work horse
 
@@ -125,7 +125,7 @@ def handle_kill_worker_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
         worker.log.info('Worker is not working, kill horse command ignored')
 
 
-def handle_stop_job_command(worker: 'BaseWorker', payload: Dict[Any, Any]):
+def handle_stop_job_command(worker: 'BaseWorker', payload: dict[Any, Any]):
     """Handles stop job command.
 
     Args:

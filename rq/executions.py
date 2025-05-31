@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from redis import Redis
@@ -89,7 +89,7 @@ class Execution:
         job.started_job_registry.remove_execution(execution=self, pipeline=pipeline)
         ExecutionRegistry(job_id=self.job_id, connection=self.connection).remove(execution=self, pipeline=pipeline)
 
-    def serialize(self) -> Dict:
+    def serialize(self) -> dict:
         return {
             'id': self.id,
             'created_at': self.created_at.timestamp(),
@@ -118,7 +118,7 @@ class ExecutionRegistry(BaseRegistry):
         self.job_id = job_id
         self.key = self.key_template.format(job_id)
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[List] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -149,12 +149,12 @@ class ExecutionRegistry(BaseRegistry):
         """Remove an execution from registry."""
         return pipeline.zrem(self.key, execution.id)
 
-    def get_execution_ids(self, start: int = 0, end: int = -1) -> List[str]:
+    def get_execution_ids(self, start: int = 0, end: int = -1) -> list[str]:
         """Returns all executions IDs in registry"""
         self.cleanup()
         return [as_text(job_id) for job_id in self.connection.zrange(self.key, start, end)]
 
-    def get_executions(self, start: int = 0, end: int = -1) -> List[Execution]:
+    def get_executions(self, start: int = 0, end: int = -1) -> list[Execution]:
         """Returns all executions IDs in registry"""
         execution_ids = self.get_execution_ids(start, end)
         executions = []
