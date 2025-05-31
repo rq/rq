@@ -3,7 +3,7 @@ import logging.config
 import os
 import sys
 import warnings
-from typing import TYPE_CHECKING, List, cast
+from typing import TYPE_CHECKING, cast
 
 import click
 from redis.exceptions import ConnectionError
@@ -206,7 +206,7 @@ def worker_pool(
     """Starts a RQ worker pool"""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
-    queue_names: List[str] = queues or settings.get('QUEUES', ['default'])
+    queue_names: list[str] = queues or settings.get('QUEUES', ['default'])
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 

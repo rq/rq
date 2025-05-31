@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from types import FrameType
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -145,8 +145,8 @@ class BaseWorker:
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         default_worker_ttl: Optional[int] = None,  # TODO remove this arg in 3.0
         worker_ttl: Optional[int] = None,
-        job_class: Optional[Type['Job']] = None,
-        queue_class: Optional[Type['Queue']] = None,
+        job_class: Optional[type['Job']] = None,
+        queue_class: Optional[type['Queue']] = None,
         log_job_description: bool = True,
         job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
         disable_default_exception_handler: bool = False,
@@ -201,7 +201,7 @@ class BaseWorker:
         self.queues = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
-        self._exc_handlers: List[Callable] = []
+        self._exc_handlers: list[Callable] = []
         self._work_horse_killed_handler = work_horse_killed_handler
         self._shutdown_requested_date: Optional[datetime] = None
 
@@ -259,8 +259,8 @@ class BaseWorker:
         cls,
         worker_key: str,
         connection: 'Redis',
-        job_class: Optional[Type['Job']] = None,
-        queue_class: Optional[Type['Queue']] = None,
+        job_class: Optional[type['Job']] = None,
+        queue_class: Optional[type['Queue']] = None,
         serializer: Optional[Union[Serializer, str]] = None,
     ) -> Optional['BaseWorker']:
         """Returns a Worker instance, based on the naming conventions for
@@ -306,11 +306,11 @@ class BaseWorker:
     def all(
         cls,
         connection: Optional['Redis'] = None,
-        job_class: Optional[Type['Job']] = None,
-        queue_class: Optional[Type['Queue']] = None,
+        job_class: Optional[type['Job']] = None,
+        queue_class: Optional[type['Queue']] = None,
         queue: Optional['Queue'] = None,
         serializer=None,
-    ) -> List['BaseWorker']:
+    ) -> list['BaseWorker']:
         """Returns an iterable of all Workers.
 
         Returns:
@@ -330,7 +330,7 @@ class BaseWorker:
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None) -> List[str]:
+    def all_keys(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None) -> list[str]:
         """List of worker keys
 
         Args:
@@ -482,7 +482,7 @@ class BaseWorker:
             if not isinstance(queue, self.queue_class):
                 raise TypeError(f'{queue} is not of type {self.queue_class} or string types')
 
-    def queue_names(self) -> List[str]:
+    def queue_names(self) -> list[str]:
         """Returns the queue names of this worker's queues.
 
         Returns:
@@ -490,7 +490,7 @@ class BaseWorker:
         """
         return [queue.name for queue in self.queues]
 
-    def queue_keys(self) -> List[str]:
+    def queue_keys(self) -> list[str]:
         """Returns the Redis keys representing this worker's queues.
 
         Returns:
@@ -1060,7 +1060,7 @@ class BaseWorker:
 
     def dequeue_job_and_maintain_ttl(
         self, timeout: Optional[int], max_idle_time: Optional[int] = None
-    ) -> Optional[Tuple['Job', 'Queue']]:
+    ) -> Optional[tuple['Job', 'Queue']]:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
@@ -1258,7 +1258,7 @@ class Worker(BaseWorker):
             else:
                 raise
 
-    def wait_for_horse(self) -> Tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
+    def wait_for_horse(self) -> tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
         """Waits for the horse process to complete.
         Uses `0` as argument as to include "any child in the process group of the current process".
         """

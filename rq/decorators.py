@@ -1,5 +1,5 @@
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -22,10 +22,10 @@ class job:  # noqa
         timeout: Optional[int] = None,
         result_ttl: int = DEFAULT_RESULT_TTL,
         ttl: Optional[int] = None,
-        queue_class: Optional[Type['Queue']] = None,
-        depends_on: Optional[List[Any]] = None,
+        queue_class: Optional[type['Queue']] = None,
+        depends_on: Optional[list[Any]] = None,
         at_front: bool = False,
-        meta: Optional[Dict[Any, Any]] = None,
+        meta: Optional[dict[Any, Any]] = None,
         description: Optional[str] = None,
         failure_ttl: Optional[int] = None,
         retry: Optional['Retry'] = None,

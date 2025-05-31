@@ -1,6 +1,6 @@
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from collections.abc import Iterable
-from typing import List, Optional
+from typing import Optional
 from uuid import uuid4
 
 from redis import Redis
@@ -88,7 +88,7 @@ class Group:
         return group
 
     @classmethod
-    def all(cls, connection: 'Redis') -> List['Group']:
+    def all(cls, connection: 'Redis') -> list['Group']:
         "Returns an iterable of all Groups."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         groups = []

@@ -2,7 +2,7 @@ import zlib
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from redis import Redis
 
@@ -203,7 +203,7 @@ class Result:
         return self.id
 
     def serialize(self):
-        data: Dict[str, Any] = {'type': self.type.value}
+        data: dict[str, Any] = {'type': self.type.value}
 
         if self.exc_string is not None:
             data['exc_string'] = b64encode(zlib.compress(self.exc_string.encode())).decode()
