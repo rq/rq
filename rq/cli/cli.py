@@ -153,7 +153,7 @@ def suspend(cli_config, duration, **options):
     connection_suspend(cli_config.connection, duration)
 
     if duration:
-        msg = f"""Suspending workers for {duration} seconds.  No new jobs will be started during that time, but then will
+        msg = f"""Suspending workers for {duration} seconds. No new jobs will be started during that time, but then will
         automatically resume"""
         click.echo(msg)
     else:
