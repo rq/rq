@@ -8,6 +8,7 @@ from enum import Enum
 from functools import partial, update_wrapper
 from json import JSONDecodeError, loads
 from shutil import get_terminal_size
+from typing import Type, cast
 
 import click
 from redis import Redis
@@ -373,7 +374,7 @@ class CliConfig:
             raise click.BadParameter(str(exc), param_hint='--queue-class')
 
         try:
-            self.connection_class = import_attribute(connection_class)
+            self.connection_class: Type[Redis] = cast(Type[Redis], import_attribute(connection_class))
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--connection-class')
 
