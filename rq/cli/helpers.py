@@ -22,7 +22,7 @@ from rq.defaults import (
     DEFAULT_WORKER_CLASS,
 )
 from rq.logutils import setup_loghandlers
-from rq.utils import import_attribute, now, parse_timeout
+from rq.utils import import_attribute, import_worker_class, now, parse_timeout
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
@@ -354,7 +354,7 @@ class CliConfig:
                 sys.path.append(pth)
 
         try:
-            self.worker_class = import_attribute(worker_class)
+            self.worker_class = import_worker_class(worker_class)
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--worker-class')
         try:

@@ -32,8 +32,9 @@ from typing import (
 
 if TYPE_CHECKING:
     from redis import Redis
-
+    from .job import Job
     from .queue import Queue
+    from .worker import Worker
 
 from redis.exceptions import ResponseError
 
@@ -143,6 +144,34 @@ def import_attribute(name: str) -> Callable[..., Any]:
     if not hasattr(attribute_owner, attribute_name):
         raise ValueError('Invalid attribute name: %s' % name)
     return getattr(attribute_owner, attribute_name)
+
+
+def import_worker_class(name: str) -> Type['Worker']:
+    """Import a worker class from a dotted path name."""
+    cls = import_attribute(name)
+
+    if not isinstance(cls, type):
+        raise ValueError(f'Invalid worker class: {name}')
+
+    from .worker import Worker
+    if not issubclass(cls, Worker):
+        raise ValueError(f'Invalid worker class: {name}')
+
+    return cls
+
+
+def import_job_class(name: str) -> Type['Job']:
+    """Import a job class from a dotted path name."""
+    cls = import_attribute(name)
+
+    if not isinstance(cls, type):
+        raise ValueError(f'Invalid job class: {name}')
+
+    from .job import Job
+    if not issubclass(cls, Job):
+        raise ValueError(f'Invalid job class: {name}')
+
+    return cls
 
 
 def now() -> datetime.datetime:

@@ -27,6 +27,7 @@ from rq.defaults import (
 from rq.job import Job
 from rq.serializers import DefaultSerializer
 from rq.suspension import is_suspended
+from rq.utils import import_job_class, import_worker_class
 from rq.worker_pool import WorkerPool
 
 if TYPE_CHECKING:
@@ -215,12 +216,12 @@ def worker_pool(
         serializer = DefaultSerializer
 
     if worker_class:
-        worker_class = import_attribute(worker_class)
+        worker_class = import_worker_class(worker_class)
     else:
         worker_class = Worker
 
     if job_class:
-        job_class = import_attribute(job_class)
+        job_class = import_job_class(job_class)
     else:
         job_class = Job
 
