@@ -62,8 +62,8 @@ class TestCommands(RQTestCase):
 
         with mock.patch('redis.client.PubSub.get_message', new_callable=raise_exc_mock):
             worker.subscribe()
+            worker.pubsub_thread.join()
 
-        worker.pubsub_thread.join()
         assert not worker.pubsub_thread.is_alive()
 
     def test_kill_horse_command(self):

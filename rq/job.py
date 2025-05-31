@@ -430,7 +430,7 @@ class Job:
         """
         if refresh:
             meta = self.connection.hget(self.key, 'meta')
-            self.meta = self.serializer.loads(meta) if meta else {}  # type: ignore[assignment]
+            self.meta = self.serializer.loads(meta) if meta else {}
 
         return self.meta
 
@@ -1002,7 +1002,7 @@ class Job:
         self.enqueue_at_front = bool(int(obj['enqueue_at_front'])) if 'enqueue_at_front' in obj else None
         self.ttl = int(obj['ttl']) if obj.get('ttl') else None
         try:
-            self.meta = self.serializer.loads(obj['meta']) if obj.get('meta') else {}  # type: ignore[assignment]
+            self.meta = self.serializer.loads(obj['meta']) if obj.get('meta') else {}
         except Exception:  # depends on the serializer
             self.meta = {'unserialized': obj.get('meta', {})}
 

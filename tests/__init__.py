@@ -87,6 +87,7 @@ class RQTestCase(unittest.TestCase):
     def tearDown(self):
         # Flush afterwards
         self.connection.flushdb()
+        self.connection.close()
 
     @classmethod
     def tearDownClass(cls):

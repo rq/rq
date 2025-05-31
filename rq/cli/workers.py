@@ -3,7 +3,7 @@ import logging.config
 import os
 import sys
 import warnings
-from typing import TYPE_CHECKING, List, Type, cast
+from typing import TYPE_CHECKING, List, cast
 
 import click
 from redis.exceptions import ConnectionError
@@ -210,9 +210,9 @@ def worker_pool(
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     if serializer:
-        serializer_class = cast(Type['Serializer'], import_attribute(serializer))
+        serializer = cast('Serializer', import_attribute(serializer))
     else:
-        serializer_class = DefaultSerializer
+        serializer = DefaultSerializer
 
     if worker_class:
         worker_class = import_attribute(worker_class)
@@ -232,7 +232,7 @@ def worker_pool(
         queue_names,
         connection=cli_config.connection,
         num_workers=num_workers,
-        serializer=serializer_class,
+        serializer=serializer,
         worker_class=worker_class,
         job_class=job_class,
     )
