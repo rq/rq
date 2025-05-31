@@ -3,7 +3,7 @@ title: "RQ: Cron Scheduler"
 layout: docs
 ---
 
-RQ Cron is a simple interval-based job scheduler for RQ that allows you to schedule existing functions to be enqueued at regular intervals. It automatically enqueues jobs to the defined queues at specified intervals, making it perfect for recurring tasks like health checks and data synchronization.
+RQ's `CronScheduler` is a simple scheduler that allows you to enqueue functions at regular intervals.
 
 _New in version 2.4.0._
 
@@ -15,7 +15,7 @@ _New in version 2.4.0._
 
 ## Overview
 
-RQ Cron provides a lightweight way to schedule recurring jobs without the complexity of traditional cron systems. It's perfect for:
+`CronScheduler` provides a lightweight way to enqueue recurring jobs without the complexity of traditional cron systems. It's perfect for:
 
 - Health Checks and Monitoring
 - Data Pipeline and ETL Tasks
@@ -23,11 +23,11 @@ RQ Cron provides a lightweight way to schedule recurring jobs without the comple
 
 Advantages over traditional cron:
 
-1. **Sub-Minute Precision**: schedule jobs to run every few seconds (e.g., every 10 seconds), traditional cron is limited to one minute intervals
-2. **RQ Integration**: plugs into your existing RQ infrastructure, workers and monitoring
+1. **Sub-Minute Precision**: enqueue jobs every few seconds (e.g. every 5 seconds), traditional cron is limited to one minute intervals
+2. **RQ Integration**: plugs into your existing RQ infrastructure
 3. **Fault Tolerance**: jobs benefit from RQ's retry mechanisms and failure handling (soon)
 4. **Scalability**: route functions to run in different queues, allowing for better resource management and scaling
-5. **Dynamic Configuration**: easy to configure functions and intervals without touching system cron
+5. **Dynamic Configuration**: easily configure functions and intervals without modifying system cron
 6. **Job Control**: jobs can have timeouts, TTLs and custom failure/success handling
 
 ## Quick Start
@@ -51,7 +51,7 @@ cron.register(
 cron.register(
     send_notifications,
     queue_name='repeating_tasks',
-    interval=3600  # 1 hour in seconds
+    interval=5  # Every 5 seconds
 )
 
 # Send daily reports every 24 hours
@@ -70,34 +70,22 @@ cron.register(
 rq cron cron_config.py
 ```
 
-### 3. Run RQ Workers
-
-In separate terminals, start workers to process the scheduled jobs:
-
-```sh
-# Worker for maintenance queue
-rq worker repeating_tasks
-```
-
 That's it! Your jobs will now be automatically enqueued at the specified intervals.
 
 ## Understanding RQ Cron
 
 ### How It Works
 
-RQ's cron functionality is not a job executor - it's a scheduler to enqueue functions periodically. Here's how the system works:
-
-1. **Registration**: Functions are registered with `CronScheduler` along with their intervals and target queues
-2. **First run**: `CronScheduler` enqueues registered interval based jobs immediately when started
-3. **Enqueuing**: When a job's interval has elapsed, the scheduler enqueues it to the specified RQ queue
-4. **Worker execution**: Standard RQ workers pick up and execute the jobs from their queues
-5. **Sleep**: `CronScheduler` sleeps until the next job is due
-
-### Key Concepts
-
-- **Interval-based**: jobs run every X seconds (e.g., every 300 seconds for a 5-minute interval). Cron string based job enqueueing is planned for future releases.
+Key concepts:
+- **Interval-based**: jobs run every X seconds (e.g. every 5 seconds). Cron string based job enqueueing is planned for future releases.
 - **Separation of concerns**: `CronScheduler` only enqueues jobs; RQ workers handle execution
-- **Standard RQ integration**: uses regular RQ queues, jobs, and workers - no special infrastructure needed
+
+`CronScheduler` is not a job executor - it's a scheduler to enqueue functions periodically. Here's how the system works:
+
+1. **Registration**: functions are registered along with their intervals and target queues
+2. **First run**: registered functions are immediately enqueued when `CronScheduler` starts
+3. **Worker execution**: RQ workers pick up and execute the jobs from their queues
+4. **Sleep**: `CronScheduler` sleeps until the next job is due
 
 ## Configuration Files
 
@@ -146,13 +134,9 @@ if os.getenv("ENABLE_CLEANUP") == "true":
 
 ## Command Line Usage
 
-### Basic Command
-
 ```console
 $ rq cron my_cron_config.py
 ```
-
-### Using Module Paths
 
 You can specify a dotted module path instead of a file path:
 
@@ -160,9 +144,7 @@ You can specify a dotted module path instead of a file path:
 $ rq cron myapp.cron_config
 ```
 
-### Options
-
-RQ Cron accepts the following options:
+The `rq cron` CLI command accepts the following options:
 
 - `--url`, `-u`: Redis connection URL (env: RQ_REDIS_URL)
 - `--config`, `-c`: Python module with RQ settings (env: RQ_CONFIG)
@@ -174,11 +156,11 @@ RQ Cron accepts the following options:
 - `--connection-class`: Dotted path to Redis client class
 - `--serializer`, `-S`: Dotted path to serializer class
 
-**Positional argument:**
+Positional argument:
 
 - `config_path`: File path or module path to your cron configuration
 
-**Example:**
+Example:
 
 ```console
 $ rq cron myapp.cron_config --url redis://localhost:6379/1 --path src
