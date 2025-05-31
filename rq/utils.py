@@ -11,6 +11,7 @@ import importlib
 import logging
 import numbers
 import warnings
+from collections.abc import Generator, Iterable, Sequence
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
@@ -18,11 +19,8 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Generator,
-    Iterable,
     List,
     Optional,
-    Sequence,
     Tuple,
     Type,
     TypeVar,
@@ -379,11 +377,11 @@ def get_call_string(
 
     arg_list = [as_text(truncate_long_string(repr(arg), max_length)) for arg in args]
 
-    list_kwargs = ['{0}={1}'.format(k, as_text(truncate_long_string(repr(v), max_length))) for k, v in kwargs.items()]
+    list_kwargs = [f'{k}={as_text(truncate_long_string(repr(v), max_length))}' for k, v in kwargs.items()]
     arg_list += sorted(list_kwargs)
     args = ', '.join(arg_list)
 
-    return '{0}({1})'.format(func_name, args)
+    return f'{func_name}({args})'
 
 
 def parse_names(queues_or_names: Iterable[Union[str, 'Queue']]) -> List[str]:

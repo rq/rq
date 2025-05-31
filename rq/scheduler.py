@@ -3,10 +3,11 @@ import os
 import signal
 import time
 import traceback
+from collections.abc import Iterable
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
-from typing import Iterable, List, Optional, Set, Union
+from typing import List, Optional, Set, Union
 
 from redis import ConnectionPool, Redis
 

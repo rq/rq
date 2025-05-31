@@ -220,7 +220,7 @@ class BaseWorker:
         self.current_job_working_time: float = 0
         self.birth_date = None
         self.scheduler: Optional[RQScheduler] = None
-        self.pubsub: Optional['PubSub'] = None
+        self.pubsub: Optional[PubSub] = None
         self.pubsub_thread = None
         self._dequeue_strategy: Optional[DequeueStrategy] = DequeueStrategy.DEFAULT
 
@@ -480,7 +480,7 @@ class BaseWorker:
         """Sanity check for the given queues."""
         for queue in self.queues:
             if not isinstance(queue, self.queue_class):
-                raise TypeError('{0} is not of type {1} or string types'.format(queue, self.queue_class))
+                raise TypeError(f'{queue} is not of type {self.queue_class} or string types')
 
     def queue_names(self) -> List[str]:
         """Returns the queue names of this worker's queues.
@@ -1138,7 +1138,7 @@ class BaseWorker:
             pipeline (Optional[Redis]): A Redis pipeline
         """
         timeout = timeout or self.worker_ttl + 60
-        connection: Union[Redis, 'Pipeline'] = pipeline if pipeline is not None else self.connection
+        connection: Union[Redis, Pipeline] = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(now()))
         self.log.debug('Sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', timeout)
@@ -1311,7 +1311,7 @@ class Worker(BaseWorker):
             os._exit(0)  # just in case
         else:
             self._horse_pid = child_pid
-            self.procline('Forked {0} at {1}'.format(child_pid, time.time()))
+            self.procline(f'Forked {child_pid} at {time.time()}')
 
     def get_heartbeat_ttl(self, job: 'Job') -> int:
         """Get's the TTL for the next heartbeat.
@@ -1789,7 +1789,7 @@ class SimpleWorker(Worker):
         if job.timeout == -1:
             return DEFAULT_WORKER_TTL
         else:
-            return int((job.timeout or DEFAULT_WORKER_TTL)) + 60
+            return int(job.timeout or DEFAULT_WORKER_TTL) + 60
 
 
 class HerokuWorker(Worker):

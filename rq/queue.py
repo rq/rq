@@ -4,6 +4,7 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta
 from functools import total_ordering
 
@@ -13,10 +14,8 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     List,
     Optional,
-    Sequence,
     Tuple,
     Type,
     Union,
@@ -147,7 +146,7 @@ class Queue:
         """
         prefix = cls.redis_queue_namespace_prefix
         if not queue_key.startswith(prefix):
-            raise ValueError('Not a valid RQ queue key: {0}'.format(queue_key))
+            raise ValueError(f'Not a valid RQ queue key: {queue_key}')
         name = queue_key[len(prefix) :]
         return cls(
             name,
@@ -187,7 +186,7 @@ class Queue:
         self.connection = connection
         prefix = self.redis_queue_namespace_prefix
         self.name = name
-        self._key = '{0}{1}'.format(prefix, name)
+        self._key = f'{prefix}{name}'
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger
@@ -279,8 +278,8 @@ class Queue:
         Returns:
             script (...): The Lua Script is called.
         """
-        script = """
-            local prefix = "{0}"
+        script = f"""
+            local prefix = "{self.job_class.redis_job_namespace_prefix}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -295,7 +294,7 @@ class Queue:
                 count = count + 1
             end
             return count
-        """.format(self.job_class.redis_job_namespace_prefix).encode('utf-8')
+        """.encode()
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
@@ -1463,7 +1462,7 @@ class Queue:
         return hash(self.name)
 
     def __repr__(self):  # noqa  # pragma: no cover
-        return '{0}({1!r})'.format(self.__class__.__name__, self.name)
+        return f'{self.__class__.__name__}({self.name!r})'
 
     def __str__(self):
-        return '<{0} {1}>'.format(self.__class__.__name__, self.name)
+        return f'<{self.__class__.__name__} {self.name}>'

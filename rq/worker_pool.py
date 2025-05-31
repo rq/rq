@@ -4,11 +4,12 @@ import logging
 import os
 import signal
 import time
+from collections.abc import Iterable
 from enum import Enum
 from multiprocessing import Process
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Type, Union
+from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Type, Union
 from uuid import uuid4
 
 from redis import ConnectionPool, Redis
@@ -63,7 +64,7 @@ class WorkerPool:
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
         self.worker_class: Type[BaseWorker] = worker_class
-        self.serializer: 'Serializer' = serializer
+        self.serializer: Serializer = serializer
         self.job_class: Type[Job] = job_class
         self.queue_class: Type[Queue] = queue_class
 

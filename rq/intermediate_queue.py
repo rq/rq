@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from .worker import BaseWorker
 
 
-class IntermediateQueue(object):
+class IntermediateQueue:
     def __init__(self, queue_key: str, connection: Redis):
         self.queue_key = queue_key
         self.key = self.get_intermediate_queue_key(queue_key)

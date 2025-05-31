@@ -282,7 +282,7 @@ def parse_function_arg(argument, arg_pos):
 
     if value.startswith('@'):
         try:
-            with open(value[1:], 'r') as file:
+            with open(value[1:]) as file:
                 value = file.read()
         except FileNotFoundError:
             raise click.FileError(value[1:], 'Not found')

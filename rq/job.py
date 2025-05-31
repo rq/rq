@@ -4,9 +4,10 @@ import json
 import logging
 import warnings
 import zlib
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from uuid import uuid4
 
 from redis import WatchError
@@ -165,18 +166,18 @@ class Job:
         self._id = id
         self.created_at = now()
         self._data = UNEVALUATED
-        self._func_name: Union[str, 'UnevaluatedType'] = UNEVALUATED
-        self._instance: Optional[Union[object, 'UnevaluatedType']] = UNEVALUATED
-        self._args: Union[tuple, list, 'UnevaluatedType'] = UNEVALUATED
-        self._kwargs: Union[Dict[str, Any], 'UnevaluatedType'] = UNEVALUATED
+        self._func_name: Union[str, UnevaluatedType] = UNEVALUATED
+        self._instance: Optional[Union[object, UnevaluatedType]] = UNEVALUATED
+        self._args: Union[tuple, list, UnevaluatedType] = UNEVALUATED
+        self._kwargs: Union[Dict[str, Any], UnevaluatedType] = UNEVALUATED
         self._success_callback_name: Optional[str] = None
-        self._success_callback: Union[Callable[['Job', 'Redis', Any], Any], 'UnevaluatedType'] = UNEVALUATED
+        self._success_callback: Union[Callable[[Job, Redis, Any], Any], UnevaluatedType] = UNEVALUATED
         self._failure_callback_name: Optional[str] = None
-        self._failure_callback: Union[Callable[['Job', 'Redis', Unpack[Tuple['ExcInfo']]], Any], 'UnevaluatedType'] = (
+        self._failure_callback: Union[Callable[[Job, Redis, Unpack[Tuple[ExcInfo]]], Any], UnevaluatedType] = (
             UNEVALUATED
         )
         self._stopped_callback_name: Optional[str] = None
-        self._stopped_callback: Union[Callable[['Job', 'Redis'], Any], 'UnevaluatedType'] = UNEVALUATED
+        self._stopped_callback: Union[Callable[[Job, Redis], Any], UnevaluatedType] = UNEVALUATED
         self.description: Optional[str] = None
         self.origin: str = ''
         self.enqueued_at: Optional[datetime] = None
@@ -292,9 +293,9 @@ class Job:
             kwargs = {}
 
         if not isinstance(args, (tuple, list)):
-            raise TypeError('{0!r} is not a valid args list'.format(args))
+            raise TypeError(f'{args!r} is not a valid args list')
         if not isinstance(kwargs, dict):
-            raise TypeError('{0!r} is not a valid kwargs dict'.format(kwargs))
+            raise TypeError(f'{kwargs!r} is not a valid kwargs dict')
 
         job = cls(connection=connection, serializer=serializer)
         if id is not None:
@@ -309,14 +310,14 @@ class Job:
             job._instance = func.__self__
             job._func_name = func.__name__
         elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = '{0}.{1}'.format(func.__module__, func.__qualname__)
+            job._func_name = f'{func.__module__}.{func.__qualname__}'
         elif isinstance(func, str):
             job._func_name = as_text(func)
         elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
             job._instance = func
             job._func_name = '__call__'
         else:
-            raise TypeError('Expected a callable or a string, but got: {0}'.format(func))
+            raise TypeError(f'Expected a callable or a string, but got: {func}')
         job._args = args
         job._kwargs = kwargs
 
@@ -416,7 +417,7 @@ class Job:
             pipeline (Optional[Pipeline], optional): Optional Redis Pipeline to use. Defaults to None.
         """
         self._status = status
-        connection: 'Redis' = pipeline if pipeline is not None else self.connection
+        connection: Redis = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
     def get_meta(self, refresh: bool = True) -> Dict:
@@ -692,7 +693,7 @@ class Job:
                 pipeline.hgetall(cls.key_for(job_id))
             results = pipeline.execute()
 
-        jobs: List[Optional['Job']] = []
+        jobs: List[Optional[Job]] = []
         for i, job_id in enumerate(parsed_ids):
             if not results[i]:
                 jobs.append(None)
@@ -705,10 +706,10 @@ class Job:
         return jobs
 
     def __repr__(self):  # noqa  # pragma: no cover
-        return '{0}({1!r}, enqueued_at={2!r})'.format(self.__class__.__name__, self._id, self.enqueued_at)
+        return f'{self.__class__.__name__}({self._id!r}, enqueued_at={self.enqueued_at!r})'
 
     def __str__(self):
-        return '<{0} {1}: {2}>'.format(self.__class__.__name__, self.id, self.description)
+        return f'<{self.__class__.__name__} {self.id}: {self.description}>'
 
     def __eq__(self, other):  # noqa
         return isinstance(other, self.__class__) and self.id == other.id
@@ -735,7 +736,7 @@ class Job:
             value (str): The value to set as Job ID
         """
         if not isinstance(value, str):
-            raise TypeError('id must be a string, not {0}'.format(type(value)))
+            raise TypeError(f'id must be a string, not {type(value)}')
 
         if ':' in value:
             raise ValueError('id must not contain ":"')
@@ -782,7 +783,7 @@ class Job:
         Returns:
             dependents_key (str): The dependents key
         """
-        return '{0}{1}:dependents'.format(cls.redis_job_namespace_prefix, job_id)
+        return f'{cls.redis_job_namespace_prefix}{job_id}:dependents'
 
     @property
     def key(self):
@@ -796,7 +797,7 @@ class Job:
 
     @property
     def dependencies_key(self):
-        return '{0}:{1}:dependencies'.format(self.redis_job_namespace_prefix, self.id)
+        return f'{self.redis_job_namespace_prefix}:{self.id}:dependencies'
 
     def fetch_dependencies(self, watch: bool = False, pipeline: Optional['Pipeline'] = None) -> List['Job']:
         """Fetch all of a job's dependencies. If a pipeline is supplied, and
@@ -948,7 +949,7 @@ class Job:
         try:
             raw_data = obj['data']
         except KeyError:
-            raise NoSuchJobError('Unexpected job format: {0}'.format(obj))
+            raise NoSuchJobError(f'Unexpected job format: {obj}')
 
         try:
             self.data = zlib.decompress(raw_data)
@@ -1032,7 +1033,7 @@ class Job:
         """
         data = self.connection.hgetall(self.key)
         if not data:
-            raise NoSuchJobError('No such job: {0}'.format(self.key))
+            raise NoSuchJobError(f'No such job: {self.key}')
         self.restore(data)
 
     def to_dict(self, include_meta: bool = True, include_result: bool = True) -> dict:
@@ -1178,7 +1179,7 @@ class Job:
             InvalidJobOperation: If the job has already been cancelled.
         """
         if self.is_canceled:
-            raise InvalidJobOperation('Cannot cancel already canceled job: {}'.format(self.get_id()))
+            raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.get_id()}')
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
@@ -1769,4 +1770,4 @@ class Callback:
     def name(self) -> str:
         if isinstance(self.func, str):
             return self.func
-        return '{0}.{1}'.format(self.func.__module__, self.func.__qualname__)
+        return f'{self.func.__module__}.{self.func.__qualname__}'

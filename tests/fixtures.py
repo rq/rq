@@ -107,7 +107,7 @@ def create_file_after_timeout_and_setpgrp(path, timeout):
 def launch_process_within_worker_and_store_pid(path, timeout):
     p = subprocess.Popen(['sleep', str(timeout)])
     with open(path, 'w') as f:
-        f.write('{}'.format(p.pid))
+        f.write(f'{p.pid}')
     p.wait()
 
 
