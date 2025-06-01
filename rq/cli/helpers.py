@@ -251,11 +251,33 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
+class ParsingMode(Enum):
+    PLAIN_TEXT = 0
+    JSON = 1
+    LITERAL_EVAL = 2
+
+
+def _parse_json_value(value, keyword, arg_pos):
+    """Parse value as JSON with error handling."""
+    try:
+        return loads(value)
+    except JSONDecodeError:
+        raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or '%s. non keyword argument' % arg_pos))
+
+
+def _parse_literal_eval_value(value, keyword, arg_pos):
+    """Parse value using literal_eval with error handling."""
+    try:
+        return literal_eval(value)
+    except Exception:
+        raise click.BadParameter(
+            'Unable to eval %s as Python object. See '
+            'https://docs.python.org/3/library/ast.html#ast.literal_eval'
+            % (keyword or '%s. non keyword argument' % arg_pos)
+        )
+
+
 def parse_function_arg(argument, arg_pos):
-    class ParsingMode(Enum):
-        PLAIN_TEXT = 0
-        JSON = 1
-        LITERAL_EVAL = 2
 
     keyword = None
     if argument.startswith(':'):  # no keyword, json
@@ -289,19 +311,9 @@ def parse_function_arg(argument, arg_pos):
             raise click.FileError(value[1:], 'Not found')
 
     if mode == ParsingMode.JSON:  # json
-        try:
-            value = loads(value)
-        except JSONDecodeError:
-            raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or '%s. non keyword argument' % arg_pos))
+        value = _parse_json_value(value, keyword, arg_pos)
     elif mode == ParsingMode.LITERAL_EVAL:  # literal_eval
-        try:
-            value = literal_eval(value)
-        except Exception:
-            raise click.BadParameter(
-                'Unable to eval %s as Python object. See '
-                'https://docs.python.org/3/library/ast.html#ast.literal_eval'
-                % (keyword or '%s. non keyword argument' % arg_pos)
-            )
+        value = _parse_literal_eval_value(value, keyword, arg_pos)
 
     return keyword, value
 

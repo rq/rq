@@ -405,13 +405,13 @@ class TestRQCli(CLITestCase):
     def test_suspend_with_ttl(self):
         """rq suspend -u <url> --duration=2"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 1])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '1'])
         self.assert_normal_execution(result)
 
     def test_suspend_with_invalid_ttl(self):
         """rq suspend -u <url> --duration=0"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 0])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '0'])
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Duration must be an integer greater than 1', result.output)
