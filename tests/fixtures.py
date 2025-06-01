@@ -203,9 +203,10 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay, connection):
             for i in range(20):
                 time.sleep(0.1)
             create_file(os.path.join(sandbox, 'finished'))
+            return True
 
     w = TestHerokuWorker(Queue('dummy', connection=connection), connection=connection)
-    w.main_work_horse(None, None)
+    w.main_work_horse(None, None)  # type: ignore[no-untyped-call]
 
 
 class DummyQueue:
