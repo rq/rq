@@ -1185,6 +1185,9 @@ class Job:
         """
         if self.is_canceled:
             raise InvalidJobOperation("Cannot cancel already canceled job: {}".format(self.get_id()))
+        # make sure the job exists in Redis
+        if not self.exists(self.id, self.connection):
+            self.save()
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
