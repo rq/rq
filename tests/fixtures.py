@@ -107,7 +107,7 @@ def create_file_after_timeout_and_setpgrp(path, timeout):
 def launch_process_within_worker_and_store_pid(path, timeout):
     p = subprocess.Popen(['sleep', str(timeout)])
     with open(path, 'w') as f:
-        f.write('{}'.format(p.pid))
+        f.write(f'{p.pid}')
     p.wait()
 
 
@@ -203,9 +203,10 @@ def run_dummy_heroku_worker(sandbox, _imminent_shutdown_delay, connection):
             for i in range(20):
                 time.sleep(0.1)
             create_file(os.path.join(sandbox, 'finished'))
+            return True
 
     w = TestHerokuWorker(Queue('dummy', connection=connection), connection=connection)
-    w.main_work_horse(None, None)
+    w.main_work_horse(None, None)  # type: ignore[no-untyped-call]
 
 
 class DummyQueue:

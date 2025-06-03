@@ -53,7 +53,7 @@ class TestScheduledJobRegistry(RQTestCase):
         chunk_size = 5
 
         for index in range(0, chunk_size * 2):
-            self.connection.zadd(registry.key, {'foo_{}'.format(index): 1})
+            self.connection.zadd(registry.key, {f'foo_{index}': 1})
 
         self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size)), chunk_size)
         self.assertEqual(len(registry.get_jobs_to_schedule(timestamp, chunk_size * 2)), chunk_size * 2)
@@ -441,7 +441,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(registry), 1)
 
         # enqueue_at set job status to "scheduled"
-        self.assertTrue(job.get_status() == 'scheduled')
+        self.assertEqual(job.get_status(), 'scheduled')
 
         # After enqueue_scheduled_jobs() is called, the registry is empty
         # and job is enqueued
@@ -465,8 +465,8 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(registry), 2)
 
         # enqueue_at set job status to "scheduled"
-        self.assertTrue(job_first.get_status() == 'scheduled')
-        self.assertTrue(job_second.get_status() == 'scheduled')
+        self.assertEqual(job_first.get_status(), 'scheduled')
+        self.assertEqual(job_second.get_status(), 'scheduled')
 
         # After enqueue_scheduled_jobs() is called, the registry is empty
         # and job is enqueued

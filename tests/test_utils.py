@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from redis import Redis
 
 from rq.exceptions import TimeoutFormatError
+from rq.job import Job
 from rq.utils import (
     as_text,
     backend_class,
@@ -12,6 +13,8 @@ from rq.utils import (
     get_call_string,
     get_version,
     import_attribute,
+    import_job_class,
+    import_worker_class,
     is_nonstring_iterable,
     parse_timeout,
     split_list,
@@ -88,28 +91,28 @@ class TestUtils(RQTestCase):
     def test_get_redis_version(self):
         """Ensure get_version works properly"""
         redis = Redis()
-        self.assertTrue(isinstance(get_version(redis), tuple))
+        self.assertIsInstance(get_version(redis), tuple)
 
         # Parses 3 digit version numbers correctly
-        class DummyRedis(Redis):
+        class Redis4(Redis):
             def info(*args):
                 return {'redis_version': '4.0.8'}
 
-        self.assertEqual(get_version(DummyRedis()), (4, 0, 8))
+        self.assertEqual(get_version(Redis4()), (4, 0, 8))
 
         # Parses 3 digit version numbers correctly
-        class DummyRedis(Redis):
+        class Redis3(Redis):
             def info(*args):
                 return {'redis_version': '3.0.7.9'}
 
-        self.assertEqual(get_version(DummyRedis()), (3, 0, 7))
+        self.assertEqual(get_version(Redis3()), (3, 0, 7))
 
         # Parses 2 digit version numbers correctly (Seen in AWS ElastiCache Redis)
-        class DummyRedis(Redis):
+        class Redis7(Redis):
             def info(*args):
                 return {'redis_version': '7.1'}
 
-        self.assertEqual(get_version(DummyRedis()), (7, 1, 0))
+        self.assertEqual(get_version(Redis7()), (7, 1, 0))
 
         # Parses 2 digit float version numbers correctly (Seen in AWS ElastiCache Redis)
         class DummyRedis(Redis):
@@ -179,3 +182,39 @@ class TestUtils(RQTestCase):
         kwargs = {'len4': 1234, 'len5': 12345, 'len6': 123456}
         cs = get_call_string(func_name, args, kwargs, max_length=5)
         assert cs == 'f(1234, 12345, 12345..., len4=1234, len5=12345, len6=12345...)'
+
+    def test_import_job_class(self):
+        """Ensure import_job_class works properly"""
+        # Test importing a valid job class
+        job_class = import_job_class('rq.job.Job')
+        self.assertEqual(job_class, Job)
+
+        # Test importing a non-existent module
+        with self.assertRaises(ValueError):
+            import_job_class('non.existent.module')
+
+        # Test importing a non-class attribute
+        with self.assertRaises(ValueError):
+            import_job_class('rq.utils.get_version')
+
+        # Test importing a class that's not a Job subclass
+        with self.assertRaises(ValueError):
+            import_job_class('datetime.datetime')
+
+    def test_import_worker_class(self):
+        """Ensure import_worker_class works properly"""
+        # Test importing a valid worker class
+        worker_class = import_worker_class('rq.worker.SimpleWorker')
+        self.assertEqual(worker_class, SimpleWorker)
+
+        # Test importing a non-existent module
+        with self.assertRaises(ValueError):
+            import_worker_class('non.existent.module')
+
+        # Test importing a non-class attribute
+        with self.assertRaises(ValueError):
+            import_worker_class('rq.utils.get_version')
+
+        # Test importing a class that's not a Worker subclass
+        with self.assertRaises(ValueError):
+            import_worker_class('datetime.datetime')

@@ -33,9 +33,9 @@ class CLITestCase(RQTestCase):
             return True
         else:
             print('Non normal execution')
-            print('Exit Code: {}'.format(result.exit_code))
-            print('Output: {}'.format(result.output))
-            print('Exception: {}'.format(result.exception))
+            print(f'Exit Code: {result.exit_code}')
+            print(f'Output: {result.output}')
+            print(f'Exception: {result.exception}')
             self.assertEqual(result.exit_code, 0)
 
 
@@ -49,9 +49,9 @@ class TestRQCli(CLITestCase):
             return True
         else:
             print('Non normal execution')
-            print('Exit Code: {}'.format(result.exit_code))
-            print('Output: {}'.format(result.output))
-            print('Exception: {}'.format(result.exception))
+            print(f'Exit Code: {result.exit_code}')
+            print(f'Output: {result.output}')
+            print(f'Exception: {result.exception}')
             self.assertEqual(result.exit_code, 0)
 
     """Test rq_cli script"""
@@ -295,7 +295,7 @@ class TestRQCli(CLITestCase):
         pid = self.tmpdir.join('rq.pid')
         runner = CliRunner()
         result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--pid', str(pid)])
-        self.assertTrue(len(pid.read()) > 0)
+        self.assertGreater(len(pid.read()), 0)
         self.assert_normal_execution(result)
 
     def test_worker_with_scheduler(self):
@@ -351,19 +351,19 @@ class TestRQCli(CLITestCase):
         job = q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
         registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # If disable-default-exception-handler is given, job is not moved to FailedJobRegistry
         job = q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--disable-default-exception-handler'])
         registry = FailedJobRegistry(queue=q)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         # Both default and custom exception handler is run
         job = q.enqueue(div_by_zero)
         runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--exception-handler', 'tests.fixtures.add_meta'])
         registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
         job.refresh()
         self.assertEqual(job.meta, {'foo': 1})
 
@@ -382,7 +382,7 @@ class TestRQCli(CLITestCase):
             ],
         )
         registry = FailedJobRegistry(queue=q)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
         job.refresh()
         self.assertEqual(job.meta, {'foo': 1})
 
@@ -405,13 +405,13 @@ class TestRQCli(CLITestCase):
     def test_suspend_with_ttl(self):
         """rq suspend -u <url> --duration=2"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 1])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '1'])
         self.assert_normal_execution(result)
 
     def test_suspend_with_invalid_ttl(self):
         """rq suspend -u <url> --duration=0"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', 0])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '0'])
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Duration must be an integer greater than 1', result.output)
@@ -518,8 +518,8 @@ class TestRQCli(CLITestCase):
         worker = Worker(queue, connection=self.connection)
         scheduler = RQScheduler(queue, self.connection)
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 0)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 0)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -530,8 +530,8 @@ class TestRQCli(CLITestCase):
         scheduler.acquire_locks()
         scheduler.enqueue_scheduled_jobs()
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 1)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 1)
 
         self.assertFalse(worker.work(True))
 
@@ -539,8 +539,8 @@ class TestRQCli(CLITestCase):
 
         scheduler.enqueue_scheduled_jobs()
 
-        self.assertTrue(len(queue) == 1)
-        self.assertTrue(len(registry) == 0)
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(len(registry), 0)
 
         self.assertTrue(worker.work(True))
 
@@ -555,8 +555,8 @@ class TestRQCli(CLITestCase):
         worker = Worker(queue, connection=self.connection)
         scheduler = RQScheduler(queue, self.connection)
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 0)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 0)
 
         runner = CliRunner()
         result = runner.invoke(
@@ -566,31 +566,31 @@ class TestRQCli(CLITestCase):
 
         scheduler.acquire_locks()
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 1)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 1)
 
         scheduler.enqueue_scheduled_jobs()
 
-        self.assertTrue(len(queue) == 1)
-        self.assertTrue(len(registry) == 0)
+        self.assertEqual(len(queue), 1)
+        self.assertEqual(len(registry), 0)
 
         self.assertTrue(worker.work(True))
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 0)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 0)
 
         result = runner.invoke(
             main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello', '--schedule-at', '2100-01-01T00:00:00']
         )
         self.assert_normal_execution(result)
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 1)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 1)
 
         scheduler.enqueue_scheduled_jobs()
 
-        self.assertTrue(len(queue) == 0)
-        self.assertTrue(len(registry) == 1)
+        self.assertEqual(len(queue), 0)
+        self.assertEqual(len(registry), 1)
 
         self.assertFalse(worker.work(True))
 
@@ -771,7 +771,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([open('tests/test.json', 'r').read()], {}))
+        self.assertEqual((job.args, job.kwargs), ([open('tests/test.json').read()], {}))
 
         id = str(uuid4())
         result = runner.invoke(
@@ -779,7 +779,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json', 'r').read()}))
+        self.assertEqual((job.args, job.kwargs), ([], {'key': open('tests/test.json').read()}))
 
         id = str(uuid4())
         result = runner.invoke(
@@ -787,7 +787,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json', 'r').read())], {}))
+        self.assertEqual((job.args, job.kwargs), ([json.loads(open('tests/test.json').read())], {}))
 
         id = str(uuid4())
         result = runner.invoke(
@@ -795,7 +795,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
-        self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json', 'r').read())}))
+        self.assertEqual((job.args, job.kwargs), ([], {'key': json.loads(open('tests/test.json').read())}))
 
 
 class WorkerPoolCLITestCase(CLITestCase):

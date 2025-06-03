@@ -119,7 +119,7 @@ class TestScheduledJobRegistry(RQTestCase):
         worker.handle_job_success(job, queue, registry)
 
         payload = self.connection.hgetall(job.key)
-        self.assertFalse(b'result' in payload.keys())
+        self.assertNotIn(b'result', payload.keys())
         self.assertEqual(job.result, 'Success')
 
         with patch('rq.worker.Worker.supports_redis_streams', new_callable=PropertyMock) as mock:
@@ -138,7 +138,7 @@ class TestScheduledJobRegistry(RQTestCase):
 
                 worker.handle_job_success(job, queue, registry)
                 payload = self.connection.hgetall(job.key)
-                self.assertTrue(b'result' in payload.keys())
+                self.assertIn(b'result', payload.keys())
                 # Delete all new result objects so we only have result stored in job hash,
                 # this should simulate a job that was executed in an earlier RQ version
                 self.assertEqual(job.result, 'Success')
@@ -161,7 +161,7 @@ class TestScheduledJobRegistry(RQTestCase):
 
         job = Job.fetch(job.id, connection=self.connection)
         payload = self.connection.hgetall(job.key)
-        self.assertFalse(b'exc_info' in payload.keys())
+        self.assertNotIn(b'exc_info', payload.keys())
         self.assertEqual(job.exc_info, 'Error')
 
         with patch('rq.worker.Worker.supports_redis_streams', new_callable=PropertyMock) as mock:
@@ -180,7 +180,7 @@ class TestScheduledJobRegistry(RQTestCase):
 
                 worker.handle_job_failure(job, exc_string='Error', queue=queue, started_job_registry=registry)
                 payload = self.connection.hgetall(job.key)
-                self.assertTrue(b'exc_info' in payload.keys())
+                self.assertIn(b'exc_info', payload.keys())
                 # Delete all new result objects so we only have result stored in job hash,
                 # this should simulate a job that was executed in an earlier RQ version
                 Result.delete_all(job)

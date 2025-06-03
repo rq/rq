@@ -44,7 +44,7 @@ class TestIntermediateQueue(RQTestCase):
         intermediate_queue.set_first_seen(job.id)
         timestamp = intermediate_queue.get_first_seen(job.id)
         assert timestamp
-        self.assertTrue(datetime.now(tz=timezone.utc) - timestamp < timedelta(seconds=5))
+        self.assertLess(datetime.now(tz=timezone.utc) - timestamp, timedelta(seconds=5))
 
     def test_should_be_cleaned_up(self):
         """Job in the intermediate queue should be cleaned up if it was seen more than 1 minute ago."""
@@ -105,7 +105,7 @@ class TestIntermediateQueue(RQTestCase):
             # If worker.execute_job() does nothing, job status should be `queued`
             # even though it's not in the queue, but it should be in the intermediate queue
             self.assertEqual(job.get_status(), JobStatus.QUEUED)
-            self.assertFalse(job.id in self.queue.get_job_ids())
+            self.assertNotIn(job.id, self.queue.get_job_ids())
             self.assertEqual(intermediate_queue.get_job_ids(), [job.id])
 
             self.assertIsNone(intermediate_queue.get_first_seen(job.id))
@@ -150,7 +150,7 @@ class TestIntermediateQueue(RQTestCase):
             # If worker.execute_job() does nothing, job status should be `queued`
             # even though it's not in the queue, but it should be in the intermediate queue
             self.assertEqual(job.get_status(), JobStatus.QUEUED)
-            self.assertFalse(job.id in self.queue.get_job_ids())
+            self.assertNotIn(job.id, self.queue.get_job_ids())
             self.assertEqual(intermediate_queue.get_job_ids(), [job.id])
 
             self.assertIsNone(intermediate_queue.get_first_seen(job.id))
@@ -196,12 +196,13 @@ class TestIntermediateQueue(RQTestCase):
             # even though it's not in the queue, but it should be in the intermediate queue
             # and the job should be in the started queue (since we only mocked perform_job)
             self.assertEqual(job.get_status(), JobStatus.QUEUED)
-            self.assertFalse(job.id in self.queue.get_job_ids())
+            self.assertNotIn(job.id, self.queue.get_job_ids())
             self.assertEqual(intermediate_queue.get_job_ids(), [job.id])
 
-            self.assertTrue(job.id in job.started_job_registry.get_job_ids())
-            self.assertTrue(
-                (worker.execution.job_id, worker.execution.id) in job.started_job_registry.get_job_and_execution_ids()
+            self.assertIn(job.id, job.started_job_registry.get_job_ids())
+            self.assertIn(
+                (worker.execution.job_id, worker.execution.id),
+                job.started_job_registry.get_job_and_execution_ids(),
             )
 
             # this should NOT remove the job from the queue, nor set the first see key
@@ -210,7 +211,7 @@ class TestIntermediateQueue(RQTestCase):
             intermediate_queue.cleanup(worker, self.queue)
             self.assertIsNone(intermediate_queue.get_first_seen(job.id))
 
-            self.assertTrue(job.get_status() == JobStatus.QUEUED)
+            self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_clean_intermediate_queue_deprecation(self):
         with pytest.deprecated_call():

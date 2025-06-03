@@ -62,8 +62,8 @@ class TestCommands(RQTestCase):
 
         with mock.patch('redis.client.PubSub.get_message', new_callable=raise_exc_mock):
             worker.subscribe()
+            worker.pubsub_thread.join()
 
-        worker.pubsub_thread.join()
         assert not worker.pubsub_thread.is_alive()
 
     def test_kill_horse_command(self):
@@ -80,7 +80,7 @@ class TestCommands(RQTestCase):
         worker.work(burst=True)
         p.join(1)
         job.refresh()
-        self.assertTrue(job.id in queue.failed_job_registry)
+        self.assertIn(job.id, queue.failed_job_registry)
 
         p = Process(target=start_work, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy()))
         p.start()

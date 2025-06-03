@@ -3,10 +3,11 @@ import os
 import signal
 import time
 import traceback
+from collections.abc import Iterable
 from datetime import datetime
 from enum import Enum
 from multiprocessing import Process
-from typing import Iterable, List, Optional, Set, Union
+from typing import Optional, Union
 
 from redis import ConnectionPool, Redis
 
@@ -47,8 +48,8 @@ class RQScheduler:
         serializer=None,
     ):
         self._queue_names = set(parse_names(queues))
-        self._acquired_locks: Set[str] = set()
-        self._scheduled_job_registries: List[ScheduledJobRegistry] = []
+        self._acquired_locks: set[str] = set()
+        self._scheduled_job_registries: list[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
