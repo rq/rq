@@ -98,6 +98,7 @@ def signal_name(signum):
     except ValueError:
         return 'SIG_UNKNOWN'
 
+SIGNAL_SHUTDOWN = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL
 
 class DequeueStrategy(str, Enum):
     DEFAULT = 'default'
@@ -1227,7 +1228,7 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
-    def kill_horse(self, sig: signal.Signals = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL):
+    def kill_horse(self, sig: signal.Signals = SIGNAL_SHUTDOWN):
         raise NotImplementedError()
 
 
@@ -1237,7 +1238,7 @@ class Worker(BaseWorker):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
 
-    def kill_horse(self, sig: signal.Signals = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL):
+    def kill_horse(self, sig: signal.Signals = SIGNAL_SHUTDOWN):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
 
         Args:
