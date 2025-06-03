@@ -4,11 +4,12 @@ import logging
 import os
 import signal
 import time
+from collections.abc import Iterable
 from enum import Enum
 from multiprocessing import Process
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import TYPE_CHECKING, Dict, Iterable, List, NamedTuple, Optional, Type, Union
+from typing import TYPE_CHECKING, NamedTuple, Optional, Union
 from uuid import uuid4
 
 from redis import ConnectionPool, Redis
@@ -44,35 +45,35 @@ class WorkerPool:
         queues: Iterable[Union[str, Queue]],
         connection: Redis,
         num_workers: int = 1,
-        worker_class: Type[BaseWorker] = Worker,
-        serializer: Type['Serializer'] = DefaultSerializer,
-        job_class: Type[Job] = Job,
-        queue_class: Type[Queue] = Queue,
+        worker_class: type[BaseWorker] = Worker,
+        serializer: 'Serializer' = DefaultSerializer,
+        job_class: type[Job] = Job,
+        queue_class: type[Queue] = Queue,
         *args,
         **kwargs,
     ):
         self.num_workers: int = num_workers
-        self._workers: List[Worker] = []
+        self._workers: list[Worker] = []
         setup_loghandlers('INFO', DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log: logging.Logger = logging.getLogger(__name__)
         # self.log: logging.Logger = logger
-        self._queue_names: List[str] = parse_names(queues)
+        self._queue_names: list[str] = parse_names(queues)
         self.connection = connection
         self.name: str = uuid4().hex
         self._burst: bool = True
         self._sleep: int = 0
         self.status: self.Status = self.Status.IDLE  # type: ignore
-        self.worker_class: Type[BaseWorker] = worker_class
-        self.serializer: Type['Serializer'] = serializer
-        self.job_class: Type[Job] = job_class
-        self.queue_class: Type[Queue] = queue_class
+        self.worker_class: type[BaseWorker] = worker_class
+        self.serializer: Serializer = serializer
+        self.job_class: type[Job] = job_class
+        self.queue_class: type[Queue] = queue_class
 
         # A dictionary of WorkerData keyed by worker name
-        self.worker_dict: Dict[str, WorkerData] = {}
+        self.worker_dict: dict[str, WorkerData] = {}
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
 
     @property
-    def queues(self) -> List[Queue]:
+    def queues(self) -> list[Queue]:
         """Returns a list of Queue objects"""
         return [self.queue_class(name, connection=self.connection) for name in self._queue_names]
 
@@ -250,10 +251,10 @@ def run_worker(
     connection_class,
     connection_pool_class,
     connection_pool_kwargs: dict,
-    worker_class: Type[BaseWorker] = Worker,
-    serializer: Type['Serializer'] = DefaultSerializer,
-    job_class: Type[Job] = Job,
-    queue_class: Type[Queue] = Queue,
+    worker_class: type[BaseWorker] = Worker,
+    serializer: 'Serializer' = DefaultSerializer,
+    job_class: type[Job] = Job,
+    queue_class: type[Queue] = Queue,
     burst: bool = True,
     logging_level: str = 'INFO',
     _sleep: int = 0,

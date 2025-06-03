@@ -4,7 +4,7 @@ import time
 import traceback
 import warnings
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Type, Union, cast
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 from rq.serializers import resolve_serializer
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from redis.client import Pipeline
 
     from rq.executions import Execution
+    from rq.serializers import Serializer
 
 
 logger = logging.getLogger('rq.registry')
@@ -40,10 +41,10 @@ class BaseRegistry:
         self,
         name: str = 'default',
         connection: Optional['Redis'] = None,
-        job_class: Optional[Type['Job']] = None,
+        job_class: Optional[type['Job']] = None,
         queue: Optional['Queue'] = None,
-        serializer: Any = None,
-        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
+        serializer: Optional[Union['Serializer', str]] = None,
+        death_penalty_class: Optional[type[BaseDeathPenalty]] = None,
     ):
         if queue:
             self.name = queue.name
@@ -55,8 +56,8 @@ class BaseRegistry:
             self.serializer = resolve_serializer(serializer)
 
         self.key = self.key_template.format(self.name)
-        self.job_class = backend_class(self, 'job_class', override=job_class)
-        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)
+        self.job_class = job_class if job_class else Job
+        self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)  # type: ignore[assignment]
 
     def __len__(self):
         """Returns the number of jobs in this registry"""
@@ -153,7 +154,7 @@ class BaseRegistry:
         expired_jobs = self.connection.zrangebyscore(self.key, 0, score)
         return [self.parse_job_id(job_id) for job_id in expired_jobs]
 
-    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True) -> List[str]:
+    def get_job_ids(self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True) -> list[str]:
         """Returns list of all job ids.
 
         Args:
@@ -232,7 +233,7 @@ class BaseRegistry:
             entry = as_text(entry)  # type: ignore
         return entry
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[List] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
         """This method is automatically called by `count()` and `get_job_ids()` methods
         implemented in BaseRegistry. Base registry doesn't have any special cleanup instructions"""
 
@@ -348,7 +349,7 @@ class StartedJobRegistry(BaseRegistry):
 
     def get_job_and_execution_ids(
         self, start: int = 0, end: int = -1, desc: bool = False, cleanup: bool = True
-    ) -> List[Tuple[str, str]]:
+    ) -> list[tuple[str, str]]:
         """Function to retrieve a list of tuples where the first item is the job id and
             the second is the execution id.
 
@@ -418,7 +419,7 @@ class FinishedJobRegistry(BaseRegistry):
 
     key_template = 'rq:finished:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[List] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -436,7 +437,7 @@ class FailedJobRegistry(BaseRegistry):
 
     key_template = 'rq:failed:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[List] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -483,7 +484,7 @@ class DeferredJobRegistry(BaseRegistry):
 
     key_template = 'rq:deferred:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[List] = None):
+    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
         """Remove expired jobs from registry and add them to FailedJobRegistry.
         Removes jobs with an expiry time earlier than timestamp, specified as
         seconds since the Unix epoch. timestamp defaults to call time if
@@ -559,7 +560,7 @@ class ScheduledJobRegistry(BaseRegistry):
         score: int = timestamp if timestamp is not None else current_timestamp()
         return connection.zremrangebyscore(self.key, 0, score)
 
-    def get_jobs_to_schedule(self, timestamp: Optional[int] = None, chunk_size: int = 1000) -> List[str]:
+    def get_jobs_to_schedule(self, timestamp: Optional[int] = None, chunk_size: int = 1000) -> list[str]:
         """Get's a list of job IDs that should be scheduled.
 
         Args:

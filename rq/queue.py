@@ -4,6 +4,7 @@ import traceback
 import uuid
 import warnings
 from collections import namedtuple
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta
 from functools import total_ordering
 
@@ -12,13 +13,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    Iterable,
-    List,
     Optional,
-    Sequence,
-    Tuple,
-    Type,
     Union,
     cast,
 )
@@ -40,7 +35,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .repeat import Repeat
-from .serializers import resolve_serializer
+from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
 
@@ -80,8 +75,8 @@ class EnqueueData(
 
 @total_ordering
 class Queue:
-    job_class: Type['Job'] = Job
-    death_penalty_class: Type[BaseDeathPenalty] = UnixSignalDeathPenalty
+    job_class: type['Job'] = Job
+    death_penalty_class: type[BaseDeathPenalty] = UnixSignalDeathPenalty
     DEFAULT_TIMEOUT: int = 180  # Default timeout seconds.
     redis_queue_namespace_prefix: str = 'rq:queue:'
     redis_queues_keys: str = 'rq:queues'
@@ -90,10 +85,10 @@ class Queue:
     def all(
         cls,
         connection: 'Redis',
-        job_class: Optional[Type['Job']] = None,
+        job_class: Optional[type['Job']] = None,
         serializer=None,
-        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
-    ) -> List['Queue']:
+        death_penalty_class: Optional[type[BaseDeathPenalty]] = None,
+    ) -> list['Queue']:
         """Returns an iterable of all Queues.
 
         Args:
@@ -124,9 +119,9 @@ class Queue:
         cls,
         queue_key: str,
         connection: 'Redis',
-        job_class: Optional[Type['Job']] = None,
-        serializer: Any = None,
-        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
+        job_class: Optional[type['Job']] = None,
+        serializer: Optional[Union[Serializer, str]] = None,
+        death_penalty_class: Optional[type[BaseDeathPenalty]] = None,
     ) -> 'Queue':
         """Returns a Queue instance, based on the naming conventions for naming
         the internal Redis keys.  Can be used to reverse-lookup Queues by their
@@ -136,7 +131,7 @@ class Queue:
             queue_key (str): The queue key
             connection (Redis): Redis connection. Defaults to None.
             job_class (Optional[Job], optional): Job class. Defaults to None.
-            serializer (Any, optional): Serializer. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Optional[BaseDeathPenalty], optional): Death penalty class. Defaults to None.
 
         Raises:
@@ -147,7 +142,7 @@ class Queue:
         """
         prefix = cls.redis_queue_namespace_prefix
         if not queue_key.startswith(prefix):
-            raise ValueError('Not a valid RQ queue key: {0}'.format(queue_key))
+            raise ValueError(f'Not a valid RQ queue key: {queue_key}')
         name = queue_key[len(prefix) :]
         return cls(
             name,
@@ -163,9 +158,9 @@ class Queue:
         connection: Optional['Redis'] = None,
         default_timeout: Optional[int] = None,
         is_async: bool = True,
-        job_class: Optional[Union[str, Type['Job']]] = None,
-        serializer: Any = None,
-        death_penalty_class: Optional[Type[BaseDeathPenalty]] = UnixSignalDeathPenalty,
+        job_class: Optional[Union[str, type['Job']]] = None,
+        serializer: Optional[Union[Serializer, str]] = None,
+        death_penalty_class: Optional[type[BaseDeathPenalty]] = UnixSignalDeathPenalty,
         **kwargs,
     ):
         """Initializes a Queue object.
@@ -178,7 +173,7 @@ class Queue:
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
             job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
                 Defaults to None.
-            serializer (Any, optional): Serializer. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Type[BaseDeathPenalty, optional): Job class or a string referencing the Job class path.
                 Defaults to UnixSignalDeathPenalty.
         """
@@ -187,7 +182,7 @@ class Queue:
         self.connection = connection
         prefix = self.redis_queue_namespace_prefix
         self.name = name
-        self._key = '{0}{1}'.format(prefix, name)
+        self._key = f'{prefix}{name}'
         self._default_timeout = parse_timeout(default_timeout) or self.DEFAULT_TIMEOUT
         self._is_async = is_async
         self.log = logger
@@ -205,7 +200,7 @@ class Queue:
         self.death_penalty_class = death_penalty_class  # type: ignore[assignment]
 
         self.serializer = resolve_serializer(serializer)
-        self.redis_server_version: Optional[Tuple[int, int, int]] = None
+        self.redis_server_version: Optional[tuple[int, int, int]] = None
 
     def __len__(self):
         return self.count
@@ -216,7 +211,7 @@ class Queue:
     def __iter__(self):
         yield self
 
-    def get_redis_server_version(self) -> Tuple[int, int, int]:
+    def get_redis_server_version(self) -> tuple[int, int, int]:
         """Return Redis server version of connection
 
         Returns:
@@ -279,8 +274,8 @@ class Queue:
         Returns:
             script (...): The Lua Script is called.
         """
-        script = """
-            local prefix = "{0}"
+        script = f"""
+            local prefix = "{self.job_class.redis_job_namespace_prefix}"
             local q = KEYS[1]
             local count = 0
             while true do
@@ -295,7 +290,7 @@ class Queue:
                 count = count + 1
             end
             return count
-        """.format(self.job_class.redis_job_namespace_prefix).encode('utf-8')
+        """.encode()
         script = self.connection.register_script(script)
         return script(keys=[self.key])
 
@@ -374,7 +369,7 @@ class Queue:
             return self.job_ids.index(job_id)
         return None
 
-    def get_job_ids(self, offset: int = 0, length: int = -1) -> List[str]:
+    def get_job_ids(self, offset: int = 0, length: int = -1) -> list[str]:
         """Returns a slice of job IDs in the queue.
 
         Args:
@@ -393,7 +388,7 @@ class Queue:
         self.log.debug('Getting jobs for queue %s: %d found.', green(self.name), len(job_ids))
         return job_ids
 
-    def get_jobs(self, offset: int = 0, length: int = -1) -> List['Job']:
+    def get_jobs(self, offset: int = 0, length: int = -1) -> list['Job']:
         """Returns a slice of jobs in the queue.
 
         Args:
@@ -407,12 +402,12 @@ class Queue:
         return compact([self.fetch_job(job_id) for job_id in job_ids])
 
     @property
-    def job_ids(self) -> List[str]:
+    def job_ids(self) -> list[str]:
         """Returns a list of all job IDS in the queue."""
         return self.get_job_ids()
 
     @property
-    def jobs(self) -> List['Job']:
+    def jobs(self) -> list['Job']:
         """Returns a list of all (valid) jobs in the queue."""
         return self.get_jobs()
 
@@ -516,8 +511,8 @@ class Queue:
     def create_job(
         self,
         func: 'FunctionReferenceType',
-        args: Union[Tuple, List, None] = None,
-        kwargs: Optional[Dict] = None,
+        args: Union[tuple, list, None] = None,
+        kwargs: Optional[dict] = None,
         timeout: Optional[int] = None,
         result_ttl: Optional[int] = None,
         ttl: Optional[int] = None,
@@ -525,7 +520,7 @@ class Queue:
         description: Optional[str] = None,
         depends_on: Optional['JobDependencyType'] = None,
         job_id: Optional[str] = None,
-        meta: Optional[Dict] = None,
+        meta: Optional[dict] = None,
         status: JobStatus = JobStatus.QUEUED,
         retry: Optional['Retry'] = None,
         repeat: Optional['Repeat'] = None,
@@ -676,8 +671,8 @@ class Queue:
     def enqueue_call(
         self,
         func: 'FunctionReferenceType',
-        args: Union[Tuple, List, None] = None,
-        kwargs: Optional[Dict] = None,
+        args: Union[tuple, list, None] = None,
+        kwargs: Optional[dict] = None,
         timeout: Optional[int] = None,
         result_ttl: Optional[int] = None,
         ttl: Optional[int] = None,
@@ -686,7 +681,7 @@ class Queue:
         depends_on: Optional['JobDependencyType'] = None,
         job_id: Optional[str] = None,
         at_front: bool = False,
-        meta: Optional[Dict] = None,
+        meta: Optional[dict] = None,
         retry: Optional['Retry'] = None,
         repeat: Optional['Repeat'] = None,
         on_success: Optional[Union[Callback, Callable[..., Any]]] = None,
@@ -750,8 +745,8 @@ class Queue:
     @staticmethod
     def prepare_data(
         func: 'FunctionReferenceType',
-        args: Union[Tuple, List, None] = None,
-        kwargs: Optional[Dict] = None,
+        args: Union[tuple, list, None] = None,
+        kwargs: Optional[dict] = None,
         timeout: Optional[int] = None,
         result_ttl: Optional[int] = None,
         ttl: Optional[int] = None,
@@ -760,7 +755,7 @@ class Queue:
         depends_on: Optional['JobDependencyType'] = None,
         job_id: Optional[str] = None,
         at_front: bool = False,
-        meta: Optional[Dict] = None,
+        meta: Optional[dict] = None,
         retry: Optional['Retry'] = None,
         on_success: Optional[Union[Callback, Callable]] = None,
         on_failure: Optional[Union[Callback, Callable]] = None,
@@ -817,7 +812,7 @@ class Queue:
 
     def enqueue_many(
         self, job_datas: Iterable['EnqueueData'], pipeline: Optional['Pipeline'] = None, group_id: Optional[str] = None
-    ) -> List[Job]:
+    ) -> list[Job]:
         """Creates multiple jobs (created via `Queue.prepare_data` calls)
         to represent the delayed function calls and enqueues them.
 
@@ -1387,10 +1382,10 @@ class Queue:
         queues: Iterable['Queue'],
         timeout: Optional[int],
         connection: 'Redis',
-        job_class: Optional[Type['Job']] = None,
-        serializer: Any = None,
-        death_penalty_class: Optional[Type[BaseDeathPenalty]] = None,
-    ) -> Optional[Tuple['Job', 'Queue']]:
+        job_class: Optional[type['Job']] = None,
+        serializer: Optional[Union[Serializer, str]] = None,
+        death_penalty_class: Optional[type[BaseDeathPenalty]] = None,
+    ) -> Optional[tuple['Job', 'Queue']]:
         """Class method returning the job_class instance at the front of the given
         set of Queues, where the order of the queues is important.
 
@@ -1406,7 +1401,7 @@ class Queue:
             timeout (Optional[int]): Timeout for the LPOP
             connection (Optional[Redis], optional): Redis Connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class. Defaults to None.
-            serializer (Any, optional): Serializer to use. Defaults to None.
+            serializer (Optional[Union[Serializer, str]], optional): Serializer to use. Defaults to None.
             death_penalty_class (Optional[Type[BaseDeathPenalty]], optional): The death penalty class. Defaults to None.
 
         Raises:
@@ -1415,7 +1410,7 @@ class Queue:
         Returns:
             job, queue (Tuple[Job, Queue]): A tuple of Job, Queue
         """
-        job_cls: Type[Job] = backend_class(cls, 'job_class', override=job_class)
+        job_cls: type[Job] = backend_class(cls, 'job_class', override=job_class)
 
         while True:
             queue_keys = [q.key for q in queues]
@@ -1463,7 +1458,7 @@ class Queue:
         return hash(self.name)
 
     def __repr__(self):  # noqa  # pragma: no cover
-        return '{0}({1!r})'.format(self.__class__.__name__, self.name)
+        return f'{self.__class__.__name__}({self.name!r})'
 
     def __str__(self):
-        return '<{0} {1}>'.format(self.__class__.__name__, self.name)
+        return f'<{self.__class__.__name__} {self.name}>'

@@ -3,7 +3,7 @@ import logging.config
 import os
 import sys
 import warnings
-from typing import TYPE_CHECKING, List, Type, cast
+from typing import TYPE_CHECKING, cast
 
 import click
 from redis.exceptions import ConnectionError
@@ -27,6 +27,7 @@ from rq.defaults import (
 from rq.job import Job
 from rq.serializers import DefaultSerializer
 from rq.suspension import is_suspended
+from rq.utils import import_job_class, import_worker_class
 from rq.worker_pool import WorkerPool
 
 if TYPE_CHECKING:
@@ -62,7 +63,6 @@ if TYPE_CHECKING:
 @click.option('--max-jobs', type=int, default=None, help='Maximum number of jobs to execute')
 @click.option('--max-idle-time', type=int, default=None, help='Maximum seconds to stay alive without jobs to execute')
 @click.option('--with-scheduler', '-s', is_flag=True, help='Run worker with scheduler')
-@click.option('--serializer', '-S', default=None, help='Run worker with custom serializer')
 @click.option(
     '--dequeue-strategy', '-ds', default='default', help='Sets a custom stratey to dequeue from multiple queues'
 )
@@ -154,7 +154,7 @@ def worker(
             serializer=serializer,
         )
 
-        # if --verbose or --quiet, override --logging_level
+        # if --verbose or --quiet, don't override the logging level set by setup_loghandlers_from_args
         if verbose or quiet:
             logging_level = None
 
@@ -206,34 +206,36 @@ def worker_pool(
     """Starts a RQ worker pool"""
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
-    queue_names: List[str] = queues or settings.get('QUEUES', ['default'])
+    queue_names: list[str] = queues or settings.get('QUEUES', ['default'])
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
     if serializer:
-        serializer_class = cast(Type['Serializer'], import_attribute(serializer))
+        serializer = cast('Serializer', import_attribute(serializer))
     else:
-        serializer_class = DefaultSerializer
+        serializer = DefaultSerializer
 
     if worker_class:
-        worker_class = import_attribute(worker_class)
+        worker_class = import_worker_class(worker_class)
     else:
         worker_class = Worker
 
     if job_class:
-        job_class = import_attribute(job_class)
+        job_class = import_job_class(job_class)
     else:
         job_class = Job
 
-    # if --verbose or --quiet, override --logging_level
-    if verbose or quiet:
-        logging_level = None
+    # if --verbose or --quiet, use the appropriate logging level
+    if verbose:
+        logging_level = 'DEBUG'
+    elif quiet:
+        logging_level = 'WARNING'
 
     pool = WorkerPool(
         queue_names,
         connection=cli_config.connection,
         num_workers=num_workers,
-        serializer=serializer_class,
+        serializer=serializer,
         worker_class=worker_class,
         job_class=job_class,
     )

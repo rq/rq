@@ -1,21 +1,21 @@
 import json
 import pickle
 from functools import partial
-from typing import TYPE_CHECKING, Callable, Optional, Type, Union
+from typing import Any, Callable, ClassVar, Optional, Protocol, Union, runtime_checkable
 
 from .utils import import_attribute
 
-if TYPE_CHECKING:
-    from typing_extensions import Protocol
 
-    class Serializer(Protocol):
-        dumps: Callable[..., bytes]
-        loads: Callable[..., object]
+@runtime_checkable
+class Serializer(Protocol):
+    def dumps(self, obj: Any, /) -> bytes: ...  # pragma: no cover
+
+    def loads(self, data: bytes, /) -> Any: ...  # pragma: no cover
 
 
 class DefaultSerializer:
-    dumps: Callable[..., bytes] = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
-    loads: Callable[..., object] = pickle.loads
+    dumps: ClassVar[Callable[[Any], bytes]] = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
+    loads: ClassVar[Callable[[bytes], Any]] = pickle.loads
 
 
 class JSONSerializer:
@@ -28,7 +28,7 @@ class JSONSerializer:
         return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
-def resolve_serializer(serializer: Optional[Union[Type['Serializer'], str]] = None) -> Type['Serializer']:
+def resolve_serializer(serializer: Optional[Union[Serializer, str]] = None) -> Serializer:
     """This function checks the user defined serializer for ('dumps', 'loads') methods
     It returns a default pickle serializer if not found else it returns a MySerializer
     The returned serializer objects implement ('dumps', 'loads') methods
@@ -47,10 +47,8 @@ def resolve_serializer(serializer: Optional[Union[Type['Serializer'], str]] = No
         serializer = import_attribute(serializer)  # type: ignore[assignment]
 
     assert not isinstance(serializer, str)
-    default_serializer_methods = ('dumps', 'loads')
 
-    for instance_method in default_serializer_methods:
-        if not hasattr(serializer, instance_method):
-            raise NotImplementedError('Serializer should have (dumps, loads) methods.')
+    if not isinstance(serializer, Serializer):
+        raise NotImplementedError('Serializer should have (dumps, loads) methods.')
 
     return serializer

@@ -98,7 +98,7 @@ cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
 typing = "mypy --enable-incomplete-feature=Unpack rq"
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py39"
 
 # Set what ruff should check for.
 # See https://beta.ruff.rs/docs/rules/ for a list of rules.
@@ -135,3 +135,7 @@ ignore_missing_imports = true
 [tool.pyright]
 reportOptionalMemberAccess = false
 reportOptionalOperand = false
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = ["slow", "ssl_test"]

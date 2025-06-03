@@ -8,6 +8,7 @@ from enum import Enum
 from functools import partial, update_wrapper
 from json import JSONDecodeError, loads
 from shutil import get_terminal_size
+from typing import Type, cast
 
 import click
 from redis import Redis
@@ -22,7 +23,7 @@ from rq.defaults import (
     DEFAULT_WORKER_CLASS,
 )
 from rq.logutils import setup_loghandlers
-from rq.utils import import_attribute, now, parse_timeout
+from rq.utils import import_attribute, import_worker_class, now, parse_timeout
 from rq.worker import WorkerStatus
 
 red = partial(click.style, fg='red')
@@ -250,11 +251,33 @@ def setup_loghandlers_from_args(verbose, quiet, date_format, log_format):
     setup_loghandlers(level, date_format=date_format, log_format=log_format)
 
 
+class ParsingMode(Enum):
+    PLAIN_TEXT = 0
+    JSON = 1
+    LITERAL_EVAL = 2
+
+
+def _parse_json_value(value, keyword, arg_pos):
+    """Parse value as JSON with error handling."""
+    try:
+        return loads(value)
+    except JSONDecodeError:
+        raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or '%s. non keyword argument' % arg_pos))
+
+
+def _parse_literal_eval_value(value, keyword, arg_pos):
+    """Parse value using literal_eval with error handling."""
+    try:
+        return literal_eval(value)
+    except Exception:
+        raise click.BadParameter(
+            'Unable to eval %s as Python object. See '
+            'https://docs.python.org/3/library/ast.html#ast.literal_eval'
+            % (keyword or '%s. non keyword argument' % arg_pos)
+        )
+
+
 def parse_function_arg(argument, arg_pos):
-    class ParsingMode(Enum):
-        PLAIN_TEXT = 0
-        JSON = 1
-        LITERAL_EVAL = 2
 
     keyword = None
     if argument.startswith(':'):  # no keyword, json
@@ -282,25 +305,15 @@ def parse_function_arg(argument, arg_pos):
 
     if value.startswith('@'):
         try:
-            with open(value[1:], 'r') as file:
+            with open(value[1:]) as file:
                 value = file.read()
         except FileNotFoundError:
             raise click.FileError(value[1:], 'Not found')
 
     if mode == ParsingMode.JSON:  # json
-        try:
-            value = loads(value)
-        except JSONDecodeError:
-            raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or '%s. non keyword argument' % arg_pos))
+        value = _parse_json_value(value, keyword, arg_pos)
     elif mode == ParsingMode.LITERAL_EVAL:  # literal_eval
-        try:
-            value = literal_eval(value)
-        except Exception:
-            raise click.BadParameter(
-                'Unable to eval %s as Python object. See '
-                'https://docs.python.org/3/library/ast.html#ast.literal_eval'
-                % (keyword or '%s. non keyword argument' % arg_pos)
-            )
+        value = _parse_literal_eval_value(value, keyword, arg_pos)
 
     return keyword, value
 
@@ -354,7 +367,7 @@ class CliConfig:
                 sys.path.append(pth)
 
         try:
-            self.worker_class = import_attribute(worker_class)
+            self.worker_class = import_worker_class(worker_class)
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--worker-class')
         try:
@@ -373,7 +386,7 @@ class CliConfig:
             raise click.BadParameter(str(exc), param_hint='--queue-class')
 
         try:
-            self.connection_class = import_attribute(connection_class)
+            self.connection_class: Type[Redis] = cast(Type[Redis], import_attribute(connection_class))
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--connection-class')
 

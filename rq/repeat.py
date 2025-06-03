@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Iterable, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
@@ -21,7 +22,7 @@ class Repeat:
     """
 
     times: int
-    intervals: List[int]
+    intervals: list[int]
 
     def __init__(self, times: int, interval: Optional[Union[int, Iterable[int]]] = 0):
         """Initialize a Repeat instance.
@@ -53,7 +54,7 @@ class Repeat:
         self.times = times
 
     @classmethod
-    def get_interval(cls, count: int, intervals: List[int]) -> int:
+    def get_interval(cls, count: int, intervals: list[int]) -> int:
         """Returns the appropriate interval based on the repeat count.
 
         Args:
