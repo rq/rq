@@ -135,3 +135,7 @@ ignore_missing_imports = true
 [tool.pyright]
 reportOptionalMemberAccess = false
 reportOptionalOperand = false
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = ["slow", "ssl_test"]
