@@ -626,7 +626,7 @@ class TestJob(RQTestCase):
         registry.add(job, 500)
 
         job.delete()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         job = Job.create(
             func=fixtures.say_hello,
@@ -640,7 +640,7 @@ class TestJob(RQTestCase):
         registry.add(job, 500)
 
         job.delete()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         job = Job.create(
             func=fixtures.say_hello,
@@ -655,7 +655,7 @@ class TestJob(RQTestCase):
         registry.add(job, 500)
 
         job.delete()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         job = Job.create(
             func=fixtures.say_hello,
@@ -673,7 +673,7 @@ class TestJob(RQTestCase):
             pipe.execute()
 
         job.delete()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         job = Job.create(
             func=fixtures.say_hello,
@@ -688,7 +688,7 @@ class TestJob(RQTestCase):
         registry.add(job, 500)
 
         job.delete()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         job = Job.create(
             func=fixtures.say_hello,
@@ -703,7 +703,7 @@ class TestJob(RQTestCase):
         registry.add(job, 500)
 
         job.delete()
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
     def test_job_delete_execution_registry(self):
         """job.delete() also deletes ExecutionRegistry and all job executions"""

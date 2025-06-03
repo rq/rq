@@ -297,7 +297,7 @@ class TestQueue(RQTestCase):
 
             # Job status is still QUEUED even though it's already dequeued
             self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
-            self.assertFalse(job.id in queue.get_job_ids())
+            self.assertNotIn(job.id, queue.get_job_ids())
             self.assertIsNotNone(self.connection.lpos(queue.intermediate_queue_key, job.id))
 
     def test_dequeue_any_ignores_nonexisting_jobs(self):
@@ -442,9 +442,9 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(Queue.all(connection=self.connection)), 3)
 
         # Verify names
-        self.assertTrue('first-queue' in names)
-        self.assertTrue('second-queue' in names)
-        self.assertTrue('third-queue' in names)
+        self.assertIn('first-queue', names)
+        self.assertIn('second-queue', names)
+        self.assertIn('third-queue', names)
 
         # Now empty two queues
         w = Worker([q2, q3], connection=self.connection)
@@ -475,8 +475,8 @@ class TestQueue(RQTestCase):
         self.assertEqual(len(Queue.all(connection=self.connection)), 2)
         names = [q.name for q in Queue.all(connection=self.connection)]
         # Verify names
-        self.assertTrue('queue_with_queued_jobs' in names)
-        self.assertTrue('queue_with_deferred_jobs' in names)
+        self.assertIn('queue_with_queued_jobs', names)
+        self.assertIn('queue_with_deferred_jobs', names)
 
     def test_from_queue_key(self):
         """Ensure being able to get a Queue instance manually from Redis"""
@@ -850,4 +850,4 @@ class TestJobScheduling(RQTestCase):
         job = queue.enqueue_at(scheduled_time, say_hello)
         registry = ScheduledJobRegistry(queue=queue)
         self.assertIn(job, registry)
-        self.assertTrue(registry.get_expiration_time(job), scheduled_time)
+        self.assertEqual(registry.get_expiration_time(job), scheduled_time.replace(microsecond=0))
