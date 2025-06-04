@@ -1227,7 +1227,7 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
-    def kill_horse(self, sig: signal.Signals = SIGNAL_SHUTDOWN):
+    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         raise NotImplementedError()
 
 
@@ -1237,7 +1237,7 @@ class Worker(BaseWorker):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
 
-    def kill_horse(self, sig: signal.Signals = SIGNAL_SHUTDOWN):
+    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
 
         Args:
