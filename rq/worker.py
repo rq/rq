@@ -97,7 +97,7 @@ def signal_name(signum):
     except ValueError:
         return 'SIG_UNKNOWN'
 
-SIGNAL_SHUTDOWN = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL
+SHUTDOWN_SIGNAL = signal.SIGTERM if not hasattr(signal, 'SIGKILL') else signal.SIGKILL
 
 class DequeueStrategy(str, Enum):
     DEFAULT = 'default'
