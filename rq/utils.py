@@ -205,9 +205,11 @@ def is_nonstring_iterable(obj: Any) -> bool:
 
 
 @overload
-def ensure_job_list(obj: ObjOrStr) -> list[ObjOrStr]: ...
+def ensure_job_list(obj: str) -> list[str]: ...
 @overload
-def ensure_job_list(obj: Iterable[ObjOrStr]) -> list[ObjOrStr]: ...
+def ensure_job_list(obj: Iterable[_O]) -> list[_O]: ...
+@overload
+def ensure_job_list(obj: _O) -> list[_O]: ...
 def ensure_job_list(obj):
     """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.
@@ -263,6 +265,7 @@ def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
             timeout = int(timeout)
+            return timeout
         except ValueError:
             assert isinstance(timeout, str)
             digit, unit = timeout[:-1], (timeout[-1:]).lower()
@@ -276,7 +279,7 @@ def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
                     'such as "1h", "23m".'
                 )
 
-    return timeout
+    return int(timeout) if timeout is not None else None
 
 
 def get_version(connection: 'Redis') -> tuple[int, int, int]:
