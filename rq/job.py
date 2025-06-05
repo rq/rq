@@ -7,7 +7,7 @@ import zlib
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 from uuid import uuid4
 
 from redis import WatchError
@@ -177,7 +177,7 @@ class Job:
             UNEVALUATED
         )
         self._stopped_callback_name: Optional[str] = None
-        self._stopped_callback: Union[Callable[[Job, Redis], Any], UnevaluatedType] = UNEVALUATED
+        self._stopped_callback: Union[Callable[[Job, Redis], Any], UnevaluatedType, None] = UNEVALUATED
         self.description: Optional[str] = None
         self.origin: str = ''
         self.enqueued_at: Optional[datetime] = None
@@ -503,7 +503,7 @@ class Job:
         if self.instance:
             return getattr(self.instance, func_name)
 
-        return import_attribute(self.func_name)
+        return import_attribute(func_name)
 
     @property
     def success_callback(self) -> Optional[SuccessCallbackType]:
@@ -540,14 +540,15 @@ class Job:
         return self._failure_callback_timeout
 
     @property
-    def stopped_callback(self):
+    def stopped_callback(self) -> Optional[Callable[['Job', 'Redis'], Any]]:
         if self._stopped_callback is UNEVALUATED:
             if self._stopped_callback_name:
                 self._stopped_callback = import_attribute(self._stopped_callback_name)
             else:
                 self._stopped_callback = None
 
-        return self._stopped_callback
+        # After deserialization, _stopped_callback is either a callable or None, never UNEVALUATED
+        return cast(Optional[Callable[['Job', 'Redis'], Any]], self._stopped_callback)
 
     @property
     def stopped_callback_timeout(self) -> int:
@@ -596,10 +597,10 @@ class Job:
         self._kwargs = UNEVALUATED
 
     @property
-    def func_name(self):
+    def func_name(self) -> Optional[str]:
         if self._func_name is UNEVALUATED:
             self._deserialize_data()
-        return self._func_name
+        return self._func_name  # type: ignore[return-value]
 
     @func_name.setter
     def func_name(self, value):
@@ -1508,6 +1509,9 @@ class Job:
 
     def execute_stopped_callback(self, death_penalty_class: type[BaseDeathPenalty]):
         """Executes stopped_callback with possible timeout"""
+        if self.stopped_callback is None:
+            return
+
         logger.debug('Running stopped callbacks for %s', self.id)
         try:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):

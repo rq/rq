@@ -508,7 +508,7 @@ class DeferredJobRegistry(BaseRegistry):
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
 
-    def add(self, job, ttl=None, pipeline=None, xx=False):
+    def add(self, job: Job, ttl: Optional[int] = None, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
         """
         Adds a job to a registry with expiry time of now + ttl.
         Defaults to -1 (never expire).
