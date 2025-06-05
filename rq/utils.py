@@ -264,7 +264,8 @@ def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
-            timeout = timeout
+            timeout = int(timeout)
+            return timeout
         except ValueError:
             assert isinstance(timeout, str)
             digit, unit = timeout[:-1], (timeout[-1:]).lower()
