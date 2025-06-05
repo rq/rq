@@ -49,7 +49,7 @@ class TestWorker(RQTestCase):
         # Postconditions
         self.assertEqual(q.count, 0)
         failed_job_registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
         self.assertEqual(w.get_current_job_id(), None)
 
         # Check the job

@@ -135,13 +135,13 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.queues, queues)
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
         self.assertEqual(worker._job_id, None)
-        self.assertTrue(worker.key in Worker.all_keys(worker.connection))
+        self.assertIn(worker.key, Worker.all_keys(worker.connection))
         self.assertEqual(worker.version, VERSION)
 
         # If worker is gone, its keys should also be removed
         worker.connection.delete(worker.key)
         Worker.find_by_key(worker.key, connection=self.connection)
-        self.assertFalse(worker.key in Worker.all_keys(worker.connection))
+        self.assertNotIn(worker.key, Worker.all_keys(worker.connection))
 
         self.assertRaises(ValueError, Worker.find_by_key, 'foo', connection=self.connection)
 
@@ -232,7 +232,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(q.count, 0)
 
         failed_job_registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
 
     def test_meta_is_unserializable(self):
         """Unserializable jobs are put on the failed job registry."""
@@ -249,7 +249,7 @@ class TestWorker(RQTestCase):
         self.connection.hset(job.key, 'meta', invalid_meta)
         job.refresh()
         self.assertIsInstance(job.meta, dict)
-        self.assertTrue('unserialized' in job.meta.keys())
+        self.assertIn('unserialized', job.meta.keys())
 
     @mock.patch('rq.worker.logger.error')
     def test_deserializing_failure_is_handled(self, mock_logger_error):
@@ -293,7 +293,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(w.hostname, as_text(self.connection.hget(w.key, 'hostname')))
         last_heartbeat = self.connection.hget(w.key, 'last_heartbeat')
         self.assertIsNotNone(self.connection.hget(w.key, 'birth'))
-        self.assertTrue(last_heartbeat is not None)
+        self.assertIsNotNone(last_heartbeat)
         w = Worker.find_by_key(w.key, connection=self.connection)
         self.assertIsInstance(w.last_heartbeat, datetime)
 
@@ -376,7 +376,7 @@ class TestWorker(RQTestCase):
         # Postconditions
         self.assertEqual(q.count, 0)
         failed_job_registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
         self.assertEqual(w.get_current_job_id(), None)
 
         # Check the job
@@ -410,7 +410,7 @@ class TestWorker(RQTestCase):
         # Postconditions
         self.assertEqual(q.count, 0)
         failed_job_registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
         self.assertEqual(w.get_current_job_id(), None)
 
         # Check the job
@@ -470,7 +470,7 @@ class TestWorker(RQTestCase):
         job.refresh()
         self.assertEqual(job.retries_left, 1)
         self.assertEqual([job.id], queue.job_ids)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
         # First retry
         queue.empty()
@@ -486,7 +486,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.retries_left, 0)
         self.assertEqual([], queue.job_ids)
         # If a job is no longer retries, it's put in FailedJobRegistry
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
     def test_total_working_time(self):
         """worker.total_working_time is stored properly"""
@@ -526,14 +526,14 @@ class TestWorker(RQTestCase):
         worker.work(burst=True)
 
         registry = FailedJobRegistry(queue=queue)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
 
         # Job is not added to FailedJobRegistry if
         # disable_default_exception_handler is True
         job = queue.enqueue(div_by_zero)
         worker = Worker([queue], disable_default_exception_handler=True)
         worker.work(burst=True)
-        self.assertFalse(job in registry)
+        self.assertNotIn(job, registry)
 
     def test_custom_exc_handling(self):
         """Custom exception handling."""
@@ -886,8 +886,11 @@ class TestWorker(RQTestCase):
 
         # Updates working queue, job execution should be there
         registry = StartedJobRegistry(connection=self.connection)
-        self.assertTrue(job.id in registry.get_job_ids())
-        self.assertTrue((worker.execution.job_id, worker.execution.id) in registry.get_job_and_execution_ids())
+        self.assertIn(job.id, registry.get_job_ids())
+        self.assertIn(
+            (worker.execution.job_id, worker.execution.id),
+            registry.get_job_and_execution_ids(),
+        )
 
         # Updates worker's current job
         self.assertEqual(worker.get_current_job_id(), job.id)
@@ -1161,7 +1164,7 @@ class TestWorker(RQTestCase):
         # Postconditions
         self.assertEqual(q.count, 0)
         failed_job_registry = FailedJobRegistry(queue=q)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
         self.assertEqual(w.get_current_job_id(), None)
 
         job_check = Job.fetch(job.id, connection=self.connection)
@@ -1461,7 +1464,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         p.join(1)
         self.assertEqual(job_status, JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
         self.assertEqual(fooq.count, 0)
 
     @slow
@@ -1497,10 +1500,10 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         total_time = w.job_monitoring_interval + 65 + fudge_factor
 
         right_now = now()
-        self.assertTrue((now() - right_now).total_seconds() < total_time)
+        self.assertLess((now() - right_now).total_seconds(), total_time)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         failed_job_registry = FailedJobRegistry(queue=fooq)
-        self.assertTrue(job in failed_job_registry)
+        self.assertIn(job, failed_job_registry)
         self.assertEqual(fooq.count, 0)
         self.assertFalse(psutil.pid_exists(subprocess_pid))
 
@@ -1527,7 +1530,7 @@ class TestWorkerSubprocess(RQTestCase):
         job = q.enqueue(access_self)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
         registry = FinishedJobRegistry(queue=q)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
         assert q.count == 0
 
     @skipIf('pypy' in sys.version.lower(), 'often times out with pypy')
@@ -1537,7 +1540,7 @@ class TestWorkerSubprocess(RQTestCase):
         job = q.enqueue(schedule_access_self)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
         registry = FinishedJobRegistry(queue=q)
-        self.assertTrue(job in registry)
+        self.assertIn(job, registry)
         assert q.count == 0
 
 
