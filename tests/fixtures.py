@@ -225,6 +225,7 @@ def kill_horse(horse_pid_key: str, connection_kwargs: dict, interval: float = 1.
     :param connection_kwargs: Connection parameters for Redis
     :param interval: Time to wait before sending the kill signal
     """
+    time.sleep(interval)
     redis = Redis(**connection_kwargs)
     value = redis.get(horse_pid_key)
     if value:

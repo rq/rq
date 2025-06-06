@@ -1565,11 +1565,13 @@ class Worker(BaseWorker):
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
                     # enqueue_dependents might call multi() on the pipeline
+                    self.log.debug('Enqueueing dependents of job %s', job.id)
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
                     if not pipeline.explicit_transaction:
                         # enqueue_dependents didn't call multi after all!
                         # We have to do it ourselves to make sure everything runs in a transaction
+                        self.log.debug('Calling multi() on pipeline for job %s', job.id)
                         pipeline.multi()
 
                     self.increment_successful_job_count(pipeline=pipeline)
