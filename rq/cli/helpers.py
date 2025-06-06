@@ -356,7 +356,7 @@ class CliConfig:
         path=None,
         *args,
         **kwargs,
-    ):
+    ) -> None:
         self._connection = None
         self.url = url
         self.config = config
