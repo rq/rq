@@ -24,6 +24,10 @@ from typing import (
     overload,
 )
 
+from redis.exceptions import ResponseError
+
+from .exceptions import TimeoutFormatError
+
 if TYPE_CHECKING:
     from redis import Redis
 
@@ -31,9 +35,6 @@ if TYPE_CHECKING:
     from .queue import Queue
     from .worker import Worker
 
-from redis.exceptions import ResponseError
-
-from .exceptions import TimeoutFormatError
 
 _T = TypeVar('_T')
 _O = TypeVar('_O', bound=object)
@@ -207,9 +208,14 @@ def is_nonstring_iterable(obj: Any) -> bool:
 @overload
 def ensure_job_list(obj: str) -> list[str]: ...
 @overload
+def ensure_job_list(obj: 'Job') -> list['Job']: ...
+@overload
+def ensure_job_list(obj: Union['Job', str, Sequence[Union['Job', str]]]) -> list[Union['Job', str]]: ...
+@overload
 def ensure_job_list(obj: Iterable[_O]) -> list[_O]: ...
 @overload
 def ensure_job_list(obj: _O) -> list[_O]: ...
+
 def ensure_job_list(obj):
     """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.

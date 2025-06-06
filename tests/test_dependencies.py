@@ -1,8 +1,10 @@
+from multiprocessing import Process
+
 from rq import Queue, SimpleWorker, Worker
 from rq.job import Dependency, Job, JobStatus
 from rq.utils import current_timestamp
 from tests import RQTestCase
-from tests.fixtures import check_dependencies_are_met, div_by_zero, say_hello
+from tests.fixtures import check_dependencies_are_met, div_by_zero, kill_horse, long_running_job, say_hello
 
 
 class TestDependencies(RQTestCase):
@@ -213,3 +215,50 @@ class TestDependencies(RQTestCase):
         w = Worker([queue], connection=self.connection)
         w.work(burst=True)
         assert job_c.result
+
+    def test_allow_failures_when_work_horse_killed(self):
+        """Ensure that allow_failure is respected when a worker is killed"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(long_running_job, 10, horse_pid_key='horse_pid_key')
+        job2 = queue.enqueue(say_hello, depends_on=Dependency(jobs=job, allow_failure=True))
+
+        # Wait 1 second before killing the horse to simulate horse terminating unexpectedly
+        p = Process(target=kill_horse, args=('horse_pid_key',self.connection.connection_pool.connection_kwargs, 1))
+        p.start()
+
+        worker = Worker([queue], connection=self.connection)
+        worker.work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertEqual(job2.get_status(), JobStatus.FINISHED)
+
+    def test_dependency_accepts_single_job(self):
+        """Test that Dependency constructor accepts a single Job instance"""
+        q = Queue(connection=self.connection)
+        w = SimpleWorker([q], connection=q.connection)
+
+        # Test with single Job instance
+        parent_job = q.enqueue(say_hello)
+        dependency = Dependency(parent_job)  # Single job, not in a list
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        q.empty()
+
+        # Test with single Job instance and allow_failure=True
+        parent_job = q.enqueue(div_by_zero)
+        dependency = Dependency(parent_job, allow_failure=True)  # Single job with allow_failure
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        q.empty()
+
+        # Test with single job ID string
+        parent_job = q.enqueue(say_hello)
+        dependency = Dependency(parent_job.id)  # Single job ID string
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)

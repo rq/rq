@@ -4,7 +4,7 @@ import json
 import logging
 import warnings
 import zlib
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
@@ -71,22 +71,24 @@ def parse_job_id(job_or_execution_id: str) -> str:
 
 
 class Dependency:
-    dependencies: list[Union['Job', str]]
+    dependencies: Sequence[Union['Job', str]]
 
-    def __init__(self, jobs: Iterable[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
+    def __init__(
+        self,
+        jobs: Union['Job', str, Sequence[Union['Job', str]]],
+        allow_failure: bool = False,
+        enqueue_at_front: bool = False,
+    ):
         """The definition of a Dependency.
 
         Args:
-            jobs (Iterable[Union[Job, str]]): An iterable of Job instances or Job IDs.
+            jobs (Union[Job, str, Sequence[Union[Job, str]]]): A Job, Job ID, or sequence of Job instances/Job IDs.
                 Anything different will raise a ValueError
             allow_failure (bool, optional): Whether to allow for failure when running the dependency,
                 meaning, the dependencies should continue running even after one of them failed.
                 Defaults to False.
             enqueue_at_front (bool, optional): Whether this dependency should be enqueued at the front of the queue.
                 Defaults to False.
-
-        Raises:
-            ValueError: If the `jobs` param has anything different than `str` or `Job` class or the job list is empty
         """
         dependent_jobs = ensure_job_list(jobs)
         if not all(isinstance(job, Job) or isinstance(job, str) for job in dependent_jobs if job):
@@ -363,14 +365,14 @@ class Job:
 
         # dependency could be job instance or id, or iterable thereof
         if depends_on is not None:
-            depends_on_list = []
+            depends_on_list: list[Union['Job', str]] = []
             for depends_on_item in ensure_job_list(depends_on):
                 if isinstance(depends_on_item, Dependency):
                     # If a Dependency has enqueue_at_front or allow_failure set to True, these behaviors are used for
                     # all dependencies.
                     job.enqueue_at_front = job.enqueue_at_front or depends_on_item.enqueue_at_front
                     job.allow_dependency_failures = job.allow_dependency_failures or depends_on_item.allow_failure
-                    depends_on_list.extend(depends_on_item.dependencies)
+                    depends_on_list.extend(list(depends_on_item.dependencies))
                 else:
                     depends_on_list.extend(ensure_job_list(depends_on_item))
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
