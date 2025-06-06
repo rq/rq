@@ -231,3 +231,34 @@ class TestDependencies(RQTestCase):
 
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertEqual(job2.get_status(), JobStatus.FINISHED)
+
+    def test_dependency_accepts_single_job(self):
+        """Test that Dependency constructor accepts a single Job instance"""
+        q = Queue(connection=self.connection)
+        w = SimpleWorker([q], connection=q.connection)
+
+        # Test with single Job instance
+        parent_job = q.enqueue(say_hello)
+        dependency = Dependency(parent_job)  # Single job, not in a list
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+        
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        q.empty()
+
+        # Test with single Job instance and allow_failure=True
+        parent_job = q.enqueue(div_by_zero)
+        dependency = Dependency(parent_job, allow_failure=True)  # Single job with allow_failure
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+        
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        q.empty()
+
+        # Test with single job ID string
+        parent_job = q.enqueue(say_hello)
+        dependency = Dependency(parent_job.id)  # Single job ID string
+        job = q.enqueue_call(say_hello, depends_on=dependency)
+        
+        w.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)

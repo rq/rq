@@ -4,7 +4,7 @@ import json
 import logging
 import warnings
 import zlib
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
@@ -71,13 +71,13 @@ def parse_job_id(job_or_execution_id: str) -> str:
 
 
 class Dependency:
-    dependencies: list[Union['Job', str]]
+    dependencies: Sequence[Union['Job', str]]
 
-    def __init__(self, jobs: Iterable[Union['Job', str]], allow_failure: bool = False, enqueue_at_front: bool = False):
+    def __init__(self, jobs: Union['Job', str, Sequence[Union['Job', str]]], allow_failure: bool = False, enqueue_at_front: bool = False):
         """The definition of a Dependency.
 
         Args:
-            jobs (Iterable[Union[Job, str]]): An iterable of Job instances or Job IDs.
+            jobs (Union[Job, str, Sequence[Union[Job, str]]]): A Job instance, Job ID, or sequence of Job instances/Job IDs.
                 Anything different will raise a ValueError
             allow_failure (bool, optional): Whether to allow for failure when running the dependency,
                 meaning, the dependencies should continue running even after one of them failed.
@@ -86,7 +86,7 @@ class Dependency:
                 Defaults to False.
 
         Raises:
-            ValueError: If the `jobs` param has anything different than `str` or `Job` class or the job list is empty
+            ValueError: If the `jobs` param has anything different than `str` or `Job` class or the resulting job list is empty
         """
         dependent_jobs = ensure_job_list(jobs)
         if not all(isinstance(job, Job) or isinstance(job, str) for job in dependent_jobs if job):
