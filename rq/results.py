@@ -202,7 +202,7 @@ class Result:
                 connection.expire(key, ttl)
         return self.id
 
-    def serialize(self):
+    def serialize(self) -> dict[str, Any]:
         data: dict[str, Any] = {'type': self.type.value}
 
         if self.exc_string is not None:

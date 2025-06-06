@@ -1,4 +1,3 @@
-
 from redis import Connection as RedisConnection
 from redis import Redis
 
