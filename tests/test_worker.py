@@ -16,7 +16,6 @@ from unittest.mock import Mock
 import psutil
 import pytest
 import redis.exceptions
-from redis import Redis
 
 from rq import Queue, SimpleWorker, Worker
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
@@ -25,10 +24,10 @@ from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegist
 from rq.results import Result
 from rq.serializers import JSONSerializer
 from rq.suspension import resume, suspend
-from rq.utils import as_text, get_version, now
+from rq.utils import as_text, now
 from rq.version import VERSION
 from rq.worker import HerokuWorker, RandomWorker, RoundRobinWorker, WorkerStatus
-from tests import RQTestCase, find_empty_redis_database, slow
+from tests import RQTestCase, find_empty_redis_database, min_redis_version, slow
 from tests.fixtures import (
     CustomJob,
     access_self,
@@ -912,7 +911,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.get_current_job_id(), None)
         self.assertIsNone(worker.execution)
 
-    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    @min_redis_version((6, 2, 0))
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
         """Prepare job execution removes job from intermediate queue."""
         queue = Queue(connection=self.connection)
@@ -925,7 +924,7 @@ class TestWorker(RQTestCase):
         self.assertIsNone(self.connection.lpos(queue.intermediate_queue_key, job.id))
         self.assertEqual(queue.count, 0)
 
-    @skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+    @min_redis_version((6, 2, 0))
     def test_work_removes_key_from_intermediate_queue(self):
         """Worker removes job from intermediate queue."""
         queue = Queue(connection=self.connection)
