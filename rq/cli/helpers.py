@@ -278,7 +278,6 @@ def _parse_literal_eval_value(value, keyword, arg_pos):
 
 
 def parse_function_arg(argument, arg_pos):
-
     keyword = None
     if argument.startswith(':'):  # no keyword, json
         mode = ParsingMode.JSON

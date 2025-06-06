@@ -223,7 +223,7 @@ class TestDependencies(RQTestCase):
         job2 = queue.enqueue(say_hello, depends_on=Dependency(jobs=job, allow_failure=True))
 
         # Wait 1 second before killing the horse to simulate horse terminating unexpectedly
-        p = Process(target=kill_horse, args=('horse_pid_key',self.connection.connection_pool.connection_kwargs, 1))
+        p = Process(target=kill_horse, args=('horse_pid_key',self.connection.connection_pool.connection_kwargs, 1.5))
         p.start()
 
         worker = Worker([queue], connection=self.connection)
@@ -241,7 +241,7 @@ class TestDependencies(RQTestCase):
         parent_job = q.enqueue(say_hello)
         dependency = Dependency(parent_job)  # Single job, not in a list
         job = q.enqueue_call(say_hello, depends_on=dependency)
-        
+
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
         q.empty()
@@ -250,7 +250,7 @@ class TestDependencies(RQTestCase):
         parent_job = q.enqueue(div_by_zero)
         dependency = Dependency(parent_job, allow_failure=True)  # Single job with allow_failure
         job = q.enqueue_call(say_hello, depends_on=dependency)
-        
+
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
         q.empty()
@@ -259,6 +259,6 @@ class TestDependencies(RQTestCase):
         parent_job = q.enqueue(say_hello)
         dependency = Dependency(parent_job.id)  # Single job ID string
         job = q.enqueue_call(say_hello, depends_on=dependency)
-        
+
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
