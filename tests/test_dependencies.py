@@ -1,8 +1,10 @@
+from multiprocessing import Process
+
 from rq import Queue, SimpleWorker, Worker
 from rq.job import Dependency, Job, JobStatus
 from rq.utils import current_timestamp
 from tests import RQTestCase
-from tests.fixtures import check_dependencies_are_met, div_by_zero, say_hello
+from tests.fixtures import check_dependencies_are_met, div_by_zero, kill_horse, long_running_job, say_hello
 
 
 class TestDependencies(RQTestCase):
@@ -213,3 +215,19 @@ class TestDependencies(RQTestCase):
         w = Worker([queue], connection=self.connection)
         w.work(burst=True)
         assert job_c.result
+
+    def test_allow_failures_when_work_horse_killed(self):
+        """Ensure that allow_failure is respected when a worker is killed"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(long_running_job, 10, horse_pid_key='horse_pid_key')
+        job2 = queue.enqueue(say_hello, depends_on=Dependency(jobs=job, allow_failure=True))
+
+        # Wait 1 second before killing the horse to simulate horse terminating unexpectedly
+        p = Process(target=kill_horse, args=('horse_pid_key',self.connection.connection_pool.connection_kwargs, 1))
+        p.start()
+
+        worker = Worker([queue], connection=self.connection)
+        worker.work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertEqual(job2.get_status(), JobStatus.FINISHED)
