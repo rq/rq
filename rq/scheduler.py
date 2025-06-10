@@ -161,8 +161,12 @@ class RQScheduler:
                         try:
                             queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
                         except DeserializationError:
-                            self.log.error('Deserialization error while trying to enqueueing job %d', job.id, exc_info=True, stack_info=True)
-                        registry.remove(job, pipeline=pipeline)
+                            self.log.error('RQ Scheduler Error: deserialization error while trying to enqueue job %d', job.id, exc_info=True, stack_info=True)
+                        except Exception as e:
+                            self.log.error('RQ Scheduler Error: while trying to enqueue job %d: %s', job.id, str(e), exc_info=True, stack_info=True)
+                        finally:
+                            # Always remove the job from registry, even if there was an error
+                            registry.remove(job, pipeline=pipeline)
                     else:
                         self.log.error("Scheduled job %s didn't exist while trying to enqueue it. Cleaning it up", job_id, exc_info=True, stack_info=True)
                         # pass the job_id, not the job, it works, the remove code is able to cope
