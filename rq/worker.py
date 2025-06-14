@@ -734,9 +734,11 @@ class BaseWorker:
                 pipeline.execute()
                 if enqueue_dependents:
                     queue.enqueue_dependents(job)
-            except Exception:
+            except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
+                self.log.error('Exception during pipeline execute or enqueue_dependents for job %s: %s',
+                              job.id, e)
                 pass
 
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
@@ -916,7 +918,9 @@ class BaseWorker:
             date_format (str, optional): Date Format. Defaults to DEFAULT_LOGGING_DATE_FORMAT.
             log_format (str, optional): Log Format. Defaults to DEFAULT_LOGGING_FORMAT.
         """
-        setup_loghandlers(logging_level, date_format, log_format)
+
+        setup_loghandlers(logging_level, date_format, log_format, name='rq.worker')
+        setup_loghandlers(logging_level, date_format, log_format, name='rq.job')
         self.register_birth()
         self.log.info('Worker %s started with PID %d, version %s', self.key, os.getpid(), VERSION)
         self.subscribe()
@@ -1210,7 +1214,7 @@ class BaseWorker:
 
         # func_name
         self.log.error(
-            '[Job %s]: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
+            'Job %s: exception raised while executing (%s)\n%s', job.id, func_name, exc_string, extra=extra
         )
 
         for handler in self._exc_handlers:
@@ -1369,6 +1373,9 @@ class Worker(BaseWorker):
 
         self.set_current_job_working_time(0)
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
+
+        self.log.debug('Work horse finished for job %s: retpid=%s, ret_val=%s', job.id, retpid, ret_val)
+
         if ret_val == os.EX_OK:  # The process exited normally.
             return
 
@@ -1379,7 +1386,7 @@ class Worker(BaseWorker):
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
-            self.log.warning('Job stopped by user, moving job to FailedJobRegistry')
+            self.log.warning('Job %s stopped by user, moving job to FailedJobRegistry', job.id)
             if job.stopped_callback:
                 job.execute_stopped_callback(self.death_penalty_class)
             self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
@@ -1390,7 +1397,7 @@ class Worker(BaseWorker):
             # Unhandled failure: move the job to the failed queue
             signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
             exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
-            self.log.warning('Moving job to FailedJobRegistry (%s)', exc_string)
+            self.log.warning('Moving job %s to FailedJobRegistry (%s)', job.id, exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
@@ -1702,6 +1709,8 @@ class Worker(BaseWorker):
         return self._exc_handlers.pop()
 
     def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
+        self.log.warning('Work horse killed for job %s: retpid=%s, ret_val=%s', job.id, retpid, ret_val)
+
         if self._work_horse_killed_handler is None:
             return
 
