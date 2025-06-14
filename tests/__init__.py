@@ -26,12 +26,14 @@ def find_empty_redis_database(ssl=False):
         testconn.close()
     assert False, 'No empty Redis database found to run tests in.'
 
+
 def min_redis_version(ver: tuple[int, ...]):
-    ver_str = ".".join(map(str, ver))
+    ver_str = '.'.join(map(str, ver))
     with Redis() as conn:
         redis_version = get_version(conn)
 
     return unittest.skipIf(redis_version < ver, f'Skip if Redis server < {ver_str}')
+
 
 def slow(f):
     f = pytest.mark.slow(f)

@@ -1546,7 +1546,9 @@ class Job:
             finished_job_registry.add(self, result_ttl, pipeline)
 
     def _handle_failure(self, exc_string: str, pipeline: 'Pipeline'):
-        self.log.debug('Job %s: Handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string)
+        self.log.debug(
+            'Job %s: Handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string
+        )
 
         failed_job_registry = self.failed_job_registry
         # Exception should be saved in job hash if server
@@ -1632,8 +1634,7 @@ class Job:
         """
         from .registry import DeferredJobRegistry
 
-        self.log.debug('Job %s registering dependencies: %s',
-                     self.id, self._dependency_ids)
+        self.log.debug('Job %s registering dependencies: %s', self.id, self._dependency_ids)
 
         registry = DeferredJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
@@ -1695,8 +1696,13 @@ class Job:
             # if this job allows parent job to fail
             dependencies_ids.discard(parent_job.id)
             parent_status = parent_job.get_status(refresh=refresh_job_status)
-            self.log.debug('Job %s parent job %s status: %s, allow_dependency_failures: %s',
-                          self.id, parent_job.id, parent_status, self.allow_dependency_failures)
+            self.log.debug(
+                'Job %s parent job %s status: %s, allow_dependency_failures: %s',
+                self.id,
+                parent_job.id,
+                parent_status,
+                self.allow_dependency_failures,
+            )
 
             if parent_status == JobStatus.CANCELED:
                 return False

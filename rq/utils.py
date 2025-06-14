@@ -216,6 +216,7 @@ def ensure_job_list(obj: Iterable[_O]) -> list[_O]: ...
 @overload
 def ensure_job_list(obj: _O) -> list[_O]: ...
 
+
 def ensure_job_list(obj):
     """When passed an iterable of objects, convert to list, otherwise, it returns
     a list with just that object in it.

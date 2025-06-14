@@ -1267,8 +1267,12 @@ class Queue:
                 if not jobs_to_enqueue:
                     break
 
-                self.log.debug('Enqueueing %d dependent jobs for job %s: %s',
-                               len(jobs_to_enqueue), job.id, [j.id for j in jobs_to_enqueue])
+                self.log.debug(
+                    'Enqueueing %d dependent jobs for job %s: %s',
+                    len(jobs_to_enqueue),
+                    job.id,
+                    [j.id for j in jobs_to_enqueue],
+                )
 
                 for dependent in jobs_to_enqueue:
                     enqueue_at_front = dependent.enqueue_at_front or False
@@ -1280,12 +1284,20 @@ class Queue:
                     self.log.debug('Removed job %s from DeferredJobRegistry', dependent.id)
 
                     if dependent.origin == self.name:
-                        self.log.debug('Enqueueing job %s to current queue %s (at_front=%s)',
-                                       dependent.id, self.name, enqueue_at_front)
+                        self.log.debug(
+                            'Enqueueing job %s to current queue %s (at_front=%s)',
+                            dependent.id,
+                            self.name,
+                            enqueue_at_front,
+                        )
                         self._enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
                     else:
-                        self.log.debug('Enqueueing job %s to different queue %s (at_front=%s)',
-                                       dependent.id, dependent.origin, enqueue_at_front)
+                        self.log.debug(
+                            'Enqueueing job %s to different queue %s (at_front=%s)',
+                            dependent.id,
+                            dependent.origin,
+                            enqueue_at_front,
+                        )
                         queue = self.__class__(name=dependent.origin, connection=self.connection)
                         queue._enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
 
