@@ -154,9 +154,11 @@ def worker(
             serializer=serializer,
         )
 
-        # if --verbose or --quiet, don't override the logging level set by setup_loghandlers_from_args
-        if verbose or quiet:
-            logging_level = None
+        # if --verbose or --quiet, use the appropriate logging level
+        if verbose:
+            logging_level = 'DEBUG'
+        elif quiet:
+            logging_level = 'WARNING'
 
         worker_instance.work(
             burst=burst,
