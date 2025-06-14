@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, cast
 import click
 from redis.exceptions import ConnectionError
 
-from rq import Worker
 from rq.cli.cli import main
 from rq.cli.helpers import (
     import_attribute,
@@ -24,10 +23,8 @@ from rq.defaults import (
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
-from rq.job import Job
 from rq.serializers import DefaultSerializer
 from rq.suspension import is_suspended
-from rq.utils import import_job_class, import_worker_class
 from rq.worker_pool import WorkerPool
 
 if TYPE_CHECKING:
@@ -184,7 +181,6 @@ def worker(
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
-@click.option('--job-class', type=str, default=None, help='Dotted path to a Job class')
 @click.argument('queues', nargs=-1)
 @click.option('--num-workers', '-n', type=int, default=1, help='Number of workers to start')
 @pass_cli_config
@@ -198,8 +194,6 @@ def worker_pool(
     quiet,
     log_format,
     date_format,
-    worker_class,
-    job_class,
     num_workers,
     **options,
 ):
@@ -215,16 +209,6 @@ def worker_pool(
     else:
         serializer = DefaultSerializer
 
-    if worker_class:
-        worker_class = import_worker_class(worker_class)
-    else:
-        worker_class = Worker
-
-    if job_class:
-        job_class = import_job_class(job_class)
-    else:
-        job_class = Job
-
     # if --verbose or --quiet, use the appropriate logging level
     if verbose:
         logging_level = 'DEBUG'
@@ -236,7 +220,7 @@ def worker_pool(
         connection=cli_config.connection,
         num_workers=num_workers,
         serializer=serializer,
-        worker_class=worker_class,
-        job_class=job_class,
+        worker_class=cli_config.worker_class,
+        job_class=cli_config.job_class,
     )
     pool.start(burst=burst, logging_level=logging_level)
