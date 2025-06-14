@@ -4,7 +4,7 @@ to have a low barrier to entry while scaling incredibly well for large applicati
 It can be integrated into your web stack easily, making it suitable for projects
 of any size—from simple applications to high-volume enterprise systems.
 
-RQ requires Redis >= 4 or Valkey >= 7.2.
+RQ requires Redis >= 5 or Valkey >= 7.2.
 
 [![Build status](https://github.com/rq/rq/workflows/Test/badge.svg)](https://github.com/rq/rq/actions?query=workflow%3A%22Test%22)
 [![PyPI](https://img.shields.io/pypi/pyversions/rq.svg)](https://pypi.python.org/pypi/rq)
@@ -98,6 +98,40 @@ queue.enqueue(say_hello, retry=Retry(max=3, interval=[10, 30, 60]))
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
+## Cron Style Job Scheduling
+
+To schedule jobs to be enqueued at specific intervals, RQ >= 2.4 now provides a cron-like feature (support for cron syntax coming soon).
+
+First, create a configuration file (e.g., `cron_config.py`) that defines the jobs you want to run periodically.
+
+```python
+from rq import cron
+from myapp import cleanup_database, send_daily_report
+
+# Run database cleanup every 5 minutes
+cron.register(
+    cleanup_database,
+    queue_name='default',
+    interval=300  # 5 minutes in seconds
+)
+
+# Send daily reports every 24 hours
+cron.register(
+    send_daily_report,
+    queue_name='repeating_tasks',
+    args=('daily',),
+    kwargs={'format': 'pdf'},
+    interval=86400  # 24 hours in seconds
+)
+```
+
+And then start the `rq cron` command to enqueue these jobs at specified intervals:
+
+```sh
+$ rq cron cron_config.py
+```
+
+More details on functionality can be found in the [docs](https://python-rq.org/docs/cron/).
 
 ### The Worker
 
@@ -115,7 +149,7 @@ Job result = 818
 To run multiple workers in production, use process managers like `systemd`. RQ also ships with a beta version of `worker-pool` that lets you run multiple worker processes with a single command.
 
 ```console
-rq worker-pool -n 4
+$ rq worker-pool -n 4
 ```
 
 More options are documented on [python-rq.org](https://python-rq.org/docs/workers/).

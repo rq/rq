@@ -20,6 +20,8 @@ navigation:
         url: /docs/exceptions/
       - text: Scheduling & Repeating Jobs
         url: /docs/scheduling/
+      - text: Cron Style Scheduling
+        url: /docs/cron/
       - text: Job Registries
         url: /docs/job_registries/
       - text: Monitoring

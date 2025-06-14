@@ -1,3 +1,9 @@
+### RQ 2.4.0 (2025-06-14)
+* Added `rq cron` CLI command. Thanks @selwin!
+* Various tests, typing improvements and cleanups. Thanks @SpecLad!
+* When a job is canceled, you can now optionally clean it from dependencies using `job.cancel(remove_from_dependencies=True)`. Thanks @Marishka17!
+* RQ now requires Python >= 3.9. Thanks @Jankovn and @selwin!
+
 ### RQ 2.3.3 (2025-05-10)
 * `WorkerPool` now accepts `queue_class` argument. Thanks @amonsh1!
 * Disallow `redis-py=6.0.0`. Thanks @selwin and @terencehonles!
