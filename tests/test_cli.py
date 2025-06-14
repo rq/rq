@@ -29,6 +29,9 @@ class CLITestCase(RQTestCase):
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
         self.connection: Redis = Redis.from_url(self.redis_url)
 
+    def tearDown(self):
+        self.connection.close()
+
     def assert_normal_execution(self, result):
         if result.exit_code == 0:
             return True

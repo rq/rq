@@ -1,13 +1,10 @@
 import json
 import queue
 import time
-import unittest
 import zlib
 from datetime import datetime, timezone
 from pickle import dumps, loads
 from uuid import uuid4
-
-from redis import Redis
 
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
@@ -23,9 +20,9 @@ from rq.registry import (
     StartedJobRegistry,
 )
 from rq.serializers import JSONSerializer
-from rq.utils import as_text, get_version, now, utcformat
+from rq.utils import as_text, now, utcformat
 from rq.worker import Worker
-from tests import RQTestCase, fixtures
+from tests import RQTestCase, fixtures, min_redis_version
 
 
 class TestJob(RQTestCase):
@@ -832,7 +829,7 @@ class TestJob(RQTestCase):
 
         assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
 
-    @unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
+    @min_redis_version((5, 0, 0))
     def test_blocking_result_fetch(self):
         # Ensure blocking waits for the time to run the job, but not right up until the timeout.
         job_sleep_seconds = 2
