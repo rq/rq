@@ -1493,7 +1493,7 @@ class Job:
         if not self.success_callback:
             return
 
-        logger.debug('Job %s: Running success callback...', self.id)
+        self.log.debug('Job %s: running success callback...', self.id)
         with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
             self.success_callback(self, self.connection, result)
 
@@ -1502,12 +1502,12 @@ class Job:
         if not self.failure_callback:
             return
 
-        logger.debug('Job %s: Running failure callback...', self.id)
+        self.log.debug('Job %s: running failure callback...', self.id)
         try:
             with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.failure_callback(self, self.connection, *exc_info)
         except Exception:  # noqa
-            logger.exception('Job %s: Error while executing failure callback', self.id)
+            self.log.exception('Job %s: error while executing failure callback', self.id)
             raise
 
     def execute_stopped_callback(self, death_penalty_class: type[BaseDeathPenalty]):
@@ -1515,17 +1515,17 @@ class Job:
         if self.stopped_callback is None:
             return
 
-        logger.debug('Job %s: Running stopped callback...', self.id)
+        self.log.debug('Job %s: running stopped callback...', self.id)
         try:
             with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
                 self.stopped_callback(self, self.connection)
         except Exception:  # noqa
-            logger.exception('Job %s: Error while executing stopped callback', self.id)
+            self.log.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
     def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
         """Saves and cleanup job after successful execution"""
-        self.log.debug('Job %s: Handling success...', self.id)
+        self.log.debug('Job %s: handling success...', self.id)
 
         self.set_status(JobStatus.FINISHED, pipeline=pipeline)
         # Result should be saved in job hash only if server
@@ -1547,7 +1547,7 @@ class Job:
 
     def _handle_failure(self, exc_string: str, pipeline: 'Pipeline'):
         self.log.debug(
-            'Job %s: Handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string
+            'Job %s: handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string
         )
 
         failed_job_registry = self.failed_job_registry
@@ -1610,12 +1610,12 @@ class Job:
             scheduled_datetime = now() + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
-            logger.info(
-                'Job %s: Scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
+            self.log.info(
+                'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
             )
         else:
             queue._enqueue_job(self, pipeline=pipeline)
-            logger.info('Job %s: Enqueued for retry, %s remaining', self.id, self.retries_left)
+            self.log.info('Job %s: enqueued for retry, %s remaining', self.id, self.retries_left)
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
         """Jobs may have dependencies. Jobs are enqueued only if the jobs they

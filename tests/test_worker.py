@@ -1602,7 +1602,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertFalse(os.path.exists(os.path.join(self.sandbox, 'finished')))
 
     @mock.patch('rq.worker.logger.info')
-    def test_handle_shutdown_request(self, mock_logger_info):
+    def test_handle_shutdown_request(self, mock_logger):
         """Mutate HerokuWorker so _horse_pid refers to an artificial process
         and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo', connection=self.connection)
@@ -1619,7 +1619,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         # would expect p.exitcode to be -34
         self.assertEqual(p.exitcode, -34)
         self.assertFalse(os.path.exists(path))
-        mock_logger_info.assert_called_with('Killed horse pid %s', p.pid)
+        mock_logger.info.assert_called_with('Worker %s: killed horse pid %s', w.key, p.pid)
 
     def test_handle_shutdown_request_no_horse(self):
         """Mutate HerokuWorker so _horse_pid refers to non existent process
