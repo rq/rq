@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from time import sleep
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -26,7 +27,7 @@ class CLITestCase(RQTestCase):
         super().setUp()
         db_num = self.connection.connection_pool.connection_kwargs['db']
         self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
-        self.connection = Redis.from_url(self.redis_url)
+        self.connection: Redis = Redis.from_url(self.redis_url)
 
     def tearDown(self):
         self.connection.close()
@@ -83,7 +84,7 @@ class TestRQCli(CLITestCase):
             'testhost.example.com',
         )
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '--config', cli_config.config])
+        result = runner.invoke(main, ['info', '--config', str(cli_config.config)])
         self.assertEqual(result.exit_code, 1)
 
     def test_config_file_default_options(self):
@@ -685,7 +686,7 @@ class TestRQCli(CLITestCase):
         start = datetime.now(timezone.utc) + timedelta(minutes=5)
         middle = parse_schedule('5m', None)
         end = datetime.now(timezone.utc) + timedelta(minutes=5)
-
+        assert middle is not None and start is not None
         self.assertGreater(middle, start)
         self.assertLess(middle, end)
 
@@ -862,3 +863,94 @@ class WorkerPoolCLITestCase(CLITestCase):
         # --quiet and --verbose are mutually exclusive
         result = runner.invoke(main, args + ['--quiet', '--verbose'])
         self.assertNotEqual(result.exit_code, 0)
+
+
+class CronCLITestCase(CLITestCase):
+    """Tests the `rq cron` CLI command."""
+
+    def setUp(self):
+        # Call parent setUp first to initialize self.connection, self.redis_url etc.
+        super().setUp()
+
+        # Path to the existing cron config file
+        current_dir = os.path.dirname(__file__)
+        self.cron_config_path = os.path.abspath(os.path.join(current_dir, 'cron_config.py'))
+        self.assertTrue(os.path.exists(self.cron_config_path), f'Config file not found at {self.cron_config_path}')
+
+    def test_cron_execution(self):
+        """rq cron <config_path> -u <url>"""
+        runner = CliRunner()
+        mock_cron = MagicMock()
+
+        # Mock the Cron class instead of load_config
+        with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
+            # Make the start method just return to avoid infinite loop
+            mock_cron.start.side_effect = lambda: None
+
+            result = runner.invoke(main, ['cron', self.cron_config_path, '-u', self.redis_url])
+
+            self.assert_normal_execution(result)
+
+            # Verify Cron was constructed with correct parameters
+            mock_cron_class.assert_called_once()
+
+            # Verify load_config_from_file was called with correct path
+            mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)
+
+            # Verify start was called
+            mock_cron.start.assert_called_once()
+
+    def test_cron_execution_log_level(self):
+        """rq cron <config_path> -u <url> --logging-level DEBUG"""
+        runner = CliRunner()
+        mock_cron = MagicMock()
+
+        # Mock the Cron class
+        with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
+            mock_cron.start.side_effect = lambda: None
+
+            result = runner.invoke(
+                main, ['cron', '--logging-level', 'DEBUG', self.cron_config_path, '-u', self.redis_url]
+            )
+
+            self.assert_normal_execution(result)
+
+            # Verify Cron was constructed with correct parameters
+            mock_cron_class.assert_called_once()
+
+            # Verify all logging parameters
+            call_kwargs = mock_cron_class.call_args[1]
+            self.assertEqual(call_kwargs['logging_level'], 'DEBUG')
+
+            # Verify config loading and start were called
+            mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)
+            mock_cron.start.assert_called_once()
+
+    def test_cron_execution_with_url(self):
+        """Verify that the Redis URL (-u option) is correctly parsed and used"""
+        runner = CliRunner()
+        mock_cron = MagicMock()
+
+        # Use a distinctive non-default URL with different host, port, and DB
+        test_url = 'redis://test-host:7777/5'
+
+        with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
+            mock_cron.start.side_effect = lambda: None
+
+            result = runner.invoke(main, ['cron', self.cron_config_path, '-u', test_url])
+
+            self.assert_normal_execution(result)
+
+            # Verify that Cron was called with a connection from the provided URL
+            mock_cron_class.assert_called_once()
+            connection = mock_cron_class.call_args[1]['connection']
+
+            # Verify all connection parameters match our custom URL
+            connection_kwargs = connection.connection_pool.connection_kwargs
+            self.assertEqual(connection_kwargs['host'], 'test-host')
+            self.assertEqual(connection_kwargs['port'], 7777)
+            self.assertEqual(connection_kwargs['db'], 5)
+
+            # Verify config loading and start were called
+            mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)
+            mock_cron.start.assert_called_once()
