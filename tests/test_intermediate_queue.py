@@ -1,20 +1,17 @@
-import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
-from redis import Redis
 
 from rq import Queue, Worker
 from rq.intermediate_queue import IntermediateQueue
 from rq.job import JobStatus
 from rq.maintenance import clean_intermediate_queue
-from rq.utils import get_version
-from tests import RQTestCase
+from tests import RQTestCase, min_redis_version
 from tests.fixtures import say_hello
 
 
-@unittest.skipIf(get_version(Redis()) < (6, 2, 0), 'Skip if Redis server < 6.2.0')
+@min_redis_version((6, 2, 0))
 class TestIntermediateQueue(RQTestCase):
     def setUp(self):
         super().setUp()

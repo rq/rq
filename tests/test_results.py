@@ -1,24 +1,21 @@
 import tempfile
 import time
-import unittest
 from datetime import timedelta
 from unittest.mock import PropertyMock, patch
-
-from redis import Redis
 
 from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.job import Job
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result, get_key
-from rq.utils import get_version, now
+from rq.utils import now
 from rq.worker import Worker
-from tests import RQTestCase
+from tests import RQTestCase, min_redis_version
 
 from .fixtures import div_by_zero, say_hello
 
 
-@unittest.skipIf(get_version(Redis()) < (5, 0, 0), 'Skip if Redis server < 5.0')
+@min_redis_version((5, 0, 0))
 class TestScheduledJobRegistry(RQTestCase):
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
