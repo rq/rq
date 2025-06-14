@@ -132,9 +132,7 @@ class CronScheduler:
 
         job_key = f'{func.__module__}.{func.__name__}'
         if interval is not None:
-            self.log.info(f"Registered cron job '{job_key}' to run on {queue_name} every {interval} seconds")
-        else:
-            self.log.info(f"Registered cron job '{job_key}' for manual execution only")
+            self.log.info(f"Registered '{job_key}' to run on {queue_name} every {interval} seconds")
 
         return cron_job
 
