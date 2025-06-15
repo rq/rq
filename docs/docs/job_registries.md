@@ -4,16 +4,16 @@ layout: docs
 ---
 
 Each queue maintains a set of Job Registries:
-* `StartedJobRegistry` Holds currently executing jobs. Jobs are added right before they are 
+* `StartedJobRegistry` Holds currently executing jobs. Jobs are added right before they are
 executed and removed right after completion (success or failure).
 * `FinishedJobRegistry` Holds successfully completed jobs.
 * `FailedJobRegistry` Holds jobs that have been executed, but didn't finish successfully.
-* `DeferredJobRegistry` Holds deferred jobs (jobs that depend on another job and are waiting for that 
+* `DeferredJobRegistry` Holds deferred jobs (jobs that depend on another job and are waiting for that
 job to finish).
 * `ScheduledJobRegistry` Holds scheduled jobs.
 * `CanceledJobRegistry` Holds canceled jobs.
 
-You can get the number of jobs in a registry, the ids of the jobs in the registry, and more. 
+You can get the number of jobs in a registry, the ids of the jobs in the registry, and more.
 Below is an example using a `StartedJobRegistry`.
 ```python
 import time

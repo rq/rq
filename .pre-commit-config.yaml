@@ -1,14 +1,15 @@
 repos:
-  -   repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v2.3.0
-      hooks:
-      -   id: check-yaml
-      -   id: end-of-file-fixer
-      -   id: trailing-whitespace
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.9
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
     hooks:
-      - id: ruff
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.13
+    hooks:
+      - id: ruff-check
+        args: [--fix]
       - id: ruff-format
   - repo: https://github.com/tox-dev/pyproject-fmt
     rev: "v2.5.0"

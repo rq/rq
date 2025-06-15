@@ -63,4 +63,3 @@ the job hash.  In Python:
 Note that it is irrelevant on which queue the job resides.  When a worker
 eventually pops the job ID from the queue and notes that the Job hash does not
 exist (anymore), it simply discards the job ID and continues with the next.
-

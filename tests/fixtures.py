@@ -180,7 +180,6 @@ def save_key_ttl(key):
 
 
 def long_running_job(timeout=10, horse_pid_key=None):
-
     job = get_current_job()
     if horse_pid_key:
         # Store the PID of the worker horse in a key
