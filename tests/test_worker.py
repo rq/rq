@@ -1619,7 +1619,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         # would expect p.exitcode to be -34
         self.assertEqual(p.exitcode, -34)
         self.assertFalse(os.path.exists(path))
-        mock_logger.assert_called_with('Worker %s: killed horse pid %s', w.key, p.pid)
+        mock_logger.assert_called_with('Worker %s: killed horse pid %s', w.name, p.pid)
 
     def test_handle_shutdown_request_no_horse(self):
         """Mutate HerokuWorker so _horse_pid refers to non existent process

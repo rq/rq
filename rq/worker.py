@@ -460,7 +460,7 @@ class BaseWorker:
             # If there are multiple workers running, we only want 1 worker
             # to run clean_registries().
             if queue.acquire_maintenance_lock():
-                self.log.info('Worker %s: cleaning registries for queue: %s', self.key, queue.name)
+                self.log.info('Worker %s: cleaning registries for queue: %s', self.name, queue.name)
                 clean_registries(queue, self._exc_handlers)
                 worker_registration.clean_worker_registry(queue)
                 queue.intermediate_queue.cleanup(self, queue)
@@ -518,7 +518,7 @@ class BaseWorker:
             signum (Any): Signum
             frame (Any): Frame
         """
-        self.log.debug('Worker %s: got signal %s', self.key, signal_name(signum))
+        self.log.debug('Worker %s: got signal %s', self.name, signal_name(signum))
         self._shutdown_requested_date = now()
 
         signal.signal(signal.SIGINT, self.request_force_stop)
@@ -535,9 +535,7 @@ class BaseWorker:
         if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
-            self.log.debug(
-                'Worker %s: stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.', self.key
-            )
+            self.log.debug('Worker %s: stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.', self.name)
             if self.scheduler:
                 self.stop_scheduler()
         else:
@@ -608,16 +606,16 @@ class BaseWorker:
                         self.run_maintenance_tasks()
 
                     if self._stop_requested:
-                        self.log.info('Worker %s: stopping on request', self.key)
+                        self.log.info('Worker %s: stopping on request', self.name)
                         break
 
                     timeout = None if burst else self.dequeue_timeout
                     result = self.dequeue_job_and_maintain_ttl(timeout, max_idle_time)
                     if result is None:
                         if burst:
-                            self.log.info('Worker %s: done, quitting', self.key)
+                            self.log.info('Worker %s: done, quitting', self.name)
                         elif max_idle_time is not None:
-                            self.log.info('Worker %s: idle for %d seconds, quitting', self.key, max_idle_time)
+                            self.log.info('Worker %s: idle for %d seconds, quitting', self.name, max_idle_time)
                         break
 
                     job, queue = result
@@ -627,11 +625,11 @@ class BaseWorker:
                     completed_jobs += 1
                     if max_jobs is not None:
                         if completed_jobs >= max_jobs:
-                            self.log.info('Worker %s: finished executing %d jobs, quitting', self.key, completed_jobs)
+                            self.log.info('Worker %s: finished executing %d jobs, quitting', self.name, completed_jobs)
                             break
 
                 except redis.exceptions.TimeoutError:
-                    self.log.error('Worker %s: Redis connection timeout, quitting...', self.key)
+                    self.log.error('Worker %s: Redis connection timeout, quitting...', self.name)
                     break
 
                 except StopRequested:
@@ -642,7 +640,7 @@ class BaseWorker:
                     raise
 
                 except:  # noqa
-                    self.log.error('Worker %s: found an unhandled exception, quitting...', self.key, exc_info=True)
+                    self.log.error('Worker %s: found an unhandled exception, quitting...', self.name, exc_info=True)
                     break
         finally:
             self.teardown()
@@ -695,7 +693,7 @@ class BaseWorker:
             4. Add the job to FailedJobRegistry
         `save_exc_to_job` should only be used for testing purposes
         """
-        self.log.debug('Worker %s: handling failed execution of job %s', self.key, job.id)
+        self.log.debug('Worker %s: handling failed execution of job %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
@@ -739,12 +737,8 @@ class BaseWorker:
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
-                self.log.error(
-                    'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
-                    self.key,
-                    job.id,
-                    e,
-                )
+                self.log.error('Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
+                              self.name, job.id, e)
                 pass
 
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
@@ -862,7 +856,7 @@ class BaseWorker:
 
     def register_birth(self):
         """Registers its own birth."""
-        self.log.debug('Worker %s: registering birth', self.key)
+        self.log.debug('Worker %s: registering birth', self.name)
         if self.connection.exists(self.key) and not self.connection.hexists(self.key, 'death'):
             msg = 'There exists an active worker named {0!r} already'
             raise ValueError(msg.format(self.name))
@@ -892,7 +886,7 @@ class BaseWorker:
 
     def register_death(self):
         """Registers its own death."""
-        self.log.debug('Worker %s: registering death', self.key)
+        self.log.debug('Worker %s: registering death', self.name)
         with self.connection.pipeline() as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
@@ -928,7 +922,7 @@ class BaseWorker:
         setup_loghandlers(logging_level, date_format, log_format, name='rq.worker')
         setup_loghandlers(logging_level, date_format, log_format, name='rq.job')
         self.register_birth()
-        self.log.info('Worker %s: started with PID %d, version %s', self.key, os.getpid(), VERSION)
+        self.log.info('Worker %s: started with PID %d, version %s', self.name, os.getpid(), VERSION)
         self.subscribe()
         self.set_state(WorkerStatus.STARTED)
         qnames = self.queue_names()
@@ -941,12 +935,12 @@ class BaseWorker:
 
         while not self._stop_requested and is_suspended(self.connection, self):
             if burst:
-                self.log.info('Worker %s: suspended in burst mode, exiting', self.key)
-                self.log.info('Worker %s: note: there could still be unfinished jobs on the queue', self.key)
+                self.log.info('Worker %s: suspended in burst mode, exiting', self.name)
+                self.log.info('Worker %s: note: there could still be unfinished jobs on the queue', self.name)
                 raise StopRequested
 
             if not notified:
-                self.log.info('Worker %s: suspended, run `rq resume` to resume', self.key)
+                self.log.info('Worker %s: suspended, run `rq resume` to resume', self.name)
                 before_state = self.get_state()
                 self.set_state(WorkerStatus.SUSPENDED)
                 notified = True
@@ -1007,24 +1001,24 @@ class BaseWorker:
         if isinstance(exc, (redis.exceptions.ConnectionError)):
             self.log.error(
                 'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...',
-                self.key,
+                self.name,
                 exc,
                 2,
             )
             time.sleep(2.0)
         else:
-            self.log.warning('Worker %s: pubsub thread exiting on %s', self.key, exc)
+            self.log.warning('Worker %s: pubsub thread exiting on %s', self.name, exc)
             raise
 
     def handle_payload(self, message):
         """Handle external commands"""
-        self.log.debug('Worker %s: received message: %s', self.key, message)
+        self.log.debug('Worker %s: received message: %s', self.name, message)
         payload = parse_payload(message)
         handle_command(self, payload)
 
     def subscribe(self):
         """Subscribe to this worker's channel"""
-        self.log.info('Worker %s: subscribing to channel %s', self.key, self.pubsub_channel_name)
+        self.log.info('Worker %s: subscribing to channel %s', self.name, self.pubsub_channel_name)
         self.pubsub = self.connection.pubsub()
         self.pubsub.subscribe(**{self.pubsub_channel_name: self.handle_payload})
         self.pubsub_thread = self.pubsub.run_in_thread(
@@ -1060,7 +1054,7 @@ class BaseWorker:
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
         if self.pubsub_thread:
-            self.log.info('Worker %s: unsubscribing from channel %s', self.key, self.pubsub_channel_name)
+            self.log.info('Worker %s: unsubscribing from channel %s', self.name, self.pubsub_channel_name)
             self.pubsub.unsubscribe()
             self.pubsub_thread.stop()
             self.pubsub_thread.join(timeout=1)
@@ -1079,7 +1073,7 @@ class BaseWorker:
 
         self.set_state(WorkerStatus.IDLE)
         self.procline('Listening on ' + qnames)
-        self.log.debug('Worker %s: *** Listening on %s...', self.key, green(qnames))
+        self.log.debug('Worker %s: *** Listening on %s...', self.name, green(qnames))
         connection_wait_time = 1.0
         idle_since = now()
         idle_time_left = max_idle_time
@@ -1093,9 +1087,7 @@ class BaseWorker:
                 if timeout is not None and idle_time_left is not None:
                     timeout = min(timeout, idle_time_left)
 
-                self.log.debug(
-                    'Worker %s: dequeueing jobs on queues %s and timeout %s', self.key, green(qnames), timeout
-                )
+                self.log.debug('Worker %s: dequeueing jobs on queues %s and timeout %s', self.name, green(qnames), timeout)
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,
@@ -1107,7 +1099,7 @@ class BaseWorker:
                 if result is not None:
                     job, queue = result
                     self.reorder_queues(reference_queue=queue)
-                    self.log.debug('Worker %s: dequeued job %s from %s', self.key, blue(job.id), green(queue.name))
+                    self.log.debug('Worker %s: dequeued job %s from %s', self.name, blue(job.id), green(queue.name))
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
                         self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
@@ -1123,10 +1115,7 @@ class BaseWorker:
                         break
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error(
-                    'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...',
-                    self.key,
-                    conn_err,
-                    connection_wait_time,
+                    'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...', self.name, conn_err, connection_wait_time
                 )
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
@@ -1154,11 +1143,7 @@ class BaseWorker:
         connection: Union[Redis, Pipeline] = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(now()))
-        self.log.debug(
-            'Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.',
-            self.key,
-            timeout,
-        )
+        self.log.debug('Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', self.name, timeout)
 
     def teardown(self):
         if not self.is_horse:
@@ -1216,7 +1201,7 @@ class BaseWorker:
         the other properties are accessed, which will stop exceptions from
         being properly logged, so we guard against it here.
         """
-        self.log.debug('Worker %s: handling exception for %s.', self.key, job.id)
+        self.log.debug('Worker %s: handling exception for %s.', self.name, job.id)
         exc_string = ''.join(traceback.format_exception(*exc_info))
         try:
             extra = {'func': job.func_name, 'arguments': job.args, 'kwargs': job.kwargs}
@@ -1230,16 +1215,11 @@ class BaseWorker:
 
         # func_name
         self.log.error(
-            'Worker %s: job %s: exception raised while executing (%s)\n%s',
-            self.key,
-            job.id,
-            func_name,
-            exc_string,
-            extra=extra,
+            'Worker %s: job %s: exception raised while executing (%s)\n%s', self.name, job.id, func_name, exc_string, extra=extra
         )
 
         for handler in self._exc_handlers:
-            self.log.debug('Worker %s: invoking exception handler %s', self.key, handler)
+            self.log.debug('Worker %s: invoking exception handler %s', self.name, handler)
             fallthrough = handler(job, *exc_info)
 
             # Only handlers with explicit return values should disable further
@@ -1272,11 +1252,11 @@ class Worker(BaseWorker):
         """
         try:
             os.killpg(os.getpgid(self.horse_pid), sig)
-            self.log.info('Worker %s: killed horse pid %s', self.key, self.horse_pid)
+            self.log.info('Worker %s: killed horse pid %s', self.name, self.horse_pid)
         except OSError as e:
             if e.errno == errno.ESRCH:
                 # "No such process" is fine with us
-                self.log.debug('Worker %s: horse already dead', self.key)
+                self.log.debug('Worker %s: horse already dead', self.name)
             else:
                 raise
 
@@ -1304,14 +1284,14 @@ class Worker(BaseWorker):
         # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
         # we ignore it.
         if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
-            self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.key)
+            self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.name)
             return
 
-        self.log.warning('Worker %s: cold shut down', self.key)
+        self.log.warning('Worker %s: cold shut down', self.name)
 
         # Take down the horse with the worker
         if self.horse_pid:
-            self.log.debug('Worker %s: taking down horse %s with me', self.key, self.horse_pid)
+            self.log.debug('Worker %s: taking down horse %s with me', self.name, self.horse_pid)
             self.kill_horse()
             self.wait_for_horse()
         raise SystemExit()
@@ -1395,9 +1375,7 @@ class Worker(BaseWorker):
         self.set_current_job_working_time(0)
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
 
-        self.log.debug(
-            'Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.key, job.id, retpid, ret_val
-        )
+        self.log.debug('Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.name, job.id, retpid, ret_val)
 
         if ret_val == os.EX_OK:  # The process exited normally.
             return
@@ -1409,7 +1387,7 @@ class Worker(BaseWorker):
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
-            self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.key, job.id)
+            self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
             if job.stopped_callback:
                 job.execute_stopped_callback(self.death_penalty_class)
             self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
@@ -1420,7 +1398,7 @@ class Worker(BaseWorker):
             # Unhandled failure: move the job to the failed queue
             signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
             exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
-            self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.key, job.id, exc_string)
+            self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.name, job.id, exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
@@ -1496,7 +1474,7 @@ class Worker(BaseWorker):
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
-        self.log.debug('Worker %s: preparing for execution of job ID %s', self.key, job.id)
+        self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
@@ -1512,7 +1490,7 @@ class Worker(BaseWorker):
                 queue = Queue(job.origin, connection=self.connection)
                 pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
             pipeline.execute()
-            self.log.debug('Worker %s: job preparation finished.', self.key)
+            self.log.debug('Worker %s: job preparation finished.', self.name)
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
@@ -1526,12 +1504,12 @@ class Worker(BaseWorker):
             queue (Queue): The queue
             started_job_registry (StartedJobRegistry): The started registry
         """
-        self.log.debug('Worker %s: handling retry of job %s', self.key, job.id)
+        self.log.debug('Worker %s: handling retry of job %s', self.name, job.id)
 
         # Check if job has exceeded max retries
         if job.number_of_retries and job.number_of_retries >= retry.max:
             # If max retries exceeded, treat as failure
-            self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.key, job.id, retry.max)
+            self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
             exc_string = f'Job failed after {retry.max} retry attempts'
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
             return
@@ -1550,7 +1528,7 @@ class Worker(BaseWorker):
                 queue.schedule_job(job, scheduled_time, pipeline=pipeline)
                 self.log.debug(
                     'Worker %s: job %s: scheduled for retry at %s, %s attempts remaining',
-                    self.key,
+                    self.name,
                     job.id,
                     scheduled_time,
                     retry.max - (job.number_of_retries or 0),
@@ -1558,7 +1536,7 @@ class Worker(BaseWorker):
             else:
                 self.log.debug(
                     'Worker %s: job %s: enqueued for retry, %s attempts remaining',
-                    self.key,
+                    self.name,
                     job.id,
                     retry.max - (job.number_of_retries or 0),
                 )
@@ -1568,7 +1546,7 @@ class Worker(BaseWorker):
 
             pipeline.execute()
 
-            self.log.debug('Worker %s: finished handling retry of job %s', self.key, job.id)
+            self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
 
     def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
@@ -1588,7 +1566,7 @@ class Worker(BaseWorker):
             queue (Queue): The queue
             started_job_registry (StartedJobRegistry): The started registry
         """
-        self.log.debug('Worker %s: handling successful execution of job %s', self.key, job.id)
+        self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
 
         with self.connection.pipeline() as pipeline:
             while True:
@@ -1597,13 +1575,13 @@ class Worker(BaseWorker):
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
                     # enqueue_dependents might call multi() on the pipeline
-                    self.log.debug('Worker %s: enqueueing dependents of job %s', self.key, job.id)
+                    self.log.debug('Worker %s: enqueueing dependents of job %s', self.name, job.id)
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
                     if not pipeline.explicit_transaction:
                         # enqueue_dependents didn't call multi after all!
                         # We have to do it ourselves to make sure everything runs in a transaction
-                        self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.key, job.id)
+                        self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
                         pipeline.multi()
 
                     self.increment_successful_job_count(pipeline=pipeline)
@@ -1611,15 +1589,13 @@ class Worker(BaseWorker):
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
-                        self.log.debug("Worker %s: saving job %s's successful execution result", self.key, job.id)
+                        self.log.debug("Worker %s: saving job %s's successful execution result", self.name, job.id)
                         job._handle_success(result_ttl, pipeline=pipeline)
 
                     if job.repeats_left is not None and job.repeats_left > 0:
                         from .repeat import Repeat
 
-                        self.log.info(
-                            'Worker %s: job %s scheduled to repeat (%s left)', self.key, job.id, job.repeats_left
-                        )
+                        self.log.info('Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left)
                         Repeat.schedule(job, queue, pipeline=pipeline)
                     else:
                         job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
@@ -1642,7 +1618,7 @@ class Worker(BaseWorker):
                             'Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name
                         )
 
-                    self.log.debug('Worker %s: finished handling successful execution of job %s', self.key, job.id)
+                    self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
                     break
                 except redis.exceptions.WatchError:
                     continue
@@ -1664,7 +1640,7 @@ class Worker(BaseWorker):
             bool: True after finished.
         """
         started_job_registry = queue.started_job_registry
-        self.log.debug('Worker %s: started job registry set.', self.key)
+        self.log.debug('Worker %s: started job registry set.', self.name)
 
         try:
             remove_from_intermediate_queue = len(self.queues) == 1
@@ -1673,9 +1649,9 @@ class Worker(BaseWorker):
             job.started_at = now()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
             with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
-                self.log.debug('Worker %s: performing job %s ...', self.key, job.id)
+                self.log.debug('Worker %s: performing job %s ...', self.name, job.id)
                 return_value = job.perform()
-                self.log.debug('Worker %s: finished performing job %s', self.key, job.id)
+                self.log.debug('Worker %s: finished performing job %s', self.name, job.id)
 
             self.handle_execution_ended(job, queue, job.success_callback_timeout)
             # Pickle the result in the same try-except block since we need
@@ -1684,7 +1660,7 @@ class Worker(BaseWorker):
 
             if isinstance(return_value, Retry):
                 # Retry the job
-                self.log.debug('Worker %s: job %s returns a Retry object', self.key, job.id)
+                self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
                 self.handle_job_retry(
                     job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry
                 )
@@ -1694,8 +1670,9 @@ class Worker(BaseWorker):
                 self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
 
         except:  # NOQA
-            self.log.debug('Worker %s: job %s raised an exception.', self.key, job.id)
+            self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
             job._status = JobStatus.FAILED
+
 
             self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
@@ -1718,7 +1695,7 @@ class Worker(BaseWorker):
 
         self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if return_value is not None:
-            self.log.debug('Worker %s: result: %r', self.key, yellow(str(return_value)))
+            self.log.debug('Worker %s: result: %r', self.name, yellow(str(return_value)))
 
         if self.log_result_lifespan:
             result_ttl = job.get_result_ttl(self.default_result_ttl)
