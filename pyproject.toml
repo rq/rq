@@ -1,45 +1,45 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling"]
+requires = [ "hatchling" ]
 
 [project]
 name = "rq"
 description = "RQ is a simple, lightweight, library for creating background jobs, and processing them."
 readme = "README.md"
 license = "BSD-2-Clause"
-maintainers = [{ name = "Selwin Ong" }]
+maintainers = [ { name = "Selwin Ong" } ]
 authors = [
-    { name = "Selwin Ong", email = "selwin.ong@gmail.com" },
-    { name = "Vincent Driessen", email = "vincent@3rdcloud.com" },
+  { name = "Selwin Ong", email = "selwin.ong@gmail.com" },
+  { name = "Vincent Driessen", email = "vincent@3rdcloud.com" },
 ]
 requires-python = ">=3.9"
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Intended Audience :: Developers",
-    "Intended Audience :: End Users/Desktop",
-    "Intended Audience :: Information Technology",
-    "Intended Audience :: Science/Research",
-    "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: BSD License",
-    "Operating System :: MacOS",
-    "Operating System :: POSIX",
-    "Operating System :: Unix",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Internet",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: Distributed Computing",
-    "Topic :: System :: Monitoring",
-    "Topic :: System :: Systems Administration",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX",
+  "Operating System :: Unix",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Distributed Computing",
+  "Topic :: System :: Monitoring",
+  "Topic :: System :: Systems Administration",
 ]
-dynamic = ["version"]
-dependencies = ["click>=5", "redis>=3.5,!=6.0.0"]
+dynamic = [ "version" ]
+dependencies = [ "click>=5", "redis>=3.5,!=6" ]
 urls.changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
 urls.documentation = "https://python-rq.org/docs/"
 urls.homepage = "https://python-rq.org/"
@@ -50,16 +50,16 @@ scripts.rqworker = "rq.cli:worker" # TODO [v2]: Remove
 
 [dependency-groups]
 dev = [
-    "coverage>=7.6.1",
-    "mypy>=1.14.1",
-    "packaging>=24.2",
-    "psutil>=7",
-    "pytest>=8.3.5",
-    "pytest-cov>=5",
-    "ruff>=0.9.9",
-    "tox>=4.24.1",
-    "types-greenlet>=3.1.0.20241221",
-    "types-redis>=4.6.0.20241004",
+  "coverage>=7.6.1",
+  "mypy>=1.14.1",
+  "packaging>=24.2",
+  "psutil>=7",
+  "pytest>=8.3.5",
+  "pytest-cov>=5",
+  "ruff>=0.9.9",
+  "tox>=4.24.1",
+  "types-greenlet>=3.1.0.20241221",
+  "types-redis>=4.6.0.20241004",
 ]
 
 [tool.hatch.version]
@@ -67,31 +67,31 @@ path = "rq/version.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/docs",
-    "/rq",
-    "/tests",
-    "CHANGES.md",
-    "LICENSE",
-    "pyproject.toml",
-    "README.md",
-    "requirements.txt",
-    "tox.ini",
+  "/docs",
+  "/rq",
+  "/tests",
+  "CHANGES.md",
+  "LICENSE",
+  "pyproject.toml",
+  "README.md",
+  "requirements.txt",
+  "tox.ini",
 ]
 [tool.hatch.envs.default]
 installer = "uv"
 
 [tool.hatch.envs.test]
 dependencies = [
-    "coverage",
-    "mypy",
-    "packaging",
-    "psutil",
-    "pytest",
-    "pytest-cov",
-    "ruff",
-    "tox",
-    "types-greenlet",
-    "types-redis",
+  "coverage",
+  "mypy",
+  "packaging",
+  "psutil",
+  "pytest",
+  "pytest-cov",
+  "ruff",
+  "tox",
+  "types-greenlet",
+  "types-redis",
 ]
 [tool.hatch.envs.test.scripts]
 cov = "pytest --cov=rq --cov-config=.coveragerc --cov-report=xml {args:tests}"
@@ -105,19 +105,23 @@ target-version = "py39"
 line-length = 120
 format.quote-style = "single"
 lint.select = [
-    "E", # pycodestyle errors
-    "F", # pyflakes errors
-    "I", # import sorting
-    "W", # pycodestyle warnings
+  "E", # pycodestyle errors
+  "F", # pyflakes errors
+  "I", # import sorting
+  "W", # pycodestyle warnings
 ]
-lint.isort.known-first-party = ["rq"]
+lint.isort.known-first-party = [ "rq" ]
 lint.isort.section-order = [
-    "future",
-    "standard-library",
-    "third-party",
-    "first-party",
-    "local-folder",
+  "future",
+  "standard-library",
+  "third-party",
+  "first-party",
+  "local-folder",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [ "slow", "ssl_test" ]
 
 [tool.mypy]
 allow_redefinition = true
@@ -135,7 +139,3 @@ ignore_missing_imports = true
 [tool.pyright]
 reportOptionalMemberAccess = false
 reportOptionalOperand = false
-
-[tool.pytest.ini_options]
-addopts = "--strict-markers"
-markers = ["slow", "ssl_test"]
