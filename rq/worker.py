@@ -535,7 +535,10 @@ class BaseWorker:
         if self.get_state() == WorkerStatus.BUSY:
             self._stop_requested = True
             self.set_shutdown_requested_date()
-            self.log.debug('Worker %s: stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.', self.name)
+            self.log.debug(
+                'Worker %s: stopping after current horse is finished. Press Ctrl+C again for a cold shutdown.',
+                self.name,
+            )
             if self.scheduler:
                 self.stop_scheduler()
         else:
@@ -737,8 +740,12 @@ class BaseWorker:
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
-                self.log.error('Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
-                              self.name, job.id, e)
+                self.log.error(
+                    'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
+                    self.name,
+                    job.id,
+                    e,
+                )
                 pass
 
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
@@ -1087,7 +1094,9 @@ class BaseWorker:
                 if timeout is not None and idle_time_left is not None:
                     timeout = min(timeout, idle_time_left)
 
-                self.log.debug('Worker %s: dequeueing jobs on queues %s and timeout %s', self.name, green(qnames), timeout)
+                self.log.debug(
+                    'Worker %s: dequeueing jobs on queues %s and timeout %s', self.name, green(qnames), timeout
+                )
                 result = self.queue_class.dequeue_any(
                     self._ordered_queues,
                     timeout,
@@ -1115,7 +1124,10 @@ class BaseWorker:
                         break
             except redis.exceptions.ConnectionError as conn_err:
                 self.log.error(
-                    'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...', self.name, conn_err, connection_wait_time
+                    'Worker %s: could not connect to Redis instance: %s retrying in %d seconds...',
+                    self.name,
+                    conn_err,
+                    connection_wait_time,
                 )
                 time.sleep(connection_wait_time)
                 connection_wait_time *= self.exponential_backoff_factor
@@ -1143,7 +1155,11 @@ class BaseWorker:
         connection: Union[Redis, Pipeline] = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(now()))
-        self.log.debug('Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.', self.name, timeout)
+        self.log.debug(
+            'Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.',
+            self.name,
+            timeout,
+        )
 
     def teardown(self):
         if not self.is_horse:
@@ -1215,7 +1231,12 @@ class BaseWorker:
 
         # func_name
         self.log.error(
-            'Worker %s: job %s: exception raised while executing (%s)\n%s', self.name, job.id, func_name, exc_string, extra=extra
+            'Worker %s: job %s: exception raised while executing (%s)\n%s',
+            self.name,
+            job.id,
+            func_name,
+            exc_string,
+            extra=extra,
         )
 
         for handler in self._exc_handlers:
@@ -1375,7 +1396,9 @@ class Worker(BaseWorker):
         self.set_current_job_working_time(0)
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
 
-        self.log.debug('Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.name, job.id, retpid, ret_val)
+        self.log.debug(
+            'Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.name, job.id, retpid, ret_val
+        )
 
         if ret_val == os.EX_OK:  # The process exited normally.
             return
@@ -1595,7 +1618,9 @@ class Worker(BaseWorker):
                     if job.repeats_left is not None and job.repeats_left > 0:
                         from .repeat import Repeat
 
-                        self.log.info('Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left)
+                        self.log.info(
+                            'Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left
+                        )
                         Repeat.schedule(job, queue, pipeline=pipeline)
                     else:
                         job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
@@ -1672,7 +1697,6 @@ class Worker(BaseWorker):
         except:  # NOQA
             self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
             job._status = JobStatus.FAILED
-
 
             self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
