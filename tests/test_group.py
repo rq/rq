@@ -23,6 +23,14 @@ class TestGroup(RQTestCase):
         assert len(group.get_jobs()) == 2
         q.empty()
 
+    def test_group_cleanup_with_no_jobs(self):
+        q = Queue(connection=self.connection)
+        group = Group.create(connection=self.connection)
+        assert len(group.get_jobs()) == 0
+        group.cleanup()
+        assert len(group.get_jobs()) == 0
+        q.empty()
+
     def test_group_repr(self):
         group = Group.create(name='foo', connection=self.connection)
         assert group.__repr__() == 'Group(id=foo)'

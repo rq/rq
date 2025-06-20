@@ -33,23 +33,24 @@ class Group:
         pipeline.sadd(self.REDIS_GROUP_KEY, self.name)
         pipeline.execute()
 
-    def cleanup(self, pipeline: Optional['Pipeline'] = None):
+    def cleanup(self):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
-        pipe = pipeline if pipeline else self.connection.pipeline()
-        job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
-        expired_job_ids = []
-        for job in job_ids:
-            pipe.exists(Job.key_for(job))
-        results = pipe.execute()
+        with self.connection.pipeline() as pipe: # Use a new pipeline
+            job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
+            if not job_ids:
+                return
+            expired_job_ids = []
+            for job in job_ids:
+                pipe.exists(Job.key_for(job))
+            results = pipe.execute()
 
-        for i, key_exists in enumerate(results):
-            if not key_exists:
-                expired_job_ids.append(job_ids[i])
-        if expired_job_ids:
-            pipe.srem(self.key, *expired_job_ids)
-        if pipeline is None:
-            pipe.execute()
+            for i, key_exists in enumerate(results):
+                if not key_exists:
+                    expired_job_ids.append(job_ids[i])
+            if expired_job_ids:
+                pipe.srem(self.key, *expired_job_ids)
+                pipe.execute()
 
     def enqueue_many(self, queue: Queue, job_datas: Iterable['EnqueueData'], pipeline: Optional['Pipeline'] = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
@@ -112,7 +113,7 @@ class Group:
         with connection.pipeline() as p:
             # Remove expired jobs from groups
             for group in groups:
-                group.cleanup(pipeline=p)
+                group.cleanup()
             p.execute()
             # Remove empty groups from group registry
             for group in groups:
