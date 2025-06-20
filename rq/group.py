@@ -38,6 +38,8 @@ class Group:
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
         with self.connection.pipeline() as pipe: # Use a new pipeline
             job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
+            if not job_ids:
+                return
             expired_job_ids = []
             for job in job_ids:
                 pipe.exists(Job.key_for(job))
