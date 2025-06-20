@@ -44,7 +44,7 @@ class Group:
             for job in job_ids:
                 pipe.exists(Job.key_for(job))
             results = pipe.execute()
-            
+
             for i, key_exists in enumerate(results):
                 if not key_exists:
                     expired_job_ids.append(job_ids[i])
