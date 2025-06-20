@@ -113,7 +113,6 @@ class Group:
         with connection.pipeline() as p:
             # Remove expired jobs from groups
             for group in groups:
-                print(f"\n\nCleaning up group: {group.name}")
                 group.cleanup()
             p.execute()
             # Remove empty groups from group registry
