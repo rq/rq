@@ -141,7 +141,7 @@ The handler itself is a function that takes the following parameters: `job`,
 from resource import struct_rusage
 from rq.job import Job
 def my_work_horse_killed_handler(job: Job, retpid: int, ret_val: int, rusage: struct_rusage):
-    # do your thing here, for example set job.retries_left to 0 
+    # do your thing here, for example set job.retries_left to 0
 
 ```
 
@@ -149,6 +149,6 @@ def my_work_horse_killed_handler(job: Job, retpid: int, ret_val: int, rusage: st
 RQ Exceptions you can get in your job failure callbacks
 
 # AbandonedJobError
-This error means an unfinished job was collected by another worker's maintenance task.  
-This usually happens when a worker is busy with a job and is terminated before it finished that job.  
+This error means an unfinished job was collected by another worker's maintenance task.
+This usually happens when a worker is busy with a job and is terminated before it finished that job.
 Another worker collects this job and moves it to the FailedJobRegistry.
