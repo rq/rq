@@ -439,7 +439,7 @@ class BaseWorker:
             # If there are multiple workers running, we only want 1 worker
             # to run clean_registries().
             if queue.acquire_maintenance_lock():
-                self.log.info('Cleaning registries for queue: %s', queue.name)
+                self.log.debug('Cleaning registries for queue: %s', queue.name)
                 clean_registries(queue)
                 worker_registration.clean_worker_registry(queue)
                 clean_intermediate_queue(self, queue)
@@ -1538,11 +1538,11 @@ class Worker(BaseWorker):
         if self.log_result_lifespan:
             result_ttl = job.get_result_ttl(self.default_result_ttl)
             if result_ttl == 0:
-                self.log.info('Result discarded immediately')
+                self.log.debug('Result discarded immediately')
             elif result_ttl > 0:
-                self.log.info('Result is kept for %s seconds', result_ttl)
+                self.log.debug('Result is kept for %s seconds', result_ttl)
             else:
-                self.log.info('Result will never expire, clean up result key manually')
+                self.log.debug('Result will never expire, clean up result key manually')
 
         return True
 
