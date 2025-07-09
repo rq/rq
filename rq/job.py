@@ -316,7 +316,7 @@ class Job:
             job._func_name = f'{func.__module__}.{func.__qualname__}'
         elif isinstance(func, str):
             job._func_name = as_text(func)
-        elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
+        elif inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
             job._instance = func
             job._func_name = '__call__'
         else:
