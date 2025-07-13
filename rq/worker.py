@@ -49,7 +49,11 @@ from .registry import StartedJobRegistry, clean_registries
 from .scheduler import RQScheduler
 from .serializers import Serializer, resolve_serializer
 from .suspension import is_suspended
-from .timeouts import HorseMonitorTimeoutException, JobTimeoutException, UnixSignalDeathPenalty
+from .timeouts import (
+    HorseMonitorTimeoutException,
+    JobTimeoutException,
+    get_default_death_penalty_class,
+)
 from .utils import (
     as_text,
     compact,
@@ -119,7 +123,7 @@ class WorkerStatus(str, Enum):
 class BaseWorker:
     redis_worker_namespace_prefix = 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
-    death_penalty_class = UnixSignalDeathPenalty
+    death_penalty_class = get_default_death_penalty_class()
     queue_class = Queue
     job_class = Job
 
