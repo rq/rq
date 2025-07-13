@@ -29,6 +29,28 @@ class TestDependencies(RQTestCase):
         jobs = Job.fetch_many([job.id], connection=self.connection)
         self.assertTrue(jobs[0].allow_dependency_failures)
 
+    def test_deferred_task_not_enqueued_when_dependencies_are_not_finished(self):
+
+        job_a = Job.create(say_hello, connection=self.connection)
+        job_b = Job.create(say_hello, connection=self.connection)
+        job_c = Job.create(say_hello, connection=self.connection, depends_on=[job_a, job_b])
+        job_a.save()
+        job_b.save()
+        job_c.save()
+
+        queue = Queue('default', connection=self.connection)
+        queue.enqueue_job(job_c)
+        self.assertEqual(JobStatus.DEFERRED, job_c.get_status())
+        self.assertEqual(0, queue.count)
+
+        queue.enqueue_job(job_a)
+        worker = SimpleWorker([queue], connection=queue.connection)
+        worker.work(burst=True)
+        self.assertEqual(JobStatus.FINISHED, job_a.get_status())
+
+        # Child job is started but should not!!!
+        self.assertEqual(JobStatus.DEFERRED, job_c.get_status(refresh=True))
+
     def test_job_dependency(self):
         """Enqueue dependent jobs only when appropriate"""
         q = Queue(connection=self.connection)

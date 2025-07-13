@@ -246,6 +246,7 @@ class TestJob(RQTestCase):
                 b'failure_callback_name',
                 b'stopped_callback_name',
                 b'group_id',
+                b'status',
             },
             set(self.connection.hkeys(job.key)),
         )
@@ -507,11 +508,21 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(job.last_heartbeat)
         self.assertIsNotNone(job.started_at)
 
-    def test_unset_job_status_fails(self):
-        """None is an invalid status for Job."""
+    def test_job_status_always_exists(self):
+        """Job status is always guaranteed to exist, defaulting to CREATED."""
+        job = Job.create(func=fixtures.say_hello, connection=self.connection)
+        self.assertEqual(job.get_status(refresh=False), JobStatus.CREATED)
+        job.save()
+        self.assertEqual(job.get_status(refresh=True), JobStatus.CREATED)
+
+    def test_get_status_fails_when_job_deleted_from_redis(self):
+        """get_status() raises InvalidJobOperation when job hash is deleted from Redis."""
         job = Job.create(func=fixtures.say_hello, connection=self.connection)
         job.save()
-        self.assertRaises(InvalidJobOperation, job.get_status)
+        # Delete the job hash from Redis
+        self.connection.delete(job.key)
+        # Now get_status with refresh should raise an exception
+        self.assertRaises(InvalidJobOperation, job.get_status, refresh=True)
 
     def test_job_access_outside_job_fails(self):
         """The current job is accessible only within a job context."""

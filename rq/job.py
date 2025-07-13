@@ -53,6 +53,7 @@ logger = logging.getLogger('rq.job')
 class JobStatus(str, Enum):
     """The Status of Job within its lifecycle at any given time."""
 
+    CREATED = 'created'
     QUEUED = 'queued'
     FINISHED = 'finished'
     FAILED = 'failed'
@@ -195,7 +196,7 @@ class Job:
         self.failure_ttl: Optional[int] = None
         self.ttl: Optional[int] = None
         self.worker_name: Optional[str] = None
-        self._status: Optional[JobStatus] = None
+        self._status: JobStatus = JobStatus.CREATED
         self._dependency_ids: list[str] = []
         self.meta: dict[str, Any] = {}
         self.serializer = resolve_serializer(serializer)
@@ -360,7 +361,6 @@ class Job:
         job.failure_ttl = parse_timeout(failure_ttl)
         job.ttl = parse_timeout(ttl)
         job.timeout = parse_timeout(timeout)
-        job._status = status
         job.meta = meta or {}
         job.group_id = group_id
 
@@ -375,8 +375,16 @@ class Job:
                     job.allow_dependency_failures = job.allow_dependency_failures or depends_on_item.allow_failure
                     depends_on_list.extend(list(depends_on_item.dependencies))
                 else:
-                    depends_on_list.extend(ensure_job_list(depends_on_item))
+                    # After checking for Dependency, depends_on_item should be Job or str
+                    # Use type cast to inform mypy of the narrowed type
+                    depends_on_list.append(depends_on_item)  # type: ignore[arg-type]
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
+
+        # Set status: explicit status takes precedence, otherwise DEFERRED if has dependencies, CREATED if not
+        if status is not None:
+            job._status = status
+        else:
+            job._status = JobStatus.CREATED
 
         return job
 
@@ -393,7 +401,7 @@ class Job:
             return q.get_job_position(self.id)
         return None
 
-    def get_status(self, refresh: bool = True) -> Optional[JobStatus]:
+    def get_status(self, refresh: bool = True) -> JobStatus:
         """Gets the Job Status
 
         Args:
@@ -979,7 +987,11 @@ class Job:
         self.timeout = parse_timeout(obj.get('timeout')) if obj.get('timeout') else None
         self.result_ttl = int(obj['result_ttl']) if obj.get('result_ttl') else None
         self.failure_ttl = int(obj['failure_ttl']) if obj.get('failure_ttl') else None
-        self._status = JobStatus(as_text(obj['status'])) if obj.get('status') else None
+
+        # Beginning from v2.4.1, jobs are created with a status, so the fallback to CREATED
+        # is not needed, but we keep it for backwards compatibility
+        # In future versions, if a job has no status, an error should be raised
+        self._status = JobStatus(as_text(obj['status'])) if obj.get('status') else JobStatus.CREATED
 
         if obj.get('success_callback_name'):
             self._success_callback_name = obj['success_callback_name'].decode()
@@ -1104,8 +1116,7 @@ class Job:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
             obj['failure_ttl'] = self.failure_ttl
-        if self._status is not None:
-            obj['status'] = self._status
+        obj['status'] = self._status
         if self._dependency_ids:
             obj['dependency_id'] = self._dependency_ids[0]  # for backwards compatibility
             obj['dependency_ids'] = json.dumps(self._dependency_ids)
