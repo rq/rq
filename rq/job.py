@@ -53,6 +53,7 @@ logger = logging.getLogger('rq.job')
 class JobStatus(str, Enum):
     """The Status of Job within its lifecycle at any given time."""
 
+    CREATED = 'created'
     QUEUED = 'queued'
     FINISHED = 'finished'
     FAILED = 'failed'
@@ -360,7 +361,6 @@ class Job:
         job.failure_ttl = parse_timeout(failure_ttl)
         job.ttl = parse_timeout(ttl)
         job.timeout = parse_timeout(timeout)
-        job._status = status
         job.meta = meta or {}
         job.group_id = group_id
 
@@ -377,6 +377,12 @@ class Job:
                 else:
                     depends_on_list.extend(ensure_job_list(depends_on_item))
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
+
+        # Set status: explicit status takes precedence, otherwise DEFERRED if has dependencies, CREATED if not
+        if status is not None:
+            job._status = status
+        else:
+            job._status = JobStatus.CREATED
 
         return job
 
