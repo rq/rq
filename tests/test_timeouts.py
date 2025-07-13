@@ -4,9 +4,9 @@ from unittest.mock import patch
 from rq import Queue, SimpleWorker
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.timeouts import (
-    get_default_death_penalty_class,
     TimerDeathPenalty,
     UnixSignalDeathPenalty,
+    get_default_death_penalty_class,
 )
 from tests import RQTestCase
 
