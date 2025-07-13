@@ -174,8 +174,12 @@ class BaseWorker:
         self.connection = connection
         self.redis_server_version = None
 
-        self.job_class = import_job_class(job_class) if isinstance(job_class, str) else (job_class if job_class else Job)
-        self.queue_class = import_queue_class(queue_class) if isinstance(queue_class, str) else (queue_class if queue_class else Queue)
+        self.job_class = (
+            import_job_class(job_class) if isinstance(job_class, str) else (job_class if job_class else Job)
+        )
+        self.queue_class = (
+            import_queue_class(queue_class) if isinstance(queue_class, str) else (queue_class if queue_class else Queue)
+        )
         self.version: str = VERSION
         self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)

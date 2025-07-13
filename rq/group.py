@@ -36,7 +36,7 @@ class Group:
     def cleanup(self):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
-        with self.connection.pipeline() as pipe: # Use a new pipeline
+        with self.connection.pipeline() as pipe:  # Use a new pipeline
             job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
             if not job_ids:
                 return

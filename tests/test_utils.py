@@ -5,6 +5,7 @@ from redis import Redis
 
 from rq.exceptions import TimeoutFormatError
 from rq.job import Job
+from rq.queue import Queue
 from rq.utils import (
     as_text,
     backend_class,
@@ -22,7 +23,6 @@ from rq.utils import (
     truncate_long_string,
     utcparse,
 )
-from rq.queue import Queue
 from rq.worker import SimpleWorker
 from tests import RQTestCase, fixtures
 
