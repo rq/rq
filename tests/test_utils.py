@@ -5,6 +5,7 @@ from redis import Redis
 
 from rq.exceptions import TimeoutFormatError
 from rq.job import Job
+from rq.queue import Queue
 from rq.utils import (
     as_text,
     backend_class,
@@ -14,6 +15,7 @@ from rq.utils import (
     get_version,
     import_attribute,
     import_job_class,
+    import_queue_class,
     import_worker_class,
     is_nonstring_iterable,
     parse_timeout,
@@ -218,3 +220,21 @@ class TestUtils(RQTestCase):
         # Test importing a class that's not a Worker subclass
         with self.assertRaises(ValueError):
             import_worker_class('datetime.datetime')
+
+    def test_import_queue_class(self):
+        """Ensure import_queue_class works properly"""
+        # Test importing a valid queue class
+        queue_class = import_queue_class('rq.queue.Queue')
+        self.assertEqual(queue_class, Queue)
+
+        # Test importing a non-existent module
+        with self.assertRaises(ValueError):
+            import_queue_class('non.existent.module')
+
+        # Test importing a non-class attribute
+        with self.assertRaises(ValueError):
+            import_queue_class('rq.utils.get_version')
+
+        # Test importing a class that's not a Queue subclass
+        with self.assertRaises(ValueError):
+            import_queue_class('datetime.datetime')

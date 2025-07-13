@@ -172,6 +172,21 @@ def import_job_class(name: str) -> type['Job']:
     return cls
 
 
+def import_queue_class(name: str) -> type['Queue']:
+    """Import a queue class from a dotted path name."""
+    cls = import_attribute(name)
+
+    if not isinstance(cls, type):
+        raise ValueError(f'Invalid queue class: {name}')
+
+    from .queue import Queue
+
+    if not issubclass(cls, Queue):
+        raise ValueError(f'Invalid queue class: {name}')
+
+    return cls
+
+
 def now() -> datetime.datetime:
     """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)

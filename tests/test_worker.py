@@ -827,11 +827,21 @@ class TestWorker(RQTestCase):
         worker = Worker([q], job_class=CustomJob)
         self.assertEqual(worker.job_class, CustomJob)
 
+        # Test job_class as string
+        worker_string = Worker([q], job_class='tests.fixtures.CustomJob')
+        from tests.fixtures import CustomJob as FixturesCustomJob
+        self.assertEqual(worker_string.job_class, FixturesCustomJob)
+
     def test_custom_queue_class(self):
         """Ensure Worker accepts custom queue class."""
         q = CustomQueue(connection=self.connection)
         worker = Worker([q], queue_class=CustomQueue)
         self.assertEqual(worker.queue_class, CustomQueue)
+
+        # Test queue_class as string
+        q_generic = Queue(connection=self.connection)
+        worker_string = Worker([q_generic], queue_class='rq.Queue')
+        self.assertEqual(worker_string.queue_class, Queue)
 
     def test_custom_queue_class_is_not_global(self):
         """Ensure Worker custom queue class is not global."""
@@ -852,6 +862,11 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker_custom.job_class, CustomJob)
         self.assertEqual(worker_generic.job_class, Job)
         self.assertEqual(Worker.job_class, Job)
+
+        # Test both job_class and queue_class as strings
+        worker = Worker([q], job_class='tests.fixtures.CustomJob')
+        from tests.fixtures import CustomJob as FixturesCustomJob
+        self.assertEqual(worker.job_class, FixturesCustomJob)
 
     def test_work_via_simpleworker(self):
         """Worker processes work, with forking disabled,

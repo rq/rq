@@ -56,6 +56,8 @@ from .utils import (
     ensure_job_list,
     get_connection_from_queues,
     get_version,
+    import_job_class,
+    import_queue_class,
     now,
     utcformat,
     utcparse,
@@ -142,8 +144,8 @@ class BaseWorker:
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         default_worker_ttl: Optional[int] = None,  # TODO remove this arg in 3.0
         worker_ttl: Optional[int] = None,
-        job_class: Optional[type[Job]] = None,
-        queue_class: Optional[type[Queue]] = None,
+        job_class: Optional[Union[type[Job], str]] = None,
+        queue_class: Optional[Union[type[Queue], str]] = None,
         log_job_description: bool = True,
         job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
         disable_default_exception_handler: bool = False,
@@ -172,8 +174,12 @@ class BaseWorker:
         self.connection = connection
         self.redis_server_version = None
 
-        self.job_class = job_class if job_class else Job
-        self.queue_class = queue_class if queue_class else Queue
+        self.job_class = (
+            import_job_class(job_class) if isinstance(job_class, str) else (job_class if job_class else Job)
+        )
+        self.queue_class = (
+            import_queue_class(queue_class) if isinstance(queue_class, str) else (queue_class if queue_class else Queue)
+        )
         self.version: str = VERSION
         self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)
