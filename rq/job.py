@@ -375,7 +375,9 @@ class Job:
                     job.allow_dependency_failures = job.allow_dependency_failures or depends_on_item.allow_failure
                     depends_on_list.extend(list(depends_on_item.dependencies))
                 else:
-                    depends_on_list.extend(ensure_job_list(depends_on_item))
+                    # After checking for Dependency, depends_on_item should be Job or str
+                    # Use type cast to inform mypy of the narrowed type
+                    depends_on_list.append(depends_on_item)  # type: ignore[arg-type]
             job._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
         # Set status: explicit status takes precedence, otherwise DEFERRED if has dependencies, CREATED if not
