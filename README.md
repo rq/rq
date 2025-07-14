@@ -53,8 +53,42 @@ And enqueue the function call:
 
 ```python
 from my_module import count_words_at_url
-job = queue.enqueue(count_words_at_url, 'http://nvie.com')
+job = queue.enqueue(count_words_at_url, 'https://stamps.id')
 ```
+
+## Job Prioritization
+
+By default, jobs are added to the end of a single queue. RQ offers two ways to give certain jobs higher priority:
+
+### 1. Enqueue at the front
+
+You can enqueue a job at the front of its queue so it’s picked up before other jobs:
+
+```python
+job = queue.enqueue(count_words_at_url, 'https://stamps.id', at_front=True)
+```
+
+### 2. Use multiple queues
+You can create multiple queues and enqueue jobs into different queues based on their priority:
+
+```python
+from rq import Queue
+high_priority_queue = Queue('high', connection=Redis())
+low_priority_queue = Queue('low', connection=Redis())
+
+# This job will be picked up before jobs in the low priority queue
+# even if it was enqueued later
+high_priority_queue.enqueue(urgent_task)
+low_priority_queue.enqueue(non_urgent_task)
+```
+
+Then start workers with a prioritized queue list:
+```console
+$ rq worker high low
+```
+
+Workers will always dequeue from the `high` queue before `low`, ensuring urgent tasks are processed ahead of others.
+You can also have different workers for different queues, allowing you to scale your application based on the priority of tasks.
 
 ## Scheduling Jobs
 
