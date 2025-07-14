@@ -86,9 +86,9 @@ Then start workers with a prioritized queue list:
 ```console
 $ rq worker high low
 ```
-
-Workers will always dequeue from the `high` queue before `low`, ensuring urgent tasks are processed ahead of others.
-You can also have different workers for different queues, allowing you to scale your application based on the priority of tasks.
+This command starts a worker that listens to both `high` and `low` queues. The worker will process
+jobs from the `high` queue first, followed by the `low` queue. You can also run different workers
+for different queues, allowing you to scale your workers based on the number of jobs in each queue.
 
 ## Scheduling Jobs
 
