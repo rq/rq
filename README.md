@@ -60,7 +60,7 @@ job = queue.enqueue(count_words_at_url, 'https://stamps.id')
 
 By default, jobs are added to the end of a single queue. RQ offers two ways to give certain jobs higher priority:
 
-### 1. Enqueue at the front
+#### 1. Enqueue at the front
 
 You can enqueue a job at the front of its queue so it’s picked up before other jobs:
 
@@ -68,7 +68,7 @@ You can enqueue a job at the front of its queue so it’s picked up before other
 job = queue.enqueue(count_words_at_url, 'https://stamps.id', at_front=True)
 ```
 
-### 2. Use multiple queues
+#### 2. Use multiple queues
 You can create multiple queues and enqueue jobs into different queues based on their priority:
 
 ```python
