@@ -192,12 +192,24 @@ More options are documented on [python-rq.org](https://python-rq.org/docs/worker
 ## Installation
 
 Simply use the following command to install the latest released version:
+```console
+$ pip install rq
+```
 
-    pip install rq
+## Notes on Performance
 
-If you want the cutting edge version (that may well be broken), use this:
+**TL;DR — run `Worker` or `SpawnWorker` in production.**
 
-    pip install git+https://github.com/rq/rq.git@master#egg=rq
+In a simple hello world [microbenchmark](docs/benchmark.md), `SimpleWorker` processed 1,000 jobs in just 1.02 seconds vs. 6.64 seconds with the default `Worker`), more than 6x faster.
+
+`SimpleWorker` is faster because it skips `fork()` or `spawn()` and runs jobs in process. `Worker` and `SpawnWorker` run each job in a separate process, acting as a sandbox that isolates crashes, memory leaks and enforce hard time-outs.
+
+Although `SimpleWorker` is faster in benchmarks, this overhead is negligible in most real world applications like sending emails, generating reports, processing images, etc. In production systems, the time spent performing jobs usually dwarfs any queueing/worker overhead.
+
+Use `SimpleWorker` in production only if:
+* Your jobs are extremely short-lived (single digit milliseconds).
+* The `fork()` or `spawn()` latency is a proven bottleneck at your traffic levels.
+* Your job code is 100% trusted and known to be free of resource leaks and the possibility of crashing/segfaults.
 
 
 ## Docs
