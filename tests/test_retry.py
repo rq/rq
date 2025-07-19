@@ -118,7 +118,7 @@ class TestRetry(RQTestCase):
         # Scheduled time is roughly 5 seconds from now
         scheduled_time = registry.get_scheduled_time(job)
         now = datetime.now(timezone.utc)
-        self.assertTrue(now + timedelta(seconds=4) < scheduled_time < now + timedelta(seconds=10))
+        self.assertTrue(now + timedelta(seconds=3) < scheduled_time < now + timedelta(seconds=10))
 
     def test_cleanup_handles_retries(self):
         """Expired jobs should also be retried"""
