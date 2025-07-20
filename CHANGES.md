@@ -1,3 +1,10 @@
+### RQ 2.4.1 (2025-07-20)
+* `Worker` will now automatically choose `TimerDeathPenalty` if `UnixSignalDeathPenalty` is not available. Thanks @selwin!
+* Introduced `CREATED` `Job` status for jobs that are not enqueued not deferred. Thanks @selwin!
+* `Worker` can now import `Job` and `Queue` classes from string. Thanks @selwin!
+* Fixed a bug in `Group.cleanup()`. Thanks @dixoncrews-gdl!
+* Logging improvements and code cleanups. Thanks @selwin, @SpecLad!
+
 ### RQ 2.4.0 (2025-06-14)
 * Added `rq cron` CLI command. Thanks @selwin!
 * Various tests, typing improvements and cleanups. Thanks @SpecLad!
