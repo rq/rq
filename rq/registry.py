@@ -453,7 +453,6 @@ class FailedJobRegistry(BaseRegistry):
         ttl=None,
         exc_string: str = '',
         pipeline: Optional['Pipeline'] = None,
-        _save_exc_to_job: bool = False,
     ):
         """
         Adds a job to a registry with expiry time of now + ttl.
@@ -469,7 +468,7 @@ class FailedJobRegistry(BaseRegistry):
             p = self.connection.pipeline()
 
         job._exc_info = exc_string
-        job.save(pipeline=p, include_meta=False, include_result=_save_exc_to_job)
+        job.save(pipeline=p, include_meta=False, include_result=False)
         job.cleanup(ttl=ttl, pipeline=p)
         p.zadd(self.key, {job.id: score})
 

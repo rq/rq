@@ -39,7 +39,6 @@ from .utils import (
     decode_redis_hash,
     ensure_job_list,
     get_call_string,
-    get_version,
     import_attribute,
     now,
     parse_timeout,
@@ -1142,17 +1141,6 @@ class Job:
         mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
         connection.hset(key, mapping=mapping)
 
-    def get_redis_server_version(self) -> tuple[int, int, int]:
-        """Return Redis server version of connection
-
-        Returns:
-            redis_server_version (Tuple[int, int, int]): The Redis version within a Tuple of integers, eg (5, 0, 9)
-        """
-        if self.redis_server_version is None:
-            self.redis_server_version = get_version(self.connection)
-
-        return self.redis_server_version
-
     def save_meta(self):
         """Stores job meta from the job instance to the corresponding Redis key."""
         meta = self.serializer.dumps(self.meta)
@@ -1550,7 +1538,6 @@ class Job:
             ttl=self.failure_ttl,
             exc_string=exc_string,
             pipeline=pipeline,
-            _save_exc_to_job=False,
         )
         from .results import Result
 
