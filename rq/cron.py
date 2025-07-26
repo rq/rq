@@ -84,7 +84,7 @@ class CronJob:
     def should_run(self) -> bool:
         """Check if this job should run now"""
         # For interval jobs that have never run, run immediately
-        # Cron jobs always have next_run_time set during initialization
+        # Jobs with cron string always have next_run_time set during initialization
         if not self.latest_run_time and not self.cron:
             return True
 
