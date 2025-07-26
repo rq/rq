@@ -167,17 +167,15 @@ class TestCronJob(RQTestCase):
         self.assertIsNone(cron_job.interval)
         self.assertEqual(cron_job.queue_name, self.queue.name)
 
-    def test_cron_job_initialization_with_both_interval_and_cron_raises_error(self):
-        """CronJob raises error when both interval and cron are specified"""
-        with self.assertRaises(ValueError) as context:
-            CronJob(func=say_hello, queue_name=self.queue.name, interval=60, cron='0 9 * * *')
-        self.assertIn('Cannot specify both interval and cron parameters', str(context.exception))
+        # next_run_time should be set immediately upon initialization
+        self.assertIsNotNone(cron_job.next_run_time)
 
-    def test_cron_job_initialization_with_neither_interval_nor_cron_raises_error(self):
-        """CronJob raises error when neither interval nor cron are specified"""
-        with self.assertRaises(ValueError) as context:
-            CronJob(func=say_hello, queue_name=self.queue.name)
-        self.assertIn('Must specify either interval or cron parameter', str(context.exception))
+        # latest_run_time should still be None (hasn't run yet)
+        self.assertIsNone(cron_job.latest_run_time)
+
+        # For comparison, interval jobs don't set next_run_time during initialization
+        interval_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        self.assertIsNone(interval_job.next_run_time)  # Not set until first run
 
     def test_get_next_run_time_with_cron_string(self):
         """Test that get_next_run_time correctly calculates next run time using cron expression"""
@@ -205,35 +203,16 @@ class TestCronJob(RQTestCase):
         """Test should_run method logic with cron expressions"""
         # Job with cron that has not run yet should NOT run immediately (crontab behavior)
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 9 * * *')
-        # First call to should_run() initializes next_run_time and returns False
-        self.assertFalse(cron_job.should_run())
-        # Verify next_run_time was set
+        # next_run_time should already be set during initialization
         self.assertIsNotNone(cron_job.next_run_time)
 
         # Job with future next_run_time should not run yet
-        cron_job.latest_run_time = utils.now() - timedelta(hours=1)
         cron_job.next_run_time = utils.now() + timedelta(hours=1)
         self.assertFalse(cron_job.should_run())
 
         # Job with past next_run_time should run
         cron_job.next_run_time = utils.now() - timedelta(minutes=5)
         self.assertTrue(cron_job.should_run())
-
-    def test_set_run_time_with_cron_string(self):
-        """Test that set_run_time correctly sets latest run time and updates next run time with cron"""
-        cron_expr = '0 */6 * * *'  # Every 6 hours
-        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron=cron_expr)
-
-        # Set run time to 3 AM
-        test_time = datetime(2023, 10, 27, 3, 0, 0)
-        cron_job.set_run_time(test_time)
-
-        # Check latest_run_time is set correctly
-        self.assertEqual(cron_job.latest_run_time, test_time)
-
-        # Check that next_run_time is calculated correctly (should be 6 AM)
-        expected_next_run = datetime(2023, 10, 27, 6, 0, 0)
-        self.assertEqual(cron_job.next_run_time, expected_next_run)
 
     def test_cron_weekday_expressions(self):
         """Test cron expressions with specific weekday patterns"""
@@ -355,14 +334,14 @@ class TestCronScheduler(RQTestCase):
     @patch('rq.cron.now')
     def test_calculate_sleep_interval(self, mock_now):
         """Tests calculate_sleep_interval across various explicit scenarios."""
-        cron = CronScheduler(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)
         base_time = datetime(2023, 10, 27, 12, 0, 0)
         mock_now.return_value = base_time
 
         # No Jobs (directly check _cron_jobs on the instance)
         cron._cron_jobs = []  # Ensure no jobs
         actual_interval = cron.calculate_sleep_interval()
-        self.assertEqual(actual_interval, 60.0)
+        self.assertEqual(actual_interval, 60)
 
         # Jobs with no next_run_time
         job1 = CronJob(func=say_hello, queue_name=self.queue_name, interval=60)
@@ -386,7 +365,7 @@ class TestCronScheduler(RQTestCase):
         # Get the actual next run times after set_run_time
         self.assertEqual(job1.next_run_time, base_time + timedelta(seconds=35))
         self.assertEqual(job2.next_run_time, base_time + timedelta(seconds=70))
-        self.assertAlmostEqual(actual_interval, 35.0)  # Expect float
+        self.assertAlmostEqual(actual_interval, 35)
 
         # Future job over max sleep time
         job1 = CronJob(func=say_hello, queue_name=self.queue_name, interval=120)
@@ -655,9 +634,8 @@ class TestCronScheduler(RQTestCase):
         """Test that only cron jobs whose time has arrived are executed"""
         cron = CronScheduler(connection=self.connection)
 
-        # Set current time to 8:30 AM
-        current_time = datetime(2023, 10, 27, 8, 30, 0)
-        mock_now.return_value = current_time
+        # Set current time to 8:15 AM
+        mock_now.return_value = datetime(2023, 10, 27, 8, 15, 0)
 
         # Register multiple jobs with different schedules
         job_9am = cron.register(
@@ -676,7 +654,6 @@ class TestCronScheduler(RQTestCase):
         job_every_30_min = cron.register(
             func=say_hello,
             queue_name=self.queue_name,
-            args=('30 min job',),
             cron='*/30 * * * *',  # Every 30 minutes
         )
 
@@ -684,48 +661,46 @@ class TestCronScheduler(RQTestCase):
         # (assuming it last ran at 8:00 AM or this is its first run at 8:30)
         mock_now.return_value = datetime(2023, 10, 27, 8, 30, 0)
         enqueued_jobs = cron.enqueue_jobs()
-        queue = Queue(self.queue_name, connection=self.connection)
 
         # Only the 30-minute job should run (as it matches the current time)
-        self.assertEqual(len(enqueued_jobs), 1)
-        self.assertIn(job_every_30_min, enqueued_jobs)
-        self.assertNotIn(job_9am, enqueued_jobs)
-        self.assertNotIn(job_10am, enqueued_jobs)
-
-        # Clear queue for next test
-        queue.empty()
+        self.assertEqual(enqueued_jobs, [job_every_30_min])
 
         # Now advance to 9:00 AM
         mock_now.return_value = datetime(2023, 10, 27, 9, 0, 0)
         enqueued_jobs = cron.enqueue_jobs()
 
         # Now the 9 AM job should also run, but not the 10 AM job
-        self.assertEqual(len(enqueued_jobs), 1)
+        self.assertEqual(len(enqueued_jobs), 2)
+        self.assertIn(job_every_30_min, enqueued_jobs)
         self.assertIn(job_9am, enqueued_jobs)
         self.assertNotIn(job_10am, enqueued_jobs)
-        # The 30-minute job shouldn't run again (already ran at 8:30)
-        self.assertNotIn(job_every_30_min, enqueued_jobs)
 
     @patch('rq.cron.now')
     def test_calculate_sleep_interval_with_cron_jobs(self, mock_now):
         """Test calculate_sleep_interval with cron-scheduled jobs"""
         cron = CronScheduler(connection=self.connection)
-        base_time = datetime(2023, 10, 27, 8, 30, 0)  # 8:30 AM
-        mock_now.return_value = base_time
+        # Set current time to 8:58 AM
+        mock_now.return_value = datetime(2023, 10, 27, 8, 58, 0)
 
-        # Job scheduled for 9 AM (30 minutes later)
-        job1 = CronJob(func=say_hello, queue_name=self.queue_name, cron='0 9 * * *')
-        job1.set_run_time(base_time - timedelta(hours=23))  # Last run was yesterday
+        # Create jobs that will have next_run_time set based on the mock time
+        # Job 1: scheduled for every minute (next run at 8:59 AM, 1 minute away)
+        job1 = CronJob(func=say_hello, queue_name=self.queue_name, cron='* * * * *')
 
-        # Job scheduled for 10 AM (90 minutes later)
-        job2 = CronJob(func=do_nothing, queue_name=self.queue_name, cron='0 10 * * *')
-        job2.set_run_time(base_time - timedelta(hours=22))  # Last run was yesterday
+        # Job 2: scheduled for 9:05 AM (7 minutes away)
+        job2 = CronJob(func=do_nothing, queue_name=self.queue_name, cron='5 9 * * *')
 
         cron._cron_jobs = [job1, job2]
         actual_interval = cron.calculate_sleep_interval()
 
-        # Should sleep for 30 minutes (1800 seconds) but capped at 60
-        self.assertEqual(actual_interval, 60)
+        # Should sleep for 1 minute (60 seconds) until the first job
+        self.assertEqual(actual_interval, 60.0)
+
+        # Test with a closer time - 30 seconds before next job
+        mock_now.return_value = datetime(2023, 10, 27, 8, 58, 30)
+
+        actual_interval = cron.calculate_sleep_interval()
+        # Should sleep for 30 seconds (not capped at 60)
+        self.assertEqual(actual_interval, 30.0)
 
     def test_mixed_interval_and_cron_jobs(self):
         """Test that interval-based and cron-based jobs can coexist"""

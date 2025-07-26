@@ -46,6 +46,11 @@ class CronJob:
         self.queue_name: str = queue_name
         self.next_run_time: Optional[datetime] = None
         self.latest_run_time: Optional[datetime] = None
+
+        # For cron jobs, set initial next_run_time during initialization
+        if self.cron:
+            cron_iter = croniter(self.cron, now())
+            self.next_run_time = cron_iter.get_next(datetime)
         self.job_options: Dict[str, Any] = {
             'timeout': timeout,
             'result_ttl': result_ttl,
@@ -70,10 +75,8 @@ class CronJob:
             # Use cron expression to calculate next run time
             cron_iter = croniter(self.cron, self.latest_run_time or now())
             return cron_iter.get_next(datetime)
-        elif self.interval is not None:
+        elif self.interval and self.latest_run_time:
             # Use interval-based calculation
-            if self.latest_run_time is None:
-                return datetime.max  # Far future if no latest run time set
             return self.latest_run_time + timedelta(seconds=self.interval)
         else:
             return datetime.max  # Far future if neither interval nor cron set
@@ -82,16 +85,12 @@ class CronJob:
         """Check if this job should run now"""
         if self.cron:
             # For cron jobs, only run based on cron schedule (crontab behavior)
-            if self.latest_run_time is None and self.next_run_time is None:
-                # Initialize next_run_time using get_next_run_time() only once
-                self.next_run_time = self.get_next_run_time()
-                return False  # Don't run immediately, wait for scheduled time
             if self.next_run_time:
                 return now() >= self.next_run_time
             return False
         else:
             # For interval jobs, run immediately if never run before
-            if self.latest_run_time is None:
+            if not self.latest_run_time:
                 return True
             if self.next_run_time:
                 return now() >= self.next_run_time
