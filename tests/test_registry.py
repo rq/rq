@@ -669,12 +669,9 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertNotIn(job, self.registry)
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        if job.supports_redis_streams:
-            latest_result = job.latest_result()
-            self.assertIsNotNone(latest_result)
-            self.assertTrue(latest_result.exc_string)  # explanation is written to exc_info
-        else:
-            self.assertTrue(job.exc_info)
+        latest_result = job.latest_result()
+        self.assertIsNotNone(latest_result)
+        self.assertTrue(latest_result.exc_string)  # explanation is written to exc_info
 
     def test_enqueue_dependents_when_parent_job_is_abandoned(self):
         """Enqueuing parent job's dependencies after moving it to FailedJobRegistry due to AbandonedJobError."""

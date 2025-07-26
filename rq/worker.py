@@ -515,11 +515,6 @@ class BaseWorker:
         """Returns the worker's Redis hash key."""
         return PUBSUB_CHANNEL_TEMPLATE % self.name
 
-    @property
-    def supports_redis_streams(self) -> bool:
-        """Only supported by Redis server >= 5.0 is required."""
-        return self.get_redis_server_version() >= (5, 0, 0)
-
     def request_stop(self, signum, frame):
         """Stops the current worker loop but waits for child processes to
         end gracefully (warm shutdown).

@@ -846,12 +846,11 @@ class Job:
 
         from .results import Result
 
-        if self.supports_redis_streams:
-            if not self._cached_result:
-                self._cached_result = self.latest_result()
+        if not self._cached_result:
+            self._cached_result = self.latest_result()
 
-            if self._cached_result and self._cached_result.type == Result.Type.FAILED:
-                return self._cached_result.exc_string
+        if self._cached_result and self._cached_result.type == Result.Type.FAILED:
+            return self._cached_result.exc_string
 
         return self._exc_info
 
@@ -868,17 +867,6 @@ class Job:
 
         if refresh:
             self._cached_result = None
-
-        if not self.supports_redis_streams:
-            if self._result is not None:
-                return self._result
-
-            rv = self.connection.hget(self.key, 'result')
-            if rv is not None:
-                # cache the result
-                self._result = self.serializer.loads(rv)
-                return self._result
-            return None
 
         if not self._cached_result:
             self._cached_result = self.latest_result()
@@ -910,13 +898,13 @@ class Job:
 
         from .results import Result
 
-        if self.supports_redis_streams:
-            if not self._cached_result:
-                self._cached_result = self.latest_result()
+        if not self._cached_result:
+            self._cached_result = self.latest_result()
 
-            if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
-                return self._cached_result.return_value
+        if self._cached_result and self._cached_result.type == Result.Type.SUCCESSFUL:
+            return self._cached_result.return_value
 
+        # TODO: Remove this fallback in RQ 3.0 - only kept for backward compatibility
         # Fallback to old behavior of getting result from job hash
         if self._result is None:
             rv = self.connection.hget(self.key, 'result')
@@ -1153,11 +1141,6 @@ class Job:
 
         mapping = self.to_dict(include_meta=include_meta, include_result=include_result)
         connection.hset(key, mapping=mapping)
-
-    @property
-    def supports_redis_streams(self) -> bool:
-        """Only supported by Redis server >= 5.0 is required."""
-        return self.get_redis_server_version() >= (5, 0, 0)
 
     def get_redis_server_version(self) -> tuple[int, int, int]:
         """Return Redis server version of connection
@@ -1541,23 +1524,22 @@ class Job:
         self.set_status(JobStatus.FINISHED, pipeline=pipeline)
         # Result should be saved in job hash only if server
         # doesn't support Redis streams
-        include_result = not self.supports_redis_streams
+        include_result = False
         # Don't clobber user's meta dictionary!
         self.save(pipeline=pipeline, include_meta=False, include_result=include_result)
         # Result creation should eventually be moved to job.save() after support
         # for Redis < 5.0 is dropped. job.save(include_result=...) is used to test
         # for backward compatibility
-        if self.supports_redis_streams:
-            from .results import Result
+        from .results import Result
 
-            Result.create(
-                self,
-                Result.Type.SUCCESSFUL,
-                return_value=self._result,
-                ttl=result_ttl,
-                worker_name=worker_name,
-                pipeline=pipeline,
-            )
+        Result.create(
+            self,
+            Result.Type.SUCCESSFUL,
+            return_value=self._result,
+            ttl=result_ttl,
+            worker_name=worker_name,
+            pipeline=pipeline,
+        )
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
@@ -1571,7 +1553,7 @@ class Job:
         failed_job_registry = self.failed_job_registry
         # Exception should be saved in job hash if server
         # doesn't support Redis streams
-        _save_exc_to_job = not self.supports_redis_streams
+        _save_exc_to_job = False
         failed_job_registry.add(
             self,
             ttl=self.failure_ttl,
@@ -1579,18 +1561,14 @@ class Job:
             pipeline=pipeline,
             _save_exc_to_job=_save_exc_to_job,
         )
-        if self.supports_redis_streams:
-            from .results import Result
+        from .results import Result
 
-            Result.create_failure(
-                self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline
-            )
+        Result.create_failure(self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline)
 
     def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline', worker_name: str = ''):
-        if self.supports_redis_streams:
-            from .results import Result
+        from .results import Result
 
-            Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
+        Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         queue._enqueue_job(self, pipeline=pipeline)
 
