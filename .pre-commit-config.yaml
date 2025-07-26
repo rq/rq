@@ -20,10 +20,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy type checks
-        entry: mypy
+        entry: hatch run test:typing
         language: python
         types: [python]
         pass_filenames: false
-        args:
-          - --enable-incomplete-feature=Unpack
-          - rq

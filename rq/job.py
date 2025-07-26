@@ -1534,7 +1534,7 @@ class Job:
             self.log.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
-    def _handle_success(self, result_ttl: int, pipeline: 'Pipeline'):
+    def _handle_success(self, result_ttl, pipeline: 'Pipeline', worker_name: str = ''):
         """Saves and cleanup job after successful execution"""
         self.log.debug('Job %s: handling success...', self.id)
 
@@ -1550,13 +1550,20 @@ class Job:
         if self.supports_redis_streams:
             from .results import Result
 
-            Result.create(self, Result.Type.SUCCESSFUL, return_value=self._result, ttl=result_ttl, pipeline=pipeline)
+            Result.create(
+                self,
+                Result.Type.SUCCESSFUL,
+                return_value=self._result,
+                ttl=result_ttl,
+                worker_name=worker_name,
+                pipeline=pipeline,
+            )
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
             finished_job_registry.add(self, result_ttl, pipeline)
 
-    def _handle_failure(self, exc_string: str, pipeline: 'Pipeline'):
+    def _handle_failure(self, exc_string: str, pipeline: 'Pipeline', worker_name: str = ''):
         self.log.debug(
             'Job %s: handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string
         )
@@ -1575,13 +1582,15 @@ class Job:
         if self.supports_redis_streams:
             from .results import Result
 
-            Result.create_failure(self, self.failure_ttl, exc_string=exc_string, pipeline=pipeline)
+            Result.create_failure(
+                self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline
+            )
 
-    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline'):
+    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline', worker_name: str = ''):
         if self.supports_redis_streams:
             from .results import Result
 
-            Result.create_retried(self, self.failure_ttl, pipeline=pipeline)
+            Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         queue._enqueue_job(self, pipeline=pipeline)
 

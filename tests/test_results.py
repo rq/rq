@@ -16,7 +16,7 @@ from .fixtures import div_by_zero, say_hello
 
 
 @min_redis_version((5, 0, 0))
-class TestScheduledJobRegistry(RQTestCase):
+class TestResult(RQTestCase):
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)
