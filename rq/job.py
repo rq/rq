@@ -1522,14 +1522,8 @@ class Job:
         self.log.debug('Job %s: handling success...', self.id)
 
         self.set_status(JobStatus.FINISHED, pipeline=pipeline)
-        # Result should be saved in job hash only if server
-        # doesn't support Redis streams
-        include_result = False
         # Don't clobber user's meta dictionary!
-        self.save(pipeline=pipeline, include_meta=False, include_result=include_result)
-        # Result creation should eventually be moved to job.save() after support
-        # for Redis < 5.0 is dropped. job.save(include_result=...) is used to test
-        # for backward compatibility
+        self.save(pipeline=pipeline, include_meta=False, include_result=False)
         from .results import Result
 
         Result.create(
@@ -1551,15 +1545,12 @@ class Job:
         )
 
         failed_job_registry = self.failed_job_registry
-        # Exception should be saved in job hash if server
-        # doesn't support Redis streams
-        _save_exc_to_job = False
         failed_job_registry.add(
             self,
             ttl=self.failure_ttl,
             exc_string=exc_string,
             pipeline=pipeline,
-            _save_exc_to_job=_save_exc_to_job,
+            _save_exc_to_job=False,
         )
         from .results import Result
 
