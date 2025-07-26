@@ -23,6 +23,7 @@ repos:
         entry: mypy
         language: python
         types: [python]
+        pass_filenames: false
         args:
           - --enable-incomplete-feature=Unpack
           - rq
