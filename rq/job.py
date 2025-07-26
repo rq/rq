@@ -1121,6 +1121,7 @@ class Job:
 
         return obj
 
+    # TODO: Remove include_result parameter in RQ 3.0 - results are now always saved to Redis streams
     def save(self, pipeline: Optional['Pipeline'] = None, include_meta: bool = True, include_result: bool = True):
         """Dumps the current job instance to its corresponding Redis key.
 
@@ -1134,6 +1135,7 @@ class Job:
             pipeline (Optional[Pipeline], optional): The Redis' pipeline to use. Defaults to None.
             include_meta (bool, optional): Whether to include the job's metadata. Defaults to True.
             include_result (bool, optional): Whether to include the job's result. Defaults to True.
+                TODO: Remove this parameter in RQ 3.0 - results are now always saved to Redis streams.
         """
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
