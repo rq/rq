@@ -729,7 +729,7 @@ class BaseWorker:
             self.cleanup_execution(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
-                job._handle_failure(exc_string, pipeline=pipeline)
+                job._handle_failure(exc_string, pipeline=pipeline, worker_name=self.name)
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 
@@ -1573,7 +1573,7 @@ class Worker(BaseWorker):
                     job.id,
                     retry.max - (job.number_of_retries or 0),
                 )
-                job._handle_retry_result(queue=queue, pipeline=pipeline)
+                job._handle_retry_result(queue=queue, pipeline=pipeline, worker_name=self.name)
 
             self.cleanup_execution(job, pipeline=pipeline)
 
@@ -1623,7 +1623,7 @@ class Worker(BaseWorker):
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
                     if result_ttl != 0:
                         self.log.debug("Worker %s: saving job %s's successful execution result", self.name, job.id)
-                        job._handle_success(result_ttl, pipeline=pipeline)
+                        job._handle_success(result_ttl, pipeline=pipeline, worker_name=self.name)
 
                     if job.repeats_left is not None and job.repeats_left > 0:
                         from .repeat import Repeat

@@ -16,7 +16,7 @@ from .fixtures import div_by_zero, say_hello
 
 
 @min_redis_version((5, 0, 0))
-class TestScheduledJobRegistry(RQTestCase):
+class TestResult(RQTestCase):
     def test_save_and_get_result(self):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)
@@ -25,9 +25,10 @@ class TestScheduledJobRegistry(RQTestCase):
         result = Result.fetch_latest(job)
         self.assertIsNone(result)
 
-        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1)
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1, worker_name='a')
         result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 1)
+        self.assertEqual(result.worker_name, 'a')
         self.assertEqual(job.latest_result().return_value, 1)
 
         # Check that ttl is properly set
@@ -47,8 +48,9 @@ class TestScheduledJobRegistry(RQTestCase):
         """Ensure data is saved properly"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        Result.create_failure(job, ttl=10, exc_string='exception')
+        Result.create_failure(job, ttl=10, exc_string='exception', worker_name='a')
         result = Result.fetch_latest(job)
+        self.assertEqual(result.worker_name, 'a')
         self.assertEqual(result.exc_string, 'exception')
 
         # Check that ttl is properly set

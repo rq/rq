@@ -93,8 +93,14 @@ class TestWorker(RQTestCase):
         w = Worker([fooq, barq])
         self.assertEqual(w.work(burst=True), False, 'Did not expect any work on the queue.')
 
-        fooq.enqueue(say_hello, name='Frank')
+        job = fooq.enqueue(say_hello, name='Frank')
         self.assertEqual(w.work(burst=True), True, 'Expected at least some work done.')
+
+        # Check that worker_name is stored in the result
+        if job.supports_redis_streams:
+            result = job.latest_result()
+            self.assertIsNotNone(result)
+            self.assertEqual(result.worker_name, w.name)
 
     def test_work_and_quit_custom_serializer(self):
         """Worker processes work, then quits."""
@@ -173,7 +179,7 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.result, expected_result)
         # Only run if Redis server supports streams
         if job.supports_redis_streams:
-            self.assertEqual(Result.fetch_latest(job).return_value, expected_result)
+            self.assertEqual(job.latest_result().return_value, expected_result)
         self.assertIsNone(job.worker_name)
 
     def test_job_times(self):
@@ -386,9 +392,10 @@ class TestWorker(RQTestCase):
         # to the failed queue
         self.assertEqual(job.enqueued_at.replace(tzinfo=timezone.utc).timestamp(), enqueued_at_date.timestamp())
         if job.supports_redis_streams:
-            result = Result.fetch_latest(job)
+            result = job.latest_result()
             self.assertTrue(result.exc_string)
             self.assertEqual(result.type, Result.Type.FAILED)
+            self.assertEqual(result.worker_name, w.name)
 
     def test_horse_fails(self):
         """Tests that job status is set to FAILED even if horse unexpectedly fails"""
@@ -486,6 +493,12 @@ class TestWorker(RQTestCase):
         self.assertEqual([], queue.job_ids)
         # If a job is no longer retries, it's put in FailedJobRegistry
         self.assertIn(job, registry)
+
+        # Check that worker_name is stored in the failure result
+        if job.supports_redis_streams:
+            result = job.latest_result()
+            self.assertIsNotNone(result)
+            self.assertEqual(result.worker_name, worker.name)
 
     def test_total_working_time(self):
         """worker.total_working_time is stored properly"""
@@ -830,6 +843,7 @@ class TestWorker(RQTestCase):
         # Test job_class as string
         worker_string = Worker([q], job_class='tests.fixtures.CustomJob')
         from tests.fixtures import CustomJob as FixturesCustomJob
+
         self.assertEqual(worker_string.job_class, FixturesCustomJob)
 
     def test_custom_queue_class(self):
@@ -866,6 +880,7 @@ class TestWorker(RQTestCase):
         # Test both job_class and queue_class as strings
         worker = Worker([q], job_class='tests.fixtures.CustomJob')
         from tests.fixtures import CustomJob as FixturesCustomJob
+
         self.assertEqual(worker.job_class, FixturesCustomJob)
 
     def test_work_via_simpleworker(self):

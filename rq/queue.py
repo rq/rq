@@ -906,7 +906,7 @@ class Queue:
         job.ended_at = now()
         result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL)
         with self.connection.pipeline() as pipeline:
-            job._handle_success(result_ttl=result_ttl, pipeline=pipeline)
+            job._handle_success(result_ttl=result_ttl, pipeline=pipeline, worker_name='')
             job.cleanup(result_ttl, pipeline=pipeline)
             pipeline.execute()
         return job
@@ -1199,7 +1199,7 @@ class Queue:
             with self.connection.pipeline() as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 exc_string = ''.join(traceback.format_exception(*sys.exc_info()))
-                job._handle_failure(exc_string, pipeline)
+                job._handle_failure(exc_string, pipeline, worker_name='')
                 pipeline.execute()
 
             if job.failure_callback:
