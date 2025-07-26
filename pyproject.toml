@@ -39,7 +39,11 @@ classifiers = [
   "Topic :: System :: Systems Administration",
 ]
 dynamic = [ "version" ]
-dependencies = [ "click>=5", "redis>=3.5,!=6" ]
+dependencies = [
+  "click>=5",
+  "croniter",
+  "redis>=3.5,!=6",
+]
 urls.changelog = "https://github.com/rq/rq/blob/master/CHANGES.md"
 urls.documentation = "https://python-rq.org/docs/"
 urls.homepage = "https://python-rq.org/"

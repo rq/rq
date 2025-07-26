@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+from croniter import croniter
 from redis import Redis
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
@@ -25,16 +26,23 @@ class CronJob:
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         interval: Optional[int] = None,
+        cron: Optional[str] = None,
         timeout: Optional[int] = None,
         result_ttl: int = 500,
         ttl: Optional[int] = None,
         failure_ttl: Optional[int] = None,
         meta: Optional[dict] = None,
     ):
+        if interval and cron:
+            raise ValueError('Cannot specify both interval and cron parameters')
+        if not interval and not cron:
+            raise ValueError('Must specify either interval or cron parameter')
+
         self.func: Callable = func
         self.args: Tuple = args or ()
         self.kwargs: Dict = kwargs or {}
         self.interval: Optional[int] = interval
+        self.cron: Optional[str] = cron
         self.queue_name: str = queue_name
         self.next_run_time: Optional[datetime] = None
         self.latest_run_time: Optional[datetime] = None
@@ -57,26 +65,44 @@ class CronJob:
         return job
 
     def get_next_run_time(self) -> datetime:
-        """Calculate the next run time based on the current time and interval"""
-        if self.interval is None:
-            return datetime.max  # Far future if no interval set
-        assert self.latest_run_time
-        return self.latest_run_time + timedelta(seconds=self.interval)
+        """Calculate the next run time based on interval or cron expression"""
+        if self.cron:
+            # Use cron expression to calculate next run time
+            cron_iter = croniter(self.cron, self.latest_run_time or now())
+            return cron_iter.get_next(datetime)
+        elif self.interval is not None:
+            # Use interval-based calculation
+            if self.latest_run_time is None:
+                return datetime.max  # Far future if no latest run time set
+            return self.latest_run_time + timedelta(seconds=self.interval)
+        else:
+            return datetime.max  # Far future if neither interval nor cron set
 
     def should_run(self) -> bool:
         """Check if this job should run now"""
-        if self.latest_run_time is None:
-            return True
-        if self.next_run_time:
-            return now() >= self.next_run_time
-        return False
+        if self.cron:
+            # For cron jobs, only run based on cron schedule (crontab behavior)
+            if self.latest_run_time is None and self.next_run_time is None:
+                # Initialize next_run_time using get_next_run_time() only once
+                self.next_run_time = self.get_next_run_time()
+                return False  # Don't run immediately, wait for scheduled time
+            if self.next_run_time:
+                return now() >= self.next_run_time
+            return False
+        else:
+            # For interval jobs, run immediately if never run before
+            if self.latest_run_time is None:
+                return True
+            if self.next_run_time:
+                return now() >= self.next_run_time
+            return False
 
     def set_run_time(self, time: datetime) -> None:
         """Set latest run time to a given time and update next run time"""
         self.latest_run_time = time
 
-        # Update next run time if interval is set
-        if self.interval is not None:
+        # Update next run time if interval or cron is set
+        if self.interval is not None or self.cron is not None:
             self.next_run_time = self.get_next_run_time()
 
 
@@ -108,6 +134,7 @@ class CronScheduler:
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         interval: Optional[int] = None,
+        cron: Optional[str] = None,
         timeout: Optional[int] = None,
         result_ttl: int = 500,
         ttl: Optional[int] = None,
@@ -121,6 +148,7 @@ class CronScheduler:
             args=args,
             kwargs=kwargs,
             interval=interval,
+            cron=cron,
             timeout=timeout,
             result_ttl=result_ttl,
             ttl=ttl,
@@ -131,8 +159,10 @@ class CronScheduler:
         self._cron_jobs.append(cron_job)
 
         job_key = f'{func.__module__}.{func.__name__}'
-        if interval is not None:
+        if interval:
             self.log.info(f"Registered '{job_key}' to run on {queue_name} every {interval} seconds")
+        elif cron:
+            self.log.info(f"Registered '{job_key}' to run on {queue_name} with cron schedule '{cron}'")
 
         return cron_job
 
@@ -290,6 +320,7 @@ def register(
     args: Optional[Tuple] = None,
     kwargs: Optional[Dict] = None,
     interval: Optional[int] = None,
+    cron: Optional[str] = None,
     timeout: Optional[int] = None,
     result_ttl: int = 500,
     ttl: Optional[int] = None,
@@ -319,6 +350,7 @@ def register(
         'args': args,
         'kwargs': kwargs,
         'interval': interval,
+        'cron': cron,
         'timeout': timeout,
         'result_ttl': result_ttl,
         'ttl': ttl,
