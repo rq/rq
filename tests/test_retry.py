@@ -170,10 +170,8 @@ class TestWorkerRetry(RQTestCase):
         worker.work(max_jobs=1)
 
         # A result with type `RETRIED` should be created
-        # skip on Redis < 5
-        if job.supports_redis_streams:
-            result = job.latest_result()
-            self.assertEqual(result.type, result.Type.RETRIED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_job_handle_retry(self):
@@ -202,23 +200,20 @@ class TestWorkerRetry(RQTestCase):
 
         # A result with type `RETRIED` should be created,
         # job should be back in the queue
-        if job.supports_redis_streams:
-            result = job.latest_result()
-            self.assertEqual(result.type, result.Type.RETRIED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
         self.assertIn(job.id, queue.get_job_ids())
 
         # Second retry
         worker.work(max_jobs=1)
-        if job.supports_redis_streams:
-            result = job.latest_result()
-            self.assertEqual(result.type, result.Type.RETRIED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
         self.assertIn(job.id, queue.get_job_ids())
 
         # Third execution would fail since max number of retries is 2
         worker.work(max_jobs=1)
-        if job.supports_redis_streams:
-            result = job.latest_result()
-            self.assertEqual(result.type, result.Type.FAILED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.FAILED)
         self.assertNotIn(job.id, queue.get_job_ids())
 
     def test_worker_handles_retry_interval(self):
