@@ -78,23 +78,21 @@ class CronJob:
         elif self.interval and self.latest_run_time:
             # Use interval-based calculation
             return self.latest_run_time + timedelta(seconds=self.interval)
-        else:
-            return datetime.max  # Far future if neither interval nor cron set
+
+        return datetime.max  # Far future if neither interval nor cron set
 
     def should_run(self) -> bool:
         """Check if this job should run now"""
-        if self.cron:
-            # For cron jobs, only run based on cron schedule (crontab behavior)
-            if self.next_run_time:
-                return now() >= self.next_run_time
-            return False
-        else:
-            # For interval jobs, run immediately if never run before
-            if not self.latest_run_time:
-                return True
-            if self.next_run_time:
-                return now() >= self.next_run_time
-            return False
+        # For interval jobs that have never run, run immediately
+        # Cron jobs always have next_run_time set during initialization
+        if not self.latest_run_time and not self.cron:
+            return True
+
+        # For all other cases, check if next_run_time has arrived
+        if self.next_run_time:
+            return now() >= self.next_run_time
+
+        return False
 
     def set_run_time(self, time: datetime) -> None:
         """Set latest run time to a given time and update next run time"""
