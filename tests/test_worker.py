@@ -1386,6 +1386,21 @@ class TestWorker(RQTestCase):
         q.enqueue(say_hello, args=('ccc',), result_ttl=0)
         self.assertTrue(w.work(burst=True))
 
+    def test_custom_job_and_queue(self):
+        class CustomJob(Job):
+            pass
+
+        class CustomQueue(Queue):
+            pass
+
+        class CustomWorker(Worker):
+            job_class = CustomJob
+            queue_class = CustomQueue
+
+        worker = CustomWorker(CustomQueue('foo', connection=self.connection))
+        assert worker.job_class is CustomJob
+        assert worker.queue_class is CustomQueue
+
 
 def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     time.sleep(time_to_wait)
