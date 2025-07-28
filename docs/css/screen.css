@@ -279,6 +279,22 @@ li {
     /* IE7 spacing */
 }
 
+table {
+    margin-bottom: 1em;
+}
+
+table, td, th {
+    border: 1px solid #555555;
+}
+
+thead {
+    background-color: #f3f3f0;
+}
+
+th, td {
+    padding: 10px;
+}
+
 /*
 @media screen and (max-width: 1400px)
 {
