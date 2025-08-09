@@ -31,6 +31,9 @@ class TestWorker(RQTestCase):
         registry = FinishedJobRegistry(queue=queue)
         self.assertEqual(registry.get_job_ids(), [job.id])
 
+        registry = queue.started_job_registry
+        self.assertEqual(registry.get_job_ids(), [])
+
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
         q = Queue(connection=self.connection)

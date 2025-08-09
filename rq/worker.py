@@ -1769,6 +1769,7 @@ class SpawnWorker(Worker):
         """Spawns a work horse to perform the actual work using os.spawn()."""
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
+        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
         redis_kwargs = self.connection.connection_pool.connection_kwargs
         if redis_kwargs.get('retry'):
@@ -1787,6 +1788,7 @@ import sys
 from redis import Redis
 from rq import Worker, Queue
 from rq.job import Job
+from rq.executions import Execution
 
 # Recreate worker instance
 redis = Redis(**{redis_kwargs})
@@ -1794,9 +1796,11 @@ worker = Worker.find_by_key("{self.key}", connection=redis)
 if not worker:
     sys.exit(1)
 
-# Reconstruct job and queue
+# Reconstruct job, queue and execution objects
 job = Job.fetch("{job.id}", connection=worker.connection)
 queue = Queue("{queue.name}", connection=worker.connection)
+execution_id = os.environ.get('RQ_EXECUTION_ID')
+worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
 
 # Set up work horse
 os.setpgrp()
