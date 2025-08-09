@@ -6,7 +6,7 @@ from multiprocessing import Process
 
 from rq import Queue
 from rq.job import Job
-from rq.registry import FailedJobRegistry, FinishedJobRegistry
+from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.results import Result
 from rq.worker import SpawnWorker
 from tests import RQTestCase, slow
@@ -30,6 +30,9 @@ class TestWorker(RQTestCase):
 
         registry = FinishedJobRegistry(queue=queue)
         self.assertEqual(registry.get_job_ids(), [job.id])
+
+        registry = StartedJobRegistry(queue=queue)
+        self.assertEqual(registry.get_job_ids(), [])
 
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""

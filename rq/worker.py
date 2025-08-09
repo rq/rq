@@ -1406,6 +1406,9 @@ class Worker(BaseWorker):
         )
 
         if ret_val == os.EX_OK:  # The process exited normally.
+            with self.connection.pipeline() as pipeline:
+                self.cleanup_execution(job, pipeline=pipeline)
+                pipeline.execute()
             return
 
         try:
