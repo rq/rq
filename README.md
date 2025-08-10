@@ -158,7 +158,7 @@ cron.register(
     generate_analytics_report,
     queue_name='reports',
     args=('daily_metrics',),
-    kwargs={'format': 'json', 'email_recipients': ['admin@company.com']},
+    kwargs={'format': 'json', 'recipients': ['bob@example.com']},
     interval=21600  # 6 hours in seconds
 )
 ```
