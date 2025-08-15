@@ -132,9 +132,9 @@ queue.enqueue(say_hello, retry=Retry(max=3, interval=[10, 30, 60]))
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
-## Cron Style Job Scheduling
+## Interval and Cron Job Scheduling
 
-To schedule jobs to be enqueued at specific intervals, RQ >= 2.4 now provides a cron-like feature (support for cron syntax coming soon).
+RQ >= 2.5 provides built-in job scheduling functionality that supports both simple interval-based scheduling and flexible cron syntax.
 
 First, create a configuration file (e.g., `cron_config.py`) that defines the jobs you want to run periodically.
 
@@ -143,19 +143,23 @@ from rq import cron
 from myapp import cleanup_database, send_daily_report
 
 # Run database cleanup every 5 minutes
+from rq import cron
+from myapp import cleanup_temp_files, generate_analytics_report
+
+# Clean up temporary files every 30 minutes
 cron.register(
-    cleanup_database,
-    queue_name='default',
-    interval=300  # 5 minutes in seconds
+    cleanup_temp_files,
+    queue_name='maintenance',
+    interval=1800  # 30 minutes in seconds
 )
 
-# Send daily reports every 24 hours
+# Generate analytics report every 6 hours
 cron.register(
-    send_daily_report,
-    queue_name='repeating_tasks',
-    args=('daily',),
-    kwargs={'format': 'pdf'},
-    interval=86400  # 24 hours in seconds
+    generate_analytics_report,
+    queue_name='reports',
+    args=('daily_metrics',),
+    kwargs={'format': 'json', 'recipients': ['bob@example.com']},
+    interval=21600  # 6 hours in seconds
 )
 ```
 
@@ -164,6 +168,27 @@ And then start the `rq cron` command to enqueue these jobs at specified interval
 ```sh
 $ rq cron cron_config.py
 ```
+
+You can also use standard cron syntax for more flexible scheduling:
+
+```python
+from rq import cron
+from myapp import send_newsletter, backup_database
+
+# Database backup every day at 3:00 AM
+cron.register(
+    backup_database,
+    queue_name='maintenance',
+    cron_string='0 3 * * *'
+)
+
+# Monthly report on the first day of each month at 8:00 AM
+cron.register(
+    generate_monthly_report,
+    queue_name='reports',
+    cron_string='0 8 1 * *'
+)
+```python
 
 More details on functionality can be found in the [docs](https://python-rq.org/docs/cron/).
 

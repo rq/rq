@@ -3,7 +3,7 @@ title: "RQ: Cron Scheduler"
 layout: docs
 ---
 
-RQ's `CronScheduler` is a simple scheduler that allows you to enqueue functions at regular intervals.
+RQ's `CronScheduler` allows you to enqueue functions/jobs at regular intervals.
 
 _New in version 2.4.0._
 
@@ -38,29 +38,22 @@ Create a cron configuration file (`cron_config.py`):
 
 ```python
 from rq import cron
-from myapp import cleanup_database, send_notifications, send_daily_report
+from myapp import cleanup_temp_files, send_newsletter
 
-# Run database cleanup every 5 minutes
+# Clean up temporary files every 30 minutes (interval-based)
 cron.register(
-    cleanup_database,
-    queue_name='repeating_tasks',
-    interval=300  # 5 minutes in seconds
+    cleanup_temp_files,
+    queue_name='maintenance',
+    interval=1800  # 30 minutes in seconds
 )
 
-# Send notifications every hour
+# Send newsletter every Tuesday at 10:30 AM (cron string)
 cron.register(
-    send_notifications,
-    queue_name='repeating_tasks',
-    interval=5  # Every 5 seconds
-)
-
-# Send daily reports every 24 hours
-cron.register(
-    send_daily_report,
-    queue_name='repeating_tasks',
-    args=('daily',),
-    kwargs={'format': 'pdf'},
-    interval=86400  # 24 hours in seconds
+    send_newsletter,
+    queue_name='email',
+    args=('weekly_digest',),
+    kwargs={'template': 'newsletter.html'},
+    cron_string='30 10 * * 2'
 )
 ```
 
@@ -77,15 +70,47 @@ That's it! Your jobs will now be automatically enqueued at the specified interva
 ### How It Works
 
 Key concepts:
-- **Interval-based**: jobs run every X seconds (e.g. every 5 seconds). Cron string based job enqueueing is planned for future releases.
+- **Interval based**: jobs run every X seconds (e.g. every 5 seconds).
+- **Cron based**: jobs run based on standard cron syntax (e.g. 0 9 * * * for daily at 9 AM)
 - **Separation of concerns**: `CronScheduler` only enqueues jobs; RQ workers handle execution
 
-`CronScheduler` is not a job executor - it's a scheduler to enqueue functions periodically. Here's how the system works:
+`CronScheduler` is not a job executor - it's a scheduler to periodically enqueue functions. When you run `rq cron`:
 
-1. **Registration**: functions are registered along with their intervals and target queues
-2. **First run**: registered functions are immediately enqueued when `CronScheduler` starts
-3. **Worker execution**: RQ workers pick up and execute the jobs from their queues
+1. **Registration**: functions are registered along with their schedules (interval or cron string) and target queues
+2. **First run**: interval based functions are immediately enqueued when `CronScheduler` starts
+3. **Worker execution**: RQ workers pick up and execute the jobs from their queues (workers need to be run separately)
 4. **Sleep**: `CronScheduler` sleeps until the next job is due
+
+## Scheduling Options
+
+`CronScheduler` supports two scheduling methods.
+
+### Interval Based
+
+Use the interval parameter to specify execution frequency in seconds.
+
+```python
+cron.register(my_function, queue_name='default', interval=300)  # Every 5 minutes
+cron.register(hourly_task, queue_name='hourly', interval=3600)  # Every hour
+```
+
+### Cron Based
+
+__New in version 2.5__
+
+Use the cron_string parameter with standard [cron syntax](https://en.wikipedia.org/wiki/Cron).
+
+```python
+# Every day at 2:30 AM
+cron.register(daily_backup, queue_name='maintenance', cron_string='30 2 * * *')
+
+# Every 15 minutes
+cron.register(frequent_task, queue_name='default', cron_string='*/15 * * * *')
+
+# Weekly on Sundays at 6:00 PM
+cron.register(weekly_report, queue_name='reports', cron_string='0 18 * * 0')
+```
+
 
 ## Configuration Files
 
@@ -114,7 +139,7 @@ register(
 register(
     backup_files,
     queue_name='backup',
-    interval=86400,  # Once per day
+    cron_string='0 2 * * *',  # Daily at 2 AM
     timeout=1800,    # 30 minutes max execution time
     result_ttl=3600, # Keep results for 1 hour
     failure_ttl=86400 # Keep failed jobs for 1 day
@@ -190,7 +215,7 @@ cron.register(
     send_reports,
     queue_name='reports',
     args=('daily',),
-    interval=86400
+    cron_string='0 9 * * *'  # Daily at 9 AM
 )
 
 # Start the scheduler (this will block until interrupted)
