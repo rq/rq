@@ -1,3 +1,9 @@
+### RQ 2.5 (2025-08-15)
+* `CronScheduler` now supports running periodic jobs based on cron string. Thanks @selwin!
+* Fixed an issue where `SpawnWorker` does not properly register successful job executions. Thanks @selwin!
+* Fixed an issue where `Worker` may fail to register custom job and queue classes. Thanks @armicron!
+* Added `result.worker_name` to easily trace which `Worker` generated the result. Thanks @selwin!
+
 ### RQ 2.4.1 (2025-07-20)
 * `Worker` will now automatically choose `TimerDeathPenalty` if `UnixSignalDeathPenalty` is not available. Thanks @selwin!
 * Introduced `CREATED` `Job` status for jobs that are not enqueued not deferred. Thanks @selwin!
