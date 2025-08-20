@@ -64,7 +64,7 @@ jobs:
         run: |
           RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5.4.2
+        uses: codecov/codecov-action@v5.5.0
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
