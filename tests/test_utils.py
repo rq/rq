@@ -21,6 +21,7 @@ from rq.utils import (
     is_nonstring_iterable,
     parse_timeout,
     split_list,
+    str_to_date,
     truncate_long_string,
     utcparse,
 )
@@ -81,6 +82,30 @@ class TestUtils(RQTestCase):
         utc_formatted_time = '2017-08-31T10:14:02Z'
         expected_time = datetime.datetime(2017, 8, 31, 10, 14, 2, tzinfo=datetime.timezone.utc)
         self.assertEqual(expected_time, utcparse(utc_formatted_time))
+
+    def test_str_to_date(self):
+        """Ensure function str_to_date works correctly"""
+        # Test with bytes input
+        date_bytes = b'2023-01-01T12:00:00.000000Z'
+        expected_time = datetime.datetime(2023, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        result_bytes = str_to_date(date_bytes)
+        self.assertEqual(expected_time, result_bytes)
+        self.assertIsInstance(result_bytes, datetime.datetime)
+
+        # Test with string input
+        date_str = '2023-01-01T12:00:00.000000Z'
+        result_str = str_to_date(date_str)
+        self.assertEqual(expected_time, result_str)
+        self.assertIsInstance(result_str, datetime.datetime)
+
+        # Both should return the same result
+        self.assertEqual(result_bytes, result_str)
+
+        # Test error cases
+        with self.assertRaises(ValueError):
+            str_to_date('')  # empty string
+        with self.assertRaises(ValueError):
+            str_to_date(b'')  # empty bytes
 
     def test_backend_class(self):
         """Ensure function backend_class works correctly"""
