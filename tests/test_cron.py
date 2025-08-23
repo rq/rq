@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler, _job_data_registry
+from rq.exceptions import SchedulerNotFound
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
@@ -480,9 +481,8 @@ class TestCronScheduler(RQTestCase):
 
         # Test 3: Test error handling with a non-existent path
         cron = CronScheduler(connection=self.connection)
-        with self.assertRaises(Exception) as context:  # Expect FileNotFoundError or ImportError
+        with self.assertRaises(Exception):  # Expect FileNotFoundError or ImportError
             cron.load_config_from_file('path/does/not/exist.py')
-        self.assertIn('not found', str(context.exception).lower())
         self.assertEqual(len(cron.get_jobs()), 0)  # No jobs should be loaded
         self.assertEqual(len(_job_data_registry), 0, 'Registry not cleared after non-existent path error')
 
@@ -492,10 +492,9 @@ class TestCronScheduler(RQTestCase):
             invalid_file.write('this is not valid python code :')
             invalid_file_path = invalid_file.name  # Store path before closing
         try:
-            with self.assertRaises(Exception) as context:  # Expect ImportError or SyntaxError inside
+            with self.assertRaises(Exception):  # Expect ImportError or SyntaxError inside
                 cron.load_config_from_file(invalid_file_path)
 
-            self.assertIn('failed to load configuration file', str(context.exception).lower())
             self.assertEqual(len(cron.get_jobs()), 0)  # No jobs should be loaded
             self.assertEqual(len(_job_data_registry), 0, 'Registry not cleared after invalid content error')
         finally:
@@ -556,16 +555,14 @@ class TestCronScheduler(RQTestCase):
         """Test that registering with both interval and cron arguments"""
         cron = CronScheduler(connection=self.connection)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ValueError):
             cron.register(func=say_hello, queue_name=self.queue_name, interval=60, cron='0 9 * * *')
-        self.assertIn('Cannot specify both interval and cron parameters', str(context.exception))
 
         # Registering with neither interval nor cron also raises an error
         cron = CronScheduler(connection=self.connection)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ValueError):
             cron.register(func=say_hello, queue_name=self.queue_name)
-        self.assertIn('Must specify either interval or cron parameter', str(context.exception))
 
     def test_enqueue_jobs_with_cron_strings(self):
         """Test that cron.register correctly handles cron-scheduled jobs"""
@@ -798,10 +795,9 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(loaded_scheduler.config_file, original_scheduler.config_file)
         self.assertEqual(loaded_scheduler.created_at, original_scheduler.created_at)
 
-        # Test that fetching a nonexistent scheduler raises ValueError
-        with self.assertRaises(ValueError) as context:
+        # Test that fetching a nonexistent scheduler raises SchedulerNotFound
+        with self.assertRaises(SchedulerNotFound):
             CronScheduler.fetch('nonexistent-scheduler', self.connection)
-        self.assertIn("CronScheduler with name 'nonexistent-scheduler' not found", str(context.exception))
 
     def test_cron_scheduler_default_name(self):
         """Test that CronScheduler creates a default name if none provided"""

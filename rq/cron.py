@@ -12,6 +12,7 @@ from redis import Redis
 from redis.client import Pipeline
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .exceptions import SchedulerNotFound
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -355,7 +356,7 @@ class CronScheduler:
         raw_data = connection.hgetall(key)
 
         if not raw_data:
-            raise ValueError(f"CronScheduler with name '{name}' not found")
+            raise SchedulerNotFound(f"CronScheduler with name '{name}' not found")
 
         scheduler = cls(connection=connection, name=name)
         scheduler.restore(raw_data)

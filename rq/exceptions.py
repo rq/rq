@@ -38,3 +38,11 @@ class TimeoutFormatError(Exception):
 
 class AbandonedJobError(Exception):
     pass
+
+
+class SchedulerNotFound(Exception):
+    pass
+
+
+class DuplicateSchedulerError(Exception):
+    pass
