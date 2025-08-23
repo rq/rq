@@ -57,6 +57,7 @@ from .timeouts import (
 from .utils import (
     as_text,
     compact,
+    decode_redis_hash,
     ensure_job_list,
     get_connection_from_queues,
     get_version,
@@ -366,70 +367,43 @@ class BaseWorker:
         """Refreshes the worker data.
         It will get the data from the datastore and update the Worker's attributes
         """
-        data = self.connection.hmget(
-            self.key,
-            'queues',
-            'state',
-            'current_job',
-            'last_heartbeat',
-            'birth',
-            'failed_job_count',
-            'successful_job_count',
-            'total_working_time',
-            'current_job_working_time',
-            'hostname',
-            'ip_address',
-            'pid',
-            'version',
-            'python_version',
-        )
-        (
-            queues,
-            state,
-            job_id,
-            last_heartbeat,
-            birth,
-            failed_job_count,
-            successful_job_count,
-            total_working_time,
-            current_job_working_time,
-            hostname,
-            ip_address,
-            pid,
-            version,
-            python_version,
-        ) = data
-        self.hostname = as_text(hostname) if hostname else None
-        self.ip_address = as_text(ip_address) if ip_address else None
-        self.pid = int(pid) if pid else None
-        self.version = as_text(version) if version else None
-        self.python_version = as_text(python_version) if python_version else None
-        self._state = as_text(state or '?')
-        self._job_id = job_id or None
-        if last_heartbeat:
-            self.last_heartbeat = utcparse(as_text(last_heartbeat))
+        raw_data = self.connection.hgetall(self.key)
+        if not raw_data:
+            return
+
+        data = decode_redis_hash(raw_data, decode_values=True)
+
+        self.hostname = data.get('hostname') or None
+        self.ip_address = data.get('ip_address') or None
+        self.pid = int(data['pid']) if data.get('pid') else None
+        self.version = data.get('version') or VERSION
+        self.python_version = data.get('python_version') or sys.version
+        self._state = data.get('state', '?')
+        self._job_id = data.get('current_job')
+
+        if data.get('last_heartbeat'):
+            self.last_heartbeat = utcparse(data['last_heartbeat'])
         else:
             self.last_heartbeat = None
-        if birth:
-            self.birth_date = utcparse(as_text(birth))
+
+        if data.get('birth'):
+            self.birth_date = utcparse(data['birth'])
         else:
             self.birth_date = None
-        if failed_job_count:
-            self.failed_job_count = int(as_text(failed_job_count))
-        if successful_job_count:
-            self.successful_job_count = int(as_text(successful_job_count))
-        if total_working_time:
-            self.total_working_time = float(as_text(total_working_time))
-        if current_job_working_time:
-            self.current_job_working_time = float(as_text(current_job_working_time))
 
-        if queues:
-            queues = as_text(queues)
+        self.failed_job_count = int(data['failed_job_count']) if data.get('failed_job_count') else 0
+        self.successful_job_count = int(data['successful_job_count']) if data.get('successful_job_count') else 0
+        self.total_working_time = float(data['total_working_time']) if data.get('total_working_time') else 0
+        self.current_job_working_time = (
+            float(data['current_job_working_time']) if data.get('current_job_working_time') else 0
+        )
+
+        if data.get('queues'):
             self.queues = [
                 self.queue_class(
                     queue, connection=self.connection, job_class=self.job_class, serializer=self.serializer
                 )
-                for queue in queues.split(',')
+                for queue in data['queues'].split(',')
             ]
 
     @property
