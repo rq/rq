@@ -251,7 +251,7 @@ class TestCronScheduler(RQTestCase):
         # Test initial values
         self.assertEqual(cron.hostname, socket.gethostname())
         self.assertEqual(cron.pid, os.getpid())
-        self.assertIsNone(cron.config_file)
+        self.assertFalse(cron.config_file)
 
         # Test config_file is set when loading config
         config_file_path = 'tests/cron_config.py'
@@ -781,28 +781,27 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(restored_scheduler.config_file, original_scheduler.config_file)
         self.assertEqual(restored_scheduler.created_at, original_scheduler.created_at)
 
-    def test_cron_scheduler_load_from_redis(self):
-        """Test that CronScheduler can be loaded from Redis using the load class method"""
+    def test_cron_scheduler_fetch_from_redis(self):
+        """Test that CronScheduler can be fetched from Redis using the fetch class method"""
         # Create and save a scheduler
         original_scheduler = CronScheduler(connection=self.connection, name='persistent-scheduler')
         original_scheduler.config_file = 'persistent_config.py'
         original_scheduler.save()
 
-        # Load scheduler from Redis
-        loaded_scheduler = CronScheduler.load('persistent-scheduler', self.connection)
+        # Fetch scheduler from Redis
+        loaded_scheduler = CronScheduler.fetch('persistent-scheduler', self.connection)
 
-        # Verify loaded scheduler matches original
-        self.assertIsNotNone(loaded_scheduler)
+        # Verify fetched scheduler matches original
         self.assertEqual(loaded_scheduler.hostname, original_scheduler.hostname)
         self.assertEqual(loaded_scheduler.pid, original_scheduler.pid)
         self.assertEqual(loaded_scheduler.name, original_scheduler.name)
         self.assertEqual(loaded_scheduler.config_file, original_scheduler.config_file)
         self.assertEqual(loaded_scheduler.created_at, original_scheduler.created_at)
 
-    def test_cron_scheduler_load_nonexistent(self):
-        """Test that loading a nonexistent scheduler returns None"""
-        loaded_scheduler = CronScheduler.load('nonexistent-scheduler', self.connection)
-        self.assertIsNone(loaded_scheduler)
+        # Test that fetching a nonexistent scheduler raises ValueError
+        with self.assertRaises(ValueError) as context:
+            CronScheduler.fetch('nonexistent-scheduler', self.connection)
+        self.assertIn("CronScheduler with name 'nonexistent-scheduler' not found", str(context.exception))
 
     def test_cron_scheduler_default_name(self):
         """Test that CronScheduler creates a default name if none provided"""

@@ -342,24 +342,22 @@ class CronScheduler:
         """Restore CronScheduler instance from Redis hash data"""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
-        self.hostname = obj.get('hostname', '')
+        self.hostname = obj['hostname']
         self.pid = int(obj.get('pid', 0))
         self.name = obj['name']
         self.created_at = str_to_date(obj['created_at'])
-        self.config_file = obj.get('config_file', '')
+        self.config_file = obj['config_file']
 
     @classmethod
-    def load(
-        cls, name: str, connection: Redis, logging_level: Union[str, int] = logging.INFO
-    ) -> Optional['CronScheduler']:
-        """Load a CronScheduler instance from Redis by name"""
+    def fetch(cls, name: str, connection: Redis) -> 'CronScheduler':
+        """Fetch a CronScheduler instance from Redis by name"""
         key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
         if not raw_data:
-            return None
+            raise ValueError(f"CronScheduler with name '{name}' not found")
 
-        scheduler = cls(connection=connection, logging_level=logging_level, name=name)
+        scheduler = cls(connection=connection, name=name)
         scheduler.restore(raw_data)
         return scheduler
 
