@@ -322,7 +322,7 @@ class CronScheduler:
         """Redis key for this CronScheduler instance"""
         return f'rq:cron_scheduler:{self.name}'
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> Dict:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
         obj = {
             'hostname': self.hostname,
@@ -335,10 +335,8 @@ class CronScheduler:
 
     def save(self, pipeline: Optional[Pipeline] = None) -> None:
         """Save CronScheduler instance to Redis hash"""
-        key = self.key
         connection = pipeline if pipeline is not None else self.connection
-        mapping = self.to_dict()
-        connection.hset(key, mapping=mapping)  # type: ignore
+        connection.hset(self.key, mapping=self.to_dict())
 
     def restore(self, raw_data: Dict) -> None:
         """Restore CronScheduler instance from Redis hash data"""
