@@ -113,14 +113,14 @@ class CronScheduler:
         self,
         connection: Redis,
         logging_level: Union[str, int] = logging.INFO,
-        name: Optional[str] = None,
+        name: str = '',
     ):
         self.connection: Redis = connection
         self._cron_jobs: List[CronJob] = []
         self.hostname: str = socket.gethostname()
         self.pid: int = os.getpid()
         self.name: str = name or f'{self.hostname}:{self.pid}'
-        self.config_file: Optional[str] = None
+        self.config_file: str = ''
         self.created_at: datetime = now()
         self.serializer = resolve_serializer()
 
@@ -322,7 +322,7 @@ class CronScheduler:
         """Redis key for this CronScheduler instance"""
         return f'rq:cron_scheduler:{self.name}'
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, str]:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
         obj = {
             'hostname': self.hostname,
@@ -338,17 +338,17 @@ class CronScheduler:
         key = self.key
         connection = pipeline if pipeline is not None else self.connection
         mapping = self.to_dict()
-        connection.hset(key, mapping=mapping)
+        connection.hset(key, mapping=mapping)  # type: ignore
 
     def restore(self, raw_data: Dict) -> None:
         """Restore CronScheduler instance from Redis hash data"""
-        obj = decode_redis_hash(raw_data)
+        obj = decode_redis_hash(raw_data, decode_values=True)
 
         self.hostname = obj.get('hostname', '')
         self.pid = int(obj.get('pid', 0))
-        self.name = obj.get('name', '')
-        self.created_at = str_to_date(obj.get('created_at'))
-        self.config_file = obj.get('config_file') or None
+        self.name = obj['name']
+        self.created_at = str_to_date(obj['created_at'])
+        self.config_file = obj.get('config_file', '')
 
     @classmethod
     def load(
