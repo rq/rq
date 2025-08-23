@@ -745,35 +745,35 @@ class TestCronScheduler(RQTestCase):
 
     def test_cron_scheduler_to_dict(self):
         """Test that CronScheduler can be serialized to a dictionary"""
-        cron = CronScheduler(connection=self.connection, name="test-scheduler")
-        cron.config_file = "test_config.py"
-        
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+        cron.config_file = 'test_config.py'
+
         data = cron.to_dict()
-        
+
         self.assertEqual(data['hostname'], cron.hostname)
         self.assertEqual(data['pid'], str(cron.pid))
-        self.assertEqual(data['name'], "test-scheduler")
-        self.assertEqual(data['config_file'], "test_config.py")
+        self.assertEqual(data['name'], 'test-scheduler')
+        self.assertEqual(data['config_file'], 'test_config.py')
         self.assertIn('created_at', data)
 
     def test_cron_scheduler_save_and_restore(self):
         """Test that CronScheduler can be saved to and restored from Redis"""
         # Create and configure scheduler
-        original_scheduler = CronScheduler(connection=self.connection, name="test-scheduler")
-        original_scheduler.config_file = "test_config.py"
-        
+        original_scheduler = CronScheduler(connection=self.connection, name='test-scheduler')
+        original_scheduler.config_file = 'test_config.py'
+
         # Save to Redis
         original_scheduler.save()
-        
+
         # Verify data exists in Redis
         key = original_scheduler.key
         redis_data = self.connection.hgetall(key)
         self.assertGreater(len(redis_data), 0)
-        
+
         # Create new scheduler and restore from Redis data
-        restored_scheduler = CronScheduler(connection=self.connection, name="restored-scheduler")
+        restored_scheduler = CronScheduler(connection=self.connection, name='restored-scheduler')
         restored_scheduler.restore(redis_data)
-        
+
         # Verify restored data matches original
         self.assertEqual(restored_scheduler.hostname, original_scheduler.hostname)
         self.assertEqual(restored_scheduler.pid, original_scheduler.pid)
@@ -784,13 +784,13 @@ class TestCronScheduler(RQTestCase):
     def test_cron_scheduler_load_from_redis(self):
         """Test that CronScheduler can be loaded from Redis using the load class method"""
         # Create and save a scheduler
-        original_scheduler = CronScheduler(connection=self.connection, name="persistent-scheduler")
-        original_scheduler.config_file = "persistent_config.py"
+        original_scheduler = CronScheduler(connection=self.connection, name='persistent-scheduler')
+        original_scheduler.config_file = 'persistent_config.py'
         original_scheduler.save()
-        
+
         # Load scheduler from Redis
-        loaded_scheduler = CronScheduler.load("persistent-scheduler", self.connection)
-        
+        loaded_scheduler = CronScheduler.load('persistent-scheduler', self.connection)
+
         # Verify loaded scheduler matches original
         self.assertIsNotNone(loaded_scheduler)
         self.assertEqual(loaded_scheduler.hostname, original_scheduler.hostname)
@@ -801,11 +801,11 @@ class TestCronScheduler(RQTestCase):
 
     def test_cron_scheduler_load_nonexistent(self):
         """Test that loading a nonexistent scheduler returns None"""
-        loaded_scheduler = CronScheduler.load("nonexistent-scheduler", self.connection)
+        loaded_scheduler = CronScheduler.load('nonexistent-scheduler', self.connection)
         self.assertIsNone(loaded_scheduler)
 
     def test_cron_scheduler_default_name(self):
         """Test that CronScheduler creates a default name if none provided"""
         cron = CronScheduler(connection=self.connection)
-        expected_name = f"{cron.hostname}:{cron.pid}"
+        expected_name = f'{cron.hostname}:{cron.pid}'
         self.assertEqual(cron.name, expected_name)

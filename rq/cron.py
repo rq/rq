@@ -1,5 +1,4 @@
 import importlib.util
-import json
 import logging
 import os
 import socket
@@ -17,7 +16,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
-from .utils import as_text, decode_redis_hash, now, str_to_date, utcformat
+from .utils import decode_redis_hash, now, str_to_date, utcformat
 
 
 class CronJob:
@@ -120,7 +119,7 @@ class CronScheduler:
         self._cron_jobs: List[CronJob] = []
         self.hostname: str = socket.gethostname()
         self.pid: int = os.getpid()
-        self.name: str = name or f"{self.hostname}:{self.pid}"
+        self.name: str = name or f'{self.hostname}:{self.pid}'
         self.config_file: Optional[str] = None
         self.created_at: datetime = now()
         self.serializer = resolve_serializer()
@@ -321,7 +320,7 @@ class CronScheduler:
     @property
     def key(self) -> str:
         """Redis key for this CronScheduler instance"""
-        return f"rq:cron_scheduler:{self.name}"
+        return f'rq:cron_scheduler:{self.name}'
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
@@ -344,7 +343,7 @@ class CronScheduler:
     def restore(self, raw_data: Dict) -> None:
         """Restore CronScheduler instance from Redis hash data"""
         obj = decode_redis_hash(raw_data)
-        
+
         self.hostname = obj.get('hostname', '')
         self.pid = int(obj.get('pid', 0))
         self.name = obj.get('name', '')
@@ -352,14 +351,16 @@ class CronScheduler:
         self.config_file = obj.get('config_file') or None
 
     @classmethod
-    def load(cls, name: str, connection: Redis, logging_level: Union[str, int] = logging.INFO) -> Optional['CronScheduler']:
+    def load(
+        cls, name: str, connection: Redis, logging_level: Union[str, int] = logging.INFO
+    ) -> Optional['CronScheduler']:
         """Load a CronScheduler instance from Redis by name"""
-        key = f"rq:cron_scheduler:{name}"
+        key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
-        
+
         if not raw_data:
             return None
-        
+
         scheduler = cls(connection=connection, logging_level=logging_level, name=name)
         scheduler.restore(raw_data)
         return scheduler
