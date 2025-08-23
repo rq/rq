@@ -956,14 +956,18 @@ class Job:
             # Fallback to uncompressed string
             self.data = raw_data
 
-        self.created_at = str_to_date(obj.get('created_at'))  # type: ignore[assignment]
+        self.created_at = str_to_date(v) if (v := obj.get('created_at')) else now()
         self.origin = as_text(obj['origin']) if obj.get('origin') else ''
         self.worker_name = obj['worker_name'].decode() if obj.get('worker_name') else None
         self.description = as_text(obj['description']) if obj.get('description') else None
-        self.enqueued_at = str_to_date(obj.get('enqueued_at'))
-        self.started_at = str_to_date(obj.get('started_at'))
-        self.ended_at = str_to_date(obj.get('ended_at'))
-        self.last_heartbeat = str_to_date(obj.get('last_heartbeat'))
+
+        self.enqueued_at = str_to_date(v) if (v := obj.get('enqueued_at')) else None
+
+        self.started_at = str_to_date(v) if (v := obj.get('started_at')) else None
+
+        self.ended_at = str_to_date(v) if (v := obj.get('ended_at')) else None
+
+        self.last_heartbeat = str_to_date(v) if (v := obj.get('last_heartbeat')) else None
         self.group_id = as_text(obj['group_id']) if obj.get('group_id') else None
         result = obj.get('result')
         if result:

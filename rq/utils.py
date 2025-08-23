@@ -275,11 +275,14 @@ def backend_class(holder, default_name, override=None) -> type:
         return override
 
 
-def str_to_date(date_str: Optional[bytes]) -> Optional[datetime.datetime]:
+def str_to_date(date_str: Union[bytes, str]) -> datetime.datetime:
     if not date_str:
-        return None
+        raise ValueError('Empty string or bytestring provided')
     else:
-        return utcparse(date_str.decode())
+        if isinstance(date_str, bytes):
+            return utcparse(date_str.decode())
+        else:
+            return utcparse(date_str)
 
 
 def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
