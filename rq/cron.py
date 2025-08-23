@@ -1,6 +1,8 @@
 import importlib.util
+import json
 import logging
 import os
+import socket
 import sys
 import time
 from datetime import datetime, timedelta
@@ -8,12 +10,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from croniter import croniter
 from redis import Redis
+from redis.client import Pipeline
 
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .utils import now
+from .serializers import resolve_serializer
+from .utils import as_text, decode_redis_hash, now, str_to_date, utcformat
 
 
 class CronJob:
@@ -110,9 +114,16 @@ class CronScheduler:
         self,
         connection: Redis,
         logging_level: Union[str, int] = logging.INFO,
+        name: Optional[str] = None,
     ):
         self.connection: Redis = connection
         self._cron_jobs: List[CronJob] = []
+        self.hostname: str = socket.gethostname()
+        self.pid: int = os.getpid()
+        self.name: str = name or f"{self.hostname}:{self.pid}"
+        self.config_file: Optional[str] = None
+        self.created_at: datetime = now()
+        self.serializer = resolve_serializer()
 
         self.log: logging.Logger = logging.getLogger(__name__)
         if not self.log.hasHandlers():
@@ -228,6 +239,7 @@ class CronScheduler:
         Args:
             config_path: Path to the cron_config.py file or module path.
         """
+        self.config_file = config_path
         self.log.info(f'Loading cron configuration from {config_path}')
 
         global _job_data_registry
@@ -305,6 +317,52 @@ class CronScheduler:
         _job_data_registry = []  # type: ignore
         self.log.info(f"Successfully registered {job_count} cron jobs from '{config_path}'")
         # Method modifies the instance, no need to return self unless chaining is desired
+
+    @property
+    def key(self) -> str:
+        """Redis key for this CronScheduler instance"""
+        return f"rq:cron_scheduler:{self.name}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert CronScheduler instance to a dictionary for Redis storage"""
+        obj = {
+            'hostname': self.hostname,
+            'pid': str(self.pid),
+            'name': self.name,
+            'created_at': utcformat(self.created_at),
+            'config_file': self.config_file or '',
+        }
+        return obj
+
+    def save(self, pipeline: Optional[Pipeline] = None) -> None:
+        """Save CronScheduler instance to Redis hash"""
+        key = self.key
+        connection = pipeline if pipeline is not None else self.connection
+        mapping = self.to_dict()
+        connection.hset(key, mapping=mapping)
+
+    def restore(self, raw_data: Dict) -> None:
+        """Restore CronScheduler instance from Redis hash data"""
+        obj = decode_redis_hash(raw_data)
+        
+        self.hostname = obj.get('hostname', '')
+        self.pid = int(obj.get('pid', 0))
+        self.name = obj.get('name', '')
+        self.created_at = str_to_date(obj.get('created_at'))
+        self.config_file = obj.get('config_file') or None
+
+    @classmethod
+    def load(cls, name: str, connection: Redis, logging_level: Union[str, int] = logging.INFO) -> Optional['CronScheduler']:
+        """Load a CronScheduler instance from Redis by name"""
+        key = f"rq:cron_scheduler:{name}"
+        raw_data = connection.hgetall(key)
+        
+        if not raw_data:
+            return None
+        
+        scheduler = cls(connection=connection, logging_level=logging_level, name=name)
+        scheduler.restore(raw_data)
+        return scheduler
 
 
 # Global registry to store job data before Cron instance is created

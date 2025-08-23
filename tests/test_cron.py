@@ -1,4 +1,5 @@
 import os
+import socket
 import tempfile
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -242,6 +243,20 @@ class TestCronScheduler(RQTestCase):
         self.queue_name = 'default'
         # Ensure clean global registry before each test method in this class
         _job_data_registry.clear()
+
+    def test_scheduler_tracking_attributes(self):
+        """Test that CronScheduler tracks hostname, pid, and config_file"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Test initial values
+        self.assertEqual(cron.hostname, socket.gethostname())
+        self.assertEqual(cron.pid, os.getpid())
+        self.assertIsNone(cron.config_file)
+
+        # Test config_file is set when loading config
+        config_file_path = 'tests/cron_config.py'
+        cron.load_config_from_file(config_file_path)
+        self.assertEqual(cron.config_file, config_file_path)
 
     def test_register_job(self):
         """Test registering jobs with different configurations"""
@@ -727,3 +742,70 @@ class TestCronScheduler(RQTestCase):
         # Interval job should run immediately, cron job should wait for schedule
         self.assertTrue(interval_job.should_run())  # Interval jobs run immediately
         self.assertFalse(cron_job.should_run())  # Cron jobs wait for their schedule
+
+    def test_cron_scheduler_to_dict(self):
+        """Test that CronScheduler can be serialized to a dictionary"""
+        cron = CronScheduler(connection=self.connection, name="test-scheduler")
+        cron.config_file = "test_config.py"
+        
+        data = cron.to_dict()
+        
+        self.assertEqual(data['hostname'], cron.hostname)
+        self.assertEqual(data['pid'], str(cron.pid))
+        self.assertEqual(data['name'], "test-scheduler")
+        self.assertEqual(data['config_file'], "test_config.py")
+        self.assertIn('created_at', data)
+
+    def test_cron_scheduler_save_and_restore(self):
+        """Test that CronScheduler can be saved to and restored from Redis"""
+        # Create and configure scheduler
+        original_scheduler = CronScheduler(connection=self.connection, name="test-scheduler")
+        original_scheduler.config_file = "test_config.py"
+        
+        # Save to Redis
+        original_scheduler.save()
+        
+        # Verify data exists in Redis
+        key = original_scheduler.key
+        redis_data = self.connection.hgetall(key)
+        self.assertGreater(len(redis_data), 0)
+        
+        # Create new scheduler and restore from Redis data
+        restored_scheduler = CronScheduler(connection=self.connection, name="restored-scheduler")
+        restored_scheduler.restore(redis_data)
+        
+        # Verify restored data matches original
+        self.assertEqual(restored_scheduler.hostname, original_scheduler.hostname)
+        self.assertEqual(restored_scheduler.pid, original_scheduler.pid)
+        self.assertEqual(restored_scheduler.name, original_scheduler.name)
+        self.assertEqual(restored_scheduler.config_file, original_scheduler.config_file)
+        self.assertEqual(restored_scheduler.created_at, original_scheduler.created_at)
+
+    def test_cron_scheduler_load_from_redis(self):
+        """Test that CronScheduler can be loaded from Redis using the load class method"""
+        # Create and save a scheduler
+        original_scheduler = CronScheduler(connection=self.connection, name="persistent-scheduler")
+        original_scheduler.config_file = "persistent_config.py"
+        original_scheduler.save()
+        
+        # Load scheduler from Redis
+        loaded_scheduler = CronScheduler.load("persistent-scheduler", self.connection)
+        
+        # Verify loaded scheduler matches original
+        self.assertIsNotNone(loaded_scheduler)
+        self.assertEqual(loaded_scheduler.hostname, original_scheduler.hostname)
+        self.assertEqual(loaded_scheduler.pid, original_scheduler.pid)
+        self.assertEqual(loaded_scheduler.name, original_scheduler.name)
+        self.assertEqual(loaded_scheduler.config_file, original_scheduler.config_file)
+        self.assertEqual(loaded_scheduler.created_at, original_scheduler.created_at)
+
+    def test_cron_scheduler_load_nonexistent(self):
+        """Test that loading a nonexistent scheduler returns None"""
+        loaded_scheduler = CronScheduler.load("nonexistent-scheduler", self.connection)
+        self.assertIsNone(loaded_scheduler)
+
+    def test_cron_scheduler_default_name(self):
+        """Test that CronScheduler creates a default name if none provided"""
+        cron = CronScheduler(connection=self.connection)
+        expected_name = f"{cron.hostname}:{cron.pid}"
+        self.assertEqual(cron.name, expected_name)
