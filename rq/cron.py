@@ -11,6 +11,7 @@ from croniter import croniter
 from redis import Redis
 from redis.client import Pipeline
 
+from . import cron_scheduler_registry
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .exceptions import SchedulerNotFound
 from .job import Job
@@ -361,6 +362,16 @@ class CronScheduler:
         scheduler = cls(connection=connection, name=name)
         scheduler.restore(raw_data)
         return scheduler
+
+    def register_birth(self, pipeline: Optional[Pipeline] = None) -> None:
+        """Register this scheduler's birth in the scheduler registry"""
+        self.log.info(f'CronScheduler {self.name}: registering birth...')
+        cron_scheduler_registry.register(self, pipeline)
+
+    def register_death(self, pipeline: Optional[Pipeline] = None) -> None:
+        """Register this scheduler's death by removing it from the scheduler registry"""
+        self.log.info(f'CronScheduler {self.name}: registering death...')
+        cron_scheduler_registry.unregister(self, pipeline)
 
 
 # Global registry to store job data before Cron instance is created

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler, _job_data_registry
+from rq.cron_scheduler_registry import get_keys, get_registry_key
 from rq.exceptions import SchedulerNotFound
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
@@ -804,3 +805,25 @@ class TestCronScheduler(RQTestCase):
         cron = CronScheduler(connection=self.connection)
         expected_name = f'{cron.hostname}:{cron.pid}'
         self.assertEqual(cron.name, expected_name)
+
+    def test_register_birth_and_death(self):
+        """Test that register_birth and register_death manage scheduler registry"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Ensure registry is clean
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Register birth
+        cron.register_birth()
+
+        # Verify scheduler is in registry
+        registered_keys = get_keys(self.connection)
+        self.assertIn('test-scheduler', registered_keys)
+
+        # Register death
+        cron.register_death()
+
+        # Verify scheduler is no longer in registry
+        registered_keys = get_keys(self.connection)
+        self.assertNotIn('test-scheduler', registered_keys)
