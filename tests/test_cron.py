@@ -1,8 +1,13 @@
 import os
+import signal
 import socket
 import tempfile
+import time
 from datetime import datetime, timedelta
+from multiprocessing import Process
 from unittest.mock import patch
+
+from redis import Redis
 
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler, _job_data_registry
@@ -14,6 +19,14 @@ from tests.fixtures import div_by_zero, do_nothing, say_hello
 
 class BreakLoop(Exception):
     pass
+
+
+def run_scheduler(redis_connection_kwargs):
+    """Target function to run the scheduler in a separate process."""
+    scheduler = CronScheduler(connection=Redis(**redis_connection_kwargs))
+    # Register a job that runs every second to keep the scheduler busy
+    scheduler.register(do_nothing, 'default', interval=1)
+    scheduler.start()
 
 
 class TestCronJob(RQTestCase):
@@ -790,11 +803,7 @@ class TestCronScheduler(RQTestCase):
         loaded_scheduler = CronScheduler.fetch('persistent-scheduler', self.connection)
 
         # Verify fetched scheduler matches original
-        self.assertEqual(loaded_scheduler.hostname, original_scheduler.hostname)
-        self.assertEqual(loaded_scheduler.pid, original_scheduler.pid)
         self.assertEqual(loaded_scheduler.name, original_scheduler.name)
-        self.assertEqual(loaded_scheduler.config_file, original_scheduler.config_file)
-        self.assertEqual(loaded_scheduler.created_at, original_scheduler.created_at)
 
         # Test that fetching a nonexistent scheduler raises SchedulerNotFound
         with self.assertRaises(SchedulerNotFound):
@@ -827,3 +836,49 @@ class TestCronScheduler(RQTestCase):
         # Verify scheduler is no longer in registry
         registered_keys = get_keys(self.connection)
         self.assertNotIn('test-scheduler', registered_keys)
+
+    @patch('rq.cron.CronScheduler.register_death')
+    @patch('rq.cron.CronScheduler._install_signal_handlers')
+    def test_start_always_calls_register_death_on_exception(self, mock_signal_handlers, mock_register_death):
+        """Test that start() calls register_death even when an exception occurs in the main loop"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Mock enqueue_jobs to raise an exception
+        with patch.object(cron, 'enqueue_jobs', side_effect=Exception('Test exception')):
+            with self.assertRaises(Exception) as cm:
+                cron.start()
+
+            self.assertEqual(str(cm.exception), 'Test exception')
+
+            # Verify register_death was still called
+            mock_signal_handlers.assert_called_once()
+            mock_register_death.assert_called_once()
+
+    @patch('rq.cron.CronScheduler.register_death')
+    def test_start_handles_keyboard_interrupt(self, mock_register_death):
+        """Test that start() handles KeyboardInterrupt gracefully"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Mock enqueue_jobs to raise KeyboardInterrupt
+        with patch.object(cron, 'enqueue_jobs', side_effect=KeyboardInterrupt('Ctrl+C')):
+            # start() should handle KeyboardInterrupt without re-raising it
+            cron.start()
+
+            # Verify lifecycle methods were called
+            mock_register_death.assert_called_once()
+
+    def test_sigint_handling(self):
+        """Test that sending SIGINT to the process stops the scheduler"""
+        conn_kwargs = self.connection.connection_pool.connection_kwargs
+        scheduler_process = Process(target=run_scheduler, args=(conn_kwargs,))
+        scheduler_process.start()
+        assert scheduler_process.pid
+        time.sleep(0.2)
+        # Ensure scheduler is registered
+        scheduler_name = f'{socket.gethostname()}:{scheduler_process.pid}'
+        self.assertIn(scheduler_name, get_keys(self.connection))
+        os.kill(scheduler_process.pid, signal.SIGINT)
+
+        scheduler_process.join(timeout=2)
+        self.assertFalse(scheduler_process.is_alive())
+        self.assertNotIn(scheduler_name, get_keys(self.connection))

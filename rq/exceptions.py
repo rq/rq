@@ -46,3 +46,7 @@ class SchedulerNotFound(Exception):
 
 class DuplicateSchedulerError(Exception):
     pass
+
+
+class StopRequested(Exception):
+    pass

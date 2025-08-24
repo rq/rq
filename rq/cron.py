@@ -1,6 +1,7 @@
 import importlib.util
 import logging
 import os
+import signal
 import socket
 import sys
 import time
@@ -13,7 +14,7 @@ from redis.client import Pipeline
 
 from . import cron_scheduler_registry
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
-from .exceptions import SchedulerNotFound
+from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -217,15 +218,39 @@ class CronScheduler:
         # Cap maximum sleep time at 60 seconds
         return min(seconds_until_next, 60)
 
+    def _install_signal_handlers(self):
+        """Install signal handlers for graceful shutdown."""
+        signal.signal(signal.SIGINT, self._request_stop)
+        signal.signal(signal.SIGTERM, self._request_stop)
+
+    def _request_stop(self, signum, frame):
+        """Handle shutdown signals gracefully."""
+        self.log.info('CronScheduler %s: received shutdown signal %s', self.name, signum)
+        raise StopRequested()
+
     def start(self):
         """Start the cron scheduler"""
-        self.log.info('Starting cron scheduler...')
-        while True:
-            self.enqueue_jobs()
-            sleep_time = self.calculate_sleep_interval()
-            if sleep_time > 0:
-                self.log.debug(f'Sleeping for {sleep_time} seconds...')
-                time.sleep(sleep_time)
+        self.log.info('CronScheduler %s: starting...', self.name)
+
+        # Register birth and install signal handlers
+        self._install_signal_handlers()
+        self.register_birth()
+
+        try:
+            while True:
+                self.enqueue_jobs()
+                sleep_time = self.calculate_sleep_interval()
+                if sleep_time > 0:
+                    self.log.debug(f'Sleeping for {sleep_time} seconds...')
+                    time.sleep(sleep_time)
+        except KeyboardInterrupt:
+            self.log.info('CronScheduler %s: received KeyboardInterrupt', self.name)
+        except StopRequested:
+            self.log.info('CronScheduler %s: stop requested', self.name)
+        finally:
+            # Register death before shutting down
+            self.register_death()
+            self.log.info('CronScheduler %s: shutdown complete', self.name)
 
     def load_config_from_file(self, config_path: str):
         """
