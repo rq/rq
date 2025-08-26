@@ -8,6 +8,7 @@ terminal colorizing code, originally by Georg Brandl.
 import calendar
 import datetime
 import importlib
+import inspect
 import logging
 import numbers
 import warnings
@@ -42,6 +43,33 @@ ObjOrStr = Union[_O, str]
 
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_function_reference(func) -> tuple[Any, str]:
+    """Resolve a function reference into instance and function name components.
+
+    Args:
+        func: The function reference to resolve - can be a method, function,
+             builtin, string path, or callable class instance.
+
+    Returns:
+        A tuple of (instance, func_name) where:
+        - instance: The object instance (for methods/callable instances) or None
+        - func_name: The string representation of the function name/path
+
+    Raises:
+        TypeError: If func is not a valid callable or string reference.
+    """
+    if inspect.ismethod(func):
+        return func.__self__, func.__name__
+    elif inspect.isfunction(func) or inspect.isbuiltin(func):
+        return None, f'{func.__module__}.{func.__qualname__}'
+    elif isinstance(func, str):
+        return None, as_text(func)
+    elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
+        return func, '__call__'
+    else:
+        raise TypeError(f'Expected a callable or a string, but got: {func}')
 
 
 def compact(lst: Iterable[Optional[_T]]) -> list[_T]:
