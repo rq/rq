@@ -42,6 +42,7 @@ from .utils import (
     import_attribute,
     now,
     parse_timeout,
+    resolve_function_reference,
     str_to_date,
     utcformat,
 )
@@ -295,11 +296,6 @@ class Job:
         if kwargs is None:
             kwargs = {}
 
-        if not isinstance(args, (tuple, list)):
-            raise TypeError(f'{args!r} is not a valid args list')
-        if not isinstance(kwargs, dict):
-            raise TypeError(f'{kwargs!r} is not a valid kwargs dict')
-
         job = cls(connection=connection, serializer=serializer)
         if id is not None:
             job.set_id(id)
@@ -308,19 +304,7 @@ class Job:
             job.origin = origin
 
         # Set the core job tuple properties
-        job._instance = None
-        if inspect.ismethod(func):
-            job._instance = func.__self__
-            job._func_name = func.__name__
-        elif inspect.isfunction(func) or inspect.isbuiltin(func):
-            job._func_name = f'{func.__module__}.{func.__qualname__}'
-        elif isinstance(func, str):
-            job._func_name = as_text(func)
-        elif not inspect.isclass(func) and hasattr(func, '__call__'):  # a callable class instance
-            job._instance = func
-            job._func_name = '__call__'
-        else:
-            raise TypeError(f'Expected a callable or a string, but got: {func}')
+        job._instance, job._func_name = resolve_function_reference(func)
         job._args = args
         job._kwargs = kwargs
 
@@ -1791,4 +1775,5 @@ class Callback:
     def name(self) -> str:
         if isinstance(self.func, str):
             return self.func
-        return f'{self.func.__module__}.{self.func.__qualname__}'
+        _, func_name = resolve_function_reference(self.func)
+        return func_name
