@@ -838,7 +838,7 @@ class TestJob(RQTestCase):
         job_id = 'random'
         key = Job.key_for(job_id=job_id)
 
-        assert key == (Job.redis_job_namespace_prefix + job_id).encode('utf-8')
+        assert key == Job.redis_job_namespace_prefix + job_id
 
     @min_redis_version((5, 0, 0))
     def test_blocking_result_fetch(self):

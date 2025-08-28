@@ -745,16 +745,16 @@ class Job:
     id = property(get_id, set_id)
 
     @classmethod
-    def key_for(cls, job_id: str) -> bytes:
+    def key_for(cls, job_id: str) -> str:
         """The Redis key that is used to store job hash under.
 
         Args:
             job_id (str): The Job ID
 
         Returns:
-            redis_job_key (bytes): The Redis fully qualified key for the job
+            redis_job_key (str): The Redis fully qualified key for the job
         """
-        return (cls.redis_job_namespace_prefix + job_id).encode('utf-8')
+        return cls.redis_job_namespace_prefix + job_id
 
     @classmethod
     def dependents_key_for(cls, job_id: str) -> str:
@@ -1627,9 +1627,9 @@ class Job:
             connection.sadd(self.dependencies_key, dependency_id)
 
     @property
-    def dependency_ids(self) -> list[bytes]:
+    def dependency_ids(self) -> list[str]:
         dependencies = self.connection.smembers(self.dependencies_key)
-        return [Job.key_for(_id.decode()) for _id in dependencies]
+        return [_id.decode() for _id in dependencies]
 
     def dependencies_are_met(
         self,
