@@ -168,7 +168,7 @@ class Job:
         self.connection = connection
         self._id = id
         self.created_at = now()
-        self._data = UNEVALUATED
+        self._data: Union[bytes, 'UnevaluatedType'] = UNEVALUATED
         self._func_name: Union[str, UnevaluatedType] = UNEVALUATED
         self._instance: Optional[Union[object, UnevaluatedType]] = UNEVALUATED
         self._args: Union[tuple, list, UnevaluatedType] = UNEVALUATED
@@ -552,7 +552,7 @@ class Job:
             raise DeserializationError() from e
 
     @property
-    def data(self):
+    def data(self) -> bytes:
         if self._data is UNEVALUATED:
             if self._func_name is UNEVALUATED:
                 raise ValueError('Cannot build the job data')
@@ -568,7 +568,7 @@ class Job:
 
             job_tuple = self._func_name, self._instance, self._args, self._kwargs
             self._data = self.serializer.dumps(job_tuple)
-        return self._data
+        return cast(bytes, self._data)
 
     @data.setter
     def data(self, value):
@@ -745,16 +745,16 @@ class Job:
     id = property(get_id, set_id)
 
     @classmethod
-    def key_for(cls, job_id: str) -> bytes:
+    def key_for(cls, job_id: str) -> str:
         """The Redis key that is used to store job hash under.
 
         Args:
             job_id (str): The Job ID
 
         Returns:
-            redis_job_key (bytes): The Redis fully qualified key for the job
+            redis_job_key (str): The Redis fully qualified key for the job
         """
-        return (cls.redis_job_namespace_prefix + job_id).encode('utf-8')
+        return cls.redis_job_namespace_prefix + job_id
 
     @classmethod
     def dependents_key_for(cls, job_id: str) -> str:
@@ -1373,6 +1373,8 @@ class Job:
         Returns:
             result (Any): The function result
         """
+        if not self.func:
+            raise ValueError('Cannot execute job: function is None')
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
             loop = asyncio.new_event_loop()
@@ -1625,9 +1627,9 @@ class Job:
             connection.sadd(self.dependencies_key, dependency_id)
 
     @property
-    def dependency_ids(self) -> list[bytes]:
+    def dependency_ids(self) -> list[str]:
         dependencies = self.connection.smembers(self.dependencies_key)
-        return [Job.key_for(_id.decode()) for _id in dependencies]
+        return [_id.decode() for _id in dependencies]
 
     def dependencies_are_met(
         self,
