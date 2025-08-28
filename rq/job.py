@@ -1691,11 +1691,11 @@ class Job:
             if not dependencies_ids:
                 return True
 
-        with connection.pipeline() as inner_pipeline:
+        with connection.pipeline() as pipeline:
             for key in dependencies_ids:
-                inner_pipeline.hget(self.key_for(key), 'status')
+                pipeline.hget(self.key_for(key), 'status')
 
-            dependencies_statuses = inner_pipeline.execute()
+            dependencies_statuses = pipeline.execute()
 
         allowed_statuses = [JobStatus.FINISHED]
         if self.allow_dependency_failures:
