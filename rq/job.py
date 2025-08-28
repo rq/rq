@@ -168,7 +168,7 @@ class Job:
         self.connection = connection
         self._id = id
         self.created_at = now()
-        self._data = UNEVALUATED
+        self._data: Union[bytes, 'UnevaluatedType'] = UNEVALUATED
         self._func_name: Union[str, UnevaluatedType] = UNEVALUATED
         self._instance: Optional[Union[object, UnevaluatedType]] = UNEVALUATED
         self._args: Union[tuple, list, UnevaluatedType] = UNEVALUATED
@@ -552,7 +552,7 @@ class Job:
             raise DeserializationError() from e
 
     @property
-    def data(self):
+    def data(self) -> bytes:
         if self._data is UNEVALUATED:
             if self._func_name is UNEVALUATED:
                 raise ValueError('Cannot build the job data')
@@ -568,7 +568,7 @@ class Job:
 
             job_tuple = self._func_name, self._instance, self._args, self._kwargs
             self._data = self.serializer.dumps(job_tuple)
-        return self._data
+        return cast(bytes, self._data)
 
     @data.setter
     def data(self, value):
@@ -1373,6 +1373,8 @@ class Job:
         Returns:
             result (Any): The function result
         """
+        if not self.func:
+            raise ValueError('Cannot execute job: function is None')
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
             loop = asyncio.new_event_loop()
@@ -1689,11 +1691,11 @@ class Job:
             if not dependencies_ids:
                 return True
 
-        with connection.pipeline() as pipeline:
+        with connection.pipeline() as inner_pipeline:
             for key in dependencies_ids:
-                pipeline.hget(self.key_for(key), 'status')
+                inner_pipeline.hget(self.key_for(key), 'status')
 
-            dependencies_statuses = pipeline.execute()
+            dependencies_statuses = inner_pipeline.execute()
 
         allowed_statuses = [JobStatus.FINISHED]
         if self.allow_dependency_failures:
