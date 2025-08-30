@@ -74,3 +74,22 @@ def get_keys(connection: Redis) -> List[str]:
 
     # Decode bytes to strings
     return [key.decode('utf-8') if isinstance(key, bytes) else key for key in keys]
+
+
+def cleanup(connection: Redis, threshold: int = 120) -> int:
+    """Remove stale CronScheduler entries from the registry
+
+    Removes schedulers that haven't sent a heartbeat in more than `threshold` seconds.
+
+    Args:
+        connection: Redis connection to use
+        threshold: Number of seconds after which a scheduler is considered stale (default: 120)
+
+    Returns:
+        Number of stale entries removed
+    """
+    registry_key = get_registry_key()
+    cutoff_time = time.time() - threshold
+
+    # Remove entries with scores (timestamps) older than cutoff_time
+    return connection.zremrangebyscore(registry_key, 0, cutoff_time)

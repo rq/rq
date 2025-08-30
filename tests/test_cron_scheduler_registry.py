@@ -1,3 +1,5 @@
+import time
+
 from rq import cron_scheduler_registry
 from rq.cron import CronScheduler
 from rq.exceptions import DuplicateSchedulerError, SchedulerNotFound
@@ -88,3 +90,21 @@ class TestCronSchedulerRegistry(RQTestCase):
         keys = cron_scheduler_registry.get_keys(self.connection)
         self.assertEqual(len(keys), 1)
         self.assertIn('test-scheduler-duplicate', keys)
+
+    def test_cleanup(self):
+        """Test cleanup function removes stale entries and preserves recent ones"""
+
+        registry_key = cron_scheduler_registry.get_registry_key()
+        current_time = time.time()
+
+        self.connection.zadd(
+            registry_key, {'stale-scheduler': current_time - 150, 'recent-scheduler': current_time - 60}
+        )
+
+        # Cleanup with default threshold (120s) should remove only stale
+        self.assertEqual(cron_scheduler_registry.cleanup(self.connection), 1)
+        self.assertEqual(cron_scheduler_registry.get_keys(self.connection), ['recent-scheduler'])
+
+        # Test custom threshold - 30s should remove recent scheduler too
+        self.assertEqual(cron_scheduler_registry.cleanup(self.connection, threshold=30), 1)
+        self.assertEqual(cron_scheduler_registry.get_keys(self.connection), [])
