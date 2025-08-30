@@ -39,7 +39,13 @@ from .defaults import (
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
-from .exceptions import DequeueTimeout, DeserializationError, InvalidJobOperation, ShutDownImminentException
+from .exceptions import (
+    DequeueTimeout,
+    DeserializationError,
+    InvalidJobOperation,
+    ShutDownImminentException,
+    StopRequested,
+)
 from .executions import Execution
 from .group import Group
 from .job import Job, JobStatus, Retry
@@ -81,10 +87,6 @@ except ImportError:
 logger = logging.getLogger('rq.worker')
 if logger.level == logging.NOTSET:
     logger.setLevel(logging.INFO)
-
-
-class StopRequested(Exception):
-    pass
 
 
 _signames = dict(

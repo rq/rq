@@ -279,7 +279,6 @@ def start_worker_process(
     """
     Use multiprocessing to start a new worker in a separate process.
     """
-    connection = connection
     conn_kwargs = connection.connection_pool.connection_kwargs
     p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
     p.start()

@@ -934,9 +934,7 @@ class Job:
         self.description = as_text(obj['description']) if obj.get('description') else None
 
         self.enqueued_at = str_to_date(v) if (v := obj.get('enqueued_at')) else None
-
         self.started_at = str_to_date(v) if (v := obj.get('started_at')) else None
-
         self.ended_at = str_to_date(v) if (v := obj.get('ended_at')) else None
 
         self.last_heartbeat = str_to_date(v) if (v := obj.get('last_heartbeat')) else None
