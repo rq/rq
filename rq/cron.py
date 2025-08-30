@@ -138,6 +138,16 @@ class CronScheduler:
             )
             self.log.propagate = False
 
+    def __eq__(self, other) -> bool:
+        """Equality does not take the database/connection into account"""
+        if not isinstance(other, self.__class__):
+            return False
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        """The hash does not take the database/connection into account"""
+        return hash(self.name)
+
     def register(
         self,
         func: Callable,

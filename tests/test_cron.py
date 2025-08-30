@@ -1003,9 +1003,7 @@ class TestCronScheduler(RQTestCase):
         all_schedulers = CronScheduler.all(self.connection)
 
         # Should return all 3 schedulers
-        scheduler_names = {s.name for s in all_schedulers}
-        expected_names = {cron1.name, cron2.name, cron3.name}
-        self.assertEqual(scheduler_names, expected_names)
+        self.assertEqual(set(all_schedulers), {cron1, cron2, cron3})
 
         # Test with cleanup disabled
         all_schedulers_no_cleanup = CronScheduler.all(self.connection, cleanup=False)
@@ -1015,3 +1013,21 @@ class TestCronScheduler(RQTestCase):
         cron1.register_death()
         cron2.register_death()
         cron3.register_death()
+
+    def test_equality(self):
+        """Test that CronScheduler equality works correctly"""
+        # Schedulers with same name should be equal
+        cron1 = CronScheduler(connection=self.connection, name='test-scheduler')
+        cron2 = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        self.assertEqual(cron1, cron2)
+        self.assertEqual(hash(cron1), hash(cron2))
+
+        # Schedulers with different names should not be equal
+        cron3 = CronScheduler(connection=self.connection, name='different-scheduler')
+        self.assertNotEqual(cron1, cron3)
+        self.assertNotEqual(hash(cron1), hash(cron3))
+
+        # Scheduler should not equal non-scheduler objects
+        self.assertNotEqual(cron1, 'not-a-scheduler')
+        self.assertNotEqual(cron1, 42)
