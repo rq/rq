@@ -813,30 +813,53 @@ class TestCronScheduler(RQTestCase):
     def test_cron_scheduler_default_name(self):
         """Test that CronScheduler creates a default name if none provided"""
         cron = CronScheduler(connection=self.connection)
-        expected_name = f'{cron.hostname}:{cron.pid}'
-        self.assertEqual(cron.name, expected_name)
+        # Name should follow pattern: hostname:pid:random_suffix
+        expected_prefix = f'{cron.hostname}:{cron.pid}:'
+        self.assertTrue(cron.name.startswith(expected_prefix))
+        # Random suffix should be 6 characters (hex)
+        suffix = cron.name[len(expected_prefix) :]
+        self.assertEqual(len(suffix), 6)
+        self.assertTrue(all(c in '0123456789abcdef' for c in suffix))
 
     def test_register_birth_and_death(self):
-        """Test that register_birth and register_death manage scheduler registry"""
-        cron = CronScheduler(connection=self.connection, name='test-scheduler')
-
-        # Ensure registry is clean
-        registry_key = get_registry_key()
-        self.connection.delete(registry_key)
+        """Test that register_birth and register_death manage scheduler registry and Redis hash"""
+        cron = CronScheduler(connection=self.connection)
 
         # Register birth
         cron.register_birth()
 
         # Verify scheduler is in registry
         registered_keys = get_keys(self.connection)
-        self.assertIn('test-scheduler', registered_keys)
+        self.assertIn(cron.name, registered_keys)
+
+        # Verify Redis hash data was saved
+        self.assertTrue(self.connection.exists(cron.key))
+
+        # Verify TTL is set (should be 60 seconds)
+        ttl = self.connection.ttl(cron.key)
+        self.assertGreater(ttl, 0)
+        self.assertLessEqual(ttl, 60)
 
         # Register death
         cron.register_death()
 
         # Verify scheduler is no longer in registry
         registered_keys = get_keys(self.connection)
-        self.assertNotIn('test-scheduler', registered_keys)
+        self.assertNotIn(cron.name, registered_keys)
+
+    def test_fetch_after_register_birth(self):
+        """Test that CronScheduler can be fetched using saved Redis hash data"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Register birth to save data
+        cron.register_birth()
+
+        # Fetch the scheduler from Redis
+        fetched_cron = CronScheduler.fetch(cron.name, self.connection)
+
+        # Verify basic attributes were restored correctly
+        self.assertEqual(fetched_cron.name, cron.name)
+        self.assertEqual(fetched_cron.created_at, cron.created_at)
 
     def test_heartbeat(self):
         """Test that heartbeat() updates scheduler's timestamp in registry"""
@@ -907,14 +930,26 @@ class TestCronScheduler(RQTestCase):
         scheduler_process.start()
         assert scheduler_process.pid
         time.sleep(0.2)
-        # Ensure scheduler is registered
-        scheduler_name = f'{socket.gethostname()}:{scheduler_process.pid}'
-        self.assertIn(scheduler_name, get_keys(self.connection))
+        # Ensure scheduler is registered (name will have random suffix)
+        scheduler_prefix = f'{socket.gethostname()}:{scheduler_process.pid}:'
+
+        # Find scheduler with matching prefix
+        matching_scheduler = None
+        for key in get_keys(self.connection):
+            if key.startswith(scheduler_prefix):
+                matching_scheduler = key
+                break
+
+        self.assertTrue(matching_scheduler)
+
         os.kill(scheduler_process.pid, signal.SIGINT)
 
         scheduler_process.join(timeout=2)
         self.assertFalse(scheduler_process.is_alive())
-        self.assertNotIn(scheduler_name, get_keys(self.connection))
+
+        # Verify scheduler is no longer registered
+        keys = get_keys(self.connection)
+        self.assertEqual([key for key in keys if key.startswith(scheduler_prefix)], [])
 
     def test_last_heartbeat_property(self):
         """Test that last_heartbeat property works correctly in all scenarios"""
@@ -947,3 +982,36 @@ class TestCronScheduler(RQTestCase):
         # After death, should return None
         cron.register_death()
         self.assertIsNone(cron.last_heartbeat)
+
+    def test_all(self):
+        """Test that CronScheduler.all() returns all registered schedulers"""
+        # Clean up any existing schedulers
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Create multiple schedulers with default names (now unique due to random suffix)
+        cron1 = CronScheduler(connection=self.connection)
+        cron2 = CronScheduler(connection=self.connection)
+        cron3 = CronScheduler(connection=self.connection)
+
+        # Register births
+        cron1.register_birth()
+        cron2.register_birth()
+        cron3.register_birth()
+
+        # Test all() method
+        all_schedulers = CronScheduler.all(self.connection)
+
+        # Should return all 3 schedulers
+        scheduler_names = {s.name for s in all_schedulers}
+        expected_names = {cron1.name, cron2.name, cron3.name}
+        self.assertEqual(scheduler_names, expected_names)
+
+        # Test with cleanup disabled
+        all_schedulers_no_cleanup = CronScheduler.all(self.connection, cleanup=False)
+        self.assertEqual(len(all_schedulers_no_cleanup), 3)
+
+        # Register death for cleanup
+        cron1.register_death()
+        cron2.register_death()
+        cron3.register_death()

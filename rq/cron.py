@@ -5,6 +5,7 @@ import signal
 import socket
 import sys
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -122,7 +123,7 @@ class CronScheduler:
         self._cron_jobs: List[CronJob] = []
         self.hostname: str = socket.gethostname()
         self.pid: int = os.getpid()
-        self.name: str = name or f'{self.hostname}:{self.pid}'
+        self.name: str = name or f'{self.hostname}:{self.pid}:{uuid.uuid4().hex[:6]}'
         self.config_file: str = ''
         self.created_at: datetime = now()
         self.serializer = resolve_serializer()
@@ -362,9 +363,10 @@ class CronScheduler:
         return obj
 
     def save(self, pipeline: Optional[Pipeline] = None) -> None:
-        """Save CronScheduler instance to Redis hash"""
+        """Save CronScheduler instance to Redis hash with TTL"""
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, mapping=self.to_dict())
+        connection.expire(self.key, 60)
 
     def restore(self, raw_data: Dict) -> None:
         """Restore CronScheduler instance from Redis hash data"""
@@ -389,10 +391,40 @@ class CronScheduler:
         scheduler.restore(raw_data)
         return scheduler
 
-    def register_birth(self, pipeline: Optional[Pipeline] = None) -> None:
-        """Register this scheduler's birth in the scheduler registry"""
+    @classmethod
+    def all(cls, connection: Redis, cleanup: bool = True) -> List['CronScheduler']:
+        """Returns all CronScheduler instances from the registry
+
+        Args:
+            connection: Redis connection to use
+            cleanup: If True, removes stale entries from registry before fetching schedulers
+
+        Returns:
+            List of CronScheduler instances
+        """
+        from contextlib import suppress
+
+        if cleanup:
+            cron_scheduler_registry.cleanup(connection)
+
+        scheduler_names = cron_scheduler_registry.get_keys(connection)
+        schedulers = []
+
+        for name in scheduler_names:
+            with suppress(SchedulerNotFound):
+                scheduler = cls.fetch(name, connection)
+                schedulers.append(scheduler)
+
+        return schedulers
+
+    def register_birth(self) -> None:
+        """Register this scheduler's birth in the scheduler registry and save data to Redis hash"""
         self.log.info(f'CronScheduler {self.name}: registering birth...')
-        cron_scheduler_registry.register(self, pipeline)
+
+        with self.connection.pipeline() as pipeline:
+            cron_scheduler_registry.register(self, pipeline)
+            self.save(pipeline)
+            pipeline.execute()
 
     def register_death(self, pipeline: Optional[Pipeline] = None) -> None:
         """Register this scheduler's death by removing it from the scheduler registry"""
