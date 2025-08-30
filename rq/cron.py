@@ -5,7 +5,7 @@ import signal
 import socket
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from croniter import croniter
@@ -406,14 +406,28 @@ class CronScheduler:
             pipeline: Redis pipeline to use. If None, uses self.connection
         """
         connection = pipeline if pipeline is not None else self.connection
-        registry_key = cron_scheduler_registry.get_registry_key()
 
         # Use current timestamp as score to track when scheduler was last seen
-        result = connection.zadd(registry_key, {self.name: time.time()}, xx=True)
+        result = connection.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True)
         if result:
             self.log.debug(f'CronScheduler {self.name}: heartbeat sent successfully')
         else:
             self.log.warning(f'CronScheduler {self.name}: heartbeat failed - scheduler not found in registry')
+
+    @property
+    def last_heartbeat(self) -> Optional[datetime]:
+        """Return the UTC datetime of the last heartbeat, or None if no heartbeat recorded
+
+        Returns:
+            datetime: UTC datetime of the last heartbeat, or None if scheduler not found in registry
+        """
+        score = self.connection.zscore(cron_scheduler_registry.get_registry_key(), self.name)
+
+        if score is None:
+            return None
+
+        # Convert Unix timestamp to UTC datetime
+        return datetime.fromtimestamp(score, tz=timezone.utc)
 
 
 # Global registry to store job data before Cron instance is created

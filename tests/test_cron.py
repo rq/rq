@@ -3,7 +3,7 @@ import signal
 import socket
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from typing import cast
 from unittest.mock import patch
@@ -915,3 +915,35 @@ class TestCronScheduler(RQTestCase):
         scheduler_process.join(timeout=2)
         self.assertFalse(scheduler_process.is_alive())
         self.assertNotIn(scheduler_name, get_keys(self.connection))
+
+    def test_last_heartbeat_property(self):
+        """Test that last_heartbeat property works correctly in all scenarios"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Ensure registry is clean
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Register scheduler and verify heartbeat timestamp
+        before_registration = datetime.now(timezone.utc)
+        cron.register_birth()
+        initial_heartbeat = cron.last_heartbeat
+
+        assert initial_heartbeat
+
+        after_registration = datetime.now(timezone.utc)
+        # Heartbeat should be between before and after registration
+        self.assertGreaterEqual(initial_heartbeat, before_registration - timedelta(seconds=1))
+        self.assertLessEqual(initial_heartbeat, after_registration + timedelta(seconds=1))
+
+        # Wait and send heartbeat, should update timestamp
+        time.sleep(0.01)
+        cron.heartbeat()
+
+        new_heartbeat = cron.last_heartbeat
+        assert new_heartbeat
+        self.assertGreater(new_heartbeat, initial_heartbeat)
+
+        # After death, should return None
+        cron.register_death()
+        self.assertIsNone(cron.last_heartbeat)

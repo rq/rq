@@ -88,8 +88,7 @@ def cleanup(connection: Redis, threshold: int = 120) -> int:
     Returns:
         Number of stale entries removed
     """
-    registry_key = get_registry_key()
     cutoff_time = time.time() - threshold
 
     # Remove entries with scores (timestamps) older than cutoff_time
-    return connection.zremrangebyscore(registry_key, 0, cutoff_time)
+    return connection.zremrangebyscore(get_registry_key(), 0, cutoff_time)
