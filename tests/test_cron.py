@@ -5,6 +5,7 @@ import tempfile
 import time
 from datetime import datetime, timedelta
 from multiprocessing import Process
+from typing import cast
 from unittest.mock import patch
 
 from redis import Redis
@@ -779,11 +780,11 @@ class TestCronScheduler(RQTestCase):
         # Verify data exists in Redis
         key = original_scheduler.key
         redis_data = self.connection.hgetall(key)
-        self.assertGreater(len(redis_data), 0)
+        self.assertGreater(len(cast(dict, redis_data)), 0)
 
         # Create new scheduler and restore from Redis data
         restored_scheduler = CronScheduler(connection=self.connection, name='restored-scheduler')
-        restored_scheduler.restore(redis_data)
+        restored_scheduler.restore(cast(dict, redis_data))
 
         # Verify restored data matches original
         self.assertEqual(restored_scheduler.hostname, original_scheduler.hostname)
@@ -836,6 +837,38 @@ class TestCronScheduler(RQTestCase):
         # Verify scheduler is no longer in registry
         registered_keys = get_keys(self.connection)
         self.assertNotIn('test-scheduler', registered_keys)
+
+    def test_heartbeat(self):
+        """Test that heartbeat() updates scheduler's timestamp in registry"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Ensure registry is clean
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Register scheduler first (heartbeat only works on registered schedulers)
+        cron.register_birth()
+        initial_score = self.connection.zscore(registry_key, cron.name)
+        self.assertIsNotNone(initial_score)
+
+        # Wait a brief moment to ensure timestamp difference
+        time.sleep(0.01)
+
+        cron.heartbeat()
+        new_score = self.connection.zscore(registry_key, cron.name)
+        self.assertIsNotNone(new_score)
+        self.assertGreater(cast(float, new_score), cast(float, initial_score))
+        cron.register_death()
+
+        # Test heartbeat on unregistered scheduler
+        unregistered_cron = CronScheduler(connection=self.connection, name='unregistered-scheduler')
+
+        # This should not raise an exception, but should log a warning
+        unregistered_cron.heartbeat()
+
+        # Verify unregistered scheduler is still not in registry
+        score = self.connection.zscore(registry_key, 'unregistered-scheduler')
+        self.assertIsNone(score)
 
     @patch('rq.cron.CronScheduler.register_death')
     @patch('rq.cron.CronScheduler._install_signal_handlers')

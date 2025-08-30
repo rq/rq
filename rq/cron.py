@@ -239,6 +239,7 @@ class CronScheduler:
         try:
             while True:
                 self.enqueue_jobs()
+                self.heartbeat()
                 sleep_time = self.calculate_sleep_interval()
                 if sleep_time > 0:
                     self.log.debug(f'Sleeping for {sleep_time} seconds...')
@@ -397,6 +398,22 @@ class CronScheduler:
         """Register this scheduler's death by removing it from the scheduler registry"""
         self.log.info(f'CronScheduler {self.name}: registering death...')
         cron_scheduler_registry.unregister(self, pipeline)
+
+    def heartbeat(self, pipeline: Optional[Pipeline] = None) -> None:
+        """Send a heartbeat to update this scheduler's last seen timestamp in the registry
+
+        Args:
+            pipeline: Redis pipeline to use. If None, uses self.connection
+        """
+        connection = pipeline if pipeline is not None else self.connection
+        registry_key = cron_scheduler_registry.get_registry_key()
+
+        # Use current timestamp as score to track when scheduler was last seen
+        result = connection.zadd(registry_key, {self.name: time.time()}, xx=True)
+        if result:
+            self.log.debug(f'CronScheduler {self.name}: heartbeat sent successfully')
+        else:
+            self.log.warning(f'CronScheduler {self.name}: heartbeat failed - scheduler not found in registry')
 
 
 # Global registry to store job data before Cron instance is created
