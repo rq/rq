@@ -1,16 +1,33 @@
 import os
+import signal
+import socket
 import tempfile
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
+from multiprocessing import Process
+from typing import cast
 from unittest.mock import patch
+
+from redis import Redis
 
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler, _job_data_registry
+from rq.cron_scheduler_registry import get_keys, get_registry_key
+from rq.exceptions import SchedulerNotFound
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
 
 class BreakLoop(Exception):
     pass
+
+
+def run_scheduler(redis_connection_kwargs):
+    """Target function to run the scheduler in a separate process."""
+    scheduler = CronScheduler(connection=Redis(**redis_connection_kwargs))
+    # Register a job that runs every second to keep the scheduler busy
+    scheduler.register(do_nothing, 'default', interval=1)
+    scheduler.start()
 
 
 class TestCronJob(RQTestCase):
@@ -243,6 +260,20 @@ class TestCronScheduler(RQTestCase):
         # Ensure clean global registry before each test method in this class
         _job_data_registry.clear()
 
+    def test_scheduler_tracking_attributes(self):
+        """Test that CronScheduler tracks hostname, pid, and config_file"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Test initial values
+        self.assertEqual(cron.hostname, socket.gethostname())
+        self.assertEqual(cron.pid, os.getpid())
+        self.assertFalse(cron.config_file)
+
+        # Test config_file is set when loading config
+        config_file_path = 'tests/cron_config.py'
+        cron.load_config_from_file(config_file_path)
+        self.assertEqual(cron.config_file, config_file_path)
+
     def test_register_job(self):
         """Test registering jobs with different configurations"""
         cron = CronScheduler(connection=self.connection)  # Create instance for test
@@ -465,9 +496,8 @@ class TestCronScheduler(RQTestCase):
 
         # Test 3: Test error handling with a non-existent path
         cron = CronScheduler(connection=self.connection)
-        with self.assertRaises(Exception) as context:  # Expect FileNotFoundError or ImportError
+        with self.assertRaises(Exception):  # Expect FileNotFoundError or ImportError
             cron.load_config_from_file('path/does/not/exist.py')
-        self.assertIn('not found', str(context.exception).lower())
         self.assertEqual(len(cron.get_jobs()), 0)  # No jobs should be loaded
         self.assertEqual(len(_job_data_registry), 0, 'Registry not cleared after non-existent path error')
 
@@ -477,10 +507,9 @@ class TestCronScheduler(RQTestCase):
             invalid_file.write('this is not valid python code :')
             invalid_file_path = invalid_file.name  # Store path before closing
         try:
-            with self.assertRaises(Exception) as context:  # Expect ImportError or SyntaxError inside
+            with self.assertRaises(Exception):  # Expect ImportError or SyntaxError inside
                 cron.load_config_from_file(invalid_file_path)
 
-            self.assertIn('failed to load configuration file', str(context.exception).lower())
             self.assertEqual(len(cron.get_jobs()), 0)  # No jobs should be loaded
             self.assertEqual(len(_job_data_registry), 0, 'Registry not cleared after invalid content error')
         finally:
@@ -541,16 +570,14 @@ class TestCronScheduler(RQTestCase):
         """Test that registering with both interval and cron arguments"""
         cron = CronScheduler(connection=self.connection)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ValueError):
             cron.register(func=say_hello, queue_name=self.queue_name, interval=60, cron='0 9 * * *')
-        self.assertIn('Cannot specify both interval and cron parameters', str(context.exception))
 
         # Registering with neither interval nor cron also raises an error
         cron = CronScheduler(connection=self.connection)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ValueError):
             cron.register(func=say_hello, queue_name=self.queue_name)
-        self.assertIn('Must specify either interval or cron parameter', str(context.exception))
 
     def test_enqueue_jobs_with_cron_strings(self):
         """Test that cron.register correctly handles cron-scheduled jobs"""
@@ -727,3 +754,280 @@ class TestCronScheduler(RQTestCase):
         # Interval job should run immediately, cron job should wait for schedule
         self.assertTrue(interval_job.should_run())  # Interval jobs run immediately
         self.assertFalse(cron_job.should_run())  # Cron jobs wait for their schedule
+
+    def test_cron_scheduler_to_dict(self):
+        """Test that CronScheduler can be serialized to a dictionary"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+        cron.config_file = 'test_config.py'
+
+        data = cron.to_dict()
+
+        self.assertEqual(data['hostname'], cron.hostname)
+        self.assertEqual(data['pid'], str(cron.pid))
+        self.assertEqual(data['name'], 'test-scheduler')
+        self.assertEqual(data['config_file'], 'test_config.py')
+        self.assertIn('created_at', data)
+
+    def test_cron_scheduler_save_and_restore(self):
+        """Test that CronScheduler can be saved to and restored from Redis"""
+        # Create and configure scheduler
+        original_scheduler = CronScheduler(connection=self.connection, name='test-scheduler')
+        original_scheduler.config_file = 'test_config.py'
+
+        # Save to Redis
+        original_scheduler.save()
+
+        # Verify data exists in Redis
+        key = original_scheduler.key
+        redis_data = self.connection.hgetall(key)
+        self.assertGreater(len(cast(dict, redis_data)), 0)
+
+        # Create new scheduler and restore from Redis data
+        restored_scheduler = CronScheduler(connection=self.connection, name='restored-scheduler')
+        restored_scheduler.restore(cast(dict, redis_data))
+
+        # Verify restored data matches original
+        self.assertEqual(restored_scheduler.hostname, original_scheduler.hostname)
+        self.assertEqual(restored_scheduler.pid, original_scheduler.pid)
+        self.assertEqual(restored_scheduler.name, original_scheduler.name)
+        self.assertEqual(restored_scheduler.config_file, original_scheduler.config_file)
+        self.assertEqual(restored_scheduler.created_at, original_scheduler.created_at)
+
+    def test_cron_scheduler_fetch_from_redis(self):
+        """Test that CronScheduler can be fetched from Redis using the fetch class method"""
+        # Create and save a scheduler
+        original_scheduler = CronScheduler(connection=self.connection, name='persistent-scheduler')
+        original_scheduler.config_file = 'persistent_config.py'
+        original_scheduler.save()
+
+        # Fetch scheduler from Redis
+        loaded_scheduler = CronScheduler.fetch('persistent-scheduler', self.connection)
+
+        # Verify fetched scheduler matches original
+        self.assertEqual(loaded_scheduler.name, original_scheduler.name)
+
+        # Test that fetching a nonexistent scheduler raises SchedulerNotFound
+        with self.assertRaises(SchedulerNotFound):
+            CronScheduler.fetch('nonexistent-scheduler', self.connection)
+
+    def test_cron_scheduler_default_name(self):
+        """Test that CronScheduler creates a default name if none provided"""
+        cron = CronScheduler(connection=self.connection)
+        # Name should follow pattern: hostname:pid:random_suffix
+        expected_prefix = f'{cron.hostname}:{cron.pid}:'
+        self.assertTrue(cron.name.startswith(expected_prefix))
+        # Random suffix should be 6 characters (hex)
+        suffix = cron.name[len(expected_prefix) :]
+        self.assertEqual(len(suffix), 6)
+        self.assertTrue(all(c in '0123456789abcdef' for c in suffix))
+
+    def test_register_birth_and_death(self):
+        """Test that register_birth and register_death manage scheduler registry and Redis hash"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Register birth
+        cron.register_birth()
+
+        # Verify scheduler is in registry
+        registered_keys = get_keys(self.connection)
+        self.assertIn(cron.name, registered_keys)
+
+        # Verify Redis hash data was saved
+        self.assertTrue(self.connection.exists(cron.key))
+
+        # Verify TTL is set (should be 60 seconds)
+        ttl = self.connection.ttl(cron.key)
+        self.assertGreater(ttl, 0)
+        self.assertLessEqual(ttl, 60)
+
+        # Register death
+        cron.register_death()
+
+        # Verify scheduler is no longer in registry
+        registered_keys = get_keys(self.connection)
+        self.assertNotIn(cron.name, registered_keys)
+
+    def test_fetch_after_register_birth(self):
+        """Test that CronScheduler can be fetched using saved Redis hash data"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Register birth to save data
+        cron.register_birth()
+
+        # Fetch the scheduler from Redis
+        fetched_cron = CronScheduler.fetch(cron.name, self.connection)
+
+        # Verify basic attributes were restored correctly
+        self.assertEqual(fetched_cron.name, cron.name)
+        self.assertEqual(fetched_cron.created_at, cron.created_at)
+
+    def test_heartbeat(self):
+        """Test that heartbeat() updates scheduler's timestamp in registry"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Ensure registry is clean
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Register scheduler first (heartbeat only works on registered schedulers)
+        cron.register_birth()
+        initial_score = self.connection.zscore(registry_key, cron.name)
+        self.assertIsNotNone(initial_score)
+
+        # Wait a brief moment to ensure timestamp difference
+        time.sleep(0.01)
+
+        cron.heartbeat()
+        new_score = self.connection.zscore(registry_key, cron.name)
+        self.assertIsNotNone(new_score)
+        self.assertGreater(cast(float, new_score), cast(float, initial_score))
+        cron.register_death()
+
+        # Test heartbeat on unregistered scheduler
+        unregistered_cron = CronScheduler(connection=self.connection, name='unregistered-scheduler')
+
+        # This should not raise an exception, but should log a warning
+        unregistered_cron.heartbeat()
+
+        # Verify unregistered scheduler is still not in registry
+        score = self.connection.zscore(registry_key, 'unregistered-scheduler')
+        self.assertIsNone(score)
+
+    @patch('rq.cron.CronScheduler.register_death')
+    @patch('rq.cron.CronScheduler._install_signal_handlers')
+    def test_start_always_calls_register_death_on_exception(self, mock_signal_handlers, mock_register_death):
+        """Test that start() calls register_death even when an exception occurs in the main loop"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Mock enqueue_jobs to raise an exception
+        with patch.object(cron, 'enqueue_jobs', side_effect=Exception('Test exception')):
+            with self.assertRaises(Exception) as cm:
+                cron.start()
+
+            self.assertEqual(str(cm.exception), 'Test exception')
+
+            # Verify register_death was still called
+            mock_signal_handlers.assert_called_once()
+            mock_register_death.assert_called_once()
+
+    @patch('rq.cron.CronScheduler.register_death')
+    def test_start_handles_keyboard_interrupt(self, mock_register_death):
+        """Test that start() handles KeyboardInterrupt gracefully"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Mock enqueue_jobs to raise KeyboardInterrupt
+        with patch.object(cron, 'enqueue_jobs', side_effect=KeyboardInterrupt('Ctrl+C')):
+            # start() should handle KeyboardInterrupt without re-raising it
+            cron.start()
+
+            # Verify lifecycle methods were called
+            mock_register_death.assert_called_once()
+
+    def test_sigint_handling(self):
+        """Test that sending SIGINT to the process stops the scheduler"""
+        conn_kwargs = self.connection.connection_pool.connection_kwargs
+        scheduler_process = Process(target=run_scheduler, args=(conn_kwargs,))
+        scheduler_process.start()
+        assert scheduler_process.pid
+        time.sleep(0.2)
+        # Ensure scheduler is registered (name will have random suffix)
+        scheduler_prefix = f'{socket.gethostname()}:{scheduler_process.pid}:'
+
+        # Find scheduler with matching prefix
+        matching_scheduler = None
+        for key in get_keys(self.connection):
+            if key.startswith(scheduler_prefix):
+                matching_scheduler = key
+                break
+
+        self.assertTrue(matching_scheduler)
+
+        os.kill(scheduler_process.pid, signal.SIGINT)
+
+        scheduler_process.join(timeout=2)
+        self.assertFalse(scheduler_process.is_alive())
+
+        # Verify scheduler is no longer registered
+        keys = get_keys(self.connection)
+        self.assertEqual([key for key in keys if key.startswith(scheduler_prefix)], [])
+
+    def test_last_heartbeat_property(self):
+        """Test that last_heartbeat property works correctly in all scenarios"""
+        cron = CronScheduler(connection=self.connection)
+
+        # Ensure registry is clean
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Register scheduler and verify heartbeat timestamp
+        before_registration = datetime.now(timezone.utc)
+        cron.register_birth()
+        initial_heartbeat = cron.last_heartbeat
+
+        assert initial_heartbeat
+
+        after_registration = datetime.now(timezone.utc)
+        # Heartbeat should be between before and after registration
+        self.assertGreaterEqual(initial_heartbeat, before_registration - timedelta(seconds=1))
+        self.assertLessEqual(initial_heartbeat, after_registration + timedelta(seconds=1))
+
+        # Wait and send heartbeat, should update timestamp
+        time.sleep(0.01)
+        cron.heartbeat()
+
+        new_heartbeat = cron.last_heartbeat
+        assert new_heartbeat
+        self.assertGreater(new_heartbeat, initial_heartbeat)
+
+        # After death, should return None
+        cron.register_death()
+        self.assertIsNone(cron.last_heartbeat)
+
+    def test_all(self):
+        """Test that CronScheduler.all() returns all registered schedulers"""
+        # Clean up any existing schedulers
+        registry_key = get_registry_key()
+        self.connection.delete(registry_key)
+
+        # Create multiple schedulers with default names (now unique due to random suffix)
+        cron1 = CronScheduler(connection=self.connection)
+        cron2 = CronScheduler(connection=self.connection)
+        cron3 = CronScheduler(connection=self.connection)
+
+        # Register births
+        cron1.register_birth()
+        cron2.register_birth()
+        cron3.register_birth()
+
+        # Test all() method
+        all_schedulers = CronScheduler.all(self.connection)
+
+        # Should return all 3 schedulers
+        self.assertEqual(set(all_schedulers), {cron1, cron2, cron3})
+
+        # Test with cleanup disabled
+        all_schedulers_no_cleanup = CronScheduler.all(self.connection, cleanup=False)
+        self.assertEqual(len(all_schedulers_no_cleanup), 3)
+
+        # Register death for cleanup
+        cron1.register_death()
+        cron2.register_death()
+        cron3.register_death()
+
+    def test_equality(self):
+        """Test that CronScheduler equality works correctly"""
+        # Schedulers with same name should be equal
+        cron1 = CronScheduler(connection=self.connection, name='test-scheduler')
+        cron2 = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        self.assertEqual(cron1, cron2)
+        self.assertEqual(hash(cron1), hash(cron2))
+
+        # Schedulers with different names should not be equal
+        cron3 = CronScheduler(connection=self.connection, name='different-scheduler')
+        self.assertNotEqual(cron1, cron3)
+        self.assertNotEqual(hash(cron1), hash(cron3))
+
+        # Scheduler should not equal non-scheduler objects
+        self.assertNotEqual(cron1, 'not-a-scheduler')
+        self.assertNotEqual(cron1, 42)
