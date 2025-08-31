@@ -249,6 +249,66 @@ class TestCronJob(RQTestCase):
         self.assertEqual(next_run_time.hour, 9)
         self.assertEqual(next_run_time.minute, 0)
 
+    def test_cron_job_serialization_roundtrip(self):
+        """Test CronJob serialization and deserialization with both interval and cron jobs"""
+        # Test with interval job
+        interval_job = CronJob(
+            func=say_hello,
+            queue_name=self.queue.name,
+            args=('test', 'args'),  # These won't be serialized
+            kwargs={'test': 'kwarg'},  # These won't be serialized
+            interval=60,
+            timeout=30,
+            result_ttl=600,
+            meta={'test': 'meta'},
+        )
+
+        # Serialize and deserialize
+        interval_data = interval_job.to_dict()
+        restored_interval = CronJob.from_dict(interval_data)
+
+        # Check serialized data structure
+        self.assertEqual(interval_data['func_name'], 'tests.fixtures.say_hello')
+        self.assertEqual(interval_data['queue_name'], self.queue.name)
+        self.assertEqual(interval_data['interval'], 60)
+        self.assertIsNone(interval_data['cron'])
+        self.assertEqual(interval_data['timeout'], 30)
+        self.assertEqual(interval_data['result_ttl'], 600)
+        self.assertEqual(interval_data['meta'], {'test': 'meta'})
+
+        # Check restored fields match original
+        self.assertEqual(restored_interval.queue_name, interval_job.queue_name)
+        self.assertEqual(restored_interval.interval, interval_job.interval)
+        self.assertEqual(restored_interval.cron, interval_job.cron)
+        self.assertEqual(restored_interval.job_options, interval_job.job_options)
+        self.assertFalse(hasattr(restored_interval, 'func'))  # func not restored
+
+        # Test with cron job
+        cron_job = CronJob(
+            func=say_hello, queue_name='priority_queue', cron='0 9 * * MON-FRI', ttl=300, failure_ttl=1800
+        )
+
+        # Serialize and deserialize
+        cron_data = cron_job.to_dict()
+        restored_cron = CronJob.from_dict(cron_data)
+
+        # Check serialized data structure
+        self.assertEqual(cron_data['func_name'], 'tests.fixtures.say_hello')
+        self.assertEqual(cron_data['queue_name'], 'priority_queue')
+        self.assertIsNone(cron_data['interval'])
+        self.assertEqual(cron_data['cron'], '0 9 * * MON-FRI')
+        self.assertEqual(cron_data['ttl'], 300)
+        self.assertEqual(cron_data['failure_ttl'], 1800)
+        # result_ttl should have default value
+        self.assertEqual(cron_data['result_ttl'], 500)
+
+        # Check restored fields match original
+        self.assertEqual(restored_cron.queue_name, cron_job.queue_name)
+        self.assertEqual(restored_cron.interval, cron_job.interval)
+        self.assertEqual(restored_cron.cron, cron_job.cron)
+        self.assertEqual(restored_cron.job_options, cron_job.job_options)
+        self.assertFalse(hasattr(restored_cron, 'func'))  # func not restored
+
 
 class TestCronScheduler(RQTestCase):
     """Tests for the Cron class"""

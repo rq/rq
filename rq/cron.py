@@ -46,6 +46,7 @@ class CronJob:
             raise ValueError('Must specify either interval or cron parameter')
 
         self.func: Callable = func
+        self.func_name: str = f'{func.__module__}.{func.__name__}'
         self.args: Tuple = args or ()
         self.kwargs: Dict = kwargs or {}
         self.interval: Optional[int] = interval
@@ -108,6 +109,42 @@ class CronJob:
         # Update next run time if interval or cron is set
         if self.interval is not None or self.cron is not None:
             self.next_run_time = self.get_next_run_time()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert CronJob instance to a dictionary for monitoring purposes"""
+        obj = {
+            'func_name': self.func_name,
+            'queue_name': self.queue_name,
+            'interval': self.interval,
+            'cron': self.cron,
+        }
+        # Add job options, filtering out None values
+        obj.update({k: v for k, v in self.job_options.items() if v is not None})
+        return obj
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CronJob':
+        """Create a CronJob instance from dictionary data for monitoring purposes.
+
+        Note: The returned CronJob will not have a func attribute and cannot be executed,
+        but contains all the metadata for monitoring.
+        """
+        # Create a minimal CronJob instance with placeholder function
+        cron_job = cls.__new__(cls)  # Skip __init__ to avoid validation
+
+        # Only restore what's actually serialized in to_dict()
+        cron_job.func_name = data['func_name']
+        cron_job.queue_name = data['queue_name']
+        cron_job.interval = data.get('interval')
+        cron_job.cron = data.get('cron')
+
+        # Restore job options that were serialized
+        cron_job.job_options = {}
+        for key in ['timeout', 'result_ttl', 'ttl', 'failure_ttl', 'meta']:
+            if key in data:
+                cron_job.job_options[key] = data[key]
+
+        return cron_job
 
 
 class CronScheduler:
