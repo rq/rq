@@ -28,8 +28,9 @@ class CronJob:
 
     def __init__(
         self,
-        func: Callable,
         queue_name: str,
+        func: Optional[Callable] = None,
+        func_name: Optional[str] = None,
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         interval: Optional[int] = None,
@@ -45,7 +46,15 @@ class CronJob:
         if not interval and not cron:
             raise ValueError('Must specify either interval or cron parameter')
 
-        self.func: Callable = func
+        if func:
+            self.func: Optional[Callable] = func
+            self.func_name: str = f'{func.__module__}.{func.__name__}'
+        elif func_name:
+            self.func = None
+            self.func_name = func_name
+        else:
+            raise ValueError('Either func or func_name must be provided')
+
         self.args: Tuple = args or ()
         self.kwargs: Dict = kwargs or {}
         self.interval: Optional[int] = interval
@@ -70,6 +79,9 @@ class CronJob:
 
     def enqueue(self, connection: Redis) -> Job:
         """Enqueue this job to its queue and update the next run time"""
+        if not self.func:
+            raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
+
         queue = Queue(self.queue_name, connection=connection)
         job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options)
         logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
@@ -108,6 +120,27 @@ class CronJob:
         # Update next run time if interval or cron is set
         if self.interval is not None or self.cron is not None:
             self.next_run_time = self.get_next_run_time()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert CronJob instance to a dictionary for monitoring purposes"""
+        obj = {
+            'func_name': self.func_name,
+            'queue_name': self.queue_name,
+            'interval': self.interval,
+            'cron': self.cron,
+        }
+        # Add job options, filtering out None values
+        obj.update({k: v for k, v in self.job_options.items() if v is not None})
+        return obj
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CronJob':
+        """Create a CronJob instance from dictionary data for monitoring purposes.
+
+        Note: The returned CronJob will not have a func attribute and cannot be executed,
+        but contains all the metadata for monitoring.
+        """
+        return cls(**data)
 
 
 class CronScheduler:
@@ -164,8 +197,8 @@ class CronScheduler:
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
-            func=func,
             queue_name=queue_name,
+            func=func,
             args=args,
             kwargs=kwargs,
             interval=interval,
