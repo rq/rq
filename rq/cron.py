@@ -483,7 +483,8 @@ class CronScheduler:
         connection = pipeline if pipeline is not None else self.connection
 
         # Use current timestamp as score to track when scheduler was last seen
-        result = connection.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True)
+        # Use ch=True to get count of changed elements (includes score updates)
+        result = connection.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True, ch=True)
         if result:
             self.log.debug(f'CronScheduler {self.name}: heartbeat sent successfully')
         else:
