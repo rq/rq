@@ -28,8 +28,9 @@ class CronJob:
 
     def __init__(
         self,
-        func: Callable,
         queue_name: str,
+        func: Optional[Callable] = None,
+        func_name: Optional[str] = None,
         args: Optional[Tuple] = None,
         kwargs: Optional[Dict] = None,
         interval: Optional[int] = None,
@@ -45,8 +46,15 @@ class CronJob:
         if not interval and not cron:
             raise ValueError('Must specify either interval or cron parameter')
 
-        self.func: Callable = func
-        self.func_name: str = f'{func.__module__}.{func.__name__}'
+        if func:
+            self.func: Optional[Callable] = func
+            self.func_name: str = f'{func.__module__}.{func.__name__}'
+        elif func_name:
+            self.func = None
+            self.func_name = func_name
+        else:
+            raise ValueError('Either func or func_name must be provided')
+
         self.args: Tuple = args or ()
         self.kwargs: Dict = kwargs or {}
         self.interval: Optional[int] = interval
@@ -71,6 +79,9 @@ class CronJob:
 
     def enqueue(self, connection: Redis) -> Job:
         """Enqueue this job to its queue and update the next run time"""
+        if not self.func:
+            raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
+
         queue = Queue(self.queue_name, connection=connection)
         job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options)
         logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
@@ -129,22 +140,7 @@ class CronJob:
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
-        # Create a minimal CronJob instance with placeholder function
-        cron_job = cls.__new__(cls)  # Skip __init__ to avoid validation
-
-        # Only restore what's actually serialized in to_dict()
-        cron_job.func_name = data['func_name']
-        cron_job.queue_name = data['queue_name']
-        cron_job.interval = data.get('interval')
-        cron_job.cron = data.get('cron')
-
-        # Restore job options that were serialized
-        cron_job.job_options = {}
-        for key in ['timeout', 'result_ttl', 'ttl', 'failure_ttl', 'meta']:
-            if key in data:
-                cron_job.job_options[key] = data[key]
-
-        return cron_job
+        return cls(**data)
 
 
 class CronScheduler:
@@ -201,8 +197,8 @@ class CronScheduler:
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
-            func=func,
             queue_name=queue_name,
+            func=func,
             args=args,
             kwargs=kwargs,
             interval=interval,

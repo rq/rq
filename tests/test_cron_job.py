@@ -257,7 +257,7 @@ class TestCronJob(RQTestCase):
         self.assertEqual(restored_interval.interval, interval_job.interval)
         self.assertEqual(restored_interval.cron, interval_job.cron)
         self.assertEqual(restored_interval.job_options, interval_job.job_options)
-        self.assertFalse(hasattr(restored_interval, 'func'))  # func not restored
+        self.assertIsNone(restored_interval.func)
 
         # Test with cron job
         cron_job = CronJob(
@@ -283,4 +283,4 @@ class TestCronJob(RQTestCase):
         self.assertEqual(restored_cron.interval, cron_job.interval)
         self.assertEqual(restored_cron.cron, cron_job.cron)
         self.assertEqual(restored_cron.job_options, cron_job.job_options)
-        self.assertFalse(hasattr(restored_cron, 'func'))  # func not restored
+        self.assertIsNone(restored_cron.func)
