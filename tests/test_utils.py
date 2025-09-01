@@ -19,6 +19,7 @@ from rq.utils import (
     import_queue_class,
     import_worker_class,
     is_nonstring_iterable,
+    normalize_config_path,
     parse_timeout,
     split_list,
     str_to_date,
@@ -301,3 +302,48 @@ class TestUtils(RQTestCase):
         # Should raise ValueError when decode_values=True and value is not bytes/str
         with self.assertRaises(ValueError):
             decode_redis_hash(redis_hash, decode_values=True)
+
+    def test_normalize_config_path(self):
+        """Ensure normalize_config_path works correctly for all input formats"""
+        import os
+
+        # Dotted paths should pass through unchanged
+        self.assertEqual(normalize_config_path('app.cron_config'), 'app.cron_config')
+        self.assertEqual(normalize_config_path('tests.cron_config'), 'tests.cron_config')
+        self.assertEqual(normalize_config_path('package.subpackage.module'), 'package.subpackage.module')
+        self.assertEqual(normalize_config_path('single_module'), 'single_module')
+
+        # File paths with .py extension
+        self.assertEqual(normalize_config_path('app/cron_config.py'), 'app.cron_config')
+        self.assertEqual(normalize_config_path('tests/cron_config.py'), 'tests.cron_config')
+        self.assertEqual(normalize_config_path('package/subpackage/module.py'), 'package.subpackage.module')
+
+        # File paths without .py extension
+        self.assertEqual(normalize_config_path('app/cron_config'), 'app.cron_config')
+        self.assertEqual(normalize_config_path('tests/cron_config'), 'tests.cron_config')
+        self.assertEqual(normalize_config_path('package/subpackage/module'), 'package.subpackage.module')
+
+        # Absolute paths with .py extension
+        self.assertEqual(normalize_config_path('/usr/app/cron_config.py'), 'usr.app.cron_config')
+        self.assertEqual(normalize_config_path('/home/project/config.py'), 'home.project.config')
+
+        # Absolute paths without .py extension
+        self.assertEqual(normalize_config_path('/usr/app/cron_config'), 'usr.app.cron_config')
+        self.assertEqual(normalize_config_path('/home/project/config'), 'home.project.config')
+
+        # Edge cases
+        self.assertEqual(normalize_config_path('config.py'), 'config')
+        self.assertEqual(normalize_config_path('dir/config.py'), 'dir.config')
+        self.assertEqual(normalize_config_path('app/test.config.py'), 'app.test.config')
+
+        # Platform-specific path separators
+        if os.name == 'nt':  # Windows
+            self.assertEqual(normalize_config_path('app\\cron_config.py'), 'app.cron_config')
+            self.assertEqual(normalize_config_path('C:\\project\\config.py'), 'C.project.config')
+            self.assertEqual(normalize_config_path('app\\module\\config.py'), 'app.module.config')
+            self.assertEqual(normalize_config_path('C:\\abs\\path\\config.py'), 'C.abs.path.config')
+        else:  # Unix-like
+            self.assertEqual(normalize_config_path('app/cron_config.py'), 'app.cron_config')
+            self.assertEqual(normalize_config_path('/project/config.py'), 'project.config')
+            self.assertEqual(normalize_config_path('app/module/config.py'), 'app.module.config')
+            self.assertEqual(normalize_config_path('/abs/path/config.py'), 'abs.path.config')

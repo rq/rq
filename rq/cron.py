@@ -20,7 +20,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
-from .utils import decode_redis_hash, now, str_to_date, utcformat
+from .utils import decode_redis_hash, normalize_config_path, now, str_to_date, utcformat
 
 
 class CronJob:
@@ -316,14 +316,15 @@ class CronScheduler:
         global _job_data_registry
         _job_data_registry = []  # Clear global registry before loading module
 
-        is_file_path = os.path.sep in config_path or config_path.endswith('.py')
+        # Check if it's an absolute path - these need special handling
+        is_absolute_path = os.path.isabs(config_path)
 
-        if is_file_path:
-            # --- Handle as a file path ---
-            abs_path = os.path.abspath(config_path)
-            self.log.debug(f'Attempting to load as file path: {abs_path}')
+        if is_absolute_path:
+            # Handle absolute paths using spec_from_file_location
+            abs_path = config_path
+            self.log.debug(f'Attempting to load as absolute file path: {abs_path}')
 
-            # Immediately check if file exists
+            # Check if file exists
             if not os.path.exists(abs_path):
                 error_msg = f"Configuration file not found at '{abs_path}'"
                 self.log.error(error_msg)
@@ -356,17 +357,23 @@ class CronScheduler:
                 raise ImportError(error_msg) from e
 
         else:
-            # --- Handle as a module path ---
-            self.log.debug(f'Attempting to load as module path: {config_path}')
+            # For relative paths and dotted paths, normalize to dotted format
+            normalized_path = normalize_config_path(config_path)
+            self.log.debug(f'Normalized path: {normalized_path}')
+
+            # Import the module using the normalized dotted path
             try:
-                importlib.import_module(config_path)
-                self.log.debug(f'Successfully loaded config from module: {config_path}')
+                if normalized_path in sys.modules:
+                    importlib.reload(sys.modules[normalized_path])
+                else:
+                    importlib.import_module(normalized_path)
+                self.log.debug(f'Successfully loaded config from module: {normalized_path}')
             except ImportError as e:
-                error_msg = f"Failed to import configuration module '{config_path}': {e}"
+                error_msg = f"Failed to import configuration module '{normalized_path}' (from '{config_path}'): {e}"
                 self.log.error(error_msg)
                 raise ImportError(error_msg) from e
             except Exception as e:
-                error_msg = f"An error occurred while importing configuration module '{config_path}': {e}"
+                error_msg = f"An error occurred while importing '{normalized_path}' (from '{config_path}'): {e}"
                 self.log.error(error_msg)
                 raise Exception(error_msg) from e
 

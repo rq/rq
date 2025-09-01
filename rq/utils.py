@@ -11,6 +11,7 @@ import importlib
 import inspect
 import logging
 import numbers
+import os
 import warnings
 from collections.abc import Generator, Iterable, Sequence
 
@@ -217,6 +218,49 @@ def import_queue_class(name: str) -> type['Queue']:
         raise ValueError(f'Invalid queue class: {name}')
 
     return cls
+
+
+def normalize_config_path(config_path: str) -> str:
+    """Normalize configuration path to dotted module path format.
+
+    Converts file paths like 'directory/config_file.py' or 'directory.config_file'
+    to dotted module paths like 'directory.config_file' for use with importlib.import_module().
+
+    Args:
+        config_path: Either a file path (e.g., 'app/cron_config.py', 'app/cron_config')
+                    or a dotted module path (e.g., 'app.cron_config')
+
+    Returns:
+        A dotted module path suitable for importlib.import_module()
+
+    Examples:
+        normalize_config_path('app/cron_config.py') -> 'app.cron_config'
+        normalize_config_path('app/cron_config') -> 'app.cron_config'
+        normalize_config_path('app.cron_config') -> 'app.cron_config'
+        normalize_config_path('/abs/path/to/config.py') -> 'abs.path.to.config'
+    """
+    # Check if it's already a dotted path (no path separators and no .py extension)
+    is_file_path = os.path.sep in config_path or config_path.endswith('.py')
+
+    if not is_file_path:
+        # Already a dotted module path, return as-is
+        return config_path
+
+    # Convert file path to dotted module path
+    normalized = config_path
+
+    # Remove .py extension if present
+    if normalized.endswith('.py'):
+        normalized = normalized[:-3]
+
+    # Handle absolute paths by removing leading separator
+    if normalized.startswith(os.path.sep):
+        normalized = normalized[1:]
+
+    # Replace path separators with dots
+    normalized = normalized.replace(os.path.sep, '.')
+
+    return normalized
 
 
 def now() -> datetime.datetime:
