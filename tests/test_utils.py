@@ -1,4 +1,5 @@
 import datetime
+import os
 from unittest.mock import Mock
 
 from redis import Redis
@@ -19,11 +20,13 @@ from rq.utils import (
     import_queue_class,
     import_worker_class,
     is_nonstring_iterable,
+    normalize_config_path,
     parse_timeout,
     split_list,
     str_to_date,
     truncate_long_string,
     utcparse,
+    validate_absolute_path,
 )
 from rq.worker import SimpleWorker
 from tests import RQTestCase, fixtures
@@ -123,28 +126,28 @@ class TestUtils(RQTestCase):
 
         # Parses 3 digit version numbers correctly
         class Redis4(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': '4.0.8'}
 
         self.assertEqual(get_version(Redis4()), (4, 0, 8))
 
         # Parses 3 digit version numbers correctly
         class Redis3(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': '3.0.7.9'}
 
         self.assertEqual(get_version(Redis3()), (3, 0, 7))
 
         # Parses 2 digit version numbers correctly (Seen in AWS ElastiCache Redis)
         class Redis7(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': '7.1'}
 
         self.assertEqual(get_version(Redis7()), (7, 1, 0))
 
         # Parses 2 digit float version numbers correctly (Seen in AWS ElastiCache Redis)
         class DummyRedis(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': 7.1}
 
         self.assertEqual(get_version(DummyRedis()), (7, 1, 0))
@@ -290,7 +293,7 @@ class TestUtils(RQTestCase):
         """Ensure decode_redis_hash handles invalid values correctly when decode_values=True"""
         redis_hash = {
             b'key1': b'valid_value',
-            b'key2': 42,  # This will cause as_text to raise ValueError
+            'key2': 42,  # This will cause as_text to raise ValueError
         }
 
         # Should work fine with decode_values=False (default)
@@ -301,3 +304,70 @@ class TestUtils(RQTestCase):
         # Should raise ValueError when decode_values=True and value is not bytes/str
         with self.assertRaises(ValueError):
             decode_redis_hash(redis_hash, decode_values=True)
+
+    def test_normalize_config_path(self):
+        """Ensure normalize_config_path works correctly for all input formats"""
+
+        # Dotted paths should pass through unchanged
+        self.assertEqual(normalize_config_path('package.subpackage.module'), 'package.subpackage.module')
+
+        # File paths with .py extension
+        self.assertEqual(normalize_config_path('package/subpackage/module.py'), 'package.subpackage.module')
+
+        # File paths without .py extension
+        self.assertEqual(normalize_config_path('package/subpackage/module'), 'package.subpackage.module')
+
+        # Absolute paths with .py extension
+        self.assertEqual(normalize_config_path('/home/project/config.py'), 'home.project.config')
+
+        # Absolute paths without .py extension
+        self.assertEqual(normalize_config_path('/home/project/config'), 'home.project.config')
+
+        # Edge cases
+        self.assertEqual(normalize_config_path('app/test.config.py'), 'app.test.config')
+
+        # Platform-specific path separators
+        if os.name == 'nt':  # Windows
+            self.assertEqual(normalize_config_path('app\\cron_config.py'), 'app.cron_config')
+            self.assertEqual(normalize_config_path('C:\\project\\config.py'), 'C.project.config')
+            self.assertEqual(normalize_config_path('app\\module\\config.py'), 'app.module.config')
+            self.assertEqual(normalize_config_path('C:\\abs\\path\\config.py'), 'C.abs.path.config')
+        else:  # Unix-like
+            self.assertEqual(normalize_config_path('app/cron_config.py'), 'app.cron_config')
+            self.assertEqual(normalize_config_path('/project/config.py'), 'project.config')
+            self.assertEqual(normalize_config_path('app/module/config.py'), 'app.module.config')
+            self.assertEqual(normalize_config_path('/abs/path/config.py'), 'abs.path.config')
+
+    def test_validate_absolute_path(self):
+        """Ensure validate_absolute_path works correctly for all scenarios"""
+        import os
+        import tempfile
+
+        # Test with valid existing file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write('# Test config file\n')
+            temp_file_path = temp_file.name
+
+        try:
+            # Valid file should return the same path
+            result = validate_absolute_path(temp_file_path)
+            self.assertEqual(result, temp_file_path)
+
+            # Test with non-existent file
+            non_existent_path = temp_file_path + '_does_not_exist'
+            with self.assertRaises(FileNotFoundError) as cm:
+                validate_absolute_path(non_existent_path)
+            self.assertIn('Configuration file not found', str(cm.exception))
+            self.assertIn(non_existent_path, str(cm.exception))
+
+            # Test with directory instead of file
+            with tempfile.TemporaryDirectory() as temp_dir:
+                with self.assertRaises(IsADirectoryError) as cm:
+                    validate_absolute_path(temp_dir)
+                self.assertIn('Configuration path points to a directory', str(cm.exception))
+                self.assertIn(temp_dir, str(cm.exception))
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)

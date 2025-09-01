@@ -20,7 +20,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
-from .utils import decode_redis_hash, now, str_to_date, utcformat
+from .utils import decode_redis_hash, normalize_config_path, now, str_to_date, utcformat, validate_absolute_path
 
 
 class CronJob:
@@ -316,57 +316,50 @@ class CronScheduler:
         global _job_data_registry
         _job_data_registry = []  # Clear global registry before loading module
 
-        is_file_path = os.path.sep in config_path or config_path.endswith('.py')
+        if os.path.isabs(config_path):
+            # Absolute paths must be loaded by file path (cannot be converted to valid module paths)
+            self.log.debug(f'Loading absolute file path: {config_path}')
 
-        if is_file_path:
-            # --- Handle as a file path ---
-            abs_path = os.path.abspath(config_path)
-            self.log.debug(f'Attempting to load as file path: {abs_path}')
-
-            # Immediately check if file exists
-            if not os.path.exists(abs_path):
-                error_msg = f"Configuration file not found at '{abs_path}'"
-                self.log.error(error_msg)
-                raise FileNotFoundError(error_msg)
-
-            # Check if it's actually a file and not a directory
-            if not os.path.isfile(abs_path):
-                error_msg = f"Configuration path points to a directory, not a file: '{abs_path}'"
-                self.log.error(error_msg)
-                raise IsADirectoryError(error_msg)
+            # Validate the file path
+            validate_absolute_path(config_path)
 
             # Load the file as a module
             module_name = f'rq_cron_config_{os.path.basename(config_path).replace(".", "_")}'
             try:
-                spec = importlib.util.spec_from_file_location(module_name, abs_path)
+                spec = importlib.util.spec_from_file_location(module_name, config_path)
                 if spec is None or spec.loader is None:
-                    error_msg = f'Could not create module spec for {abs_path}'
+                    error_msg = f'Could not create module spec for {config_path}'
                     self.log.error(error_msg)
                     raise ImportError(error_msg)
 
                 module = importlib.util.module_from_spec(spec)
                 sys.modules[module_name] = module
                 spec.loader.exec_module(module)
-                self.log.debug(f'Successfully loaded config from file: {abs_path}')
+                self.log.debug(f'Successfully loaded config from file: {config_path}')
             except Exception as e:
                 if module_name in sys.modules:
                     del sys.modules[module_name]
-                error_msg = f"Failed to load configuration file '{abs_path}': {e}"
+                error_msg = f"Failed to load configuration file '{config_path}': {e}"
                 self.log.error(error_msg)
                 raise ImportError(error_msg) from e
-
         else:
-            # --- Handle as a module path ---
-            self.log.debug(f'Attempting to load as module path: {config_path}')
+            # Relative paths and dotted paths - normalize to dotted module format
+            normalized_path = normalize_config_path(config_path)
+            self.log.debug(f'Normalized path: {normalized_path}')
+
+            # Import the module using the normalized dotted path
             try:
-                importlib.import_module(config_path)
-                self.log.debug(f'Successfully loaded config from module: {config_path}')
+                if normalized_path in sys.modules:
+                    importlib.reload(sys.modules[normalized_path])
+                else:
+                    importlib.import_module(normalized_path)
+                self.log.debug(f'Successfully loaded config from module: {normalized_path}')
             except ImportError as e:
-                error_msg = f"Failed to import configuration module '{config_path}': {e}"
+                error_msg = f"Failed to import configuration module '{normalized_path}' (from '{config_path}'): {e}"
                 self.log.error(error_msg)
                 raise ImportError(error_msg) from e
             except Exception as e:
-                error_msg = f"An error occurred while importing configuration module '{config_path}': {e}"
+                error_msg = f"An error occurred while importing '{normalized_path}' (from '{config_path}'): {e}"
                 self.log.error(error_msg)
                 raise Exception(error_msg) from e
 
