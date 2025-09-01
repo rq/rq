@@ -25,6 +25,7 @@ from rq.utils import (
     str_to_date,
     truncate_long_string,
     utcparse,
+    validate_absolute_path,
 )
 from rq.worker import SimpleWorker
 from tests import RQTestCase, fixtures
@@ -347,3 +348,37 @@ class TestUtils(RQTestCase):
             self.assertEqual(normalize_config_path('/project/config.py'), 'project.config')
             self.assertEqual(normalize_config_path('app/module/config.py'), 'app.module.config')
             self.assertEqual(normalize_config_path('/abs/path/config.py'), 'abs.path.config')
+
+    def test_validate_absolute_path(self):
+        """Ensure validate_absolute_path works correctly for all scenarios"""
+        import os
+        import tempfile
+
+        # Test with valid existing file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write('# Test config file\n')
+            temp_file_path = temp_file.name
+
+        try:
+            # Valid file should return the same path
+            result = validate_absolute_path(temp_file_path)
+            self.assertEqual(result, temp_file_path)
+
+            # Test with non-existent file
+            non_existent_path = temp_file_path + '_does_not_exist'
+            with self.assertRaises(FileNotFoundError) as cm:
+                validate_absolute_path(non_existent_path)
+            self.assertIn('Configuration file not found', str(cm.exception))
+            self.assertIn(non_existent_path, str(cm.exception))
+
+            # Test with directory instead of file
+            with tempfile.TemporaryDirectory() as temp_dir:
+                with self.assertRaises(IsADirectoryError) as cm:
+                    validate_absolute_path(temp_dir)
+                self.assertIn('Configuration path points to a directory', str(cm.exception))
+                self.assertIn(temp_dir, str(cm.exception))
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)

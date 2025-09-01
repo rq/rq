@@ -263,6 +263,33 @@ def normalize_config_path(config_path: str) -> str:
     return normalized
 
 
+def validate_absolute_path(file_path: str) -> str:
+    """Validate that an absolute file path exists and points to a file.
+
+    Args:
+        file_path: The absolute file path to validate
+
+    Returns:
+        The same file path if validation passes (for chaining)
+
+    Raises:
+        FileNotFoundError: If the file does not exist
+        IsADirectoryError: If the path points to a directory instead of a file
+
+    Examples:
+        validate_absolute_path('/path/to/config.py')  # Returns '/path/to/config.py'
+        validate_absolute_path('/path/to/missing.py')  # Raises FileNotFoundError
+        validate_absolute_path('/path/to/directory')   # Raises IsADirectoryError
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Configuration file not found at '{file_path}'")
+
+    if not os.path.isfile(file_path):
+        raise IsADirectoryError(f"Configuration path points to a directory, not a file: '{file_path}'")
+
+    return file_path
+
+
 def now() -> datetime.datetime:
     """Return now in UTC"""
     return datetime.datetime.now(datetime.timezone.utc)
