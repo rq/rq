@@ -126,28 +126,28 @@ class TestUtils(RQTestCase):
 
         # Parses 3 digit version numbers correctly
         class Redis4(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': '4.0.8'}
 
         self.assertEqual(get_version(Redis4()), (4, 0, 8))
 
         # Parses 3 digit version numbers correctly
         class Redis3(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': '3.0.7.9'}
 
         self.assertEqual(get_version(Redis3()), (3, 0, 7))
 
         # Parses 2 digit version numbers correctly (Seen in AWS ElastiCache Redis)
         class Redis7(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': '7.1'}
 
         self.assertEqual(get_version(Redis7()), (7, 1, 0))
 
         # Parses 2 digit float version numbers correctly (Seen in AWS ElastiCache Redis)
         class DummyRedis(Redis):
-            def info(*args):
+            def info(self, *args, **kwargs):
                 return {'redis_version': 7.1}
 
         self.assertEqual(get_version(DummyRedis()), (7, 1, 0))
@@ -293,7 +293,7 @@ class TestUtils(RQTestCase):
         """Ensure decode_redis_hash handles invalid values correctly when decode_values=True"""
         redis_hash = {
             b'key1': b'valid_value',
-            b'key2': 42,  # This will cause as_text to raise ValueError
+            'key2': 42,  # This will cause as_text to raise ValueError
         }
 
         # Should work fine with decode_values=False (default)
