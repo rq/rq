@@ -111,7 +111,6 @@ cron.register(frequent_task, queue_name='default', cron_string='*/15 * * * *')
 cron.register(weekly_report, queue_name='reports', cron_string='0 18 * * 0')
 ```
 
-
 ## Configuration Files
 
 ### Basic Configuration
@@ -224,3 +223,43 @@ try:
 except KeyboardInterrupt:
     print("Shutting down cron scheduler...")
 ```
+
+## Monitoring Schedulers
+
+_New in version 2.6._
+
+RQ provides tools to monitor and manage active cron schedulers across your infrastructure.
+
+### Listing Active Schedulers
+
+Use `CronScheduler.all()` to get all active scheduler instances:
+
+```python
+from redis import Redis
+from rq.cron import CronScheduler
+
+connection = Redis()
+active_schedulers = CronScheduler.all(connection)
+
+for scheduler in active_schedulers:
+    print(f"{scheduler.name} (PID: {scheduler.pid})")
+```
+
+### Fetching a Specific Scheduler
+
+Retrieve a scheduler by its unique name:
+
+```python
+scheduler = CronScheduler.fetch('my-scheduler-name', connection)
+print(scheduler.name)
+print(scheduler.hostname)
+```
+
+Each scheduler has these attributes:
+
+- `name`: unique identifier (hostname:pid:uuid format)
+- `hostname`: server hostname
+- `pid`: process ID
+- `created_at`: `datetime` at which scheduler is created
+- `config_file`: configuration file path (if loaded from file)
+- `last_heartbeat`: `datetime` of last recorded heartbeat
