@@ -1,3 +1,7 @@
+### RQ 2.6 (2025-09-06)
+* Added `CronScheduler.all()` that returns a list of active schedulers. Thanks @selwin!
+* Various internal cleanups and refactoring. Thanks @selwin!
+
 ### RQ 2.5 (2025-08-15)
 * `CronScheduler` now supports running periodic jobs based on cron string. Thanks @selwin!
 * Fixed an issue where `SpawnWorker` does not properly register successful job executions. Thanks @selwin!
