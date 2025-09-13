@@ -137,3 +137,31 @@ class TestWorkerPool(RQTestCase):
         pool.start(burst=True)
         # Worker should have processed the job
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
+    def test_worker_pool_starts_single_scheduler_non_burst(self):
+        """When with_scheduler=True and not burst, pool starts one scheduler process."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+
+        # Stop pool after a short delay
+        p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        p.start()
+        pool.start(burst=False, with_scheduler=True)
+
+        # Scheduler should have been created and started at some point
+        self.assertIsNotNone(pool.scheduler)
+        self.assertIsNotNone(pool.scheduler._process)
+
+    def test_worker_pool_scheduler_burst_no_process(self):
+        """In burst mode, pool scheduler enqueues scheduled jobs once and does not start a scheduler process."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+        pool.start(burst=True, with_scheduler=True)
+        self.assertIsNotNone(pool.scheduler)
+        self.assertIsNone(pool.scheduler._process)
+
+    def test_worker_pool_without_scheduler(self):
+        """When with_scheduler=False, pool does not create a scheduler."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+        p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        p.start()
+        pool.start(burst=False, with_scheduler=False)
+        self.assertIsNone(pool.scheduler)

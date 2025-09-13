@@ -21,6 +21,7 @@ from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
+from .scheduler import RQScheduler
 from .utils import parse_names
 from .worker import BaseWorker, Worker
 
@@ -71,6 +72,7 @@ class WorkerPool:
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: dict[str, WorkerData] = {}
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
+        self.scheduler: Optional[RQScheduler] = None
 
     @property
     def queues(self) -> list[Queue]:
@@ -94,6 +96,7 @@ class WorkerPool:
         self.log.info('Received SIGINT/SIGTERM, shutting down...')
         self.status = self.Status.STOPPED
         self.stop_workers()
+        self.stop_scheduler()
 
     def all_workers_have_stopped(self) -> bool:
         """Returns True if all workers have stopped."""
@@ -155,6 +158,7 @@ class WorkerPool:
         burst: bool,
         _sleep: float = 0,
         logging_level: str = 'INFO',
+        with_scheduler: bool = True,
     ) -> Process:
         """Returns the worker process"""
         return Process(
@@ -167,6 +171,7 @@ class WorkerPool:
                 'worker_class': self.worker_class,
                 'job_class': self.job_class,
                 'serializer': self.serializer,
+                'with_scheduler': with_scheduler,
             },
             name=f'Worker {name} (WorkerPool {self.name})',
         )
@@ -177,26 +182,72 @@ class WorkerPool:
         burst: bool = True,
         _sleep: float = 0,
         logging_level: str = 'INFO',
+        with_scheduler: bool = True,
     ):
         """
         Starts a worker and adds the data to worker_datas.
         * sleep: waits for X seconds before creating worker, for testing purposes
         """
         name = uuid4().hex
-        process = self.get_worker_process(name, burst=burst, _sleep=_sleep, logging_level=logging_level)
+        process = self.get_worker_process(
+            name, burst=burst, _sleep=_sleep, logging_level=logging_level, with_scheduler=with_scheduler
+        )
         process.start()
         worker_data = WorkerData(name=name, pid=process.pid, process=process)  # type: ignore
         self.worker_dict[name] = worker_data
         self.log.debug('Spawned worker: %s with PID %d', name, process.pid)
 
-    def start_workers(self, burst: bool = True, _sleep: float = 0, logging_level: str = 'INFO'):
+    def start_workers(
+        self,
+        burst: bool = True,
+        _sleep: float = 0,
+        logging_level: str = 'INFO',
+        with_scheduler: bool = False,
+    ):
         """
         Run the workers
         * sleep: waits for X seconds before creating worker, only for testing purposes
         """
         self.log.debug(f'Spawning {self.num_workers} workers')
         for i in range(self.num_workers):
-            self.start_worker(i + 1, burst=burst, _sleep=_sleep, logging_level=logging_level)
+            self.start_worker(
+                i + 1, burst=burst, _sleep=_sleep, logging_level=logging_level, with_scheduler=with_scheduler
+            )
+
+    def _start_scheduler(self, burst: bool = False, logging_level: Union[str, int] = 'INFO') -> None:
+        """Starts a single scheduler process for the pool's queues.
+
+        If burst is True, enqueue scheduled jobs once and return.
+        Otherwise, acquire locks and start the scheduler process.
+        """
+        self.scheduler = RQScheduler(
+            self.queues,
+            connection=self.connection,
+            logging_level=logging_level,
+            date_format=DEFAULT_LOGGING_DATE_FORMAT,
+            log_format=DEFAULT_LOGGING_FORMAT,
+            serializer=self.serializer,
+        )
+        self.scheduler.acquire_locks()
+        if self.scheduler.acquired_locks:
+            if burst:
+                self.scheduler.enqueue_scheduled_jobs()
+                self.scheduler.release_locks()
+            else:
+                self.scheduler.start()
+
+    def stop_scheduler(self) -> None:
+        """Ensure the scheduler process is stopped and joined."""
+        if not self.scheduler:
+            return
+        try:
+            if self.scheduler._process and self.scheduler._process.pid:
+                os.kill(self.scheduler._process.pid, signal.SIGTERM)
+        except OSError:
+            pass
+        finally:
+            if self.scheduler._process:
+                self.scheduler._process.join()
 
     def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):
         """
@@ -219,17 +270,21 @@ class WorkerPool:
         for worker_data in worker_datas:
             self.stop_worker(worker_data)
 
-    def start(self, burst: bool = False, logging_level: str = 'INFO'):
+    def start(self, burst: bool = False, logging_level: str = 'INFO', with_scheduler: bool = True):
         self._burst = burst
         respawn = not burst  # Don't respawn workers if burst mode is on
         setup_loghandlers(logging_level, DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log.info(f'Starting worker pool {self.name} with pid %d...', os.getpid())
         self.status = self.Status.STARTED
-        self.start_workers(burst=self._burst, logging_level=logging_level)
+        if with_scheduler:
+            self._start_scheduler(burst=self._burst, logging_level=logging_level)
+        self.start_workers(burst=self._burst, logging_level=logging_level, with_scheduler=False)
         self._install_signal_handlers()
         while True:
             if self.status == self.Status.STOPPED:
                 if self.all_workers_have_stopped():
+                    if with_scheduler:
+                        self.stop_scheduler()
                     self.log.info('All workers stopped, exiting...')
                     break
                 else:
@@ -238,6 +293,9 @@ class WorkerPool:
                     continue
             else:
                 self.check_workers(respawn=respawn)
+                if with_scheduler and not self._burst and self.scheduler:
+                    if not self.scheduler._process or not self.scheduler._process.is_alive():
+                        self.scheduler.acquire_locks(auto_start=True)
                 if burst and self.number_of_active_workers == 0:
                     self.log.info('All workers stopped, exiting...')
                     break
@@ -258,6 +316,7 @@ def run_worker(
     burst: bool = True,
     logging_level: str = 'INFO',
     _sleep: int = 0,
+    with_scheduler: bool = True,
 ):
     connection = connection_class(
         connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
@@ -273,4 +332,4 @@ def run_worker(
     )
     worker.log.info('Starting worker started with PID %s', os.getpid())
     time.sleep(_sleep)
-    worker.work(burst=burst, with_scheduler=True, logging_level=logging_level)
+    worker.work(burst=burst, with_scheduler=with_scheduler, logging_level=logging_level)
