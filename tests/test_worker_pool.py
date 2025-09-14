@@ -1,7 +1,7 @@
 import os
 import signal
-from multiprocessing import Process
 from datetime import datetime, timedelta, timezone
+from multiprocessing import Process
 from time import sleep
 
 from rq.connections import parse_connection

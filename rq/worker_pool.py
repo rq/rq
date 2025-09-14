@@ -238,16 +238,18 @@ class WorkerPool:
 
     def stop_scheduler(self) -> None:
         """Ensure the scheduler process is stopped and joined."""
-        if not self.scheduler:
-            return
-        try:
-            if self.scheduler._process and self.scheduler._process.pid:
-                os.kill(self.scheduler._process.pid, signal.SIGTERM)
-        except OSError:
-            pass
-        finally:
-            if self.scheduler._process:
-                self.scheduler._process.join()
+        scheduler = self.scheduler
+        if scheduler is not None:
+            proc = scheduler._process
+            if proc is not None:
+                pid = getattr(proc, 'pid', None)
+                try:
+                    if pid:
+                        os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+                finally:
+                    proc.join()
 
     def stop_worker(self, worker_data: WorkerData, sig=signal.SIGINT):
         """
@@ -294,7 +296,8 @@ class WorkerPool:
             else:
                 self.check_workers(respawn=respawn)
                 if with_scheduler and not self._burst and self.scheduler:
-                    if not self.scheduler._process or not self.scheduler._process.is_alive():
+                    proc = self.scheduler._process
+                    if proc is None or not proc.is_alive():
                         self.scheduler.acquire_locks(auto_start=True)
                 if burst and self.number_of_active_workers == 0:
                     self.log.info('All workers stopped, exiting...')
