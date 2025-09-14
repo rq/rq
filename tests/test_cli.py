@@ -294,6 +294,23 @@ class TestRQCli(CLITestCase):
         result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
         self.assert_normal_execution(result)
 
+    def test_worker_pool_cli_burst_without_scheduler(self):
+        """rq worker-pool -u <url> -b --num-workers 1 --without-scheduler"""
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                'worker-pool',
+                '-u',
+                self.redis_url,
+                '-b',
+                '--num-workers',
+                '1',
+                '--without-scheduler',
+            ],
+        )
+        self.assert_normal_execution(result)
+
     def test_worker_pid(self):
         """rq worker -u <url> /tmp/.."""
         pid = self.tmpdir.join('rq.pid')

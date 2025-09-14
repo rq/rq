@@ -1,6 +1,7 @@
 import os
 import signal
 from multiprocessing import Process
+from datetime import datetime, timedelta, timezone
 from time import sleep
 
 from rq.connections import parse_connection
@@ -165,3 +166,22 @@ class TestWorkerPool(RQTestCase):
         p.start()
         pool.start(burst=False, with_scheduler=False)
         self.assertIsNone(pool.scheduler)
+
+    def test_worker_pool_non_burst_with_scheduler_executes_scheduled_job(self):
+        """Non-burst pool with scheduler should execute a job scheduled ~1s in the future."""
+        queue = Queue('foo', connection=self.connection)
+        # Schedule a job ~1 second in the future
+        scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=1)
+        job = queue.enqueue_at(scheduled_time, say_hello)
+
+        pool = WorkerPool(['foo'], connection=self.connection, num_workers=1)
+
+        # Stop pool after a short delay to allow scheduler + worker to process the job
+        stopper = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 3.0))
+        stopper.start()
+        pool.start(burst=False, with_scheduler=True)
+
+        # After pool stops, the scheduled job should have been executed
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+        # Ensure no lingering workers in case of flakiness
+        pool.stop_workers()
