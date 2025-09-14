@@ -185,3 +185,20 @@ class TestWorkerPool(RQTestCase):
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
         # Ensure no lingering workers in case of flakiness
         pool.stop_workers()
+
+    def test_worker_pool_reacquires_scheduler_locks_when_process_missing(self):
+        """Pool eventually starts scheduler via acquire_locks(auto_start=True)."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+
+        # Block initial scheduler lock acquisition so no process is started yet
+        self.connection.set('rq:scheduler-lock:default', 'block', ex=1)
+
+        # Allow enough time for the loop to tick and the lock to expire
+        stopper = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 3.0))
+        stopper.start()
+        pool.start(burst=False, with_scheduler=True)
+
+        # After running, a scheduler should have been started by the loop
+        self.assertIsNotNone(pool.scheduler)
+        self.assertIsNotNone(pool.scheduler._process)
+        self.assertIsNotNone(getattr(pool.scheduler._process, 'pid', None))
