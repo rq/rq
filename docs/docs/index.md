@@ -141,11 +141,16 @@ Multiple jobs can be added to a Group to allow them to be tracked by a single ID
 ```python
 from rq import Queue
 from rq.group import Group
+from redis import Redis
+
+# Tell RQ what Redis connection to use
+redis_conn = Redis()
+q = Queue(connection=redis_conn)  # no args implies the default queue
 
 group = Group.create(connection=redis_conn)
 jobs = group.enqueue_many(
-  queue="my_queue",
-  [
+  queue=q,
+  job_datas=[
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_job_id'),
     Queue.prepare_data(count_words_at_url, ('http://nvie.com',), job_id='my_other_job_id'),
   ]
