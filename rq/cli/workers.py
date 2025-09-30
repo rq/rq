@@ -185,6 +185,11 @@ def worker(
 @click.option('--date-format', type=str, default=DEFAULT_LOGGING_DATE_FORMAT, help='Set the date format of the logs')
 @click.argument('queues', nargs=-1)
 @click.option('--num-workers', '-n', type=int, default=1, help='Number of workers to start')
+@click.option(
+    '--with-scheduler/--without-scheduler',
+    default=True,
+    help='Run workers with scheduler (acquires lock to ensure single scheduler)',
+)
 @pass_cli_config
 def worker_pool(
     cli_config,
@@ -197,6 +202,7 @@ def worker_pool(
     log_format,
     date_format,
     num_workers,
+    with_scheduler,
     **options,
 ):
     """Starts a RQ worker pool"""
@@ -225,4 +231,4 @@ def worker_pool(
         worker_class=cli_config.worker_class,
         job_class=cli_config.job_class,
     )
-    pool.start(burst=burst, logging_level=logging_level)
+    pool.start(burst=burst, logging_level=logging_level, with_scheduler=with_scheduler)

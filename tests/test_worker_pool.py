@@ -1,5 +1,6 @@
 import os
 import signal
+from datetime import datetime, timedelta, timezone
 from multiprocessing import Process
 from time import sleep
 
@@ -137,3 +138,67 @@ class TestWorkerPool(RQTestCase):
         pool.start(burst=True)
         # Worker should have processed the job
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
+    def test_worker_pool_starts_single_scheduler_non_burst(self):
+        """When with_scheduler=True and not burst, pool starts one scheduler process."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+
+        # Stop pool after a short delay
+        p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        p.start()
+        pool.start(burst=False, with_scheduler=True)
+
+        # Scheduler should have been created and started at some point
+        self.assertIsNotNone(pool.scheduler)
+        self.assertIsNotNone(pool.scheduler._process)
+
+    def test_worker_pool_scheduler_burst_no_process(self):
+        """In burst mode, pool scheduler enqueues scheduled jobs once and does not start a scheduler process."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+        pool.start(burst=True, with_scheduler=True)
+        self.assertIsNotNone(pool.scheduler)
+        self.assertIsNone(pool.scheduler._process)
+
+    def test_worker_pool_without_scheduler(self):
+        """When with_scheduler=False, pool does not create a scheduler."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+        p = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
+        p.start()
+        pool.start(burst=False, with_scheduler=False)
+        self.assertIsNone(pool.scheduler)
+
+    def test_worker_pool_non_burst_with_scheduler_executes_scheduled_job(self):
+        """Non-burst pool with scheduler should execute a job scheduled ~1s in the future."""
+        queue = Queue('foo', connection=self.connection)
+        # Schedule a job ~1 second in the future
+        scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=1)
+        job = queue.enqueue_at(scheduled_time, say_hello)
+
+        pool = WorkerPool(['foo'], connection=self.connection, num_workers=1)
+
+        # Stop pool after a short delay to allow scheduler + worker to process the job
+        stopper = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 3.0))
+        stopper.start()
+        pool.start(burst=False, with_scheduler=True)
+
+        # After pool stops, the scheduled job should have been executed
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+        # Ensure no lingering workers in case of flakiness
+        pool.stop_workers()
+
+    def test_worker_pool_reacquires_scheduler_locks_when_process_missing(self):
+        """Pool eventually starts scheduler via acquire_locks(auto_start=True)."""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+
+        # Block initial scheduler lock acquisition so no process is started yet
+        self.connection.set('rq:scheduler-lock:default', 'block', ex=1)
+
+        # Allow enough time for the loop to tick and the lock to expire
+        stopper = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 3.0))
+        stopper.start()
+        pool.start(burst=False, with_scheduler=True)
+
+        # After running, a scheduler should have been started by the loop
+        self.assertIsNotNone(pool.scheduler)
+        self.assertIsNotNone(pool.scheduler._process)
+        self.assertIsNotNone(getattr(pool.scheduler._process, 'pid', None))
