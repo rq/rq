@@ -27,6 +27,7 @@ RUN apt-get install -y \
     stunnel \
     python3.9 \
     python3.9-dev \
+    python3.9-distutils \
     python3.10 \
     python3.10-dev \
     python3.11 \
