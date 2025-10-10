@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from types import FrameType
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -22,8 +22,10 @@ if TYPE_CHECKING:
         from resource import struct_rusage
     except ImportError:
         pass
+    from _typeshed import ExcInfo
     from redis import Redis
     from redis.client import Pipeline, PubSub, PubSubWorkerThread
+    from typing_extensions import Unpack
 
 from contextlib import suppress
 
@@ -211,7 +213,7 @@ class BaseWorker:
         self.queues = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
-        self._exc_handlers: list[Callable] = []
+        self._exc_handlers: list[Callable[[Job, Unpack[ExcInfo]], Any]] = []
         self._work_horse_killed_handler = work_horse_killed_handler
         self._shutdown_requested_date: Optional[datetime] = None
 
@@ -1232,7 +1234,7 @@ class BaseWorker:
             if not fallthrough:
                 break
 
-    def push_exc_handler(self, handler_func):
+    def push_exc_handler(self, handler_func: Callable[[Job, Unpack[ExcInfo]], Any]):
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
