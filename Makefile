@@ -21,4 +21,4 @@ force_release: clean
 	twine upload dist/*
 
 lint:
-	@ ruff check --show-source rq tests
+	@ ruff check --output-format=full rq tests
