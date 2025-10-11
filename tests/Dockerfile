@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
@@ -27,6 +27,7 @@ RUN apt-get install -y \
     stunnel \
     python3.9 \
     python3.9-dev \
+    python3.9-distutils \
     python3.10 \
     python3.10-dev \
     python3.11 \
