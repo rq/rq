@@ -1479,7 +1479,7 @@ class Job:
         with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
             self.success_callback(self, self.connection, result)
 
-    def execute_failure_callback(self, death_penalty_class: type[BaseDeathPenalty], *exc_info):
+    def execute_failure_callback(self, death_penalty_class: type[BaseDeathPenalty], *exc_info: Unpack[ExcInfo]):
         """Executes failure_callback with possible timeout"""
         if not self.failure_callback:
             return
