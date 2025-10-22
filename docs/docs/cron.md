@@ -53,7 +53,7 @@ cron.register(
     queue_name='email',
     args=('weekly_digest',),
     kwargs={'template': 'newsletter.html'},
-    cron_string='30 10 * * 2'
+    cron='30 10 * * 2'
 )
 ```
 
@@ -98,17 +98,17 @@ cron.register(hourly_task, queue_name='hourly', interval=3600)  # Every hour
 
 __New in version 2.5__
 
-Use the cron_string parameter with standard [cron syntax](https://en.wikipedia.org/wiki/Cron).
+Use the cron parameter with standard [cron syntax](https://en.wikipedia.org/wiki/Cron).
 
 ```python
 # Every day at 2:30 AM
-cron.register(daily_backup, queue_name='maintenance', cron_string='30 2 * * *')
+cron.register(daily_backup, queue_name='maintenance', cron='30 2 * * *')
 
 # Every 15 minutes
-cron.register(frequent_task, queue_name='default', cron_string='*/15 * * * *')
+cron.register(frequent_task, queue_name='default', cron='*/15 * * * *')
 
 # Weekly on Sundays at 6:00 PM
-cron.register(weekly_report, queue_name='reports', cron_string='0 18 * * 0')
+cron.register(weekly_report, queue_name='reports', cron='0 18 * * 0')
 ```
 
 ## Configuration Files
@@ -138,7 +138,7 @@ register(
 register(
     backup_files,
     queue_name='backup',
-    cron_string='0 2 * * *',  # Daily at 2 AM
+    cron='0 2 * * *',  # Daily at 2 AM
     timeout=1800,    # 30 minutes max execution time
     result_ttl=3600, # Keep results for 1 hour
     failure_ttl=86400 # Keep failed jobs for 1 day
@@ -214,7 +214,7 @@ cron.register(
     send_reports,
     queue_name='reports',
     args=('daily',),
-    cron_string='0 9 * * *'  # Daily at 9 AM
+    cron='0 9 * * *'  # Daily at 9 AM
 )
 
 # Start the scheduler (this will block until interrupted)
