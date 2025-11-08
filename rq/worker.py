@@ -1405,6 +1405,14 @@ class Worker(BaseWorker):
             self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.name, job.id, exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
+
+            # Execute failure callback with None values since we don't have a traceback
+            try:
+                job.execute_failure_callback(self.death_penalty_class, None, None, None)
+            except:  # noqa
+                exc_info = sys.exc_info()
+                exc_string = ''.join(traceback.format_exception(*exc_info))
+
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
 
     def execute_job(self, job: 'Job', queue: 'Queue'):

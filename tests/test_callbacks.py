@@ -1,4 +1,5 @@
 from datetime import timedelta
+from multiprocessing import Process
 
 from rq import Queue, Worker
 from rq.job import UNEVALUATED, Callback, Job, JobStatus
@@ -8,7 +9,9 @@ from tests import RQTestCase
 from tests.fixtures import (
     div_by_zero,
     erroneous_callback,
+    kill_horse,
     long_process,
+    long_running_job,
     save_exception,
     save_result,
     save_result_if_not_stopped,
@@ -253,6 +256,24 @@ class WorkerCallbackTestCase(RQTestCase):
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.connection.exists('failure_callback:%s' % job.id))
+
+    def test_failure_callback_called_when_work_horse_killed(self):
+        """Test failure callback is executed when work horse is killed"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(long_running_job, 10, horse_pid_key='horse_pid_key', on_failure=save_exception)
+
+        # Wait 1 second before killing the horse to simulate horse terminating unexpectedly
+        p = Process(target=kill_horse, args=('horse_pid_key', self.connection.connection_pool.connection_kwargs, 1))
+        p.start()
+
+        worker = Worker([queue], connection=self.connection)
+        worker.work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        # Verify failure callback was called - it should have set a key with "None" as the value
+        # since we pass None for exc_info when work horse is killed
+        self.assertTrue(self.connection.exists('failure_callback:%s' % job.id))
+        self.assertEqual(self.connection.get('failure_callback:%s' % job.id).decode(), 'None')
 
         # TODO: add test case for error while executing failure callback
 
