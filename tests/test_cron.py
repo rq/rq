@@ -642,7 +642,7 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(fetched_cron.created_at, cron.created_at)
 
     def test_heartbeat(self):
-        """Test that heartbeat() updates scheduler's timestamp in registry"""
+        """Test that heartbeat() updates scheduler's timestamp in registry and extends TTL"""
         cron = CronScheduler(connection=self.connection)
 
         # Ensure registry is clean
@@ -654,6 +654,11 @@ class TestCronScheduler(RQTestCase):
         initial_score = self.connection.zscore(registry_key, cron.name)
         self.assertIsNotNone(initial_score)
 
+        # Verify initial TTL (should be 60 seconds from register_birth)
+        initial_ttl = self.connection.ttl(cron.key)
+        self.assertGreater(initial_ttl, 0)
+        self.assertLessEqual(initial_ttl, 60)
+
         # Wait a brief moment to ensure timestamp difference
         time.sleep(0.01)
 
@@ -661,6 +666,12 @@ class TestCronScheduler(RQTestCase):
         new_score = self.connection.zscore(registry_key, cron.name)
         self.assertIsNotNone(new_score)
         self.assertGreater(cast(float, new_score), cast(float, initial_score))
+
+        # Verify TTL was extended to 120 seconds
+        new_ttl = self.connection.ttl(cron.key)
+        self.assertGreater(new_ttl, 60)  # Should be greater than initial TTL
+        self.assertLessEqual(new_ttl, 120)  # Should be at most 120 seconds
+
         cron.register_death()
 
         # Test heartbeat on unregistered scheduler
