@@ -656,8 +656,7 @@ class TestCronScheduler(RQTestCase):
 
         # Verify initial TTL (should be 60 seconds from register_birth)
         initial_ttl = self.connection.ttl(cron.key)
-        self.assertGreater(initial_ttl, 0)
-        self.assertLessEqual(initial_ttl, 60)
+        self.assertTrue(0 < initial_ttl <= 60)
 
         # Wait a brief moment to ensure timestamp difference
         time.sleep(0.01)
@@ -669,8 +668,7 @@ class TestCronScheduler(RQTestCase):
 
         # Verify TTL was extended to 120 seconds
         new_ttl = self.connection.ttl(cron.key)
-        self.assertGreater(new_ttl, 60)  # Should be greater than initial TTL
-        self.assertLessEqual(new_ttl, 120)  # Should be at most 120 seconds
+        self.assertTrue(60 < new_ttl <= 120)
 
         cron.register_death()
 
