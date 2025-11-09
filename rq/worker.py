@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import random
+import re
 import signal
 import socket
 import sys
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 from contextlib import suppress
 
 import redis.exceptions
+import redis.sentinel
 
 from . import worker_registration
 from .command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
@@ -1747,10 +1749,29 @@ class SpawnWorker(Worker):
         os.environ['RQ_JOB_ID'] = job.id
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = self.connection.connection_pool.connection_kwargs
-        if redis_kwargs.get('retry'):
-            # Remove retry from connection kwargs to avoid issues with os.spawnv
-            del redis_kwargs['retry']
+        def clean_connection_kwargs(connection_kwargs: dict):
+            """Clean up connection kwargs to avoid issues with os.spawnv."""
+            return {k: v for k, v in connection_kwargs.items() if k not in ['retry', 'connection_pool']}
+
+        redis_kwargs = clean_connection_kwargs(self.connection.connection_pool.connection_kwargs)
+
+        sentinel_master_name = None
+        sentinel_instances = None
+        sentinel_manager = None
+        if isinstance(self.connection.connection_pool, redis.sentinel.SentinelConnectionPool):
+            # if we are using a sentinel connection pool, we need to prepare and pass
+            # all relevant information to the child process, so that it can handle
+            # sentinel failovers instead of just passing the current active master
+            sentinel_manager = self.connection.connection_pool.sentinel_manager
+            sentinel_instances = [
+                instance.connection_pool.connection_kwargs for instance in sentinel_manager.sentinels
+            ]
+            sentinel_instances = [
+                (instance['host'], instance['port']) for instance in sentinel_instances
+            ]
+            sentinel_master_name = self.connection.connection_pool.service_name
+            # sanitize master name, valid charset is A-z 0-9 and ".-_", avoid injection attacks
+            sentinel_master_name = re.sub(r'[^A-Za-z0-9.\-_]', '', sentinel_master_name)
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
@@ -1767,7 +1788,18 @@ from rq.job import Job
 from rq.executions import Execution
 
 # Recreate worker instance
-redis = Redis(**{redis_kwargs})
+sentinel_mgr = None
+sentinel_instances = {sentinel_instances or []}
+if sentinel_instances:
+    # recreate Sentinel instance if it has been used before
+    from redis.sentinel import Sentinel
+    sentinel_mgr = Sentinel(
+        sentinels=sentinel_instances,
+        sentinel_kwargs={sentinel_manager and sentinel_manager.sentinel_kwargs},
+        **{clean_connection_kwargs(sentinel_manager.connection_kwargs if sentinel_manager else {})},
+    )
+
+redis = Redis(**{redis_kwargs}) if not sentinel_mgr else sentinel_mgr.master_for("{sentinel_master_name}")
 worker = Worker.find_by_key("{self.key}", connection=redis)
 if not worker:
     sys.exit(1)
