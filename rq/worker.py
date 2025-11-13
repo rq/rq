@@ -980,9 +980,9 @@ class BaseWorker:
                     self.log.debug('Dequeued job %s from %s', blue(job.id), green(queue.name))
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
-                        self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
+                        self.log.debug('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
                     else:
-                        self.log.info('%s: %s', green(queue.name), job.id)
+                        self.log.debug('%s: %s', green(queue.name), job.id)
 
                 break
             except DequeueTimeout:
@@ -1531,7 +1531,7 @@ class Worker(BaseWorker):
         finally:
             pop_connection()
 
-        self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
+        self.log.debug('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
         if rv is not None:
             self.log.debug('Result: %r', yellow(as_text(str(rv))))
 
