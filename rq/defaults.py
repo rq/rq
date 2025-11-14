@@ -96,6 +96,52 @@ Defaults to the `UnixSignalDeathPenalty` class within the `rq.timeouts` module
 """
 
 
+def _get_default_max_memory() -> int:
+    """Determine the default maximum memory for work horse processes.
+
+    Attempts to read from cgroup memory limit if available (containerized environments),
+    otherwise defaults to 4 GB.
+
+    Returns:
+        int: Maximum memory in bytes (90% of cgroup limit or 4 GB)
+    """
+    cgroup_memory_file = '/sys/fs/cgroup/memory.max'
+    default_memory = 4 * 1024 * 1024 * 1024  # 4 GB fallback
+
+    try:
+        with open(cgroup_memory_file, 'r') as f:
+            content = f.read().strip()
+
+            # Handle empty file
+            if not content:
+                return default_memory
+
+            # Handle "max" (unlimited)
+            if content.lower() == 'max':
+                return default_memory
+
+            # Try to parse as integer (bytes)
+            try:
+                cgroup_limit = int(content)
+                # Use 90% of the cgroup limit
+                return int(cgroup_limit * 0.9)
+            except ValueError:
+                # Not a valid number, use default
+                return default_memory
+
+    except (FileNotFoundError, PermissionError, OSError):
+        # File doesn't exist or can't be read, use default
+        return default_memory
+
+
+DEFAULT_MAX_MEMORY = _get_default_max_memory()
+""" The default maximum memory in bytes for work horse processes.
+In containerized environments, uses 90% of cgroup memory limit.
+Otherwise defaults to 4 GB. Work horses exceeding this limit will be killed.
+Set to None to disable memory monitoring.
+"""
+
+
 UNSERIALIZABLE_RETURN_VALUE_PAYLOAD = 'Unserializable return value'
 """ The value that we store in the job's _result property or in the Result's return_value
 in case the return value of the actual job is not serializable

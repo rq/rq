@@ -42,6 +42,7 @@ from .defaults import (
     DEFAULT_LOGGING_DATE_FORMAT,
     DEFAULT_LOGGING_FORMAT,
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
+    DEFAULT_MAX_MEMORY,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
@@ -139,11 +140,13 @@ class BaseWorker:
         prepare_for_work: bool = True,
         serializer=None,
         work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
+        max_memory: Optional[int] = DEFAULT_MAX_MEMORY,
     ):  # noqa
         self.default_result_ttl = default_result_ttl
         self.worker_ttl = default_worker_ttl
         self.job_monitoring_interval = job_monitoring_interval
         self.maintenance_interval = maintenance_interval
+        self.max_memory = max_memory  # Maximum memory in bytes (default: 4 GB), None means no limit
 
         connection = self._set_connection(connection)
         self.connection = connection
@@ -1164,6 +1167,38 @@ class Worker(BaseWorker):
             pid, stat, rusage = os.wait4(self.horse_pid, 0)
         return pid, stat, rusage
 
+    def get_horse_memory_usage(self) -> Optional[int]:
+        """Get the memory usage of the work horse process in bytes.
+        Returns None if the memory cannot be determined.
+
+        Returns:
+            memory_bytes (Optional[int]): Memory usage in bytes, or None if unavailable
+        """
+        try:
+            # Read memory info from /proc/<pid>/status on Linux
+            # On macOS/BSD, we'll use psutil if available, otherwise return None
+            if sys.platform.startswith('linux'):
+                with open(f'/proc/{self.horse_pid}/status', 'r') as f:
+                    for line in f:
+                        if line.startswith('VmRSS:'):
+                            # VmRSS is in kB, convert to bytes
+                            mem_kb = int(line.split()[1])
+                            return mem_kb * 1024
+            else:
+                # Try to use psutil if available (cross-platform solution)
+                try:
+                    import psutil
+                    process = psutil.Process(self.horse_pid)
+                    mem_info = process.memory_info()
+                    return mem_info.rss  # Resident Set Size in bytes
+                except ImportError:
+                    # psutil not available
+                    pass
+        except (FileNotFoundError, ProcessLookupError, PermissionError, ValueError):
+            # Process doesn't exist or we don't have permission
+            pass
+        return None
+
     def request_force_stop(self, signum: int, frame: Optional[FrameType]):
         """Terminates the application (cold shutdown).
 
@@ -1279,6 +1314,21 @@ class Worker(BaseWorker):
                 # Horse has not exited yet and is still running.
                 # Send a heartbeat to keep the worker alive.
                 self.set_current_job_working_time((utcnow() - job.started_at).total_seconds())
+
+                # Check memory usage if max_memory is set
+                if self.max_memory is not None:
+                    memory_usage = self.get_horse_memory_usage()
+                    if memory_usage is not None and memory_usage > self.max_memory:
+                        mem_mb = memory_usage / (1024 * 1024)
+                        limit_mb = self.max_memory / (1024 * 1024)
+                        self.log.warning(
+                            'Horse %s exceeded memory limit: %.2f MB > %.2f MB, killing job %s',
+                            self.horse_pid, mem_mb, limit_mb, job.id
+                        )
+                        self.heartbeat(self.job_monitoring_interval + 60)
+                        self.kill_horse()
+                        self.wait_for_horse()
+                        break
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
