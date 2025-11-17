@@ -50,7 +50,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Start Redis
-        uses: supercharge/redis-github-action@1.8.1
+        uses: supercharge/redis-github-action@v2
         with:
           redis-version: ${{ matrix.redis-version }}
 
