@@ -30,7 +30,6 @@ class TestDependencies(RQTestCase):
         self.assertTrue(jobs[0].allow_dependency_failures)
 
     def test_deferred_task_not_enqueued_when_dependencies_are_not_finished(self):
-
         job_a = Job.create(say_hello, connection=self.connection)
         job_b = Job.create(say_hello, connection=self.connection)
         job_c = Job.create(say_hello, connection=self.connection, depends_on=[job_a, job_b])

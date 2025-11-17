@@ -208,10 +208,15 @@ class TestCronScheduler(RQTestCase):
         meta = {'purpose': 'testing'}
 
         cron_job = cron.register(
-            func=say_hello, queue_name=self.queue_name, interval=30, timeout=timeout, result_ttl=result_ttl, meta=meta
+            func=say_hello,
+            queue_name=self.queue_name,
+            interval=30,
+            job_timeout=timeout,
+            result_ttl=result_ttl,
+            meta=meta,
         )
 
-        self.assertEqual(cron_job.job_options['timeout'], timeout)
+        self.assertEqual(cron_job.job_options['job_timeout'], timeout)
         self.assertEqual(cron_job.job_options['result_ttl'], result_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
 

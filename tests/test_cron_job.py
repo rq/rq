@@ -40,7 +40,7 @@ class TestCronJob(RQTestCase):
             args=args,
             kwargs=kwargs,
             interval=interval,
-            timeout=timeout,
+            job_timeout=timeout,
             result_ttl=result_ttl,
             ttl=ttl,
             failure_ttl=failure_ttl,
@@ -54,7 +54,7 @@ class TestCronJob(RQTestCase):
         self.assertEqual(cron_job.queue_name, self.queue.name)
 
         # Check job options dict
-        self.assertEqual(cron_job.job_options['timeout'], timeout)
+        self.assertEqual(cron_job.job_options['job_timeout'], timeout)
         self.assertEqual(cron_job.job_options['result_ttl'], result_ttl)
         self.assertEqual(cron_job.job_options['ttl'], ttl)
         self.assertEqual(cron_job.job_options['failure_ttl'], failure_ttl)
@@ -113,6 +113,28 @@ class TestCronJob(RQTestCase):
         jobs = self.queue.get_jobs()
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0].id, job.id)
+
+    def test_enqueue_with_job_timeout(self):
+        """Test that job_timeout is properly set on the job and not passed to the function"""
+        timeout_value = 180
+        cron_job = CronJob(
+            func=say_hello,
+            queue_name=self.queue.name,
+            args=('World',),
+            interval=60,
+            job_timeout=timeout_value,
+        )
+        job = cron_job.enqueue(self.connection)
+
+        # Verify job has the correct timeout set
+        self.assertEqual(job.timeout, timeout_value)
+
+        # Verify job kwargs does not include job_timeout
+        self.assertNotIn('job_timeout', job.kwargs)
+
+        # Verify job can be executed without TypeError
+        result = job.perform()
+        self.assertEqual(result, 'Hi there, World!')  # say_hello returns a greeting
 
     def test_set_run_time(self):
         """Test that set_run_time correctly sets latest run time and updates next run time"""
@@ -234,7 +256,7 @@ class TestCronJob(RQTestCase):
             args=('test', 'args'),  # These won't be serialized
             kwargs={'test': 'kwarg'},  # These won't be serialized
             interval=60,
-            timeout=30,
+            job_timeout=30,
             result_ttl=600,
             meta={'test': 'meta'},
         )
@@ -248,7 +270,7 @@ class TestCronJob(RQTestCase):
         self.assertEqual(interval_data['queue_name'], self.queue.name)
         self.assertEqual(interval_data['interval'], 60)
         self.assertIsNone(interval_data['cron'])
-        self.assertEqual(interval_data['timeout'], 30)
+        self.assertEqual(interval_data['job_timeout'], 30)
         self.assertEqual(interval_data['result_ttl'], 600)
         self.assertEqual(interval_data['meta'], {'test': 'meta'})
 
