@@ -169,7 +169,7 @@ class Result:
         If a non-zero timeout is provided, block for a result until timeout is reached.
         """
         if timeout:
-            # Unlike blpop, xread timeout is in miliseconds. "0-0" is the special value for the
+            # Unlike blpop, xread timeout is in milliseconds. "0-0" is the special value for the
             # first item in the stream, like '-' for xrevrange.
             timeout_ms = timeout * 1000
             response = job.connection.xread({cls.get_key(job.id): '0-0'}, block=timeout_ms)
