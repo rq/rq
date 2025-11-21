@@ -1493,6 +1493,37 @@ class BaseWorker:
 
         return True
 
+    def main_work_horse(self, job: 'Job', queue: 'Queue'):
+        """This is the entry point of the newly spawned work horse.
+        After fork()'ing, always assure we are generating random sequences
+        that are different from the worker.
+
+        os._exit() is the way to exit from childs after a fork(), in
+        contrast to the regular sys.exit()
+        """
+        random.seed()
+        self.setup_work_horse_signals()
+        self._is_horse = True
+        self.log = logger
+        try:
+            self.perform_job(job, queue)
+        except:  # noqa
+            os._exit(1)
+        os._exit(0)
+
+    def setup_work_horse_signals(self):
+        """Setup signal handing for the newly spawned work horse
+
+        Always ignore Ctrl+C in the work horse, as it might abort the
+        currently running job.
+
+        The main worker catches the Ctrl+C and requests graceful shutdown
+        after the current work is done.  When cold shutdown is requested, it
+        kills the current job anyway.
+        """
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         raise NotImplementedError()
 
@@ -1689,37 +1720,6 @@ class Worker(BaseWorker):
 
             if results[7] == 1:
                 self.connection.delete(job.key)
-
-    def main_work_horse(self, job: 'Job', queue: 'Queue'):
-        """This is the entry point of the newly spawned work horse.
-        After fork()'ing, always assure we are generating random sequences
-        that are different from the worker.
-
-        os._exit() is the way to exit from childs after a fork(), in
-        contrast to the regular sys.exit()
-        """
-        random.seed()
-        self.setup_work_horse_signals()
-        self._is_horse = True
-        self.log = logger
-        try:
-            self.perform_job(job, queue)
-        except:  # noqa
-            os._exit(1)
-        os._exit(0)
-
-    def setup_work_horse_signals(self):
-        """Setup signal handing for the newly spawned work horse
-
-        Always ignore Ctrl+C in the work horse, as it might abort the
-        currently running job.
-
-        The main worker catches the Ctrl+C and requests graceful shutdown
-        after the current work is done.  When cold shutdown is requested, it
-        kills the current job anyway.
-        """
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
 
 class SpawnWorker(Worker):
