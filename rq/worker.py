@@ -1579,21 +1579,6 @@ class Worker(BaseWorker):
             self._horse_pid = child_pid
             self.procline(f'Forked {child_pid} at {time.time()}')
 
-    def get_heartbeat_ttl(self, job: 'Job') -> int:
-        """Get's the TTL for the next heartbeat.
-
-        Args:
-            job (Job): The Job
-
-        Returns:
-            int: The heartbeat TTL.
-        """
-        if job.timeout and job.timeout > 0:
-            remaining_execution_time = job.timeout - self.current_job_working_time
-            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
-        else:
-            return self.job_monitoring_interval + 60
-
     def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
