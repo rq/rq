@@ -1254,6 +1254,245 @@ class BaseWorker:
 
         self._work_horse_killed_handler(job, retpid, ret_val, rusage)
 
+    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
+        """Performs misc bookkeeping like updating states prior to
+        job execution.
+        """
+        self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
+        with self.connection.pipeline() as pipeline:
+            self.set_current_job_id(job.id, pipeline=pipeline)
+            self.set_current_job_working_time(0, pipeline=pipeline)
+
+            heartbeat_ttl = self.get_heartbeat_ttl(job)
+            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+            job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
+
+            job.prepare_for_execution(self.name, pipeline=pipeline)
+            if remove_from_intermediate_queue:
+                from .queue import Queue
+
+                queue = Queue(job.origin, connection=self.connection)
+                pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
+            pipeline.execute()
+            self.log.debug('Worker %s: job preparation finished.', self.name)
+
+        msg = 'Processing {0} from {1} since {2}'
+        self.procline(msg.format(job.func_name, job.origin, time.time()))
+
+    def handle_job_retry(self, job: 'Job', queue: 'Queue', retry: Retry, started_job_registry: StartedJobRegistry):
+        """Handles the retry of certain job.
+        It will remove the job from the `StartedJobRegistry` and requeue or reschedule the job.
+
+        Args:
+            job (Job): The job that will be retried.
+            queue (Queue): The queue
+            started_job_registry (StartedJobRegistry): The started registry
+        """
+        self.log.debug('Worker %s: handling retry of job %s', self.name, job.id)
+
+        # Check if job has exceeded max retries
+        if job.number_of_retries and job.number_of_retries >= retry.max:
+            # If max retries exceeded, treat as failure
+            self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
+            exc_string = f'Job failed after {retry.max} retry attempts'
+            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+            return
+
+        # Calculate retry interval based on retry count
+        retry_interval = Retry.get_interval(job.number_of_retries or 0, retry.intervals)
+
+        with self.connection.pipeline() as pipeline:
+            self.increment_failed_job_count(pipeline=pipeline)
+            self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+
+            if retry_interval > 0:
+                # Schedule job for later if there's an interval
+                scheduled_time = now() + timedelta(seconds=retry_interval)
+                job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
+                queue.schedule_job(job, scheduled_time, pipeline=pipeline)
+                self.log.debug(
+                    'Worker %s: job %s: scheduled for retry at %s, %s attempts remaining',
+                    self.name,
+                    job.id,
+                    scheduled_time,
+                    retry.max - (job.number_of_retries or 0),
+                )
+            else:
+                self.log.debug(
+                    'Worker %s: job %s: enqueued for retry, %s attempts remaining',
+                    self.name,
+                    job.id,
+                    retry.max - (job.number_of_retries or 0),
+                )
+                job._handle_retry_result(queue=queue, pipeline=pipeline, worker_name=self.name)
+
+            self.cleanup_execution(job, pipeline=pipeline)
+
+            pipeline.execute()
+
+            self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
+
+    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
+        """Handles the successful execution of certain job.
+        It will remove the job from the `StartedJobRegistry`, adding it to the `SuccessfulJobRegistry`,
+        and run a few maintenance tasks including:
+            - Resting the current job ID
+            - Enqueue dependents
+            - Incrementing the job count and working time
+            - Handling of the job successful execution
+            - If job.repeats_left > 0, it will be scheduled for the next execution.
+
+        Runs within a loop with the `watch` method so that protects interactions
+        with dependents keys.
+
+        Args:
+            job (Job): The job that was successful.
+            queue (Queue): The queue
+            started_job_registry (StartedJobRegistry): The started registry
+        """
+        self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
+
+        with self.connection.pipeline() as pipeline:
+            while True:
+                try:
+                    # if dependencies are inserted after enqueue_dependents
+                    # a WatchError is thrown by execute()
+                    pipeline.watch(job.dependents_key)
+                    # enqueue_dependents might call multi() on the pipeline
+                    self.log.debug('Worker %s: enqueueing dependents of job %s', self.name, job.id)
+                    queue.enqueue_dependents(job, pipeline=pipeline)
+
+                    if not pipeline.explicit_transaction:
+                        # enqueue_dependents didn't call multi after all!
+                        # We have to do it ourselves to make sure everything runs in a transaction
+                        self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
+                        pipeline.multi()
+
+                    self.increment_successful_job_count(pipeline=pipeline)
+                    self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+
+                    result_ttl = job.get_result_ttl(self.default_result_ttl)
+                    if result_ttl != 0:
+                        self.log.debug("Worker %s: saving job %s's successful execution result", self.name, job.id)
+                        job._handle_success(result_ttl, pipeline=pipeline, worker_name=self.name)
+
+                    if job.repeats_left is not None and job.repeats_left > 0:
+                        from .repeat import Repeat
+
+                        self.log.info(
+                            'Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left
+                        )
+                        Repeat.schedule(job, queue, pipeline=pipeline)
+                    else:
+                        job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
+
+                    self.log.debug('Cleaning up execution of job %s', job.id)
+                    self.cleanup_execution(job, pipeline=pipeline)
+
+                    pipeline.execute()
+
+                    assert job.started_at
+                    assert job.ended_at
+                    time_taken = job.ended_at - job.started_at
+
+                    if self.log_job_description:
+                        self.log.info(
+                            'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
+                        )
+                    else:
+                        self.log.info(
+                            'Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name
+                        )
+
+                    self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
+                    break
+                except redis.exceptions.WatchError:
+                    continue
+
+    def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
+        """Called after job has finished execution."""
+        job.ended_at = now()
+        job.heartbeat(now(), heartbeat_ttl)
+
+    def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
+        """Performs the actual work of a job.  Will/should only be called
+        inside the work horse's process.
+
+        Args:
+            job (Job): The Job
+            queue (Queue): The Queue
+
+        Returns:
+            bool: True after finished.
+        """
+        started_job_registry = queue.started_job_registry
+        self.log.debug('Worker %s: started job registry set.', self.name)
+
+        try:
+            remove_from_intermediate_queue = len(self.queues) == 1
+            self.prepare_job_execution(job, remove_from_intermediate_queue)
+
+            job.started_at = now()
+            timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
+            with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
+                self.log.debug('Worker %s: performing job %s ...', self.name, job.id)
+                return_value = job.perform()
+                self.log.debug('Worker %s: finished performing job %s', self.name, job.id)
+
+            self.handle_execution_ended(job, queue, job.success_callback_timeout)
+            # Pickle the result in the same try-except block since we need
+            # to use the same exc handling when pickling fails
+            job._result = return_value
+
+            if isinstance(return_value, Retry):
+                # Retry the job
+                self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
+                self.handle_job_retry(
+                    job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry
+                )
+                return True
+            else:
+                job.execute_success_callback(self.death_penalty_class, return_value)
+                self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
+
+        except:  # NOQA
+            self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
+            job._status = JobStatus.FAILED
+
+            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
+            exc_info = sys.exc_info()
+            exc_string = ''.join(traceback.format_exception(*exc_info))
+
+            try:
+                job.execute_failure_callback(self.death_penalty_class, *exc_info)
+            except:  # noqa
+                exc_info = sys.exc_info()
+                exc_string = ''.join(traceback.format_exception(*exc_info))
+
+            # TODO: reversing the order of handle_job_failure() and handle_exception()
+            # causes Sentry test to fail
+            self.handle_exception(job, *exc_info)
+            self.handle_job_failure(
+                job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
+            )
+
+            return False
+
+        self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
+        if return_value is not None:
+            self.log.debug('Worker %s: result: %r', self.name, yellow(str(return_value)))
+
+        if self.log_result_lifespan:
+            result_ttl = job.get_result_ttl(self.default_result_ttl)
+            if result_ttl == 0:
+                self.log.info('Result discarded immediately')
+            elif result_ttl > 0:
+                self.log.info('Result is kept for %s seconds', result_ttl)
+            else:
+                self.log.info('Result will never expire, clean up result key manually')
+
+        return True
+
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         raise NotImplementedError()
 
@@ -1496,245 +1735,6 @@ class Worker(BaseWorker):
         """
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
-
-    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
-        """Performs misc bookkeeping like updating states prior to
-        job execution.
-        """
-        self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
-        with self.connection.pipeline() as pipeline:
-            self.set_current_job_id(job.id, pipeline=pipeline)
-            self.set_current_job_working_time(0, pipeline=pipeline)
-
-            heartbeat_ttl = self.get_heartbeat_ttl(job)
-            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
-            job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
-
-            job.prepare_for_execution(self.name, pipeline=pipeline)
-            if remove_from_intermediate_queue:
-                from .queue import Queue
-
-                queue = Queue(job.origin, connection=self.connection)
-                pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
-            pipeline.execute()
-            self.log.debug('Worker %s: job preparation finished.', self.name)
-
-        msg = 'Processing {0} from {1} since {2}'
-        self.procline(msg.format(job.func_name, job.origin, time.time()))
-
-    def handle_job_retry(self, job: 'Job', queue: 'Queue', retry: Retry, started_job_registry: StartedJobRegistry):
-        """Handles the retry of certain job.
-        It will remove the job from the `StartedJobRegistry` and requeue or reschedule the job.
-
-        Args:
-            job (Job): The job that will be retried.
-            queue (Queue): The queue
-            started_job_registry (StartedJobRegistry): The started registry
-        """
-        self.log.debug('Worker %s: handling retry of job %s', self.name, job.id)
-
-        # Check if job has exceeded max retries
-        if job.number_of_retries and job.number_of_retries >= retry.max:
-            # If max retries exceeded, treat as failure
-            self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
-            exc_string = f'Job failed after {retry.max} retry attempts'
-            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
-            return
-
-        # Calculate retry interval based on retry count
-        retry_interval = Retry.get_interval(job.number_of_retries or 0, retry.intervals)
-
-        with self.connection.pipeline() as pipeline:
-            self.increment_failed_job_count(pipeline=pipeline)
-            self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
-
-            if retry_interval > 0:
-                # Schedule job for later if there's an interval
-                scheduled_time = now() + timedelta(seconds=retry_interval)
-                job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
-                queue.schedule_job(job, scheduled_time, pipeline=pipeline)
-                self.log.debug(
-                    'Worker %s: job %s: scheduled for retry at %s, %s attempts remaining',
-                    self.name,
-                    job.id,
-                    scheduled_time,
-                    retry.max - (job.number_of_retries or 0),
-                )
-            else:
-                self.log.debug(
-                    'Worker %s: job %s: enqueued for retry, %s attempts remaining',
-                    self.name,
-                    job.id,
-                    retry.max - (job.number_of_retries or 0),
-                )
-                job._handle_retry_result(queue=queue, pipeline=pipeline, worker_name=self.name)
-
-            self.cleanup_execution(job, pipeline=pipeline)
-
-            pipeline.execute()
-
-            self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
-
-    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
-        """Handles the successful execution of certain job.
-        It will remove the job from the `StartedJobRegistry`, adding it to the `SuccessfulJobRegistry`,
-        and run a few maintenance tasks including:
-            - Resting the current job ID
-            - Enqueue dependents
-            - Incrementing the job count and working time
-            - Handling of the job successful execution
-            - If job.repeats_left > 0, it will be scheduled for the next execution.
-
-        Runs within a loop with the `watch` method so that protects interactions
-        with dependents keys.
-
-        Args:
-            job (Job): The job that was successful.
-            queue (Queue): The queue
-            started_job_registry (StartedJobRegistry): The started registry
-        """
-        self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
-
-        with self.connection.pipeline() as pipeline:
-            while True:
-                try:
-                    # if dependencies are inserted after enqueue_dependents
-                    # a WatchError is thrown by execute()
-                    pipeline.watch(job.dependents_key)
-                    # enqueue_dependents might call multi() on the pipeline
-                    self.log.debug('Worker %s: enqueueing dependents of job %s', self.name, job.id)
-                    queue.enqueue_dependents(job, pipeline=pipeline)
-
-                    if not pipeline.explicit_transaction:
-                        # enqueue_dependents didn't call multi after all!
-                        # We have to do it ourselves to make sure everything runs in a transaction
-                        self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
-                        pipeline.multi()
-
-                    self.increment_successful_job_count(pipeline=pipeline)
-                    self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
-
-                    result_ttl = job.get_result_ttl(self.default_result_ttl)
-                    if result_ttl != 0:
-                        self.log.debug("Worker %s: saving job %s's successful execution result", self.name, job.id)
-                        job._handle_success(result_ttl, pipeline=pipeline, worker_name=self.name)
-
-                    if job.repeats_left is not None and job.repeats_left > 0:
-                        from .repeat import Repeat
-
-                        self.log.info(
-                            'Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left
-                        )
-                        Repeat.schedule(job, queue, pipeline=pipeline)
-                    else:
-                        job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
-
-                    self.log.debug('Cleaning up execution of job %s', job.id)
-                    self.cleanup_execution(job, pipeline=pipeline)
-
-                    pipeline.execute()
-
-                    assert job.started_at
-                    assert job.ended_at
-                    time_taken = job.ended_at - job.started_at
-
-                    if self.log_job_description:
-                        self.log.info(
-                            'Successfully completed %s job in %ss on worker %s', job.description, time_taken, self.name
-                        )
-                    else:
-                        self.log.info(
-                            'Successfully completed job %s in %ss on worker %s', job.id, time_taken, self.name
-                        )
-
-                    self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
-                    break
-                except redis.exceptions.WatchError:
-                    continue
-
-    def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
-        """Called after job has finished execution."""
-        job.ended_at = now()
-        job.heartbeat(now(), heartbeat_ttl)
-
-    def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
-        """Performs the actual work of a job.  Will/should only be called
-        inside the work horse's process.
-
-        Args:
-            job (Job): The Job
-            queue (Queue): The Queue
-
-        Returns:
-            bool: True after finished.
-        """
-        started_job_registry = queue.started_job_registry
-        self.log.debug('Worker %s: started job registry set.', self.name)
-
-        try:
-            remove_from_intermediate_queue = len(self.queues) == 1
-            self.prepare_job_execution(job, remove_from_intermediate_queue)
-
-            job.started_at = now()
-            timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
-            with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
-                self.log.debug('Worker %s: performing job %s ...', self.name, job.id)
-                return_value = job.perform()
-                self.log.debug('Worker %s: finished performing job %s', self.name, job.id)
-
-            self.handle_execution_ended(job, queue, job.success_callback_timeout)
-            # Pickle the result in the same try-except block since we need
-            # to use the same exc handling when pickling fails
-            job._result = return_value
-
-            if isinstance(return_value, Retry):
-                # Retry the job
-                self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
-                self.handle_job_retry(
-                    job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry
-                )
-                return True
-            else:
-                job.execute_success_callback(self.death_penalty_class, return_value)
-                self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
-
-        except:  # NOQA
-            self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
-            job._status = JobStatus.FAILED
-
-            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
-            exc_info = sys.exc_info()
-            exc_string = ''.join(traceback.format_exception(*exc_info))
-
-            try:
-                job.execute_failure_callback(self.death_penalty_class, *exc_info)
-            except:  # noqa
-                exc_info = sys.exc_info()
-                exc_string = ''.join(traceback.format_exception(*exc_info))
-
-            # TODO: reversing the order of handle_job_failure() and handle_exception()
-            # causes Sentry test to fail
-            self.handle_exception(job, *exc_info)
-            self.handle_job_failure(
-                job=job, exc_string=exc_string, queue=queue, started_job_registry=started_job_registry
-            )
-
-            return False
-
-        self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
-        if return_value is not None:
-            self.log.debug('Worker %s: result: %r', self.name, yellow(str(return_value)))
-
-        if self.log_result_lifespan:
-            result_ttl = job.get_result_ttl(self.default_result_ttl)
-            if result_ttl == 0:
-                self.log.info('Result discarded immediately')
-            elif result_ttl > 0:
-                self.log.info('Result is kept for %s seconds', result_ttl)
-            else:
-                self.log.info('Result will never expire, clean up result key manually')
-
-        return True
 
 
 class SpawnWorker(Worker):
