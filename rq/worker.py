@@ -10,6 +10,7 @@ import sys
 import time
 import traceback
 import warnings
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
@@ -142,7 +143,7 @@ class BaseWorker:
 
     def __init__(
         self,
-        queues,
+        queues: Sequence[Union[str, 'Queue']],
         name: Optional[str] = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
         connection: Optional['Redis'] = None,
@@ -208,7 +209,7 @@ class BaseWorker:
         ]
 
         self.name: str = name or uuid4().hex
-        self.queues = queues
+        self.queues: list[Queue] = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
         self._exc_handlers: list[Callable] = []
@@ -1236,16 +1237,38 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
-    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
-        raise NotImplementedError()
+    def pop_exc_handler(self):
+        """Pops the latest exception handler off of the exc handler stack."""
+        return self._exc_handlers.pop()
 
-
-class Worker(BaseWorker):
     @property
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
 
+    def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
+        self.log.warning('Work horse killed for job %s: retpid=%s, ret_val=%s', job.id, retpid, ret_val)
+
+        if self._work_horse_killed_handler is None:
+            return
+
+        self._work_horse_killed_handler(job, retpid, ret_val, rusage)
+
+    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
+        raise NotImplementedError()
+
+    def __eq__(self, other):
+        """Equality does not take the database/connection into account"""
+        if not isinstance(other, self.__class__):
+            raise TypeError('Cannot compare workers to other types (of workers)')
+        return self.name == other.name
+
+    def __hash__(self):
+        """The hash does not take the database/connection into account"""
+        return hash(self.name)
+
+
+class Worker(BaseWorker):
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
 
@@ -1712,28 +1735,6 @@ class Worker(BaseWorker):
                 self.log.info('Result will never expire, clean up result key manually')
 
         return True
-
-    def pop_exc_handler(self):
-        """Pops the latest exception handler off of the exc handler stack."""
-        return self._exc_handlers.pop()
-
-    def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
-        self.log.warning('Work horse killed for job %s: retpid=%s, ret_val=%s', job.id, retpid, ret_val)
-
-        if self._work_horse_killed_handler is None:
-            return
-
-        self._work_horse_killed_handler(job, retpid, ret_val, rusage)
-
-    def __eq__(self, other):
-        """Equality does not take the database/connection into account"""
-        if not isinstance(other, self.__class__):
-            raise TypeError('Cannot compare workers to other types (of workers)')
-        return self.name == other.name
-
-    def __hash__(self):
-        """The hash does not take the database/connection into account"""
-        return hash(self.name)
 
 
 class SpawnWorker(Worker):

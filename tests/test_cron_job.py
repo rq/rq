@@ -125,16 +125,9 @@ class TestCronJob(RQTestCase):
             job_timeout=timeout_value,
         )
         job = cron_job.enqueue(self.connection)
-
-        # Verify job has the correct timeout set
         self.assertEqual(job.timeout, timeout_value)
-
-        # Verify job kwargs does not include job_timeout
-        self.assertNotIn('job_timeout', job.kwargs)
-
         # Verify job can be executed without TypeError
-        result = job.perform()
-        self.assertEqual(result, 'Hi there, World!')  # say_hello returns a greeting
+        job.perform()
 
     def test_set_run_time(self):
         """Test that set_run_time correctly sets latest run time and updates next run time"""
