@@ -10,6 +10,7 @@ import sys
 import time
 import traceback
 import warnings
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
@@ -142,7 +143,7 @@ class BaseWorker:
 
     def __init__(
         self,
-        queues,
+        queues: Sequence[Union[str, 'Queue']],
         name: Optional[str] = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
         connection: Optional['Redis'] = None,
@@ -208,7 +209,7 @@ class BaseWorker:
         ]
 
         self.name: str = name or uuid4().hex
-        self.queues = queues
+        self.queues: list[Queue] = queues
         self.validate_queues()
         self._ordered_queues = self.queues[:]
         self._exc_handlers: list[Callable] = []
@@ -1236,243 +1237,22 @@ class BaseWorker:
         """Pushes an exception handler onto the exc handler stack."""
         self._exc_handlers.append(handler_func)
 
-    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
-        raise NotImplementedError()
+    def pop_exc_handler(self):
+        """Pops the latest exception handler off of the exc handler stack."""
+        return self._exc_handlers.pop()
 
-
-class Worker(BaseWorker):
     @property
     def is_horse(self):
         """Returns whether or not this is the worker or the work horse."""
         return self._is_horse
 
-    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
-        """Kill the horse but catch "No such process" error has the horse could already be dead.
+    def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
+        self.log.warning('Work horse killed for job %s: retpid=%s, ret_val=%s', job.id, retpid, ret_val)
 
-        Args:
-            sig (signal.Signals, optional): _description_. Defaults to SIGKILL.
-        """
-        try:
-            os.killpg(os.getpgid(self.horse_pid), sig)
-            self.log.info('Worker %s: killed horse pid %s', self.name, self.horse_pid)
-        except OSError as e:
-            if e.errno == errno.ESRCH:
-                # "No such process" is fine with us
-                self.log.debug('Worker %s: horse already dead', self.name)
-            else:
-                raise
-
-    def wait_for_horse(self) -> tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
-        """Waits for the horse process to complete.
-        Uses `0` as argument as to include "any child in the process group of the current process".
-        """
-        pid = stat = rusage = None
-        with contextlib.suppress(ChildProcessError):  # ChildProcessError: [Errno 10] No child processes
-            pid, stat, rusage = os.wait4(self.horse_pid, 0)
-        return pid, stat, rusage
-
-    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
-        """Terminates the application (cold shutdown).
-
-        Args:
-            signum (Any): Signum
-            frame (Any): Frame
-
-        Raises:
-            SystemExit: SystemExit
-        """
-        # When worker is run through a worker pool, it may receive duplicate signals
-        # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
-        # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
-        # we ignore it.
-        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
-            self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.name)
+        if self._work_horse_killed_handler is None:
             return
 
-        self.log.warning('Worker %s: cold shut down', self.name)
-
-        # Take down the horse with the worker
-        if self.horse_pid:
-            self.log.debug('Worker %s: taking down horse %s with me', self.name, self.horse_pid)
-            self.kill_horse()
-            self.wait_for_horse()
-        raise SystemExit()
-
-    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
-        """Spawns a work horse to perform the actual work and passes it a job.
-        This is where the `fork()` actually happens.
-
-        Args:
-            job (Job): The Job that will be ran
-            queue (Queue): The queue
-        """
-        child_pid = os.fork()
-        os.environ['RQ_WORKER_ID'] = self.name
-        os.environ['RQ_JOB_ID'] = job.id
-        if child_pid == 0:
-            os.setpgrp()
-            self.main_work_horse(job, queue)
-            os._exit(0)  # just in case
-        else:
-            self._horse_pid = child_pid
-            self.procline(f'Forked {child_pid} at {time.time()}')
-
-    def get_heartbeat_ttl(self, job: 'Job') -> int:
-        """Get's the TTL for the next heartbeat.
-
-        Args:
-            job (Job): The Job
-
-        Returns:
-            int: The heartbeat TTL.
-        """
-        if job.timeout and job.timeout > 0:
-            remaining_execution_time = job.timeout - self.current_job_working_time
-            return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
-        else:
-            return self.job_monitoring_interval + 60
-
-    def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
-        """The worker will monitor the work horse and make sure that it
-        either executes successfully or the status of the job is set to
-        failed
-
-        Args:
-            job (Job): _description_
-            queue (Queue): _description_
-        """
-        retpid = ret_val = rusage = None
-        job.started_at = now()
-        while True:
-            try:
-                with self.death_penalty_class(self.job_monitoring_interval, HorseMonitorTimeoutException):
-                    retpid, ret_val, rusage = self.wait_for_horse()
-                break
-            except HorseMonitorTimeoutException:
-                # Horse has not exited yet and is still running.
-                # Send a heartbeat to keep the worker alive.
-                self.set_current_job_working_time((now() - job.started_at).total_seconds())
-
-                # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
-                    self.heartbeat(self.job_monitoring_interval + 60)
-                    self.kill_horse()
-                    self.wait_for_horse()
-                    break
-
-                self.maintain_heartbeats(job)
-
-            except OSError as e:
-                # In case we encountered an OSError due to EINTR (which is
-                # caused by a SIGINT or SIGTERM signal during
-                # os.waitpid()), we simply ignore it and enter the next
-                # iteration of the loop, waiting for the child to end.  In
-                # any other case, this is some other unexpected OS error,
-                # which we don't want to catch, so we re-raise those ones.
-                if e.errno != errno.EINTR:
-                    raise
-                # Send a heartbeat to keep the worker alive.
-                self.heartbeat()
-
-        self.set_current_job_working_time(0)
-        self._horse_pid = 0  # Set horse PID to 0, horse has finished working
-
-        self.log.debug(
-            'Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.name, job.id, retpid, ret_val
-        )
-
-        if ret_val == os.EX_OK:  # The process exited normally.
-            return
-
-        try:
-            job_status = job.get_status()
-        except InvalidJobOperation:
-            return  # Job completed and its ttl has expired
-
-        if self._stopped_job_id == job.id:
-            # Work-horse killed deliberately
-            self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
-            if job.stopped_callback:
-                job.execute_stopped_callback(self.death_penalty_class)
-            self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
-        elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-            if not job.ended_at:
-                job.ended_at = now()
-
-            # Unhandled failure: move the job to the failed queue
-            signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
-            exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
-            self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.name, job.id, exc_string)
-
-            self.handle_work_horse_killed(job, retpid, ret_val, rusage)
-            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
-
-    def execute_job(self, job: 'Job', queue: 'Queue'):
-        """Spawns a work horse to perform the actual work and passes it a job.
-        The worker will wait for the work horse and make sure it executes
-        within the given timeout bounds, or will end the work horse with
-        SIGALRM.
-        """
-        self.prepare_execution(job)
-        self.fork_work_horse(job, queue)
-        self.monitor_work_horse(job, queue)
-        self.set_state(WorkerStatus.IDLE)
-
-    def maintain_heartbeats(self, job: 'Job'):
-        """Updates worker, execution and job's last heartbeat fields."""
-        with self.connection.pipeline() as pipeline:
-            self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = int(self.get_heartbeat_ttl(job))
-
-            # Also need to update execution's heartbeat
-            self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
-            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
-            job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)
-            results = pipeline.execute()
-
-            # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
-            # a race condition could happen where heartbeat arrives after job has been deleted,
-            # leaving a job key that contains only `last_heartbeat` field.
-
-            # job.heartbeat() uses hset() to update job's timestamp. This command returns 1 if a new
-            # Redis key is created, 0 otherwise. So in this case we check the return of job's
-            # heartbeat() command. If a new key was created, this means the job was already
-            # deleted. In this case, we simply send another delete command to remove the key.
-            # https://github.com/rq/rq/issues/1450
-
-            if results[7] == 1:
-                self.connection.delete(job.key)
-
-    def main_work_horse(self, job: 'Job', queue: 'Queue'):
-        """This is the entry point of the newly spawned work horse.
-        After fork()'ing, always assure we are generating random sequences
-        that are different from the worker.
-
-        os._exit() is the way to exit from childs after a fork(), in
-        contrast to the regular sys.exit()
-        """
-        random.seed()
-        self.setup_work_horse_signals()
-        self._is_horse = True
-        self.log = logger
-        try:
-            self.perform_job(job, queue)
-        except:  # noqa
-            os._exit(1)
-        os._exit(0)
-
-    def setup_work_horse_signals(self):
-        """Setup signal handing for the newly spawned work horse
-
-        Always ignore Ctrl+C in the work horse, as it might abort the
-        currently running job.
-
-        The main worker catches the Ctrl+C and requests graceful shutdown
-        after the current work is done.  When cold shutdown is requested, it
-        kills the current job anyway.
-        """
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        self._work_horse_killed_handler(job, retpid, ret_val, rusage)
 
     def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
         """Performs misc bookkeeping like updating states prior to
@@ -1713,17 +1493,39 @@ class Worker(BaseWorker):
 
         return True
 
-    def pop_exc_handler(self):
-        """Pops the latest exception handler off of the exc handler stack."""
-        return self._exc_handlers.pop()
+    def main_work_horse(self, job: 'Job', queue: 'Queue'):
+        """This is the entry point of the newly spawned work horse.
+        After fork()'ing, always assure we are generating random sequences
+        that are different from the worker.
 
-    def handle_work_horse_killed(self, job, retpid, ret_val, rusage):
-        self.log.warning('Work horse killed for job %s: retpid=%s, ret_val=%s', job.id, retpid, ret_val)
+        os._exit() is the way to exit from childs after a fork(), in
+        contrast to the regular sys.exit()
+        """
+        random.seed()
+        self.setup_work_horse_signals()
+        self._is_horse = True
+        self.log = logger
+        try:
+            self.perform_job(job, queue)
+        except:  # noqa
+            os._exit(1)
+        os._exit(0)
 
-        if self._work_horse_killed_handler is None:
-            return
+    def setup_work_horse_signals(self):
+        """Setup signal handing for the newly spawned work horse
 
-        self._work_horse_killed_handler(job, retpid, ret_val, rusage)
+        Always ignore Ctrl+C in the work horse, as it might abort the
+        currently running job.
+
+        The main worker catches the Ctrl+C and requests graceful shutdown
+        after the current work is done.  When cold shutdown is requested, it
+        kills the current job anyway.
+        """
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
+        raise NotImplementedError()
 
     def __eq__(self, other):
         """Equality does not take the database/connection into account"""
@@ -1734,6 +1536,190 @@ class Worker(BaseWorker):
     def __hash__(self):
         """The hash does not take the database/connection into account"""
         return hash(self.name)
+
+
+class Worker(BaseWorker):
+    def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
+        """Kill the horse but catch "No such process" error has the horse could already be dead.
+
+        Args:
+            sig (signal.Signals, optional): _description_. Defaults to SIGKILL.
+        """
+        try:
+            os.killpg(os.getpgid(self.horse_pid), sig)
+            self.log.info('Worker %s: killed horse pid %s', self.name, self.horse_pid)
+        except OSError as e:
+            if e.errno == errno.ESRCH:
+                # "No such process" is fine with us
+                self.log.debug('Worker %s: horse already dead', self.name)
+            else:
+                raise
+
+    def wait_for_horse(self) -> tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
+        """Waits for the horse process to complete.
+        Uses `0` as argument as to include "any child in the process group of the current process".
+        """
+        pid = stat = rusage = None
+        with contextlib.suppress(ChildProcessError):  # ChildProcessError: [Errno 10] No child processes
+            pid, stat, rusage = os.wait4(self.horse_pid, 0)
+        return pid, stat, rusage
+
+    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
+        """Terminates the application (cold shutdown).
+
+        Args:
+            signum (Any): Signum
+            frame (Any): Frame
+
+        Raises:
+            SystemExit: SystemExit
+        """
+        # When worker is run through a worker pool, it may receive duplicate signals
+        # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
+        # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
+        # we ignore it.
+        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
+            self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.name)
+            return
+
+        self.log.warning('Worker %s: cold shut down', self.name)
+
+        # Take down the horse with the worker
+        if self.horse_pid:
+            self.log.debug('Worker %s: taking down horse %s with me', self.name, self.horse_pid)
+            self.kill_horse()
+            self.wait_for_horse()
+        raise SystemExit()
+
+    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse to perform the actual work and passes it a job.
+        This is where the `fork()` actually happens.
+
+        Args:
+            job (Job): The Job that will be ran
+            queue (Queue): The queue
+        """
+        child_pid = os.fork()
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
+        if child_pid == 0:
+            os.setpgrp()
+            self.main_work_horse(job, queue)
+            os._exit(0)  # just in case
+        else:
+            self._horse_pid = child_pid
+            self.procline(f'Forked {child_pid} at {time.time()}')
+
+    def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
+        """The worker will monitor the work horse and make sure that it
+        either executes successfully or the status of the job is set to
+        failed
+
+        Args:
+            job (Job): _description_
+            queue (Queue): _description_
+        """
+        retpid = ret_val = rusage = None
+        job.started_at = now()
+        while True:
+            try:
+                with self.death_penalty_class(self.job_monitoring_interval, HorseMonitorTimeoutException):
+                    retpid, ret_val, rusage = self.wait_for_horse()
+                break
+            except HorseMonitorTimeoutException:
+                # Horse has not exited yet and is still running.
+                # Send a heartbeat to keep the worker alive.
+                self.set_current_job_working_time((now() - job.started_at).total_seconds())
+
+                # Kill the job from this side if something is really wrong (interpreter lock/etc).
+                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
+                    self.heartbeat(self.job_monitoring_interval + 60)
+                    self.kill_horse()
+                    self.wait_for_horse()
+                    break
+
+                self.maintain_heartbeats(job)
+
+            except OSError as e:
+                # In case we encountered an OSError due to EINTR (which is
+                # caused by a SIGINT or SIGTERM signal during
+                # os.waitpid()), we simply ignore it and enter the next
+                # iteration of the loop, waiting for the child to end.  In
+                # any other case, this is some other unexpected OS error,
+                # which we don't want to catch, so we re-raise those ones.
+                if e.errno != errno.EINTR:
+                    raise
+                # Send a heartbeat to keep the worker alive.
+                self.heartbeat()
+
+        self.set_current_job_working_time(0)
+        self._horse_pid = 0  # Set horse PID to 0, horse has finished working
+
+        self.log.debug(
+            'Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.name, job.id, retpid, ret_val
+        )
+
+        if ret_val == os.EX_OK:  # The process exited normally.
+            return
+
+        try:
+            job_status = job.get_status()
+        except InvalidJobOperation:
+            return  # Job completed and its ttl has expired
+
+        if self._stopped_job_id == job.id:
+            # Work-horse killed deliberately
+            self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
+            if job.stopped_callback:
+                job.execute_stopped_callback(self.death_penalty_class)
+            self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
+        elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
+            if not job.ended_at:
+                job.ended_at = now()
+
+            # Unhandled failure: move the job to the failed queue
+            signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
+            exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
+            self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.name, job.id, exc_string)
+
+            self.handle_work_horse_killed(job, retpid, ret_val, rusage)
+            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+
+    def execute_job(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse to perform the actual work and passes it a job.
+        The worker will wait for the work horse and make sure it executes
+        within the given timeout bounds, or will end the work horse with
+        SIGALRM.
+        """
+        self.prepare_execution(job)
+        self.fork_work_horse(job, queue)
+        self.monitor_work_horse(job, queue)
+        self.set_state(WorkerStatus.IDLE)
+
+    def maintain_heartbeats(self, job: 'Job'):
+        """Updates worker, execution and job's last heartbeat fields."""
+        with self.connection.pipeline() as pipeline:
+            self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+            ttl = int(self.get_heartbeat_ttl(job))
+
+            # Also need to update execution's heartbeat
+            self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
+            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
+            job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)
+            results = pipeline.execute()
+
+            # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
+            # a race condition could happen where heartbeat arrives after job has been deleted,
+            # leaving a job key that contains only `last_heartbeat` field.
+
+            # job.heartbeat() uses hset() to update job's timestamp. This command returns 1 if a new
+            # Redis key is created, 0 otherwise. So in this case we check the return of job's
+            # heartbeat() command. If a new key was created, this means the job was already
+            # deleted. In this case, we simply send another delete command to remove the key.
+            # https://github.com/rq/rq/issues/1450
+
+            if results[7] == 1:
+                self.connection.delete(job.key)
 
 
 class SpawnWorker(Worker):
