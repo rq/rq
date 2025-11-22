@@ -139,7 +139,7 @@ register(
     backup_files,
     queue_name='backup',
     cron='0 2 * * *',  # Daily at 2 AM
-    timeout=1800,    # 30 minutes max execution time
+    job_timeout=1800,    # 30 minutes max execution time
     result_ttl=3600, # Keep results for 1 hour
     failure_ttl=86400 # Keep failed jobs for 1 day
 )

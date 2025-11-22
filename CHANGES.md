@@ -1,3 +1,9 @@
+### RQ 2.6.1 (2025-11-22)
+* Updated `CronScheduler` to accept `job_timeout` instead of `timeout` argument. Thanks @selwin!
+* Fixed an issue where `CronScheduler.heartbeat()` does not properly extend the key's TTL. Thanks @selwin!
+* Minor changes and code cleanups. Thanks @selwin, @hovsater, @DhavalGojiya, @sylvioCampos and @JimNero009!
+
+
 ### RQ 2.6 (2025-09-06)
 * Added `CronScheduler.all()` that returns a list of active schedulers. Thanks @selwin!
 * Various internal cleanups and refactoring. Thanks @selwin!
