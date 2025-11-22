@@ -422,13 +422,6 @@ Or via CLI:
 rq worker -w rq.worker.SpawnWorker
 ```
 
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
-    <strong>Note:</strong>
-    <p>`SpawnWorker` is still in beta, use at your own risk!</p>
-</div>
-
-
 The main differences between these workers are:
 
 - SimpleWorker: No process forking, simpler but less isolated execution. Also no periodic heartbeats during job executions.
@@ -555,12 +548,6 @@ send_stop_job_command(redis, job_id)
 ## Worker Pool
 
 _New in version 1.14.0._
-
-<div class="warning">
-    <img style="float: right; margin-right: -60px; margin-top: -38px" src="/img/warning.png" />
-    <strong>Note:</strong>
-    <p>`WorkerPool` is still in beta, use at your own risk!</p>
-</div>
 
 WorkerPool allows you to run multiple workers in a single CLI command.
 

@@ -205,7 +205,7 @@ Job result = 818
 *** Listening for work on default
 ```
 
-To run multiple workers in production, use process managers like `systemd`. RQ also ships with a beta version of `worker-pool` that lets you run multiple worker processes with a single command.
+To run multiple workers in production, use process managers like `systemd`. RQ also ships with a `worker-pool` that lets you run multiple worker processes with a single command.
 
 ```console
 $ rq worker-pool -n 4
