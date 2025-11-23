@@ -529,7 +529,31 @@ class BaseWorker:
             raise StopRequested()
 
     def request_force_stop(self, signum: int, frame: Optional[FrameType]):
-        raise NotImplementedError()
+        """Terminates the application (cold shutdown).
+
+        Args:
+            signum (int): Signal number
+            frame (Optional[FrameType]): Frame
+
+        Raises:
+            SystemExit: SystemExit
+        """
+        # When worker is run through a worker pool, it may receive duplicate signals
+        # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
+        # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
+        # we ignore it.
+        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
+            self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.name)
+            return
+
+        self.log.warning('Worker %s: cold shut down', self.name)
+
+        # Take down the horse with the worker
+        if self.horse_pid:
+            self.log.debug('Worker %s: taking down horse %s with me', self.name, self.horse_pid)
+            self.kill_horse()
+            self.wait_for_horse()
+        raise SystemExit()
 
     def _install_signal_handlers(self):
         """Installs signal handlers for handling SIGINT and SIGTERM gracefully."""
@@ -1143,6 +1167,31 @@ class BaseWorker:
             timeout,
         )
 
+    def maintain_heartbeats(self, job: 'Job'):
+        """Updates worker, execution and job's last heartbeat fields."""
+        with self.connection.pipeline() as pipeline:
+            self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+            ttl = int(self.get_heartbeat_ttl(job))
+
+            # Also need to update execution's heartbeat
+            self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
+            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
+            job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)
+            results = pipeline.execute()
+
+            # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
+            # a race condition could happen where heartbeat arrives after job has been deleted,
+            # leaving a job key that contains only `last_heartbeat` field.
+
+            # job.heartbeat() uses hset() to update job's timestamp. This command returns 1 if a new
+            # Redis key is created, 0 otherwise. So in this case we check the return of job's
+            # heartbeat() command. If a new key was created, this means the job was already
+            # deleted. In this case, we simply send another delete command to remove the key.
+            # https://github.com/rq/rq/issues/1450
+
+            if results[7] == 1:
+                self.connection.delete(job.key)
+
     def teardown(self):
         if not self.is_horse:
             if self.scheduler:
@@ -1525,7 +1574,12 @@ class BaseWorker:
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
-        raise NotImplementedError()
+        """Kill the work horse process. No-op for workers without child processes."""
+        pass
+
+    def wait_for_horse(self) -> tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
+        """Wait for the work horse process to complete. No-op for workers without child processes."""
+        return None, None, None
 
     def __eq__(self, other):
         """Equality does not take the database/connection into account"""
@@ -1563,33 +1617,6 @@ class Worker(BaseWorker):
         with contextlib.suppress(ChildProcessError):  # ChildProcessError: [Errno 10] No child processes
             pid, stat, rusage = os.wait4(self.horse_pid, 0)
         return pid, stat, rusage
-
-    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
-        """Terminates the application (cold shutdown).
-
-        Args:
-            signum (Any): Signum
-            frame (Any): Frame
-
-        Raises:
-            SystemExit: SystemExit
-        """
-        # When worker is run through a worker pool, it may receive duplicate signals
-        # One is sent by the pool when it calls `pool.stop_worker()` and another is sent by the OS
-        # when user hits Ctrl+C. In this case if we receive the second signal within 1 second,
-        # we ignore it.
-        if (now() - self._shutdown_requested_date) < timedelta(seconds=1):  # type: ignore
-            self.log.debug('Worker %s: shutdown signal ignored, received twice in less than 1 second', self.name)
-            return
-
-        self.log.warning('Worker %s: cold shut down', self.name)
-
-        # Take down the horse with the worker
-        if self.horse_pid:
-            self.log.debug('Worker %s: taking down horse %s with me', self.name, self.horse_pid)
-            self.kill_horse()
-            self.wait_for_horse()
-        raise SystemExit()
 
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -1696,31 +1723,6 @@ class Worker(BaseWorker):
         self.monitor_work_horse(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def maintain_heartbeats(self, job: 'Job'):
-        """Updates worker, execution and job's last heartbeat fields."""
-        with self.connection.pipeline() as pipeline:
-            self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = int(self.get_heartbeat_ttl(job))
-
-            # Also need to update execution's heartbeat
-            self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
-            # After transition to job execution is complete, `job.heartbeat()` is no longer needed
-            job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)
-            results = pipeline.execute()
-
-            # If job was enqueued with `result_ttl=0` (job is deleted as soon as it finishes),
-            # a race condition could happen where heartbeat arrives after job has been deleted,
-            # leaving a job key that contains only `last_heartbeat` field.
-
-            # job.heartbeat() uses hset() to update job's timestamp. This command returns 1 if a new
-            # Redis key is created, 0 otherwise. So in this case we check the return of job's
-            # heartbeat() command. If a new key was created, this means the job was already
-            # deleted. In this case, we simply send another delete command to remove the key.
-            # https://github.com/rq/rq/issues/1450
-
-            if results[7] == 1:
-                self.connection.delete(job.key)
-
 
 class SpawnWorker(Worker):
     """Worker implementation that uses os.spawn() instead of os.fork().
@@ -1776,7 +1778,7 @@ worker.main_work_horse(job, queue)
         self.procline(f'Spawned {child_pid} at {time.time()}')
 
 
-class SimpleWorker(Worker):
+class SimpleWorker(BaseWorker):
     def execute_job(self, job: 'Job', queue: 'Queue'):
         """Execute job in same thread/process, do not fork()"""
         self.prepare_execution(job)

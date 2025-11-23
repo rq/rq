@@ -1,6 +1,7 @@
 import datetime
 import os
-from unittest.mock import Mock
+import sys
+from unittest.mock import Mock, patch
 
 from redis import Redis
 
@@ -8,12 +9,14 @@ from rq.exceptions import TimeoutFormatError
 from rq.job import Job
 from rq.queue import Queue
 from rq.utils import (
+    Platform,
     as_text,
     backend_class,
     ceildiv,
     decode_redis_hash,
     ensure_job_list,
     get_call_string,
+    get_platform,
     get_version,
     import_attribute,
     import_job_class,
@@ -371,3 +374,39 @@ class TestUtils(RQTestCase):
             # Clean up temp file
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
+
+    def test_get_platform(self):
+        """Ensure Platform enum and get_platform function work correctly"""
+        # Test enum values
+        self.assertEqual(Platform.WINDOWS.value, 'windows')
+        self.assertEqual(Platform.MAC.value, 'mac')
+        self.assertEqual(Platform.LINUX.value, 'linux')
+        self.assertEqual(Platform.OTHERS.value, 'others')
+
+        # Test enum has exactly four members
+        members = list(Platform)
+        self.assertEqual(len(members), 4)
+
+        # Test get_platform returns a Platform enum instance
+        result = get_platform()
+        self.assertIsInstance(result, Platform)
+
+        # Test platform detection with mocked sys.platform
+        platform_mappings = [
+            ('win32', Platform.WINDOWS),
+            ('win64', Platform.WINDOWS),
+            ('WIN32', Platform.WINDOWS),
+            ('darwin', Platform.MAC),
+            ('DARWIN', Platform.MAC),
+            ('linux', Platform.LINUX),
+            ('linux2', Platform.LINUX),
+            ('LINUX', Platform.LINUX),
+            ('cygwin', Platform.OTHERS),
+            ('freebsd', Platform.OTHERS),
+            ('sunos5', Platform.OTHERS),
+            ('aix', Platform.OTHERS),
+        ]
+
+        for platform_str, expected in platform_mappings:
+            with patch.object(sys, 'platform', platform_str):
+                self.assertEqual(get_platform(), expected)
