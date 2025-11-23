@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
     from .job import Job
     from .queue import Queue
-    from .worker import Worker
+    from .worker import BaseWorker
 
 
 _T = TypeVar('_T')
@@ -208,16 +208,16 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
-def import_worker_class(name: str) -> type['Worker']:
+def import_worker_class(name: str) -> type['BaseWorker']:
     """Import a worker class from a dotted path name."""
     cls = import_attribute(name)
 
     if not isinstance(cls, type):
         raise ValueError(f'Invalid worker class: {name}')
 
-    from .worker import Worker
+    from .worker import BaseWorker
 
-    if not issubclass(cls, Worker):
+    if not issubclass(cls, BaseWorker):
         raise ValueError(f'Invalid worker class: {name}')
 
     return cls
