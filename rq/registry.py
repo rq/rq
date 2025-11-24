@@ -4,7 +4,7 @@ import time
 import traceback
 import warnings
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 from rq.serializers import resolve_serializer
 
@@ -16,8 +16,10 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
 if TYPE_CHECKING:
+    from _typeshed import ExcInfo
     from redis import Redis
     from redis.client import Pipeline
+    from typing_extensions import Unpack
 
     from rq.executions import Execution
     from rq.serializers import Serializer
@@ -252,7 +254,11 @@ class StartedJobRegistry(BaseRegistry):
 
     key_template = 'rq:wip:{0}'
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
+    def cleanup(
+        self,
+        timestamp: Optional[float] = None,
+        exception_handlers: Optional[list[Callable[[Job, Unpack[ExcInfo]], Any]]] = None,
+    ):
         """Remove abandoned jobs from registry and add them to FailedJobRegistry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -604,7 +610,7 @@ class CanceledJobRegistry(BaseRegistry):
         raise NotImplementedError
 
 
-def clean_registries(queue: 'Queue', exception_handlers: Optional[list] = None):
+def clean_registries(queue: 'Queue', exception_handlers: Optional[list[Callable[[Job, Unpack[ExcInfo]], Any]]] = None):
     """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry, and DeferredJobRegistry of a queue.
 
     Args:
