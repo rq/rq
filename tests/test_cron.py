@@ -1,3 +1,4 @@
+import json
 import os
 import signal
 import socket
@@ -553,30 +554,114 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(data['config_file'], 'test_config.py')
         self.assertIn('created_at', data)
 
+    def test_cron_scheduler_to_dict_jobs(self):
+        """Test that CronScheduler serializes jobs correctly"""
+
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Register mix of interval and cron jobs
+        cron.register(say_hello, 'default', interval=60)
+        cron.register(do_nothing, 'high', cron='0 * * * *')
+        cron.register(div_by_zero, 'low', interval=120, job_timeout=10)
+
+        data = cron.to_dict()
+
+        self.assertIn('cron_jobs', data)
+        jobs_data = json.loads(data['cron_jobs'])
+        self.assertEqual(len(jobs_data), 3)
+
+        # Verify all jobs have required fields
+        for job in jobs_data:
+            self.assertIn('func_name', job)
+            self.assertIn('queue_name', job)
+            # Each job should have either interval or cron
+            self.assertTrue('interval' in job or 'cron' in job)
+
     def test_cron_scheduler_save_and_restore(self):
-        """Test that CronScheduler can be saved to and restored from Redis"""
-        # Create and configure scheduler
-        original_scheduler = CronScheduler(connection=self.connection, name='test-scheduler')
-        original_scheduler.config_file = 'test_config.py'
+        """Test that save() and fetch() round-trip scheduler data and jobs correctly"""
+        # Test with no jobs
+        cron = CronScheduler(connection=self.connection, name='empty-scheduler')
+        cron.config_file = 'test_config.py'
+        cron.save()
 
-        # Save to Redis
-        original_scheduler.save()
+        fetched = CronScheduler.fetch('empty-scheduler', self.connection)
+        self.assertEqual(fetched.hostname, cron.hostname)
+        self.assertEqual(fetched.pid, cron.pid)
+        self.assertEqual(fetched.name, cron.name)
+        self.assertEqual(fetched.config_file, 'test_config.py')
+        self.assertEqual(fetched.created_at, cron.created_at)
+        self.assertEqual(len(fetched.get_jobs()), 0)
 
-        # Verify data exists in Redis
-        key = original_scheduler.key
-        redis_data = self.connection.hgetall(key)
-        self.assertGreater(len(cast(dict, redis_data)), 0)
+        # Test with jobs
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+        cron.config_file = 'other_config.py'
+        cron.register(say_hello, 'default', interval=60, job_timeout=30)
+        cron.register(do_nothing, 'high', cron='0 * * * *')
+        cron.save()
 
-        # Create new scheduler and restore from Redis data
-        restored_scheduler = CronScheduler(connection=self.connection, name='restored-scheduler')
-        restored_scheduler.restore(cast(dict, redis_data))
+        # Fetch and verify scheduler attributes
+        fetched = CronScheduler.fetch('test-scheduler', self.connection)
+        self.assertEqual(fetched.hostname, cron.hostname)
+        self.assertEqual(fetched.pid, cron.pid)
+        self.assertEqual(fetched.name, cron.name)
+        self.assertEqual(fetched.config_file, 'other_config.py')
+        self.assertEqual(fetched.created_at, cron.created_at)
 
-        # Verify restored data matches original
-        self.assertEqual(restored_scheduler.hostname, original_scheduler.hostname)
-        self.assertEqual(restored_scheduler.pid, original_scheduler.pid)
-        self.assertEqual(restored_scheduler.name, original_scheduler.name)
-        self.assertEqual(restored_scheduler.config_file, original_scheduler.config_file)
-        self.assertEqual(restored_scheduler.created_at, original_scheduler.created_at)
+        # Verify jobs
+        fetched_jobs = fetched.get_jobs()
+        self.assertEqual(len(fetched_jobs), 2)
+        self.assertEqual(fetched_jobs[0].func_name, 'tests.fixtures.say_hello')
+        self.assertEqual(fetched_jobs[0].queue_name, 'default')
+        self.assertEqual(fetched_jobs[0].interval, 60)
+        self.assertIsNone(fetched_jobs[0].cron)
+        self.assertEqual(fetched_jobs[1].func_name, 'tests.fixtures.do_nothing')
+        self.assertEqual(fetched_jobs[1].queue_name, 'high')
+        self.assertEqual(fetched_jobs[1].cron, '0 * * * *')
+        self.assertIsNone(fetched_jobs[1].interval)
+
+        # Verify fetched jobs are monitoring-only
+        self.assertIsNone(fetched_jobs[0].func)
+        self.assertIsNone(fetched_jobs[1].func)
+        with self.assertRaises(ValueError):
+            fetched_jobs[0].enqueue(self.connection)
+
+    def test_cron_scheduler_restore_backward_compatibility(self):
+        """Test that restore() handles missing cron_jobs field (backward compatibility)"""
+
+        # Create scheduler data WITHOUT cron_jobs field (old format)
+        data = {
+            b'hostname': b'test-host',
+            b'pid': b'12345',
+            b'name': b'old-scheduler',
+            b'created_at': b'2025-11-29T00:00:00.000000Z',
+            b'config_file': b'config.py',
+        }
+
+        # Restore from old format
+        restored = CronScheduler(connection=self.connection, name='restored')
+        restored.restore(data)
+
+        # Verify jobs list is empty (not None or error)
+        self.assertEqual(len(restored.get_jobs()), 0)
+
+    def test_cron_scheduler_restore_malformed_json(self):
+        """Test that restore() handles malformed JSON gracefully"""
+        # Create scheduler data with invalid JSON
+        bad_data = {
+            b'hostname': b'test-host',
+            b'pid': b'12345',
+            b'name': b'bad-scheduler',
+            b'created_at': b'2025-11-29T00:00:00.000000Z',
+            b'config_file': b'',
+            b'cron_jobs': b'{invalid json]',
+        }
+
+        # Restore should not crash
+        restored = CronScheduler(connection=self.connection, name='restored')
+        restored.restore(bad_data)
+
+        # Verify jobs list is empty (graceful degradation)
+        self.assertEqual(len(restored.get_jobs()), 0)
 
     def test_cron_scheduler_fetch_from_redis(self):
         """Test that CronScheduler can be fetched from Redis using the fetch class method"""

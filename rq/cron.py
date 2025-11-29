@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import logging
 import os
 import signal
@@ -121,7 +122,7 @@ class CronJob:
         if self.interval is not None or self.cron is not None:
             self.next_run_time = self.get_next_run_time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
         obj = {
             'func_name': self.func_name,
@@ -134,7 +135,7 @@ class CronJob:
         return obj
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CronJob':
+    def from_dict(cls, data: dict[str, Any]) -> 'CronJob':
         """Create a CronJob instance from dictionary data for monitoring purposes.
 
         Note: The returned CronJob will not have a func attribute and cannot be executed,
@@ -387,14 +388,15 @@ class CronScheduler:
         """Redis key for this CronScheduler instance"""
         return f'rq:cron_scheduler:{self.name}'
 
-    def to_dict(self) -> Dict:
-        """Convert CronScheduler instance to a dictionary for Redis storage"""
+    def to_dict(self) -> dict:
+        """Convert CronScheduler instance to a dictionary for Redis storage."""
         obj = {
             'hostname': self.hostname,
             'pid': str(self.pid),
             'name': self.name,
             'created_at': utcformat(self.created_at),
             'config_file': self.config_file or '',
+            'cron_jobs': json.dumps([job.to_dict() for job in self._cron_jobs]),
         }
         return obj
 
@@ -405,7 +407,7 @@ class CronScheduler:
         connection.expire(self.key, 60)
 
     def restore(self, raw_data: Dict) -> None:
-        """Restore CronScheduler instance from Redis hash data"""
+        """Restore CronScheduler instance from Redis hash data."""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
         self.hostname = obj['hostname']
@@ -414,9 +416,21 @@ class CronScheduler:
         self.created_at = str_to_date(obj['created_at'])
         self.config_file = obj['config_file']
 
+        # Restore CronJob data if available
+        if obj.get('cron_jobs'):
+            try:
+                jobs_data = json.loads(obj['cron_jobs'])
+                self._cron_jobs = [CronJob.from_dict(job_data) for job_data in jobs_data]
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                self.log.warning(f'Failed to restore cron jobs: {e}')
+                self._cron_jobs = []
+        else:
+            # Backward compatibility: missing field = no jobs
+            self._cron_jobs = []
+
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> 'CronScheduler':
-        """Fetch a CronScheduler instance from Redis by name"""
+        """Fetch a CronScheduler instance from Redis by name."""
         key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
@@ -428,7 +442,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> List['CronScheduler']:
+    def all(cls, connection: Redis, cleanup: bool = True) -> list['CronScheduler']:
         """Returns all CronScheduler instances from the registry
 
         Args:

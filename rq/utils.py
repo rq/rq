@@ -105,7 +105,7 @@ def as_text(v: Union[bytes, str]) -> str:
         raise ValueError('Unknown type %r' % type(v))
 
 
-def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = False) -> dict[str, Any]:
+def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = False) -> dict[str, str]:
     """Decodes the Redis hash, ensuring that keys are strings
     Most importantly, decodes bytes strings, ensuring the dict has str keys.
 
