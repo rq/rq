@@ -57,32 +57,32 @@ class TestCronScheduler(RQTestCase):
 
     def test_register_job(self):
         """Test registering jobs with different configurations"""
-        cron = CronScheduler(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)
 
-        # Register job with cron expression
-        cron_job_manual = cron.register(  # Renamed variable
-            func=say_hello, queue_name=self.queue_name, cron='0 9 * * *'
-        )
+        # Test with cron expression
+        cron_job = cron.register(func=say_hello, queue_name=self.queue_name, cron='0 9 * * *')
+        self.assertIsInstance(cron_job, CronJob)
+        self.assertEqual(cron_job.func, say_hello)
+        self.assertIsNone(cron_job.interval)
+        self.assertEqual(cron_job.cron, '0 9 * * *')
 
-        self.assertIsInstance(cron_job_manual, CronJob)
-        self.assertEqual(cron_job_manual.func, say_hello)
-        self.assertIsNone(cron_job_manual.interval)
-        self.assertEqual(cron_job_manual.cron, '0 9 * * *')
+        # Test with interval
+        interval_job = cron.register(func=say_hello, queue_name=self.queue_name, args=('Periodic job',), interval=60)
+        self.assertEqual(interval_job.interval, 60)
+        self.assertEqual(interval_job.args, ('Periodic job',))
 
-        # Register job with an interval
-        interval = 60
-        cron_job_interval = cron.register(  # Renamed variable
-            func=say_hello, queue_name=self.queue_name, args=('Periodic job',), interval=interval
-        )
-
-        self.assertEqual(cron_job_interval.interval, interval)
-        self.assertEqual(cron_job_interval.args, ('Periodic job',))
-
-        # Verify jobs are in the cron instance's registry
+        # Verify jobs are registered
         registered_jobs = cron.get_jobs()
         self.assertEqual(len(registered_jobs), 2)
-        self.assertIn(cron_job_manual, registered_jobs)
-        self.assertIn(cron_job_interval, registered_jobs)  # Check the second job too
+        self.assertIn(cron_job, registered_jobs)
+
+        # Test validation: both interval and cron raises error
+        with self.assertRaises(ValueError):
+            cron.register(func=say_hello, queue_name=self.queue_name, interval=60, cron='0 9 * * *')
+
+        # Test validation: neither interval nor cron raises error
+        with self.assertRaises(ValueError):
+            cron.register(func=say_hello, queue_name=self.queue_name)
 
     def test_enqueue_jobs(self):
         """Test that enqueue_jobs correctly enqueues jobs that are due to run"""
@@ -335,36 +335,6 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(mock_sleep.call_count, 1, 'time.sleep should be called only once')
         mock_sleep.assert_called_once_with(15.5)  # Verify it was called with the correct interval
 
-    def test_register_job_with_cron_string(self):
-        """Test registering jobs with cron expressions"""
-        cron = CronScheduler(connection=self.connection)
-
-        # Register job with cron expression
-        cron_expr = '0 9 * * 1-5'  # 9 AM on weekdays
-        cron_job = cron.register(func=say_hello, queue_name=self.queue_name, cron=cron_expr)
-
-        self.assertEqual(cron_job.func, say_hello)
-        self.assertEqual(cron_job.cron, cron_expr)
-        self.assertIsNone(cron_job.interval)
-
-        # Verify job is in the cron instance's registry
-        registered_jobs = cron.get_jobs()
-        self.assertEqual(len(registered_jobs), 1)
-        self.assertIn(cron_job, registered_jobs)
-
-    def test_register_job_with_interval_and_cron_args(self):
-        """Test that registering with both interval and cron arguments"""
-        cron = CronScheduler(connection=self.connection)
-
-        with self.assertRaises(ValueError):
-            cron.register(func=say_hello, queue_name=self.queue_name, interval=60, cron='0 9 * * *')
-
-        # Registering with neither interval nor cron also raises an error
-        cron = CronScheduler(connection=self.connection)
-
-        with self.assertRaises(ValueError):
-            cron.register(func=say_hello, queue_name=self.queue_name)
-
     def test_enqueue_jobs_with_cron_strings(self):
         """Test that cron.register correctly handles cron-scheduled jobs"""
         cron = CronScheduler(connection=self.connection)
@@ -542,31 +512,25 @@ class TestCronScheduler(RQTestCase):
         self.assertFalse(cron_job.should_run())  # Cron jobs wait for their schedule
 
     def test_cron_scheduler_to_dict(self):
-        """Test that CronScheduler can be serialized to a dictionary"""
+        """Test that CronScheduler serializes to dictionary with jobs"""
         cron = CronScheduler(connection=self.connection, name='test-scheduler')
         cron.config_file = 'test_config.py'
 
+        # Test basic fields
         data = cron.to_dict()
-
         self.assertEqual(data['hostname'], cron.hostname)
         self.assertEqual(data['pid'], str(cron.pid))
         self.assertEqual(data['name'], 'test-scheduler')
         self.assertEqual(data['config_file'], 'test_config.py')
         self.assertIn('created_at', data)
+        self.assertIn('cron_jobs', data)
 
-    def test_cron_scheduler_to_dict_jobs(self):
-        """Test that CronScheduler serializes jobs correctly"""
-
-        cron = CronScheduler(connection=self.connection, name='test-scheduler')
-
-        # Register mix of interval and cron jobs
+        # Test with jobs
         cron.register(say_hello, 'default', interval=60)
         cron.register(do_nothing, 'high', cron='0 * * * *')
         cron.register(div_by_zero, 'low', interval=120, job_timeout=10)
 
         data = cron.to_dict()
-
-        self.assertIn('cron_jobs', data)
         jobs_data = json.loads(data['cron_jobs'])
         self.assertEqual(len(jobs_data), 3)
 
@@ -574,7 +538,6 @@ class TestCronScheduler(RQTestCase):
         for job in jobs_data:
             self.assertIn('func_name', job)
             self.assertIn('queue_name', job)
-            # Each job should have either interval or cron
             self.assertTrue('interval' in job or 'cron' in job)
 
     def test_cron_scheduler_save_and_restore(self):
@@ -664,17 +627,22 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(len(restored.get_jobs()), 0)
 
     def test_cron_scheduler_fetch_from_redis(self):
-        """Test that CronScheduler can be fetched from Redis using the fetch class method"""
-        # Create and save a scheduler
+        """Test that CronScheduler can be fetched from Redis"""
+        # Test fetch after save()
         original_scheduler = CronScheduler(connection=self.connection, name='persistent-scheduler')
         original_scheduler.config_file = 'persistent_config.py'
         original_scheduler.save()
 
-        # Fetch scheduler from Redis
         loaded_scheduler = CronScheduler.fetch('persistent-scheduler', self.connection)
-
-        # Verify fetched scheduler matches original
         self.assertEqual(loaded_scheduler.name, original_scheduler.name)
+
+        # Test fetch after register_birth()
+        cron = CronScheduler(connection=self.connection)
+        cron.register_birth()
+
+        fetched_cron = CronScheduler.fetch(cron.name, self.connection)
+        self.assertEqual(fetched_cron.name, cron.name)
+        self.assertEqual(fetched_cron.created_at, cron.created_at)
 
         # Test that fetching a nonexistent scheduler raises SchedulerNotFound
         with self.assertRaises(SchedulerNotFound):
@@ -716,20 +684,6 @@ class TestCronScheduler(RQTestCase):
         # Verify scheduler is no longer in registry
         registered_keys = get_keys(self.connection)
         self.assertNotIn(cron.name, registered_keys)
-
-    def test_fetch_after_register_birth(self):
-        """Test that CronScheduler can be fetched using saved Redis hash data"""
-        cron = CronScheduler(connection=self.connection)
-
-        # Register birth to save data
-        cron.register_birth()
-
-        # Fetch the scheduler from Redis
-        fetched_cron = CronScheduler.fetch(cron.name, self.connection)
-
-        # Verify basic attributes were restored correctly
-        self.assertEqual(fetched_cron.name, cron.name)
-        self.assertEqual(fetched_cron.created_at, cron.created_at)
 
     def test_heartbeat(self):
         """Test that heartbeat() updates scheduler's timestamp in registry and extends TTL"""
