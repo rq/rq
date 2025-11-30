@@ -608,9 +608,9 @@ class TestCronScheduler(RQTestCase):
         # Simulate job execution by updating timing
         from datetime import datetime, timedelta, timezone
 
-        now_time = datetime.now(timezone.utc)
-        next_time = now_time + timedelta(seconds=60)
-        job.latest_run_time = now_time
+        last_enqueue_time = datetime.now(timezone.utc)
+        next_time = last_enqueue_time + timedelta(seconds=60)
+        job.latest_run_time = last_enqueue_time
         job.next_run_time = next_time
 
         # Save only jobs data (not full scheduler state)
@@ -624,13 +624,14 @@ class TestCronScheduler(RQTestCase):
         # Verify timing information was persisted
         self.assertIsNotNone(updated_jobs[0].latest_run_time)
         self.assertIsNotNone(updated_jobs[0].next_run_time)
-        self.assertEqual(updated_jobs[0].latest_run_time.replace(microsecond=0), now_time.replace(microsecond=0))
+        self.assertEqual(
+            updated_jobs[0].latest_run_time.replace(microsecond=0), last_enqueue_time.replace(microsecond=0)
+        )
         self.assertEqual(updated_jobs[0].next_run_time.replace(microsecond=0), next_time.replace(microsecond=0))
 
-    def test_cron_scheduler_restore_backward_compatibility(self):
-        """Test that restore() handles missing cron_jobs field (backward compatibility)"""
-
-        # Create scheduler data WITHOUT cron_jobs field (old format)
+    def test_cron_scheduler_restore_edge_cases(self):
+        """Test that restore() handles missing and malformed cron_jobs data gracefully"""
+        # Test missing cron_jobs field (backwards compatibility)
         data = {
             b'hostname': b'test-host',
             b'pid': b'12345',
@@ -639,31 +640,15 @@ class TestCronScheduler(RQTestCase):
             b'config_file': b'config.py',
         }
 
-        # Restore from old format
-        restored = CronScheduler(connection=self.connection, name='restored')
-        restored.restore(data)
+        cron = CronScheduler(connection=self.connection, name='restored')
+        cron.restore(data)
+        self.assertEqual(len(cron.get_jobs()), 0)
 
-        # Verify jobs list is empty (not None or error)
-        self.assertEqual(len(restored.get_jobs()), 0)
+        # Test malformed JSON in cron_jobs
+        data[b'cron_jobs'] = b'{invalid json]'
 
-    def test_cron_scheduler_restore_malformed_json(self):
-        """Test that restore() handles malformed JSON gracefully"""
-        # Create scheduler data with invalid JSON
-        bad_data = {
-            b'hostname': b'test-host',
-            b'pid': b'12345',
-            b'name': b'bad-scheduler',
-            b'created_at': b'2025-11-29T00:00:00.000000Z',
-            b'config_file': b'',
-            b'cron_jobs': b'{invalid json]',
-        }
-
-        # Restore should not crash
-        restored = CronScheduler(connection=self.connection, name='restored')
-        restored.restore(bad_data)
-
-        # Verify jobs list is empty (graceful degradation)
-        self.assertEqual(len(restored.get_jobs()), 0)
+        cron.restore(data)
+        self.assertEqual(len(cron.get_jobs()), 0)
 
     def test_cron_scheduler_fetch_from_redis(self):
         """Test that CronScheduler can be fetched from Redis"""
