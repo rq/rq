@@ -21,7 +21,15 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
-from .utils import decode_redis_hash, normalize_config_path, now, str_to_date, utcformat, validate_absolute_path
+from .utils import (
+    decode_redis_hash,
+    normalize_config_path,
+    now,
+    str_to_date,
+    utcformat,
+    utcparse,
+    validate_absolute_path,
+)
 
 
 class CronJob:
@@ -129,6 +137,8 @@ class CronJob:
             'queue_name': self.queue_name,
             'interval': self.interval,
             'cron': self.cron,
+            'last_enqueue_time': utcformat(self.latest_run_time) if self.latest_run_time else None,
+            'next_enqueue_time': utcformat(self.next_run_time) if self.next_run_time else None,
         }
         # Add job options, filtering out None values
         obj.update({k: v for k, v in self.job_options.items() if v is not None})
@@ -141,7 +151,26 @@ class CronJob:
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
-        return cls(**data)
+        job = cls(
+            queue_name=data['queue_name'],
+            func_name=data['func_name'],
+            interval=data.get('interval'),
+            cron=data.get('cron'),
+            job_timeout=data.get('job_timeout'),
+            result_ttl=data.get('result_ttl'),
+            ttl=data.get('ttl'),
+            failure_ttl=data.get('failure_ttl'),
+            meta=data.get('meta'),
+        )
+
+        # Restore timing information if present
+        if data.get('last_enqueue_time'):
+            job.latest_run_time = utcparse(data['last_enqueue_time'])
+
+        if data.get('next_enqueue_time'):
+            job.next_run_time = utcparse(data['next_enqueue_time'])
+
+        return job
 
 
 class CronScheduler:
@@ -283,7 +312,10 @@ class CronScheduler:
 
         try:
             while True:
-                self.enqueue_jobs()
+                enqueued = self.enqueue_jobs()
+                if enqueued:
+                    # Save updated job timing data to Redis
+                    self.save_jobs_data()
                 self.heartbeat()
                 sleep_time = self.calculate_sleep_interval()
                 if sleep_time > 0:
@@ -405,6 +437,11 @@ class CronScheduler:
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, mapping=self.to_dict())
         connection.expire(self.key, 60)
+
+    def save_jobs_data(self) -> None:
+        """Save cron jobs data to Redis."""
+        data = json.dumps([job.to_dict() for job in self._cron_jobs])
+        self.connection.hset(self.key, 'cron_jobs', data)
 
     def restore(self, raw_data: Dict) -> None:
         """Restore CronScheduler instance from Redis hash data."""
