@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import logging
 import os
 import signal
@@ -14,13 +15,21 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
-from .utils import decode_redis_hash, normalize_config_path, now, str_to_date, utcformat, validate_absolute_path
+from .utils import (
+    decode_redis_hash,
+    normalize_config_path,
+    now,
+    str_to_date,
+    utcformat,
+    utcparse,
+    validate_absolute_path,
+)
 
 
 class CronJob:
@@ -36,7 +45,7 @@ class CronJob:
         interval: Optional[int] = None,
         cron: Optional[str] = None,
         job_timeout: Optional[int] = None,
-        result_ttl: int = 500,
+        result_ttl: int = DEFAULT_RESULT_TTL,
         ttl: Optional[int] = None,
         failure_ttl: Optional[int] = None,
         meta: Optional[dict] = None,
@@ -121,26 +130,47 @@ class CronJob:
         if self.interval is not None or self.cron is not None:
             self.next_run_time = self.get_next_run_time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
         obj = {
             'func_name': self.func_name,
             'queue_name': self.queue_name,
             'interval': self.interval,
             'cron': self.cron,
+            'last_enqueue_time': utcformat(self.latest_run_time) if self.latest_run_time else None,
+            'next_enqueue_time': utcformat(self.next_run_time) if self.next_run_time else None,
         }
         # Add job options, filtering out None values
         obj.update({k: v for k, v in self.job_options.items() if v is not None})
         return obj
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CronJob':
+    def from_dict(cls, data: dict[str, Any]) -> 'CronJob':
         """Create a CronJob instance from dictionary data for monitoring purposes.
 
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
-        return cls(**data)
+        job = cls(
+            queue_name=data['queue_name'],
+            func_name=data['func_name'],
+            interval=data.get('interval'),
+            cron=data.get('cron'),
+            job_timeout=data.get('job_timeout'),
+            result_ttl=data.get('result_ttl', DEFAULT_RESULT_TTL),
+            ttl=data.get('ttl'),
+            failure_ttl=data.get('failure_ttl'),
+            meta=data.get('meta'),
+        )
+
+        # Restore timing information if present
+        if data.get('last_enqueue_time'):
+            job.latest_run_time = utcparse(data['last_enqueue_time'])
+
+        if data.get('next_enqueue_time'):
+            job.next_run_time = utcparse(data['next_enqueue_time'])
+
+        return job
 
 
 class CronScheduler:
@@ -282,7 +312,10 @@ class CronScheduler:
 
         try:
             while True:
-                self.enqueue_jobs()
+                enqueued = self.enqueue_jobs()
+                if enqueued:
+                    # Save updated job timing data to Redis
+                    self.save_jobs_data()
                 self.heartbeat()
                 sleep_time = self.calculate_sleep_interval()
                 if sleep_time > 0:
@@ -387,14 +420,15 @@ class CronScheduler:
         """Redis key for this CronScheduler instance"""
         return f'rq:cron_scheduler:{self.name}'
 
-    def to_dict(self) -> Dict:
-        """Convert CronScheduler instance to a dictionary for Redis storage"""
+    def to_dict(self) -> dict:
+        """Convert CronScheduler instance to a dictionary for Redis storage."""
         obj = {
             'hostname': self.hostname,
             'pid': str(self.pid),
             'name': self.name,
             'created_at': utcformat(self.created_at),
             'config_file': self.config_file or '',
+            'cron_jobs': json.dumps([job.to_dict() for job in self._cron_jobs]),
         }
         return obj
 
@@ -404,8 +438,13 @@ class CronScheduler:
         connection.hset(self.key, mapping=self.to_dict())
         connection.expire(self.key, 60)
 
+    def save_jobs_data(self) -> None:
+        """Save cron jobs data to Redis."""
+        data = json.dumps([job.to_dict() for job in self._cron_jobs])
+        self.connection.hset(self.key, 'cron_jobs', data)
+
     def restore(self, raw_data: Dict) -> None:
-        """Restore CronScheduler instance from Redis hash data"""
+        """Restore CronScheduler instance from Redis hash data."""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
         self.hostname = obj['hostname']
@@ -414,9 +453,21 @@ class CronScheduler:
         self.created_at = str_to_date(obj['created_at'])
         self.config_file = obj['config_file']
 
+        # Restore CronJob data if available
+        if obj.get('cron_jobs'):
+            try:
+                jobs_data = json.loads(obj['cron_jobs'])
+                self._cron_jobs = [CronJob.from_dict(job_data) for job_data in jobs_data]
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                self.log.warning(f'Failed to restore cron jobs: {e}')
+                self._cron_jobs = []
+        else:
+            # Backward compatibility: missing field = no jobs
+            self._cron_jobs = []
+
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> 'CronScheduler':
-        """Fetch a CronScheduler instance from Redis by name"""
+        """Fetch a CronScheduler instance from Redis by name."""
         key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
@@ -428,7 +479,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> List['CronScheduler']:
+    def all(cls, connection: Redis, cleanup: bool = True) -> list['CronScheduler']:
         """Returns all CronScheduler instances from the registry
 
         Args:

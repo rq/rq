@@ -1,3 +1,4 @@
+import json
 import os
 import signal
 import socket
@@ -56,32 +57,32 @@ class TestCronScheduler(RQTestCase):
 
     def test_register_job(self):
         """Test registering jobs with different configurations"""
-        cron = CronScheduler(connection=self.connection)  # Create instance for test
+        cron = CronScheduler(connection=self.connection)
 
-        # Register job with cron expression
-        cron_job_manual = cron.register(  # Renamed variable
-            func=say_hello, queue_name=self.queue_name, cron='0 9 * * *'
-        )
+        # Test with cron expression
+        cron_job = cron.register(func=say_hello, queue_name=self.queue_name, cron='0 9 * * *')
+        self.assertIsInstance(cron_job, CronJob)
+        self.assertEqual(cron_job.func, say_hello)
+        self.assertIsNone(cron_job.interval)
+        self.assertEqual(cron_job.cron, '0 9 * * *')
 
-        self.assertIsInstance(cron_job_manual, CronJob)
-        self.assertEqual(cron_job_manual.func, say_hello)
-        self.assertIsNone(cron_job_manual.interval)
-        self.assertEqual(cron_job_manual.cron, '0 9 * * *')
+        # Test with interval
+        interval_job = cron.register(func=say_hello, queue_name=self.queue_name, args=('Periodic job',), interval=60)
+        self.assertEqual(interval_job.interval, 60)
+        self.assertEqual(interval_job.args, ('Periodic job',))
 
-        # Register job with an interval
-        interval = 60
-        cron_job_interval = cron.register(  # Renamed variable
-            func=say_hello, queue_name=self.queue_name, args=('Periodic job',), interval=interval
-        )
-
-        self.assertEqual(cron_job_interval.interval, interval)
-        self.assertEqual(cron_job_interval.args, ('Periodic job',))
-
-        # Verify jobs are in the cron instance's registry
+        # Verify jobs are registered
         registered_jobs = cron.get_jobs()
         self.assertEqual(len(registered_jobs), 2)
-        self.assertIn(cron_job_manual, registered_jobs)
-        self.assertIn(cron_job_interval, registered_jobs)  # Check the second job too
+        self.assertIn(cron_job, registered_jobs)
+
+        # Test validation: both interval and cron raises error
+        with self.assertRaises(ValueError):
+            cron.register(func=say_hello, queue_name=self.queue_name, interval=60, cron='0 9 * * *')
+
+        # Test validation: neither interval nor cron raises error
+        with self.assertRaises(ValueError):
+            cron.register(func=say_hello, queue_name=self.queue_name)
 
     def test_enqueue_jobs(self):
         """Test that enqueue_jobs correctly enqueues jobs that are due to run"""
@@ -334,36 +335,6 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(mock_sleep.call_count, 1, 'time.sleep should be called only once')
         mock_sleep.assert_called_once_with(15.5)  # Verify it was called with the correct interval
 
-    def test_register_job_with_cron_string(self):
-        """Test registering jobs with cron expressions"""
-        cron = CronScheduler(connection=self.connection)
-
-        # Register job with cron expression
-        cron_expr = '0 9 * * 1-5'  # 9 AM on weekdays
-        cron_job = cron.register(func=say_hello, queue_name=self.queue_name, cron=cron_expr)
-
-        self.assertEqual(cron_job.func, say_hello)
-        self.assertEqual(cron_job.cron, cron_expr)
-        self.assertIsNone(cron_job.interval)
-
-        # Verify job is in the cron instance's registry
-        registered_jobs = cron.get_jobs()
-        self.assertEqual(len(registered_jobs), 1)
-        self.assertIn(cron_job, registered_jobs)
-
-    def test_register_job_with_interval_and_cron_args(self):
-        """Test that registering with both interval and cron arguments"""
-        cron = CronScheduler(connection=self.connection)
-
-        with self.assertRaises(ValueError):
-            cron.register(func=say_hello, queue_name=self.queue_name, interval=60, cron='0 9 * * *')
-
-        # Registering with neither interval nor cron also raises an error
-        cron = CronScheduler(connection=self.connection)
-
-        with self.assertRaises(ValueError):
-            cron.register(func=say_hello, queue_name=self.queue_name)
-
     def test_enqueue_jobs_with_cron_strings(self):
         """Test that cron.register correctly handles cron-scheduled jobs"""
         cron = CronScheduler(connection=self.connection)
@@ -541,55 +512,161 @@ class TestCronScheduler(RQTestCase):
         self.assertFalse(cron_job.should_run())  # Cron jobs wait for their schedule
 
     def test_cron_scheduler_to_dict(self):
-        """Test that CronScheduler can be serialized to a dictionary"""
+        """Test that CronScheduler serializes to dictionary with jobs"""
         cron = CronScheduler(connection=self.connection, name='test-scheduler')
         cron.config_file = 'test_config.py'
 
+        # Test basic fields
         data = cron.to_dict()
-
         self.assertEqual(data['hostname'], cron.hostname)
         self.assertEqual(data['pid'], str(cron.pid))
         self.assertEqual(data['name'], 'test-scheduler')
         self.assertEqual(data['config_file'], 'test_config.py')
         self.assertIn('created_at', data)
+        self.assertIn('cron_jobs', data)
+
+        # Test with jobs
+        cron.register(say_hello, 'default', interval=60)
+        cron.register(do_nothing, 'high', cron='0 * * * *')
+        cron.register(div_by_zero, 'low', interval=120, job_timeout=10)
+
+        data = cron.to_dict()
+        jobs_data = json.loads(data['cron_jobs'])
+        self.assertEqual(len(jobs_data), 3)
+
+        # Verify all jobs have required fields
+        for job in jobs_data:
+            self.assertIn('func_name', job)
+            self.assertIn('queue_name', job)
+            self.assertTrue('interval' in job or 'cron' in job)
 
     def test_cron_scheduler_save_and_restore(self):
-        """Test that CronScheduler can be saved to and restored from Redis"""
-        # Create and configure scheduler
-        original_scheduler = CronScheduler(connection=self.connection, name='test-scheduler')
-        original_scheduler.config_file = 'test_config.py'
+        """Test that save() and fetch() round-trip scheduler data and jobs correctly"""
+        # Test with no jobs
+        cron = CronScheduler(connection=self.connection, name='empty-scheduler')
+        cron.config_file = 'test_config.py'
+        cron.save()
 
-        # Save to Redis
-        original_scheduler.save()
+        fetched = CronScheduler.fetch('empty-scheduler', self.connection)
+        self.assertEqual(fetched.hostname, cron.hostname)
+        self.assertEqual(fetched.pid, cron.pid)
+        self.assertEqual(fetched.name, cron.name)
+        self.assertEqual(fetched.config_file, 'test_config.py')
+        self.assertEqual(fetched.created_at, cron.created_at)
+        self.assertEqual(len(fetched.get_jobs()), 0)
 
-        # Verify data exists in Redis
-        key = original_scheduler.key
-        redis_data = self.connection.hgetall(key)
-        self.assertGreater(len(cast(dict, redis_data)), 0)
+        # Test with jobs
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+        cron.config_file = 'other_config.py'
+        cron.register(say_hello, 'default', interval=60, job_timeout=30)
+        cron.register(do_nothing, 'high', cron='0 * * * *')
+        cron.save()
 
-        # Create new scheduler and restore from Redis data
-        restored_scheduler = CronScheduler(connection=self.connection, name='restored-scheduler')
-        restored_scheduler.restore(cast(dict, redis_data))
+        # Fetch and verify scheduler attributes
+        fetched = CronScheduler.fetch('test-scheduler', self.connection)
+        self.assertEqual(fetched.hostname, cron.hostname)
+        self.assertEqual(fetched.pid, cron.pid)
+        self.assertEqual(fetched.name, cron.name)
+        self.assertEqual(fetched.config_file, 'other_config.py')
+        self.assertEqual(fetched.created_at, cron.created_at)
 
-        # Verify restored data matches original
-        self.assertEqual(restored_scheduler.hostname, original_scheduler.hostname)
-        self.assertEqual(restored_scheduler.pid, original_scheduler.pid)
-        self.assertEqual(restored_scheduler.name, original_scheduler.name)
-        self.assertEqual(restored_scheduler.config_file, original_scheduler.config_file)
-        self.assertEqual(restored_scheduler.created_at, original_scheduler.created_at)
+        # Verify jobs
+        fetched_jobs = fetched.get_jobs()
+        self.assertEqual(len(fetched_jobs), 2)
+        self.assertEqual(fetched_jobs[0].func_name, 'tests.fixtures.say_hello')
+        self.assertEqual(fetched_jobs[0].queue_name, 'default')
+        self.assertEqual(fetched_jobs[0].interval, 60)
+        self.assertIsNone(fetched_jobs[0].cron)
+        self.assertEqual(fetched_jobs[1].func_name, 'tests.fixtures.do_nothing')
+        self.assertEqual(fetched_jobs[1].queue_name, 'high')
+        self.assertEqual(fetched_jobs[1].cron, '0 * * * *')
+        self.assertIsNone(fetched_jobs[1].interval)
+
+        # Verify fetched jobs are monitoring-only
+        self.assertIsNone(fetched_jobs[0].func)
+        self.assertIsNone(fetched_jobs[1].func)
+        with self.assertRaises(ValueError):
+            fetched_jobs[0].enqueue(self.connection)
+
+    def test_save_jobs_data_updates_timing(self):
+        """Test that save_jobs_data() updates job timing information in Redis"""
+        cron = CronScheduler(connection=self.connection, name='test-scheduler')
+
+        # Register a job with interval
+        job = cron.register(say_hello, 'default', interval=60)
+
+        # Initial save
+        cron.save()
+
+        # Fetch initial state
+        fetched = CronScheduler.fetch('test-scheduler', self.connection)
+        initial_jobs = fetched.get_jobs()
+        self.assertEqual(len(initial_jobs), 1)
+        # New job hasn't run yet, so timing should be None
+        self.assertIsNone(initial_jobs[0].latest_run_time)
+
+        # Simulate job execution by updating timing
+        from datetime import datetime, timedelta, timezone
+
+        last_enqueue_time = datetime.now(timezone.utc)
+        next_time = last_enqueue_time + timedelta(seconds=60)
+        job.latest_run_time = last_enqueue_time
+        job.next_run_time = next_time
+
+        # Save only jobs data (not full scheduler state)
+        cron.save_jobs_data()
+
+        # Fetch again and verify timing was updated
+        fetched = CronScheduler.fetch('test-scheduler', self.connection)
+        updated_jobs = fetched.get_jobs()
+        self.assertEqual(len(updated_jobs), 1)
+
+        # Verify timing information was persisted
+        self.assertIsNotNone(updated_jobs[0].latest_run_time)
+        self.assertIsNotNone(updated_jobs[0].next_run_time)
+        self.assertEqual(
+            updated_jobs[0].latest_run_time.replace(microsecond=0), last_enqueue_time.replace(microsecond=0)
+        )
+        self.assertEqual(updated_jobs[0].next_run_time.replace(microsecond=0), next_time.replace(microsecond=0))
+
+    def test_cron_scheduler_restore_edge_cases(self):
+        """Test that restore() handles missing and malformed cron_jobs data gracefully"""
+        # Test missing cron_jobs field (backwards compatibility)
+        data = {
+            b'hostname': b'test-host',
+            b'pid': b'12345',
+            b'name': b'old-scheduler',
+            b'created_at': b'2025-11-29T00:00:00.000000Z',
+            b'config_file': b'config.py',
+        }
+
+        cron = CronScheduler(connection=self.connection, name='restored')
+        cron.restore(data)
+        self.assertEqual(len(cron.get_jobs()), 0)
+
+        # Test malformed JSON in cron_jobs
+        data[b'cron_jobs'] = b'{invalid json]'
+
+        cron.restore(data)
+        self.assertEqual(len(cron.get_jobs()), 0)
 
     def test_cron_scheduler_fetch_from_redis(self):
-        """Test that CronScheduler can be fetched from Redis using the fetch class method"""
-        # Create and save a scheduler
+        """Test that CronScheduler can be fetched from Redis"""
+        # Test fetch after save()
         original_scheduler = CronScheduler(connection=self.connection, name='persistent-scheduler')
         original_scheduler.config_file = 'persistent_config.py'
         original_scheduler.save()
 
-        # Fetch scheduler from Redis
         loaded_scheduler = CronScheduler.fetch('persistent-scheduler', self.connection)
-
-        # Verify fetched scheduler matches original
         self.assertEqual(loaded_scheduler.name, original_scheduler.name)
+
+        # Test fetch after register_birth()
+        cron = CronScheduler(connection=self.connection)
+        cron.register_birth()
+
+        fetched_cron = CronScheduler.fetch(cron.name, self.connection)
+        self.assertEqual(fetched_cron.name, cron.name)
+        self.assertEqual(fetched_cron.created_at, cron.created_at)
 
         # Test that fetching a nonexistent scheduler raises SchedulerNotFound
         with self.assertRaises(SchedulerNotFound):
@@ -631,20 +708,6 @@ class TestCronScheduler(RQTestCase):
         # Verify scheduler is no longer in registry
         registered_keys = get_keys(self.connection)
         self.assertNotIn(cron.name, registered_keys)
-
-    def test_fetch_after_register_birth(self):
-        """Test that CronScheduler can be fetched using saved Redis hash data"""
-        cron = CronScheduler(connection=self.connection)
-
-        # Register birth to save data
-        cron.register_birth()
-
-        # Fetch the scheduler from Redis
-        fetched_cron = CronScheduler.fetch(cron.name, self.connection)
-
-        # Verify basic attributes were restored correctly
-        self.assertEqual(fetched_cron.name, cron.name)
-        self.assertEqual(fetched_cron.created_at, cron.created_at)
 
     def test_heartbeat(self):
         """Test that heartbeat() updates scheduler's timestamp in registry and extends TTL"""
@@ -824,4 +887,111 @@ class TestCronScheduler(RQTestCase):
 
         # Scheduler should not equal non-scheduler objects
         self.assertNotEqual(cron1, 'not-a-scheduler')
-        self.assertNotEqual(cron1, 42)
+
+
+class TestCronJob(RQTestCase):
+    """Tests for the CronJob class serialization and deserialization"""
+
+    def test_to_dict_with_and_without_timing(self):
+        """Test that to_dict() handles both None and populated timing information"""
+        job = CronJob(
+            queue_name='default',
+            func=say_hello,
+            interval=60,
+            job_timeout=300,
+            result_ttl=1000,
+            ttl=600,
+            failure_ttl=3600,
+            meta={'key': 'value'},
+        )
+
+        # Test without timing information
+        job_dict = job.to_dict()
+        self.assertIsNone(job_dict['last_enqueue_time'])
+        self.assertIsNone(job_dict['next_enqueue_time'])
+
+        # Set timing information
+        now_time = datetime.now(timezone.utc)
+        next_time = now_time + timedelta(seconds=60)
+        job.latest_run_time = now_time
+        job.next_run_time = next_time
+
+        # Test with timing information
+        job_dict = job.to_dict()
+        self.assertEqual(job_dict['last_enqueue_time'], utils.utcformat(now_time))
+        self.assertEqual(job_dict['next_enqueue_time'], utils.utcformat(next_time))
+
+        # Verify job_options are included
+        self.assertEqual(job_dict['job_timeout'], 300)
+        self.assertEqual(job_dict['result_ttl'], 1000)
+        self.assertEqual(job_dict['ttl'], 600)
+        self.assertEqual(job_dict['failure_ttl'], 3600)
+        self.assertEqual(job_dict['meta'], {'key': 'value'})
+
+    def test_from_dict_with_and_without_timing(self):
+        """Test that from_dict() handles both missing and present timing information"""
+        # Test without timing fields (backwards compatibility)
+        data_without_timing = {
+            'queue_name': 'default',
+            'func_name': 'tests.fixtures.say_hello',
+            'interval': 60,
+            'job_timeout': 300,
+            'result_ttl': 1000,
+        }
+
+        job = CronJob.from_dict(data_without_timing)
+        self.assertIsNone(job.latest_run_time)
+        self.assertIsNone(job.next_run_time)
+        self.assertEqual(job.job_options['job_timeout'], 300)
+
+        # Test with timing fields
+        now_time = datetime.now(timezone.utc)
+        next_time = now_time + timedelta(seconds=60)
+
+        data_with_timing = {
+            'queue_name': 'default',
+            'func_name': 'tests.fixtures.say_hello',
+            'interval': 60,
+            'job_timeout': 300,
+            'result_ttl': 1000,
+            'ttl': 600,
+            'failure_ttl': 3600,
+            'meta': {'key': 'value'},
+            'last_enqueue_time': utils.utcformat(now_time),
+            'next_enqueue_time': utils.utcformat(next_time),
+        }
+
+        job = CronJob.from_dict(data_with_timing)
+        self.assertEqual(job.latest_run_time.replace(microsecond=0), now_time.replace(microsecond=0))
+        self.assertEqual(job.next_run_time.replace(microsecond=0), next_time.replace(microsecond=0))
+        self.assertEqual(job.job_options['job_timeout'], 300)
+        self.assertEqual(job.job_options['ttl'], 600)
+        self.assertEqual(job.job_options['meta'], {'key': 'value'})
+
+    def test_round_trip_serialization(self):
+        """Test that round-trip serialization preserves timing and job_options"""
+        original_job = CronJob(
+            queue_name='default',
+            func=say_hello,
+            cron='0 9 * * *',
+            job_timeout=300,
+            result_ttl=1000,
+            meta={'foo': 'bar'},
+        )
+
+        now_time = datetime.now(timezone.utc)
+        next_time = now_time + timedelta(hours=1)
+        original_job.latest_run_time = now_time
+        original_job.next_run_time = next_time
+
+        restored_job = CronJob.from_dict(original_job.to_dict())
+
+        # Assert timing preserved
+        self.assertEqual(
+            restored_job.latest_run_time.replace(microsecond=0), original_job.latest_run_time.replace(microsecond=0)
+        )
+        self.assertEqual(
+            restored_job.next_run_time.replace(microsecond=0), original_job.next_run_time.replace(microsecond=0)
+        )
+        # Assert job_options preserved
+        self.assertEqual(restored_job.job_options, original_job.job_options)
