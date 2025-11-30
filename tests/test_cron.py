@@ -607,6 +607,7 @@ class TestCronScheduler(RQTestCase):
 
         # Simulate job execution by updating timing
         from datetime import datetime, timedelta, timezone
+
         now_time = datetime.now(timezone.utc)
         next_time = now_time + timedelta(seconds=60)
         job.latest_run_time = now_time
@@ -623,14 +624,8 @@ class TestCronScheduler(RQTestCase):
         # Verify timing information was persisted
         self.assertIsNotNone(updated_jobs[0].latest_run_time)
         self.assertIsNotNone(updated_jobs[0].next_run_time)
-        self.assertEqual(
-            updated_jobs[0].latest_run_time.replace(microsecond=0),
-            now_time.replace(microsecond=0)
-        )
-        self.assertEqual(
-            updated_jobs[0].next_run_time.replace(microsecond=0),
-            next_time.replace(microsecond=0)
-        )
+        self.assertEqual(updated_jobs[0].latest_run_time.replace(microsecond=0), now_time.replace(microsecond=0))
+        self.assertEqual(updated_jobs[0].next_run_time.replace(microsecond=0), next_time.replace(microsecond=0))
 
     def test_cron_scheduler_restore_backward_compatibility(self):
         """Test that restore() handles missing cron_jobs field (backward compatibility)"""
@@ -922,7 +917,7 @@ class TestCronJob(RQTestCase):
             result_ttl=1000,
             ttl=600,
             failure_ttl=3600,
-            meta={'key': 'value'}
+            meta={'key': 'value'},
         )
 
         # Test without timing information
@@ -956,7 +951,7 @@ class TestCronJob(RQTestCase):
             'func_name': 'tests.fixtures.say_hello',
             'interval': 60,
             'job_timeout': 300,
-            'result_ttl': 1000
+            'result_ttl': 1000,
         }
 
         job = CronJob.from_dict(data_without_timing)
@@ -978,7 +973,7 @@ class TestCronJob(RQTestCase):
             'failure_ttl': 3600,
             'meta': {'key': 'value'},
             'last_enqueue_time': utils.utcformat(now_time),
-            'next_enqueue_time': utils.utcformat(next_time)
+            'next_enqueue_time': utils.utcformat(next_time),
         }
 
         job = CronJob.from_dict(data_with_timing)
@@ -996,7 +991,7 @@ class TestCronJob(RQTestCase):
             cron='0 9 * * *',
             job_timeout=300,
             result_ttl=1000,
-            meta={'foo': 'bar'}
+            meta={'foo': 'bar'},
         )
 
         now_time = datetime.now(timezone.utc)
@@ -1008,12 +1003,10 @@ class TestCronJob(RQTestCase):
 
         # Assert timing preserved
         self.assertEqual(
-            restored_job.latest_run_time.replace(microsecond=0),
-            original_job.latest_run_time.replace(microsecond=0)
+            restored_job.latest_run_time.replace(microsecond=0), original_job.latest_run_time.replace(microsecond=0)
         )
         self.assertEqual(
-            restored_job.next_run_time.replace(microsecond=0),
-            original_job.next_run_time.replace(microsecond=0)
+            restored_job.next_run_time.replace(microsecond=0), original_job.next_run_time.replace(microsecond=0)
         )
         # Assert job_options preserved
         self.assertEqual(restored_job.job_options, original_job.job_options)

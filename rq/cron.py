@@ -15,7 +15,7 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
@@ -45,7 +45,7 @@ class CronJob:
         interval: Optional[int] = None,
         cron: Optional[str] = None,
         job_timeout: Optional[int] = None,
-        result_ttl: int = 500,
+        result_ttl: int = DEFAULT_RESULT_TTL,
         ttl: Optional[int] = None,
         failure_ttl: Optional[int] = None,
         meta: Optional[dict] = None,
@@ -157,7 +157,7 @@ class CronJob:
             interval=data.get('interval'),
             cron=data.get('cron'),
             job_timeout=data.get('job_timeout'),
-            result_ttl=data.get('result_ttl'),
+            result_ttl=data.get('result_ttl', DEFAULT_RESULT_TTL),
             ttl=data.get('ttl'),
             failure_ttl=data.get('failure_ttl'),
             meta=data.get('meta'),
