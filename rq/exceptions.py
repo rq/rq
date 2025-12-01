@@ -26,7 +26,9 @@ class DequeueTimeout(Exception):
     pass
 
 
-class ShutDownImminentException(Exception):
+class ShutDownImminentException(BaseException):
+    # Inherit from BaseException as this is used specifically as a
+    # 'shutdown' signal and should not be caught by except Exception.
     def __init__(self, msg, extra_info):
         self.extra_info = extra_info
         super().__init__(msg)
