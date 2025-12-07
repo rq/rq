@@ -100,18 +100,17 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(len(enqueued_jobs), 3)
         self.assertEqual(len(queue.get_jobs()), 3)
 
-        # Store the run time for job2 to check later it wasn't updated
-        self.assertIsNotNone(job2.latest_enqueue_time)  # Ensure it was set by the first enqueue
+        self.assertIsNotNone(job2.latest_enqueue_time)
         job_2_latest_enqueue_time = job2.latest_enqueue_time
 
         queue.empty()
         # Set job1 and job3 to be due, but not job2
-        now_time = utils.now()  # Use consistent name
+        now = utils.now()
         # Manually set the next run times for testing `should_run` logic
         # Note: latest_enqueue_time is already set from the previous enqueue
-        job1.next_enqueue_time = now_time - timedelta(seconds=5)  # 5 seconds ago
-        job2.next_enqueue_time = now_time + timedelta(seconds=30)  # 30 seconds in the future
-        job3.next_enqueue_time = now_time - timedelta(seconds=10)  # 10 seconds ago
+        job1.next_enqueue_time = now - timedelta(seconds=5)
+        job2.next_enqueue_time = now + timedelta(seconds=30)
+        job3.next_enqueue_time = now - timedelta(seconds=10)
 
         # Execute enqueue_jobs()
         enqueued_jobs = cron.enqueue_jobs()
@@ -127,20 +126,19 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(len(queue_jobs), 2)
 
         # Check that the run times were updated for the enqueued jobs
-        self.assertIsNotNone(job1.latest_enqueue_time)
         assert job1.latest_enqueue_time is not None and job_2_latest_enqueue_time is not None
         self.assertTrue(job1.latest_enqueue_time > job_2_latest_enqueue_time)
         self.assertIsNotNone(job1.next_enqueue_time)
-        self.assertGreaterEqual(job1.next_enqueue_time, now_time)
+        self.assertGreaterEqual(job1.next_enqueue_time, now)
 
         self.assertIsNotNone(job3.latest_enqueue_time)
         self.assertTrue(job3.latest_enqueue_time > job_2_latest_enqueue_time)
         self.assertIsNotNone(job3.next_enqueue_time)
-        self.assertGreaterEqual(job3.next_enqueue_time, now_time)
+        self.assertGreaterEqual(job3.next_enqueue_time, now)
 
         # job2 should not be updated since it wasn't run
-        self.assertEqual(job2.latest_enqueue_time, job_2_latest_enqueue_time)  # Check it wasn't updated
-        self.assertEqual(job2.next_enqueue_time, now_time + timedelta(seconds=30))  # Still future time
+        self.assertEqual(job2.latest_enqueue_time, job_2_latest_enqueue_time)
+        self.assertEqual(job2.next_enqueue_time, now + timedelta(seconds=30))
 
     @patch('rq.cron.now')
     def test_calculate_sleep_interval(self, mock_now):
@@ -150,7 +148,7 @@ class TestCronScheduler(RQTestCase):
         mock_now.return_value = base_time
 
         # No Jobs (directly check _cron_jobs on the instance)
-        cron._cron_jobs = []  # Ensure no jobs
+        cron._cron_jobs = []
         actual_interval = cron.calculate_sleep_interval()
         self.assertEqual(actual_interval, 60)
 
