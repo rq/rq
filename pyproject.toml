@@ -106,10 +106,11 @@ target-version = "py39"
 line-length = 120
 format.quote-style = "single"
 lint.select = [
-  "E", # pycodestyle errors
-  "F", # pyflakes errors
-  "I", # import sorting
-  "W", # pycodestyle warnings
+  "E",  # pycodestyle errors
+  "F",  # pyflakes errors
+  "I",  # import sorting
+  "UP",
+  "W",  # pycodestyle warnings
 ]
 lint.isort.known-first-party = [ "rq" ]
 lint.isort.section-order = [
