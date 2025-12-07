@@ -68,13 +68,13 @@ class CronJob:
         self.interval: Optional[int] = interval
         self.cron: Optional[str] = cron
         self.queue_name: str = queue_name
-        self.next_run_time: Optional[datetime] = None
-        self.latest_run_time: Optional[datetime] = None
+        self.next_enqueue_time: Optional[datetime] = None
+        self.latest_enqueue_time: Optional[datetime] = None
 
-        # For cron jobs, set initial next_run_time during initialization
+        # For cron jobs, set initial next_enqueue_time during initialization
         if self.cron:
             cron_iter = croniter(self.cron, now())
-            self.next_run_time = cron_iter.get_next(datetime)
+            self.next_enqueue_time = cron_iter.get_next(datetime)
         self.job_options: Dict[str, Any] = {
             'job_timeout': job_timeout,
             'result_ttl': result_ttl,
@@ -96,38 +96,38 @@ class CronJob:
 
         return job
 
-    def get_next_run_time(self) -> datetime:
+    def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""
         if self.cron:
             # Use cron expression to calculate next run time
-            cron_iter = croniter(self.cron, self.latest_run_time or now())
+            cron_iter = croniter(self.cron, self.latest_enqueue_time or now())
             return cron_iter.get_next(datetime)
-        elif self.interval and self.latest_run_time:
+        elif self.interval and self.latest_enqueue_time:
             # Use interval-based calculation
-            return self.latest_run_time + timedelta(seconds=self.interval)
+            return self.latest_enqueue_time + timedelta(seconds=self.interval)
 
         return datetime.max  # Far future if neither interval nor cron set
 
     def should_run(self) -> bool:
         """Check if this job should run now"""
         # For interval jobs that have never run, run immediately
-        # Jobs with cron string always have next_run_time set during initialization
-        if not self.latest_run_time and not self.cron:
+        # Jobs with cron string always have next_enqueue_time set during initialization
+        if not self.latest_enqueue_time and not self.cron:
             return True
 
-        # For all other cases, check if next_run_time has arrived
-        if self.next_run_time:
-            return now() >= self.next_run_time
+        # For all other cases, check if next_enqueue_time has arrived
+        if self.next_enqueue_time:
+            return now() >= self.next_enqueue_time
 
         return False
 
-    def set_run_time(self, time: datetime) -> None:
+    def set_enqueue_time(self, time: datetime) -> None:
         """Set latest run time to a given time and update next run time"""
-        self.latest_run_time = time
+        self.latest_enqueue_time = time
 
         # Update next run time if interval or cron is set
         if self.interval is not None or self.cron is not None:
-            self.next_run_time = self.get_next_run_time()
+            self.next_enqueue_time = self.get_next_enqueue_time()
 
     def to_dict(self) -> dict[str, Any]:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
@@ -136,8 +136,8 @@ class CronJob:
             'queue_name': self.queue_name,
             'interval': self.interval,
             'cron': self.cron,
-            'last_enqueue_time': utcformat(self.latest_run_time) if self.latest_run_time else None,
-            'next_enqueue_time': utcformat(self.next_run_time) if self.next_run_time else None,
+            'last_enqueue_time': utcformat(self.latest_enqueue_time) if self.latest_enqueue_time else None,
+            'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
         obj.update({k: v for k, v in self.job_options.items() if v is not None})
@@ -164,10 +164,10 @@ class CronJob:
 
         # Restore timing information if present
         if data.get('last_enqueue_time'):
-            job.latest_run_time = utcparse(data['last_enqueue_time'])
+            job.latest_enqueue_time = utcparse(data['last_enqueue_time'])
 
         if data.get('next_enqueue_time'):
-            job.next_run_time = utcparse(data['next_enqueue_time'])
+            job.next_enqueue_time = utcparse(data['next_enqueue_time'])
 
         return job
 
@@ -260,7 +260,7 @@ class CronScheduler:
         for job in self._cron_jobs:
             if job.should_run():
                 job.enqueue(self.connection)
-                job.set_run_time(enqueue_time)
+                job.set_enqueue_time(enqueue_time)
                 enqueued_jobs.append(job)
         return enqueued_jobs
 
@@ -273,12 +273,12 @@ class CronScheduler:
         current_time = now()
 
         # Find the next job to run
-        next_job_times = [job.next_run_time for job in self._cron_jobs if job.next_run_time]
+        next_job_times = [job.next_enqueue_time for job in self._cron_jobs if job.next_enqueue_time]
 
         if not next_job_times:
             return 60  # Default sleep time of 60 seconds
 
-        # Find the closest job by next_run_time
+        # Find the closest job by next_enqueue_time
         closest_time = min(next_job_times)
 
         # Calculate seconds until next job
