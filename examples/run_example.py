@@ -23,17 +23,17 @@ def wait_for_all(jobs):
     done = False
     while not done:
         os.system('clear')
-        print('Asynchronously: (now = %.2f)' % (time.time() - start_time,))
+        print(f'Asynchronously: (now = {time.time() - start_time:.2f})')
         done = True
         for job in jobs:
             status = job.get_status()
             if status is JobStatus.FINISHED:
                 result = job.return_value()
             else:
-                result = '(%s)' % status.name
+                result = f'({status.name})'
                 done = False
             (arg,) = job.args
-            print('fib(%d) = %s' % (arg, result))
+            print(f'fib({arg}) = {result}')
         print('')
         print('To start the actual in the background, run a worker:')
         print('    $ rq worker')

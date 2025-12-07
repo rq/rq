@@ -102,7 +102,7 @@ def as_text(v: Union[bytes, str]) -> str:
     elif isinstance(v, str):
         return v
     else:
-        raise ValueError('Unknown type %r' % type(v))
+        raise ValueError(f'Unknown type {type(v)!r}')
 
 
 def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = False) -> dict[str, Any]:
@@ -168,10 +168,10 @@ def import_attribute(name: str) -> Callable[..., Any]:
     try:
         attribute_owner = getattr(module, attribute_owner_name)
     except:  # noqa
-        raise ValueError('Invalid attribute name: %s' % attribute_name)
+        raise ValueError(f'Invalid attribute name: {attribute_name}')
 
     if not hasattr(attribute_owner, attribute_name):
-        raise ValueError('Invalid attribute name: %s' % name)
+        raise ValueError(f'Invalid attribute name: {name}')
     return getattr(attribute_owner, attribute_name)
 
 

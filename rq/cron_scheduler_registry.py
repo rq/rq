@@ -1,5 +1,5 @@
 import time
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from redis import Redis
 from redis.client import Pipeline
@@ -57,7 +57,7 @@ def unregister(cron_scheduler: 'CronScheduler', pipeline: Optional[Pipeline] = N
         raise SchedulerNotFound(f"CronScheduler '{cron_scheduler.name}' not found in registry")
 
 
-def get_keys(connection: Redis) -> List[str]:
+def get_keys(connection: Redis) -> list[str]:
     """Get all registered CronScheduler names from the registry
 
     Args:
