@@ -1,3 +1,4 @@
+import json
 import os
 import signal
 import socket
@@ -528,7 +529,7 @@ class TestCronScheduler(RQTestCase):
         cron.register(div_by_zero, 'low', interval=120, job_timeout=10)
 
         data = cron.to_dict()
-        jobs_data = cron.serializer.loads(data['cron_jobs'])
+        jobs_data = json.loads(data['cron_jobs'])
         self.assertEqual(len(jobs_data), 3)
 
         # Verify all jobs have required fields

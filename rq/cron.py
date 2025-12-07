@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import logging
 import os
 import signal
@@ -427,7 +428,7 @@ class CronScheduler:
             'name': self.name,
             'created_at': utcformat(self.created_at),
             'config_file': self.config_file or '',
-            'cron_jobs': self.serializer.dumps([job.to_dict() for job in self._cron_jobs]),
+            'cron_jobs': json.dumps([job.to_dict() for job in self._cron_jobs]),
         }
         return obj
 
@@ -439,14 +440,11 @@ class CronScheduler:
 
     def save_jobs_data(self) -> None:
         """Save cron jobs data to Redis."""
-        data = self.serializer.dumps([job.to_dict() for job in self._cron_jobs])
+        data = json.dumps([job.to_dict() for job in self._cron_jobs])
         self.connection.hset(self.key, 'cron_jobs', data)
 
-    def restore(self, raw_data: Dict) -> None:
+    def restore(self, raw_data: dict) -> None:
         """Restore CronScheduler instance from Redis hash data."""
-        # Extract cron_jobs bytes before decoding (serializer produces binary data)
-        cron_jobs_data = raw_data.pop(b'cron_jobs', None)
-
         obj = decode_redis_hash(raw_data, decode_values=True)
 
         self.hostname = obj['hostname']
@@ -456,11 +454,11 @@ class CronScheduler:
         self.config_file = obj['config_file']
 
         # Restore CronJob data if available
-        if cron_jobs_data:
+        if obj.get('cron_jobs'):
             try:
-                jobs_data = self.serializer.loads(cron_jobs_data)
+                jobs_data = json.loads(obj['cron_jobs'])
                 self._cron_jobs = [CronJob.from_dict(job_data) for job_data in jobs_data]
-            except Exception as e:
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
                 self.log.warning(f'Failed to restore cron jobs: {e}')
                 self._cron_jobs = []
         else:
