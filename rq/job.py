@@ -168,7 +168,7 @@ class Job:
         self.connection = connection
         self._id = id
         self.created_at = now()
-        self._data: Union[bytes, 'UnevaluatedType'] = UNEVALUATED
+        self._data: Union[bytes, UnevaluatedType] = UNEVALUATED
         self._func_name: Union[str, UnevaluatedType] = UNEVALUATED
         self._instance: Optional[Union[object, UnevaluatedType]] = UNEVALUATED
         self._args: Union[tuple, list, UnevaluatedType] = UNEVALUATED
@@ -1328,7 +1328,7 @@ class Job:
                        or iterable of these types.
         """
 
-        depends_on_list: list[Union['Job', str]] = []
+        depends_on_list: list[Union[Job, str]] = []
         for depends_on_item in ensure_job_list(depends_on):
             if isinstance(depends_on_item, Dependency):
                 # If a Dependency has enqueue_at_front or allow_failure set to True, these behaviors are used for
