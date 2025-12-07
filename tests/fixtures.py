@@ -29,7 +29,7 @@ def say_hello(name=None):
     """A job with a single argument and a return value."""
     if name is None:
         name = 'Stranger'
-    return 'Hi there, %s!' % (name,)
+    return f'Hi there, {name}!'
 
 
 async def say_hello_async(name=None):
@@ -309,16 +309,16 @@ def burst_two_workers(queue, connection: Redis, timeout=2, tries=5, pause=0.1):
 
 def save_result(job, connection, result):
     """Store job result in a key"""
-    connection.set('success_callback:%s' % job.id, result, ex=60)
+    connection.set(f'success_callback:{job.id}', result, ex=60)
 
 
 def save_exception(job, connection, type, value, traceback):
     """Store job exception in a key"""
-    connection.set('failure_callback:%s' % job.id, str(value), ex=60)
+    connection.set(f'failure_callback:{job.id}', str(value), ex=60)
 
 
 def save_result_if_not_stopped(job, connection, result=''):
-    connection.set('stopped_callback:%s' % job.id, result, ex=60)
+    connection.set(f'stopped_callback:{job.id}', result, ex=60)
 
 
 def erroneous_callback(job):

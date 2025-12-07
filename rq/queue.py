@@ -239,7 +239,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return 'rq:clean_registries:%s' % self.name
+        return f'rq:clean_registries:{self.name}'
 
     @property
     def scheduler_pid(self) -> Optional[int]:

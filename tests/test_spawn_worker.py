@@ -82,7 +82,7 @@ class TimeoutTestCase:
 
     def _timeout(self, signal, frame):
         raise AssertionError(
-            "test still running after %i seconds, likely the worker wasn't shutdown correctly" % self.killtimeout
+            f"test still running after {self.killtimeout} seconds, likely the worker wasn't shutdown correctly"
         )
 
 

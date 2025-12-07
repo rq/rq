@@ -263,7 +263,7 @@ def enqueue(
         queue.schedule_job(job, schedule)
 
     if not quiet:
-        click.echo("Enqueued %s with job-id '%s'." % (blue(function_string), job.id))
+        click.echo(f"Enqueued {blue(function_string)} with job-id '{job.id}'.")
 
 
 if __name__ == '__main__':

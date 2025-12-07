@@ -25,8 +25,8 @@ class _Colorizer:
 
         x = 30
         for dark, light in zip(dark_colors, light_colors):
-            self.codes[dark] = esc + '%im' % x
-            self.codes[light] = esc + '%i;01m' % x
+            self.codes[dark] = esc + f'{x}m'
+            self.codes[light] = esc + f'{x};01m'
             x += 1
 
         del dark, light, x

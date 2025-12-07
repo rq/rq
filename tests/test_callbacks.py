@@ -124,20 +124,20 @@ class SyncJobCallback(RQTestCase):
 
         job = queue.enqueue(say_hello, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(self.connection.get('success_callback:%s' % job.id).decode(), job.result)
+        self.assertEqual(self.connection.get(f'success_callback:{job.id}').decode(), job.result)
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('success_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'success_callback:{job.id}'))
 
         # test string callbacks
         job = queue.enqueue(say_hello, on_success=Callback('tests.fixtures.save_result'))
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(self.connection.get('success_callback:%s' % job.id).decode(), job.result)
+        self.assertEqual(self.connection.get(f'success_callback:{job.id}').decode(), job.result)
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('success_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'success_callback:{job.id}'))
 
     def test_failure_callback(self):
         """queue.enqueue* methods with on_failure is persisted correctly"""
@@ -145,20 +145,20 @@ class SyncJobCallback(RQTestCase):
 
         job = queue.enqueue(div_by_zero, on_failure=save_exception)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIn('div_by_zero', self.connection.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('failure_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
         # test string callbacks
         job = queue.enqueue(div_by_zero, on_failure=Callback('tests.fixtures.save_exception'))
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIn('div_by_zero', self.connection.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('failure_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
     def test_stopped_callback(self):
         """queue.enqueue* methods with on_stopped is persisted correctly"""
@@ -170,14 +170,14 @@ class SyncJobCallback(RQTestCase):
         job.execute_stopped_callback(
             worker.death_penalty_class
         )  # Calling execute_stopped_callback directly for coverage
-        self.assertTrue(self.connection.exists('stopped_callback:%s' % job.id))
+        self.assertTrue(self.connection.exists(f'stopped_callback:{job.id}'))
 
         # test string callbacks
         job = queue.enqueue(long_process, on_stopped=Callback('tests.fixtures.save_result_if_not_stopped'))
         job.execute_stopped_callback(
             worker.death_penalty_class
         )  # Calling execute_stopped_callback directly for coverage
-        self.assertTrue(self.connection.exists('stopped_callback:%s' % job.id))
+        self.assertTrue(self.connection.exists(f'stopped_callback:{job.id}'))
 
 
 class WorkerCallbackTestCase(RQTestCase):
@@ -190,23 +190,23 @@ class WorkerCallbackTestCase(RQTestCase):
         job = queue.enqueue(say_hello, on_success=save_result)
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(self.connection.get('success_callback:%s' % job.id).decode(), job.return_value())
+        self.assertEqual(self.connection.get(f'success_callback:{job.id}').decode(), job.return_value())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('success_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'success_callback:{job.id}'))
 
         # test string callbacks
         job = queue.enqueue(say_hello, on_success=Callback('tests.fixtures.save_result'))
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
-        self.assertEqual(self.connection.get('success_callback:%s' % job.id).decode(), job.return_value())
+        self.assertEqual(self.connection.get(f'success_callback:{job.id}').decode(), job.return_value())
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('success_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'success_callback:{job.id}'))
 
     def test_erroneous_success_callback(self):
         """Test exception handling when executing success callback"""
@@ -234,12 +234,12 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
         print(job.exc_info)
-        self.assertIn('div_by_zero', self.connection.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('failure_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
         # test string callbacks
         job = queue.enqueue(div_by_zero, on_failure=Callback('tests.fixtures.save_exception'))
@@ -247,12 +247,12 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
         print(job.exc_info)
-        self.assertIn('div_by_zero', self.connection.get('failure_callback:%s' % job.id).decode())
+        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         worker.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertFalse(self.connection.exists('failure_callback:%s' % job.id))
+        self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
         # TODO: add test case for error while executing failure callback
 

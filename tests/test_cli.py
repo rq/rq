@@ -26,7 +26,7 @@ class CLITestCase(RQTestCase):
     def setUp(self):
         super().setUp()
         db_num = self.connection.connection_pool.connection_kwargs['db']
-        self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
+        self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
         self.connection: Redis = Redis.from_url(self.redis_url)
 
     def tearDown(self):
