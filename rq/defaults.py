@@ -1,3 +1,9 @@
+import logging
+import os
+
+import psutil
+
+
 DEFAULT_JOB_CLASS = 'rq.job.Job'
 """ The path for the default Job class to use.
 Defaults to the main `Job` class within the `rq.job` module
@@ -105,8 +111,11 @@ def _get_default_max_memory() -> int:
     Returns:
         int: Maximum memory in bytes (90% of cgroup limit or 4 GB)
     """
+    logger = logging.getLogger("rq.job")
+
     cgroup_memory_file = '/sys/fs/cgroup/memory.max'
     default_memory = 4 * 1024 * 1024 * 1024  # 4 GB fallback
+
 
     try:
         with open(cgroup_memory_file, 'r') as f:
@@ -123,8 +132,14 @@ def _get_default_max_memory() -> int:
             # Try to parse as integer (bytes)
             try:
                 cgroup_limit = int(content)
+                current_process_memory = psutil.Process(os.getpid()).memory_info().rss
+                effective_child_limit = cgroup_limit - current_process_memory
+                factor = 0.9
+                logger.debug(
+                    f"Setting max memory to ({cgroup_limit=} - {current_process_memory=}) * {factor=} = {int(effective_child_limit * factor)=}"
+                )
                 # Use 90% of the cgroup limit
-                return int(cgroup_limit * 0.9)
+                return int(effective_child_limit * factor)
             except ValueError:
                 # Not a valid number, use default
                 return default_memory
@@ -136,7 +151,7 @@ def _get_default_max_memory() -> int:
 
 DEFAULT_MAX_MEMORY = _get_default_max_memory()
 """ The default maximum memory in bytes for work horse processes.
-In containerized environments, uses 90% of cgroup memory limit.
+In containerized environments, uses 90% of cgroup memory limit - current process memory usage.
 Otherwise defaults to 4 GB. Work horses exceeding this limit will be killed.
 Set to None to disable memory monitoring.
 """
