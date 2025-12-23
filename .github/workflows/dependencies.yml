@@ -86,7 +86,7 @@ jobs:
     needs: dependency-build
 
     steps:
-    - uses: actions/download-artifact@v6
+    - uses: actions/download-artifact@v7
       with:
         name: dependencies-error
         path: .
