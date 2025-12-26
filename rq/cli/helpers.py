@@ -90,7 +90,7 @@ def get_redis_from_config(settings, connection_class=Redis):
 
 def pad(s, pad_to_length):
     """Pads the given string to the given length."""
-    return ('%-' + '%ds' % pad_to_length) % (s,)
+    return f'{s:<{pad_to_length}}'
 
 
 def get_scale(x):
@@ -132,21 +132,14 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class, connection: Re
         count = counts[q]
         if not raw:
             chart = green('|' + '█' * int(ratio * count))
-            line = '%-12s %s %d, %d executing, %d finished, %d failed' % (
-                q.name,
-                chart,
-                count,
-                q.started_job_registry.count,
-                q.finished_job_registry.count,
-                q.failed_job_registry.count,
+            line = (
+                f'{q.name:<12} {chart} {count}, {q.started_job_registry.count} executing, '
+                f'{q.finished_job_registry.count} finished, {q.failed_job_registry.count} failed'
             )
         else:
-            line = 'queue %s %d, %d executing, %d finished, %d failed' % (
-                q.name,
-                count,
-                q.started_job_registry.count,
-                q.finished_job_registry.count,
-                q.failed_job_registry.count,
+            line = (
+                f'queue {q.name} {count}, {q.started_job_registry.count} executing, '
+                f'{q.finished_job_registry.count} finished, {q.failed_job_registry.count} failed'
             )
         click.echo(line)
 
@@ -154,7 +147,7 @@ def show_queues(queues, raw, by_queue, queue_class, worker_class, connection: Re
 
     # print summary when not in raw mode
     if not raw:
-        click.echo('%d queues, %d jobs total' % (len(queues), num_jobs))
+        click.echo(f'{len(queues)} queues, {num_jobs} jobs total')
 
 
 def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: Redis):
@@ -172,21 +165,15 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: R
             queue_names = ', '.join(worker.queue_names())
             name = f'{worker.name} ({worker.hostname} {worker.ip_address} {worker.pid})'
             if not raw:
-                line = '%s: %s %s. jobs: %d finished, %d failed' % (
-                    name,
-                    state_symbol(worker.get_state()),
-                    queue_names,
-                    worker.successful_job_count,
-                    worker.failed_job_count,
+                line = (
+                    f'{name}: {state_symbol(worker.get_state())} {queue_names}. '
+                    f'jobs: {worker.successful_job_count} finished, {worker.failed_job_count} failed'
                 )
                 click.echo(line)
             else:
-                line = 'worker %s %s %s. jobs: %d finished, %d failed' % (
-                    name,
-                    worker.get_state(),
-                    queue_names,
-                    worker.successful_job_count,
-                    worker.failed_job_count,
+                line = (
+                    f'worker {name} {worker.get_state()} {queue_names}. '
+                    f'jobs: {worker.successful_job_count} finished, {worker.failed_job_count} failed'
                 )
                 click.echo(line)
 
@@ -211,7 +198,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: R
             click.echo('{} {}'.format(pad(queue.name + ':', max_length + 1), queues_str))
 
     if not raw:
-        click.echo('%d workers, %d queues' % (len(workers), len(queues)))
+        click.echo(f'{len(workers)} workers, {len(queues)} queues')
 
 
 def show_both(queues, raw, by_queue, queue_class, worker_class, connection: Redis):

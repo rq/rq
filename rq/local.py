@@ -220,7 +220,7 @@ class LocalManager:
             release_local(local)
 
     def __repr__(self):
-        return '<%s storages: %d>' % (self.__class__.__name__, len(self.locals))
+        return f'<{self.__class__.__name__} storages: {len(self.locals)}>'
 
 
 class LocalProxy:
