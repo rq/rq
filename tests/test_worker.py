@@ -121,9 +121,9 @@ class TestWorker(RQTestCase):
         w2 = Worker([foo_queue], name='w2')
         w2.register_birth()
 
-        self.assertEqual(set(Worker.all(connection=foo_queue.connection)), set([w1, w2]))
-        self.assertEqual(set(Worker.all(queue=foo_queue)), set([w1, w2]))
-        self.assertEqual(set(Worker.all(queue=bar_queue)), set([w1]))
+        self.assertEqual(set(Worker.all(connection=foo_queue.connection)), {w1, w2})
+        self.assertEqual(set(Worker.all(queue=foo_queue)), {w1, w2})
+        self.assertEqual(set(Worker.all(queue=bar_queue)), {w1})
 
         w1.register_death()
         w2.register_death()
@@ -195,15 +195,15 @@ class TestWorker(RQTestCase):
         job.refresh()
         self.assertTrue(
             before <= job.enqueued_at.replace(tzinfo=timezone.utc) <= after,
-            'Not %s <= %s <= %s' % (before, job.enqueued_at, after),
+            f'Not {before} <= {job.enqueued_at} <= {after}',
         )
         self.assertTrue(
             before <= job.started_at.replace(tzinfo=timezone.utc) <= after,
-            'Not %s <= %s <= %s' % (before, job.started_at, after),
+            f'Not {before} <= {job.started_at} <= {after}',
         )
         self.assertTrue(
             before <= job.ended_at.replace(tzinfo=timezone.utc) <= after,
-            'Not %s <= %s <= %s' % (before, job.ended_at, after),
+            f'Not {before} <= {job.ended_at} <= {after}',
         )
 
     def test_work_is_unreadable(self):
@@ -1049,7 +1049,7 @@ class TestWorker(RQTestCase):
         w1 = Worker([q], name='worker1')
         w2 = Worker([q], name='worker2')
         w3 = Worker([q], name='worker1')
-        worker_set = set([w1, w2, w3])
+        worker_set = {w1, w2, w3}
         self.assertEqual(len(worker_set), 2)
 
     def test_worker_sets_birth(self):

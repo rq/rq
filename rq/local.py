@@ -275,7 +275,7 @@ class LocalProxy:
         try:
             return getattr(self.__local, self.__name__)
         except AttributeError:
-            raise RuntimeError('no object bound to %s' % self.__name__)
+            raise RuntimeError(f'no object bound to {self.__name__}')
 
     @property
     def __dict__(self):
@@ -288,7 +288,7 @@ class LocalProxy:
         try:
             obj = self._get_current_object()
         except RuntimeError:
-            return '<%s unbound>' % self.__class__.__name__
+            return f'<{self.__class__.__name__} unbound>'
         return repr(obj)
 
     def __dir__(self):

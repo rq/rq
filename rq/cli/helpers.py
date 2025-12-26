@@ -8,7 +8,7 @@ from enum import Enum
 from functools import partial, update_wrapper
 from json import JSONDecodeError, loads
 from shutil import get_terminal_size
-from typing import Type, cast
+from typing import cast
 
 import click
 from redis import Redis
@@ -34,7 +34,7 @@ yellow = partial(click.style, fg='yellow')
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
     settings = importlib.import_module(module)
-    return dict([(k, v) for k, v in settings.__dict__.items() if k.upper() == k])
+    return {k: v for k, v in settings.__dict__.items() if k.upper() == k}
 
 
 def get_redis_from_config(settings, connection_class=Redis):
@@ -170,7 +170,7 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: R
     if not by_queue:
         for worker in workers:
             queue_names = ', '.join(worker.queue_names())
-            name = '%s (%s %s %s)' % (worker.name, worker.hostname, worker.ip_address, worker.pid)
+            name = f'{worker.name} ({worker.hostname} {worker.ip_address} {worker.pid})'
             if not raw:
                 line = '%s: %s %s. jobs: %d finished, %d failed' % (
                     name,
@@ -204,11 +204,11 @@ def show_workers(queues, raw, by_queue, queue_class, worker_class, connection: R
         for queue in queue_dict:
             if queue_dict[queue]:
                 queues_str = ', '.join(
-                    sorted(map(lambda w: '%s (%s)' % (w.name, state_symbol(w.get_state())), queue_dict[queue]))
+                    sorted(map(lambda w: f'{w.name} ({state_symbol(w.get_state())})', queue_dict[queue]))
                 )
             else:
                 queues_str = '–'
-            click.echo('%s %s' % (pad(queue.name + ':', max_length + 1), queues_str))
+            click.echo('{} {}'.format(pad(queue.name + ':', max_length + 1), queues_str))
 
     if not raw:
         click.echo('%d workers, %d queues' % (len(workers), len(queues)))
@@ -223,7 +223,7 @@ def show_both(queues, raw, by_queue, queue_class, worker_class, connection: Redi
         click.echo('')
         import datetime
 
-        click.echo('Updated: %s' % datetime.datetime.now())
+        click.echo(f'Updated: {datetime.datetime.now()}')
 
 
 def refresh(interval, func, *args):
@@ -262,7 +262,7 @@ def _parse_json_value(value, keyword, arg_pos):
     try:
         return loads(value)
     except JSONDecodeError:
-        raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or '%s. non keyword argument' % arg_pos))
+        raise click.BadParameter('Unable to parse %s as JSON.' % (keyword or f'{arg_pos}. non keyword argument'))
 
 
 def _parse_literal_eval_value(value, keyword, arg_pos):
@@ -273,7 +273,7 @@ def _parse_literal_eval_value(value, keyword, arg_pos):
         raise click.BadParameter(
             'Unable to eval %s as Python object. See '
             'https://docs.python.org/3/library/ast.html#ast.literal_eval'
-            % (keyword or '%s. non keyword argument' % arg_pos)
+            % (keyword or f'{arg_pos}. non keyword argument')
         )
 
 
@@ -385,7 +385,7 @@ class CliConfig:
             raise click.BadParameter(str(exc), param_hint='--queue-class')
 
         try:
-            self.connection_class: Type[Redis] = cast(Type[Redis], import_attribute(connection_class))
+            self.connection_class: type[Redis] = cast(type[Redis], import_attribute(connection_class))
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--connection-class')
 

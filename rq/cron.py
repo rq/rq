@@ -7,7 +7,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 from croniter import croniter
 from redis import Redis
@@ -31,8 +31,8 @@ class CronJob:
         queue_name: str,
         func: Optional[Callable] = None,
         func_name: Optional[str] = None,
-        args: Optional[Tuple] = None,
-        kwargs: Optional[Dict] = None,
+        args: Optional[tuple] = None,
+        kwargs: Optional[dict] = None,
         interval: Optional[int] = None,
         cron: Optional[str] = None,
         job_timeout: Optional[int] = None,
@@ -55,8 +55,8 @@ class CronJob:
         else:
             raise ValueError('Either func or func_name must be provided')
 
-        self.args: Tuple = args or ()
-        self.kwargs: Dict = kwargs or {}
+        self.args: tuple = args or ()
+        self.kwargs: dict = kwargs or {}
         self.interval: Optional[int] = interval
         self.cron: Optional[str] = cron
         self.queue_name: str = queue_name
@@ -67,7 +67,7 @@ class CronJob:
         if self.cron:
             cron_iter = croniter(self.cron, now())
             self.next_run_time = cron_iter.get_next(datetime)
-        self.job_options: Dict[str, Any] = {
+        self.job_options: dict[str, Any] = {
             'job_timeout': job_timeout,
             'result_ttl': result_ttl,
             'ttl': ttl,
@@ -121,7 +121,7 @@ class CronJob:
         if self.interval is not None or self.cron is not None:
             self.next_run_time = self.get_next_run_time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
         obj = {
             'func_name': self.func_name,
@@ -134,7 +134,7 @@ class CronJob:
         return obj
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CronJob':
+    def from_dict(cls, data: dict[str, Any]) -> 'CronJob':
         """Create a CronJob instance from dictionary data for monitoring purposes.
 
         Note: The returned CronJob will not have a func attribute and cannot be executed,
@@ -153,7 +153,7 @@ class CronScheduler:
         name: str = '',
     ):
         self.connection: Redis = connection
-        self._cron_jobs: List[CronJob] = []
+        self._cron_jobs: list[CronJob] = []
         self.hostname: str = socket.gethostname()
         self.pid: int = os.getpid()
         self.name: str = name or f'{self.hostname}:{self.pid}:{uuid.uuid4().hex[:6]}'
@@ -185,8 +185,8 @@ class CronScheduler:
         self,
         func: Callable,
         queue_name: str,
-        args: Optional[Tuple] = None,
-        kwargs: Optional[Dict] = None,
+        args: Optional[tuple] = None,
+        kwargs: Optional[dict] = None,
         interval: Optional[int] = None,
         cron: Optional[str] = None,
         job_timeout: Optional[int] = None,
@@ -220,14 +220,14 @@ class CronScheduler:
 
         return cron_job
 
-    def get_jobs(self) -> List[CronJob]:
+    def get_jobs(self) -> list[CronJob]:
         """Get all registered cron jobs"""
         return self._cron_jobs
 
-    def enqueue_jobs(self) -> List[CronJob]:
+    def enqueue_jobs(self) -> list[CronJob]:
         """Enqueue all jobs that are due to run"""
         enqueue_time = now()
-        enqueued_jobs: List[CronJob] = []
+        enqueued_jobs: list[CronJob] = []
         for job in self._cron_jobs:
             if job.should_run():
                 job.enqueue(self.connection)
@@ -387,7 +387,7 @@ class CronScheduler:
         """Redis key for this CronScheduler instance"""
         return f'rq:cron_scheduler:{self.name}'
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
         obj = {
             'hostname': self.hostname,
@@ -404,7 +404,7 @@ class CronScheduler:
         connection.hset(self.key, mapping=self.to_dict())
         connection.expire(self.key, 60)
 
-    def restore(self, raw_data: Dict) -> None:
+    def restore(self, raw_data: dict) -> None:
         """Restore CronScheduler instance from Redis hash data"""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
@@ -428,7 +428,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> List['CronScheduler']:
+    def all(cls, connection: Redis, cleanup: bool = True) -> list['CronScheduler']:
         """Returns all CronScheduler instances from the registry
 
         Args:
@@ -500,14 +500,14 @@ class CronScheduler:
 
 
 # Global registry to store job data before Cron instance is created
-_job_data_registry: List[Dict] = []
+_job_data_registry: list[dict] = []
 
 
 def register(
     func: Callable,
     queue_name: str,
-    args: Optional[Tuple] = None,
-    kwargs: Optional[Dict] = None,
+    args: Optional[tuple] = None,
+    kwargs: Optional[dict] = None,
     interval: Optional[int] = None,
     cron: Optional[str] = None,
     job_timeout: Optional[int] = None,
@@ -515,7 +515,7 @@ def register(
     ttl: Optional[int] = None,
     failure_ttl: Optional[int] = None,
     meta: Optional[dict] = None,
-) -> Dict:
+) -> dict:
     """
     Register a function to be run as a cron job by adding its definition
     to a temporary global registry.
