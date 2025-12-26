@@ -90,17 +90,14 @@ if logger.level == logging.NOTSET:
     logger.setLevel(logging.INFO)
 
 
-_signames = dict(
-    (getattr(signal, signame), signame) for signame in dir(signal) if signame.startswith('SIG') and '_' not in signame
-)
+_signames = {
+    getattr(signal, signame): signame for signame in dir(signal) if signame.startswith('SIG') and '_' not in signame
+}
 
 
 def signal_name(signum):
     try:
-        if sys.version_info[:2] >= (3, 5):
-            return signal.Signals(signum).name
-        else:
-            return _signames[signum]
+        return signal.Signals(signum).name
 
     except KeyError:
         return 'SIG_UNKNOWN'
@@ -293,7 +290,7 @@ class BaseWorker:
         """
         prefix = cls.redis_worker_namespace_prefix
         if not worker_key.startswith(prefix):
-            raise ValueError('Not a valid RQ worker key: %s' % worker_key)
+            raise ValueError(f'Not a valid RQ worker key: {worker_key}')
 
         if not connection.exists(worker_key):
             connection.srem(cls.redis_workers_keys, worker_key)
@@ -1839,9 +1836,9 @@ class HerokuWorker(Worker):
             signal.alarm(self.imminent_shutdown_delay)
 
     def request_force_stop_sigrtmin(self, signum, frame):
-        info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
+        info = {attr: getattr(frame, attr) for attr in self.frame_properties}
         self.log.warning('raising ShutDownImminentException to cancel job...')
-        raise ShutDownImminentException('shut down imminent (signal: %s)' % signal_name(signum), info)
+        raise ShutDownImminentException(f'shut down imminent (signal: {signal_name(signum)})', info)
 
 
 class RoundRobinWorker(Worker):

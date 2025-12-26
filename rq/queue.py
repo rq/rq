@@ -239,7 +239,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return 'rq:clean_registries:%s' % self.name
+        return f'rq:clean_registries:{self.name}'
 
     @property
     def scheduler_pid(self) -> Optional[int]:
@@ -480,7 +480,7 @@ class Queue:
         """Removes all "dead" jobs from the queue by cycling through it,
         while guaranteeing FIFO semantics.
         """
-        COMPACT_QUEUE = '{0}_compact:{1}'.format(self.redis_queue_namespace_prefix, uuid.uuid4())  # noqa
+        COMPACT_QUEUE = f'{self.redis_queue_namespace_prefix}_compact:{uuid.uuid4()}'  # noqa
 
         self.connection.rename(self.key, COMPACT_QUEUE)
         while True:

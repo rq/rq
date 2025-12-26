@@ -515,7 +515,7 @@ class DeferredJobRegistry(BaseRegistry):
         if ttl is None:
             ttl = -1
 
-        return super(DeferredJobRegistry, self).add(job, ttl, pipeline, xx)
+        return super().add(job, ttl, pipeline, xx)
 
 
 class ScheduledJobRegistry(BaseRegistry):

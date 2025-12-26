@@ -121,9 +121,9 @@ class TestWorker(RQTestCase):
         w2 = Worker([foo_queue], name='w2')
         w2.register_birth()
 
-        self.assertEqual(set(Worker.all(connection=foo_queue.connection)), set([w1, w2]))
-        self.assertEqual(set(Worker.all(queue=foo_queue)), set([w1, w2]))
-        self.assertEqual(set(Worker.all(queue=bar_queue)), set([w1]))
+        self.assertEqual(set(Worker.all(connection=foo_queue.connection)), {w1, w2})
+        self.assertEqual(set(Worker.all(queue=foo_queue)), {w1, w2})
+        self.assertEqual(set(Worker.all(queue=bar_queue)), {w1})
 
         w1.register_death()
         w2.register_death()
@@ -195,15 +195,15 @@ class TestWorker(RQTestCase):
         job.refresh()
         self.assertTrue(
             before <= job.enqueued_at.replace(tzinfo=timezone.utc) <= after,
-            'Not %s <= %s <= %s' % (before, job.enqueued_at, after),
+            f'Not {before} <= {job.enqueued_at} <= {after}',
         )
         self.assertTrue(
             before <= job.started_at.replace(tzinfo=timezone.utc) <= after,
-            'Not %s <= %s <= %s' % (before, job.started_at, after),
+            f'Not {before} <= {job.started_at} <= {after}',
         )
         self.assertTrue(
             before <= job.ended_at.replace(tzinfo=timezone.utc) <= after,
-            'Not %s <= %s <= %s' % (before, job.ended_at, after),
+            f'Not {before} <= {job.ended_at} <= {after}',
         )
 
     def test_work_is_unreadable(self):
@@ -1049,7 +1049,7 @@ class TestWorker(RQTestCase):
         w1 = Worker([q], name='worker1')
         w2 = Worker([q], name='worker2')
         w3 = Worker([q], name='worker1')
-        worker_set = set([w1, w2, w3])
+        worker_set = {w1, w2, w3}
         self.assertEqual(len(worker_set), 2)
 
     def test_worker_sets_birth(self):
@@ -1293,11 +1293,11 @@ class TestWorker(RQTestCase):
         self.assertEqual(worker.python_version, python_version)
 
     def test_dequeue_random_strategy(self):
-        qs = [Queue('q%d' % i, connection=self.connection) for i in range(5)]
+        qs = [Queue(f'q{i}', connection=self.connection) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
-                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
+                qs[i].enqueue(say_pid, job_id=f'q{i}_{j}')
 
         w = Worker(qs, connection=self.connection)
         w.work(burst=True, dequeue_strategy='random')
@@ -1305,12 +1305,12 @@ class TestWorker(RQTestCase):
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i, j), connection=self.connection)
-                start_times.append(('q%d_%d' % (i, j), job.started_at))
+                job = Job.fetch(f'q{i}_{j}', connection=self.connection)
+                start_times.append((f'q{i}_{j}', job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected_rr = ['q%d_%d' % (i, j) for j in range(3) for i in range(5)]
-        expected_ser = ['q%d_%d' % (i, j) for i in range(5) for j in range(3)]
+        expected_rr = [f'q{i}_{j}' for j in range(3) for i in range(5)]
+        expected_ser = [f'q{i}_{j}' for i in range(5) for j in range(3)]
 
         self.assertNotEqual(sorted_ids, expected_rr)
         self.assertNotEqual(sorted_ids, expected_ser)
@@ -1337,11 +1337,11 @@ class TestWorker(RQTestCase):
             self.assertRaises(SystemExit, worker.request_force_stop, 1, frame=None)
 
     def test_dequeue_round_robin(self):
-        qs = [Queue('q%d' % i, connection=self.connection) for i in range(5)]
+        qs = [Queue(f'q{i}', connection=self.connection) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
-                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
+                qs[i].enqueue(say_pid, job_id=f'q{i}_{j}')
 
         w = Worker(qs)
         w.work(burst=True, dequeue_strategy='round_robin')
@@ -1349,8 +1349,8 @@ class TestWorker(RQTestCase):
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i, j), connection=self.connection)
-                start_times.append(('q%d_%d' % (i, j), job.started_at))
+                job = Job.fetch(f'q{i}_{j}', connection=self.connection)
+                start_times.append((f'q{i}_{j}', job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
         expected = [
@@ -1417,7 +1417,7 @@ class TimeoutTestCase:
 
     def _timeout(self, signal, frame):
         raise AssertionError(
-            "test still running after %i seconds, likely the worker wasn't shutdown correctly" % self.killtimeout
+            f"test still running after {self.killtimeout} seconds, likely the worker wasn't shutdown correctly"
         )
 
 
@@ -1557,7 +1557,7 @@ class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
         super().setUp()
         db_num = self.connection.connection_pool.connection_kwargs['db']
-        self.redis_url = 'redis://127.0.0.1:6379/%d' % db_num
+        self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
 
     def test_run_empty_queue(self):
         """Run the worker in its own process with an empty queue"""
@@ -1685,19 +1685,19 @@ class TestExceptionHandlerMessageEncoding(RQTestCase):
 
 class TestRoundRobinWorker(RQTestCase):
     def test_round_robin(self):
-        qs = [Queue('q%d' % i, connection=self.connection) for i in range(5)]
+        qs = [Queue(f'q{i}', connection=self.connection) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
-                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
+                qs[i].enqueue(say_pid, job_id=f'q{i}_{j}')
 
         w = RoundRobinWorker(qs)
         w.work(burst=True)
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i, j), connection=self.connection)
-                start_times.append(('q%d_%d' % (i, j), job.started_at))
+                job = Job.fetch(f'q{i}_{j}', connection=self.connection)
+                start_times.append((f'q{i}_{j}', job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
         expected = [
@@ -1722,23 +1722,23 @@ class TestRoundRobinWorker(RQTestCase):
 
 class TestRandomWorker(RQTestCase):
     def test_random_worker(self):
-        qs = [Queue('q%d' % i, connection=self.connection) for i in range(5)]
+        qs = [Queue(f'q{i}', connection=self.connection) for i in range(5)]
 
         for i in range(5):
             for j in range(3):
-                qs[i].enqueue(say_pid, job_id='q%d_%d' % (i, j))
+                qs[i].enqueue(say_pid, job_id=f'q{i}_{j}')
 
         w = RandomWorker(qs)
         w.work(burst=True)
         start_times = []
         for i in range(5):
             for j in range(3):
-                job = Job.fetch('q%d_%d' % (i, j), connection=self.connection)
-                start_times.append(('q%d_%d' % (i, j), job.started_at))
+                job = Job.fetch(f'q{i}_{j}', connection=self.connection)
+                start_times.append((f'q{i}_{j}', job.started_at))
         sorted_by_time = sorted(start_times, key=lambda tup: tup[1])
         sorted_ids = [tup[0] for tup in sorted_by_time]
-        expected_rr = ['q%d_%d' % (i, j) for j in range(3) for i in range(5)]
-        expected_ser = ['q%d_%d' % (i, j) for i in range(5) for j in range(3)]
+        expected_rr = [f'q{i}_{j}' for j in range(3) for i in range(5)]
+        expected_ser = [f'q{i}_{j}' for i in range(5) for j in range(3)]
         self.assertNotEqual(sorted_ids, expected_rr)
         self.assertNotEqual(sorted_ids, expected_ser)
         expected_rr.reverse()

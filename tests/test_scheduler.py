@@ -172,7 +172,7 @@ class TestScheduler(RQTestCase):
         scheduler.lock_acquisition_time = datetime.now() - timedelta(seconds=DEFAULT_MAINTENANCE_TASK_INTERVAL + 6)
         self.assertFalse(scheduler.should_reacquire_locks)
 
-        scheduler._queue_names = set(['default', 'foo'])
+        scheduler._queue_names = {'default', 'foo'}
         self.assertTrue(scheduler.should_reacquire_locks)
         scheduler.acquire_locks()
         self.assertFalse(scheduler.should_reacquire_locks)
@@ -186,7 +186,7 @@ class TestScheduler(RQTestCase):
 
         self.assertEqual(scheduler.acquire_locks(), {name_1})
         self.assertEqual(scheduler._acquired_locks, {name_1})
-        self.assertEqual(scheduler.acquire_locks(), set([]))
+        self.assertEqual(scheduler.acquire_locks(), set())
 
         # Only name_2 is returned since name_1 is already locked
         scheduler = RQScheduler([name_1, name_2], self.connection)

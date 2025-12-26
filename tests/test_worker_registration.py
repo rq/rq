@@ -52,11 +52,11 @@ class TestWorkerRegistry(RQTestCase):
         register(worker3)
 
         # get_keys(queue) will return worker keys for that queue
-        self.assertEqual(set([worker1.key, worker2.key]), get_keys(foo_queue))
-        self.assertEqual(set([worker1.key]), get_keys(bar_queue))
+        self.assertEqual({worker1.key, worker2.key}, get_keys(foo_queue))
+        self.assertEqual({worker1.key}, get_keys(bar_queue))
 
         # get_keys(connection=connection) will return all worker keys
-        self.assertEqual(set([worker1.key, worker2.key, worker3.key]), get_keys(connection=worker1.connection))
+        self.assertEqual({worker1.key, worker2.key, worker3.key}, get_keys(connection=worker1.connection))
 
         # Calling get_keys without arguments raises an exception
         self.assertRaises(ValueError, get_keys)
