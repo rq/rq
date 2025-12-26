@@ -12,8 +12,10 @@ import inspect
 import logging
 import numbers
 import os
+import sys
 import warnings
 from collections.abc import Generator, Iterable, Sequence
+from enum import Enum
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
@@ -35,7 +37,7 @@ if TYPE_CHECKING:
 
     from .job import Job
     from .queue import Queue
-    from .worker import Worker
+    from .worker import BaseWorker
 
 
 _T = TypeVar('_T')
@@ -44,6 +46,37 @@ ObjOrStr = Union[_O, str]
 
 
 logger = logging.getLogger(__name__)
+
+
+class Platform(Enum):
+    """Enum representing the operating system platform."""
+
+    WINDOWS = 'windows'
+    MAC = 'mac'
+    LINUX = 'linux'
+    OTHERS = 'others'
+
+
+def get_platform() -> Platform:
+    """Detect and return the current operating system platform.
+
+    Returns:
+        Platform: The detected platform enum value.
+            - Platform.WINDOWS for Windows systems
+            - Platform.MAC for macOS systems
+            - Platform.LINUX for Linux systems
+            - Platform.OTHERS for any other platform
+    """
+    platform = sys.platform.lower()
+
+    if platform.startswith('win'):
+        return Platform.WINDOWS
+    elif platform == 'darwin':
+        return Platform.MAC
+    elif platform.startswith('linux'):
+        return Platform.LINUX
+    else:
+        return Platform.OTHERS
 
 
 def resolve_function_reference(func) -> tuple[Any, str]:
@@ -175,16 +208,16 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
-def import_worker_class(name: str) -> type['Worker']:
+def import_worker_class(name: str) -> type['BaseWorker']:
     """Import a worker class from a dotted path name."""
     cls = import_attribute(name)
 
     if not isinstance(cls, type):
         raise ValueError(f'Invalid worker class: {name}')
 
-    from .worker import Worker
+    from .worker import BaseWorker
 
-    if not issubclass(cls, Worker):
+    if not issubclass(cls, BaseWorker):
         raise ValueError(f'Invalid worker class: {name}')
 
     return cls
