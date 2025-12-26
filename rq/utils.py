@@ -9,6 +9,7 @@ import calendar
 import datetime
 import importlib
 import inspect
+import json
 import logging
 import numbers
 import os
@@ -153,6 +154,15 @@ def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = 
     if decode_values:
         return {as_text(k): as_text(v) for k, v in h.items()}
     return {as_text(k): v for k, v in h.items()}
+
+
+def safe_json_dumps(value: Any) -> Any:
+    """Return value if JSON-serializable, otherwise a placeholder string."""
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        return '<not JSON serializable>'
+    return value
 
 
 def import_attribute(name: str) -> Callable[..., Any]:

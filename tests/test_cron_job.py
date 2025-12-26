@@ -60,12 +60,12 @@ class TestCronJob(RQTestCase):
         self.assertEqual(cron_job.job_options['failure_ttl'], failure_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
 
-    def test_get_next_run_time(self):
-        """Test that get_next_run_time correctly calculates the next run time"""
-        # Test with cron job (returns far future for no latest_run_time initially)
+    def test_get_next_enqueue_time(self):
+        """Test that get_next_enqueue_time correctly calculates the next run time"""
+        # Test with cron job (returns far future for no latest_enqueue_time initially)
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 9 * * *')
-        # Without latest_run_time set, get_next_run_time uses current time
-        next_run = cron_job.get_next_run_time()
+        # Without latest_enqueue_time set, get_next_enqueue_time uses current time
+        next_run = cron_job.get_next_enqueue_time()
         self.assertIsInstance(next_run, datetime)
 
         # Test with a specific interval
@@ -73,14 +73,14 @@ class TestCronJob(RQTestCase):
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=interval)
 
         now = utils.now()
-        cron_job.set_run_time(now)
-        next_run_time = cron_job.get_next_run_time()
+        cron_job.set_enqueue_time(now)
+        next_enqueue_time = cron_job.get_next_enqueue_time()
 
-        # Check that next_run_time is about interval seconds from now
+        # Check that next_enqueue_time is about interval seconds from now
         # Allow 2 seconds tolerance for test execution time
         self.assertTrue(
-            now + timedelta(seconds=interval - 5) <= next_run_time <= now + timedelta(seconds=interval + 5),
-            f'Next run time {next_run_time} not within expected range',
+            now + timedelta(seconds=interval - 5) <= next_enqueue_time <= now + timedelta(seconds=interval + 5),
+            f'Next run time {next_enqueue_time} not within expected range',
         )
 
     def test_should_run(self):
@@ -90,13 +90,13 @@ class TestCronJob(RQTestCase):
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=3600)
         self.assertTrue(cron_job.should_run())
 
-        # Job with future next_run_time should not run yet
-        cron_job.latest_run_time = utils.now() - timedelta(seconds=5)
-        cron_job.next_run_time = utils.now() + timedelta(minutes=5)
+        # Job with future next_enqueue_time should not run yet
+        cron_job.latest_enqueue_time = utils.now() - timedelta(seconds=5)
+        cron_job.next_enqueue_time = utils.now() + timedelta(minutes=5)
         self.assertFalse(cron_job.should_run())
 
-        # Job with past next_run_time should run
-        cron_job.next_run_time = utils.now() - timedelta(seconds=5)
+        # Job with past next_enqueue_time should run
+        cron_job.next_enqueue_time = utils.now() - timedelta(seconds=5)
         self.assertTrue(cron_job.should_run())
 
     def test_enqueue(self):
@@ -129,41 +129,41 @@ class TestCronJob(RQTestCase):
         # Verify job can be executed without TypeError
         job.perform()
 
-    def test_set_run_time(self):
-        """Test that set_run_time correctly sets latest run time and updates next run time"""
+    def test_set_enqueue_time(self):
+        """Test that set_enqueue_time correctly sets latest run time and updates next run time"""
         # Test with cron job
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 9 * * *')
         test_time = utils.now()
-        cron_job.set_run_time(test_time)
+        cron_job.set_enqueue_time(test_time)
 
-        # Check latest_run_time is set correctly
-        self.assertEqual(cron_job.latest_run_time, test_time)
+        # Check latest_enqueue_time is set correctly
+        self.assertEqual(cron_job.latest_enqueue_time, test_time)
 
-        # Since cron is set, next_run_time should be calculated
-        self.assertIsNotNone(cron_job.next_run_time)
+        # Since cron is set, next_enqueue_time should be calculated
+        self.assertIsNotNone(cron_job.next_enqueue_time)
 
         # Test with an interval
         interval = 60  # 60 seconds
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=interval)
-        cron_job.set_run_time(test_time)
+        cron_job.set_enqueue_time(test_time)
 
-        # Check latest_run_time is set correctly
-        self.assertEqual(cron_job.latest_run_time, test_time)
+        # Check latest_enqueue_time is set correctly
+        self.assertEqual(cron_job.latest_enqueue_time, test_time)
 
-        # Check that next_run_time is calculated correctly
-        next_run_time = test_time + timedelta(seconds=interval)
-        self.assertEqual(cron_job.next_run_time, next_run_time)
+        # Check that next_enqueue_time is calculated correctly
+        next_enqueue_time = test_time + timedelta(seconds=interval)
+        self.assertEqual(cron_job.next_enqueue_time, next_enqueue_time)
 
         # Test updating the run time
         test_time = test_time + timedelta(seconds=30)
-        cron_job.set_run_time(test_time)
+        cron_job.set_enqueue_time(test_time)
 
-        # Check latest_run_time is updated
-        self.assertEqual(cron_job.latest_run_time, test_time)
+        # Check latest_enqueue_time is updated
+        self.assertEqual(cron_job.latest_enqueue_time, test_time)
 
-        # Check that next_run_time is recalculated
+        # Check that next_enqueue_time is recalculated
         new_expected_next_run = test_time + timedelta(seconds=interval)
-        self.assertEqual(cron_job.next_run_time, new_expected_next_run)
+        self.assertEqual(cron_job.next_enqueue_time, new_expected_next_run)
 
     def test_cron_job_initialization_with_cron_string(self):
         """CronJob correctly initializes with cron string parameters"""
@@ -175,51 +175,51 @@ class TestCronJob(RQTestCase):
         self.assertIsNone(cron_job.interval)
         self.assertEqual(cron_job.queue_name, self.queue.name)
 
-        # next_run_time should be set immediately upon initialization
-        self.assertIsNotNone(cron_job.next_run_time)
+        # next_enqueue_time should be set immediately upon initialization
+        self.assertIsNotNone(cron_job.next_enqueue_time)
 
-        # latest_run_time should still be None (hasn't run yet)
-        self.assertIsNone(cron_job.latest_run_time)
+        # latest_enqueue_time should still be None (hasn't run yet)
+        self.assertIsNone(cron_job.latest_enqueue_time)
 
-        # For comparison, interval jobs don't set next_run_time during initialization
+        # For comparison, interval jobs don't set next_enqueue_time during initialization
         interval_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
-        self.assertIsNone(interval_job.next_run_time)  # Not set until first run
+        self.assertIsNone(interval_job.next_enqueue_time)  # Not set until first run
 
-    def test_get_next_run_time_with_cron_string(self):
-        """Test that get_next_run_time correctly calculates next run time using cron expression"""
+    def test_get_next_enqueue_time_with_cron_string(self):
+        """Test that get_next_enqueue_time correctly calculates next run time using cron expression"""
         # Test daily at 9 AM
         cron_expr = '0 9 * * *'
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron=cron_expr)
 
         # Set a base time to 8 AM today
         base_time = datetime(2023, 10, 27, 8, 0, 0)
-        cron_job.set_run_time(base_time)
+        cron_job.set_enqueue_time(base_time)
 
-        next_run_time = cron_job.get_next_run_time()
+        next_enqueue_time = cron_job.get_next_enqueue_time()
         expected_next_run = datetime(2023, 10, 27, 9, 0, 0)  # 9 AM same day
-        self.assertEqual(next_run_time, expected_next_run)
+        self.assertEqual(next_enqueue_time, expected_next_run)
 
         # If we're already past 9 AM, should schedule for next day
         base_time = datetime(2023, 10, 27, 10, 0, 0)
-        cron_job.set_run_time(base_time)
+        cron_job.set_enqueue_time(base_time)
 
-        next_run_time = cron_job.get_next_run_time()
+        next_enqueue_time = cron_job.get_next_enqueue_time()
         expected_next_run = datetime(2023, 10, 28, 9, 0, 0)  # 9 AM next day
-        self.assertEqual(next_run_time, expected_next_run)
+        self.assertEqual(next_enqueue_time, expected_next_run)
 
     def test_should_run_with_cron_string(self):
         """Test should_run method logic with cron expressions"""
         # Job with cron that has not run yet should NOT run immediately (crontab behavior)
         cron_job = CronJob(func=say_hello, queue_name=self.queue.name, cron='0 9 * * *')
-        # next_run_time should already be set during initialization
-        self.assertIsNotNone(cron_job.next_run_time)
+        # next_enqueue_time should already be set during initialization
+        self.assertIsNotNone(cron_job.next_enqueue_time)
 
-        # Job with future next_run_time should not run yet
-        cron_job.next_run_time = utils.now() + timedelta(hours=1)
+        # Job with future next_enqueue_time should not run yet
+        cron_job.next_enqueue_time = utils.now() + timedelta(hours=1)
         self.assertFalse(cron_job.should_run())
 
-        # Job with past next_run_time should run
-        cron_job.next_run_time = utils.now() - timedelta(minutes=5)
+        # Job with past next_enqueue_time should run
+        cron_job.next_enqueue_time = utils.now() - timedelta(minutes=5)
         self.assertTrue(cron_job.should_run())
 
     def test_cron_weekday_expressions(self):
@@ -230,15 +230,15 @@ class TestCronJob(RQTestCase):
 
         # Set to Friday 9 AM
         friday_time = datetime(2023, 10, 27, 9, 0, 0)  # Assuming this is a Friday
-        cron_job.set_run_time(friday_time)
+        cron_job.set_enqueue_time(friday_time)
 
-        next_run_time = cron_job.get_next_run_time()
+        next_enqueue_time = cron_job.get_next_enqueue_time()
 
         # Next run should be Monday (skip weekend)
         # We can verify it's not Saturday or Sunday by checking the weekday
-        self.assertIn(next_run_time.weekday(), [0, 1, 2, 3, 4])  # Monday=0, Friday=4
-        self.assertEqual(next_run_time.hour, 9)
-        self.assertEqual(next_run_time.minute, 0)
+        self.assertIn(next_enqueue_time.weekday(), [0, 1, 2, 3, 4])  # Monday=0, Friday=4
+        self.assertEqual(next_enqueue_time.hour, 9)
+        self.assertEqual(next_enqueue_time.minute, 0)
 
     def test_cron_job_serialization_roundtrip(self):
         """Test CronJob serialization and deserialization with both interval and cron jobs"""
