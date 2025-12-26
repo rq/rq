@@ -25,6 +25,7 @@ from .utils import (
     decode_redis_hash,
     normalize_config_path,
     now,
+    safe_json_dumps,
     str_to_date,
     utcformat,
     utcparse,
@@ -141,7 +142,7 @@ class CronJob:
             'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
-        obj.update({k: v for k, v in self.job_options.items() if v is not None})
+        obj.update({k: safe_json_dumps(v) for k, v in self.job_options.items() if v is not None})
         return obj
 
     @classmethod

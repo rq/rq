@@ -994,3 +994,15 @@ class TestCronJob(RQTestCase):
         )
         # Assert job_options preserved
         self.assertEqual(restored_job.job_options, original_job.job_options)
+
+    def test_to_dict_with_non_json_meta(self):
+        """Test that non-JSON-serializable meta is replaced"""
+        job = CronJob(
+            queue_name='default',
+            func=say_hello,
+            interval=60,
+            meta={'bad': {1, 2, 3}},
+        )
+
+        job_dict = job.to_dict()
+        self.assertEqual(job_dict['meta'], '<not JSON serializable>')
