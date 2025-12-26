@@ -90,9 +90,9 @@ if logger.level == logging.NOTSET:
     logger.setLevel(logging.INFO)
 
 
-_signames = dict(
-    (getattr(signal, signame), signame) for signame in dir(signal) if signame.startswith('SIG') and '_' not in signame
-)
+_signames = {
+    getattr(signal, signame): signame for signame in dir(signal) if signame.startswith('SIG') and '_' not in signame
+}
 
 
 def signal_name(signum):
@@ -1836,7 +1836,7 @@ class HerokuWorker(Worker):
             signal.alarm(self.imminent_shutdown_delay)
 
     def request_force_stop_sigrtmin(self, signum, frame):
-        info = dict((attr, getattr(frame, attr)) for attr in self.frame_properties)
+        info = {attr: getattr(frame, attr) for attr in self.frame_properties}
         self.log.warning('raising ShutDownImminentException to cancel job...')
         raise ShutDownImminentException(f'shut down imminent (signal: {signal_name(signum)})', info)
 

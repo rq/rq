@@ -151,8 +151,8 @@ def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = 
         When decode_values=True, returns Dict[str, str]
     """
     if decode_values:
-        return dict((as_text(k), as_text(v)) for k, v in h.items())
-    return dict((as_text(k), v) for k, v in h.items())
+        return {as_text(k): as_text(v) for k, v in h.items()}
+    return {as_text(k): v for k, v in h.items()}
 
 
 def import_attribute(name: str) -> Callable[..., Any]:

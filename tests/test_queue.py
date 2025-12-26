@@ -499,11 +499,11 @@ class TestQueue(RQTestCase):
 
         parent_job.set_status(JobStatus.FINISHED)
 
-        self.assertEqual(set(registry.get_job_ids()), set([job_1.id, job_2.id]))
+        self.assertEqual(set(registry.get_job_ids()), {job_1.id, job_2.id})
         # After dependents is enqueued, job_1 and job_2 should be in queue
         self.assertEqual(q.job_ids, [])
         q.enqueue_dependents(parent_job)
-        self.assertEqual(set(q.job_ids), set([job_2.id, job_1.id]))
+        self.assertEqual(set(q.job_ids), {job_2.id, job_1.id})
         self.assertFalse(self.connection.exists(parent_job.dependents_key))
 
         # DeferredJobRegistry should also be empty
@@ -521,12 +521,12 @@ class TestQueue(RQTestCase):
 
         # Each queue has its own DeferredJobRegistry
         registry_1 = DeferredJobRegistry(q_1.name, connection=self.connection)
-        self.assertEqual(set(registry_1.get_job_ids()), set([job_1.id]))
+        self.assertEqual(set(registry_1.get_job_ids()), {job_1.id})
         registry_2 = DeferredJobRegistry(q_2.name, connection=self.connection)
 
         parent_job.set_status(JobStatus.FINISHED)
 
-        self.assertEqual(set(registry_2.get_job_ids()), set([job_2.id]))
+        self.assertEqual(set(registry_2.get_job_ids()), {job_2.id})
 
         # After dependents is enqueued, job_1 on queue_1 and
         # job_2 should be in queue_2
@@ -534,8 +534,8 @@ class TestQueue(RQTestCase):
         self.assertEqual(q_2.job_ids, [])
         q_1.enqueue_dependents(parent_job)
         q_2.enqueue_dependents(parent_job)
-        self.assertEqual(set(q_1.job_ids), set([job_1.id]))
-        self.assertEqual(set(q_2.job_ids), set([job_2.id]))
+        self.assertEqual(set(q_1.job_ids), {job_1.id})
+        self.assertEqual(set(q_2.job_ids), {job_2.id})
         self.assertFalse(self.connection.exists(parent_job.dependents_key))
 
         # DeferredJobRegistry should also be empty

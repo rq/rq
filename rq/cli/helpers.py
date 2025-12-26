@@ -34,7 +34,7 @@ yellow = partial(click.style, fg='yellow')
 def read_config_file(module):
     """Reads all UPPERCASE variables defined in the given module file."""
     settings = importlib.import_module(module)
-    return dict([(k, v) for k, v in settings.__dict__.items() if k.upper() == k])
+    return {k: v for k, v in settings.__dict__.items() if k.upper() == k}
 
 
 def get_redis_from_config(settings, connection_class=Redis):

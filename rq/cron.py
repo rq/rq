@@ -421,7 +421,7 @@ class CronScheduler:
         return f'rq:cron_scheduler:{self.name}'
 
     def to_dict(self) -> dict:
-        """Convert CronScheduler instance to a dictionary for Redis storage."""
+        """Convert CronScheduler instance to a dictionary for Redis storage"""
         obj = {
             'hostname': self.hostname,
             'pid': str(self.pid),
