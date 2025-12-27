@@ -1213,31 +1213,48 @@ class BaseWorker:
         """Used to keep the worker stats up to date in Redis.
         Increments the failed job count.
 
+        Setting to expire in 1 minute more than the worker TTL to ensure that
+        this gets cleaned up in the event that this is called after the worker has
+        registered its death.
+
         Args:
             pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
         """
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
+        connection.expire(self.key, self.worker_ttl + 60)
+
 
     def increment_successful_job_count(self, pipeline: Optional['Pipeline'] = None):
         """Used to keep the worker stats up to date in Redis.
         Increments the successful job count.
+
+        Setting to expire in 1 minute more than the worker TTL to ensure that
+        this gets cleaned up in the event that this is called after the worker has
+        registered its death.
 
         Args:
             pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
         """
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
+        connection.expire(self.key, self.worker_ttl + 60)
 
     def increment_total_working_time(self, job_execution_time: timedelta, pipeline: 'Pipeline'):
         """Used to keep the worker stats up to date in Redis.
         Increments the time the worker has been working for (in seconds).
 
+        Setting to expire in 1 minute more than the worker TTL to ensure that
+        this gets cleaned up in the event that this is called after the worker has
+        registered its death.
+
         Args:
             job_execution_time (timedelta): A timedelta object.
             pipeline (Optional[Pipeline], optional): A Redis Pipeline. Defaults to None.
         """
-        pipeline.hincrbyfloat(self.key, 'total_working_time', job_execution_time.total_seconds())
+        pipeline.hincrbyfloat(self.key, 'total_working_time',
+                              job_execution_time.total_seconds())
+        pipeline.expire(self.key, self.worker_ttl + 60)
 
     def handle_exception(self, job: 'Job', *exc_info):
         """Walks the exception handler stack to delegate exception handling.
