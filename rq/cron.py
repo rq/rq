@@ -136,9 +136,11 @@ class CronJob:
         obj = {
             'func_name': self.func_name,
             'queue_name': self.queue_name,
+            'args': safe_json_dumps(self.args) if self.args else None,
+            'kwargs': safe_json_dumps(self.kwargs) if self.kwargs else None,
             'interval': self.interval,
             'cron': self.cron,
-            'last_enqueue_time': utcformat(self.latest_enqueue_time) if self.latest_enqueue_time else None,
+            'latest_enqueue_time': utcformat(self.latest_enqueue_time) if self.latest_enqueue_time else None,
             'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
@@ -152,9 +154,16 @@ class CronJob:
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
+        # Restore args/kwargs - handle both tuple and list (JSON deserializes tuples as lists)
+        args = data.get('args')
+        if args is not None and not isinstance(args, str):
+            args = tuple(args)
+
         job = cls(
             queue_name=data['queue_name'],
             func_name=data['func_name'],
+            args=args,
+            kwargs=data.get('kwargs'),
             interval=data.get('interval'),
             cron=data.get('cron'),
             job_timeout=data.get('job_timeout'),
@@ -165,8 +174,8 @@ class CronJob:
         )
 
         # Restore timing information if present
-        if data.get('last_enqueue_time'):
-            job.latest_enqueue_time = utcparse(data['last_enqueue_time'])
+        if data.get('latest_enqueue_time'):
+            job.latest_enqueue_time = utcparse(data['latest_enqueue_time'])
 
         if data.get('next_enqueue_time'):
             job.next_enqueue_time = utcparse(data['next_enqueue_time'])

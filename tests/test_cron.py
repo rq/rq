@@ -553,10 +553,10 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(fetched.created_at, cron.created_at)
         self.assertEqual(len(fetched.get_jobs()), 0)
 
-        # Test with jobs
+        # Test with jobs (including args and kwargs)
         cron = CronScheduler(connection=self.connection, name='test-scheduler')
         cron.config_file = 'other_config.py'
-        cron.register(say_hello, 'default', interval=60, job_timeout=30)
+        cron.register(say_hello, 'default', args=('hello',), kwargs={'name': 'world'}, interval=60, job_timeout=30)
         cron.register(do_nothing, 'high', cron='0 * * * *')
         cron.save()
 
@@ -575,6 +575,9 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(fetched_jobs[0].queue_name, 'default')
         self.assertEqual(fetched_jobs[0].interval, 60)
         self.assertIsNone(fetched_jobs[0].cron)
+        # Verify args and kwargs are preserved
+        self.assertEqual(fetched_jobs[0].args, ('hello',))
+        self.assertEqual(fetched_jobs[0].kwargs, {'name': 'world'})
         self.assertEqual(fetched_jobs[1].func_name, 'tests.fixtures.do_nothing')
         self.assertEqual(fetched_jobs[1].queue_name, 'high')
         self.assertEqual(fetched_jobs[1].cron, '0 * * * *')
@@ -885,124 +888,3 @@ class TestCronScheduler(RQTestCase):
 
         # Scheduler should not equal non-scheduler objects
         self.assertNotEqual(cron1, 'not-a-scheduler')
-
-
-class TestCronJob(RQTestCase):
-    """Tests for the CronJob class serialization and deserialization"""
-
-    def test_to_dict_with_and_without_timing(self):
-        """Test that to_dict() handles both None and populated timing information"""
-        job = CronJob(
-            queue_name='default',
-            func=say_hello,
-            interval=60,
-            job_timeout=300,
-            result_ttl=1000,
-            ttl=600,
-            failure_ttl=3600,
-            meta={'key': 'value'},
-        )
-
-        # Test without timing information
-        job_dict = job.to_dict()
-        self.assertIsNone(job_dict['last_enqueue_time'])
-        self.assertIsNone(job_dict['next_enqueue_time'])
-
-        # Set timing information
-        now_time = datetime.now(timezone.utc)
-        next_time = now_time + timedelta(seconds=60)
-        job.latest_enqueue_time = now_time
-        job.next_enqueue_time = next_time
-
-        # Test with timing information
-        job_dict = job.to_dict()
-        self.assertEqual(job_dict['last_enqueue_time'], utils.utcformat(now_time))
-        self.assertEqual(job_dict['next_enqueue_time'], utils.utcformat(next_time))
-
-        # Verify job_options are included
-        self.assertEqual(job_dict['job_timeout'], 300)
-        self.assertEqual(job_dict['result_ttl'], 1000)
-        self.assertEqual(job_dict['ttl'], 600)
-        self.assertEqual(job_dict['failure_ttl'], 3600)
-        self.assertEqual(job_dict['meta'], {'key': 'value'})
-
-    def test_from_dict_with_and_without_timing(self):
-        """Test that from_dict() handles both missing and present timing information"""
-        # Test without timing fields (backwards compatibility)
-        data_without_timing = {
-            'queue_name': 'default',
-            'func_name': 'tests.fixtures.say_hello',
-            'interval': 60,
-            'job_timeout': 300,
-            'result_ttl': 1000,
-        }
-
-        job = CronJob.from_dict(data_without_timing)
-        self.assertIsNone(job.latest_enqueue_time)
-        self.assertIsNone(job.next_enqueue_time)
-        self.assertEqual(job.job_options['job_timeout'], 300)
-
-        # Test with timing fields
-        now_time = datetime.now(timezone.utc)
-        next_time = now_time + timedelta(seconds=60)
-
-        data_with_timing = {
-            'queue_name': 'default',
-            'func_name': 'tests.fixtures.say_hello',
-            'interval': 60,
-            'job_timeout': 300,
-            'result_ttl': 1000,
-            'ttl': 600,
-            'failure_ttl': 3600,
-            'meta': {'key': 'value'},
-            'last_enqueue_time': utils.utcformat(now_time),
-            'next_enqueue_time': utils.utcformat(next_time),
-        }
-
-        job = CronJob.from_dict(data_with_timing)
-        self.assertEqual(job.latest_enqueue_time.replace(microsecond=0), now_time.replace(microsecond=0))
-        self.assertEqual(job.next_enqueue_time.replace(microsecond=0), next_time.replace(microsecond=0))
-        self.assertEqual(job.job_options['job_timeout'], 300)
-        self.assertEqual(job.job_options['ttl'], 600)
-        self.assertEqual(job.job_options['meta'], {'key': 'value'})
-
-    def test_round_trip_serialization(self):
-        """Test that round-trip serialization preserves timing and job_options"""
-        original_job = CronJob(
-            queue_name='default',
-            func=say_hello,
-            cron='0 9 * * *',
-            job_timeout=300,
-            result_ttl=1000,
-            meta={'foo': 'bar'},
-        )
-
-        now_time = datetime.now(timezone.utc)
-        next_time = now_time + timedelta(hours=1)
-        original_job.latest_enqueue_time = now_time
-        original_job.next_enqueue_time = next_time
-
-        restored_job = CronJob.from_dict(original_job.to_dict())
-
-        # Assert timing preserved
-        self.assertEqual(
-            restored_job.latest_enqueue_time.replace(microsecond=0),
-            original_job.latest_enqueue_time.replace(microsecond=0),
-        )
-        self.assertEqual(
-            restored_job.next_enqueue_time.replace(microsecond=0), original_job.next_enqueue_time.replace(microsecond=0)
-        )
-        # Assert job_options preserved
-        self.assertEqual(restored_job.job_options, original_job.job_options)
-
-    def test_to_dict_with_non_json_meta(self):
-        """Test that non-JSON-serializable meta is replaced"""
-        job = CronJob(
-            queue_name='default',
-            func=say_hello,
-            interval=60,
-            meta={'bad': {1, 2, 3}},
-        )
-
-        job_dict = job.to_dict()
-        self.assertEqual(job_dict['meta'], '<not JSON serializable>')

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from rq import Queue, utils
 from rq.cron import CronJob
@@ -299,3 +299,107 @@ class TestCronJob(RQTestCase):
         self.assertEqual(restored_cron.cron, cron_job.cron)
         self.assertEqual(restored_cron.job_options, cron_job.job_options)
         self.assertIsNone(restored_cron.func)
+
+    def test_round_trip_serialization(self):
+        """Test that round-trip serialization preserves timing, args, kwargs, and job_options"""
+        original_job = CronJob(
+            queue_name='default',
+            func=say_hello,
+            args=('hello', 123),
+            kwargs={'name': 'world'},
+            cron='0 9 * * *',
+            job_timeout=300,
+            result_ttl=1000,
+            meta={'foo': 'bar'},
+        )
+
+        now_time = datetime.now(timezone.utc)
+        next_time = now_time + timedelta(hours=1)
+        original_job.latest_enqueue_time = now_time
+        original_job.next_enqueue_time = next_time
+
+        restored_job = CronJob.from_dict(original_job.to_dict())
+
+        # Assert timing preserved
+        self.assertEqual(
+            restored_job.latest_enqueue_time.replace(microsecond=0),
+            original_job.latest_enqueue_time.replace(microsecond=0),
+        )
+        self.assertEqual(
+            restored_job.next_enqueue_time.replace(microsecond=0), original_job.next_enqueue_time.replace(microsecond=0)
+        )
+        # Assert args and kwargs preserved
+        self.assertEqual(restored_job.args, original_job.args)
+        self.assertEqual(restored_job.kwargs, original_job.kwargs)
+        # Assert job_options preserved
+        self.assertEqual(restored_job.job_options, original_job.job_options)
+
+    def test_args_kwargs_serialization(self):
+        """Test that args and kwargs are properly serialized and restored"""
+        # Test with args only
+        job_with_args = CronJob(
+            queue_name='default',
+            func=say_hello,
+            args=('hello', 42, ['a', 'b']),
+            interval=60,
+        )
+
+        job_dict = job_with_args.to_dict()
+        self.assertEqual(job_dict['args'], ('hello', 42, ['a', 'b']))
+        self.assertIsNone(job_dict['kwargs'])
+
+        # Restore and verify
+        restored = CronJob.from_dict(job_dict)
+        self.assertEqual(restored.args, ('hello', 42, ['a', 'b']))
+        self.assertEqual(restored.kwargs, {})
+
+        # Test with kwargs only
+        job_with_kwargs = CronJob(
+            queue_name='default',
+            func=say_hello,
+            kwargs={'name': 'world', 'count': 5},
+            interval=60,
+        )
+
+        job_dict = job_with_kwargs.to_dict()
+        self.assertIsNone(job_dict['args'])
+        self.assertEqual(job_dict['kwargs'], {'name': 'world', 'count': 5})
+
+        # Restore and verify
+        restored = CronJob.from_dict(job_dict)
+        self.assertEqual(restored.args, ())
+        self.assertEqual(restored.kwargs, {'name': 'world', 'count': 5})
+
+        # Test with both args and kwargs
+        job_with_both = CronJob(
+            queue_name='default',
+            func=say_hello,
+            args=('arg1', 'arg2'),
+            kwargs={'key1': 'value1', 'key2': 123},
+            interval=60,
+        )
+
+        job_dict = job_with_both.to_dict()
+        self.assertEqual(job_dict['args'], ('arg1', 'arg2'))
+        self.assertEqual(job_dict['kwargs'], {'key1': 'value1', 'key2': 123})
+
+        # Restore and verify
+        restored = CronJob.from_dict(job_dict)
+        self.assertEqual(restored.args, ('arg1', 'arg2'))
+        self.assertEqual(restored.kwargs, {'key1': 'value1', 'key2': 123})
+
+    def test_to_dict_with_non_json_serializable_values(self):
+        """Test that non-JSON-serializable args, kwargs, and meta are replaced with placeholder"""
+        job = CronJob(
+            queue_name='default',
+            func=say_hello,
+            args=({1, 2, 3},),  # sets are not JSON serializable
+            kwargs={'bad': {4, 5, 6}},
+            interval=60,
+            meta={'bad': {7, 8, 9}},
+        )
+
+        job_dict = job.to_dict()
+        self.assertEqual(job_dict['args'], '<not JSON serializable>')
+        self.assertEqual(job_dict['kwargs'], '<not JSON serializable>')
+        self.assertEqual(job_dict['meta'], '<not JSON serializable>')
