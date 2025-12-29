@@ -1,8 +1,9 @@
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, Union
 
 if TYPE_CHECKING:
+    from _typeshed import ExcInfo
     from redis import Redis
+    from typing_extensions import Unpack
 
     from .job import Dependency, Job
 
@@ -21,6 +22,4 @@ A simple helper definition for the `depends_on` parameter when creating a job.
 """
 
 SuccessCallbackType = Callable[['Job', 'Redis', Any], Any]
-FailureCallbackType = Callable[
-    ['Job', 'Redis', Optional[type[BaseException]], Optional[BaseException], Optional[TracebackType]], Any
-]
+FailureCallbackType = Callable[['Job', 'Redis', Unpack[ExcInfo]], Any]
