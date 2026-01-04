@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import os
 import shutil
 import signal
@@ -1597,7 +1598,9 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_immediate_shutdown(self):
         """Heroku work horse shutdown with immediate (0 second) kill"""
-        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 0, self.connection))
+        # Use 'fork' context to avoid pickling issues with Redis connections in Python 3.14+
+        ForkProcess = multiprocessing.get_context('fork').Process
+        p = ForkProcess(target=run_dummy_heroku_worker, args=(self.sandbox, 0, self.connection))
         p.start()
         time.sleep(0.5)
 
@@ -1611,7 +1614,9 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_1_sec_shutdown(self):
         """Heroku work horse shutdown with 1 second kill"""
-        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 1, self.connection))
+        # Use 'fork' context to avoid pickling issues with Redis connections in Python 3.14+
+        ForkProcess = multiprocessing.get_context('fork').Process
+        p = ForkProcess(target=run_dummy_heroku_worker, args=(self.sandbox, 1, self.connection))
         p.start()
         time.sleep(0.5)
 
@@ -1627,7 +1632,9 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
     @slow
     def test_shutdown_double_sigrtmin(self):
         """Heroku work horse shutdown with long delay but SIGRTMIN sent twice"""
-        p = Process(target=run_dummy_heroku_worker, args=(self.sandbox, 10, self.connection))
+        # Use 'fork' context to avoid pickling issues with Redis connections in Python 3.14+
+        ForkProcess = multiprocessing.get_context('fork').Process
+        p = ForkProcess(target=run_dummy_heroku_worker, args=(self.sandbox, 10, self.connection))
         p.start()
         time.sleep(0.5)
 
