@@ -105,7 +105,7 @@ class QueueCallbackTestCase(RQTestCase):
         self.assertEqual(job.stopped_callback, print)
 
     def test_enqueue_many_callback(self):
-        queue = Queue('example', connection=self.connection)
+        queue = Queue(connection=self.connection)
 
         job_data = Queue.prepare_data(
             func=say_hello, on_success=print, on_failure=save_exception, on_stopped=save_result_if_not_stopped
