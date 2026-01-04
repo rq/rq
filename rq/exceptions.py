@@ -14,6 +14,10 @@ class InvalidJobDependency(Exception):
     pass
 
 
+class DuplicateJobError(Exception):
+    pass
+
+
 class InvalidJobOperationError(Exception):
     pass
 
