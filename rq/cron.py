@@ -154,16 +154,23 @@ class CronJob:
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
-        # Restore args/kwargs - handle both tuple and list (JSON deserializes tuples as lists)
+        # Restore args/kwargs - handle JSON string (from to_dict) and list/tuple
         args = data.get('args')
-        if args is not None and not isinstance(args, str):
-            args = tuple(args)
+        if args is not None:
+            if isinstance(args, str):
+                args = tuple(json.loads(args))
+            else:
+                args = tuple(args)
+
+        kwargs = data.get('kwargs')
+        if isinstance(kwargs, str):
+            kwargs = json.loads(kwargs)
 
         job = cls(
             queue_name=data['queue_name'],
             func_name=data['func_name'],
             args=args,
-            kwargs=data.get('kwargs'),
+            kwargs=kwargs,
             interval=data.get('interval'),
             cron=data.get('cron'),
             job_timeout=data.get('job_timeout'),
