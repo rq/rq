@@ -70,20 +70,20 @@ class TestQueue(RQTestCase):
 
     def test_empty_queue(self):
         """Emptying queues."""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
 
-        self.connection.rpush('rq:queue:example', 'foo')
-        self.connection.rpush('rq:queue:example', 'bar')
+        self.connection.rpush(q.key, 'foo')
+        self.connection.rpush(q.key, 'bar')
         self.assertEqual(q.is_empty(), False)
 
         q.empty()
 
         self.assertEqual(q.is_empty(), True)
-        self.assertIsNone(self.connection.lpop('rq:queue:example'))
+        self.assertIsNone(self.connection.lpop(q.key))
 
     def test_empty_removes_jobs(self):
         """Emptying a queue deletes the associated job objects"""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         job = q.enqueue(say_hello)
         self.assertTrue(Job.exists(job.id, connection=self.connection))
         q.empty()
@@ -91,15 +91,15 @@ class TestQueue(RQTestCase):
 
     def test_queue_is_empty(self):
         """Detecting empty queues."""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         self.assertEqual(q.is_empty(), True)
 
-        self.connection.rpush('rq:queue:example', 'sentinel message')
+        self.connection.rpush(q.key, 'sentinel message')
         self.assertEqual(q.is_empty(), False)
 
     def test_queue_delete(self):
         """Test queue.delete properly removes queue"""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         job = q.enqueue(say_hello)
         job2 = q.enqueue(say_hello)
 
@@ -115,7 +115,7 @@ class TestQueue(RQTestCase):
 
     def test_queue_delete_but_keep_jobs(self):
         """Test queue.delete properly removes queue but keeps the job keys in the redis store"""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         job = q.enqueue(say_hello)
         job2 = q.enqueue(say_hello)
 
@@ -131,7 +131,7 @@ class TestQueue(RQTestCase):
 
     def test_position(self):
         """Test queue.delete properly removes queue but keeps the job keys in the redis store"""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         job = q.enqueue(say_hello)
         job2 = q.enqueue(say_hello)
         job3 = q.enqueue(say_hello)
@@ -143,7 +143,7 @@ class TestQueue(RQTestCase):
 
     def test_remove(self):
         """Ensure queue.remove properly removes Job from queue."""
-        q = Queue('example', serializer=JSONSerializer, connection=self.connection)
+        q = Queue(serializer=JSONSerializer, connection=self.connection)
         job = q.enqueue(say_hello)
         self.assertIn(job.id, q.job_ids)
         q.remove(job)
@@ -156,7 +156,7 @@ class TestQueue(RQTestCase):
 
     def test_jobs(self):
         """Getting jobs out of a queue."""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         self.assertEqual(q.jobs, [])
         job = q.enqueue(say_hello)
         self.assertEqual(q.jobs, [job])
@@ -776,7 +776,7 @@ class TestQueue(RQTestCase):
 
     def test_fetch_job_successful(self):
         """Fetch a job from a queue."""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         job_orig = q.enqueue(say_hello)
         job_fetch: Job = q.fetch_job(job_orig.id)  # type: ignore
         self.assertIsNotNone(job_fetch)
@@ -785,7 +785,7 @@ class TestQueue(RQTestCase):
 
     def test_fetch_job_missing(self):
         """Fetch a job from a queue which doesn't exist."""
-        q = Queue('example', connection=self.connection)
+        q = Queue(connection=self.connection)
         job = q.fetch_job('123')
         self.assertIsNone(job)
 
@@ -802,7 +802,7 @@ class TestQueue(RQTestCase):
 
     def test_getting_registries(self):
         """Getting job registries from queue object"""
-        queue = Queue('example', connection=self.connection)
+        queue = Queue(connection=self.connection)
         self.assertEqual(queue.scheduled_job_registry, ScheduledJobRegistry(queue=queue))
         self.assertEqual(queue.started_job_registry, StartedJobRegistry(queue=queue))
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
@@ -812,7 +812,7 @@ class TestQueue(RQTestCase):
 
     def test_getting_registries_with_serializer(self):
         """Getting job registries from queue object (with custom serializer)"""
-        queue = Queue('example', connection=self.connection, serializer=JSONSerializer)
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
         self.assertEqual(queue.scheduled_job_registry, ScheduledJobRegistry(queue=queue))
         self.assertEqual(queue.started_job_registry, StartedJobRegistry(queue=queue))
         self.assertEqual(queue.failed_job_registry, FailedJobRegistry(queue=queue))
@@ -830,7 +830,7 @@ class TestQueue(RQTestCase):
 
     def test_enqueue_with_retry(self):
         """Enqueueing with retry_strategy works"""
-        queue = Queue('example', connection=self.connection)
+        queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello, retry=Retry(max=3, interval=5))
 
         job = Job.fetch(job.id, connection=self.connection)

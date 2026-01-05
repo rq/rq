@@ -37,7 +37,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
         valkey-version: ["7.2", "8.0"]
         redis-py-version: ["5", "6"]
 

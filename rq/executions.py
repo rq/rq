@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
@@ -6,6 +7,8 @@ from redis import Redis
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
+
+    from .worker.base import BaseWorker
 
 from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
@@ -169,3 +172,45 @@ class ExecutionRegistry(BaseRegistry):
         for execution in executions:
             execution.delete(pipeline=pipeline, job=job)
         pipeline.delete(self.key)
+
+
+logger = logging.getLogger('rq.worker')
+
+
+def prepare_execution(worker: 'BaseWorker', job: Job) -> Execution:
+    """Prepares execution for a job. This is called by the main Worker (not the horse)
+    as it prepares for execution. Do not confuse this with worker.prepare_job_execution()
+    which is called by the horse.
+
+    Args:
+        worker: The worker preparing the execution
+        job: The job to prepare execution for
+
+    Returns:
+        Execution: The created Execution object
+    """
+    # Import here to avoid circular imports
+    from .worker.base import WorkerStatus
+
+    with worker.connection.pipeline() as pipeline:
+        heartbeat_ttl = worker.get_heartbeat_ttl(job)
+        worker.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
+        worker.set_state(WorkerStatus.BUSY, pipeline=pipeline)
+        pipeline.execute()
+    return worker.execution
+
+
+def cleanup_execution(worker: 'BaseWorker', job: Job, pipeline: 'Pipeline') -> None:
+    """Cleans up the execution of a job.
+    It will remove the job execution record from the StartedJobRegistry and delete the Execution object.
+
+    Args:
+        worker: The worker to clean up execution for
+        job: The job whose execution is being cleaned up
+        pipeline: Redis pipeline to use for the cleanup
+    """
+    logger.debug('Cleaning up execution of job %s', job.id)
+    worker.set_current_job_id(None, pipeline=pipeline)
+    if worker.execution is not None:
+        worker.execution.delete(job=job, pipeline=pipeline)
+        worker.execution = None

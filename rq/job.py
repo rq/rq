@@ -298,7 +298,7 @@ class Job:
 
         job = cls(connection=connection, serializer=serializer)
         if id is not None:
-            job.set_id(id)
+            job.id = id
 
         if origin:
             job.origin = origin
@@ -701,31 +701,6 @@ class Job:
         return hash(self.id)
 
     # Data access
-    def get_id(self) -> str:  # noqa
-        """The job ID for this job instance. Generates an ID lazily the
-        first time the ID is requested.
-
-        Returns:
-            job_id (str): The Job ID
-        """
-        if self._id is None:
-            self._id = str(uuid4())
-        return self._id
-
-    def set_id(self, value: str) -> None:
-        """Sets a job ID for the given job
-
-        Args:
-            value (str): The value to set as Job ID
-        """
-        if not isinstance(value, str):
-            raise TypeError(f'id must be a string, not {type(value)}')
-
-        if ':' in value:
-            raise ValueError('id must not contain ":"')
-
-        self._id = value
-
     def heartbeat(self, timestamp: datetime, ttl: int, pipeline: Optional['Pipeline'] = None, xx: bool = False):
         """Sets the heartbeat for a job.
         It will set a hash in Redis with the `last_heartbeat` key and datetime value.
@@ -742,7 +717,32 @@ class Job:
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         # self.started_job_registry.add(self, ttl, pipeline=pipeline, xx=xx)
 
-    id = property(get_id, set_id)
+    @property
+    def id(self) -> str:
+        """The job ID for this job instance. Generates an ID lazily the
+        first time the ID is requested.
+
+        Returns:
+            job_id (str): The Job ID
+        """
+        if self._id is None:
+            self._id = str(uuid4())
+        return self._id
+
+    @id.setter
+    def id(self, value: str) -> None:
+        """Sets a job ID for the given job
+
+        Args:
+            value (str): The value to set as Job ID
+        """
+        if not isinstance(value, str):
+            raise TypeError(f'id must be a string, not {type(value)}')
+
+        if ':' in value:
+            raise ValueError('id must not contain ":"')
+
+        self._id = value
 
     @classmethod
     def key_for(cls, job_id: str) -> str:
@@ -1146,7 +1146,7 @@ class Job:
             InvalidJobOperation: If the job has already been cancelled.
         """
         if self.is_canceled:
-            raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.get_id()}')
+            raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.id}')
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
