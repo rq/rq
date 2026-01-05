@@ -924,19 +924,6 @@ class TestWorker(RQTestCase):
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
 
-    def test_cleanup_execution(self):
-        """Cleanup execution does the necessary bookkeeping."""
-        queue = Queue(connection=self.connection)
-        job = queue.enqueue(say_hello)
-        worker = Worker([queue])
-        worker.prepare_job_execution(job)
-        with self.connection.pipeline() as pipeline:
-            worker.cleanup_execution(job, pipeline=pipeline)
-            pipeline.execute()
-
-        self.assertEqual(worker.get_current_job_id(), None)
-        self.assertIsNone(worker.execution)
-
     @min_redis_version((6, 2, 0))
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
         """Prepare job execution removes job from intermediate queue."""

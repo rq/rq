@@ -207,3 +207,15 @@ class TestRegistry(RQTestCase):
             # call count remains the same
             self.assertEqual(mock.call_count, 1)
             self.assertEqual(id(first_fetch), id(second_fetch))
+
+    def test_cleanup_execution(self):
+        """Cleanup execution does the necessary bookkeeping."""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue])
+        worker.prepare_job_execution(job)
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(job, pipeline=pipeline)
+            pipeline.execute()
+
+        self.assertEqual(worker.get_current_job_id(), None)
+        self.assertIsNone(worker.execution)

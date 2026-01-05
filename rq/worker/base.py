@@ -39,7 +39,7 @@ from ..defaults import (
     DEFAULT_WORKER_TTL,
 )
 from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
-from ..executions import Execution
+from ..executions import Execution, cleanup_execution, prepare_execution
 from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..logutils import blue, green, setup_loghandlers, yellow
@@ -644,11 +644,7 @@ class BaseWorker:
         """Cleans up the execution of a job.
         It will remove the job execution record from the `StartedJobRegistry` and delete the Execution object.
         """
-        self.log.debug('Cleaning up execution of job %s', job.id)
-        self.set_current_job_id(None, pipeline=pipeline)
-        if self.execution is not None:
-            self.execution.delete(job=job, pipeline=pipeline)
-            self.execution = None
+        cleanup_execution(self, job, pipeline)
 
     def handle_warm_shutdown_request(self):
         self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
@@ -1042,12 +1038,7 @@ class BaseWorker:
         """This method is called by the main `Worker` (not the horse) as it prepares for execution.
         Do not confuse this with worker.prepare_job_execution() which is called by the horse.
         """
-        with self.connection.pipeline() as pipeline:
-            heartbeat_ttl = self.get_heartbeat_ttl(job)
-            self.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
-            self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
-            pipeline.execute()
-        return self.execution
+        return prepare_execution(self, job)
 
     def unsubscribe(self):
         """Unsubscribe from pubsub channel"""
