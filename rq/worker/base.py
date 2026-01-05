@@ -132,7 +132,6 @@ class BaseWorker:
         name: Optional[str] = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
         connection: Optional['Redis'] = None,
-        exc_handler=None,
         exception_handlers=None,
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         default_worker_ttl: Optional[int] = None,  # TODO remove this arg in 3.0
