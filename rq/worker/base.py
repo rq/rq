@@ -128,7 +128,7 @@ class BaseWorker:
 
     def __init__(
         self,
-        queues: Sequence[Union[str, 'Queue']],
+        queues: Union[str, 'Queue', Sequence[str], Sequence['Queue']],
         name: Optional[str] = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
         connection: Optional['Redis'] = None,
