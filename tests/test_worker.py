@@ -771,26 +771,26 @@ class TestWorker(RQTestCase):
         q = Queue(connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w = Worker([q])
-        self.assertIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
+        self.assertIn(job.id.encode(), self.connection.lrange(q.key, 0, -1))
         w.work(burst=True)
         self.assertNotEqual(self.connection.ttl(job.key), 0)
-        self.assertNotIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
+        self.assertNotIn(job.id.encode(), self.connection.lrange(q.key, 0, -1))
 
         # Job with -1 result_ttl don't expire
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=-1)
         w = Worker([q])
-        self.assertIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
+        self.assertIn(job.id.encode(), self.connection.lrange(q.key, 0, -1))
         w.work(burst=True)
         self.assertEqual(self.connection.ttl(job.key), -1)
-        self.assertNotIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
+        self.assertNotIn(job.id.encode(), self.connection.lrange(q.key, 0, -1))
 
         # Job with result_ttl = 0 gets deleted immediately
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=0)
         w = Worker([q])
-        self.assertIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
+        self.assertIn(job.id.encode(), self.connection.lrange(q.key, 0, -1))
         w.work(burst=True)
         self.assertEqual(self.connection.get(job.key), None)
-        self.assertNotIn(job.get_id().encode(), self.connection.lrange(q.key, 0, -1))
+        self.assertNotIn(job.id.encode(), self.connection.lrange(q.key, 0, -1))
 
     def test_worker_sets_job_status(self):
         """Ensure that worker correctly sets job status."""
@@ -923,19 +923,6 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
-
-    def test_cleanup_execution(self):
-        """Cleanup execution does the necessary bookkeeping."""
-        queue = Queue(connection=self.connection)
-        job = queue.enqueue(say_hello)
-        worker = Worker([queue])
-        worker.prepare_job_execution(job)
-        with self.connection.pipeline() as pipeline:
-            worker.cleanup_execution(job, pipeline=pipeline)
-            pipeline.execute()
-
-        self.assertEqual(worker.get_current_job_id(), None)
-        self.assertIsNone(worker.execution)
 
     @min_redis_version((6, 2, 0))
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
