@@ -15,6 +15,8 @@ from ..utils import now
 from .base import SHUTDOWN_SIGNAL, BaseWorker, WorkerStatus, signal_name
 
 if TYPE_CHECKING:
+    from ..queue import Queue
+
     try:
         from resource import struct_rusage
     except ImportError:
