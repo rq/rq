@@ -35,6 +35,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .repeat import Repeat
+from .suspension import is_queue_suspended
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
@@ -1435,7 +1436,8 @@ class Queue:
         job_cls: type[Job] = backend_class(cls, 'job_class', override=job_class)
 
         while True:
-            queue_keys = [q.key for q in queues]
+            suspended_queues = {q for q in queues if is_queue_suspended(connection, q.name)}
+            queue_keys = [q.key for q in queues if q not in suspended_queues]
             if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
                 result = cls.lmove(connection, queue_keys[0], timeout)
             else:
