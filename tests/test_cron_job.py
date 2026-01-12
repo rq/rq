@@ -314,9 +314,8 @@ class TestCronJob(RQTestCase):
         )
 
         now_time = datetime.now(timezone.utc)
-        next_time = now_time + timedelta(hours=1)
         original_job.latest_enqueue_time = now_time
-        original_job.next_enqueue_time = next_time
+        original_job.next_enqueue_time = now_time + timedelta(hours=1)
 
         restored_job = CronJob.from_dict(original_job.to_dict())
 
