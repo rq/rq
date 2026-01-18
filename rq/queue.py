@@ -86,7 +86,7 @@ class Queue:
         -- KEYS[1] = job key (rq:job:{job_id})
         -- KEYS[2] = queue key (rq:queue:{queue_name})
         -- ARGV[1] = job_id
-        -- ARGV[2] = push direction ("L" or "R")
+        -- ARGV[2] = push direction ("L", "R", or "N" for no push)
         -- ARGV[3] = TTL in seconds (-1 for no TTL)
         -- ARGV[4+] = field1, value1, field2, value2, ... for HSET
 
@@ -106,10 +106,10 @@ class Queue:
             redis.call("EXPIRE", KEYS[1], ttl)
         end
 
-        -- Push job ID to queue
+        -- Push job ID to queue (skip if "N")
         if ARGV[2] == "L" then
             redis.call("LPUSH", KEYS[2], ARGV[1])
-        else
+        elseif ARGV[2] == "R" then
             redis.call("RPUSH", KEYS[2], ARGV[1])
         end
 
@@ -550,12 +550,14 @@ class Queue:
             self._unique_enqueue_script = self.connection.register_script(self.UNIQUE_ENQUEUE_SCRIPT)
         return self._unique_enqueue_script
 
-    def _enqueue_job_unique(self, job: 'Job', at_front: bool = False) -> bool:
-        """Atomically check uniqueness, save job, and push to queue using Lua script.
+    def _enqueue_job_unique(self, job: 'Job', at_front: bool = False, push_to_queue: bool = True) -> bool:
+        """Atomically check uniqueness, save job, and optionally push to queue using Lua script.
 
         Args:
             job (Job): The job to enqueue
             at_front (bool): Whether to push to front of queue
+            push_to_queue (bool): Whether to push job ID to the queue. Defaults to True.
+                Set to False for sync jobs that don't need to be queued.
 
         Returns:
             bool: True if job was enqueued, False if duplicate exists
@@ -580,10 +582,18 @@ class Queue:
         # Determine TTL (-1 means no TTL)
         ttl = job.ttl if job.ttl is not None else -1
 
+        # Determine push direction: "L" for front, "R" for back, "N" for no push
+        if not push_to_queue:
+            push_direction = 'N'
+        elif at_front:
+            push_direction = 'L'
+        else:
+            push_direction = 'R'
+
         # Execute the Lua script
         result = script(
             keys=[job.key, self.key],
-            args=[job.id, 'L' if at_front else 'R', ttl] + hset_args,
+            args=[job.id, push_direction, ttl] + hset_args,
         )
 
         if result == 0:
@@ -1258,7 +1268,7 @@ class Queue:
         if self._is_async:
             return self._enqueue_async_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         else:
-            return self._enqueue_sync_job(job, pipeline=pipeline)
+            return self._enqueue_sync_job(job, pipeline=pipeline, unique=unique)
 
     def _prepare_for_queue(self, job: 'Job', pipeline: 'Pipeline') -> None:
         """Prepare a job for enqueueing by saving it to Redis.
@@ -1322,24 +1332,40 @@ class Queue:
 
         return job
 
-    def _enqueue_sync_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None) -> Job:
+    def _enqueue_sync_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None, unique: bool = False) -> Job:
         """Enqueues and immediately executes a job synchronously.
 
         Args:
             job (Job): The job to enqueue and execute
             pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
             Job: The executed job
         """
         self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        if unique:
+            # For unique jobs, set up job properties manually before the atomic Lua script
+            job.redis_server_version = self.get_redis_server_version()
+            job.origin = self.name
+            job.enqueued_at = now()
 
-        self._prepare_for_queue(job, pipe)
+            if job.timeout is None:
+                job.timeout = self._default_timeout
 
-        if pipeline is None:
-            pipe.execute()
+            job._status = JobStatus.QUEUED
+
+            # Use atomic Lua script for unique check and save (without pushing to queue)
+            self._enqueue_job_unique(job, push_to_queue=False)
+        else:
+            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+
+            self._prepare_for_queue(job, pipe)
+
+            if pipeline is None:
+                pipe.execute()
 
         job = self.run_sync(job)
 
