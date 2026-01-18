@@ -1155,29 +1155,73 @@ class Queue:
         Returns:
             Job: The enqueued job
         """
+        if self._is_async:
+            return self._enqueue_async_job(job, pipeline=pipeline, at_front=at_front)
+        else:
+            return self._enqueue_sync_job(job, pipeline=pipeline)
+
+    def _prepare_for_queue(self, job: 'Job', pipeline: 'Pipeline') -> None:
+        """Prepare a job for enqueueing by saving it to Redis.
+
+        This sets common job properties (status, origin, enqueued_at, timeout),
+        persists the job to Redis, and performs cleanup.
+
+        Args:
+            job (Job): The job to prepare
+            pipeline (Pipeline): The Redis pipeline to use
+        """
+        job.redis_server_version = self.get_redis_server_version()
+        job.set_status(JobStatus.QUEUED, pipeline=pipeline)
+        job.origin = self.name
+        job.enqueued_at = now()
+        if job.timeout is None:
+            job.timeout = self._default_timeout
+        job.save(pipeline=pipeline)
+        job.cleanup(ttl=job.ttl, pipeline=pipeline)
+
+    def _enqueue_async_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None, at_front: bool = False) -> Job:
+        """Enqueues a job for async (delayed) execution.
+
+        Args:
+            job (Job): The job to enqueue
+            pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
+
+        Returns:
+            Job: The enqueued job
+        """
         self.log.debug('Enqueueing job %s to queue %s (at_front=%s)', job.id, self.name, at_front)
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-        job.redis_server_version = self.get_redis_server_version()
-        job.set_status(JobStatus.QUEUED, pipeline=pipe)
-
-        job.origin = self.name
-        job.enqueued_at = now()
-
-        if job.timeout is None:
-            job.timeout = self._default_timeout
-        job.save(pipeline=pipe)
-        job.cleanup(ttl=job.ttl, pipeline=pipe)
-
-        if self._is_async:
-            self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
+        self._prepare_for_queue(job, pipe)
+        self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
         if pipeline is None:
             pipe.execute()
 
-        if not self._is_async:
-            job = self.run_sync(job)
+        return job
+
+    def _enqueue_sync_job(self, job: 'Job', pipeline: Optional['Pipeline'] = None) -> Job:
+        """Enqueues and immediately executes a job synchronously.
+
+        Args:
+            job (Job): The job to enqueue and execute
+            pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+
+        Returns:
+            Job: The executed job
+        """
+        self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
+
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+
+        self._prepare_for_queue(job, pipe)
+
+        if pipeline is None:
+            pipe.execute()
+
+        job = self.run_sync(job)
 
         return job
 
