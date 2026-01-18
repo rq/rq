@@ -1184,16 +1184,20 @@ class Queue:
             job.enqueue_at_front = True
         return self.schedule_job(job, datetime, pipeline=pipeline)
 
-    def schedule_job(self, job: 'Job', datetime: datetime, pipeline: Optional['Pipeline'] = None):
+    def schedule_job(
+        self, job: 'Job', datetime: datetime, pipeline: Optional['Pipeline'] = None, unique: bool = False
+    ) -> 'Job':
         """Puts job on ScheduledJobRegistry
 
         Args:
-            job (Job): _description_
-            datetime (datetime): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
+            job (Job): The job to schedule
+            datetime (datetime): The scheduled execution time
+            pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
-            _type_: _description_
+            Job: The scheduled job
         """
         from .registry import ScheduledJobRegistry
 
@@ -1203,7 +1207,13 @@ class Queue:
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
-        job.save(pipeline=pipe)
+
+        if unique:
+            # Use atomic Lua script for unique check and save (without pushing to queue)
+            self._persist_unique_job(job, enqueue=False)
+        else:
+            self._persist_job(job, pipe, status=JobStatus.SCHEDULED)
+
         registry.schedule(job, datetime, pipeline=pipe)
         if pipeline is None:
             pipe.execute()
@@ -1286,7 +1296,7 @@ class Queue:
             job.timeout = self._default_timeout
         job._status = JobStatus.QUEUED
 
-    def _persist_job(self, job: 'Job', pipeline: 'Pipeline') -> None:
+    def _persist_job(self, job: 'Job', pipeline: 'Pipeline', status: JobStatus = JobStatus.QUEUED) -> None:
         """Persist a job to Redis.
 
         This saves the job data and performs cleanup.
@@ -1294,8 +1304,9 @@ class Queue:
         Args:
             job (Job): The job to save
             pipeline (Pipeline): The Redis pipeline to use
+            status (JobStatus): The job status to set. Defaults to JobStatus.QUEUED.
         """
-        job.set_status(JobStatus.QUEUED, pipeline=pipeline)
+        job.set_status(status, pipeline=pipeline)
         job.save(pipeline=pipeline)
         job.cleanup(ttl=job.ttl, pipeline=pipeline)
 
