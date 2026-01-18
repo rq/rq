@@ -1,4 +1,4 @@
-"""Tests for the _enqueue_job_unique method in Queue."""
+"""Tests for the _persist_unique_job method in Queue."""
 
 from rq import Queue
 from rq.exceptions import DuplicateJobError
@@ -8,19 +8,19 @@ from tests.fixtures import say_hello
 
 
 class TestEnqueueJobUnique(RQTestCase):
-    """Tests for Queue._enqueue_job_unique method."""
+    """Tests for Queue._persist_unique_job method."""
 
     def _create_job_for_unique_enqueue(self, queue, job_id, ttl=None):
-        """Helper to create and prepare a job for _enqueue_job_unique.
+        """Helper to create and prepare a job for _persist_unique_job.
 
-        This mimics what _enqueue_async_job does before calling _enqueue_job_unique.
+        This mimics what _enqueue_async_job does before calling _persist_unique_job.
         """
         job = queue.create_job(say_hello, job_id=job_id, ttl=ttl)
         queue._prepare_for_queue(job)
         return job
 
     def test_enqueue_job_unique_push_direction(self):
-        """_enqueue_job_unique pushes job to correct position based on at_front and push_to_queue."""
+        """_persist_unique_job pushes job to correct position based on at_front and push_to_queue."""
         queue = Queue(connection=self.connection)
 
         # First enqueue a dummy job using the standard enqueue method
@@ -29,7 +29,7 @@ class TestEnqueueJobUnique(RQTestCase):
 
         # Enqueue a unique job to the right (back) of queue
         job1 = self._create_job_for_unique_enqueue(queue, 'job-1')
-        queue._enqueue_job_unique(job1, at_front=False)
+        queue._persist_unique_job(job1, at_front=False)
 
         # Verify order: dummy-job should still be first, job-1 should be at the back
         job_ids = queue.get_job_ids()
@@ -37,15 +37,15 @@ class TestEnqueueJobUnique(RQTestCase):
 
         # Enqueue another unique job to the left (front) of queue
         job2 = self._create_job_for_unique_enqueue(queue, 'job-2')
-        queue._enqueue_job_unique(job2, at_front=True)
+        queue._persist_unique_job(job2, at_front=True)
 
         # Verify order: job-2 should be first (front), then dummy-job, then job-1
         job_ids = queue.get_job_ids()
         self.assertEqual(job_ids, ['job-2', 'dummy-job', 'job-1'])
 
-        # Enqueue a unique job with push_to_queue=False (should not be added to queue)
+        # Enqueue a unique job with enqueue=False (should not be added to queue)
         job3 = self._create_job_for_unique_enqueue(queue, 'job-3')
-        queue._enqueue_job_unique(job3, push_to_queue=False)
+        queue._persist_unique_job(job3, enqueue=False)
 
         # Verify job data is saved in Redis
         self.assertTrue(self.connection.exists(job3.key))
@@ -57,12 +57,12 @@ class TestEnqueueJobUnique(RQTestCase):
         self.assertEqual(job_ids, ['job-2', 'dummy-job', 'job-1'])
 
     def test_enqueue_job_unique_ttl(self):
-        """_enqueue_job_unique sets TTL correctly based on job.ttl value."""
+        """_persist_unique_job sets TTL correctly based on job.ttl value."""
         queue = Queue(connection=self.connection)
 
         # Create job with TTL of 60 seconds
         job_with_ttl = self._create_job_for_unique_enqueue(queue, 'ttl-job', ttl=60)
-        queue._enqueue_job_unique(job_with_ttl, at_front=False)
+        queue._persist_unique_job(job_with_ttl, at_front=False)
 
         # Verify job exists and TTL is set (should be close to 60 seconds)
         self.assertTrue(self.connection.exists(job_with_ttl.key))
@@ -72,7 +72,7 @@ class TestEnqueueJobUnique(RQTestCase):
 
         # Create job without TTL (default)
         job_without_ttl = self._create_job_for_unique_enqueue(queue, 'no-ttl-job', ttl=None)
-        queue._enqueue_job_unique(job_without_ttl, at_front=False)
+        queue._persist_unique_job(job_without_ttl, at_front=False)
 
         # Verify job exists and no TTL is set (-1 means no expiry in Redis)
         self.assertTrue(self.connection.exists(job_without_ttl.key))
@@ -80,36 +80,36 @@ class TestEnqueueJobUnique(RQTestCase):
         self.assertEqual(ttl, -1)
 
     def test_enqueue_job_unique_raises_on_duplicate(self):
-        """_enqueue_job_unique raises DuplicateJobError when job already exists."""
+        """_persist_unique_job raises DuplicateJobError when job already exists."""
         queue = Queue(connection=self.connection)
 
         # Create and enqueue first job
         job1 = self._create_job_for_unique_enqueue(queue, 'duplicate-job')
-        queue._enqueue_job_unique(job1, at_front=False)
+        queue._persist_unique_job(job1, at_front=False)
 
         # Try to enqueue second job with same ID
         job2 = self._create_job_for_unique_enqueue(queue, 'duplicate-job')
         with self.assertRaises(DuplicateJobError) as context:
-            queue._enqueue_job_unique(job2, at_front=False)
+            queue._persist_unique_job(job2, at_front=False)
 
         self.assertIn('duplicate-job', str(context.exception))
 
         # Verify only one job is in the queue
         self.assertEqual(queue.count, 1)
 
-        # Also test with push_to_queue=False (used for sync jobs)
+        # Also test with enqueue=False (used for sync jobs)
         job3 = self._create_job_for_unique_enqueue(queue, 'sync-duplicate-job')
-        queue._enqueue_job_unique(job3, push_to_queue=False)
+        queue._persist_unique_job(job3, enqueue=False)
 
         # Try to enqueue second job with same ID (also without pushing)
         job4 = self._create_job_for_unique_enqueue(queue, 'sync-duplicate-job')
         with self.assertRaises(DuplicateJobError) as context:
-            queue._enqueue_job_unique(job4, push_to_queue=False)
+            queue._persist_unique_job(job4, enqueue=False)
 
         self.assertIn('sync-duplicate-job', str(context.exception))
 
     def test_enqueue_job_unique_stores_job_data_correctly(self):
-        """_enqueue_job_unique stores all job data correctly in Redis."""
+        """_persist_unique_job stores all job data correctly in Redis."""
         queue = Queue(connection=self.connection)
 
         # Create job with various attributes
@@ -124,7 +124,7 @@ class TestEnqueueJobUnique(RQTestCase):
         )
         queue._prepare_for_queue(job)
 
-        queue._enqueue_job_unique(job, at_front=False)
+        queue._persist_unique_job(job, at_front=False)
 
         # Fetch job fresh from Redis
         fetched_job = Job.fetch('data-job', connection=self.connection)

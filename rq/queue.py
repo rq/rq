@@ -550,14 +550,14 @@ class Queue:
             self._unique_enqueue_script = self.connection.register_script(self.UNIQUE_ENQUEUE_SCRIPT)
         return self._unique_enqueue_script
 
-    def _enqueue_job_unique(self, job: 'Job', at_front: bool = False, push_to_queue: bool = True) -> bool:
+    def _persist_unique_job(self, job: 'Job', enqueue: bool = True, at_front: bool = False) -> bool:
         """Atomically check uniqueness, save job, and optionally push to queue using Lua script.
 
         Args:
             job (Job): The job to enqueue
-            at_front (bool): Whether to push to front of queue
-            push_to_queue (bool): Whether to push job ID to the queue. Defaults to True.
+            enqueue (bool): Whether to push job ID to the queue. Defaults to True.
                 Set to False for sync jobs that don't need to be queued.
+            at_front (bool): Whether to push to front of queue
 
         Returns:
             bool: True if job was enqueued, False if duplicate exists
@@ -583,7 +583,7 @@ class Queue:
         ttl = job.ttl if job.ttl is not None else -1
 
         # Determine push direction: "L" for front, "R" for back, "N" for no push
-        if not push_to_queue:
+        if not enqueue:
             push_direction = 'N'
         elif at_front:
             push_direction = 'L'
@@ -1286,7 +1286,7 @@ class Queue:
             job.timeout = self._default_timeout
         job._status = JobStatus.QUEUED
 
-    def _save_job(self, job: 'Job', pipeline: 'Pipeline') -> None:
+    def _persist_job(self, job: 'Job', pipeline: 'Pipeline') -> None:
         """Persist a job to Redis.
 
         This saves the job data and performs cleanup.
@@ -1321,11 +1321,11 @@ class Queue:
         if unique:
             # Use atomic Lua script for unique enqueue (check + save + push)
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
-            self._enqueue_job_unique(job, at_front=at_front)
+            self._persist_unique_job(job, at_front=at_front)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-            self._save_job(job, pipe)
+            self._persist_job(job, pipe)
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
             if pipeline is None:
@@ -1351,11 +1351,11 @@ class Queue:
 
         if unique:
             # Use atomic Lua script for unique check and save (without pushing to queue)
-            self._enqueue_job_unique(job, push_to_queue=False)
+            self._persist_unique_job(job, enqueue=False)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-            self._save_job(job, pipe)
+            self._persist_job(job, pipe)
 
             if pipeline is None:
                 pipe.execute()
