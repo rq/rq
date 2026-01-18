@@ -1209,6 +1209,8 @@ class Queue:
         pipe.sadd(self.redis_queues_keys, self.key)
 
         if unique:
+            # Set status to SCHEDULED before atomic Lua script saves the job
+            job._status = JobStatus.SCHEDULED
             # Use atomic Lua script for unique check and save (without pushing to queue)
             self._persist_unique_job(job, enqueue=False)
         else:
@@ -1245,7 +1247,13 @@ class Queue:
 
         Returns:
             Job: The enqueued job
+
+        Raises:
+            ValueError: If unique=True and job has dependencies
         """
+        if unique and job._dependency_ids:
+            raise ValueError('unique=True is not supported with job dependencies')
+
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
         # Add Queue key set
