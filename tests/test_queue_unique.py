@@ -2,8 +2,7 @@
 
 from rq import Queue
 from rq.exceptions import DuplicateJobError
-from rq.job import Job, JobStatus
-from rq.utils import now
+from rq.job import Job
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -17,12 +16,7 @@ class TestEnqueueJobUnique(RQTestCase):
         This mimics what _enqueue_async_job does before calling _enqueue_job_unique.
         """
         job = queue.create_job(say_hello, job_id=job_id, ttl=ttl)
-        job.redis_server_version = queue.get_redis_server_version()
-        job.origin = queue.name
-        job.enqueued_at = now()
-        if job.timeout is None:
-            job.timeout = queue._default_timeout
-        job._status = JobStatus.QUEUED
+        queue._prepare_for_queue(job)
         return job
 
     def test_enqueue_job_unique_push_direction(self):
@@ -128,10 +122,7 @@ class TestEnqueueJobUnique(RQTestCase):
             timeout=300,
             result_ttl=600,
         )
-        job.redis_server_version = queue.get_redis_server_version()
-        job.origin = queue.name
-        job.enqueued_at = now()
-        job._status = JobStatus.QUEUED
+        queue._prepare_for_queue(job)
 
         queue._enqueue_job_unique(job, at_front=False)
 

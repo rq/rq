@@ -1270,22 +1270,32 @@ class Queue:
         else:
             return self._enqueue_sync_job(job, pipeline=pipeline, unique=unique)
 
-    def _prepare_for_queue(self, job: 'Job', pipeline: 'Pipeline') -> None:
-        """Prepare a job for enqueueing by saving it to Redis.
+    def _prepare_for_queue(self, job: 'Job') -> None:
+        """Prepare a job for enqueueing by setting its metadata.
 
-        This sets common job properties (status, origin, enqueued_at, timeout),
-        persists the job to Redis, and performs cleanup.
+        This sets common job properties (redis_server_version, origin, enqueued_at, timeout, status)
+        without persisting to Redis.
 
         Args:
             job (Job): The job to prepare
-            pipeline (Pipeline): The Redis pipeline to use
         """
         job.redis_server_version = self.get_redis_server_version()
-        job.set_status(JobStatus.QUEUED, pipeline=pipeline)
         job.origin = self.name
         job.enqueued_at = now()
         if job.timeout is None:
             job.timeout = self._default_timeout
+        job._status = JobStatus.QUEUED
+
+    def _save_job(self, job: 'Job', pipeline: 'Pipeline') -> None:
+        """Persist a job to Redis.
+
+        This saves the job data and performs cleanup.
+
+        Args:
+            job (Job): The job to save
+            pipeline (Pipeline): The Redis pipeline to use
+        """
+        job.set_status(JobStatus.QUEUED, pipeline=pipeline)
         job.save(pipeline=pipeline)
         job.cleanup(ttl=job.ttl, pipeline=pipeline)
 
@@ -1306,25 +1316,16 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (at_front=%s)', job.id, self.name, at_front)
 
+        self._prepare_for_queue(job)
+
         if unique:
-            # For unique jobs, set up job properties manually before the atomic Lua script
-            job.redis_server_version = self.get_redis_server_version()
-            job.origin = self.name
-            job.enqueued_at = now()
-
-            if job.timeout is None:
-                job.timeout = self._default_timeout
-
-            # Set job status to QUEUED (this updates internal state without saving to Redis yet)
-            job._status = JobStatus.QUEUED
-
             # Use atomic Lua script for unique enqueue (check + save + push)
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
             self._enqueue_job_unique(job, at_front=at_front)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-            self._prepare_for_queue(job, pipe)
+            self._save_job(job, pipe)
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
             if pipeline is None:
@@ -1346,23 +1347,15 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
 
+        self._prepare_for_queue(job)
+
         if unique:
-            # For unique jobs, set up job properties manually before the atomic Lua script
-            job.redis_server_version = self.get_redis_server_version()
-            job.origin = self.name
-            job.enqueued_at = now()
-
-            if job.timeout is None:
-                job.timeout = self._default_timeout
-
-            job._status = JobStatus.QUEUED
-
             # Use atomic Lua script for unique check and save (without pushing to queue)
             self._enqueue_job_unique(job, push_to_queue=False)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-            self._prepare_for_queue(job, pipe)
+            self._save_job(job, pipe)
 
             if pipeline is None:
                 pipe.execute()
