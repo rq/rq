@@ -19,9 +19,18 @@ This occurs because there is a window between the worker fetching the job and th
   - **`prepare_job_execution`**: Wrapped the job status update in a Redis `WATCH` transaction. It now checks if the job status is `CANCELED` before proceeding. If canceled, it raises `InvalidJobOperation`.
   - **`perform_job`**: Added logic to catch `InvalidJobOperation`. If the job is canceled, it logs a warning and skips execution (returns `False`).
 
+## How to Test
+1. **Unit Tests**:
+   Run the newly added test suite which simulates the race condition using mocks:
+   ```bash
+   pytest tests/test_cancellation_race_condition.py
+   ```
+   Ensure all tests pass.
+
+2. **Reproduction Script** (Optional):
+   If you have a reproduction script (like `check_rq.py` provided in the issue), run it against this branch. Canceled jobs should no longer enter the `STARTED` state.
+
 ## Verification
-- Added a new unit test file `tests/test_cancellation_race_condition.py` which mocks Redis connections to verify the fix logic in isolation.
-- Verified that:
-  - `prepare_job_execution` aborts if job is canceled.
-  - `perform_job` gracefully handles the abortion and skips execution.
-  - Normal execution proceeds if job is not canceled.
+- Added `tests/test_cancellation_race_condition.py`.
+- Verified that `prepare_job_execution` aborts if job is canceled.
+- Verified that `perform_job` gracefully handles the abortion.
