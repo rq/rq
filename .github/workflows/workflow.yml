@@ -62,12 +62,18 @@ jobs:
 
       - name: Test with pytest
         run: |
-          RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
+          RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5 --junitxml=junit.xml -o junit_family=legacy
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }} # Run even if tests fail
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5.5.2
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   mypy:
     runs-on: ubuntu-latest
