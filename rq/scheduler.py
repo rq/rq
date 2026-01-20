@@ -58,7 +58,7 @@ class RQScheduler:
         self.interval = interval
         self._stop_requested = False
         self._status = self.Status.STOPPED
-        self._process = None
+        self._process: Optional[Process] = None
         self.log = logging.getLogger(__name__)
         setup_loghandlers(
             level=logging_level,
