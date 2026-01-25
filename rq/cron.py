@@ -23,9 +23,9 @@ from .queue import Queue
 from .serializers import resolve_serializer
 from .utils import (
     decode_redis_hash,
+    ensure_json_serializable,
     normalize_config_path,
     now,
-    safe_json_dumps,
     str_to_date,
     utcformat,
     utcparse,
@@ -136,15 +136,15 @@ class CronJob:
         obj = {
             'func_name': self.func_name,
             'queue_name': self.queue_name,
-            'args': safe_json_dumps(self.args) if self.args else None,
-            'kwargs': safe_json_dumps(self.kwargs) if self.kwargs else None,
+            'args': ensure_json_serializable(self.args) if self.args else None,
+            'kwargs': ensure_json_serializable(self.kwargs) if self.kwargs else None,
             'interval': self.interval,
             'cron': self.cron,
             'latest_enqueue_time': utcformat(self.latest_enqueue_time) if self.latest_enqueue_time else None,
             'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
-        obj.update({k: safe_json_dumps(v) for k, v in self.job_options.items() if v is not None})
+        obj.update({k: ensure_json_serializable(v) for k, v in self.job_options.items() if v is not None})
         return obj
 
     @classmethod

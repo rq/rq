@@ -156,7 +156,7 @@ def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = 
     return {as_text(k): v for k, v in h.items()}
 
 
-def safe_json_dumps(value: Any) -> Any:
+def ensure_json_serializable(value: Any) -> Any:
     """Return value if JSON-serializable, otherwise a placeholder string."""
     try:
         json.dumps(value)
