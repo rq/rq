@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from rq import Queue, utils
-from rq.cron import CronJob
+from rq.cron import CronJob, CronScheduler
+from rq.utils import NOT_JSON_SERIALIZABLE
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -246,8 +247,8 @@ class TestCronJob(RQTestCase):
         interval_job = CronJob(
             func=say_hello,
             queue_name=self.queue.name,
-            args=('test', 'args'),  # These won't be serialized
-            kwargs={'test': 'kwarg'},  # These won't be serialized
+            args=('test', 'args'),
+            kwargs={'test': 'kwarg'},
             interval=60,
             job_timeout=30,
             result_ttl=600,
@@ -265,7 +266,7 @@ class TestCronJob(RQTestCase):
         self.assertIsNone(interval_data['cron'])
         self.assertEqual(interval_data['job_timeout'], 30)
         self.assertEqual(interval_data['result_ttl'], 600)
-        self.assertEqual(interval_data['meta'], {'test': 'meta'})
+        self.assertEqual(interval_data['meta'], '{"test": "meta"}')  # JSON string
 
         # Check restored fields match original
         self.assertEqual(restored_interval.queue_name, interval_job.queue_name)
@@ -333,18 +334,40 @@ class TestCronJob(RQTestCase):
         # Assert job_options preserved
         self.assertEqual(restored_job.job_options, original_job.job_options)
 
-    def test_to_dict_with_non_json_serializable_values(self):
-        """Test that non-JSON-serializable args, kwargs, and meta are replaced with placeholder"""
-        job = CronJob(
-            queue_name='default',
-            func=say_hello,
+    def test_non_serializable_arguments(self):
+        """Test that from_dict gracefully handles the non-serializable placeholder through Redis"""
+
+        scheduler = CronScheduler(connection=self.connection)
+        scheduler.register(
+            say_hello,
+            'default',
             args=({1, 2, 3},),  # sets are not JSON serializable
             kwargs={'bad': {4, 5, 6}},
             interval=60,
-            meta={'bad': {7, 8, 9}},
+        )
+        scheduler.save()
+
+        # Fetch from Redis - this should NOT raise
+        fetched_scheduler = CronScheduler.fetch(scheduler.name, self.connection)
+        job = fetched_scheduler.get_jobs()[0]
+
+        # Non-serializable values should keep the placeholder for monitoring visibility
+        self.assertEqual(job.args, NOT_JSON_SERIALIZABLE)
+        self.assertEqual(job.kwargs, NOT_JSON_SERIALIZABLE)
+
+    def test_to_dict_returns_json_strings_for_serializable_values(self):
+        """Test that to_dict returns JSON strings for serializable args/kwargs"""
+        job = CronJob(
+            queue_name='default',
+            func=say_hello,
+            args=('hello', 123),
+            kwargs={'name': 'world'},
+            interval=60,
+            meta={'foo': 'bar'},
         )
 
         job_dict = job.to_dict()
-        self.assertEqual(job_dict['args'], '<not JSON serializable>')
-        self.assertEqual(job_dict['kwargs'], '<not JSON serializable>')
-        self.assertEqual(job_dict['meta'], '<not JSON serializable>')
+        # Now args/kwargs/meta are JSON strings, not raw Python objects
+        self.assertEqual(job_dict['args'], '["hello", 123]')
+        self.assertEqual(job_dict['kwargs'], '{"name": "world"}')
+        self.assertEqual(job_dict['meta'], '{"foo": "bar"}')

@@ -156,13 +156,15 @@ def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = 
     return {as_text(k): v for k, v in h.items()}
 
 
-def ensure_json_serializable(value: Any) -> Any:
-    """Return value if JSON-serializable, otherwise a placeholder string."""
+NOT_JSON_SERIALIZABLE = '<not JSON serializable>'
+
+
+def safe_json_dumps(value: Any) -> str:
+    """Return JSON string if serializable, otherwise a placeholder string."""
     try:
-        json.dumps(value)
+        return json.dumps(value)
     except (TypeError, ValueError):
-        return '<not JSON serializable>'
-    return value
+        return NOT_JSON_SERIALIZABLE
 
 
 def import_attribute(name: str) -> Callable[..., Any]:

@@ -22,10 +22,11 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
 from .utils import (
+    NOT_JSON_SERIALIZABLE,
     decode_redis_hash,
-    ensure_json_serializable,
     normalize_config_path,
     now,
+    safe_json_dumps,
     str_to_date,
     utcformat,
     utcparse,
@@ -136,15 +137,18 @@ class CronJob:
         obj = {
             'func_name': self.func_name,
             'queue_name': self.queue_name,
-            'args': ensure_json_serializable(self.args) if self.args else None,
-            'kwargs': ensure_json_serializable(self.kwargs) if self.kwargs else None,
+            'args': safe_json_dumps(self.args) if self.args else None,
+            'kwargs': safe_json_dumps(self.kwargs) if self.kwargs else None,
             'interval': self.interval,
             'cron': self.cron,
             'latest_enqueue_time': utcformat(self.latest_enqueue_time) if self.latest_enqueue_time else None,
             'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
-        obj.update({k: ensure_json_serializable(v) for k, v in self.job_options.items() if v is not None})
+        # meta uses safe_json_dumps, others are kept as-is (integers)
+        for k, v in self.job_options.items():
+            if v is not None:
+                obj[k] = safe_json_dumps(v) if k == 'meta' else v
         return obj
 
     @classmethod
@@ -154,17 +158,20 @@ class CronJob:
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
-        # Restore args/kwargs - handle JSON string (from to_dict) and list/tuple
+        # Restore args - handle JSON string (from to_dict) or keep as-is (None or placeholder)
         args = data.get('args')
-        if args is not None:
-            if isinstance(args, str):
-                args = tuple(json.loads(args))
-            else:
-                args = tuple(args)
+        if args and args != NOT_JSON_SERIALIZABLE:
+            args = tuple(json.loads(args))
 
+        # Restore kwargs - handle JSON string (from to_dict) or keep as-is (None or placeholder)
         kwargs = data.get('kwargs')
-        if isinstance(kwargs, str):
+        if kwargs and kwargs != NOT_JSON_SERIALIZABLE:
             kwargs = json.loads(kwargs)
+
+        # Restore meta - handle JSON string (from to_dict) or keep as-is (None or placeholder)
+        meta = data.get('meta')
+        if meta and meta != NOT_JSON_SERIALIZABLE:
+            meta = json.loads(meta)
 
         job = cls(
             queue_name=data['queue_name'],
@@ -177,7 +184,7 @@ class CronJob:
             result_ttl=data.get('result_ttl', DEFAULT_RESULT_TTL),
             ttl=data.get('ttl'),
             failure_ttl=data.get('failure_ttl'),
-            meta=data.get('meta'),
+            meta=meta,
         )
 
         # Restore timing information if present
