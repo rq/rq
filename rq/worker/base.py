@@ -38,13 +38,13 @@ from ..defaults import (
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
-from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
+from ..exceptions import DequeueTimeout, DeserializationError, InvalidJobOperation, ShutDownImminentException, StopRequested
 from ..executions import Execution, cleanup_execution, prepare_execution
 from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..logutils import blue, green, setup_loghandlers, yellow
-from ..queue import Queue
-from ..registry import StartedJobRegistry, clean_registries
+from ..queue import EnqueueData, Queue
+from ..registry import FailedJobRegistry, StartedJobRegistry, clean_registries
 from ..scheduler import RQScheduler
 from ..serializers import Serializer, resolve_serializer
 from ..suspension import is_suspended
@@ -1283,22 +1283,33 @@ class BaseWorker:
         job execution.
         """
         self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
-        with self.connection.pipeline() as pipeline:
-            self.set_current_job_id(job.id, pipeline=pipeline)
-            self.set_current_job_working_time(0, pipeline=pipeline)
+        while True:
+            try:
+                self.connection.watch(job.key)
+                if job.get_status(refresh=True) == JobStatus.CANCELED:
+                    self.connection.unwatch()
+                    raise InvalidJobOperation('Job %s is canceled' % job.id)
 
-            heartbeat_ttl = self.get_heartbeat_ttl(job)
-            self.heartbeat(heartbeat_ttl, pipeline=pipeline)
-            job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
+                with self.connection.pipeline() as pipeline:
+                    pipeline.multi()
+                    self.set_current_job_id(job.id, pipeline=pipeline)
+                    self.set_current_job_working_time(0, pipeline=pipeline)
 
-            job.prepare_for_execution(self.name, pipeline=pipeline)
-            if remove_from_intermediate_queue:
-                from ..queue import Queue
+                    heartbeat_ttl = self.get_heartbeat_ttl(job)
+                    self.heartbeat(heartbeat_ttl, pipeline=pipeline)
+                    job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
 
-                queue = Queue(job.origin, connection=self.connection)
-                pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
-            pipeline.execute()
-            self.log.debug('Worker %s: job preparation finished.', self.name)
+                    job.prepare_for_execution(self.name, pipeline=pipeline)
+                    if remove_from_intermediate_queue:
+                        from ..queue import Queue
+
+                        queue = Queue(job.origin, connection=self.connection)
+                        pipeline.lrem(queue.intermediate_queue_key, 1, job.id)
+                    pipeline.execute()
+                    self.log.debug('Worker %s: job preparation finished.', self.name)
+                break
+            except redis.exceptions.WatchError:
+                continue
 
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
@@ -1454,7 +1465,13 @@ class BaseWorker:
 
         try:
             remove_from_intermediate_queue = len(self.queues) == 1
-            self.prepare_job_execution(job, remove_from_intermediate_queue)
+            try:
+                self.prepare_job_execution(job, remove_from_intermediate_queue)
+            except InvalidJobOperation:
+                if job.get_status() == JobStatus.CANCELED:
+                    self.log.warning('Worker %s: job %s was canceled, skipping execution', self.name, job.id)
+                    return False
+                raise
 
             job.started_at = now()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
