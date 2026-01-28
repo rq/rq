@@ -52,7 +52,7 @@ scripts.rqworker = "rq.cli:worker" # TODO [v2]: Remove
 [dependency-groups]
 dev = [
   "coverage>=7.6.1",
-  "mypy>=1.14.1",
+  "mypy>=1.18.2",
   "packaging>=24.2",
   "psutil>=7",
   "pytest>=8.3.5",
