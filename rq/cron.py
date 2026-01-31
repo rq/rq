@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import logging
 import os
 import signal
@@ -14,13 +15,23 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
+from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .serializers import resolve_serializer
-from .utils import decode_redis_hash, normalize_config_path, now, str_to_date, utcformat, validate_absolute_path
+from .utils import (
+    NOT_JSON_SERIALIZABLE,
+    decode_redis_hash,
+    normalize_config_path,
+    now,
+    safe_json_dumps,
+    str_to_date,
+    utcformat,
+    utcparse,
+    validate_absolute_path,
+)
 
 
 class CronJob:
@@ -36,7 +47,7 @@ class CronJob:
         interval: Optional[int] = None,
         cron: Optional[str] = None,
         job_timeout: Optional[int] = None,
-        result_ttl: int = 500,
+        result_ttl: int = DEFAULT_RESULT_TTL,
         ttl: Optional[int] = None,
         failure_ttl: Optional[int] = None,
         meta: Optional[dict] = None,
@@ -60,13 +71,13 @@ class CronJob:
         self.interval: Optional[int] = interval
         self.cron: Optional[str] = cron
         self.queue_name: str = queue_name
-        self.next_run_time: Optional[datetime] = None
-        self.latest_run_time: Optional[datetime] = None
+        self.next_enqueue_time: Optional[datetime] = None
+        self.latest_enqueue_time: Optional[datetime] = None
 
-        # For cron jobs, set initial next_run_time during initialization
+        # For cron jobs, set initial next_enqueue_time during initialization
         if self.cron:
             cron_iter = croniter(self.cron, now())
-            self.next_run_time = cron_iter.get_next(datetime)
+            self.next_enqueue_time = cron_iter.get_next(datetime)
         self.job_options: dict[str, Any] = {
             'job_timeout': job_timeout,
             'result_ttl': result_ttl,
@@ -88,49 +99,56 @@ class CronJob:
 
         return job
 
-    def get_next_run_time(self) -> datetime:
+    def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""
         if self.cron:
             # Use cron expression to calculate next run time
-            cron_iter = croniter(self.cron, self.latest_run_time or now())
+            cron_iter = croniter(self.cron, self.latest_enqueue_time or now())
             return cron_iter.get_next(datetime)
-        elif self.interval and self.latest_run_time:
+        elif self.interval and self.latest_enqueue_time:
             # Use interval-based calculation
-            return self.latest_run_time + timedelta(seconds=self.interval)
+            return self.latest_enqueue_time + timedelta(seconds=self.interval)
 
         return datetime.max  # Far future if neither interval nor cron set
 
     def should_run(self) -> bool:
         """Check if this job should run now"""
         # For interval jobs that have never run, run immediately
-        # Jobs with cron string always have next_run_time set during initialization
-        if not self.latest_run_time and not self.cron:
+        # Jobs with cron string always have next_enqueue_time set during initialization
+        if not self.latest_enqueue_time and not self.cron:
             return True
 
-        # For all other cases, check if next_run_time has arrived
-        if self.next_run_time:
-            return now() >= self.next_run_time
+        # For all other cases, check if next_enqueue_time has arrived
+        if self.next_enqueue_time:
+            return now() >= self.next_enqueue_time
 
         return False
 
-    def set_run_time(self, time: datetime) -> None:
+    def set_enqueue_time(self, time: datetime) -> None:
         """Set latest run time to a given time and update next run time"""
-        self.latest_run_time = time
+        self.latest_enqueue_time = time
 
         # Update next run time if interval or cron is set
         if self.interval is not None or self.cron is not None:
-            self.next_run_time = self.get_next_run_time()
+            self.next_enqueue_time = self.get_next_enqueue_time()
 
     def to_dict(self) -> dict[str, Any]:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
         obj = {
             'func_name': self.func_name,
             'queue_name': self.queue_name,
+            'args': safe_json_dumps(self.args) if self.args else None,
+            'kwargs': safe_json_dumps(self.kwargs) if self.kwargs else None,
             'interval': self.interval,
             'cron': self.cron,
+            'latest_enqueue_time': utcformat(self.latest_enqueue_time) if self.latest_enqueue_time else None,
+            'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
-        obj.update({k: v for k, v in self.job_options.items() if v is not None})
+        # meta uses safe_json_dumps, others are kept as-is (integers)
+        for k, v in self.job_options.items():
+            if v is not None:
+                obj[k] = safe_json_dumps(v) if k == 'meta' else v
         return obj
 
     @classmethod
@@ -140,7 +158,43 @@ class CronJob:
         Note: The returned CronJob will not have a func attribute and cannot be executed,
         but contains all the metadata for monitoring.
         """
-        return cls(**data)
+        # Restore args - handle JSON string (from to_dict) or keep as-is (None or placeholder)
+        args = data.get('args')
+        if args and args != NOT_JSON_SERIALIZABLE:
+            args = tuple(json.loads(args))
+
+        # Restore kwargs - handle JSON string (from to_dict) or keep as-is (None or placeholder)
+        kwargs = data.get('kwargs')
+        if kwargs and kwargs != NOT_JSON_SERIALIZABLE:
+            kwargs = json.loads(kwargs)
+
+        # Restore meta - handle JSON string (from to_dict) or keep as-is (None or placeholder)
+        meta = data.get('meta')
+        if meta and meta != NOT_JSON_SERIALIZABLE:
+            meta = json.loads(meta)
+
+        job = cls(
+            queue_name=data['queue_name'],
+            func_name=data['func_name'],
+            args=args,
+            kwargs=kwargs,
+            interval=data.get('interval'),
+            cron=data.get('cron'),
+            job_timeout=data.get('job_timeout'),
+            result_ttl=data.get('result_ttl', DEFAULT_RESULT_TTL),
+            ttl=data.get('ttl'),
+            failure_ttl=data.get('failure_ttl'),
+            meta=meta,
+        )
+
+        # Restore timing information if present
+        if data.get('latest_enqueue_time'):
+            job.latest_enqueue_time = utcparse(data['latest_enqueue_time'])
+
+        if data.get('next_enqueue_time'):
+            job.next_enqueue_time = utcparse(data['next_enqueue_time'])
+
+        return job
 
 
 class CronScheduler:
@@ -190,7 +244,7 @@ class CronScheduler:
         interval: Optional[int] = None,
         cron: Optional[str] = None,
         job_timeout: Optional[int] = None,
-        result_ttl: int = 500,
+        result_ttl: int = DEFAULT_RESULT_TTL,
         ttl: Optional[int] = None,
         failure_ttl: Optional[int] = None,
         meta: Optional[dict] = None,
@@ -231,7 +285,7 @@ class CronScheduler:
         for job in self._cron_jobs:
             if job.should_run():
                 job.enqueue(self.connection)
-                job.set_run_time(enqueue_time)
+                job.set_enqueue_time(enqueue_time)
                 enqueued_jobs.append(job)
         return enqueued_jobs
 
@@ -244,12 +298,12 @@ class CronScheduler:
         current_time = now()
 
         # Find the next job to run
-        next_job_times = [job.next_run_time for job in self._cron_jobs if job.next_run_time]
+        next_job_times = [job.next_enqueue_time for job in self._cron_jobs if job.next_enqueue_time]
 
         if not next_job_times:
             return 60  # Default sleep time of 60 seconds
 
-        # Find the closest job by next_run_time
+        # Find the closest job by next_enqueue_time
         closest_time = min(next_job_times)
 
         # Calculate seconds until next job
@@ -282,7 +336,10 @@ class CronScheduler:
 
         try:
             while True:
-                self.enqueue_jobs()
+                enqueued = self.enqueue_jobs()
+                if enqueued:
+                    # Save updated job timing data to Redis
+                    self.save_jobs_data()
                 self.heartbeat()
                 sleep_time = self.calculate_sleep_interval()
                 if sleep_time > 0:
@@ -395,6 +452,7 @@ class CronScheduler:
             'name': self.name,
             'created_at': utcformat(self.created_at),
             'config_file': self.config_file or '',
+            'cron_jobs': json.dumps([job.to_dict() for job in self._cron_jobs]),
         }
         return obj
 
@@ -404,8 +462,13 @@ class CronScheduler:
         connection.hset(self.key, mapping=self.to_dict())
         connection.expire(self.key, 60)
 
+    def save_jobs_data(self) -> None:
+        """Save cron jobs data to Redis."""
+        data = json.dumps([job.to_dict() for job in self._cron_jobs])
+        self.connection.hset(self.key, 'cron_jobs', data)
+
     def restore(self, raw_data: dict) -> None:
-        """Restore CronScheduler instance from Redis hash data"""
+        """Restore CronScheduler instance from Redis hash data."""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
         self.hostname = obj['hostname']
@@ -414,9 +477,21 @@ class CronScheduler:
         self.created_at = str_to_date(obj['created_at'])
         self.config_file = obj['config_file']
 
+        # Restore CronJob data if available
+        if obj.get('cron_jobs'):
+            try:
+                jobs_data = json.loads(obj['cron_jobs'])
+                self._cron_jobs = [CronJob.from_dict(job_data) for job_data in jobs_data]
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                self.log.warning(f'Failed to restore cron jobs: {e}')
+                self._cron_jobs = []
+        else:
+            # Backward compatibility: missing field = no jobs
+            self._cron_jobs = []
+
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> 'CronScheduler':
-        """Fetch a CronScheduler instance from Redis by name"""
+        """Fetch a CronScheduler instance from Redis by name."""
         key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
@@ -511,7 +586,7 @@ def register(
     interval: Optional[int] = None,
     cron: Optional[str] = None,
     job_timeout: Optional[int] = None,
-    result_ttl: int = 500,
+    result_ttl: int = DEFAULT_RESULT_TTL,
     ttl: Optional[int] = None,
     failure_ttl: Optional[int] = None,
     meta: Optional[dict] = None,

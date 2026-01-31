@@ -33,7 +33,7 @@ def wait_for_all(jobs):
                 result = f'({status.name})'
                 done = False
             (arg,) = job.args
-            print('fib(%d) = %s' % (arg, result))
+            print(f'fib({arg}) = {result}')
         print('')
         print('To start the actual in the background, run a worker:')
         print('    $ rq worker')
