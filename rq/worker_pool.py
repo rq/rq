@@ -6,7 +6,8 @@ import signal
 import time
 from collections.abc import Iterable
 from enum import Enum
-from multiprocessing import Process
+from multiprocessing import get_context
+from multiprocessing.process import BaseProcess
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import TYPE_CHECKING, NamedTuple, Optional, Union
@@ -24,6 +25,8 @@ from .queue import Queue
 from .utils import parse_names
 from .worker import BaseWorker, Worker
 
+ForkProcess = get_context('fork').Process
+
 if TYPE_CHECKING:
     from rq.serializers import Serializer
 
@@ -31,7 +34,7 @@ if TYPE_CHECKING:
 class WorkerData(NamedTuple):
     name: str
     pid: int
-    process: Process
+    process: BaseProcess
 
 
 class WorkerPool:
@@ -155,9 +158,9 @@ class WorkerPool:
         burst: bool,
         _sleep: float = 0,
         logging_level: str = 'INFO',
-    ) -> Process:
+    ) -> BaseProcess:
         """Returns the worker process"""
-        return Process(
+        return ForkProcess(
             target=run_worker,
             args=(name, self._queue_names, self._connection_class, self._pool_class, self._pool_kwargs),
             kwargs={
