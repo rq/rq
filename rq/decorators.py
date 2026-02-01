@@ -85,10 +85,12 @@ class job:  # noqa
     def __call__(self, f):
         @wraps(f)
         def delay(*args, **kwargs):
-            if isinstance(self.queue, str):
-                queue = self.queue_class(name=self.queue, connection=self.connection)
+            queue_: Union[Queue, str] = kwargs.pop('queue', self.queue)
+            queue: Queue
+            if isinstance(queue_, str):
+                queue = self.queue_class(name=queue_, connection=self.connection)
             else:
-                queue = self.queue
+                queue = queue_
 
             depends_on = kwargs.pop('depends_on', None)
             job_id = kwargs.pop('job_id', None)
