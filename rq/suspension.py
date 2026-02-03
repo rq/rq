@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 
 WORKERS_SUSPENDED = 'rq:suspended'
+QUEUE_SUSPENDED_TEMPLATE = 'rq:suspended:queue:{0}'
 
 
 def is_suspended(connection: 'Redis', worker: Optional['BaseWorker'] = None):
@@ -24,6 +25,9 @@ def is_suspended(connection: 'Redis', worker: Optional['BaseWorker'] = None):
         pipeline.exists(WORKERS_SUSPENDED)
         return pipeline.execute()[-1]
 
+def is_queue_suspended(connection: 'Redis', queue_name: str):
+    return connection.exists(QUEUE_SUSPENDED_TEMPLATE.format(queue_name))
+
 
 def suspend(connection: 'Redis', ttl: Optional[int] = None):
     """
@@ -38,6 +42,10 @@ def suspend(connection: 'Redis', ttl: Optional[int] = None):
     if ttl is not None:
         connection.expire(WORKERS_SUSPENDED, ttl)
 
+def suspend_queue(connection: 'Redis', queue_name: str, ttl: Optional[int] = None):
+    connection.set(QUEUE_SUSPENDED_TEMPLATE.format(queue_name), 1)
+    if ttl is not None:
+        connection.expire(WORKERS_SUSPENDED, ttl)
 
 def resume(connection: 'Redis'):
     """
@@ -47,3 +55,6 @@ def resume(connection: 'Redis'):
         connection (Redis): The Redis connection to use..
     """
     return connection.delete(WORKERS_SUSPENDED)
+
+def resume_queue(connection: 'Redis', queue_name: str):
+    return connection.delete(QUEUE_SUSPENDED_TEMPLATE.format(queue_name))
