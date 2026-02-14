@@ -602,6 +602,7 @@ class Queue:
         if retry:
             job.retries_left = retry.max
             job.retry_intervals = retry.intervals
+            job.enqueue_at_front_on_retry = retry.enqueue_at_front
 
         if repeat:
             job.repeats_left = repeat.times
