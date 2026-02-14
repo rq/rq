@@ -203,6 +203,7 @@ class Job:
         self.retries_left: Optional[int] = None
         self.number_of_retries: Optional[int] = None
         self.retry_intervals: Optional[list[int]] = None
+        self.enqueue_at_front_on_retry: Optional[bool] = None
         self.redis_server_version: Optional[tuple[int, int, int]] = None
         self.last_heartbeat: Optional[datetime] = None
         self.allow_dependency_failures: Optional[bool] = None
@@ -988,6 +989,10 @@ class Job:
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
+        if obj.get('enqueue_at_front_on_retry'):
+            self.enqueue_at_front_on_retry = bool(int(obj['enqueue_at_front_on_retry']))
+        else:
+            self.enqueue_at_front_on_retry = None
 
         self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
         if obj.get('repeat_intervals'):
@@ -1046,6 +1051,8 @@ class Job:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
             obj['retry_intervals'] = json.dumps(self.retry_intervals)
+        if self.enqueue_at_front_on_retry is not None:
+            obj['enqueue_at_front_on_retry'] = int(self.enqueue_at_front_on_retry)
         if self.origin:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -1590,7 +1597,8 @@ class Job:
                 'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
             )
         else:
-            queue._enqueue_job(self, pipeline=pipeline)
+            assert self.enqueue_at_front_on_retry is not None
+            queue._enqueue_job(self, pipeline=pipeline, at_front=self.enqueue_at_front_on_retry)
             self.log.info('Job %s: enqueued for retry, %s remaining', self.id, self.retries_left)
 
     def register_dependency(self, pipeline: Optional['Pipeline'] = None):
@@ -1706,7 +1714,7 @@ _job_stack = LocalStack()
 
 
 class Retry:
-    def __init__(self, max: int, interval: Union[int, Iterable[int]] = 0):
+    def __init__(self, max: int, interval: Union[int, Iterable[int]] = 0, enqueue_at_front: bool = False):
         """The main object to defined Retry logics for jobs.
 
         Args:
@@ -1734,6 +1742,7 @@ class Retry:
 
         self.max = max
         self.intervals = intervals
+        self.enqueue_at_front = enqueue_at_front
 
     @classmethod
     def get_interval(cls, count: int, intervals: Union[int, list[int], None]) -> int:

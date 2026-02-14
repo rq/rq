@@ -20,19 +20,23 @@ class TestRetry(RQTestCase):
         job = Job.create(func=say_hello, connection=self.connection)
         job.retries_left = 3
         job.retry_intervals = [1, 2, 3]
+        job.enqueue_at_front_on_retry = True
         job.save()
 
         job.retries_left = None
         job.retry_intervals = None
+        job.enqueue_at_front_on_retry = None
         job.refresh()
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [1, 2, 3])
+        self.assertEqual(job.enqueue_at_front_on_retry, True)
 
     def test_retry_class(self):
         """Retry parses `max` and `interval` correctly"""
         retry = Retry(max=1)
         self.assertEqual(retry.max, 1)
         self.assertEqual(retry.intervals, [0])
+        self.assertEqual(retry.enqueue_at_front, False)
         self.assertRaises(ValueError, Retry, max=0)
 
         retry = Retry(max=2, interval=5)
@@ -42,6 +46,11 @@ class TestRetry(RQTestCase):
         retry = Retry(max=3, interval=[5, 10])
         self.assertEqual(retry.max, 3)
         self.assertEqual(retry.intervals, [5, 10])
+
+        retry = Retry(max=1, enqueue_at_front=True)
+        self.assertEqual(retry.max, 1)
+        self.assertEqual(retry.intervals, [0])
+        self.assertEqual(retry.enqueue_at_front, True)
 
         # interval can't be negative
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
@@ -87,6 +96,17 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
 
         retry = Retry(max=3)
+        job = queue.enqueue(div_by_zero, retry=retry)
+
+        with self.connection.pipeline() as pipeline:
+            job.retry(queue, pipeline)
+            pipeline.execute()
+
+        self.assertEqual(job.retries_left, 2)
+        # status should be queued
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        retry = Retry(max=3, enqueue_at_front=True)
         job = queue.enqueue(div_by_zero, retry=retry)
 
         with self.connection.pipeline() as pipeline:
@@ -157,6 +177,7 @@ class TestRetry(RQTestCase):
         # Handle case where interval is a single integer
         self.assertEqual(Retry.get_interval(1, 3), 3)
         self.assertEqual(Retry.get_interval(2, 3), 3)
+
 
 
 class TestWorkerRetry(RQTestCase):
@@ -248,3 +269,17 @@ class TestWorkerRetry(RQTestCase):
         scheduled_time = registry.get_scheduled_time(job)
         # Ensure that job is scheduled roughly 5 seconds from now
         self.assertTrue(now + timedelta(seconds=27) < scheduled_time < now + timedelta(seconds=33))
+
+    def test_worker_handles_enqueue_at_front_on_retry(self):
+        """Job is enqueued at front of the queue if enqueue_at_front_on_retry is True"""
+        queue = Queue(connection=self.connection)
+        retry = Retry(max=1, enqueue_at_front=True)
+        job1 = queue.enqueue(div_by_zero, retry=retry)
+        job2 = queue.enqueue(say_hello)
+
+        worker = Worker([queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        # job1 should be retried and enqueued at the front of the queue
+        self.assertEqual(queue.job_ids, [job1.id, job2.id])
+
