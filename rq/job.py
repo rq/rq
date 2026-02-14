@@ -989,7 +989,10 @@ class Job:
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
-        self.enqueue_at_front_on_retry = bool(int(obj['enqueue_at_front_on_retry'])) if obj.get('enqueue_at_front_on_retry') else None
+        if obj.get('enqueue_at_front_on_retry'):
+            self.enqueue_at_front_on_retry = bool(int(obj['enqueue_at_front_on_retry']))
+        else:
+            self.enqueue_at_front_on_retry = None
 
         self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
         if obj.get('repeat_intervals'):

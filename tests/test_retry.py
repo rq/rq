@@ -112,7 +112,7 @@ class TestRetry(RQTestCase):
         with self.connection.pipeline() as pipeline:
             job.retry(queue, pipeline)
             pipeline.execute()
-        
+
         self.assertEqual(job.retries_left, 2)
         # status should be queued
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
@@ -177,8 +177,8 @@ class TestRetry(RQTestCase):
         # Handle case where interval is a single integer
         self.assertEqual(Retry.get_interval(1, 3), 3)
         self.assertEqual(Retry.get_interval(2, 3), 3)
-    
-    
+
+
 
 class TestWorkerRetry(RQTestCase):
     """Tests from test_job_retry.py"""
@@ -276,7 +276,7 @@ class TestWorkerRetry(RQTestCase):
         retry = Retry(max=1, enqueue_at_front=True)
         job1 = queue.enqueue(div_by_zero, retry=retry)
         job2 = queue.enqueue(say_hello)
-        
+
         worker = Worker([queue], connection=self.connection)
         worker.work(max_jobs=1)
 
