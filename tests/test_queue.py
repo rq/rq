@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from rq import Queue, Retry
+from rq.exceptions import DuplicateJobError
 from rq.job import Job, JobStatus
 from rq.registry import (
     CanceledJobRegistry,
@@ -836,6 +837,91 @@ class TestQueue(RQTestCase):
         job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [5])
+
+
+class TestUniqueJob(RQTestCase):
+    def test_enqueue_unique_raises_on_duplicate(self):
+        """Enqueueing with unique=True raises DuplicateJobError for duplicate job_id"""
+        queue = Queue(connection=self.connection)
+
+        # First enqueue succeeds
+        job1 = queue.enqueue(say_hello, job_id='unique-job', unique=True)
+        self.assertIsNotNone(job1)
+
+        # Second enqueue with same job_id raises DuplicateJobError
+        with self.assertRaises(DuplicateJobError) as context:
+            queue.enqueue(say_hello, job_id='unique-job', unique=True)
+
+        self.assertIn('unique-job', str(context.exception))
+
+    def test_enqueue_without_unique_allows_duplicate_ids(self):
+        """Enqueueing without unique=True allows jobs with same ID (overwrites)"""
+        queue = Queue(connection=self.connection)
+
+        # First enqueue
+        job1 = queue.enqueue(say_hello, job_id='duplicate-job')
+        self.assertEqual(job1.id, 'duplicate-job')
+
+        # Second enqueue with same ID works (default behavior - overwrites)
+        job2 = queue.enqueue(say_hello, job_id='duplicate-job')
+        self.assertEqual(job2.id, 'duplicate-job')
+
+    def test_enqueue_unique_allows_requeue_after_job_deleted(self):
+        """After job is deleted, can enqueue same job_id with unique=True"""
+        queue = Queue(connection=self.connection)
+
+        # First enqueue
+        job1 = queue.enqueue(say_hello, job_id='requeue-job', unique=True)
+        self.assertIsNotNone(job1)
+
+        # Delete the job
+        job1.delete()
+
+        # Now we can enqueue again with the same job_id
+        job2 = queue.enqueue(say_hello, job_id='requeue-job', unique=True)
+        self.assertIsNotNone(job2)
+        self.assertEqual(job2.id, 'requeue-job')
+
+    def test_enqueue_unique_stores_job_data_correctly(self):
+        """Unique enqueue stores all job data (args, kwargs, meta) correctly in Redis"""
+        queue = Queue(connection=self.connection)
+
+        # Enqueue with args, kwargs, and metadata
+        job = queue.enqueue(
+            echo,
+            'arg1',
+            'arg2',
+            key1='value1',
+            key2='value2',
+            job_id='unique-with-data',
+            unique=True,
+            meta={'custom_field': 'custom_value'},
+            description='Test job with args and kwargs',
+            job_timeout=300,
+            result_ttl=600,
+        )
+
+        self.assertEqual(job.id, 'unique-with-data')
+
+        # Fetch the job fresh from Redis to verify data was stored correctly
+        fetched_job = Job.fetch('unique-with-data', connection=self.connection)
+
+        # Verify args and kwargs
+        self.assertEqual(fetched_job.args, ('arg1', 'arg2'))
+        self.assertEqual(fetched_job.kwargs, {'key1': 'value1', 'key2': 'value2'})
+
+        # Verify metadata
+        self.assertEqual(fetched_job.meta, {'custom_field': 'custom_value'})
+
+        # Verify other job attributes
+        self.assertEqual(fetched_job.description, 'Test job with args and kwargs')
+        self.assertEqual(fetched_job.timeout, 300)
+        self.assertEqual(fetched_job.result_ttl, 600)
+        self.assertEqual(fetched_job.origin, 'default')
+        self.assertEqual(fetched_job.get_status(), JobStatus.QUEUED)
+
+        # Verify the job is in the queue
+        self.assertIn(job.id, queue.job_ids)
 
 
 class TestJobScheduling(RQTestCase):
