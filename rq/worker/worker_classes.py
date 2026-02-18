@@ -132,13 +132,12 @@ class Worker(BaseWorker):
                 job.execute_stopped_callback(self.death_penalty_class)
             self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-            if not job.ended_at:
-                job.ended_at = now()
+            job.ended_at = now()
 
-            # Unhandled failure: move the job to the failed queue
+            # Unhandled failure: work-horse terminated unexpectedly
             signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
             exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
-            self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.name, job.id, exc_string)
+            self.log.warning('Worker %s: job %s failed (%s)', self.name, job.id, exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
