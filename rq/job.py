@@ -1336,10 +1336,12 @@ class Job:
                 self.enqueue_at_front = self.enqueue_at_front or depends_on_item.enqueue_at_front
                 self.allow_dependency_failures = self.allow_dependency_failures or depends_on_item.allow_failure
                 depends_on_list.extend(list(depends_on_item.dependencies))
+            elif isinstance(depends_on_item, (Job, str)):
+                depends_on_list.append(depends_on_item)
             else:
-                # After checking for Dependency, depends_on_item should be Job or str
-                # Use type cast to inform mypy of the narrowed type
-                depends_on_list.append(depends_on_item)  # type: ignore[arg-type]
+                raise ValueError(
+                    f'depends_on items must be Job objects or string job IDs, got {type(depends_on_item).__name__}'
+                )
         self._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
     def prepare_for_execution(self, worker_name: str, pipeline: 'Pipeline') -> None:

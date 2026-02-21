@@ -278,6 +278,17 @@ class TestJob(RQTestCase):
         self.assertEqual(stored_job.dependency.id, parent_job.id)
         self.assertEqual(stored_job.dependency, parent_job)
 
+        # Invalid dependency types should raise ValueError
+        with self.assertRaises(ValueError):
+            Job.create(
+                func=fixtures.some_calculation,
+                depends_on=[{'id': 'not-a-job'}, parent_job.id],
+                connection=self.connection,
+            )
+
+        with self.assertRaises(ValueError):
+            Job.create(func=fixtures.some_calculation, depends_on=[parent_job, 12345], connection=self.connection)
+
     def test_persistence_of_callbacks(self):
         """Storing jobs with success and/or failure callbacks."""
         job = Job.create(
