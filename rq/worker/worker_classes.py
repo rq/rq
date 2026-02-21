@@ -170,6 +170,8 @@ class SpawnWorker(Worker):
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']
+        if redis_kwargs.get('driver_info'):
+            del redis_kwargs['driver_info']
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
