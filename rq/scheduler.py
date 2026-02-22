@@ -6,7 +6,7 @@ import traceback
 from collections.abc import Iterable
 from datetime import datetime
 from enum import Enum
-from multiprocessing import Process
+from multiprocessing import get_context
 from typing import Optional, Union
 
 from redis import ConnectionPool, Redis
@@ -19,6 +19,8 @@ from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
 from .utils import current_timestamp, parse_names
+
+ForkProcess = get_context('fork').Process
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
@@ -200,7 +202,7 @@ class RQScheduler:
         # Redis instance can't be pickled across processes so we need to
         # clean this up before forking
         self._connection = None
-        self._process = Process(target=run, args=(self,), name='Scheduler')
+        self._process = ForkProcess(target=run, args=(self,), name='Scheduler')
         self._process.start()
         return self._process
 

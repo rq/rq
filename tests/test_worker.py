@@ -1642,7 +1642,9 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         w = HerokuWorker('foo', connection=self.connection)
 
         path = os.path.join(self.sandbox, 'shouldnt_exist')
-        p = Process(target=create_file_after_timeout_and_setpgrp, args=(path, 2))
+        # Use 'fork' context to avoid pickling issues with Redis connections in Python 3.14+
+        ForkProcess = multiprocessing.get_context('fork').Process
+        p = ForkProcess(target=create_file_after_timeout_and_setpgrp, args=(path, 2))
         p.start()
         self.assertEqual(p.exitcode, None)
         time.sleep(0.1)
