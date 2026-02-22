@@ -1476,13 +1476,13 @@ class BaseWorker:
                 )
                 return True
             else:
-                job.set_status(JobStatus.FINISHED)
+                job._status = JobStatus.FINISHED
                 job.execute_success_callback(self.death_penalty_class, return_value)
                 self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
 
         except:  # NOQA
             self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
-            job.set_status(JobStatus.FAILED)
+            job._status = JobStatus.FAILED
 
             self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
