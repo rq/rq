@@ -1482,7 +1482,7 @@ class BaseWorker:
 
         except:  # NOQA
             self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
-            job.set_status(JobStatus.FAILED)
+            job._status = JobStatus.FAILED
 
             self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
