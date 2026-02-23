@@ -1639,7 +1639,6 @@ class Job:
             scheduled_datetime = now() + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
-            self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
             self.log.info(
                 'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
             )
