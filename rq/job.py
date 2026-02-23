@@ -223,7 +223,7 @@ class Job:
         # retried via handle_job_retry() / _handle_retry_result().
         self.number_of_retries: Optional[int] = None
         self.retry_intervals: Optional[list[int]] = None
-        self.enqueue_at_front_on_retry: Optional[bool] = None
+        self.enqueue_at_front_on_retry: bool = False
         self.redis_server_version: Optional[tuple[int, int, int]] = None
         self.last_heartbeat: Optional[datetime] = None
         self.allow_dependency_failures: Optional[bool] = None
@@ -1007,7 +1007,7 @@ class Job:
         if obj.get('enqueue_at_front_on_retry'):
             self.enqueue_at_front_on_retry = bool(int(obj['enqueue_at_front_on_retry']))
         else:
-            self.enqueue_at_front_on_retry = None
+            self.enqueue_at_front_on_retry = False
 
         self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
         if obj.get('repeat_intervals'):
@@ -1066,7 +1066,7 @@ class Job:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
             obj['retry_intervals'] = json.dumps(self.retry_intervals)
-        if self.enqueue_at_front_on_retry is not None:
+        if self.enqueue_at_front_on_retry:
             obj['enqueue_at_front_on_retry'] = int(self.enqueue_at_front_on_retry)
         if self.origin:
             obj['origin'] = self.origin
@@ -1631,6 +1631,7 @@ class Job:
             queue (Queue): The queue to retry the job on
             pipeline (Pipeline): The Redis' pipeline to use
         """
+        self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         retry_interval = self.get_retry_interval()
         assert self.retries_left
         self.retries_left = self.retries_left - 1
@@ -1638,11 +1639,11 @@ class Job:
             scheduled_datetime = now() + timedelta(seconds=retry_interval)
             self.set_status(JobStatus.SCHEDULED)
             queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+            self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
             self.log.info(
                 'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
             )
         else:
-            assert self.enqueue_at_front_on_retry is not None
             queue._enqueue_job(self, pipeline=pipeline, at_front=self.enqueue_at_front_on_retry)
             self.log.info('Job %s: enqueued for retry, %s remaining', self.id, self.retries_left)
 

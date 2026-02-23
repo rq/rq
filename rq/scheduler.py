@@ -14,7 +14,7 @@ from redis import ConnectionPool, Redis
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
-from .job import Job
+from .job import Job, Retry
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
@@ -161,7 +161,10 @@ class RQScheduler:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
                 for job in jobs:
                     if job is not None:
-                        queue._enqueue_job(job, pipeline=pipeline, at_front=bool(job.enqueue_at_front))
+                        enqueue_flag = bool(job.enqueue_at_front)
+                        if job.enqueue_at_front_on_retry and job.number_of_retries is not None and job.number_of_retries > 0:
+                            enqueue_flag = True
+                        queue._enqueue_job(job, pipeline=pipeline, at_front=enqueue_flag)
                 for job_id in job_ids:
                     registry.remove(job_id, pipeline=pipeline)
                 pipeline.execute()
