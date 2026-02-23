@@ -1,13 +1,14 @@
-from datetime import datetime, time, timedelta, timezone
 import time
-from rq import Queue, scheduler
+from datetime import datetime, timedelta, timezone
+
+from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
-from rq.results import Result
+from rq.scheduler import RQScheduler
 from rq.worker import Worker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
-from rq.scheduler import RQScheduler
+
 
 def return_retry(max: int = 1, interval: int = 0):
     return Retry(max=max, interval=interval)
@@ -326,11 +327,11 @@ class TestWorkerRetry(RQTestCase):
 
         worker = Worker([queue], connection=self.connection)
         worker.work(max_jobs=1)
-        
+
         # job1 should be retried and enqueued at the front of the queue
         self.assertEqual(queue.job_ids, [job1.id, job2.id])
-       
-    
+
+
     def test_worker_handles_enqueue_at_front_on_retry_with_interval(self):
         """Job is enqueued at front of the queue if enqueue_at_front_on_retry is True, even with retry interval"""
         queue = Queue(connection=self.connection)
@@ -341,7 +342,7 @@ class TestWorkerRetry(RQTestCase):
         worker = Worker([queue], connection=self.connection)
         worker.work(max_jobs=1, with_scheduler=True)  # schedules the retry
 
-        
+
         # Confirm job was scheduled for retry
         self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
         sched = RQScheduler([queue.name], connection=self.connection, interval=1)
@@ -355,6 +356,6 @@ class TestWorkerRetry(RQTestCase):
             if queue.job_ids == [job1.id, job2.id]:
                 break
             time.sleep(0.1)
-        
+
         self.assertEqual(queue.job_ids, [job1.id, job2.id])
 
