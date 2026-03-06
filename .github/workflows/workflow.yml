@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Build the Docker test image for tox
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           file: tests/Dockerfile
           tags: rqtest-image:latest
