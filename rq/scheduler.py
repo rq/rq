@@ -6,7 +6,8 @@ import traceback
 from collections.abc import Iterable
 from datetime import datetime
 from enum import Enum
-from multiprocessing import get_context
+from multiprocessing import Process, get_context
+from multiprocessing.process import BaseProcess
 from typing import Optional, Union
 
 from redis import ConnectionPool, Redis
@@ -20,7 +21,11 @@ from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
 from .utils import current_timestamp, parse_names
 
-ForkProcess = get_context('fork').Process
+ForkProcess: type[BaseProcess]
+try:
+    ForkProcess = get_context('fork').Process
+except ValueError:
+    ForkProcess = Process
 
 SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
 SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'

@@ -6,7 +6,7 @@ import signal
 import time
 from collections.abc import Iterable
 from enum import Enum
-from multiprocessing import get_context
+from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
 
 # TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
@@ -25,7 +25,11 @@ from .queue import Queue
 from .utils import parse_names
 from .worker import BaseWorker, Worker
 
-ForkProcess = get_context('fork').Process
+ForkProcess: type[BaseProcess]
+try:
+    ForkProcess = get_context('fork').Process
+except ValueError:
+    ForkProcess = Process
 
 if TYPE_CHECKING:
     from rq.serializers import Serializer
