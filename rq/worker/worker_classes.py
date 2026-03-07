@@ -23,7 +23,13 @@ if TYPE_CHECKING:
         pass
 
 
-class ForkWorker(BaseWorker):
+class Worker(BaseWorker):
+    def __init__(self, queues, *args, spawn_method: Optional[str] = None, **kwargs):
+        super().__init__(queues, *args, **kwargs)
+        if spawn_method is None:
+            spawn_method = 'fork' if sys.platform == 'linux' else 'spawn'
+        self.spawn_method = spawn_method
+
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
 
@@ -51,12 +57,20 @@ class ForkWorker(BaseWorker):
 
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
-        This is where the `fork()` actually happens.
+
+        Uses os.fork() when spawn_method is 'fork', or os.spawnv() when spawn_method is 'spawn'.
 
         Args:
             job (Job): The Job that will be ran
             queue (Queue): The queue
         """
+        if self.spawn_method == 'fork':
+            self._fork_work_horse(job, queue)
+        elif self.spawn_method == 'spawn':
+            self._spawn_work_horse(job, queue)
+
+    def _fork_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse using os.fork()."""
         child_pid = os.fork()
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
@@ -67,6 +81,56 @@ class ForkWorker(BaseWorker):
         else:
             self._horse_pid = child_pid
             self.procline(f'Forked {child_pid} at {time.time()}')
+
+    def _spawn_work_horse(self, job: 'Job', queue: 'Queue'):
+        """Spawns a work horse using os.spawnv()."""
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_JOB_ID'] = job.id
+        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
+
+        redis_kwargs = self.connection.connection_pool.connection_kwargs
+        if redis_kwargs.get('retry'):
+            # Remove retry from connection kwargs to avoid issues with os.spawnv
+            del redis_kwargs['retry']
+        if redis_kwargs.get('driver_info'):
+            del redis_kwargs['driver_info']
+
+        child_pid = os.spawnv(
+            os.P_NOWAIT,
+            sys.executable,
+            [
+                sys.executable,
+                '-c',
+                f"""
+import os
+import sys
+from redis import Redis
+from rq import Worker, Queue
+from rq.job import Job
+from rq.executions import Execution
+
+# Recreate worker instance
+redis = Redis(**{redis_kwargs})
+worker = Worker.find_by_key("{self.key}", connection=redis)
+if not worker:
+    sys.exit(1)
+
+# Reconstruct job, queue and execution objects
+job = Job.fetch("{job.id}", connection=worker.connection)
+queue = Queue("{queue.name}", connection=worker.connection)
+execution_id = os.environ.get('RQ_EXECUTION_ID')
+worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
+
+# Set up work horse
+os.setpgrp()
+worker._is_horse = True
+worker.main_work_horse(job, queue)
+""",
+            ],
+        )
+
+        self._horse_pid = child_pid
+        self.procline(f'Spawned {child_pid} at {time.time()}')
 
     def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
         """The worker will monitor the work horse and make sure that it
@@ -154,75 +218,18 @@ class ForkWorker(BaseWorker):
         self.set_state(WorkerStatus.IDLE)
 
 
-class SpawnWorker(ForkWorker):
-    """Worker implementation that uses os.spawn() instead of os.fork().
-    This implementation is intended for environments where `os.fork()` is not available.
-    """
+class ForkWorker(Worker):
+    """Worker that always uses os.fork() to spawn work horses."""
 
-    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
-        """Spawns a work horse to perform the actual work using os.spawn()."""
-        os.environ['RQ_WORKER_ID'] = self.name
-        os.environ['RQ_JOB_ID'] = job.id
-        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
-
-        redis_kwargs = self.connection.connection_pool.connection_kwargs
-        if redis_kwargs.get('retry'):
-            # Remove retry from connection kwargs to avoid issues with os.spawnv
-            del redis_kwargs['retry']
-        if redis_kwargs.get('driver_info'):
-            del redis_kwargs['driver_info']
-
-        child_pid = os.spawnv(
-            os.P_NOWAIT,
-            sys.executable,
-            [
-                sys.executable,
-                '-c',
-                f"""
-import os
-import sys
-from redis import Redis
-from rq import Worker, Queue
-from rq.job import Job
-from rq.executions import Execution
-
-# Recreate worker instance
-redis = Redis(**{redis_kwargs})
-worker = Worker.find_by_key("{self.key}", connection=redis)
-if not worker:
-    sys.exit(1)
-
-# Reconstruct job, queue and execution objects
-job = Job.fetch("{job.id}", connection=worker.connection)
-queue = Queue("{queue.name}", connection=worker.connection)
-execution_id = os.environ.get('RQ_EXECUTION_ID')
-worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
-
-# Set up work horse
-os.setpgrp()
-worker._is_horse = True
-worker.main_work_horse(job, queue)
-""",
-            ],
-        )
-
-        self._horse_pid = child_pid
-        self.procline(f'Spawned {child_pid} at {time.time()}')
+    def __init__(self, queues, *args, spawn_method: str = 'fork', **kwargs):
+        super().__init__(queues, *args, spawn_method=spawn_method, **kwargs)
 
 
-def _get_default_worker_class() -> type[BaseWorker]:
-    if sys.platform == 'linux':
-        return ForkWorker
-    return SpawnWorker
+class SpawnWorker(Worker):
+    """Worker that always uses os.spawnv() to spawn work horses."""
 
-
-class Worker(_get_default_worker_class()):  # type: ignore[misc]
-    """Worker that automatically selects the best execution strategy for the current platform.
-
-    Uses ForkWorker (os.fork) on Linux, SpawnWorker (os.spawnv) on macOS and Windows.
-    """
-
-    pass
+    def __init__(self, queues, *args, spawn_method: str = 'spawn', **kwargs):
+        super().__init__(queues, *args, spawn_method=spawn_method, **kwargs)
 
 
 class SimpleWorker(BaseWorker):
@@ -248,7 +255,7 @@ class SimpleWorker(BaseWorker):
             return int(job.timeout or DEFAULT_WORKER_TTL) + 60
 
 
-class HerokuWorker(ForkWorker):
+class HerokuWorker(Worker):
     """
     Modified version of rq worker which:
     * stops work horses getting killed with SIGTERM
