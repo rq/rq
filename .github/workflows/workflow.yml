@@ -92,7 +92,7 @@ jobs:
 
       - name: Verify Redis is ready
         run: |
-          redis-cli ping
+          & "C:\Program Files\Memurai\memurai-cli.exe" ping
 
       - name: Install dependencies
         run: |
