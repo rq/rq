@@ -50,7 +50,7 @@ from .utils import (
 
 logger = logging.getLogger('rq.job')
 
-JOB_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]+$')
+JOB_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]+')
 
 
 class JobStatus(str, Enum):
@@ -77,10 +77,10 @@ def parse_job_id(job_or_execution_id: str) -> str:
 def validate_job_id(job_id: str) -> None:
     """Validate a custom job ID."""
     if not isinstance(job_id, str):
-        raise TypeError(f'id must be a string, not {type(job_id)}')
+        raise TypeError(f'Job ID must be a string, not {type(job_id)}')
 
     if not JOB_ID_PATTERN.fullmatch(job_id):
-        raise ValueError('id must only contain letters, numbers, underscores and dashes')
+        raise ValueError('Job ID must only contain letters, numbers, underscores and dashes')
 
 
 class Dependency:
@@ -178,6 +178,8 @@ class Job:
         if not connection:
             raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
         self.connection = connection
+        if id:
+            validate_job_id(id)
         self._id = id
         self.created_at = now()
         self._data: Union[bytes, UnevaluatedType] = UNEVALUATED
