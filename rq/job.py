@@ -200,7 +200,13 @@ class Job:
         self._dependency_ids: list[str] = []
         self.meta: dict[str, Any] = {}
         self.serializer = resolve_serializer(serializer)
+        # Tracks remaining retries for exception-based retry. Set to retry.max when a job
+        # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
+        # the job raises an exception and is retried via job.retry().
         self.retries_left: Optional[int] = None
+        # Tracks how many retries have been performed for return-based retry.
+        # Incremented each time a job returns a Retry object as its result and is
+        # retried via handle_job_retry() / _handle_retry_result().
         self.number_of_retries: Optional[int] = None
         self.retry_intervals: Optional[list[int]] = None
         self.redis_server_version: Optional[tuple[int, int, int]] = None
@@ -1545,12 +1551,40 @@ class Job:
 
         Result.create_failure(self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline)
 
-    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline', worker_name: str = ''):
+    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline', retry: 'Retry', worker_name: str = ''):
+        """Handles jobs that return a Retry object as its result.
+
+        Creates a RETRIED result record, increments number_of_retries,
+        and requeues or schedules the job for retry.
+
+        Args:
+            queue (Queue): The queue to retry the job on
+            pipeline (Pipeline): The Redis pipeline to use
+            retry (Retry): The Retry object returned by the job
+            worker_name (str): The name of the worker
+        """
         from .results import Result
 
         Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
+        retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
-        queue._enqueue_job(self, pipeline=pipeline)
+        if retry_interval:
+            scheduled_datetime = now() + timedelta(seconds=retry_interval)
+            self.set_status(JobStatus.SCHEDULED)
+            queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+            self.log.info(
+                'Job %s: scheduled for retry at %s, %s remaining',
+                self.id,
+                scheduled_datetime,
+                retry.max - (self.number_of_retries or 0),
+            )
+        else:
+            queue._enqueue_job(self, pipeline=pipeline)
+            self.log.info(
+                'Job %s: enqueued for retry, %s remaining',
+                self.id,
+                retry.max - (self.number_of_retries or 0),
+            )
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
@@ -1572,10 +1606,10 @@ class Job:
         return self.retries_left is not None and self.retries_left > 0
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
-        """Requeue or schedule this job for execution.
-        If the `retry_interval` was set on the job itself,
-        it will calculate a scheduled time for the job to run, and instead
-        of just regularly `enqueuing` the job, it will `schedule` it.
+        """Should be called when a job was enqueued with queue.enqueue(retry=Retry(...)) raises an exception.
+
+        Requeues or schedules the job for execution. If retry_interval was set,
+        the job will be scheduled for later; otherwise it will be enqueued immediately.
 
         Args:
             queue (Queue): The queue to retry the job on

@@ -1322,36 +1322,11 @@ class BaseWorker:
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
             return
 
-        # Calculate retry interval based on retry count
-        retry_interval = Retry.get_interval(job.number_of_retries or 0, retry.intervals)
-
         with self.connection.pipeline() as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
-
-            if retry_interval > 0:
-                # Schedule job for later if there's an interval
-                scheduled_time = now() + timedelta(seconds=retry_interval)
-                job.set_status(JobStatus.SCHEDULED, pipeline=pipeline)
-                queue.schedule_job(job, scheduled_time, pipeline=pipeline)
-                self.log.debug(
-                    'Worker %s: job %s: scheduled for retry at %s, %s attempts remaining',
-                    self.name,
-                    job.id,
-                    scheduled_time,
-                    retry.max - (job.number_of_retries or 0),
-                )
-            else:
-                self.log.debug(
-                    'Worker %s: job %s: enqueued for retry, %s attempts remaining',
-                    self.name,
-                    job.id,
-                    retry.max - (job.number_of_retries or 0),
-                )
-                job._handle_retry_result(queue=queue, pipeline=pipeline, worker_name=self.name)
-
+            job._handle_retry_result(queue=queue, pipeline=pipeline, retry=retry, worker_name=self.name)
             self.cleanup_execution(job, pipeline=pipeline)
-
             pipeline.execute()
 
             self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
