@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install hatch
+          pip install hatch "virtualenv<20.27"
           pip install redis==${{ matrix.redis-py-version }}
 
       - name: Test with pytest
@@ -84,7 +84,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install hatch
+          pip install hatch "virtualenv<20.27"
 
       - name: Run Test
         run: |
