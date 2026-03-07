@@ -71,6 +71,24 @@ def parse_job_id(job_or_execution_id: str) -> str:
     return job_or_execution_id
 
 
+def validate_job_id(job_id: str) -> None:
+    """Validate a custom job ID."""
+    if not isinstance(job_id, str):
+        raise TypeError(f'id must be a string, not {type(job_id)}')
+
+    if not job_id:
+        raise ValueError('id must not be empty')
+
+    if ':' in job_id:
+        raise ValueError('id must not contain ":"')
+
+    if any(char.isspace() for char in job_id):
+        raise ValueError('id must not contain whitespace')
+
+    if any(char in {'"', "'", ';', '\\'} for char in job_id):
+        raise ValueError('id must not contain quotes, semicolons or backslashes')
+
+
 class Dependency:
     dependencies: Sequence[Union['Job', str]]
 
@@ -742,12 +760,7 @@ class Job:
         Args:
             value (str): The value to set as Job ID
         """
-        if not isinstance(value, str):
-            raise TypeError(f'id must be a string, not {type(value)}')
-
-        if ':' in value:
-            raise ValueError('id must not contain ":"')
-
+        validate_job_id(value)
         self._id = value
 
     @classmethod
