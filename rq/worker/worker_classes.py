@@ -24,11 +24,11 @@ if TYPE_CHECKING:
 
 
 class Worker(BaseWorker):
-    def __init__(self, queues, *args, spawn_method: Optional[str] = None, **kwargs):
+    def __init__(self, queues, *args, execution_mode: Optional[str] = None, **kwargs):
         super().__init__(queues, *args, **kwargs)
-        if spawn_method is None:
-            spawn_method = 'fork' if sys.platform == 'linux' else 'spawn'
-        self.spawn_method = spawn_method
+        if execution_mode is None:
+            execution_mode = 'fork' if sys.platform == 'linux' else 'spawn'
+        self.execution_mode = execution_mode
 
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -58,15 +58,15 @@ class Worker(BaseWorker):
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work and passes it a job.
 
-        Uses os.fork() when spawn_method is 'fork', or os.spawnv() when spawn_method is 'spawn'.
+        Uses os.fork() when execution_mode is 'fork', or os.spawnv() when execution_mode is 'spawn'.
 
         Args:
             job (Job): The Job that will be ran
             queue (Queue): The queue
         """
-        if self.spawn_method == 'fork':
+        if self.execution_mode == 'fork':
             self._fork_work_horse(job, queue)
-        elif self.spawn_method == 'spawn':
+        elif self.execution_mode == 'spawn':
             self._spawn_work_horse(job, queue)
 
     def _fork_work_horse(self, job: 'Job', queue: 'Queue'):
@@ -221,15 +221,15 @@ worker.main_work_horse(job, queue)
 class ForkWorker(Worker):
     """Worker that always uses os.fork() to spawn work horses."""
 
-    def __init__(self, queues, *args, spawn_method: str = 'fork', **kwargs):
-        super().__init__(queues, *args, spawn_method=spawn_method, **kwargs)
+    def __init__(self, queues, *args, execution_mode: str = 'fork', **kwargs):
+        super().__init__(queues, *args, execution_mode=execution_mode, **kwargs)
 
 
 class SpawnWorker(Worker):
     """Worker that always uses os.spawnv() to spawn work horses."""
 
-    def __init__(self, queues, *args, spawn_method: str = 'spawn', **kwargs):
-        super().__init__(queues, *args, spawn_method=spawn_method, **kwargs)
+    def __init__(self, queues, *args, execution_mode: str = 'spawn', **kwargs):
+        super().__init__(queues, *args, execution_mode=execution_mode, **kwargs)
 
 
 class SimpleWorker(BaseWorker):
