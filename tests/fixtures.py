@@ -18,7 +18,7 @@ from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.suspension import resume
-from rq.worker import HerokuWorker, Worker
+from rq.worker import ForkWorker, HerokuWorker
 
 
 def say_pid():
@@ -264,7 +264,7 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_int
     # Silence stdout (thanks to <https://stackoverflow.com/a/28321717/14153673>)
     # with open(os.devnull, 'w') as devnull:
     #     with contextlib.redirect_stdout(devnull):
-    w = Worker(
+    w = ForkWorker(
         [queue_name],
         name=worker_name,
         connection=Redis(**conn_kwargs),
@@ -292,7 +292,7 @@ def burst_two_workers(queue, connection: Redis, timeout=2, tries=5, pause=0.1):
     on the worker that runs in another process.
     """
     w1 = start_worker_process(queue.name, worker_name='w1', burst=True, connection=connection)
-    w2 = Worker(queue, name='w2', connection=connection)
+    w2 = ForkWorker(queue, name='w2', connection=connection)
     jobs = queue.jobs
     if jobs:
         first_job = jobs[0]

@@ -1,6 +1,6 @@
 from multiprocessing import Process
 
-from rq import Queue, SimpleWorker, Worker
+from rq import ForkWorker, Queue, SimpleWorker
 from rq.job import Dependency, Job, JobStatus
 from rq.utils import current_timestamp
 from tests import RQTestCase
@@ -208,7 +208,7 @@ class TestDependencies(RQTestCase):
 
         dependency_job = queue.enqueue(say_hello, result_ttl=0)
 
-        w = Worker([queue], connection=self.connection)
+        w = ForkWorker([queue], connection=self.connection)
         w.work(burst=True)
 
         assert queue.enqueue(say_hello, depends_on=dependency_job)
@@ -219,7 +219,7 @@ class TestDependencies(RQTestCase):
         dependency_job = queue.enqueue(say_hello, result_ttl=0)
         dependent_job = queue.enqueue(say_hello, depends_on=dependency_job)
 
-        w = Worker([queue], connection=self.connection)
+        w = ForkWorker([queue], connection=self.connection)
         w.work(burst=True, max_jobs=1)
 
         assert dependent_job.dependencies_are_met()
@@ -233,7 +233,7 @@ class TestDependencies(RQTestCase):
         job_c = queue.enqueue(check_dependencies_are_met, job_id='C', depends_on=['A', 'B'])
 
         job_c.dependencies_are_met()
-        w = Worker([queue], connection=self.connection)
+        w = ForkWorker([queue], connection=self.connection)
         w.work(burst=True)
         assert job_c.result
 
@@ -247,7 +247,7 @@ class TestDependencies(RQTestCase):
         p = Process(target=kill_horse, args=('horse_pid_key', self.connection.connection_pool.connection_kwargs, 1))
         p.start()
 
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(burst=True)
 
         self.assertEqual(job.get_status(), JobStatus.FAILED)

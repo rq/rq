@@ -210,13 +210,13 @@ worker.main_work_horse(job, queue)
         self.procline(f'Spawned {child_pid} at {time.time()}')
 
 
-def _get_default_worker_class():
+def _get_default_worker_class() -> type[BaseWorker]:
     if sys.platform == 'linux':
         return ForkWorker
     return SpawnWorker
 
 
-class Worker(_get_default_worker_class()):
+class Worker(_get_default_worker_class()):  # type: ignore[misc]
     """Worker that automatically selects the best execution strategy for the current platform.
 
     Uses ForkWorker (os.fork) on Linux, SpawnWorker (os.spawnv) on macOS and Windows.

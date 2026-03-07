@@ -5,7 +5,7 @@ from unittest import mock
 from redis import Redis
 from redis.exceptions import ResponseError
 
-from rq import Queue, Worker
+from rq import ForkWorker, Queue
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.serializers import JSONSerializer
@@ -15,12 +15,12 @@ from tests.fixtures import _send_kill_horse_command, _send_shutdown_command, lon
 
 
 def start_work(queue_name, worker_name, connection_kwargs):
-    worker = Worker(queue_name, name=worker_name, connection=Redis(**connection_kwargs))
+    worker = ForkWorker(queue_name, name=worker_name, connection=Redis(**connection_kwargs))
     worker.work()
 
 
 def start_work_burst(queue_name, worker_name, connection_kwargs):
-    worker = Worker(queue_name, name=worker_name, connection=Redis(**connection_kwargs), serializer=JSONSerializer)
+    worker = ForkWorker(queue_name, name=worker_name, connection=Redis(**connection_kwargs), serializer=JSONSerializer)
     worker.work(burst=True)
 
 
@@ -28,7 +28,7 @@ class TestCommands(RQTestCase):
     def test_shutdown_command(self):
         """Ensure that shutdown command works properly."""
         connection = self.connection
-        worker = Worker('foo', connection=connection)
+        worker = ForkWorker('foo', connection=connection)
 
         p = Process(
             target=_send_shutdown_command, args=(worker.name, connection.connection_pool.connection_kwargs.copy())
@@ -40,7 +40,7 @@ class TestCommands(RQTestCase):
     def test_pubsub_thread_survives_connection_error(self):
         """Ensure that the pubsub thread is still alive after its Redis connection is killed"""
         connection = self.connection
-        worker = Worker('foo', connection=connection)
+        worker = ForkWorker('foo', connection=connection)
         worker.subscribe()
 
         assert worker.pubsub_thread.is_alive()
@@ -58,7 +58,7 @@ class TestCommands(RQTestCase):
     def test_pubsub_thread_exits_other_error(self):
         """Ensure that the pubsub thread  exits on other than redis.exceptions.ConnectionError"""
         connection = self.connection
-        worker = Worker('foo', connection=connection)
+        worker = ForkWorker('foo', connection=connection)
 
         with mock.patch('redis.client.PubSub.get_message', new_callable=raise_exc_mock):
             worker.subscribe()
@@ -71,7 +71,7 @@ class TestCommands(RQTestCase):
         connection = self.connection
         queue = Queue('foo', connection=connection)
         job = queue.enqueue(long_running_job, 4)
-        worker = Worker('foo', connection=connection)
+        worker = ForkWorker('foo', connection=connection)
 
         p = Process(
             target=_send_kill_horse_command, args=(worker.name, connection.connection_pool.connection_kwargs.copy())
@@ -98,7 +98,7 @@ class TestCommands(RQTestCase):
         connection = self.connection
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_running_job, 3)
-        worker = Worker('foo', connection=connection, serializer=JSONSerializer)
+        worker = ForkWorker('foo', connection=connection, serializer=JSONSerializer)
 
         # If job is not executing, an error is raised
         with self.assertRaises(InvalidJobOperation):
@@ -118,7 +118,7 @@ class TestCommands(RQTestCase):
 
         send_command(connection, worker.name, 'stop-job', job_id=1)
         time.sleep(0.25)
-        # Worker still working due to job_id mismatch
+        # ForkWorker still working due to job_id mismatch
         worker.refresh()
         self.assertEqual(worker.get_state(), WorkerStatus.BUSY)
 
@@ -128,6 +128,6 @@ class TestCommands(RQTestCase):
         # Job status is set appropriately
         self.assertTrue(job.is_stopped)
 
-        # Worker has stopped working
+        # ForkWorker has stopped working
         worker.refresh()
         self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
