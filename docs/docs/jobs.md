@@ -58,7 +58,7 @@ print('Job id: %s' % job.id)
 ```
 
 Or if you want a predetermined job id, you may specify it when creating the job.
-Custom job ids must not contain colons, whitespace, quotes, semicolons or backslashes.
+Custom job ids may contain only letters, numbers, underscores and dashes.
 
 ```python
 job = q.enqueue(count_words_at_url, 'http://nvie.com', job_id='my_job_id')

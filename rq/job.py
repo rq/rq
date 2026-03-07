@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 import warnings
 import zlib
 from collections.abc import Iterable, Mapping, Sequence
@@ -49,6 +50,8 @@ from .utils import (
 
 logger = logging.getLogger('rq.job')
 
+JOB_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]+$')
+
 
 class JobStatus(str, Enum):
     """The Status of Job within its lifecycle at any given time."""
@@ -76,17 +79,8 @@ def validate_job_id(job_id: str) -> None:
     if not isinstance(job_id, str):
         raise TypeError(f'id must be a string, not {type(job_id)}')
 
-    if not job_id:
-        raise ValueError('id must not be empty')
-
-    if ':' in job_id:
-        raise ValueError('id must not contain ":"')
-
-    if any(char.isspace() for char in job_id):
-        raise ValueError('id must not contain whitespace')
-
-    if any(char in {'"', "'", ';', '\\'} for char in job_id):
-        raise ValueError('id must not contain quotes, semicolons or backslashes')
+    if not JOB_ID_PATTERN.fullmatch(job_id):
+        raise ValueError('id must only contain letters, numbers, underscores and dashes')
 
 
 class Dependency:
