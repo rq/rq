@@ -71,7 +71,7 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `failure_ttl` specifies how long failed jobs are kept (defaults to 1 year)
 * `depends_on` specifies another job (or list of jobs) that must complete before this
   job will be queued.
-* `job_id` allows you to manually specify this job's `job_id`
+* `job_id` lets you set a custom job ID (may contain only letters, numbers, underscores and dashes).
 * `at_front` will place the job at the *front* of the queue, instead of the
   back
 * `description` to add additional description to enqueued jobs.

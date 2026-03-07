@@ -162,10 +162,9 @@ class SpawnWorker(Worker):
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work using os.spawn()."""
         os.environ['RQ_WORKER_ID'] = self.name
-        os.environ['RQ_JOB_ID'] = job.id
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = self.connection.connection_pool.connection_kwargs
+        redis_kwargs = self.connection.connection_pool.connection_kwargs.copy()
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']
@@ -195,7 +194,7 @@ if not worker:
 # Reconstruct job, queue and execution objects
 job = Job.fetch("{job.id}", connection=worker.connection)
 queue = Queue("{queue.name}", connection=worker.connection)
-execution_id = os.environ.get('RQ_EXECUTION_ID')
+execution_id = os.environ["RQ_EXECUTION_ID"]
 worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
 
 # Set up work horse

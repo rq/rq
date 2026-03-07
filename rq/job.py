@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 import warnings
 import zlib
 from collections.abc import Iterable, Mapping, Sequence
@@ -49,6 +50,8 @@ from .utils import (
 
 logger = logging.getLogger('rq.job')
 
+JOB_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]+')
+
 
 class JobStatus(str, Enum):
     """The Status of Job within its lifecycle at any given time."""
@@ -69,6 +72,15 @@ def parse_job_id(job_or_execution_id: str) -> str:
     if ':' in job_or_execution_id:
         return job_or_execution_id.split(':')[0]
     return job_or_execution_id
+
+
+def validate_job_id(job_id: str) -> None:
+    """Validate a custom job ID."""
+    if not isinstance(job_id, str):
+        raise TypeError(f'Job ID must be a string, not {type(job_id)}')
+
+    if not JOB_ID_PATTERN.fullmatch(job_id):
+        raise ValueError('Job ID must only contain letters, numbers, underscores and dashes')
 
 
 class Dependency:
@@ -166,6 +178,8 @@ class Job:
         if not connection:
             raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
         self.connection = connection
+        if id:
+            validate_job_id(id)
         self._id = id
         self.created_at = now()
         self._data: Union[bytes, UnevaluatedType] = UNEVALUATED
@@ -742,12 +756,7 @@ class Job:
         Args:
             value (str): The value to set as Job ID
         """
-        if not isinstance(value, str):
-            raise TypeError(f'id must be a string, not {type(value)}')
-
-        if ':' in value:
-            raise ValueError('id must not contain ":"')
-
+        validate_job_id(value)
         self._id = value
 
     @classmethod

@@ -748,11 +748,32 @@ class TestJob(RQTestCase):
         self.assertRaises(TypeError, queue.enqueue, fixtures.say_hello, job_id=1234)
 
     def test_create_job_with_invalid_id(self):
-        """test creating jobs with a custom invalid ID (with character :)"""
+        """test creating jobs with invalid custom IDs"""
         queue = Queue(connection=self.connection)
 
         with self.assertRaises(ValueError):
             queue.enqueue(fixtures.say_hello, job_id='1234:4321')
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id='bad id')
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id='bad\\id')
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id='bad"id')
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id="bad'id")
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id='bad;id')
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id='bad\nid')
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(fixtures.say_hello, job_id='')
 
     def test_create_job_with_async(self):
         """test creating jobs with async function"""
