@@ -158,6 +158,30 @@ class TestRetry(RQTestCase):
         self.assertEqual(Retry.get_interval(1, 3), 3)
         self.assertEqual(Retry.get_interval(2, 3), 3)
 
+    def test_handle_retry_result(self):
+        """_handle_retry_result() increments number_of_retries, creates result, and enqueues or schedules"""
+        queue = Queue(connection=self.connection)
+
+        # Test immediate retry (no interval)
+        retry = Retry(max=2)
+        job = queue.enqueue(say_hello)
+        with self.connection.pipeline() as pipeline:
+            job._handle_retry_result(queue, pipeline, retry=retry)
+            pipeline.execute()
+        job.refresh()
+        self.assertEqual(job.number_of_retries, 1)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        # Test scheduled retry (with interval)
+        retry = Retry(max=2, interval=10)
+        job = queue.enqueue(say_hello)
+        with self.connection.pipeline() as pipeline:
+            job._handle_retry_result(queue, pipeline, retry=retry)
+            pipeline.execute()
+        job.refresh()
+        self.assertEqual(job.number_of_retries, 1)
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+
 
 class TestWorkerRetry(RQTestCase):
     """Tests from test_job_retry.py"""
@@ -175,21 +199,26 @@ class TestWorkerRetry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_job_handle_retry(self):
-        """job._handle_retry_result() increments job.number_of_retries"""
+        """handle_job_retry() increments job.number_of_retries"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry)
-        pipeline = self.connection.pipeline()
+        worker = Worker([queue], connection=self.connection)
 
-        # job._handle_retry_result() should increment job.number_of_retries
-        job._handle_retry_result(queue, pipeline)
-        pipeline.execute()
-        job = Job.fetch(job.id, connection=self.connection)
+        # First retry should set number_of_retries to 1
+        worker.work(max_jobs=1)
+        job.refresh()
         self.assertEqual(job.number_of_retries, 1)
 
-        pipeline = self.connection.pipeline()
-        job._handle_retry_result(queue, pipeline)
-        pipeline.execute()
-        self.assertEqual(job.number_of_retries, 2)
+    def test_job_handle_retry_with_interval_increments_number_of_retries(self):
+        """handle_job_retry() increments number_of_retries even when retry has an interval"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(return_retry, max=2, interval=10)
+        worker = Worker([queue], connection=self.connection)
+
+        worker.work(max_jobs=1)
+        job.refresh()
+        self.assertEqual(job.number_of_retries, 1)
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
 
     def test_worker_handles_max_retry(self):
         """Job fails after maximum retries are exhausted"""
@@ -248,3 +277,21 @@ class TestWorkerRetry(RQTestCase):
         scheduled_time = registry.get_scheduled_time(job)
         # Ensure that job is scheduled roughly 5 seconds from now
         self.assertTrue(now + timedelta(seconds=27) < scheduled_time < now + timedelta(seconds=33))
+
+    def test_worker_handles_max_retry_with_interval(self):
+        """Job fails after maximum retries are exhausted, even with retry interval"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(return_retry, max=1, interval=0)
+        worker = Worker([queue], connection=self.connection)
+
+        # First execution: job returns Retry, gets retried
+        worker.work(max_jobs=1)
+        job.refresh()
+        self.assertEqual(job.number_of_retries, 1)
+        self.assertIn(job.id, queue.get_job_ids())
+
+        # Second execution: max retries exceeded, job should fail
+        worker.work(max_jobs=1)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertNotIn(job.id, queue.get_job_ids())
