@@ -289,22 +289,23 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(job_ids, [job.id])
 
     def test_add_with_deferred_ttl(self):
-        """Job TTL defaults to +inf"""
+        """Job score is set to current timestamp (creation time), ttl is ignored."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
         key = self.registry.key
+        timestamp = current_timestamp()
 
         self.registry.add(job)
         score = self.connection.zscore(key, job.id)
-        self.assertEqual(score, float('inf'))
+        self.assertGreater(score, timestamp - 2)
+        self.assertLess(score, timestamp + 2)
 
-        timestamp = current_timestamp()
-        ttl = 5
-        self.registry.add(job, ttl=ttl)
+        # ttl parameter is ignored for deferred jobs
+        self.registry.add(job, ttl=5)
         score = self.connection.zscore(key, job.id)
-        self.assertLess(score, timestamp + ttl + 2)
-        self.assertGreater(score, timestamp + ttl - 2)
+        self.assertGreater(score, timestamp - 2)
+        self.assertLess(score, timestamp + 2)
 
     def test_register_dependency(self):
         """Ensure job creation and deletion works with DeferredJobRegistry."""

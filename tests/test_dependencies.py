@@ -178,19 +178,18 @@ class TestDependencies(RQTestCase):
         self.assertEqual(parent_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
-    def test_enqueue_job_dependency_sets_ttl(self):
-        """Ensures that the TTL of jobs in the deferred queue is set"""
+    def test_enqueue_job_dependency_score(self):
+        """Ensures that deferred jobs are scored by creation time, not TTL."""
         q = Queue(connection=self.connection)
         parent_job = Job.create(say_hello, connection=self.connection)
         parent_job.save()
 
         timestamp = current_timestamp()
-        ttl = 5
-        job = Job.create(say_hello, connection=self.connection, depends_on=parent_job, ttl=ttl)
+        job = Job.create(say_hello, connection=self.connection, depends_on=parent_job, ttl=5)
         q.enqueue_job(job)
         score = self.connection.zscore(q.deferred_job_registry.key, job.id)
-        self.assertLess(score, timestamp + ttl + 2)
-        self.assertGreater(score, timestamp + ttl - 2)
+        self.assertGreater(score, timestamp - 2)
+        self.assertLess(score, timestamp + 2)
 
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""
