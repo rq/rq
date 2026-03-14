@@ -320,37 +320,15 @@ class TestDeferredRegistry(RQTestCase):
         job2.delete()
         self.assertEqual(registry.get_job_ids(), [])
 
-    def test_cleanup_supports_deleted_jobs(self):
+    def test_cleanup_is_noop(self):
+        """Deferred jobs don't expire based on time, so cleanup is a no-op."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        self.registry.add(job, ttl=10)
+        self.registry.add(job)
 
         self.assertEqual(self.registry.count, 1)
-        job.delete(remove_from_queue=False)
-        self.assertEqual(self.registry.count, 1)
-
-        self.registry.cleanup(current_timestamp() + 100)
-        self.assertEqual(self.registry.count, 0)
-
-    def test_cleanup_moves_jobs_to_failed_job_registry(self):
-        """Moving expired jobs to FailedJobRegistry."""
-        queue = Queue(connection=self.connection)
-        failed_job_registry = FailedJobRegistry(connection=self.connection)
-        job = queue.enqueue(say_hello)
-
-        self.connection.zadd(self.registry.key, {job.id: 2})
-
-        # Job has not been moved to FailedJobRegistry
-        self.registry.cleanup(1)
-        self.assertNotIn(job, failed_job_registry)
-        self.assertIn(job, self.registry)
-
         self.registry.cleanup()
-        self.assertIn(job.id, failed_job_registry)
-        self.assertNotIn(job, self.registry)
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertTrue(job.exc_info)  # explanation is written to exc_info
+        self.assertEqual(self.registry.count, 1)
 
 
 class TestFailedJobRegistry(RQTestCase):
