@@ -1725,7 +1725,7 @@ class Job:
                 self.allow_dependency_failures,
             )
 
-            if parent_status == JobStatus.CANCELED:
+            if parent_status in (JobStatus.CANCELED, JobStatus.STOPPED):
                 return False
             elif parent_status == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False

@@ -282,3 +282,27 @@ class TestDependencies(RQTestCase):
 
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_stopped_job_does_not_enqueue_dependents(self):
+        """When a job is stopped (STOPPED status), its dependents should NOT be enqueued.
+
+        This tests the fix for the bug where dependencies_are_met() didn't check
+        for STOPPED status, causing dependents to be incorrectly enqueued.
+        """
+        q = Queue(connection=self.connection)
+
+        parent_job = q.enqueue(say_hello)
+        dependent_job = q.enqueue(say_hello, depends_on=parent_job)
+
+        self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
+
+        # Simulate parent job being stopped
+        parent_job.set_status(JobStatus.STOPPED)
+
+        # dependencies_are_met should return False when parent is STOPPED
+        self.assertFalse(dependent_job.dependencies_are_met(parent_job))
+        self.assertFalse(dependent_job.dependencies_are_met())
+
+        # Verify enqueue_dependents does not enqueue the dependent
+        q.enqueue_dependents(parent_job)
+        self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
