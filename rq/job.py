@@ -560,6 +560,13 @@ class Job:
 
         return self._stopped_callback_timeout
 
+    def should_enqueue_at_front(self) -> bool:
+        """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
+        (i.e. ended_at is not None), otherwise returns the value of enqueue_at_front"""
+        if (self.enqueue_at_front_on_retry and self.ended_at is not None):
+                return True
+        return bool(self.enqueue_at_front)
+
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
         This includes the `_func_name`, `_instance`, `_args` and `_kwargs`
@@ -1631,7 +1638,7 @@ class Job:
             queue (Queue): The queue to retry the job on
             pipeline (Pipeline): The Redis' pipeline to use
         """
-        self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
+
         retry_interval = self.get_retry_interval()
         assert self.retries_left
         self.retries_left = self.retries_left - 1

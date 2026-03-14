@@ -161,12 +161,7 @@ class RQScheduler:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
                 for job in jobs:
                     if job is not None:
-                        enqueue_flag = bool(job.enqueue_at_front)
-                        if (job.enqueue_at_front_on_retry
-                            and job.number_of_retries is not None
-                            and job.number_of_retries > 0):
-                            enqueue_flag = True
-                        queue._enqueue_job(job, pipeline=pipeline, at_front=enqueue_flag)
+                        queue._enqueue_job(job, pipeline=pipeline, at_front= job.should_enqueue_at_front())
                 for job_id in job_ids:
                     registry.remove(job_id, pipeline=pipeline)
                 pipeline.execute()

@@ -336,13 +336,11 @@ class TestWorkerRetry(RQTestCase):
         """Job is enqueued at front of the queue if enqueue_at_front_on_retry is True, even with retry interval"""
         queue = Queue(connection=self.connection)
         retry = Retry(max=1, interval=2, enqueue_at_front=True)
+
         job1 = queue.enqueue(div_by_zero, retry=retry)
         job2 = queue.enqueue(say_hello)
-
         worker = Worker([queue], connection=self.connection)
         worker.work(max_jobs=1, with_scheduler=True)  # schedules the retry
-
-
         # Confirm job was scheduled for retry
         self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
         sched = RQScheduler([queue.name], connection=self.connection, interval=1)
