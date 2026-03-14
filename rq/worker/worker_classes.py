@@ -132,13 +132,12 @@ class Worker(BaseWorker):
                 job.execute_stopped_callback(self.death_penalty_class)
             self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
-            if not job.ended_at:
-                job.ended_at = now()
+            job.ended_at = now()
 
-            # Unhandled failure: move the job to the failed queue
+            # Unhandled failure: work-horse terminated unexpectedly
             signal_msg = f' (signal {os.WTERMSIG(ret_val)})' if ret_val and os.WIFSIGNALED(ret_val) else ''
             exc_string = f'Work-horse terminated unexpectedly; waitpid returned {ret_val}{signal_msg}; '
-            self.log.warning('Worker %s: moving job %s to FailedJobRegistry (%s)', self.name, job.id, exc_string)
+            self.log.warning('Worker %s: job %s failed (%s)', self.name, job.id, exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
@@ -163,13 +162,14 @@ class SpawnWorker(Worker):
     def fork_work_horse(self, job: 'Job', queue: 'Queue'):
         """Spawns a work horse to perform the actual work using os.spawn()."""
         os.environ['RQ_WORKER_ID'] = self.name
-        os.environ['RQ_JOB_ID'] = job.id
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = self.connection.connection_pool.connection_kwargs
+        redis_kwargs = self.connection.connection_pool.connection_kwargs.copy()
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']
+        if redis_kwargs.get('driver_info'):
+            del redis_kwargs['driver_info']
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
@@ -194,7 +194,7 @@ if not worker:
 # Reconstruct job, queue and execution objects
 job = Job.fetch("{job.id}", connection=worker.connection)
 queue = Queue("{queue.name}", connection=worker.connection)
-execution_id = os.environ.get('RQ_EXECUTION_ID')
+execution_id = os.environ["RQ_EXECUTION_ID"]
 worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
 
 # Set up work horse

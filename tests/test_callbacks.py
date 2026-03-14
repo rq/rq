@@ -12,6 +12,8 @@ from tests.fixtures import (
     save_exception,
     save_result,
     save_result_if_not_stopped,
+    save_status_on_failure,
+    save_status_on_success,
     say_hello,
 )
 
@@ -255,6 +257,32 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
         # TODO: add test case for error while executing failure callback
+
+    def test_job_status_set_before_success_callback(self):
+        """Job status should be FINISHED when success callback runs (#1631)."""
+        queue = Queue(connection=self.connection)
+        worker = SimpleWorker([queue], connection=self.connection)
+
+        job = queue.enqueue(say_hello, on_success=save_status_on_success)
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(
+            self.connection.get(f'success_callback_status:{job.id}').decode(),
+            JobStatus.FINISHED.value,
+        )
+
+    def test_job_status_set_before_failure_callback(self):
+        """Job status should be FAILED when failure callback runs (#1631)."""
+        queue = Queue(connection=self.connection)
+        worker = SimpleWorker([queue], connection=self.connection)
+
+        job = queue.enqueue(div_by_zero, on_failure=save_status_on_failure)
+        worker.work(burst=True)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertEqual(
+            self.connection.get(f'failure_callback_status:{job.id}').decode(),
+            JobStatus.FAILED.value,
+        )
 
 
 class JobCallbackTestCase(RQTestCase):

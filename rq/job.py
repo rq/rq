@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 import warnings
 import zlib
 from collections.abc import Iterable, Mapping, Sequence
@@ -49,6 +50,8 @@ from .utils import (
 
 logger = logging.getLogger('rq.job')
 
+JOB_ID_PATTERN = re.compile(r'[A-Za-z0-9_-]+')
+
 
 class JobStatus(str, Enum):
     """The Status of Job within its lifecycle at any given time."""
@@ -69,6 +72,15 @@ def parse_job_id(job_or_execution_id: str) -> str:
     if ':' in job_or_execution_id:
         return job_or_execution_id.split(':')[0]
     return job_or_execution_id
+
+
+def validate_job_id(job_id: str) -> None:
+    """Validate a custom job ID."""
+    if not isinstance(job_id, str):
+        raise TypeError(f'Job ID must be a string, not {type(job_id)}')
+
+    if not JOB_ID_PATTERN.fullmatch(job_id):
+        raise ValueError('Job ID must only contain letters, numbers, underscores and dashes')
 
 
 class Dependency:
@@ -166,6 +178,8 @@ class Job:
         if not connection:
             raise TypeError("Job.__init__() missing 1 required argument: 'connection'")
         self.connection = connection
+        if id:
+            validate_job_id(id)
         self._id = id
         self.created_at = now()
         self._data: Union[bytes, UnevaluatedType] = UNEVALUATED
@@ -200,7 +214,13 @@ class Job:
         self._dependency_ids: list[str] = []
         self.meta: dict[str, Any] = {}
         self.serializer = resolve_serializer(serializer)
+        # Tracks remaining retries for exception-based retry. Set to retry.max when a job
+        # is enqueued with retry=Retry(...) via queue.enqueue(). Decremented each time
+        # the job raises an exception and is retried via job.retry().
         self.retries_left: Optional[int] = None
+        # Tracks how many retries have been performed for return-based retry.
+        # Incremented each time a job returns a Retry object as its result and is
+        # retried via handle_job_retry() / _handle_retry_result().
         self.number_of_retries: Optional[int] = None
         self.retry_intervals: Optional[list[int]] = None
         self.redis_server_version: Optional[tuple[int, int, int]] = None
@@ -736,12 +756,7 @@ class Job:
         Args:
             value (str): The value to set as Job ID
         """
-        if not isinstance(value, str):
-            raise TypeError(f'id must be a string, not {type(value)}')
-
-        if ':' in value:
-            raise ValueError('id must not contain ":"')
-
+        validate_job_id(value)
         self._id = value
 
     @classmethod
@@ -1336,10 +1351,12 @@ class Job:
                 self.enqueue_at_front = self.enqueue_at_front or depends_on_item.enqueue_at_front
                 self.allow_dependency_failures = self.allow_dependency_failures or depends_on_item.allow_failure
                 depends_on_list.extend(list(depends_on_item.dependencies))
+            elif isinstance(depends_on_item, (Job, str)):
+                depends_on_list.append(depends_on_item)
             else:
-                # After checking for Dependency, depends_on_item should be Job or str
-                # Use type cast to inform mypy of the narrowed type
-                depends_on_list.append(depends_on_item)  # type: ignore[arg-type]
+                raise ValueError(
+                    f'depends_on items must be Job objects or string job IDs, got {type(depends_on_item).__name__}'
+                )
         self._dependency_ids = [dep.id if isinstance(dep, Job) else dep for dep in depends_on_list]
 
     def prepare_for_execution(self, worker_name: str, pipeline: 'Pipeline') -> None:
@@ -1543,12 +1560,40 @@ class Job:
 
         Result.create_failure(self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline)
 
-    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline', worker_name: str = ''):
+    def _handle_retry_result(self, queue: 'Queue', pipeline: 'Pipeline', retry: 'Retry', worker_name: str = ''):
+        """Handles jobs that return a Retry object as its result.
+
+        Creates a RETRIED result record, increments number_of_retries,
+        and requeues or schedules the job for retry.
+
+        Args:
+            queue (Queue): The queue to retry the job on
+            pipeline (Pipeline): The Redis pipeline to use
+            retry (Retry): The Retry object returned by the job
+            worker_name (str): The name of the worker
+        """
         from .results import Result
 
         Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
+        retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
-        queue._enqueue_job(self, pipeline=pipeline)
+        if retry_interval:
+            scheduled_datetime = now() + timedelta(seconds=retry_interval)
+            self.set_status(JobStatus.SCHEDULED)
+            queue.schedule_job(self, scheduled_datetime, pipeline=pipeline)
+            self.log.info(
+                'Job %s: scheduled for retry at %s, %s remaining',
+                self.id,
+                scheduled_datetime,
+                retry.max - (self.number_of_retries or 0),
+            )
+        else:
+            queue._enqueue_job(self, pipeline=pipeline)
+            self.log.info(
+                'Job %s: enqueued for retry, %s remaining',
+                self.id,
+                retry.max - (self.number_of_retries or 0),
+            )
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
@@ -1570,10 +1615,10 @@ class Job:
         return self.retries_left is not None and self.retries_left > 0
 
     def retry(self, queue: 'Queue', pipeline: 'Pipeline'):
-        """Requeue or schedule this job for execution.
-        If the `retry_interval` was set on the job itself,
-        it will calculate a scheduled time for the job to run, and instead
-        of just regularly `enqueuing` the job, it will `schedule` it.
+        """Should be called when a job was enqueued with queue.enqueue(retry=Retry(...)) raises an exception.
+
+        Requeues or schedules the job for execution. If retry_interval was set,
+        the job will be scheduled for later; otherwise it will be enqueued immediately.
 
         Args:
             queue (Queue): The queue to retry the job on
@@ -1680,7 +1725,7 @@ class Job:
                 self.allow_dependency_failures,
             )
 
-            if parent_status == JobStatus.CANCELED:
+            if parent_status in (JobStatus.CANCELED, JobStatus.STOPPED):
                 return False
             elif parent_status == JobStatus.FAILED and not self.allow_dependency_failures:
                 return False

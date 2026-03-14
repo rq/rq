@@ -484,38 +484,14 @@ class DeferredJobRegistry(BaseRegistry):
     key_template = 'rq:deferred:{0}'
 
     def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
-        """Remove expired jobs from registry and add them to FailedJobRegistry.
-        Removes jobs with an expiry time earlier than timestamp, specified as
-        seconds since the Unix epoch. timestamp defaults to call time if
-        unspecified. Removed jobs are added to the failed job registry.
-        """
-        score = timestamp if timestamp is not None else current_timestamp()
-        job_ids = self.get_expired_job_ids(score)
-
-        if job_ids:
-            with self.connection.pipeline() as pipeline:
-                for job_id in job_ids:
-                    try:
-                        job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
-                    except NoSuchJobError:
-                        continue
-
-                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                    exc_info = f'Expired in DeferredJobRegistry, moved to FailedJobRegistry at {now}'
-                    job._handle_failure(exc_string=exc_info, pipeline=pipeline, worker_name='')
-
-                pipeline.zremrangebyscore(self.key, 0, score)
-                pipeline.execute()
+        """Deferred jobs don't expire based on time, so cleanup is a no-op."""
+        pass
 
     def add(self, job: Job, ttl: Optional[int] = None, pipeline: Optional['Pipeline'] = None, xx: bool = False) -> int:
-        """
-        Adds a job to a registry with expiry time of now + ttl.
-        Defaults to -1 (never expire).
-        """
-        if ttl is None:
-            ttl = -1
-
-        return super().add(job, ttl, pipeline, xx)
+        """Adds a job to the deferred registry, scored by creation time."""
+        score = current_timestamp()
+        connection = pipeline if pipeline is not None else self.connection
+        return connection.zadd(self.key, {job.id: score}, xx=xx)
 
 
 class ScheduledJobRegistry(BaseRegistry):

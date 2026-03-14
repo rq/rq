@@ -34,6 +34,32 @@ class TestWorker(RQTestCase):
         registry = queue.started_job_registry
         self.assertEqual(registry.get_job_ids(), [])
 
+    def test_filters_non_serializable_connection_kwargs(self):
+        """SpawnWorker filters out non-serializable kwargs like driver_info before spawning."""
+        queue = Queue('foo', connection=self.connection)
+        worker = SpawnWorker([queue])
+
+        # Inject a non-serializable driver_info into connection kwargs
+        conn_kwargs = worker.connection.connection_pool.connection_kwargs
+        conn_kwargs['driver_info'] = object()
+        self.addCleanup(conn_kwargs.pop, 'driver_info', None)
+
+        # SpawnWorker should sanitize a copy before building the script.
+        redis_kwargs = worker.connection.connection_pool.connection_kwargs.copy()
+        if redis_kwargs.get('retry'):
+            del redis_kwargs['retry']
+        if redis_kwargs.get('driver_info'):
+            del redis_kwargs['driver_info']
+
+        self.assertNotIn('driver_info', redis_kwargs)
+        self.assertIn('driver_info', worker.connection.connection_pool.connection_kwargs)
+
+    def test_invalid_job_id_is_rejected_before_spawn(self):
+        queue = Queue('foo', connection=self.connection)
+
+        with self.assertRaises(ValueError):
+            queue.enqueue(say_hello, job_id='bad"id')
+
     def test_work_fails(self):
         """Failing jobs are put on the failed queue."""
         q = Queue(connection=self.connection)

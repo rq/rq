@@ -1,8 +1,13 @@
+### RQ 2.7.0 (2026-02-22)
+* Formal support for Python 3.14. Thanks @selwin!
+* Improve `CronScheduler` monitoring, you can now monitor each `CronJob`'s latest and next scheduled enqueue time. Thanks @selwin!
+* `job.get_status()` now reports the correct final state inside `on_success` / `on_failure` callbacks. Thanks @Fridayai700!
+* Minor fixes and cleanups. Thanks @selwin, @stratakis, @JimNero009 and @Fridayai700!
+
 ### RQ 2.6.1 (2025-11-22)
 * Updated `CronScheduler` to accept `job_timeout` instead of `timeout` argument. Thanks @selwin!
 * Fixed an issue where `CronScheduler.heartbeat()` does not properly extend the key's TTL. Thanks @selwin!
 * Minor changes and code cleanups. Thanks @selwin, @hovsater, @DhavalGojiya, @sylvioCampos and @JimNero009!
-
 
 ### RQ 2.6 (2025-09-06)
 * Added `CronScheduler.all()` that returns a list of active schedulers. Thanks @selwin!

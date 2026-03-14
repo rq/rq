@@ -321,6 +321,16 @@ def save_result_if_not_stopped(job, connection, result=''):
     connection.set(f'stopped_callback:{job.id}', result, ex=60)
 
 
+def save_status_on_success(job, connection, result):
+    """Store job status during success callback to verify it's updated."""
+    connection.set(f'success_callback_status:{job.id}', job.get_status(refresh=False).value, ex=60)
+
+
+def save_status_on_failure(job, connection, type, value, traceback):
+    """Store job status during failure callback to verify it's updated."""
+    connection.set(f'failure_callback_status:{job.id}', job.get_status(refresh=False).value, ex=60)
+
+
 def erroneous_callback(job):
     """A callback that's not written properly"""
     pass
