@@ -6,7 +6,7 @@ from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
 from rq.scheduler import RQScheduler
 from rq.worker import Worker
-from tests import RQTestCase
+from tests import RQTestCase, slow
 from tests.fixtures import div_by_zero, say_hello
 
 
@@ -331,7 +331,7 @@ class TestWorkerRetry(RQTestCase):
         # job1 should be retried and enqueued at the front of the queue
         self.assertEqual(queue.job_ids, [job1.id, job2.id])
 
-
+    @slow
     def test_worker_handles_enqueue_at_front_on_retry_with_interval(self):
         """Job is enqueued at front of the queue if enqueue_at_front_on_retry is True, even with retry interval"""
         queue = Queue(connection=self.connection)
@@ -343,14 +343,14 @@ class TestWorkerRetry(RQTestCase):
         worker.work(max_jobs=1, with_scheduler=True)  # schedules the retry
         # Confirm job was scheduled for retry
         self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
-        sched = RQScheduler([queue.name], connection=self.connection, interval=1)
-        sched.acquire_locks()
-        sched.prepare_registries()
+        scheduler = RQScheduler([queue.name], connection=self.connection, interval=1)
+        scheduler.acquire_locks()
+        scheduler.prepare_registries()
 
         # Poll scheduler until the scheduled retry is enqueued (timeout to avoid flakiness)
         deadline = time.time() + 5
         while time.time() < deadline:
-            sched.enqueue_scheduled_jobs()
+            scheduler.enqueue_scheduled_jobs()
             if queue.job_ids == [job1.id, job2.id]:
                 break
             time.sleep(0.1)

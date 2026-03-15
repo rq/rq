@@ -1773,6 +1773,7 @@ class Retry:
             max (int): The max number of times a job should be retried
             interval (Union[int, List[int]], optional): The interval between retries.
                 Can be a positive number (int) or a list of ints. Defaults to 0 (meaning no interval between retries).
+            enqueue_at_front (bool): Whether the job should be requeued at the front of the queue when retried. Defaults to False.
 
         Raises:
             ValueError: If the `max` argument is lower than 1
