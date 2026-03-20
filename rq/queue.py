@@ -35,7 +35,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .repeat import Repeat
-from .scripts import persist_unique_job
+from .scripts import persist_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
@@ -1110,18 +1110,17 @@ class Queue:
 
         registry = ScheduledJobRegistry(queue=self)
 
+        if unique:
+            job._status = JobStatus.SCHEDULED
+            # Atomic: check uniqueness, save job, add to scheduled registry, register queue
+            schedule_unique_job(self.connection, self.key, registry.key, job, datetime)
+            return job
+
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
-
-        if unique:
-            # Set status to SCHEDULED before atomic Lua script saves the job
-            job._status = JobStatus.SCHEDULED
-            # Use atomic Lua script for unique check and save (without pushing to queue)
-            persist_unique_job(self.connection, self.key, job, enqueue=False)
-        else:
-            self._persist_job(job, pipe, status=JobStatus.SCHEDULED)
+        self._persist_job(job, pipe, status=JobStatus.SCHEDULED)
 
         registry.schedule(job, datetime, pipeline=pipe)
         if pipeline is None:

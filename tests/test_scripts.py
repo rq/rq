@@ -1,9 +1,12 @@
-"""Tests for the persist_unique_job function."""
+"""Tests for rq.scripts functions."""
+
+import calendar
+from datetime import datetime, timedelta, timezone
 
 from rq import Queue
 from rq.exceptions import DuplicateJobError
-from rq.job import Job
-from rq.scripts import persist_unique_job
+from rq.job import Job, JobStatus
+from rq.scripts import persist_unique_job, schedule_unique_job
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -137,3 +140,63 @@ class TestPersistUniqueJob(RQTestCase):
         self.assertEqual(fetched_job.description, 'Test job')
         self.assertEqual(fetched_job.timeout, 300)
         self.assertEqual(fetched_job.result_ttl, 600)
+
+
+class TestScheduleUniqueJob(RQTestCase):
+    """Tests for schedule_unique_job function."""
+
+    def _create_job_for_schedule(self, queue, job_id, ttl=None):
+        """Helper to create a job ready for scheduling."""
+        job = queue.create_job(say_hello, job_id=job_id, ttl=ttl)
+        job._status = JobStatus.SCHEDULED
+        return job
+
+    def test_schedule_unique_job_saves_and_schedules(self):
+        """schedule_unique_job saves job data, adds to scheduled registry, registers queue, and handles TTL."""
+        queue = Queue(connection=self.connection)
+        registry_key = 'rq:scheduled:default'
+        scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        expected_timestamp = calendar.timegm(scheduled_time.utctimetuple())
+
+        # Schedule a job with TTL
+        job = self._create_job_for_schedule(queue, 'sched-job-1', ttl=60)
+        schedule_unique_job(self.connection, queue.key, registry_key, job, scheduled_time)
+
+        # Verify job data is saved
+        fetched_job = Job.fetch('sched-job-1', connection=self.connection)
+        self.assertEqual(fetched_job.id, 'sched-job-1')
+        self.assertEqual(fetched_job.get_status(), JobStatus.SCHEDULED)
+
+        # Verify job is in scheduled registry with correct score
+        score = self.connection.zscore(registry_key, 'sched-job-1')
+        self.assertEqual(int(score), expected_timestamp)
+
+        # Verify queue is registered in rq:queues
+        self.assertIn(queue.key.encode(), self.connection.smembers('rq:queues'))
+
+        # Verify TTL is set
+        ttl = self.connection.ttl(job.key)
+        self.assertGreater(ttl, 50)
+        self.assertLessEqual(ttl, 60)
+
+        # Schedule a job without TTL
+        job_no_ttl = self._create_job_for_schedule(queue, 'sched-job-2', ttl=None)
+        schedule_unique_job(self.connection, queue.key, registry_key, job_no_ttl, scheduled_time)
+
+        ttl = self.connection.ttl(job_no_ttl.key)
+        self.assertEqual(ttl, -1)
+
+    def test_schedule_unique_job_raises_on_duplicate(self):
+        """schedule_unique_job raises DuplicateJobError when job already exists."""
+        queue = Queue(connection=self.connection)
+        registry_key = 'rq:scheduled:default'
+        scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        job1 = self._create_job_for_schedule(queue, 'dup-sched-job')
+        schedule_unique_job(self.connection, queue.key, registry_key, job1, scheduled_time)
+
+        job2 = self._create_job_for_schedule(queue, 'dup-sched-job')
+        with self.assertRaises(DuplicateJobError) as context:
+            schedule_unique_job(self.connection, queue.key, registry_key, job2, scheduled_time)
+
+        self.assertIn('dup-sched-job', str(context.exception))
