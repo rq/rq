@@ -837,6 +837,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [5])
 
+    @min_redis_version((6, 2, 0))
     def test_dequeue_any_multi_queue_uses_intermediate_queue_non_blocking(self):
         """Non-blocking dequeue from multiple queues moves job to intermediate queue."""
         foo_queue = Queue('foo', connection=self.connection)
@@ -857,6 +858,7 @@ class TestQueue(RQTestCase):
         # Job should no longer be in the main queue
         self.assertEqual(foo_queue.count, 0)
 
+    @min_redis_version((6, 2, 0))
     def test_dequeue_any_multi_queue_uses_intermediate_queue_blocking(self):
         """Blocking dequeue from multiple queues moves job to intermediate queue."""
         foo_queue = Queue('foo', connection=self.connection)
@@ -874,6 +876,7 @@ class TestQueue(RQTestCase):
         job_ids = foo_queue.intermediate_queue.get_job_ids()
         self.assertIn(job.id, job_ids)
 
+    @min_redis_version((6, 2, 0))
     def test_dequeue_any_multi_queue_intermediate_queue_cleanup(self):
         """Job in intermediate queue is recoverable after worker death."""
         foo_queue = Queue('foo', connection=self.connection)
