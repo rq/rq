@@ -224,20 +224,7 @@ class BaseWorker:
         if prepare_for_work:
             self.hostname: Optional[str] = socket.gethostname()
             self.pid: Optional[int] = os.getpid()
-            try:
-                connection.client_setname(self.name)
-            except redis.exceptions.ResponseError:
-                warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
-                self.ip_address = 'unknown'
-            else:
-                client_addresses = [
-                    client['addr'] for client in connection.client_list() if client.get('name') == self.name
-                ]
-                if len(client_addresses) > 0:
-                    self.ip_address = client_addresses[0]
-                else:
-                    warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
-                    self.ip_address = 'unknown'
+            self._set_ip_address(connection)
         else:
             self.hostname = None
             self.pid = None
@@ -248,6 +235,29 @@ class BaseWorker:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
+
+    def _set_ip_address(self, connection: 'Redis') -> None:
+        try:
+            connection.client_setname(self.name)
+        except redis.exceptions.ResponseError:
+            warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
+            self.ip_address = 'unknown'
+            return
+
+        try:
+            client_addresses = [
+                client['addr'] for client in connection.client_list() if client.get('name') == self.name
+            ]
+        except redis.exceptions.ResponseError:
+            warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
+            self.ip_address = 'unknown'
+            return
+
+        if client_addresses:
+            self.ip_address = client_addresses[0]
+        else:
+            warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
+            self.ip_address = 'unknown'
 
     @classmethod
     def find_by_key(
