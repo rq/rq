@@ -724,6 +724,8 @@ class Queue:
         Returns:
             Job: The enqueued Job
         """
+        if unique and not job_id:
+            raise ValueError('unique=True requires an explicit job_id')
 
         job = self.create_job(
             func,
@@ -1110,6 +1112,8 @@ class Queue:
 
         registry = ScheduledJobRegistry(queue=self)
 
+        if unique and not job._id:
+            raise ValueError('unique=True requires an explicit job_id')
         if unique:
             job._status = JobStatus.SCHEDULED
             # Atomic: check uniqueness, save job, add to scheduled registry, register queue
@@ -1157,6 +1161,8 @@ class Queue:
         Raises:
             ValueError: If unique=True and job has dependencies
         """
+        if unique and not job._id:
+            raise ValueError('unique=True requires an explicit job_id')
         if unique and job._dependency_ids:
             raise ValueError('unique=True is not supported with job dependencies')
 

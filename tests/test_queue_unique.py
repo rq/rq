@@ -43,3 +43,22 @@ class TestEnqueueJobUnique(RQTestCase):
             queue.schedule_job(job2, scheduled_time, unique=True)
 
         self.assertIn('scheduled-unique-job', str(context.exception))
+
+    def test_unique_requires_job_id(self):
+        """unique=True without an explicit job_id raises ValueError."""
+        queue = Queue(connection=self.connection)
+
+        # enqueue
+        with self.assertRaises(ValueError):
+            queue.enqueue(say_hello, unique=True)
+
+        # enqueue_job
+        job = queue.create_job(say_hello)
+        with self.assertRaises(ValueError):
+            queue.enqueue_job(job, unique=True)
+
+        # schedule_job
+        job = queue.create_job(say_hello)
+        scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
+        with self.assertRaises(ValueError):
+            queue.schedule_job(job, scheduled_time, unique=True)
