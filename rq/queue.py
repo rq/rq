@@ -1509,12 +1509,11 @@ class Queue:
         """
         job_cls: type[Job] = backend_class(cls, 'job_class', override=job_class)
 
-        queues_list = list(queues)
-        queue_keys = [q.key for q in queues_list]
 
         while True:
+            queue_keys = [q.key for q in queues]
             if get_version(connection) >= (6, 2, 0):
-                result = cls.lmove_any(queues_list, timeout, connection=connection)
+                result = cls.lmove_any(list(queues), timeout, connection=connection)
             else:
                 result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:
