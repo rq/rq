@@ -837,6 +837,58 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [5])
 
+    def test_dequeue_any_multi_queue_uses_intermediate_queue_non_blocking(self):
+        """Non-blocking dequeue from multiple queues moves job to intermediate queue."""
+        foo_queue = Queue('foo', connection=self.connection)
+        bar_queue = Queue('bar', connection=self.connection)
+        job = foo_queue.enqueue(say_hello)
+
+        result = Queue.dequeue_any(
+            [foo_queue, bar_queue], timeout=None, connection=self.connection
+        )
+        self.assertIsNotNone(result)
+        dequeued_job, queue = result
+        self.assertEqual(dequeued_job.id, job.id)
+
+        # Job should be in the intermediate queue (recoverable if worker dies)
+        job_ids = foo_queue.intermediate_queue.get_job_ids()
+        self.assertIn(job.id, job_ids)
+
+        # Job should no longer be in the main queue
+        self.assertEqual(foo_queue.count, 0)
+
+    def test_dequeue_any_multi_queue_uses_intermediate_queue_blocking(self):
+        """Blocking dequeue from multiple queues moves job to intermediate queue."""
+        foo_queue = Queue('foo', connection=self.connection)
+        bar_queue = Queue('bar', connection=self.connection)
+        job = foo_queue.enqueue(say_hello)
+
+        result = Queue.dequeue_any(
+            [foo_queue, bar_queue], timeout=1, connection=self.connection
+        )
+        self.assertIsNotNone(result)
+        dequeued_job, queue = result
+        self.assertEqual(dequeued_job.id, job.id)
+
+        # Job should be in the intermediate queue
+        job_ids = foo_queue.intermediate_queue.get_job_ids()
+        self.assertIn(job.id, job_ids)
+
+    def test_dequeue_any_multi_queue_intermediate_queue_cleanup(self):
+        """Job in intermediate queue is recoverable after worker death."""
+        foo_queue = Queue('foo', connection=self.connection)
+        bar_queue = Queue('bar', connection=self.connection)
+        job = foo_queue.enqueue(say_hello)
+
+        Queue.dequeue_any(
+            [foo_queue, bar_queue], timeout=None, connection=self.connection
+        )
+
+        # Job is in intermediate queue and not in started job registry
+        job_ids = foo_queue.intermediate_queue.get_job_ids()
+        self.assertIn(job.id, job_ids)
+        self.assertNotIn(job.id, foo_queue.started_job_registry)
+
 
 class TestJobScheduling(RQTestCase):
     def test_enqueue_at(self):

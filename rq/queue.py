@@ -1443,6 +1443,37 @@ class Queue:
             return None
 
     @classmethod
+    def lmove_any(
+        cls,
+        queues: Sequence['Queue'],
+        timeout: Optional[int],
+        connection: 'Redis',
+    ) -> Optional[tuple[str, str]]:
+        """Dequeue from any of the given queues using LMOVE/BLMOVE to intermediate queues.
+
+        Non-blocking: tries LMOVE on each queue in order.
+        Blocking: round-robin BLMOVE with timeout divided across queues.
+        The outer dequeue loop handles retrying and heartbeats.
+        """
+        if timeout is None:  # non-blocking
+            for queue in queues:
+                result = cls.lmove(connection, queue.key, timeout=None)
+                if result is not None:
+                    return result
+            return None
+        else:  # blocking
+            if timeout == 0:
+                raise ValueError('RQ does not support indefinite timeouts. Please pick a timeout value > 0')
+            per_queue_timeout = max(1, timeout // len(queues))
+            for queue in queues:
+                blmove_result: Optional[Any] = connection.blmove(
+                    queue.key, queue.intermediate_queue_key, per_queue_timeout
+                )
+                if blmove_result is not None:
+                    return queue.key, blmove_result
+            raise DequeueTimeout(timeout, [q.key for q in queues])
+
+    @classmethod
     def dequeue_any(
         cls,
         queues: Iterable['Queue'],
@@ -1478,10 +1509,12 @@ class Queue:
         """
         job_cls: type[Job] = backend_class(cls, 'job_class', override=job_class)
 
+        queues_list = list(queues)
+        queue_keys = [q.key for q in queues_list]
+
         while True:
-            queue_keys = [q.key for q in queues]
-            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
-                result = cls.lmove(connection, queue_keys[0], timeout)
+            if get_version(connection) >= (6, 2, 0):
+                result = cls.lmove_any(queues_list, timeout, connection=connection)
             else:
                 result = cls.lpop(queue_keys, timeout, connection=connection)
             if result is None:

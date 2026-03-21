@@ -1438,8 +1438,7 @@ class BaseWorker:
         self.log.debug('Worker %s: started job registry set.', self.name)
 
         try:
-            remove_from_intermediate_queue = len(self.queues) == 1
-            self.prepare_job_execution(job, remove_from_intermediate_queue)
+            self.prepare_job_execution(job, remove_from_intermediate_queue=True)
 
             job.started_at = now()
             timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
