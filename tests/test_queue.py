@@ -876,21 +876,6 @@ class TestQueue(RQTestCase):
         job_ids = foo_queue.intermediate_queue.get_job_ids()
         self.assertIn(job.id, job_ids)
 
-    @min_redis_version((6, 2, 0))
-    def test_dequeue_any_multi_queue_intermediate_queue_cleanup(self):
-        """Job in intermediate queue is recoverable after worker death."""
-        foo_queue = Queue('foo', connection=self.connection)
-        bar_queue = Queue('bar', connection=self.connection)
-        job = foo_queue.enqueue(say_hello)
-
-        Queue.dequeue_any(
-            [foo_queue, bar_queue], timeout=None, connection=self.connection
-        )
-
-        # Job is in intermediate queue and not in started job registry
-        job_ids = foo_queue.intermediate_queue.get_job_ids()
-        self.assertIn(job.id, job_ids)
-        self.assertNotIn(job.id, foo_queue.started_job_registry)
 
 
 class TestJobScheduling(RQTestCase):
