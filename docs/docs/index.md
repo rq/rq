@@ -177,11 +177,9 @@ If all of a group's jobs expire or are deleted, the group is removed from Redis.
 ### Unique Jobs
 _New in version 2.8_
 
-RQ allows you to enforce job uniqueness, preventing duplicate jobs from
-being enqueued. This is useful when you want to ensure that a particular task is only
-queued once.
-
-To enforce uniqueness, pass `unique=True` along with an explicit `job_id` to `queue.enqueue()`:
+RQ allows you to enforce job uniqueness and deduplicate jobs, preventing the same jobs from
+being executed multiple times. To enforce uniqueness, pass `unique=True` along with an explicit `job_id`
+to `queue.enqueue()`:
 
 ```python
 from rq import Queue
