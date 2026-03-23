@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     from redis import Redis
 
     from .job import Dependency, Job
