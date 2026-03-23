@@ -8,6 +8,8 @@ asynchronously in a worker (background) process.  Any Python function can be
 invoked asynchronously, by simply pushing a reference to the function and its
 arguments onto a queue.  This is called _enqueueing_.
 
+RQ supports Redis >= 5 and Valkey >= 7.2.
+
 
 ## Enqueueing Jobs
 
@@ -33,7 +35,7 @@ from redis import Redis
 from somewhere import count_words_at_url
 import time
 
-# Tell RQ what Redis connection to use
+# Tell RQ what Redis/Valkey connection to use
 redis_conn = Redis()
 q = Queue(connection=redis_conn)  # no args implies the default queue
 
