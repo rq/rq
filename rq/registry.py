@@ -601,3 +601,8 @@ def clean_registries(queue: 'Queue', exception_handlers: Optional[list] = None):
     DeferredJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
+
+    from .rate_limit import RateLimitRegistry
+
+    for rate_limit_registry in RateLimitRegistry.all(queue.connection):
+        rate_limit_registry.cleanup()

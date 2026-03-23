@@ -1184,15 +1184,15 @@ class Queue:
         assert job.rate_limit_concurrency
 
         registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
-
         job._status = JobStatus.RATE_LIMITED
         with self.connection.pipeline() as pipe:
+            registry.register(job.rate_limit_concurrency, pipe)
             job.save(pipeline=pipe)
             job.cleanup(ttl=job.ttl, pipeline=pipe)
             registry.add_to_pending(job.id, pipe)
             pipe.execute()
 
-        registry.acquire_and_enqueue(self.name, job.rate_limit_concurrency)
+        registry.acquire_and_enqueue(job.rate_limit_concurrency)
 
         return job
 
