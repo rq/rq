@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 if TYPE_CHECKING:
     from typing import TypeAlias
@@ -27,5 +27,5 @@ A simple helper definition for the `depends_on` parameter when creating a job.
 
 SuccessCallbackType = Callable[['Job', 'Redis', Any], Any]
 FailureCallbackType = Callable[
-    ['Job', 'Redis', type[BaseException] | None, BaseException | None, TracebackType | None], Any
+    ['Job', 'Redis', Optional[type[BaseException]], Optional[BaseException], Optional[TracebackType]], Any
 ]
