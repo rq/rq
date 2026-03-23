@@ -3,13 +3,14 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slightly different characteristics.
 """
 
+from __future__ import annotations
+
 import os
 import signal
 import subprocess
 import sys
 import time
 from multiprocessing import Process
-from typing import Optional
 
 from redis import Redis
 
@@ -274,7 +275,7 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_int
 
 
 def start_worker_process(
-    queue_name, connection, worker_name=None, burst=False, job_monitoring_interval: Optional[int] = None
+    queue_name, connection, worker_name=None, burst=False, job_monitoring_interval: int | None = None
 ) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.

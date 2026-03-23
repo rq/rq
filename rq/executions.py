@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from redis import Redis
@@ -26,7 +28,7 @@ class Execution:
         right_now = now()
         self.created_at = right_now
         self.last_heartbeat = right_now
-        self._job: Optional[Job] = None
+        self._job: Job | None = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):
@@ -49,7 +51,7 @@ class Execution:
         return f'{self.job_id}:{self.id}'
 
     @classmethod
-    def fetch(cls, id: str, job_id: str, connection: Redis) -> 'Execution':
+    def fetch(cls, id: str, job_id: str, connection: Redis) -> Execution:
         """Fetch an execution from Redis."""
         execution = cls(id=id, job_id=job_id, connection=connection)
         execution.refresh()
@@ -64,13 +66,13 @@ class Execution:
         self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']), tz=timezone.utc)
 
     @classmethod
-    def from_composite_key(cls, composite_key: str, connection: Redis) -> 'Execution':
+    def from_composite_key(cls, composite_key: str, connection: Redis) -> Execution:
         """A combination of job_id and execution_id separated by a colon."""
         job_id, execution_id = parse_composite_key(composite_key)
         return cls(id=execution_id, job_id=job_id, connection=connection)
 
     @classmethod
-    def create(cls, job: Job, ttl: int, pipeline: 'Pipeline') -> 'Execution':
+    def create(cls, job: Job, ttl: int, pipeline: Pipeline) -> Execution:
         """Save execution data to Redis."""
         id = uuid4().hex
         execution = cls(id=id, job_id=job.id, connection=job.connection)
@@ -79,14 +81,14 @@ class Execution:
         job.started_job_registry.add_execution(execution, pipeline=pipeline, ttl=ttl, xx=False)
         return execution
 
-    def save(self, ttl: int, pipeline: Optional['Pipeline'] = None):
+    def save(self, ttl: int, pipeline: Pipeline | None = None):
         """Save execution data to Redis and JobExecutionRegistry."""
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, mapping=self.serialize())
         # Still unsure how to handle TTL, but this should be tied to heartbeat TTL
         connection.expire(self.key, ttl)
 
-    def delete(self, job: Job, pipeline: 'Pipeline'):
+    def delete(self, job: Job, pipeline: Pipeline):
         """Delete an execution from Redis."""
         pipeline.delete(self.key)
         job.started_job_registry.remove_execution(execution=self, pipeline=pipeline)
@@ -99,7 +101,7 @@ class Execution:
             'last_heartbeat': self.last_heartbeat.timestamp(),
         }
 
-    def heartbeat(self, started_job_registry: StartedJobRegistry, ttl: int, pipeline: 'Pipeline'):
+    def heartbeat(self, started_job_registry: StartedJobRegistry, ttl: int, pipeline: Pipeline):
         """Update execution heartbeat."""
         # TODO: worker heartbeat should be tied to execution heartbeat
         self.last_heartbeat = now()
@@ -121,7 +123,7 @@ class ExecutionRegistry(BaseRegistry):
         self.job_id = job_id
         self.key = self.key_template.format(job_id)
 
-    def cleanup(self, timestamp: Optional[float] = None, exception_handlers: Optional[list] = None):
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
 
         Removes jobs with an expiry time earlier than timestamp, specified as
@@ -131,7 +133,7 @@ class ExecutionRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, execution: Execution, ttl: int, pipeline: 'Pipeline') -> Any:  # type: ignore
+    def add(self, execution: Execution, ttl: int, pipeline: Pipeline) -> Any:  # type: ignore
         """Register an execution to registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
@@ -148,7 +150,7 @@ class ExecutionRegistry(BaseRegistry):
         pipeline.expire(self.key, ttl + 60)
         return
 
-    def remove(self, execution: Execution, pipeline: 'Pipeline') -> Any:  # type: ignore
+    def remove(self, execution: Execution, pipeline: Pipeline) -> Any:  # type: ignore
         """Remove an execution from registry."""
         return pipeline.zrem(self.key, execution.id)
 
@@ -166,7 +168,7 @@ class ExecutionRegistry(BaseRegistry):
             executions.append(Execution.fetch(id=execution_id, job_id=self.job_id, connection=self.connection))
         return executions
 
-    def delete(self, job: Job, pipeline: 'Pipeline'):
+    def delete(self, job: Job, pipeline: Pipeline):
         """Delete the registry."""
         executions = self.get_executions()
         for execution in executions:
@@ -177,7 +179,7 @@ class ExecutionRegistry(BaseRegistry):
 logger = logging.getLogger('rq.worker')
 
 
-def prepare_execution(worker: 'BaseWorker', job: Job) -> Execution:
+def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
     """Prepares execution for a job. This is called by the main Worker (not the horse)
     as it prepares for execution. Do not confuse this with worker.prepare_job_execution()
     which is called by the horse.
@@ -200,7 +202,7 @@ def prepare_execution(worker: 'BaseWorker', job: Job) -> Execution:
     return worker.execution
 
 
-def cleanup_execution(worker: 'BaseWorker', job: Job, pipeline: 'Pipeline') -> None:
+def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline) -> None:
     """Cleans up the execution of a job.
     It will remove the job execution record from the StartedJobRegistry and delete the Execution object.
 
