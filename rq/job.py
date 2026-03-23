@@ -232,6 +232,9 @@ class Job:
         self.repeats_left: Optional[int] = None
         self.repeat_intervals: Optional[list[int]] = None
 
+        self.rate_limit_key: str | None = None
+        self.rate_limit_concurrency: int | None = None
+
         from .results import Result
 
         self._cached_result: Optional[Result] = None
@@ -558,6 +561,10 @@ class Job:
             return CALLBACK_TIMEOUT
 
         return self._stopped_callback_timeout
+
+    @property
+    def has_rate_limit(self) -> bool:
+        return bool(self.rate_limit_key and self.rate_limit_concurrency)
 
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
@@ -1008,6 +1015,9 @@ class Job:
         if obj.get('repeat_intervals'):
             self.repeat_intervals = json.loads(obj['repeat_intervals'].decode())
 
+        self.rate_limit_key = as_text(obj['rate_limit_key']) if obj.get('rate_limit_key') else None
+        self.rate_limit_concurrency = int(obj['rate_limit_concurrency']) if obj.get('rate_limit_concurrency') else None
+
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
             try:
@@ -1072,6 +1082,11 @@ class Job:
             obj['repeats_left'] = self.repeats_left
         if self.repeat_intervals is not None:
             obj['repeat_intervals'] = json.dumps(self.repeat_intervals)
+
+        if self.rate_limit_key:
+            obj['rate_limit_key'] = self.rate_limit_key
+        if self.rate_limit_concurrency:
+            obj['rate_limit_concurrency'] = self.rate_limit_concurrency
 
         if self._result is not None and include_result:
             try:

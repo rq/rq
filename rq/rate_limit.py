@@ -24,7 +24,7 @@ class RateLimit:
 # Lua script: Atomically acquire capacity and enqueue the next pending job.
 # Checks if active count < max_concurrency. If capacity available:
 #   ZPOPMIN from pending, ZADD to active, RPUSH to queue, HSET status to queued.
-# Returns promoted job_id or nil.
+# Returns enqueued job_id or nil.
 ACQUIRE_AND_ENQUEUE_SCRIPT = """
 local active_count = redis.call('ZCARD', KEYS[1])
 local max_concurrency = tonumber(ARGV[1])
@@ -44,9 +44,9 @@ end
 return nil
 """
 
-# Lua script: Release capacity from a completed job and promote the next pending job.
+# Lua script: Release capacity from a completed job and enqueue the next pending job.
 # Removes completed job from active, then runs the same acquire logic.
-# Returns promoted job_id or nil.
+# Returns enqueued job_id or nil.
 RELEASE_CAPACITY_SCRIPT = """
 local completed_job_id = ARGV[1]
 local max_concurrency = tonumber(ARGV[2])
@@ -121,7 +121,7 @@ class RateLimitRegistry:
         return f'{self.redis_queue_namespace_prefix}{queue_name}'
 
     def acquire_and_enqueue(self, queue_name: str, max_concurrency: int) -> str | None:
-        """Try to promote the next pending job to active and enqueue it.
+        """Try to enqueue the next pending job.
 
         Atomically checks if there's capacity, and if so pops from pending,
         adds to active, pushes to the queue, and sets the job status to queued.
@@ -131,7 +131,7 @@ class RateLimitRegistry:
             max_concurrency: Maximum number of concurrent jobs allowed.
 
         Returns:
-            The promoted job_id, or None if no capacity or no pending jobs.
+            The enqueued job_id, or None if no capacity or no pending jobs.
         """
         queue_key = self._get_queue_key(queue_name)
         timestamp = current_timestamp()
@@ -143,19 +143,19 @@ class RateLimitRegistry:
             return as_text(result)
         return None
 
-    def release_capacity(self, queue_name: str, job_id: str, max_concurrency: int) -> str | None:
-        """Release capacity from a completed job and promote the next pending job.
+    def release_capacity_and_enqueue(self, queue_name: str, job_id: str, max_concurrency: int) -> str | None:
+        """Release capacity from a completed job and enqueue the next pending job.
 
-        Atomically removes the job from active, then tries to promote the next
+        Atomically removes the job from active, then tries to enqueue the next
         pending job (same logic as acquire_and_enqueue).
 
         Args:
-            queue_name: The name of the queue to push the promoted job into.
+            queue_name: The name of the queue to push the enqueued job into.
             job_id: The completed job's ID to remove from active.
             max_concurrency: Maximum number of concurrent jobs allowed.
 
         Returns:
-            The promoted job_id, or None if no pending jobs.
+            The enqueued job_id, or None if no pending jobs.
         """
         queue_key = self._get_queue_key(queue_name)
         timestamp = current_timestamp()
@@ -168,15 +168,15 @@ class RateLimitRegistry:
         return None
 
     def cancel(self, queue_name: str, job_id: str, max_concurrency: int) -> str | None:
-        """Remove a job from rate limit tracking and promote the next pending job if needed.
+        """Remove a job from rate limit tracking and enqueue the next pending job if needed.
 
         Args:
-            queue_name: The name of the queue for promoting the next job.
+            queue_name: The name of the queue for enqueueing the next job.
             job_id: The job ID to remove.
             max_concurrency: Maximum number of concurrent jobs allowed.
 
         Returns:
-            The promoted job_id if one was promoted, or None.
+            The enqueued job_id, or None.
         """
         was_active = self.connection.zrem(self.active_key, job_id)
         self.connection.zrem(self.pending_key, job_id)
