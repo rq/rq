@@ -65,6 +65,7 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+    RATE_LIMITED = 'rate_limited'
 
 
 def parse_job_id(job_or_execution_id: str) -> str:

@@ -1,7 +1,8 @@
-from rq.job import Job
+from rq.job import Job, JobStatus
 from rq.queue import Queue
 from rq.rate_limit import RateLimit, RateLimitRegistry
 from tests import RQTestCase
+from tests.fixtures import say_hello
 
 
 class TestRateLimit(RQTestCase):
@@ -61,11 +62,17 @@ class TestRateLimitRegistry(RQTestCase):
         self.rate_limit_registry = RateLimitRegistry(key='test', connection=self.connection)
         self.queue = Queue('default', connection=self.connection)
 
+    def _add_to_pending(self, job_id, timestamp=None):
+        """Helper to add a job to the pending set using a pipeline."""
+        with self.connection.pipeline() as pipe:
+            self.rate_limit_registry.add_to_pending(job_id, pipe, timestamp=timestamp)
+            pipe.execute()
+
     def test_add_to_pending(self):
         """Jobs added to pending are ordered by timestamp."""
-        self.rate_limit_registry.add_to_pending('job1', timestamp=1)
-        self.rate_limit_registry.add_to_pending('job2', timestamp=2)
-        self.rate_limit_registry.add_to_pending('job3', timestamp=3)
+        self._add_to_pending('job1', timestamp=1)
+        self._add_to_pending('job2', timestamp=2)
+        self._add_to_pending('job3', timestamp=3)
         self.assertEqual(self.rate_limit_registry.get_pending_job_ids(), ['job1', 'job2', 'job3'])
 
     def test_acquire_and_enqueue(self):
@@ -78,7 +85,7 @@ class TestRateLimitRegistry(RQTestCase):
         job = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
         job.save()
 
-        self.rate_limit_registry.add_to_pending(job.id)
+        self._add_to_pending(job.id)
         result = self.rate_limit_registry.acquire_and_enqueue('default', max_concurrency=2)
 
         self.assertEqual(result, job.id)
@@ -91,7 +98,7 @@ class TestRateLimitRegistry(RQTestCase):
 
         # Now fill active set to capacity and verify nothing is enqueued
         self.connection.zadd(self.rate_limit_registry.active_key, {'active2': 2})
-        self.rate_limit_registry.add_to_pending('job2')
+        self._add_to_pending('job2')
         result = self.rate_limit_registry.acquire_and_enqueue('default', max_concurrency=2)
 
         self.assertIsNone(result)
@@ -105,8 +112,8 @@ class TestRateLimitRegistry(RQTestCase):
         job2 = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
         job2.save()
 
-        self.rate_limit_registry.add_to_pending(job1.id, timestamp=1)
-        self.rate_limit_registry.add_to_pending(job2.id, timestamp=2)
+        self._add_to_pending(job1.id, timestamp=1)
+        self._add_to_pending(job2.id, timestamp=2)
 
         result = self.rate_limit_registry.acquire_and_enqueue('default', max_concurrency=1)
         self.assertEqual(result, job1.id)
@@ -128,7 +135,7 @@ class TestRateLimitRegistry(RQTestCase):
         self.connection.zadd(self.rate_limit_registry.active_key, {'active2': 1})
         job = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
         job.save()
-        self.rate_limit_registry.add_to_pending(job.id)
+        self._add_to_pending(job.id)
 
         result = self.rate_limit_registry.release_capacity_and_enqueue('default', 'active2', max_concurrency=1)
         self.assertEqual(result, job.id)
@@ -145,7 +152,7 @@ class TestRateLimitRegistry(RQTestCase):
 
         job2 = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
         job2.save()
-        self.rate_limit_registry.add_to_pending(job2.id)
+        self._add_to_pending(job2.id)
 
         result = self.rate_limit_registry.cancel('default', 'active1', max_concurrency=1)
 
@@ -156,7 +163,7 @@ class TestRateLimitRegistry(RQTestCase):
     def test_cancel_pending_job(self):
         """cancel removes a pending job without affecting active set."""
         self.connection.zadd(self.rate_limit_registry.active_key, {'active1': 1})
-        self.rate_limit_registry.add_to_pending('pending1')
+        self._add_to_pending('pending1')
 
         result = self.rate_limit_registry.cancel('default', 'pending1', max_concurrency=1)
 
@@ -179,8 +186,10 @@ class TestRateLimitRegistry(RQTestCase):
         job_b = Job.create(func='tests.fixtures.say_hello', connection=self.connection)
         job_b.save()
 
-        registry_a.add_to_pending(job_a.id)
-        registry_b.add_to_pending(job_b.id)
+        with self.connection.pipeline() as pipe:
+            registry_a.add_to_pending(job_a.id, pipe)
+            registry_b.add_to_pending(job_b.id, pipe)
+            pipe.execute()
 
         # Fill key_a to capacity
         self.connection.zadd(registry_a.active_key, {'x': 1})
@@ -191,3 +200,62 @@ class TestRateLimitRegistry(RQTestCase):
         # key_b still has capacity
         result_b = registry_b.acquire_and_enqueue('default', max_concurrency=1)
         self.assertEqual(result_b, job_b.id)
+
+
+class TestRateLimitEnqueue(RQTestCase):
+    """Test rate limiting through Queue.enqueue()."""
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue('default', connection=self.connection)
+
+    def test_enqueue_with_rate_limit(self):
+        """Jobs exceeding concurrency limit are deferred, others are queued."""
+        rate_limit = RateLimit(key='test', concurrency=2)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job3.get_status(), JobStatus.RATE_LIMITED)
+
+        # Verify rate limit fields are persisted
+        self.assertTrue(job1.has_rate_limit)
+        self.assertEqual(job1.rate_limit_key, 'test')
+        self.assertEqual(job1.rate_limit_concurrency, 2)
+
+        # Verify the registry state
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(registry.get_active_job_count(), 2)
+        self.assertEqual(registry.get_pending_job_count(), 1)
+
+        # Only the first 2 jobs should be in the queue
+        self.assertEqual(len(self.queue.job_ids), 2)
+
+    def test_enqueue_with_rate_limit_and_dependencies(self):
+        """Rate limit check happens after dependencies are met."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        # First job takes the only slot
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+
+        # Second job depends on job1 and also has rate limit
+        job2 = self.queue.enqueue(say_hello, depends_on=job1, rate_limit=rate_limit)
+        # Should be deferred due to dependency (not rate limit)
+        self.assertEqual(job2.get_status(), JobStatus.DEFERRED)
+
+        # Simulate job1 completion: enqueue dependents
+        job1._status = JobStatus.FINISHED
+        job1.save()
+        self.queue.enqueue_dependents(job1)
+
+        # job2's dependency is met, but rate limit slot is still held by job1
+        # in the active set. So job2 should go to RL pending.
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        # job1 is still in active (not released yet), job2 should be pending
+        self.assertEqual(registry.get_active_job_count(), 1)
+        self.assertEqual(registry.get_pending_job_count(), 1)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)

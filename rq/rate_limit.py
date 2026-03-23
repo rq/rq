@@ -1,4 +1,5 @@
 from redis import Redis
+from redis.client import Pipeline
 
 from .utils import as_text, current_timestamp, now, utcformat
 
@@ -110,11 +111,11 @@ class RateLimitRegistry:
         """Returns the number of jobs in the pending set."""
         return self.connection.zcard(self.pending_key)
 
-    def add_to_pending(self, job_id: str, timestamp: float | None = None) -> None:
+    def add_to_pending(self, job_id: str, pipeline: Pipeline, timestamp: float | None = None) -> None:
         """Add a job to the pending set."""
         if timestamp is None:
             timestamp = current_timestamp()
-        self.connection.zadd(self.pending_key, {job_id: timestamp})
+        pipeline.zadd(self.pending_key, {job_id: timestamp})
 
     def _get_queue_key(self, queue_name: str) -> str:
         """Derive the Redis queue key from a queue name."""
