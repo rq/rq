@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import errno
 import logging
@@ -51,7 +53,7 @@ class WorkerPool:
         connection: Redis,
         num_workers: int = 1,
         worker_class: type[BaseWorker] = Worker,
-        serializer: 'Serializer' = DefaultSerializer,
+        serializer: Serializer = DefaultSerializer,
         job_class: type[Job] = Job,
         queue_class: type[Queue] = Queue,
         *args,
@@ -257,7 +259,7 @@ def run_worker(
     connection_pool_class,
     connection_pool_kwargs: dict,
     worker_class: type[BaseWorker] = Worker,
-    serializer: 'Serializer' = DefaultSerializer,
+    serializer: Serializer = DefaultSerializer,
     job_class: type[Job] = Job,
     queue_class: type[Queue] = Queue,
     burst: bool = True,

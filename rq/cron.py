@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib.util
 import json
 import logging
@@ -153,7 +155,7 @@ class CronJob:
         return obj
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'CronJob':
+    def from_dict(cls, data: dict[str, Any]) -> CronJob:
         """Create a CronJob instance from dictionary data for monitoring purposes.
 
         Note: The returned CronJob will not have a func attribute and cannot be executed,
@@ -491,7 +493,7 @@ class CronScheduler:
             self._cron_jobs = []
 
     @classmethod
-    def fetch(cls, name: str, connection: Redis) -> 'CronScheduler':
+    def fetch(cls, name: str, connection: Redis) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
         key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
@@ -504,7 +506,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> list['CronScheduler']:
+    def all(cls, connection: Redis, cleanup: bool = True) -> list[CronScheduler]:
         """Returns all CronScheduler instances from the registry
 
         Args:
