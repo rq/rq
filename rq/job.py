@@ -1347,7 +1347,7 @@ class Job:
                 self.enqueue_at_front = self.enqueue_at_front or depends_on_item.enqueue_at_front
                 self.allow_dependency_failures = self.allow_dependency_failures or depends_on_item.allow_failure
                 depends_on_list.extend(list(depends_on_item.dependencies))
-            elif isinstance(depends_on_item, Job | str):
+            elif isinstance(depends_on_item, (Job, str)):
                 depends_on_list.append(depends_on_item)
             else:
                 raise ValueError(
