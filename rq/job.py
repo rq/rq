@@ -10,7 +10,7 @@ import zlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 from uuid import uuid4
 
 from redis import WatchError
@@ -548,7 +548,7 @@ class Job:
                 self._stopped_callback = None
 
         # After deserialization, _stopped_callback is either a callable or None, never UNEVALUATED
-        return cast(Callable[['Job', 'Redis'], Any] | None, self._stopped_callback)
+        return cast(Optional[Callable[['Job', 'Redis'], Any]], self._stopped_callback)
 
     @property
     def stopped_callback_timeout(self) -> int:
