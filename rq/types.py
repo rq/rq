@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -14,7 +17,7 @@ or a direct callable (function/method).
 """
 
 
-JobDependencyType = Union['Dependency', 'Job', str, list[Union['Dependency', 'Job', str]]]
+JobDependencyType: TypeAlias = 'Dependency | Job | str | list[Dependency | Job | str]'
 
 """Custom type definition for a job dependencies.
 A simple helper definition for the `depends_on` parameter when creating a job.
@@ -22,5 +25,5 @@ A simple helper definition for the `depends_on` parameter when creating a job.
 
 SuccessCallbackType = Callable[['Job', 'Redis', Any], Any]
 FailureCallbackType = Callable[
-    ['Job', 'Redis', Optional[type[BaseException]], Optional[BaseException], Optional[TracebackType]], Any
+    ['Job', 'Redis', type[BaseException] | None, BaseException | None, TracebackType | None], Any
 ]

@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import zlib
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from redis import Redis
 
@@ -28,10 +30,10 @@ class Result:
         job_id: str,
         type: Type,
         connection: Redis,
-        id: Optional[str] = None,
-        created_at: Optional[datetime] = None,
-        return_value: Optional[Any] = None,
-        exc_string: Optional[str] = None,
+        id: str | None = None,
+        created_at: datetime | None = None,
+        return_value: Any | None = None,
+        exc_string: str | None = None,
         worker_name: str = '',
         serializer=None,
     ):
@@ -58,7 +60,7 @@ class Result:
         return bool(self.id)
 
     @classmethod
-    def create(cls, job, type, ttl, return_value=None, exc_string=None, worker_name='', pipeline=None) -> 'Result':
+    def create(cls, job, type, ttl, return_value=None, exc_string=None, worker_name='', pipeline=None) -> Result:
         result = cls(
             job_id=job.id,
             type=type,
@@ -72,7 +74,7 @@ class Result:
         return result
 
     @classmethod
-    def create_failure(cls, job, ttl, exc_string, worker_name='', pipeline=None) -> 'Result':
+    def create_failure(cls, job, ttl, exc_string, worker_name='', pipeline=None) -> Result:
         result = cls(
             job_id=job.id,
             type=cls.Type.FAILED,
@@ -85,7 +87,7 @@ class Result:
         return result
 
     @classmethod
-    def create_retried(cls, job, ttl, worker_name='', pipeline=None) -> 'Result':
+    def create_retried(cls, job, ttl, worker_name='', pipeline=None) -> Result:
         result = cls(
             job_id=job.id,
             type=cls.Type.RETRIED,
@@ -120,7 +122,7 @@ class Result:
         job.connection.delete(cls.get_key(job.id))
 
     @classmethod
-    def restore(cls, job_id: str, result_id: str, payload: dict, connection: Redis, serializer=None) -> 'Result':
+    def restore(cls, job_id: str, result_id: str, payload: dict, connection: Redis, serializer=None) -> Result:
         """Create a Result object from given Redis payload"""
         created_at = datetime.fromtimestamp(int(result_id.split('-')[0]) / 1000, tz=timezone.utc)
         payload = decode_redis_hash(payload)
@@ -151,7 +153,7 @@ class Result:
         )
 
     @classmethod
-    def fetch(cls, job: Job, serializer=None) -> Optional['Result']:
+    def fetch(cls, job: Job, serializer=None) -> Result | None:
         """Fetch a result that matches a given job ID. The current sorted set
         based implementation does not allow us to fetch a given key by ID
         so we need to iterate through results, deserialize the payload and
@@ -163,7 +165,7 @@ class Result:
         return None
 
     @classmethod
-    def fetch_latest(cls, job: Job, serializer=None, timeout: int = 0) -> Optional['Result']:
+    def fetch_latest(cls, job: Job, serializer=None, timeout: int = 0) -> Result | None:
         """Returns the latest result for given job instance or ID.
 
         If a non-zero timeout is provided, block for a result until timeout is reached.

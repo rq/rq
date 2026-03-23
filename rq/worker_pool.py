@@ -8,9 +8,7 @@ from collections.abc import Iterable
 from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
-
-# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
-from typing import TYPE_CHECKING, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, NamedTuple
 from uuid import uuid4
 
 from redis import ConnectionPool, Redis
@@ -49,7 +47,7 @@ class WorkerPool:
 
     def __init__(
         self,
-        queues: Iterable[Union[str, Queue]],
+        queues: Iterable[str | Queue],
         connection: Redis,
         num_workers: int = 1,
         worker_class: type[BaseWorker] = Worker,
@@ -180,7 +178,7 @@ class WorkerPool:
 
     def start_worker(
         self,
-        count: Optional[int] = None,
+        count: int | None = None,
         burst: bool = True,
         _sleep: float = 0,
         logging_level: str = 'INFO',

@@ -8,7 +8,6 @@ from datetime import datetime
 from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
-from typing import Optional, Union
 
 from redis import ConnectionPool, Redis
 
@@ -49,7 +48,7 @@ class RQScheduler:
         queues,
         connection: Redis,
         interval=1,
-        logging_level: Union[str, int] = logging.INFO,
+        logging_level: str | int = logging.INFO,
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,
@@ -123,7 +122,7 @@ class RQScheduler:
 
         return successful_locks
 
-    def prepare_registries(self, queue_names: Optional[Iterable[str]] = None):
+    def prepare_registries(self, queue_names: Iterable[str] | None = None):
         """Prepare scheduled job registries for use"""
         self._scheduled_job_registries = []
         if not queue_names:
