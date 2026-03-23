@@ -3,6 +3,8 @@ This file contains all jobs that are used in tests.  Each of these test
 fixtures has a slightly different characteristics.
 """
 
+from __future__ import annotations
+
 import os
 import signal
 import subprocess
