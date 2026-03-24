@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -16,21 +19,21 @@ class job:  # noqa
 
     def __init__(
         self,
-        queue: Union['Queue', str],
-        connection: 'Redis',
-        timeout: Optional[int] = None,
+        queue: Queue | str,
+        connection: Redis,
+        timeout: int | None = None,
         result_ttl: int = DEFAULT_RESULT_TTL,
-        ttl: Optional[int] = None,
-        queue_class: Optional[type['Queue']] = None,
-        depends_on: Optional[list[Any]] = None,
+        ttl: int | None = None,
+        queue_class: type[Queue] | None = None,
+        depends_on: list[Any] | None = None,
         at_front: bool = False,
-        meta: Optional[dict[Any, Any]] = None,
-        description: Optional[str] = None,
-        failure_ttl: Optional[int] = None,
-        retry: Optional['Retry'] = None,
-        on_failure: Optional[Union[Callback, Callable[..., Any]]] = None,
-        on_success: Optional[Union[Callback, Callable[..., Any]]] = None,
-        on_stopped: Optional[Union[Callback, Callable[..., Any]]] = None,
+        meta: dict[Any, Any] | None = None,
+        description: str | None = None,
+        failure_ttl: int | None = None,
+        retry: Retry | None = None,
+        on_failure: Callback | Callable[..., Any] | None = None,
+        on_success: Callback | Callable[..., Any] | None = None,
+        on_stopped: Callback | Callable[..., Any] | None = None,
     ):
         """A decorator that adds a ``enqueue`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required

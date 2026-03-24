@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
@@ -24,7 +26,7 @@ class Repeat:
     times: int
     intervals: list[int]
 
-    def __init__(self, times: int, interval: Optional[Union[int, Iterable[int]]] = 0):
+    def __init__(self, times: int, interval: int | Iterable[int] | None = 0):
         """Initialize a Repeat instance.
 
         Args:
@@ -71,7 +73,7 @@ class Repeat:
         return intervals[count]
 
     @classmethod
-    def schedule(cls, job: 'Job', queue: 'Queue', pipeline: Optional['Pipeline'] = None):
+    def schedule(cls, job: Job, queue: Queue, pipeline: Pipeline | None = None):
         """Schedules a job to repeat based on its repeat configuration.
 
         This decrements the job's repeats_left counter and either enqueues

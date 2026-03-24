@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import logging
 import sys
-from typing import Union
 
 from rq.defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 
@@ -106,7 +107,7 @@ class ColorizingStreamHandler(logging.StreamHandler):
 
 
 def setup_loghandlers(
-    level: Union[int, str, None] = None,
+    level: int | str | None = None,
     date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
     log_format: str = DEFAULT_LOGGING_FORMAT,
     name: str = 'rq.worker',

@@ -1,6 +1,6 @@
-# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
+from __future__ import annotations
+
 from collections.abc import Iterable
-from typing import Optional
 from uuid import uuid4
 
 from redis import Redis
@@ -19,7 +19,7 @@ class Group:
     REDIS_GROUP_NAME_PREFIX = 'rq:group:'
     REDIS_GROUP_KEY = 'rq:groups'
 
-    def __init__(self, connection: Redis, name: Optional[str] = None):
+    def __init__(self, connection: Redis, name: str | None = None):
         self.name = name if name else str(uuid4().hex)
         self.connection = connection
         self.key = f'{self.REDIS_GROUP_NAME_PREFIX}{self.name}'
@@ -52,7 +52,7 @@ class Group:
                 pipe.srem(self.key, *expired_job_ids)
                 pipe.execute()
 
-    def enqueue_many(self, queue: Queue, job_datas: Iterable['EnqueueData'], pipeline: Optional['Pipeline'] = None):
+    def enqueue_many(self, queue: Queue, job_datas: Iterable[EnqueueData], pipeline: Pipeline | None = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
 
         jobs = queue.enqueue_many(job_datas, group_id=self.name, pipeline=pipe)
@@ -70,14 +70,14 @@ class Group:
         job_ids = [as_text(job) for job in self.connection.smembers(self.key)]
         return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
-    def delete_job(self, job_id: str, pipeline: Optional['Pipeline'] = None):
+    def delete_job(self, job_id: str, pipeline: Pipeline | None = None):
         pipe = pipeline if pipeline else self.connection.pipeline()
         pipe.srem(self.key, job_id)
         if pipeline is None:
             pipe.execute()
 
     @classmethod
-    def create(cls, connection: Redis, name: Optional[str] = None):
+    def create(cls, connection: Redis, name: str | None = None):
         return cls(name=name, connection=connection)
 
     @classmethod
@@ -89,7 +89,7 @@ class Group:
         return group
 
     @classmethod
-    def all(cls, connection: 'Redis') -> list['Group']:
+    def all(cls, connection: Redis) -> list[Group]:
         "Returns an iterable of all Groups."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         groups = []
@@ -106,7 +106,7 @@ class Group:
         return cls.REDIS_GROUP_NAME_PREFIX + name
 
     @classmethod
-    def clean_registries(cls, connection: 'Redis'):
+    def clean_registries(cls, connection: Redis):
         """Loop through groups and delete those that have been deleted.
         If group still has jobs in its registry, delete those that have expired"""
         groups = Group.all(connection=connection)

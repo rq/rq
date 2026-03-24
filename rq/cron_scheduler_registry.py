@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from redis import Redis
 from redis.client import Pipeline
@@ -15,7 +17,7 @@ def get_registry_key() -> str:
     return 'rq:cron_schedulers'
 
 
-def register(cron_scheduler: 'CronScheduler', pipeline: Optional[Pipeline] = None) -> None:
+def register(cron_scheduler: CronScheduler, pipeline: Pipeline | None = None) -> None:
     """Register a CronScheduler in the registry with current timestamp as score
 
     Args:
@@ -38,7 +40,7 @@ def register(cron_scheduler: 'CronScheduler', pipeline: Optional[Pipeline] = Non
         raise DuplicateSchedulerError(f"CronScheduler '{cron_scheduler.name}' is already registered")
 
 
-def unregister(cron_scheduler: 'CronScheduler', pipeline: Optional[Pipeline] = None) -> None:
+def unregister(cron_scheduler: CronScheduler, pipeline: Pipeline | None = None) -> None:
     """Remove a CronScheduler from the registry
 
     Args:
