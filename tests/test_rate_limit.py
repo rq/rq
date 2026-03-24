@@ -1,8 +1,11 @@
+from rq.executions import Execution
 from rq.job import Job, JobStatus
 from rq.queue import Queue
 from rq.rate_limit import RateLimit, RateLimitRegistry
+from rq.registry import StartedJobRegistry
+from rq.worker import SimpleWorker
 from tests import RQTestCase
-from tests.fixtures import say_hello
+from tests.fixtures import div_by_zero, say_hello
 
 
 class TestRateLimit(RQTestCase):
@@ -318,3 +321,69 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertEqual(registry.get_active_job_count(), 1)
         self.assertEqual(registry.get_pending_job_count(), 0)
         self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+
+    def test_release_on_success(self):
+        """Completing a rate-limited job releases capacity and enqueues the next pending job."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        # job1 completed, job2 should now be enqueued
+        self.assertEqual(job1.get_status(), JobStatus.FINISHED)
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        rate_limit_registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(rate_limit_registry.get_active_job_count(), 1)
+        self.assertIn(job2.id, rate_limit_registry.get_active_job_ids())
+
+    def test_release_on_failure(self):
+        """Failing a rate-limited job releases capacity and enqueues the next pending job."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(div_by_zero, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        # job1 failed, job2 should now be enqueued
+        self.assertEqual(job1.get_status(), JobStatus.FAILED)
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        rate_limit_registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(rate_limit_registry.get_active_job_count(), 1)
+        self.assertIn(job2.id, rate_limit_registry.get_active_job_ids())
+
+    def test_release_on_abandoned_job_cleanup(self):
+        """When StartedJobRegistry cleans up an abandoned rate-limited job,
+        capacity is released and the next pending job is enqueued."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+
+        # Simulate job1 being picked up by a worker that then dies:
+        # remove from queue, add to StartedJobRegistry with an expired ttl
+        self.queue.remove(job1.id)
+        started_registry = StartedJobRegistry(connection=self.connection)
+        execution = Execution(id='execution', job_id=job1.id, connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            started_registry.add_execution(execution, pipe, ttl=0)
+            pipe.execute()
+
+        # Cleanup should detect the abandoned job, fail it, and release capacity
+        started_registry.cleanup()
+
+        self.assertEqual(job1.get_status(), JobStatus.FAILED)
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        rate_limit_registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(rate_limit_registry.get_active_job_count(), 1)
+        self.assertIn(job2.id, rate_limit_registry.get_active_job_ids())
