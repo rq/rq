@@ -1,5 +1,5 @@
 RQ (_Redis Queue_) is a simple Python library for queueing jobs and processing
-them in the background with workers. It is backed by Redis or Valkey and is designed
+them in the background with workers. It is backed by Redis/Valkey and is designed
 to have a low barrier to entry while scaling incredibly well for large applications.
 It can be integrated into your web stack easily, making it suitable for projects
 of any size—from simple applications to high-volume enterprise systems.
@@ -22,7 +22,7 @@ If you find RQ useful, please consider supporting this project via [Tidelift](ht
 
 ## Getting started
 
-First, run a Redis server, of course:
+First, run a Redis/Valkey server:
 
 ```console
 $ redis-server

@@ -1,4 +1,6 @@
-from typing import TYPE_CHECKING, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -16,7 +18,7 @@ REDIS_WORKER_KEYS = 'rq:workers'
 MAX_KEYS = 1000
 
 
-def register(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
+def register(worker: BaseWorker, pipeline: Pipeline | None = None):
     """
     Store worker key in Redis so we can easily discover active workers.
 
@@ -31,7 +33,7 @@ def register(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
         connection.sadd(redis_key, worker.key)
 
 
-def unregister(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
+def unregister(worker: BaseWorker, pipeline: Pipeline | None = None):
     """Remove Worker key from Redis
 
     Args:
@@ -52,7 +54,7 @@ def unregister(worker: 'BaseWorker', pipeline: Optional['Pipeline'] = None):
         connection.execute()
 
 
-def get_keys(queue: Optional['Queue'] = None, connection: Optional['Redis'] = None) -> set[str]:
+def get_keys(queue: Queue | None = None, connection: Redis | None = None) -> set[str]:
     """Returns a list of worker keys for a given queue.
 
     Args:
@@ -78,7 +80,7 @@ def get_keys(queue: Optional['Queue'] = None, connection: Optional['Redis'] = No
     return {as_text(key) for key in redis.smembers(redis_key)}
 
 
-def clean_worker_registry(queue: 'Queue'):
+def clean_worker_registry(queue: Queue):
     """Delete invalid worker keys in registry.
 
     Args:

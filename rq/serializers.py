@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import pickle
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable, ClassVar, Optional, Protocol, Union, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from .utils import import_attribute
 
@@ -28,7 +31,7 @@ class JSONSerializer:
         return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
-def resolve_serializer(serializer: Optional[Union[Serializer, str]] = None) -> Serializer:
+def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer:
     """This function checks the user defined serializer for ('dumps', 'loads') methods
     It returns a default pickle serializer if not found else it returns a MySerializer
     The returned serializer objects implement ('dumps', 'loads') methods

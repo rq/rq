@@ -1,4 +1,6 @@
-from typing import TYPE_CHECKING, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from redis import Redis
@@ -9,7 +11,7 @@ if TYPE_CHECKING:
 WORKERS_SUSPENDED = 'rq:suspended'
 
 
-def is_suspended(connection: 'Redis', worker: Optional['BaseWorker'] = None):
+def is_suspended(connection: Redis, worker: BaseWorker | None = None):
     """Checks whether a Worker is suspended on a given connection
     PS: pipeline returns a list of responses
     Ref: https://github.com/andymccurdy/redis-py#pipelines
@@ -25,7 +27,7 @@ def is_suspended(connection: 'Redis', worker: Optional['BaseWorker'] = None):
         return pipeline.execute()[-1]
 
 
-def suspend(connection: 'Redis', ttl: Optional[int] = None):
+def suspend(connection: Redis, ttl: int | None = None):
     """
     Suspends.
     TTL of 0 will invalidate right away.
@@ -39,7 +41,7 @@ def suspend(connection: 'Redis', ttl: Optional[int] = None):
         connection.expire(WORKERS_SUSPENDED, ttl)
 
 
-def resume(connection: 'Redis'):
+def resume(connection: Redis):
     """
     Resumes.
 
