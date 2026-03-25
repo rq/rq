@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import cached_property
 
 from redis import Redis
@@ -128,7 +130,7 @@ class RateLimitRegistry:
         return int(value) if value else 0
 
     @classmethod
-    def all(cls, connection: Redis) -> list['RateLimitRegistry']:
+    def all(cls, connection: Redis) -> list[RateLimitRegistry]:
         """Returns all known RateLimitRegistry instances."""
         keys = connection.smembers(cls.rl_keys_key)
         return [cls(key=as_text(key), connection=connection) for key in keys]
