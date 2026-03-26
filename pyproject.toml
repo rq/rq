@@ -3,7 +3,6 @@ build-backend = "hatchling.build"
 requires = [ "hatchling" ]
 
 [project]
-version = "2.0.0"
 name = "rq"
 description = "RQ is a simple, lightweight, library for creating background jobs, and processing them."
 readme = "README.md"
