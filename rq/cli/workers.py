@@ -179,6 +179,7 @@ def worker(
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--logging-level', '-l', type=str, default='INFO', help='Set logging level')
+@click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
