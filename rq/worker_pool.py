@@ -168,7 +168,7 @@ class WorkerPool:
         """Returns the worker process"""
         return ForkProcess(
             target=run_worker,
-            args=(name, self._queue_names, self._connection_class, self._pool_class, self.exception_handlers, self._pool_kwargs),
+            args=(name, self._queue_names, self._connection_class, self._pool_class, self._pool_kwargs),
             kwargs={
                 '_sleep': _sleep,
                 'burst': burst,
@@ -176,6 +176,7 @@ class WorkerPool:
                 'worker_class': self.worker_class,
                 'job_class': self.job_class,
                 'serializer': self.serializer,
+                'exception_handlers': self.exception_handlers,
             },
             name=f'Worker {name} (WorkerPool {self.name})',
         )
