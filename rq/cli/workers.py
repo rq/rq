@@ -191,7 +191,7 @@ def worker_pool(
     cli_config,
     burst: bool,
     logging_level,
-    exception_handlers,
+    exception_handler,
     queues,
     serializer,
     verbose,
@@ -218,6 +218,10 @@ def worker_pool(
         logging_level = 'DEBUG'
     elif quiet:
         logging_level = 'WARNING'
+
+    exception_handlers = []
+    for h in exception_handler:
+        exception_handlers.append(import_attribute(h))
 
     pool = WorkerPool(
         queue_names,
