@@ -233,6 +233,7 @@ class Job:
         self.repeat_intervals: list[int] | None = None
 
         self._cached_result: Result | None = None
+        self._cached_result: Result | None = None
         self.log = logger
 
     @classmethod
