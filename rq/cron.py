@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib.util
 import json
 import logging
@@ -7,8 +9,9 @@ import socket
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 from croniter import croniter
 from redis import Redis
@@ -40,17 +43,17 @@ class CronJob:
     def __init__(
         self,
         queue_name: str,
-        func: Optional[Callable] = None,
-        func_name: Optional[str] = None,
-        args: Optional[tuple] = None,
-        kwargs: Optional[dict] = None,
-        interval: Optional[int] = None,
-        cron: Optional[str] = None,
-        job_timeout: Optional[int] = None,
+        func: Callable | None = None,
+        func_name: str | None = None,
+        args: tuple | None = None,
+        kwargs: dict | None = None,
+        interval: int | None = None,
+        cron: str | None = None,
+        job_timeout: int | None = None,
         result_ttl: int = DEFAULT_RESULT_TTL,
-        ttl: Optional[int] = None,
-        failure_ttl: Optional[int] = None,
-        meta: Optional[dict] = None,
+        ttl: int | None = None,
+        failure_ttl: int | None = None,
+        meta: dict | None = None,
     ):
         if interval and cron:
             raise ValueError('Cannot specify both interval and cron parameters')
@@ -58,7 +61,7 @@ class CronJob:
             raise ValueError('Must specify either interval or cron parameter')
 
         if func:
-            self.func: Optional[Callable] = func
+            self.func: Callable | None = func
             self.func_name: str = f'{func.__module__}.{func.__name__}'
         elif func_name:
             self.func = None
@@ -68,11 +71,11 @@ class CronJob:
 
         self.args: tuple = args or ()
         self.kwargs: dict = kwargs or {}
-        self.interval: Optional[int] = interval
-        self.cron: Optional[str] = cron
+        self.interval: int | None = interval
+        self.cron: str | None = cron
         self.queue_name: str = queue_name
-        self.next_enqueue_time: Optional[datetime] = None
-        self.latest_enqueue_time: Optional[datetime] = None
+        self.next_enqueue_time: datetime | None = None
+        self.latest_enqueue_time: datetime | None = None
 
         # For cron jobs, set initial next_enqueue_time during initialization
         if self.cron:
@@ -152,7 +155,7 @@ class CronJob:
         return obj
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'CronJob':
+    def from_dict(cls, data: dict[str, Any]) -> CronJob:
         """Create a CronJob instance from dictionary data for monitoring purposes.
 
         Note: The returned CronJob will not have a func attribute and cannot be executed,
@@ -203,7 +206,7 @@ class CronScheduler:
     def __init__(
         self,
         connection: Redis,
-        logging_level: Union[str, int] = logging.INFO,
+        logging_level: str | int = logging.INFO,
         name: str = '',
     ):
         self.connection: Redis = connection
@@ -239,15 +242,15 @@ class CronScheduler:
         self,
         func: Callable,
         queue_name: str,
-        args: Optional[tuple] = None,
-        kwargs: Optional[dict] = None,
-        interval: Optional[int] = None,
-        cron: Optional[str] = None,
-        job_timeout: Optional[int] = None,
+        args: tuple | None = None,
+        kwargs: dict | None = None,
+        interval: int | None = None,
+        cron: str | None = None,
+        job_timeout: int | None = None,
         result_ttl: int = DEFAULT_RESULT_TTL,
-        ttl: Optional[int] = None,
-        failure_ttl: Optional[int] = None,
-        meta: Optional[dict] = None,
+        ttl: int | None = None,
+        failure_ttl: int | None = None,
+        meta: dict | None = None,
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
@@ -456,7 +459,7 @@ class CronScheduler:
         }
         return obj
 
-    def save(self, pipeline: Optional[Pipeline] = None) -> None:
+    def save(self, pipeline: Pipeline | None = None) -> None:
         """Save CronScheduler instance to Redis hash with TTL"""
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, mapping=self.to_dict())
@@ -490,7 +493,7 @@ class CronScheduler:
             self._cron_jobs = []
 
     @classmethod
-    def fetch(cls, name: str, connection: Redis) -> 'CronScheduler':
+    def fetch(cls, name: str, connection: Redis) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
         key = f'rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
@@ -503,7 +506,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> list['CronScheduler']:
+    def all(cls, connection: Redis, cleanup: bool = True) -> list[CronScheduler]:
         """Returns all CronScheduler instances from the registry
 
         Args:
@@ -537,7 +540,7 @@ class CronScheduler:
             self.save(pipeline)
             pipeline.execute()
 
-    def register_death(self, pipeline: Optional[Pipeline] = None) -> None:
+    def register_death(self, pipeline: Pipeline | None = None) -> None:
         """Register this scheduler's death by removing it from the scheduler registry"""
         self.log.info(f'CronScheduler {self.name}: registering death...')
         cron_scheduler_registry.unregister(self, pipeline)
@@ -559,7 +562,7 @@ class CronScheduler:
                 self.log.warning(f'CronScheduler {self.name}: heartbeat failed - scheduler not found in registry')
 
     @property
-    def last_heartbeat(self) -> Optional[datetime]:
+    def last_heartbeat(self) -> datetime | None:
         """Return the UTC datetime of the last heartbeat, or None if no heartbeat recorded
 
         Returns:
@@ -581,15 +584,15 @@ _job_data_registry: list[dict] = []
 def register(
     func: Callable,
     queue_name: str,
-    args: Optional[tuple] = None,
-    kwargs: Optional[dict] = None,
-    interval: Optional[int] = None,
-    cron: Optional[str] = None,
-    job_timeout: Optional[int] = None,
+    args: tuple | None = None,
+    kwargs: dict | None = None,
+    interval: int | None = None,
+    cron: str | None = None,
+    job_timeout: int | None = None,
     result_ttl: int = DEFAULT_RESULT_TTL,
-    ttl: Optional[int] = None,
-    failure_ttl: Optional[int] = None,
-    meta: Optional[dict] = None,
+    ttl: int | None = None,
+    failure_ttl: int | None = None,
+    meta: dict | None = None,
 ) -> dict:
     """
     Register a function to be run as a cron job by adding its definition

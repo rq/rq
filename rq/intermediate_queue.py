@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from redis import Redis
 
@@ -49,7 +51,7 @@ class IntermediateQueue:
         # TODO: job_id should be changed to execution ID in 2.0
         return bool(self.connection.set(self.get_first_seen_key(job_id), now().timestamp(), nx=True, ex=3600 * 24))
 
-    def get_first_seen(self, job_id: str) -> Optional[datetime]:
+    def get_first_seen(self, job_id: str) -> datetime | None:
         """Returns the first seen timestamp for a job.
 
         Args:
@@ -95,7 +97,7 @@ class IntermediateQueue:
         """
         self.connection.lrem(self.key, 1, job_id)
 
-    def cleanup(self, worker: 'BaseWorker', queue: 'Queue') -> None:
+    def cleanup(self, worker: BaseWorker, queue: Queue) -> None:
         job_ids = self.get_job_ids()
 
         for job_id in job_ids:
