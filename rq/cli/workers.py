@@ -191,6 +191,7 @@ def worker_pool(
     cli_config,
     burst: bool,
     logging_level,
+    exception_handlers,
     queues,
     serializer,
     verbose,
@@ -225,5 +226,6 @@ def worker_pool(
         serializer=serializer,
         worker_class=cli_config.worker_class,
         job_class=cli_config.job_class,
+        exception_handlers=exception_handlers or None,
     )
     pool.start(burst=burst, logging_level=logging_level)
