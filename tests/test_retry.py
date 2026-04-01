@@ -277,7 +277,9 @@ class TestWorkerRetry(RQTestCase):
         # Third execution would fail since max number of retries is 2
         worker.work(max_jobs=1)
         result = job.latest_result()
-        self.assertEqual(result.type, result.Type.FAILED)
+        self.assertEqual(result.type, result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertIsNone(result.exc_string)
+        self.assertIsInstance(result.return_value, Retry)
         self.assertNotIn(job.id, queue.get_job_ids())
 
     def test_worker_handles_retry_interval(self):
