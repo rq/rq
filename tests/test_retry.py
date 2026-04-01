@@ -198,6 +198,29 @@ class TestRetry(RQTestCase):
 class TestWorkerRetry(RQTestCase):
     """Tests from test_job_retry.py"""
 
+    def test_handle_job_retry_max_retries_exceeded(self):
+        """handle_job_retry() records a terminal max retries exceeded result"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        worker = Worker([queue], connection=self.connection)
+        worker.register_birth()
+
+        retry = Retry(max=1)
+        job.started_at = datetime.now(timezone.utc)
+        job.ended_at = job.started_at + timedelta(seconds=0.75)
+        job.number_of_retries = 1
+
+        worker.handle_job_retry(
+            job=job, queue=queue, retry=retry, started_job_registry=StartedJobRegistry(connection=self.connection)
+        )
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertIsNone(result.exc_string)
+        self.assertIsInstance(result.return_value, Retry)
+
     def test_retry(self):
         """Worker processes retry correctly when job returns Retry"""
         queue = Queue(connection=self.connection)

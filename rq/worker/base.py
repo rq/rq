@@ -206,7 +206,7 @@ class BaseWorker:
         self._is_horse: bool = False
         self._horse_pid: int = 0
         self._stop_requested: bool = False
-        self._stopped_job_id = None
+        self._stopped_job_id: str | None = None
 
         self.log = logger
         self.log_job_description = log_job_description
@@ -1328,10 +1328,37 @@ class BaseWorker:
 
         # Check if job has exceeded max retries
         if job.number_of_retries and job.number_of_retries >= retry.max:
-            # If max retries exceeded, treat as failure
+            # If max retries exceeded, treat as a terminal failed job but persist
+            # a distinct result type so callers can differentiate it from errors.
             self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
-            exc_string = f'Job failed after {retry.max} retry attempts'
-            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+            with self.connection.pipeline() as pipeline:
+                job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                self.cleanup_execution(job, pipeline=pipeline)
+                job.failed_job_registry.add(job, ttl=job.failure_ttl, exc_string='', pipeline=pipeline)
+
+                from ..results import Result
+
+                Result.create_max_retries_exceeded(
+                    job,
+                    job.failure_ttl,
+                    return_value=retry,
+                    worker_name=self.name,
+                    pipeline=pipeline,
+                )
+
+                self.increment_failed_job_count(pipeline=pipeline)
+                self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+
+                try:
+                    pipeline.execute()
+                    queue.enqueue_dependents(job)
+                except Exception as e:
+                    self.log.error(
+                        'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
+                        self.name,
+                        job.id,
+                        e,
+                    )
             return
 
         with self.connection.pipeline() as pipeline:
