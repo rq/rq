@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from rq import Queue, Worker
+from rq import ForkWorker, Queue
 from rq.job import Job
 from rq.registry import ScheduledJobRegistry
 from rq.repeat import Repeat
@@ -203,13 +203,13 @@ class TestWorkerRepeat(RQTestCase):
 
         job = queue.enqueue(say_hello, repeat=Repeat(times=1))
 
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(burst=True, max_jobs=1)
 
         # The original job should have been processed and repeated
         self.assertIn(job.id, queue.get_job_ids())
 
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(burst=True, max_jobs=1)
 
         # No repeats left

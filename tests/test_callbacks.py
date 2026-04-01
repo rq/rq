@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from rq import Queue, Worker
+from rq import ForkWorker, Queue
 from rq.job import UNEVALUATED, Callback, Job, JobStatus
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
@@ -213,7 +213,7 @@ class WorkerCallbackTestCase(RQTestCase):
     def test_erroneous_success_callback(self):
         """Test exception handling when executing success callback"""
         queue = Queue(connection=self.connection)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         # If success_callback raises an error, job will is considered as failed
         job = queue.enqueue(say_hello, on_success=erroneous_callback)

@@ -9,6 +9,7 @@ from .base import (
 )
 from .base import BaseWorker as BaseWorker
 from .worker_classes import (
+    ForkWorker,
     HerokuWorker,
     RandomWorker,
     RoundRobinWorker,
@@ -21,6 +22,7 @@ __all__ = [
     'BaseWorker',
     'DEFAULT_RESULT_TTL',
     'DequeueStrategy',
+    'ForkWorker',
     'HerokuWorker',
     'RandomWorker',
     'RoundRobinWorker',

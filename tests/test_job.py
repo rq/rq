@@ -21,7 +21,7 @@ from rq.registry import (
 )
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, now, utcformat
-from rq.worker import Worker
+from rq.worker import ForkWorker
 from tests import RQTestCase, fixtures, min_redis_version
 
 
@@ -184,7 +184,7 @@ class TestJob(RQTestCase):
         # Job.fetch also works with execution IDs
         queue = Queue(connection=self.connection)
         job = queue.enqueue(fixtures.say_hello)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.prepare_execution(job=job)
         worker.prepare_job_execution(job=job)
         execution = worker.execution
@@ -211,7 +211,7 @@ class TestJob(RQTestCase):
         # Job.fetch_many also works with execution IDs
         queue = Queue(connection=self.connection)
         job = queue.enqueue(fixtures.say_hello)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.prepare_execution(job=job)
         worker.prepare_job_execution(job=job)
         execution = worker.execution
@@ -543,7 +543,7 @@ class TestJob(RQTestCase):
         """The current job is accessible within the job function."""
         q = Queue(connection=self.connection)
         job = q.enqueue(fixtures.access_self)
-        w = Worker([q])
+        w = ForkWorker([q])
         w.work(burst=True)
         # access_self calls get_current_job() and executes successfully
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
@@ -728,7 +728,7 @@ class TestJob(RQTestCase):
         """job.delete() also deletes ExecutionRegistry and all job executions"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(fixtures.say_hello)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         execution = worker.prepare_execution(job=job)
 

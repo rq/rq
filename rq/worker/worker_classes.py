@@ -25,7 +25,7 @@ if TYPE_CHECKING:
         pass
 
 
-class Worker(BaseWorker):
+class ForkWorker(BaseWorker):
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
 
@@ -156,7 +156,7 @@ class Worker(BaseWorker):
         self.set_state(WorkerStatus.IDLE)
 
 
-class SpawnWorker(Worker):
+class SpawnWorker(ForkWorker):
     """Worker implementation that uses os.spawn() instead of os.fork().
     This implementation is intended for environments where `os.fork()` is not available.
     """
@@ -211,6 +211,21 @@ worker.main_work_horse(job, queue)
         self.procline(f'Spawned {child_pid} at {time.time()}')
 
 
+def _get_default_worker_class() -> type[BaseWorker]:
+    if sys.platform == 'linux':
+        return ForkWorker
+    return SpawnWorker
+
+
+class Worker(_get_default_worker_class()):  # type: ignore[misc]
+    """Worker that automatically selects the best execution strategy for the current platform.
+
+    Uses ForkWorker (os.fork) on Linux, SpawnWorker (os.spawnv) on macOS and Windows.
+    """
+
+    pass
+
+
 class SimpleWorker(BaseWorker):
     def execute_job(self, job: Job, queue: Queue):
         """Execute job in same thread/process, do not fork()"""
@@ -234,7 +249,7 @@ class SimpleWorker(BaseWorker):
             return int(job.timeout or DEFAULT_WORKER_TTL) + 60
 
 
-class HerokuWorker(Worker):
+class HerokuWorker(ForkWorker):
     """
     Modified version of rq worker which:
     * stops work horses getting killed with SIGTERM

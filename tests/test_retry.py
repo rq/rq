@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
-from rq.worker import Worker
+from rq.worker import ForkWorker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -104,7 +104,7 @@ class TestRetry(RQTestCase):
         retry = Retry(max=1, interval=5)
         job = queue.enqueue(div_by_zero, retry=retry)
 
-        worker = Worker([queue])
+        worker = ForkWorker([queue])
         registry = queue.scheduled_job_registry
         # If job if configured to retry with interval, it will be scheduled,
         # not directly put back in the queue
@@ -187,10 +187,10 @@ class TestWorkerRetry(RQTestCase):
     """Tests from test_job_retry.py"""
 
     def test_retry(self):
-        """Worker processes retry correctly when job returns Retry"""
+        """ForkWorker processes retry correctly when job returns Retry"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(max_jobs=1)
 
         # A result with type `RETRIED` should be created
@@ -202,7 +202,7 @@ class TestWorkerRetry(RQTestCase):
         """handle_job_retry() increments job.number_of_retries"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         # First retry should set number_of_retries to 1
         worker.work(max_jobs=1)
@@ -213,7 +213,7 @@ class TestWorkerRetry(RQTestCase):
         """handle_job_retry() increments number_of_retries even when retry has an interval"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry, max=2, interval=10)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         worker.work(max_jobs=1)
         job.refresh()
@@ -224,7 +224,7 @@ class TestWorkerRetry(RQTestCase):
         """Job fails after maximum retries are exhausted"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry, max=2)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(max_jobs=1)
 
         # A result with type `RETRIED` should be created,
@@ -246,10 +246,10 @@ class TestWorkerRetry(RQTestCase):
         self.assertNotIn(job.id, queue.get_job_ids())
 
     def test_worker_handles_retry_interval(self):
-        """Worker handles retry with interval correctly"""
+        """ForkWorker handles retry with interval correctly"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry, max=1, interval=10)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(max_jobs=1)
 
         now = datetime.now(timezone.utc)
@@ -264,7 +264,7 @@ class TestWorkerRetry(RQTestCase):
         self.assertTrue(now + timedelta(seconds=7) < scheduled_time < now + timedelta(seconds=13))
 
         job = queue.enqueue(return_retry, max=1, interval=30)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(max_jobs=1)
 
         now = datetime.now(timezone.utc)
@@ -282,7 +282,7 @@ class TestWorkerRetry(RQTestCase):
         """Job fails after maximum retries are exhausted, even with retry interval"""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(return_retry, max=1, interval=0)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         # First execution: job returns Retry, gets retried
         worker.work(max_jobs=1)
