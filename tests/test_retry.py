@@ -47,6 +47,12 @@ class TestRetry(RQTestCase):
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
         self.assertRaises(ValueError, Retry, max=1, interval=[1, -5])
 
+    def test_retry_repr(self):
+        """Retry repr is stable and human-readable"""
+        self.assertEqual(repr(Retry(max=1)), 'Retry(max=1, interval=0)')
+        self.assertEqual(repr(Retry(max=2, interval=5)), 'Retry(max=2, interval=5)')
+        self.assertEqual(repr(Retry(max=3, interval=[5, 10])), 'Retry(max=3, interval=[5, 10])')
+
     def test_get_retry_interval(self):
         """get_retry_interval() returns the right retry interval"""
         job = Job.create(func=say_hello, connection=self.connection)

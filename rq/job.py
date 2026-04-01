@@ -1776,6 +1776,10 @@ class Retry:
         self.max = max
         self.intervals = intervals
 
+    def __repr__(self):
+        interval = self.intervals[0] if len(self.intervals) == 1 else self.intervals
+        return f'{self.__class__.__name__}(max={self.max}, interval={interval!r})'
+
     @classmethod
     def get_interval(cls, count: int, intervals: int | list[int] | None) -> int:
         """Returns the appropriate retry interval based on retry count and intervals.
