@@ -177,6 +177,9 @@ class TestRetry(RQTestCase):
         job.refresh()
         self.assertEqual(job.number_of_retries, 1)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
+        self.assertIsInstance(result.return_value, Retry)
 
         # Test scheduled retry (with interval)
         retry = Retry(max=2, interval=10)
@@ -187,6 +190,9 @@ class TestRetry(RQTestCase):
         job.refresh()
         self.assertEqual(job.number_of_retries, 1)
         self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
+        self.assertIsInstance(result.return_value, Retry)
 
 
 class TestWorkerRetry(RQTestCase):

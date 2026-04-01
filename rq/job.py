@@ -1570,7 +1570,7 @@ class Job:
         """
         from .results import Result
 
-        Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
+        Result.create_retried(self, self.failure_ttl, return_value=retry, worker_name=worker_name, pipeline=pipeline)
         retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         if retry_interval:

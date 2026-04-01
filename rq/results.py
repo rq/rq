@@ -87,11 +87,12 @@ class Result:
         return result
 
     @classmethod
-    def create_retried(cls, job, ttl, worker_name='', pipeline=None) -> Result:
+    def create_retried(cls, job, ttl, return_value, worker_name, pipeline=None) -> Result:
         result = cls(
             job_id=job.id,
             type=cls.Type.RETRIED,
             connection=job.connection,
+            return_value=return_value,
             worker_name=worker_name,
             serializer=job.serializer,
         )
