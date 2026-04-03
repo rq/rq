@@ -47,6 +47,7 @@ from ..job import Job, JobStatus, Retry
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
 from ..registry import StartedJobRegistry, clean_registries
+from ..results import Result
 from ..scheduler import RQScheduler
 from ..serializers import Serializer, resolve_serializer
 from ..suspension import is_suspended
@@ -1335,8 +1336,6 @@ class BaseWorker:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 self.cleanup_execution(job, pipeline=pipeline)
                 job.failed_job_registry.add(job, ttl=job.failure_ttl, exc_string='', pipeline=pipeline)
-
-                from ..results import Result
 
                 Result.create_max_retries_exceeded(
                     job,
