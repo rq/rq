@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
+from rq.results import Result
 from rq.worker import Worker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
@@ -201,7 +202,7 @@ class TestWorkerRetry(RQTestCase):
     def test_handle_job_retry_max_retries_exceeded(self):
         """handle_job_retry() records a terminal max retries exceeded result"""
         queue = Queue(connection=self.connection)
-        job = queue.enqueue(say_hello)
+        job = queue.enqueue(say_hello, failure_ttl=5)
         worker = Worker([queue], connection=self.connection)
         worker.register_birth()
 
@@ -220,6 +221,8 @@ class TestWorkerRetry(RQTestCase):
         self.assertEqual(result.type, result.Type.MAX_RETRIES_EXCEEDED)
         self.assertIsNone(result.exc_string)
         self.assertIsInstance(result.return_value, Retry)
+        self.assertTrue(0 < self.connection.ttl(job.key) <= job.failure_ttl)
+        self.assertTrue(0 < self.connection.ttl(Result.get_key(job.id)) <= job.failure_ttl)
 
     def test_retry(self):
         """Worker processes retry correctly when job returns Retry"""
