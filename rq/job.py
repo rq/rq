@@ -228,7 +228,7 @@ class Job:
         self.allow_dependency_failures: bool | None = None
         self.enqueue_at_front: bool | None = None
         self.group_id: str | None = None
-
+        self.enqueue_at_front_on_retry: bool = False
         self.repeats_left: int | None = None
         self.repeat_intervals: list[int] | None = None
 
@@ -556,6 +556,13 @@ class Job:
             return CALLBACK_TIMEOUT
 
         return self._stopped_callback_timeout
+
+    def should_enqueue_at_front(self) -> bool:
+        """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
+        (i.e. ended_at is not None), otherwise returns the value of enqueue_at_front"""
+        if (self.enqueue_at_front_on_retry and self.ended_at is not None):
+                return True
+        return bool(self.enqueue_at_front)
 
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
@@ -1001,6 +1008,10 @@ class Job:
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
+        if obj.get('enqueue_at_front_on_retry'):
+            self.enqueue_at_front_on_retry = bool(int(obj['enqueue_at_front_on_retry']))
+        else:
+            self.enqueue_at_front_on_retry = False
 
         self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
         if obj.get('repeat_intervals'):
@@ -1059,6 +1070,8 @@ class Job:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
             obj['retry_intervals'] = json.dumps(self.retry_intervals)
+        if self.enqueue_at_front_on_retry:
+            obj['enqueue_at_front_on_retry'] = int(self.enqueue_at_front_on_retry)
         if self.origin:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -1620,6 +1633,7 @@ class Job:
             queue (Queue): The queue to retry the job on
             pipeline (Pipeline): The Redis' pipeline to use
         """
+
         retry_interval = self.get_retry_interval()
         assert self.retries_left
         self.retries_left = self.retries_left - 1
@@ -1631,7 +1645,7 @@ class Job:
                 'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
             )
         else:
-            queue._enqueue_job(self, pipeline=pipeline)
+            queue._enqueue_job(self, pipeline=pipeline, at_front=self.enqueue_at_front_on_retry)
             self.log.info('Job %s: enqueued for retry, %s remaining', self.id, self.retries_left)
 
     def register_dependency(self, pipeline: Pipeline | None = None):
@@ -1747,13 +1761,15 @@ _job_stack = LocalStack()
 
 
 class Retry:
-    def __init__(self, max: int, interval: int | Iterable[int] = 0):
+    def __init__(self, max: int, interval: int | Iterable[int] = 0, enqueue_at_front: bool = False):
         """The main object to defined Retry logics for jobs.
 
         Args:
             max (int): The max number of times a job should be retried
             interval (Union[int, List[int]], optional): The interval between retries.
                 Can be a positive number (int) or a list of ints. Defaults to 0 (meaning no interval between retries).
+            enqueue_at_front (bool): Whether the job should be requeued at the front of the queue when retried.
+            Defaults to False.
 
         Raises:
             ValueError: If the `max` argument is lower than 1
@@ -1775,6 +1791,7 @@ class Retry:
 
         self.max = max
         self.intervals = intervals
+        self.enqueue_at_front = enqueue_at_front
 
     @classmethod
     def get_interval(cls, count: int, intervals: int | list[int] | None) -> int:

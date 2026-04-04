@@ -888,3 +888,29 @@ class TestJob(RQTestCase):
         self.assertIsNotNone(result)
         self.assertGreaterEqual(blocked_for, job_sleep_seconds)
         self.assertLess(blocked_for, block_seconds)
+
+    def test_should_enqueue_at_front(self):
+        job = Job.create(fixtures.say_hello,connection=self.connection)
+
+        job.enqueue_at_front_on_retry = True
+        job.enqueue_at_front = False
+        job.ended_at = datetime.utcnow()
+        self.assertTrue(job.should_enqueue_at_front())
+
+        job.enqueue_at_front_on_retry = False
+        job.enqueue_at_front = True
+        job.ended_at = None
+
+        self.assertTrue(job.should_enqueue_at_front())
+
+        job.enqueue_at_front_on_retry = False
+        job.enqueue_at_front = False
+        job.ended_at = None
+
+        self.assertFalse(job.should_enqueue_at_front())
+
+        job.enqueue_at_front_on_retry = True
+        job.enqueue_at_front = False
+        job.ended_at = None
+
+        self.assertFalse(job.should_enqueue_at_front())

@@ -1,10 +1,12 @@
+import time
 from datetime import datetime, timedelta, timezone
 
 from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
+from rq.scheduler import RQScheduler
 from rq.worker import Worker
-from tests import RQTestCase
+from tests import RQTestCase, slow
 from tests.fixtures import div_by_zero, say_hello
 
 
@@ -20,19 +22,23 @@ class TestRetry(RQTestCase):
         job = Job.create(func=say_hello, connection=self.connection)
         job.retries_left = 3
         job.retry_intervals = [1, 2, 3]
+        job.enqueue_at_front_on_retry = True
         job.save()
 
         job.retries_left = None
         job.retry_intervals = None
+        job.enqueue_at_front_on_retry = False
         job.refresh()
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [1, 2, 3])
+        self.assertEqual(job.enqueue_at_front_on_retry, True)
 
     def test_retry_class(self):
         """Retry parses `max` and `interval` correctly"""
         retry = Retry(max=1)
         self.assertEqual(retry.max, 1)
         self.assertEqual(retry.intervals, [0])
+        self.assertEqual(retry.enqueue_at_front, False)
         self.assertRaises(ValueError, Retry, max=0)
 
         retry = Retry(max=2, interval=5)
@@ -42,6 +48,11 @@ class TestRetry(RQTestCase):
         retry = Retry(max=3, interval=[5, 10])
         self.assertEqual(retry.max, 3)
         self.assertEqual(retry.intervals, [5, 10])
+
+        retry = Retry(max=1, enqueue_at_front=True)
+        self.assertEqual(retry.max, 1)
+        self.assertEqual(retry.intervals, [0])
+        self.assertEqual(retry.enqueue_at_front, True)
 
         # interval can't be negative
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
@@ -87,6 +98,17 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
 
         retry = Retry(max=3)
+        job = queue.enqueue(div_by_zero, retry=retry)
+
+        with self.connection.pipeline() as pipeline:
+            job.retry(queue, pipeline)
+            pipeline.execute()
+
+        self.assertEqual(job.retries_left, 2)
+        # status should be queued
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        retry = Retry(max=3, enqueue_at_front=True)
         job = queue.enqueue(div_by_zero, retry=retry)
 
         with self.connection.pipeline() as pipeline:
@@ -295,3 +317,43 @@ class TestWorkerRetry(RQTestCase):
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_worker_handles_enqueue_at_front_on_retry(self):
+        """Job is enqueued at front of the queue if enqueue_at_front_on_retry is True"""
+        queue = Queue(connection=self.connection)
+        retry = Retry(max=1, enqueue_at_front=True)
+        job1 = queue.enqueue(div_by_zero, retry=retry)
+        job2 = queue.enqueue(say_hello)
+
+        worker = Worker([queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        # job1 should be retried and enqueued at the front of the queue
+        self.assertEqual(queue.job_ids, [job1.id, job2.id])
+
+    @slow
+    def test_worker_handles_enqueue_at_front_on_retry_with_interval(self):
+        """Job is enqueued at front of the queue if enqueue_at_front_on_retry is True, even with retry interval"""
+        queue = Queue(connection=self.connection)
+        retry = Retry(max=1, interval=2, enqueue_at_front=True)
+
+        job1 = queue.enqueue(div_by_zero, retry=retry)
+        job2 = queue.enqueue(say_hello)
+        worker = Worker([queue], connection=self.connection)
+        worker.work(max_jobs=1, with_scheduler=True)  # schedules the retry
+        # Confirm job was scheduled for retry
+        self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
+        scheduler = RQScheduler([queue.name], connection=self.connection, interval=1)
+        scheduler.acquire_locks()
+        scheduler.prepare_registries()
+
+        # Poll scheduler until the scheduled retry is enqueued (timeout to avoid flakiness)
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            scheduler.enqueue_scheduled_jobs()
+            if queue.job_ids == [job1.id, job2.id]:
+                break
+            time.sleep(0.1)
+
+        self.assertEqual(queue.job_ids, [job1.id, job2.id])
+
