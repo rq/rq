@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 class Worker(BaseWorker):
     def __init__(self, queues, *args, execution_mode: str | None = None, **kwargs):
         super().__init__(queues, *args, **kwargs)
-        if execution_mode is None:
+        if not execution_mode:
             execution_mode = 'fork' if sys.platform == 'linux' else 'spawn'
         self.execution_mode = execution_mode
 
