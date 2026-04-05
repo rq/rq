@@ -290,6 +290,11 @@ class TestWorkerRetry(RQTestCase):
         self.assertEqual(result.type, result.Type.RETRIED)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
+        # Retried result carries execution metadata populated by the worker.
+        self.assertIsNotNone(result.execution_id)
+        self.assertIsNotNone(result.execution_started_at)
+        self.assertIsNotNone(result.execution_ended_at)
+
     def test_job_handle_retry(self):
         """handle_job_retry() increments job.number_of_retries"""
         queue = Queue(connection=self.connection)

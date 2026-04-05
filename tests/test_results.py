@@ -3,6 +3,7 @@ import time
 from datetime import timedelta
 
 from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from rq.executions import prepare_execution
 from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
@@ -199,11 +200,18 @@ class TestResult(RQTestCase):
         job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
         job._result = 'Success'
+        execution = prepare_execution(worker, job)
         worker.handle_job_success(job, queue, registry)
 
         payload = self.connection.hgetall(job.key)
         self.assertNotIn(b'result', payload.keys())
         self.assertEqual(job.result, 'Success')
+
+        # Result carries execution metadata populated by the worker.
+        result = job.latest_result()
+        self.assertEqual(result.execution_id, execution.id)
+        self.assertEqual(result.execution_ended_at, job.ended_at)
+        self.assertIsNotNone(result.execution_started_at)
 
     def test_job_failed_result(self):
         """Test job failure result handling."""
@@ -219,12 +227,19 @@ class TestResult(RQTestCase):
         registry = StartedJobRegistry(connection=self.connection)
         job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
+        execution = prepare_execution(worker, job)
         worker.handle_job_failure(job, exc_string='Error', queue=queue, started_job_registry=registry)
 
         job = Job.fetch(job.id, connection=self.connection)
         payload = self.connection.hgetall(job.key)
         self.assertNotIn(b'exc_info', payload.keys())
         self.assertEqual(job.exc_info, 'Error')
+
+        # Result carries execution metadata populated by the worker.
+        result = job.latest_result()
+        self.assertEqual(result.execution_id, execution.id)
+        self.assertEqual(result.execution_ended_at, job.ended_at)
+        self.assertIsNotNone(result.execution_started_at)
 
     def test_job_return_value(self):
         """Test job.return_value"""

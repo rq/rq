@@ -715,10 +715,22 @@ class BaseWorker:
                 if not retry:
                     job.set_status(JobStatus.FAILED, pipeline=pipeline)
 
+            # Capture execution metadata before cleanup_execution() clears self.execution.
+            execution_id = self.execution.id if self.execution else None
+            execution_started_at = self.execution.created_at if self.execution else None
+            execution_ended_at = job.ended_at
+
             self.cleanup_execution(job, pipeline=pipeline)
 
             if not self.disable_default_exception_handler and not retry:
-                job._handle_failure(exc_string, pipeline=pipeline, worker_name=self.name)
+                job._handle_failure(
+                    exc_string,
+                    pipeline=pipeline,
+                    worker_name=self.name,
+                    execution_id=execution_id,
+                    execution_started_at=execution_started_at,
+                    execution_ended_at=execution_ended_at,
+                )
                 with suppress(redis.exceptions.ConnectionError):
                     pipeline.execute()
 

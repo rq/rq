@@ -102,6 +102,11 @@ class TestWorker(RQTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.worker_name, w.name)
 
+        # Check that execution metadata is populated by the worker
+        self.assertIsNotNone(result.execution_id)
+        self.assertIsNotNone(result.execution_started_at)
+        self.assertIsNotNone(result.execution_ended_at)
+
     def test_work_and_quit_custom_serializer(self):
         """Worker processes work, then quits."""
         fooq = Queue('foo', serializer=JSONSerializer, connection=self.connection)
@@ -425,6 +430,11 @@ class TestWorker(RQTestCase):
         self.assertTrue(result.exc_string)
         self.assertEqual(result.type, Result.Type.FAILED)
         self.assertEqual(result.worker_name, w.name)
+
+        # Check that execution metadata is populated by the worker
+        self.assertIsNotNone(result.execution_id)
+        self.assertIsNotNone(result.execution_started_at)
+        self.assertIsNotNone(result.execution_ended_at)
 
     def test_horse_fails(self):
         """Tests that job status is set to FAILED even if horse unexpectedly fails"""
