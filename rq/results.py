@@ -24,6 +24,7 @@ class Result:
         FAILED = 2
         STOPPED = 3
         RETRIED = 4
+        MAX_RETRIES_EXCEEDED = 5
 
     def __init__(
         self,
@@ -87,16 +88,26 @@ class Result:
         return result
 
     @classmethod
-    def create_retried(cls, job, ttl, worker_name='', pipeline=None) -> Result:
-        result = cls(
-            job_id=job.id,
-            type=cls.Type.RETRIED,
-            connection=job.connection,
+    def create_retried(cls, job, ttl, return_value, worker_name, pipeline=None) -> Result:
+        return cls.create(
+            job,
+            cls.Type.RETRIED,
+            ttl,
+            return_value=return_value,
             worker_name=worker_name,
-            serializer=job.serializer,
+            pipeline=pipeline,
         )
-        result.save(ttl=ttl, pipeline=pipeline)
-        return result
+
+    @classmethod
+    def create_max_retries_exceeded(cls, job, ttl, return_value, worker_name, pipeline=None) -> Result:
+        return cls.create(
+            job,
+            cls.Type.MAX_RETRIES_EXCEEDED,
+            ttl,
+            return_value=return_value,
+            worker_name=worker_name,
+            pipeline=pipeline,
+        )
 
     @classmethod
     def all(cls, job: Job, serializer=None):

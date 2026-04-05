@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
+from rq.results import Result
 from rq.scheduler import RQScheduler
 from rq.worker import Worker
 from tests import RQTestCase, slow
@@ -57,6 +58,19 @@ class TestRetry(RQTestCase):
         # interval can't be negative
         self.assertRaises(ValueError, Retry, max=1, interval=-5)
         self.assertRaises(ValueError, Retry, max=1, interval=[1, -5])
+
+    def test_retry_repr(self):
+        """Retry repr is stable and human-readable"""
+        self.assertEqual(repr(Retry(max=1)), 'Retry(max=1, interval=0, enqueue_at_front=False)')
+        self.assertEqual(repr(Retry(max=2, interval=5)), 'Retry(max=2, interval=5, enqueue_at_front=False)')
+        self.assertEqual(
+            repr(Retry(max=3, interval=[5, 10])),
+            'Retry(max=3, interval=[5, 10], enqueue_at_front=False)',
+        )
+        self.assertEqual(
+            repr(Retry(max=1, enqueue_at_front=True)),
+            'Retry(max=1, interval=0, enqueue_at_front=True)',
+        )
 
     def test_get_retry_interval(self):
         """get_retry_interval() returns the right retry interval"""
@@ -193,6 +207,9 @@ class TestRetry(RQTestCase):
         job.refresh()
         self.assertEqual(job.number_of_retries, 1)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
+        self.assertIsInstance(result.return_value, Retry)
 
         # Test scheduled retry (with interval)
         retry = Retry(max=2, interval=10)
@@ -203,10 +220,38 @@ class TestRetry(RQTestCase):
         job.refresh()
         self.assertEqual(job.number_of_retries, 1)
         self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.RETRIED)
+        self.assertIsInstance(result.return_value, Retry)
 
 
 class TestWorkerRetry(RQTestCase):
     """Tests from test_job_retry.py"""
+
+    def test_handle_job_retry_max_retries_exceeded(self):
+        """handle_job_retry() records a terminal max retries exceeded result"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello, failure_ttl=5)
+        worker = Worker([queue], connection=self.connection)
+        worker.register_birth()
+
+        retry = Retry(max=1)
+        job.started_at = datetime.now(timezone.utc)
+        job.ended_at = job.started_at + timedelta(seconds=0.75)
+        job.number_of_retries = 1
+
+        worker.handle_job_retry(
+            job=job, queue=queue, retry=retry, started_job_registry=StartedJobRegistry(connection=self.connection)
+        )
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        result = job.latest_result()
+        self.assertEqual(result.type, result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertIsNone(result.exc_string)
+        self.assertIsInstance(result.return_value, Retry)
+        self.assertTrue(0 < self.connection.ttl(job.key) <= job.failure_ttl)
+        self.assertTrue(0 < self.connection.ttl(Result.get_key(job.id)) <= job.failure_ttl)
 
     def test_retry(self):
         """Worker processes retry correctly when job returns Retry"""
@@ -264,7 +309,9 @@ class TestWorkerRetry(RQTestCase):
         # Third execution would fail since max number of retries is 2
         worker.work(max_jobs=1)
         result = job.latest_result()
-        self.assertEqual(result.type, result.Type.FAILED)
+        self.assertEqual(result.type, result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertIsNone(result.exc_string)
+        self.assertIsInstance(result.return_value, Retry)
         self.assertNotIn(job.id, queue.get_job_ids())
 
     def test_worker_handles_retry_interval(self):
@@ -356,4 +403,3 @@ class TestWorkerRetry(RQTestCase):
             time.sleep(0.1)
 
         self.assertEqual(queue.job_ids, [job1.id, job2.id])
-

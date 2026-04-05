@@ -560,8 +560,8 @@ class Job:
     def should_enqueue_at_front(self) -> bool:
         """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
         (i.e. ended_at is not None), otherwise returns the value of enqueue_at_front"""
-        if (self.enqueue_at_front_on_retry and self.ended_at is not None):
-                return True
+        if self.enqueue_at_front_on_retry and self.ended_at is not None:
+            return True
         return bool(self.enqueue_at_front)
 
     def _deserialize_data(self):
@@ -1583,7 +1583,7 @@ class Job:
         """
         from .results import Result
 
-        Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
+        Result.create_retried(self, self.failure_ttl, return_value=retry, worker_name=worker_name, pipeline=pipeline)
         retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         if retry_interval:
@@ -1792,6 +1792,13 @@ class Retry:
         self.max = max
         self.intervals = intervals
         self.enqueue_at_front = enqueue_at_front
+
+    def __repr__(self):
+        interval = self.intervals[0] if len(self.intervals) == 1 else self.intervals
+        return (
+            f'{self.__class__.__name__}('
+            f'max={self.max}, interval={interval!r}, enqueue_at_front={self.enqueue_at_front!r})'
+        )
 
     @classmethod
     def get_interval(cls, count: int, intervals: int | list[int] | None) -> int:
