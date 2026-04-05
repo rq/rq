@@ -97,10 +97,21 @@ class TestResult(RQTestCase):
         job = queue.enqueue(say_hello)
         retry = Retry(max=1)
 
-        Result.create_retried(job, ttl=10, return_value=retry, worker_name='a')
+        started = now()
+        ended = started + timedelta(seconds=1)
+        Result.create_retried(
+            job,
+            ttl=10,
+            return_value=retry,
+            worker_name='a',
+            execution_id='exec-1',
+            execution_started_at=started,
+            execution_ended_at=ended,
+        )
         result = Result.fetch_latest(job)
         self.assertEqual(result.type, Result.Type.RETRIED)
         self.assertEqual(result.worker_name, 'a')
+        self.assertEqual(result.execution_id, 'exec-1')
         self.assertIsInstance(result.return_value, Retry)
         self.assertEqual(result.return_value.max, retry.max)
         self.assertEqual(result.return_value.intervals, retry.intervals)
@@ -111,9 +122,20 @@ class TestResult(RQTestCase):
         job = queue.enqueue(say_hello)
         retry = Retry(max=1)
 
-        Result.create_max_retries_exceeded(job, ttl=10, return_value=retry, worker_name='a')
+        started = now()
+        ended = started + timedelta(seconds=1)
+        Result.create_max_retries_exceeded(
+            job,
+            ttl=10,
+            return_value=retry,
+            worker_name='a',
+            execution_id='exec-2',
+            execution_started_at=started,
+            execution_ended_at=ended,
+        )
         result = Result.fetch_latest(job)
         self.assertEqual(result.type, Result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertEqual(result.execution_id, 'exec-2')
         self.assertEqual(result.worker_name, 'a')
         self.assertIsNone(result.exc_string)
         self.assertIsInstance(result.return_value, Retry)

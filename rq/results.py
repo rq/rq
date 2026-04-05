@@ -128,10 +128,10 @@ class Result:
         ttl,
         return_value,
         worker_name,
+        execution_id: str,
+        execution_started_at: datetime,
+        execution_ended_at: datetime,
         pipeline=None,
-        execution_id: str | None = None,
-        execution_started_at: datetime | None = None,
-        execution_ended_at: datetime | None = None,
     ) -> Result:
         return cls.create(
             job,
@@ -152,10 +152,10 @@ class Result:
         ttl,
         return_value,
         worker_name,
+        execution_id: str,
+        execution_started_at: datetime,
+        execution_ended_at: datetime,
         pipeline=None,
-        execution_id: str | None = None,
-        execution_started_at: datetime | None = None,
-        execution_ended_at: datetime | None = None,
     ) -> Result:
         return cls.create(
             job,

@@ -1531,7 +1531,15 @@ class Job:
             self.log.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
-    def _handle_success(self, result_ttl, pipeline: Pipeline, worker_name: str = ''):
+    def _handle_success(
+        self,
+        result_ttl,
+        pipeline: Pipeline,
+        worker_name: str = '',
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
+    ):
         """Saves and cleanup job after successful execution"""
         self.log.debug('Job %s: handling success...', self.id)
 
@@ -1547,13 +1555,24 @@ class Job:
             ttl=result_ttl,
             worker_name=worker_name,
             pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
             finished_job_registry.add(self, result_ttl, pipeline)
 
-    def _handle_failure(self, exc_string: str, pipeline: Pipeline, worker_name: str = ''):
+    def _handle_failure(
+        self,
+        exc_string: str,
+        pipeline: Pipeline,
+        worker_name: str = '',
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
+    ):
         self.log.debug(
             'Job %s: handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string
         )
@@ -1567,9 +1586,27 @@ class Job:
         )
         from .results import Result
 
-        Result.create_failure(self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline)
+        Result.create_failure(
+            self,
+            self.failure_ttl,
+            exc_string=exc_string,
+            worker_name=worker_name,
+            pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
+        )
 
-    def _handle_retry_result(self, queue: Queue, pipeline: Pipeline, retry: Retry, worker_name: str = ''):
+    def _handle_retry_result(
+        self,
+        queue: Queue,
+        pipeline: Pipeline,
+        retry: Retry,
+        execution_id: str,
+        execution_started_at: datetime,
+        execution_ended_at: datetime,
+        worker_name: str = '',
+    ):
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
@@ -1579,11 +1616,23 @@ class Job:
             queue (Queue): The queue to retry the job on
             pipeline (Pipeline): The Redis pipeline to use
             retry (Retry): The Retry object returned by the job
+            execution_id (str): ID of the Execution that produced this retry
+            execution_started_at (datetime): When the execution started
+            execution_ended_at (datetime): When the execution ended
             worker_name (str): The name of the worker
         """
         from .results import Result
 
-        Result.create_retried(self, self.failure_ttl, return_value=retry, worker_name=worker_name, pipeline=pipeline)
+        Result.create_retried(
+            self,
+            self.failure_ttl,
+            return_value=retry,
+            worker_name=worker_name,
+            pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
+        )
         retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         if retry_interval:
