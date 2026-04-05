@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import errno
 import os
@@ -5,7 +7,7 @@ import signal
 import sys
 import time
 from random import shuffle
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
@@ -24,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class Worker(BaseWorker):
-    def __init__(self, queues, *args, execution_mode: Optional[str] = None, **kwargs):
+    def __init__(self, queues, *args, execution_mode: str | None = None, **kwargs):
         super().__init__(queues, *args, **kwargs)
         if execution_mode is None:
             execution_mode = 'fork' if sys.platform == 'linux' else 'spawn'
@@ -46,7 +48,7 @@ class Worker(BaseWorker):
             else:
                 raise
 
-    def wait_for_horse(self) -> tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
+    def wait_for_horse(self) -> tuple[int | None, int | None, struct_rusage | None]:
         """Waits for the horse process to complete.
         Uses `0` as argument as to include "any child in the process group of the current process".
         """
@@ -55,7 +57,7 @@ class Worker(BaseWorker):
             pid, stat, rusage = os.wait4(self.horse_pid, 0)
         return pid, stat, rusage
 
-    def fork_work_horse(self, job: 'Job', queue: 'Queue'):
+    def fork_work_horse(self, job: Job, queue: Queue):
         """Spawns a work horse to perform the actual work and passes it a job.
 
         Uses os.fork() when execution_mode is 'fork', or os.spawnv() when execution_mode is 'spawn'.
@@ -69,7 +71,7 @@ class Worker(BaseWorker):
         elif self.execution_mode == 'spawn':
             self._spawn_work_horse(job, queue)
 
-    def _fork_work_horse(self, job: 'Job', queue: 'Queue'):
+    def _fork_work_horse(self, job: Job, queue: Queue):
         """Spawns a work horse using os.fork()."""
         child_pid = os.fork()
         os.environ['RQ_WORKER_ID'] = self.name
@@ -82,13 +84,13 @@ class Worker(BaseWorker):
             self._horse_pid = child_pid
             self.procline(f'Forked {child_pid} at {time.time()}')
 
-    def _spawn_work_horse(self, job: 'Job', queue: 'Queue'):
+    def _spawn_work_horse(self, job: Job, queue: Queue):
         """Spawns a work horse using os.spawnv()."""
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_JOB_ID'] = job.id
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = self.connection.connection_pool.connection_kwargs
+        redis_kwargs = self.connection.connection_pool.connection_kwargs.copy()
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']
@@ -118,7 +120,7 @@ if not worker:
 # Reconstruct job, queue and execution objects
 job = Job.fetch("{job.id}", connection=worker.connection)
 queue = Queue("{queue.name}", connection=worker.connection)
-execution_id = os.environ.get('RQ_EXECUTION_ID')
+execution_id = os.environ["RQ_EXECUTION_ID"]
 worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
 
 # Set up work horse
@@ -132,7 +134,7 @@ worker.main_work_horse(job, queue)
         self._horse_pid = child_pid
         self.procline(f'Spawned {child_pid} at {time.time()}')
 
-    def monitor_work_horse(self, job: 'Job', queue: 'Queue'):
+    def monitor_work_horse(self, job: Job, queue: Queue):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
         failed
@@ -206,7 +208,7 @@ worker.main_work_horse(job, queue)
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
 
-    def execute_job(self, job: 'Job', queue: 'Queue'):
+    def execute_job(self, job: Job, queue: Queue):
         """Spawns a work horse to perform the actual work and passes it a job.
         The worker will wait for the work horse and make sure it executes
         within the given timeout bounds, or will end the work horse with
@@ -233,13 +235,13 @@ class SpawnWorker(Worker):
 
 
 class SimpleWorker(BaseWorker):
-    def execute_job(self, job: 'Job', queue: 'Queue'):
+    def execute_job(self, job: Job, queue: Queue):
         """Execute job in same thread/process, do not fork()"""
         self.prepare_execution(job)
         self.perform_job(job, queue)
         self.set_state(WorkerStatus.IDLE)
 
-    def get_heartbeat_ttl(self, job: 'Job') -> int:
+    def get_heartbeat_ttl(self, job: Job) -> int:
         """-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
         We should just stick to DEFAULT_WORKER_TTL.
 

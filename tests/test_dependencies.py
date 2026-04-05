@@ -178,19 +178,18 @@ class TestDependencies(RQTestCase):
         self.assertEqual(parent_job.get_status(), JobStatus.FINISHED)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
-    def test_enqueue_job_dependency_sets_ttl(self):
-        """Ensures that the TTL of jobs in the deferred queue is set"""
+    def test_enqueue_job_dependency_score(self):
+        """Ensures that deferred jobs are scored by creation time, not TTL."""
         q = Queue(connection=self.connection)
         parent_job = Job.create(say_hello, connection=self.connection)
         parent_job.save()
 
         timestamp = current_timestamp()
-        ttl = 5
-        job = Job.create(say_hello, connection=self.connection, depends_on=parent_job, ttl=ttl)
+        job = Job.create(say_hello, connection=self.connection, depends_on=parent_job, ttl=5)
         q.enqueue_job(job)
         score = self.connection.zscore(q.deferred_job_registry.key, job.id)
-        self.assertLess(score, timestamp + ttl + 2)
-        self.assertGreater(score, timestamp + ttl - 2)
+        self.assertGreater(score, timestamp - 2)
+        self.assertLess(score, timestamp + 2)
 
     def test_dependencies_are_met_if_parent_is_canceled(self):
         """When parent job is canceled, it should be treated as failed"""
@@ -283,3 +282,27 @@ class TestDependencies(RQTestCase):
 
         w.work(burst=True)
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_stopped_job_does_not_enqueue_dependents(self):
+        """When a job is stopped (STOPPED status), its dependents should NOT be enqueued.
+
+        This tests the fix for the bug where dependencies_are_met() didn't check
+        for STOPPED status, causing dependents to be incorrectly enqueued.
+        """
+        q = Queue(connection=self.connection)
+
+        parent_job = q.enqueue(say_hello)
+        dependent_job = q.enqueue(say_hello, depends_on=parent_job)
+
+        self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
+
+        # Simulate parent job being stopped
+        parent_job.set_status(JobStatus.STOPPED)
+
+        # dependencies_are_met should return False when parent is STOPPED
+        self.assertFalse(dependent_job.dependencies_are_met(parent_job))
+        self.assertFalse(dependent_job.dependencies_are_met())
+
+        # Verify enqueue_dependents does not enqueue the dependent
+        q.enqueue_dependents(parent_job)
+        self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)

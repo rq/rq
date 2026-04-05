@@ -289,22 +289,23 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(job_ids, [job.id])
 
     def test_add_with_deferred_ttl(self):
-        """Job TTL defaults to +inf"""
+        """Job score is set to current timestamp (creation time), ttl is ignored."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
 
         key = self.registry.key
+        timestamp = current_timestamp()
 
         self.registry.add(job)
         score = self.connection.zscore(key, job.id)
-        self.assertEqual(score, float('inf'))
+        self.assertGreater(score, timestamp - 2)
+        self.assertLess(score, timestamp + 2)
 
-        timestamp = current_timestamp()
-        ttl = 5
-        self.registry.add(job, ttl=ttl)
+        # ttl parameter is ignored for deferred jobs
+        self.registry.add(job, ttl=5)
         score = self.connection.zscore(key, job.id)
-        self.assertLess(score, timestamp + ttl + 2)
-        self.assertGreater(score, timestamp + ttl - 2)
+        self.assertGreater(score, timestamp - 2)
+        self.assertLess(score, timestamp + 2)
 
     def test_register_dependency(self):
         """Ensure job creation and deletion works with DeferredJobRegistry."""
@@ -319,37 +320,15 @@ class TestDeferredRegistry(RQTestCase):
         job2.delete()
         self.assertEqual(registry.get_job_ids(), [])
 
-    def test_cleanup_supports_deleted_jobs(self):
+    def test_cleanup_is_noop(self):
+        """Deferred jobs don't expire based on time, so cleanup is a no-op."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        self.registry.add(job, ttl=10)
+        self.registry.add(job)
 
         self.assertEqual(self.registry.count, 1)
-        job.delete(remove_from_queue=False)
-        self.assertEqual(self.registry.count, 1)
-
-        self.registry.cleanup(current_timestamp() + 100)
-        self.assertEqual(self.registry.count, 0)
-
-    def test_cleanup_moves_jobs_to_failed_job_registry(self):
-        """Moving expired jobs to FailedJobRegistry."""
-        queue = Queue(connection=self.connection)
-        failed_job_registry = FailedJobRegistry(connection=self.connection)
-        job = queue.enqueue(say_hello)
-
-        self.connection.zadd(self.registry.key, {job.id: 2})
-
-        # Job has not been moved to FailedJobRegistry
-        self.registry.cleanup(1)
-        self.assertNotIn(job, failed_job_registry)
-        self.assertIn(job, self.registry)
-
         self.registry.cleanup()
-        self.assertIn(job.id, failed_job_registry)
-        self.assertNotIn(job, self.registry)
-        job.refresh()
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertTrue(job.exc_info)  # explanation is written to exc_info
+        self.assertEqual(self.registry.count, 1)
 
 
 class TestFailedJobRegistry(RQTestCase):

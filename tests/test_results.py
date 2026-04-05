@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 
 from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
-from rq.job import Job
+from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result, get_key
@@ -56,6 +56,35 @@ class TestResult(RQTestCase):
         key = get_key(job.id)
         ttl = self.connection.pttl(key)
         self.assertTrue(5000 < ttl <= 10000)
+
+    def test_create_retried(self):
+        """Ensure retried result preserves returned Retry object"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        retry = Retry(max=1)
+
+        Result.create_retried(job, ttl=10, return_value=retry, worker_name='a')
+        result = Result.fetch_latest(job)
+        self.assertEqual(result.type, Result.Type.RETRIED)
+        self.assertEqual(result.worker_name, 'a')
+        self.assertIsInstance(result.return_value, Retry)
+        self.assertEqual(result.return_value.max, retry.max)
+        self.assertEqual(result.return_value.intervals, retry.intervals)
+
+    def test_create_max_retries_exceeded(self):
+        """Ensure max retries exceeded result preserves returned Retry object"""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        retry = Retry(max=1)
+
+        Result.create_max_retries_exceeded(job, ttl=10, return_value=retry, worker_name='a')
+        result = Result.fetch_latest(job)
+        self.assertEqual(result.type, Result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertEqual(result.worker_name, 'a')
+        self.assertIsNone(result.exc_string)
+        self.assertIsInstance(result.return_value, Retry)
+        self.assertEqual(result.return_value.max, retry.max)
+        self.assertEqual(result.return_value.intervals, retry.intervals)
 
     def test_getting_results(self):
         """Check getting all execution results"""

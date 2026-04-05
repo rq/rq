@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import math
 import os
@@ -8,12 +10,12 @@ import sys
 import time
 import traceback
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from types import FrameType
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -45,6 +47,7 @@ from ..job import Job, JobStatus, Retry
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
 from ..registry import StartedJobRegistry, clean_registries
+from ..results import Result
 from ..scheduler import RQScheduler
 from ..serializers import Serializer, resolve_serializer
 from ..suspension import is_suspended
@@ -128,22 +131,22 @@ class BaseWorker:
 
     def __init__(
         self,
-        queues: Union[str, 'Queue', Sequence[str], Sequence['Queue']],
-        name: Optional[str] = None,
+        queues: str | Queue | Sequence[str] | Sequence[Queue],
+        name: str | None = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
-        connection: Optional['Redis'] = None,
+        connection: Redis | None = None,
         exception_handlers=None,
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
-        default_worker_ttl: Optional[int] = None,  # TODO remove this arg in 3.0
-        worker_ttl: Optional[int] = None,
-        job_class: Optional[Union[type[Job], str]] = None,
-        queue_class: Optional[Union[type[Queue], str]] = None,
+        default_worker_ttl: int | None = None,  # TODO remove this arg in 3.0
+        worker_ttl: int | None = None,
+        job_class: type[Job] | str | None = None,
+        queue_class: type[Queue] | str | None = None,
         log_job_description: bool = True,
         job_monitoring_interval=DEFAULT_JOB_MONITORING_INTERVAL,
         disable_default_exception_handler: bool = False,
         prepare_for_work: bool = True,
-        serializer: Optional[Union[Serializer, str]] = None,
-        work_horse_killed_handler: Optional[Callable[[Job, int, int, 'struct_rusage'], None]] = None,
+        serializer: Serializer | str | None = None,
+        work_horse_killed_handler: Callable[[Job, int, int, struct_rusage], None] | None = None,
     ):  # noqa
         self.default_result_ttl = default_result_ttl
 
@@ -175,7 +178,7 @@ class BaseWorker:
         self.version: str = VERSION
         self.python_version: str = sys.version
         self.serializer = resolve_serializer(serializer)
-        self.execution: Optional[Execution] = None
+        self.execution: Execution | None = None
 
         queues = [
             (
@@ -198,13 +201,13 @@ class BaseWorker:
         self._ordered_queues = self.queues[:]
         self._exc_handlers: list[Callable] = []
         self._work_horse_killed_handler = work_horse_killed_handler
-        self._shutdown_requested_date: Optional[datetime] = None
+        self._shutdown_requested_date: datetime | None = None
 
         self._state: str = 'starting'
         self._is_horse: bool = False
         self._horse_pid: int = 0
         self._stop_requested: bool = False
-        self._stopped_job_id = None
+        self._stopped_job_id: str | None = None
 
         self.log = logger
         self.log_job_description = log_job_description
@@ -214,30 +217,17 @@ class BaseWorker:
         self.total_working_time: float = 0
         self.current_job_working_time: float = 0
         self.birth_date = None
-        self.scheduler: Optional[RQScheduler] = None
-        self.pubsub: Optional[PubSub] = None
+        self.scheduler: RQScheduler | None = None
+        self.pubsub: PubSub | None = None
         self.pubsub_thread = None
-        self._dequeue_strategy: Optional[DequeueStrategy] = DequeueStrategy.DEFAULT
+        self._dequeue_strategy: DequeueStrategy | None = DequeueStrategy.DEFAULT
 
         self.disable_default_exception_handler = disable_default_exception_handler
 
         if prepare_for_work:
-            self.hostname: Optional[str] = socket.gethostname()
-            self.pid: Optional[int] = os.getpid()
-            try:
-                connection.client_setname(self.name)
-            except redis.exceptions.ResponseError:
-                warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
-                self.ip_address = 'unknown'
-            else:
-                client_addresses = [
-                    client['addr'] for client in connection.client_list() if client.get('name') == self.name
-                ]
-                if len(client_addresses) > 0:
-                    self.ip_address = client_addresses[0]
-                else:
-                    warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
-                    self.ip_address = 'unknown'
+            self.hostname: str | None = socket.gethostname()
+            self.pid: int | None = os.getpid()
+            self._set_ip_address(connection)
         else:
             self.hostname = None
             self.pid = None
@@ -249,15 +239,38 @@ class BaseWorker:
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
+    def _set_ip_address(self, connection: Redis) -> None:
+        try:
+            connection.client_setname(self.name)
+        except redis.exceptions.ResponseError:
+            warnings.warn('CLIENT SETNAME command not supported, setting ip_address to unknown', Warning)
+            self.ip_address = 'unknown'
+            return
+
+        try:
+            client_addresses = [
+                client['addr'] for client in connection.client_list() if client.get('name') == self.name
+            ]
+        except redis.exceptions.ResponseError:
+            warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
+            self.ip_address = 'unknown'
+            return
+
+        if client_addresses:
+            self.ip_address = client_addresses[0]
+        else:
+            warnings.warn('CLIENT LIST command not supported, setting ip_address to unknown', Warning)
+            self.ip_address = 'unknown'
+
     @classmethod
     def find_by_key(
         cls,
         worker_key: str,
-        connection: 'Redis',
-        job_class: Optional[type['Job']] = None,
-        queue_class: Optional[type['Queue']] = None,
-        serializer: Optional[Union[Serializer, str]] = None,
-    ) -> Optional['BaseWorker']:
+        connection: Redis,
+        job_class: type[Job] | None = None,
+        queue_class: type[Queue] | None = None,
+        serializer: Serializer | str | None = None,
+    ) -> BaseWorker | None:
         """Returns a Worker instance, based on the naming conventions for
         naming the internal Redis keys.  Can be used to reverse-lookup Workers
         by their Redis keys.
@@ -300,12 +313,12 @@ class BaseWorker:
     @classmethod
     def all(
         cls,
-        connection: Optional['Redis'] = None,
-        job_class: Optional[type['Job']] = None,
-        queue_class: Optional[type['Queue']] = None,
-        queue: Optional['Queue'] = None,
+        connection: Redis | None = None,
+        job_class: type[Job] | None = None,
+        queue_class: type[Queue] | None = None,
+        queue: Queue | None = None,
         serializer=None,
-    ) -> list['BaseWorker']:
+    ) -> list[BaseWorker]:
         """Returns an iterable of all Workers.
 
         Returns:
@@ -325,7 +338,7 @@ class BaseWorker:
         return compact(workers)
 
     @classmethod
-    def all_keys(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None) -> list[str]:
+    def all_keys(cls, connection: Redis | None = None, queue: Queue | None = None) -> list[str]:
         """List of worker keys
 
         Args:
@@ -338,7 +351,7 @@ class BaseWorker:
         return [as_text(key) for key in worker_registration.get_keys(queue=queue, connection=connection)]
 
     @classmethod
-    def count(cls, connection: Optional['Redis'] = None, queue: Optional['Queue'] = None) -> int:
+    def count(cls, connection: Redis | None = None, queue: Queue | None = None) -> int:
         """Returns the number of workers by queue or connection.
 
         Args:
@@ -402,7 +415,7 @@ class BaseWorker:
             return True
         return False
 
-    def _set_connection(self, connection: 'Redis') -> 'Redis':
+    def _set_connection(self, connection: Redis) -> Redis:
         """Configures the Redis connection's socket timeout.
         This will timeout the connection in case any specific command hangs at any given time (eg. BLPOP), but
         also ensures that the timeout is long enough for those operations.
@@ -512,7 +525,7 @@ class BaseWorker:
                 self.stop_scheduler()
             raise StopRequested()
 
-    def request_force_stop(self, signum: int, frame: Optional[FrameType]):
+    def request_force_stop(self, signum: int, frame: FrameType | None):
         """Terminates the application (cold shutdown).
 
         Args:
@@ -544,18 +557,18 @@ class BaseWorker:
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
 
-    def execute_job(self, job: 'Job', queue: 'Queue'):
+    def execute_job(self, job: Job, queue: Queue):
         """To be implemented by subclasses."""
         raise NotImplementedError
 
     def work(
         self,
         burst: bool = False,
-        logging_level: Optional[str] = None,
+        logging_level: str | None = None,
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
-        max_jobs: Optional[int] = None,
-        max_idle_time: Optional[int] = None,
+        max_jobs: int | None = None,
+        max_idle_time: int | None = None,
         with_scheduler: bool = False,
         dequeue_strategy: DequeueStrategy = DequeueStrategy.DEFAULT,
     ) -> bool:
@@ -639,7 +652,7 @@ class BaseWorker:
             self.teardown()
         return bool(completed_jobs)
 
-    def cleanup_execution(self, job: 'Job', pipeline: 'Pipeline'):
+    def cleanup_execution(self, job: Job, pipeline: Pipeline):
         """Cleans up the execution of a job.
         It will remove the job execution record from the `StartedJobRegistry` and delete the Execution object.
         """
@@ -648,7 +661,7 @@ class BaseWorker:
     def handle_warm_shutdown_request(self):
         self.log.info('Worker %s [PID %d]: warm shut down requested', self.name, self.pid)
 
-    def reorder_queues(self, reference_queue: 'Queue'):
+    def reorder_queues(self, reference_queue: Queue):
         """Reorder the queues according to the strategy.
         As this can be defined both in the `Worker` initialization or in the `work` method,
         it doesn't take the strategy directly, but rather uses the private `_dequeue_strategy` attribute.
@@ -673,7 +686,7 @@ class BaseWorker:
             shuffle(self._ordered_queues)
             return
 
-    def handle_job_failure(self, job: 'Job', queue: 'Queue', started_job_registry=None, exc_string=''):
+    def handle_job_failure(self, job: Job, queue: Queue, started_job_registry=None, exc_string=''):
         """
         Handles the failure or an executing job by:
             1. Setting the job status to failed
@@ -734,7 +747,7 @@ class BaseWorker:
                 )
                 pass
 
-    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Optional['Pipeline'] = None):
+    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Pipeline | None = None):
         """Sets the current job working time in seconds
 
         Args:
@@ -745,7 +758,7 @@ class BaseWorker:
         connection = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'current_job_working_time', current_job_working_time)
 
-    def set_current_job_id(self, job_id: Optional[str] = None, pipeline: Optional['Pipeline'] = None):
+    def set_current_job_id(self, job_id: str | None = None, pipeline: Pipeline | None = None):
         """Sets the current job id.
         If `None` is used it will delete the current job key.
 
@@ -759,7 +772,7 @@ class BaseWorker:
         else:
             connection.hset(self.key, 'current_job', job_id)
 
-    def get_current_job_id(self, pipeline: Optional['Pipeline'] = None) -> Optional[str]:
+    def get_current_job_id(self, pipeline: Pipeline | None = None) -> str | None:
         """Retrieves the current job id.
 
         Args:
@@ -774,7 +787,7 @@ class BaseWorker:
             return None
         return as_text(result)
 
-    def get_current_job(self) -> Optional['Job']:
+    def get_current_job(self) -> Job | None:
         """Returns the currently executing job instance.
 
         Returns:
@@ -785,7 +798,7 @@ class BaseWorker:
             return None
         return self.job_class.fetch(job_id, self.connection, self.serializer)
 
-    def set_state(self, state: str, pipeline: Optional['Pipeline'] = None):
+    def set_state(self, state: str, pipeline: Pipeline | None = None):
         """Sets the worker's state.
 
         Args:
@@ -814,7 +827,7 @@ class BaseWorker:
     def _start_scheduler(
         self,
         burst: bool = False,
-        logging_level: Optional[str] = 'INFO',
+        logging_level: str | None = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -897,7 +910,7 @@ class BaseWorker:
 
     def bootstrap(
         self,
-        logging_level: Optional[str] = 'INFO',
+        logging_level: str | None = 'INFO',
         date_format: str = DEFAULT_LOGGING_DATE_FORMAT,
         log_format: str = DEFAULT_LOGGING_FORMAT,
     ):
@@ -983,7 +996,7 @@ class BaseWorker:
         self.clean_registries()
         Group.clean_registries(connection=self.connection)
 
-    def _pubsub_exception_handler(self, exc: Exception, pubsub: 'PubSub', pubsub_thread: 'PubSubWorkerThread') -> None:
+    def _pubsub_exception_handler(self, exc: Exception, pubsub: PubSub, pubsub_thread: PubSubWorkerThread) -> None:
         """
         This exception handler allows the pubsub_thread to continue & retry to
         connect after a connection problem the same way the main worker loop
@@ -1018,7 +1031,7 @@ class BaseWorker:
             sleep_time=60, daemon=True, exception_handler=self._pubsub_exception_handler
         )
 
-    def get_heartbeat_ttl(self, job: 'Job') -> int:
+    def get_heartbeat_ttl(self, job: Job) -> int:
         """Get's the TTL for the next heartbeat.
 
         Args:
@@ -1033,7 +1046,7 @@ class BaseWorker:
         else:
             return self.job_monitoring_interval + 60
 
-    def prepare_execution(self, job: 'Job') -> Execution:
+    def prepare_execution(self, job: Job) -> Execution:
         """This method is called by the main `Worker` (not the horse) as it prepares for execution.
         Do not confuse this with worker.prepare_job_execution() which is called by the horse.
         """
@@ -1049,8 +1062,8 @@ class BaseWorker:
             self.pubsub.close()
 
     def dequeue_job_and_maintain_ttl(
-        self, timeout: Optional[int], max_idle_time: Optional[int] = None
-    ) -> Optional[tuple['Job', 'Queue']]:
+        self, timeout: int | None, max_idle_time: int | None = None
+    ) -> tuple[Job, Queue] | None:
         """Dequeues a job while maintaining the TTL.
 
         Returns:
@@ -1117,7 +1130,7 @@ class BaseWorker:
         self.heartbeat()
         return result
 
-    def heartbeat(self, timeout: Optional[int] = None, pipeline: Optional['Pipeline'] = None):
+    def heartbeat(self, timeout: int | None = None, pipeline: Pipeline | None = None):
         """Specifies a new worker timeout, typically by extending the
         expiration time of the worker, effectively making this a "heartbeat"
         to not expire the worker until the timeout passes.
@@ -1133,7 +1146,7 @@ class BaseWorker:
             pipeline (Optional[Redis]): A Redis pipeline
         """
         timeout = timeout or self.worker_ttl + 60
-        connection: Union[Redis, Pipeline] = pipeline if pipeline is not None else self.connection
+        connection: Redis | Pipeline = pipeline if pipeline is not None else self.connection
         connection.expire(self.key, timeout)
         connection.hset(self.key, 'last_heartbeat', utcformat(now()))
         self.log.debug(
@@ -1142,7 +1155,7 @@ class BaseWorker:
             timeout,
         )
 
-    def maintain_heartbeats(self, job: 'Job'):
+    def maintain_heartbeats(self, job: Job):
         """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
@@ -1187,7 +1200,7 @@ class BaseWorker:
                 pass
             self.scheduler._process.join()
 
-    def increment_failed_job_count(self, pipeline: Optional['Pipeline'] = None):
+    def increment_failed_job_count(self, pipeline: Pipeline | None = None):
         """Used to keep the worker stats up to date in Redis.
         Increments the failed job count.
 
@@ -1197,7 +1210,7 @@ class BaseWorker:
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'failed_job_count', 1)
 
-    def increment_successful_job_count(self, pipeline: Optional['Pipeline'] = None):
+    def increment_successful_job_count(self, pipeline: Pipeline | None = None):
         """Used to keep the worker stats up to date in Redis.
         Increments the successful job count.
 
@@ -1207,7 +1220,7 @@ class BaseWorker:
         connection = pipeline if pipeline is not None else self.connection
         connection.hincrby(self.key, 'successful_job_count', 1)
 
-    def increment_total_working_time(self, job_execution_time: timedelta, pipeline: 'Pipeline'):
+    def increment_total_working_time(self, job_execution_time: timedelta, pipeline: Pipeline):
         """Used to keep the worker stats up to date in Redis.
         Increments the time the worker has been working for (in seconds).
 
@@ -1217,7 +1230,7 @@ class BaseWorker:
         """
         pipeline.hincrbyfloat(self.key, 'total_working_time', job_execution_time.total_seconds())
 
-    def handle_exception(self, job: 'Job', *exc_info):
+    def handle_exception(self, job: Job, *exc_info):
         """Walks the exception handler stack to delegate exception handling.
         If the job cannot be deserialized, it will raise when func_name or
         the other properties are accessed, which will stop exceptions from
@@ -1278,7 +1291,7 @@ class BaseWorker:
 
         self._work_horse_killed_handler(job, retpid, ret_val, rusage)
 
-    def prepare_job_execution(self, job: 'Job', remove_from_intermediate_queue: bool = False) -> None:
+    def prepare_job_execution(self, job: Job, remove_from_intermediate_queue: bool = False) -> None:
         """Performs misc bookkeeping like updating states prior to
         job execution.
         """
@@ -1303,7 +1316,7 @@ class BaseWorker:
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_retry(self, job: 'Job', queue: 'Queue', retry: Retry, started_job_registry: StartedJobRegistry):
+    def handle_job_retry(self, job: Job, queue: Queue, retry: Retry, started_job_registry: StartedJobRegistry):
         """Handles the retry of certain job.
         It will remove the job from the `StartedJobRegistry` and requeue or reschedule the job.
 
@@ -1316,10 +1329,35 @@ class BaseWorker:
 
         # Check if job has exceeded max retries
         if job.number_of_retries and job.number_of_retries >= retry.max:
-            # If max retries exceeded, treat as failure
+            # If max retries exceeded, treat as a terminal failed job but persist
+            # a distinct result type so callers can differentiate it from errors.
             self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
-            exc_string = f'Job failed after {retry.max} retry attempts'
-            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+            with self.connection.pipeline() as pipeline:
+                job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                self.cleanup_execution(job, pipeline=pipeline)
+                job.failed_job_registry.add(job, ttl=job.failure_ttl, exc_string='', pipeline=pipeline)
+
+                Result.create_max_retries_exceeded(
+                    job,
+                    job.failure_ttl,
+                    return_value=retry,
+                    worker_name=self.name,
+                    pipeline=pipeline,
+                )
+
+                self.increment_failed_job_count(pipeline=pipeline)
+                self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
+
+                try:
+                    pipeline.execute()
+                    queue.enqueue_dependents(job)
+                except Exception as e:
+                    self.log.error(
+                        'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
+                        self.name,
+                        job.id,
+                        e,
+                    )
             return
 
         with self.connection.pipeline() as pipeline:
@@ -1331,7 +1369,7 @@ class BaseWorker:
 
             self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
 
-    def handle_job_success(self, job: 'Job', queue: 'Queue', started_job_registry: StartedJobRegistry):
+    def handle_job_success(self, job: Job, queue: Queue, started_job_registry: StartedJobRegistry):
         """Handles the successful execution of certain job.
         It will remove the job from the `StartedJobRegistry`, adding it to the `SuccessfulJobRegistry`,
         and run a few maintenance tasks including:
@@ -1408,12 +1446,12 @@ class BaseWorker:
                 except redis.exceptions.WatchError:
                     continue
 
-    def handle_execution_ended(self, job: 'Job', queue: 'Queue', heartbeat_ttl: int):
+    def handle_execution_ended(self, job: Job, queue: Queue, heartbeat_ttl: int):
         """Called after job has finished execution."""
         job.ended_at = now()
         job.heartbeat(now(), heartbeat_ttl)
 
-    def perform_job(self, job: 'Job', queue: 'Queue') -> bool:
+    def perform_job(self, job: Job, queue: Queue) -> bool:
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
 
@@ -1493,7 +1531,7 @@ class BaseWorker:
 
         return True
 
-    def main_work_horse(self, job: 'Job', queue: 'Queue'):
+    def main_work_horse(self, job: Job, queue: Queue):
         """This is the entry point of the newly spawned work horse.
         After fork()'ing, always assure we are generating random sequences
         that are different from the worker.
@@ -1528,7 +1566,7 @@ class BaseWorker:
         """Kill the work horse process. No-op for workers without child processes."""
         pass
 
-    def wait_for_horse(self) -> tuple[Optional[int], Optional[int], Optional['struct_rusage']]:
+    def wait_for_horse(self) -> tuple[int | None, int | None, struct_rusage | None]:
         """Wait for the work horse process to complete. No-op for workers without child processes."""
         return None, None, None
 

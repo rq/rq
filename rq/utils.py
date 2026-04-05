@@ -5,6 +5,8 @@ The formatter for ANSI colored console output is heavily based on Pygments
 terminal colorizing code, originally by Georg Brandl.
 """
 
+from __future__ import annotations
+
 import calendar
 import datetime
 import importlib
@@ -15,17 +17,12 @@ import numbers
 import os
 import sys
 import warnings
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from enum import Enum
-
-# TODO: Change import path to "collections.abc" after we stop supporting Python 3.8
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Optional,
     TypeVar,
-    Union,
     overload,
 )
 
@@ -43,7 +40,6 @@ if TYPE_CHECKING:
 
 _T = TypeVar('_T')
 _O = TypeVar('_O', bound=object)
-ObjOrStr = Union[_O, str]
 
 
 logger = logging.getLogger(__name__)
@@ -107,7 +103,7 @@ def resolve_function_reference(func) -> tuple[Any, str]:
         raise TypeError(f'Expected a callable or a string, but got: {func}')
 
 
-def compact(lst: Iterable[Optional[_T]]) -> list[_T]:
+def compact(lst: Iterable[_T | None]) -> list[_T]:
     """Excludes `None` values from a list-like object.
 
     Args:
@@ -119,7 +115,7 @@ def compact(lst: Iterable[Optional[_T]]) -> list[_T]:
     return [item for item in lst if item is not None]
 
 
-def as_text(v: Union[bytes, str]) -> str:
+def as_text(v: bytes | str) -> str:
     """Converts a bytes value to a string using `utf-8`.
 
     Args:
@@ -139,7 +135,7 @@ def as_text(v: Union[bytes, str]) -> str:
         raise ValueError(f'Unknown type {type(v)!r}')
 
 
-def decode_redis_hash(h: dict[Union[bytes, str], Any], *, decode_values: bool = False) -> dict[str, Any]:
+def decode_redis_hash(h: dict[bytes | str, Any], *, decode_values: bool = False) -> dict[str, Any]:
     """Decodes the Redis hash, ensuring that keys are strings
     Most importantly, decodes bytes strings, ensuring the dict has str keys.
 
@@ -220,7 +216,7 @@ def import_attribute(name: str) -> Callable[..., Any]:
     return getattr(attribute_owner, attribute_name)
 
 
-def import_worker_class(name: str) -> type['BaseWorker']:
+def import_worker_class(name: str) -> type[BaseWorker]:
     """Import a worker class from a dotted path name."""
     cls = import_attribute(name)
 
@@ -235,7 +231,7 @@ def import_worker_class(name: str) -> type['BaseWorker']:
     return cls
 
 
-def import_job_class(name: str) -> type['Job']:
+def import_job_class(name: str) -> type[Job]:
     """Import a job class from a dotted path name."""
     cls = import_attribute(name)
 
@@ -250,7 +246,7 @@ def import_job_class(name: str) -> type['Job']:
     return cls
 
 
-def import_queue_class(name: str) -> type['Queue']:
+def import_queue_class(name: str) -> type[Queue]:
     """Import a queue class from a dotted path name."""
     cls = import_attribute(name)
 
@@ -371,9 +367,9 @@ def is_nonstring_iterable(obj: Any) -> bool:
 @overload
 def ensure_job_list(obj: str) -> list[str]: ...
 @overload
-def ensure_job_list(obj: 'Job') -> list['Job']: ...
+def ensure_job_list(obj: Job) -> list[Job]: ...
 @overload
-def ensure_job_list(obj: Union['Job', str, Sequence[Union['Job', str]]]) -> list[Union['Job', str]]: ...
+def ensure_job_list(obj: Job | str | Sequence[Job | str]) -> list[Job | str]: ...
 @overload
 def ensure_job_list(obj: Iterable[_O]) -> list[_O]: ...
 @overload
@@ -423,7 +419,7 @@ def backend_class(holder, default_name, override=None) -> type:
         return override
 
 
-def str_to_date(date_str: Union[bytes, str]) -> datetime.datetime:
+def str_to_date(date_str: bytes | str) -> datetime.datetime:
     if not date_str:
         raise ValueError('Empty string or bytestring provided')
     else:
@@ -433,7 +429,7 @@ def str_to_date(date_str: Union[bytes, str]) -> datetime.datetime:
             return utcparse(date_str)
 
 
-def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
+def parse_timeout(timeout: int | float | str | None) -> int | None:
     """Transfer all kinds of timeout format to an integer representing seconds"""
     if not isinstance(timeout, numbers.Integral) and timeout is not None:
         try:
@@ -455,7 +451,7 @@ def parse_timeout(timeout: Optional[Union[int, float, str]]) -> Optional[int]:
     return int(timeout) if timeout is not None else None
 
 
-def get_version(connection: 'Redis') -> tuple[int, int, int]:
+def get_version(connection: Redis) -> tuple[int, int, int]:
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
@@ -512,7 +508,7 @@ def split_list(a_list: Sequence[_T], segment_size: int) -> Generator[Sequence[_T
         yield a_list[i : i + segment_size]
 
 
-def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
+def truncate_long_string(data: str, max_length: int | None = None) -> str:
     """Truncate arguments with representation longer than max_length
 
     Args:
@@ -528,8 +524,8 @@ def truncate_long_string(data: str, max_length: Optional[int] = None) -> str:
 
 
 def get_call_string(
-    func_name: Optional[str], args: Any, kwargs: dict[Any, Any], max_length: Optional[int] = None
-) -> Optional[str]:
+    func_name: str | None, args: Any, kwargs: dict[Any, Any], max_length: int | None = None
+) -> str | None:
     """
     Returns a string representation of the call, formatted as a regular
     Python function invocation statement. If max_length is not None, truncate
@@ -556,7 +552,7 @@ def get_call_string(
     return f'{func_name}({args})'
 
 
-def parse_names(queues_or_names: Iterable[Union[str, 'Queue']]) -> list[str]:
+def parse_names(queues_or_names: Iterable[str | Queue]) -> list[str]:
     """Given a iterable  of strings or queues, returns queue names"""
     from .queue import Queue
 
@@ -569,7 +565,7 @@ def parse_names(queues_or_names: Iterable[Union[str, 'Queue']]) -> list[str]:
     return names
 
 
-def get_connection_from_queues(queues_or_names: Iterable[Union[str, 'Queue']]) -> Optional['Redis']:
+def get_connection_from_queues(queues_or_names: Iterable[str | Queue]) -> Redis | None:
     """Given a list of strings or queues, returns a connection"""
     from .queue import Queue
 
