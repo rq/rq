@@ -24,11 +24,26 @@ class TestResult(RQTestCase):
         result = Result.fetch_latest(job)
         self.assertIsNone(result)
 
-        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1, worker_name='a')
+        started = now()
+        ended = started + timedelta(seconds=2.5)
+        Result.create(
+            job,
+            Result.Type.SUCCESSFUL,
+            ttl=10,
+            return_value=1,
+            worker_name='a',
+            execution_id='exec-abc',
+            execution_started_at=started,
+            execution_ended_at=ended,
+        )
         result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 1)
         self.assertEqual(result.worker_name, 'a')
         self.assertEqual(job.latest_result().return_value, 1)
+        self.assertEqual(result.execution_id, 'exec-abc')
+        # Timestamps roundtrip via float — compare with sub-millisecond tolerance.
+        self.assertAlmostEqual(result.execution_started_at.timestamp(), started.timestamp(), places=3)
+        self.assertAlmostEqual(result.execution_ended_at.timestamp(), ended.timestamp(), places=3)
 
         # Check that ttl is properly set
         key = get_key(job.id)
@@ -42,6 +57,25 @@ class TestResult(RQTestCase):
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=2)
         result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 2)
+
+    def test_execution_info_backwards_compatible(self):
+        """Results without execution info restore with None fields (old data compat)."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        # Create a result without any execution info (simulates pre-upgrade data).
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1, worker_name='a')
+        result = Result.fetch_latest(job)
+        self.assertIsNone(result.execution_id)
+        self.assertIsNone(result.execution_started_at)
+        self.assertIsNone(result.execution_ended_at)
+
+        # Same for failure results.
+        Result.create_failure(job, ttl=10, exc_string='boom', worker_name='a')
+        result = Result.fetch_latest(job)
+        self.assertIsNone(result.execution_id)
+        self.assertIsNone(result.execution_started_at)
+        self.assertIsNone(result.execution_ended_at)
 
     def test_create_failure(self):
         """Ensure data is saved properly"""
