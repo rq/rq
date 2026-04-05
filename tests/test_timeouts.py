@@ -20,6 +20,7 @@ def thread_friendly_sleep_func(seconds):
     while True:
         if time.time() > end_at:
             break
+        time.sleep(0)
 
 
 class TestTimeouts(RQTestCase):
