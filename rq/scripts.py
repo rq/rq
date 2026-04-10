@@ -54,7 +54,7 @@ def get_unique_enqueue_script(connection):
     return _registered_scripts[connection]
 
 
-def persist_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
+def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
     """Atomically check uniqueness, save job, and optionally push to queue using Lua script.
 
     Args:

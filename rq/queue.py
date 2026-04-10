@@ -33,7 +33,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .repeat import Repeat
-from .scripts import persist_unique_job, schedule_unique_job
+from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
@@ -1248,7 +1248,7 @@ class Queue:
         if unique:
             # Use atomic Lua script for unique enqueue (check + save + push)
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
-            persist_unique_job(self.connection, self.key, job, at_front=at_front)
+            save_unique_job(self.connection, self.key, job, at_front=at_front)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
@@ -1278,7 +1278,7 @@ class Queue:
 
         if unique:
             # Use atomic Lua script for unique check and save (without pushing to queue)
-            persist_unique_job(self.connection, self.key, job, enqueue=False)
+            save_unique_job(self.connection, self.key, job, enqueue=False)
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
