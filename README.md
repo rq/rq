@@ -116,6 +116,16 @@ queue.enqueue(my_function, repeat=Repeat(times=3, interval=30))
 queue.enqueue(my_function, repeat=Repeat(times=3, interval=[5, 10, 15]))
 ```
 
+## Unique Jobs
+
+You can prevent duplicate jobs from being enqueued by using the `unique` parameter:
+
+```python
+job = queue.enqueue(send_email, user_id, job_id='welcome-42', unique=True)
+```
+
+More details can be found in the [docs](https://python-rq.org/docs/#unique-jobs).
+
 ## Retrying Failed Jobs
 
 Retrying failed jobs is also supported:

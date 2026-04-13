@@ -33,6 +33,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
 from .repeat import Repeat
+from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
@@ -687,6 +688,7 @@ class Queue:
         on_failure: Callback | Callable[..., Any] | None = None,
         on_stopped: Callback | Callable[..., Any] | None = None,
         pipeline: Pipeline | None = None,
+        unique: bool = False,
     ) -> Job:
         """Creates a job to represent the delayed function call and enqueues it.
 
@@ -715,10 +717,14 @@ class Queue:
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
             Job: The enqueued Job
         """
+        if unique and not job_id:
+            raise ValueError('unique=True requires an explicit job_id')
 
         job = self.create_job(
             func,
@@ -739,7 +745,7 @@ class Queue:
             on_failure=on_failure,
             on_stopped=on_stopped,
         )
-        return self.enqueue_job(job, pipeline=pipeline, at_front=at_front)
+        return self.enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
 
     @staticmethod
     def prepare_data(
@@ -947,6 +953,7 @@ class Queue:
         on_failure = kwargs.pop('on_failure', None)
         on_stopped = kwargs.pop('on_stopped', None)
         pipeline = kwargs.pop('pipeline', None)
+        unique = kwargs.pop('unique', False)
 
         if 'args' in kwargs or 'kwargs' in kwargs:
             assert args == (), 'Extra positional arguments cannot be used when using explicit args and kwargs'  # noqa
@@ -970,6 +977,7 @@ class Queue:
             on_failure,
             on_stopped,
             pipeline,
+            unique,
             args,
             kwargs,
         )
@@ -1003,6 +1011,7 @@ class Queue:
             on_failure,
             on_stopped,
             pipeline,
+            unique,
             args,
             kwargs,
         ) = Queue.parse_args(f, *args, **kwargs)
@@ -1026,6 +1035,7 @@ class Queue:
             on_failure=on_failure,
             on_stopped=on_stopped,
             pipeline=pipeline,
+            unique=unique,
         )
 
     def enqueue_at(self, datetime: datetime, f, *args, **kwargs):
@@ -1055,6 +1065,7 @@ class Queue:
             on_failure,
             on_stopped,
             pipeline,
+            unique,  # Not used for scheduled jobs, but parsed for consistency
             args,
             kwargs,
         ) = Queue.parse_args(f, *args, **kwargs)
@@ -1081,26 +1092,37 @@ class Queue:
             job.enqueue_at_front = True
         return self.schedule_job(job, datetime, pipeline=pipeline)
 
-    def schedule_job(self, job: Job, datetime: datetime, pipeline: Pipeline | None = None):
+    def schedule_job(self, job: Job, datetime: datetime, pipeline: Pipeline | None = None, unique: bool = False) -> Job:
         """Puts job on ScheduledJobRegistry
 
         Args:
-            job (Job): _description_
-            datetime (datetime): _description_
-            pipeline (Optional[Pipeline], optional): _description_. Defaults to None.
+            job (Job): The job to schedule
+            datetime (datetime): The scheduled execution time
+            pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
-            _type_: _description_
+            Job: The scheduled job
         """
         from .registry import ScheduledJobRegistry
 
         registry = ScheduledJobRegistry(queue=self)
 
+        if unique and not job._id:
+            raise ValueError('unique=True requires an explicit job_id')
+        if unique:
+            job._status = JobStatus.SCHEDULED
+            # Atomic: check uniqueness, save job, add to scheduled registry, register queue
+            schedule_unique_job(self.connection, self.key, registry.key, job, datetime)
+            return job
+
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
-        job.save(pipeline=pipe)
+        self._persist_job(job, pipe, status=JobStatus.SCHEDULED)
+
         registry.schedule(job, datetime, pipeline=pipe)
         if pipeline is None:
             pipe.execute()
@@ -1118,17 +1140,29 @@ class Queue:
         """
         return self.enqueue_at(now() + time_delta, func, *args, **kwargs)
 
-    def enqueue_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
+    def enqueue_job(
+        self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False, unique: bool = False
+    ) -> Job:
         """Enqueues a job for delayed execution checking dependencies.
 
         Args:
             job (Job): The job to enqueue
             pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
             at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
             Job: The enqueued job
+
+        Raises:
+            ValueError: If unique=True and job has dependencies
         """
+        if unique and not job._id:
+            raise ValueError('unique=True requires an explicit job_id')
+        if unique and job._dependency_ids:
+            raise ValueError('unique=True is not supported with job dependencies')
+
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
         # Add Queue key set
@@ -1138,10 +1172,12 @@ class Queue:
             pipe.execute()
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
-            return self._enqueue_job(job, pipeline=pipeline, at_front=at_front)
+            return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         return job
 
-    def _enqueue_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
+    def _enqueue_job(
+        self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False, unique: bool = False
+    ) -> Job:
         """Enqueues a job for delayed execution without checking dependencies.
 
         If Queue is instantiated with is_async=False, job is executed immediately.
@@ -1150,75 +1186,107 @@ class Queue:
             job (Job): The job to enqueue
             pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
             at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
             Job: The enqueued job
         """
         if self._is_async:
-            return self._enqueue_async_job(job, pipeline=pipeline, at_front=at_front)
+            return self._enqueue_async_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         else:
-            return self._enqueue_sync_job(job, pipeline=pipeline)
+            return self._enqueue_sync_job(job, pipeline=pipeline, unique=unique)
 
-    def _prepare_for_queue(self, job: Job, pipeline: Pipeline) -> None:
-        """Prepare a job for enqueueing by saving it to Redis.
+    def _prepare_for_queue(self, job: Job) -> None:
+        """Prepare a job for enqueueing by setting its metadata.
 
-        This sets common job properties (status, origin, enqueued_at, timeout),
-        persists the job to Redis, and performs cleanup.
+        This sets common job properties (redis_server_version, origin, enqueued_at, timeout, status)
+        without persisting to Redis.
 
         Args:
             job (Job): The job to prepare
-            pipeline (Pipeline): The Redis pipeline to use
         """
         job.redis_server_version = self.get_redis_server_version()
-        job.set_status(JobStatus.QUEUED, pipeline=pipeline)
         job.origin = self.name
         job.enqueued_at = now()
         if job.timeout is None:
             job.timeout = self._default_timeout
+        job._status = JobStatus.QUEUED
+
+    def _persist_job(self, job: Job, pipeline: Pipeline, status: JobStatus = JobStatus.QUEUED) -> None:
+        """Persist a job to Redis.
+
+        This saves the job data and performs cleanup.
+
+        Args:
+            job (Job): The job to save
+            pipeline (Pipeline): The Redis pipeline to use
+            status (JobStatus): The job status to set. Defaults to JobStatus.QUEUED.
+        """
+        job.set_status(status, pipeline=pipeline)
         job.save(pipeline=pipeline)
         job.cleanup(ttl=job.ttl, pipeline=pipeline)
 
-    def _enqueue_async_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
+    def _enqueue_async_job(
+        self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False, unique: bool = False
+    ) -> Job:
         """Enqueues a job for async (delayed) execution.
 
         Args:
             job (Job): The job to enqueue
             pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
             at_front (bool, optional): Whether should enqueue at the front of the queue. Defaults to False.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
             Job: The enqueued job
         """
         self.log.debug('Enqueueing job %s to queue %s (at_front=%s)', job.id, self.name, at_front)
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        self._prepare_for_queue(job)
 
-        self._prepare_for_queue(job, pipe)
-        self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
+        if unique:
+            # Use atomic Lua script for unique enqueue (check + save + push)
+            # Note: pipeline is ignored when unique=True because the Lua script is atomic
+            save_unique_job(self.connection, self.key, job, at_front=at_front)
+        else:
+            pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-        if pipeline is None:
-            pipe.execute()
+            self._persist_job(job, pipe)
+            self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
+
+            if pipeline is None:
+                pipe.execute()
 
         return job
 
-    def _enqueue_sync_job(self, job: Job, pipeline: Pipeline | None = None) -> Job:
+    def _enqueue_sync_job(self, job: Job, pipeline: Pipeline | None = None, unique: bool = False) -> Job:
         """Enqueues and immediately executes a job synchronously.
 
         Args:
             job (Job): The job to enqueue and execute
             pipeline (Optional[Pipeline], optional): The Redis pipeline to use. Defaults to None.
+            unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
+                Defaults to False.
 
         Returns:
             Job: The executed job
         """
         self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        self._prepare_for_queue(job)
 
-        self._prepare_for_queue(job, pipe)
+        if unique:
+            # Use atomic Lua script for unique check and save (without pushing to queue)
+            save_unique_job(self.connection, self.key, job, enqueue=False)
+        else:
+            pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
-        if pipeline is None:
-            pipe.execute()
+            self._persist_job(job, pipe)
+
+            if pipeline is None:
+                pipe.execute()
 
         job = self.run_sync(job)
 

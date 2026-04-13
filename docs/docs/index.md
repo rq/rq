@@ -80,6 +80,8 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `on_success` allows you to run a function after a job completes successfully
 * `on_failure` allows you to run a function after a job fails
 * `on_stopped` allows you to run a function after a job is stopped
+* `unique`: when set to `True`, prevents duplicate jobs with the same `job_id` from being enqueued.
+See [Unique Jobs](#unique-jobs) below.
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
@@ -173,6 +175,54 @@ group = Group.fetch(id='my_group', connection=redis_conn)
 ```
 
 If all of a group's jobs expire or are deleted, the group is removed from Redis.
+
+### Unique Jobs
+_New in version 2.8_
+
+RQ allows you to enforce job uniqueness and deduplicate jobs, preventing the same jobs from
+being executed multiple times. To enforce uniqueness, pass `unique=True` along with an explicit `job_id`
+to `queue.enqueue()`:
+
+```python
+from rq import Queue
+from redis import Redis
+from rq.exceptions import DuplicateJobError
+
+queue = Queue(connection=Redis())
+
+# First enqueue succeeds
+job = queue.enqueue(send_welcome_email, user_id, job_id='welcome-email-42', unique=True)
+
+# Attempting to enqueue again with the same job_id raises DuplicateJobError
+try:
+    queue.enqueue(send_welcome_email, user_id, job_id='welcome-email-42', unique=True)
+except DuplicateJobError:
+    print('Job already exists!')
+```
+
+The uniqueness constraint lasts until the job is deleted. Once a job is deleted, the same
+`job_id` can be reused:
+
+```python
+job = queue.enqueue(my_task, job_id='my-job', unique=True)
+
+# Delete the job
+job.delete()
+
+# Now the same job_id can be enqueued again
+job = queue.enqueue(my_task, job_id='my-job', unique=True)
+```
+
+Unique jobs can also be scheduled for future execution:
+
+```python
+from datetime import timedelta
+
+job = queue.enqueue_in(timedelta(minutes=30), my_task, job_id='scheduled-task', unique=True)
+```
+
+**Limitations:**
+- `unique=True` is not supported with job dependencies (`depends_on`).
 
 ## Job dependencies
 
