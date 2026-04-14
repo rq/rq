@@ -25,8 +25,8 @@ class TestResult(RQTestCase):
         result = Result.fetch_latest(job)
         self.assertIsNone(result)
 
-        started = now()
-        ended = started + timedelta(seconds=2.5)
+        started = now().replace(microsecond=0)
+        ended = started + timedelta(seconds=1)
         Result.create(
             job,
             Result.Type.SUCCESSFUL,
@@ -42,9 +42,8 @@ class TestResult(RQTestCase):
         self.assertEqual(result.worker_name, 'a')
         self.assertEqual(job.latest_result().return_value, 1)
         self.assertEqual(result.execution_id, 'exec-abc')
-        # Timestamps roundtrip via float — compare with sub-millisecond tolerance.
-        self.assertAlmostEqual(result.execution_started_at.timestamp(), started.timestamp(), places=3)
-        self.assertAlmostEqual(result.execution_ended_at.timestamp(), ended.timestamp(), places=3)
+        self.assertEqual(result.execution_started_at, started)
+        self.assertEqual(result.execution_ended_at, ended)
 
         # Check that ttl is properly set
         key = get_key(job.id)
