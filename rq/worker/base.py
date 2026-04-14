@@ -1328,22 +1328,29 @@ class BaseWorker:
         msg = 'Processing {0} from {1} since {2}'
         self.procline(msg.format(job.func_name, job.origin, time.time()))
 
-    def handle_job_retry(self, job: Job, queue: Queue, retry: Retry, started_job_registry: StartedJobRegistry):
+    def handle_job_retry(
+        self,
+        job: Job,
+        queue: Queue,
+        retry: Retry,
+        started_job_registry: StartedJobRegistry,
+        execution: Execution,
+    ):
         """Handles the retry of certain job.
         It will remove the job from the `StartedJobRegistry` and requeue or reschedule the job.
 
         Args:
             job (Job): The job that will be retried.
             queue (Queue): The queue
+            retry (Retry): The retry configuration returned by the job.
             started_job_registry (StartedJobRegistry): The started registry
+            execution (Execution): The execution that ran the job.
         """
         self.log.debug('Worker %s: handling retry of job %s', self.name, job.id)
 
-        # Capture execution metadata before cleanup_execution() clears self.execution.
-        assert self.execution is not None
-        assert job.ended_at is not None
-        execution_id = self.execution.id
-        execution_started_at = self.execution.created_at
+        assert job.ended_at
+        execution_id = execution.id
+        execution_started_at = execution.created_at
         execution_ended_at = job.ended_at
 
         # Check if job has exceeded max retries
@@ -1523,8 +1530,13 @@ class BaseWorker:
             if isinstance(return_value, Retry):
                 # Retry the job
                 self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
+                assert self.execution
                 self.handle_job_retry(
-                    job=job, queue=queue, retry=return_value, started_job_registry=started_job_registry
+                    job=job,
+                    queue=queue,
+                    retry=return_value,
+                    started_job_registry=started_job_registry,
+                    execution=self.execution,
                 )
                 return True
             else:

@@ -264,7 +264,11 @@ class TestWorkerRetry(RQTestCase):
         execution = prepare_execution(worker, job)
 
         worker.handle_job_retry(
-            job=job, queue=queue, retry=retry, started_job_registry=StartedJobRegistry(connection=self.connection)
+            job=job,
+            queue=queue,
+            retry=retry,
+            started_job_registry=StartedJobRegistry(connection=self.connection),
+            execution=execution,
         )
 
         job.refresh()
