@@ -9,7 +9,7 @@ from rq.queue import Queue
 from rq.registry import StartedJobRegistry
 from rq.results import Result, get_key
 from rq.utils import now
-from rq.worker import Worker
+from rq.worker import ForkWorker
 from tests import RQTestCase, min_redis_version
 
 from .fixtures import div_by_zero, say_hello
@@ -187,7 +187,7 @@ class TestResult(RQTestCase):
         """Test job successful result handling."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.register_birth()
 
         self.assertEqual(worker.failed_job_count, 0)
@@ -216,7 +216,7 @@ class TestResult(RQTestCase):
         """Test job failure result handling."""
         queue = Queue(connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.register_birth()
 
         self.assertEqual(worker.failed_job_count, 0)

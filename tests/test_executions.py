@@ -5,7 +5,7 @@ from rq.executions import Execution, ExecutionRegistry
 from rq.job import Job
 from rq.queue import Queue
 from rq.utils import current_timestamp, now
-from rq.worker import Worker
+from rq.worker import ForkWorker
 from tests import RQTestCase
 from tests.fixtures import long_running_job, say_hello, start_worker_process
 
@@ -69,7 +69,7 @@ class TestRegistry(RQTestCase):
     def test_ttl(self):
         """Execution registry and job execution should follow heartbeat TTL"""
         job = self.queue.enqueue(say_hello, timeout=-1)
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
         self.assertGreaterEqual(self.connection.ttl(job.execution_registry.key), worker.get_heartbeat_ttl(job))
         self.assertGreaterEqual(self.connection.ttl(execution.key), worker.get_heartbeat_ttl(job))
@@ -77,7 +77,7 @@ class TestRegistry(RQTestCase):
     def test_heartbeat(self):
         """Test heartbeat should refresh execution as well as registry TTL"""
         job = self.queue.enqueue(say_hello, timeout=1)
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
         # The actual TTL should be 150 seconds
@@ -94,7 +94,7 @@ class TestRegistry(RQTestCase):
     def test_registry_cleanup(self):
         """ExecutionRegistry.cleanup() should remove expired executions."""
         job = self.queue.enqueue(say_hello)
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
         worker.prepare_execution(job=job)
 
         registry = job.execution_registry
@@ -113,7 +113,7 @@ class TestRegistry(RQTestCase):
     def test_delete_registry(self):
         """ExecutionRegistry.delete() should delete registry and its executions."""
         job = self.queue.enqueue(say_hello)
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
         self.assertIn(execution.job_id, job.started_job_registry.get_job_ids())
@@ -129,7 +129,7 @@ class TestRegistry(RQTestCase):
     def test_get_execution_ids(self):
         """ExecutionRegistry.get_execution_ids() should return a list of execution IDs"""
         job = self.queue.enqueue(say_hello)
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
 
         execution = worker.prepare_execution(job=job)
         execution_2 = worker.prepare_execution(job=job)
@@ -140,7 +140,7 @@ class TestRegistry(RQTestCase):
     def test_execution_added_to_started_job_registry(self):
         """Ensure worker adds execution to started job registry"""
         job = self.queue.enqueue(long_running_job, timeout=3)
-        Worker([self.queue], connection=self.connection)
+        ForkWorker([self.queue], connection=self.connection)
 
         # Start worker process in background with 1 second monitoring interval
         process = start_worker_process(
@@ -170,7 +170,7 @@ class TestRegistry(RQTestCase):
     def test_fetch_execution(self):
         """Ensure Execution.fetch() fetches the correct execution"""
         job = self.queue.enqueue(say_hello)
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
         execution = worker.prepare_execution(job=job)
 
         fetched_execution = Execution.fetch(id=execution.id, job_id=job.id, connection=self.connection)
@@ -211,7 +211,7 @@ class TestRegistry(RQTestCase):
     def test_cleanup_execution(self):
         """Cleanup execution does the necessary bookkeeping."""
         job = self.queue.enqueue(say_hello)
-        worker = Worker([self.queue])
+        worker = ForkWorker([self.queue])
         worker.prepare_job_execution(job)
         with self.connection.pipeline() as pipeline:
             worker.cleanup_execution(job, pipeline=pipeline)
