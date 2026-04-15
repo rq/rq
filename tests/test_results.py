@@ -3,6 +3,7 @@ import time
 from datetime import timedelta
 
 from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from rq.executions import prepare_execution
 from rq.job import Job, Retry
 from rq.queue import Queue
 from rq.registry import StartedJobRegistry
@@ -24,11 +25,25 @@ class TestResult(RQTestCase):
         result = Result.fetch_latest(job)
         self.assertIsNone(result)
 
-        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1, worker_name='a')
+        started = now().replace(microsecond=0)
+        ended = started + timedelta(seconds=1)
+        Result.create(
+            job,
+            Result.Type.SUCCESSFUL,
+            ttl=10,
+            return_value=1,
+            worker_name='a',
+            execution_id='exec-abc',
+            execution_started_at=started,
+            execution_ended_at=ended,
+        )
         result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 1)
         self.assertEqual(result.worker_name, 'a')
         self.assertEqual(job.latest_result().return_value, 1)
+        self.assertEqual(result.execution_id, 'exec-abc')
+        self.assertEqual(result.execution_started_at, started)
+        self.assertEqual(result.execution_ended_at, ended)
 
         # Check that ttl is properly set
         key = get_key(job.id)
@@ -42,6 +57,25 @@ class TestResult(RQTestCase):
         Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=2)
         result = Result.fetch_latest(job)
         self.assertEqual(result.return_value, 2)
+
+    def test_execution_info_backwards_compatible(self):
+        """Results without execution info restore with None fields (old data compat)."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        # Create a result without any execution info (simulates pre-upgrade data).
+        Result.create(job, Result.Type.SUCCESSFUL, ttl=10, return_value=1, worker_name='a')
+        result = Result.fetch_latest(job)
+        self.assertIsNone(result.execution_id)
+        self.assertIsNone(result.execution_started_at)
+        self.assertIsNone(result.execution_ended_at)
+
+        # Same for failure results.
+        Result.create_failure(job, ttl=10, exc_string='boom', worker_name='a')
+        result = Result.fetch_latest(job)
+        self.assertIsNone(result.execution_id)
+        self.assertIsNone(result.execution_started_at)
+        self.assertIsNone(result.execution_ended_at)
 
     def test_create_failure(self):
         """Ensure data is saved properly"""
@@ -63,10 +97,21 @@ class TestResult(RQTestCase):
         job = queue.enqueue(say_hello)
         retry = Retry(max=1)
 
-        Result.create_retried(job, ttl=10, return_value=retry, worker_name='a')
+        started = now()
+        ended = started + timedelta(seconds=1)
+        Result.create_retried(
+            job,
+            ttl=10,
+            return_value=retry,
+            worker_name='a',
+            execution_id='exec-1',
+            execution_started_at=started,
+            execution_ended_at=ended,
+        )
         result = Result.fetch_latest(job)
         self.assertEqual(result.type, Result.Type.RETRIED)
         self.assertEqual(result.worker_name, 'a')
+        self.assertEqual(result.execution_id, 'exec-1')
         self.assertIsInstance(result.return_value, Retry)
         self.assertEqual(result.return_value.max, retry.max)
         self.assertEqual(result.return_value.intervals, retry.intervals)
@@ -77,9 +122,20 @@ class TestResult(RQTestCase):
         job = queue.enqueue(say_hello)
         retry = Retry(max=1)
 
-        Result.create_max_retries_exceeded(job, ttl=10, return_value=retry, worker_name='a')
+        started = now()
+        ended = started + timedelta(seconds=1)
+        Result.create_max_retries_exceeded(
+            job,
+            ttl=10,
+            return_value=retry,
+            worker_name='a',
+            execution_id='exec-2',
+            execution_started_at=started,
+            execution_ended_at=ended,
+        )
         result = Result.fetch_latest(job)
         self.assertEqual(result.type, Result.Type.MAX_RETRIES_EXCEEDED)
+        self.assertEqual(result.execution_id, 'exec-2')
         self.assertEqual(result.worker_name, 'a')
         self.assertIsNone(result.exc_string)
         self.assertIsInstance(result.return_value, Retry)
@@ -143,11 +199,18 @@ class TestResult(RQTestCase):
         job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
         job._result = 'Success'
+        execution = prepare_execution(worker, job)
         worker.handle_job_success(job, queue, registry)
 
         payload = self.connection.hgetall(job.key)
         self.assertNotIn(b'result', payload.keys())
         self.assertEqual(job.result, 'Success')
+
+        # Result carries execution metadata populated by the worker.
+        result = job.latest_result()
+        self.assertEqual(result.execution_id, execution.id)
+        self.assertEqual(result.execution_ended_at, job.ended_at)
+        self.assertIsNotNone(result.execution_started_at)
 
     def test_job_failed_result(self):
         """Test job failure result handling."""
@@ -163,12 +226,19 @@ class TestResult(RQTestCase):
         registry = StartedJobRegistry(connection=self.connection)
         job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
+        execution = prepare_execution(worker, job)
         worker.handle_job_failure(job, exc_string='Error', queue=queue, started_job_registry=registry)
 
         job = Job.fetch(job.id, connection=self.connection)
         payload = self.connection.hgetall(job.key)
         self.assertNotIn(b'exc_info', payload.keys())
         self.assertEqual(job.exc_info, 'Error')
+
+        # Result carries execution metadata populated by the worker.
+        result = job.latest_result()
+        self.assertEqual(result.execution_id, execution.id)
+        self.assertEqual(result.execution_ended_at, job.ended_at)
+        self.assertIsNotNone(result.execution_started_at)
 
     def test_job_return_value(self):
         """Test job.return_value"""
