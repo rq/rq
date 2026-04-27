@@ -226,7 +226,9 @@ More options are documented on [python-rq.org](https://python-rq.org/docs/worker
 
 ## Security
 
-> **Warning:** RQ's default serializer uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle), which **is not secure**. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling. Never run a worker against a Redis instance that could be reached or tampered with by an untrusted party while using the default serializer. Pass `serializer=JSONSerializer` to your `Queue` and `Worker` (see [docs](https://python-rq.org/docs/jobs/#job--queue-creation-with-custom-serializer)) when processing data from untrusted sources. JSON only supports primitive argument types (str, int, float, bool, list, dict, None).
+> **Warning:** RQ uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle) as its default serializer, which **is not secure**. Only run RQ against Redis instances that you trust. It is possible to construct malicious pickle data that will execute arbitrary code during unpickling.
+
+To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs (see [docs](https://python-rq.org/docs/jobs/#job--queue-creation-with-custom-serializer)). JSON only supports primitive argument types (str, int, float, bool, list, dict, None).
 
 ## Installation
 

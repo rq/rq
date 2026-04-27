@@ -208,27 +208,36 @@ workers = Worker.count(queue=queue)
 
 ## Worker with Custom Serializer
 
-When creating a worker, you can pass in a custom serializer that will be implicitly passed to the queue. Serializers must implement `loads` and `dumps`; see `rq.serializers.JSONSerializer` for an example. The default serializer is `pickle`.
+When creating a worker, you can pass in a custom serializer that will be used when loading jobs from Redis. Serializers must implement `loads` and `dumps`; see `rq.serializers.JSONSerializer` for an example. The default serializer is `pickle`.
 
-> **Warning:** RQ's default serializer uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle), which **is not secure**. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling. Never run a worker against a Redis instance that could be reached or tampered with by an untrusted party while using the default serializer. A safer serialization format such as `JSONSerializer` (below) may be more appropriate when processing data from untrusted sources.
+> **Warning:** RQ uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle) as its default serializer, which **is not secure**. Only run RQ against Redis instances that you trust. It is possible to construct malicious pickle data that will execute arbitrary code during unpickling.
+
+To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs.
+
+For example, to process jobs that were enqueued with `JSONSerializer`:
 
 ```python
 from rq import Worker
 from rq.serializers import JSONSerializer
 
-job = Worker('foo', serializer=JSONSerializer)
+worker = Worker('foo', serializer=JSONSerializer)
 ```
 
-or when creating from a queue
+You can also use the same serializer when creating the queue object:
 
 ```python
 from rq import Queue, Worker
 from rq.serializers import JSONSerializer
 
-w = Queue('foo', serializer=JSONSerializer)
+queue = Queue('foo', serializer=JSONSerializer)
+worker = Worker([queue], serializer=JSONSerializer)
 ```
 
-Queues will now use custom serializer
+When starting workers from the command line, pass the serializer path:
+
+```console
+$ rq worker --serializer rq.serializers.JSONSerializer
+```
 
 
 ## Better worker process title
