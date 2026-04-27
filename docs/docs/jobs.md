@@ -242,9 +242,9 @@ cancel_job(
 
 ## Job / Queue Creation with Custom Serializer
 
-When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments.
-Serializers used should have at least `loads` and `dumps` method.
-The default serializer used is `pickle`.
+When creating a job or queue, you can pass in a custom serializer that will be used for serializing / de-serializing job arguments. Serializers must implement `loads` and `dumps`. The default serializer is `pickle`.
+
+> **Warning:** RQ's default serializer uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle), which **is not secure**. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling. Never run a worker against a Redis instance that could be reached or tampered with by an untrusted party while using the default serializer. A safer serialization format such as `JSONSerializer` (below) may be more appropriate when processing data from untrusted sources. Note that JSON only supports primitive argument types (str, int, float, bool, list, dict, None).
 
 ```python
 from rq import Queue
