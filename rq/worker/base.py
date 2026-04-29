@@ -292,7 +292,12 @@ class BaseWorker:
         if not worker_key.startswith(prefix):
             raise ValueError(f'Not a valid RQ worker key: {worker_key}')
 
-        if not connection.exists(worker_key):
+        if (
+            not (key_exists := connection.exists(worker_key))
+            or not connection.hexists(worker_key, 'birth')
+        ):
+            if key_exists:
+                connection.delete(worker_key)
             connection.srem(cls.redis_workers_keys, worker_key)
             return None
 
@@ -875,7 +880,11 @@ class BaseWorker:
     def register_birth(self):
         """Registers its own birth."""
         self.log.debug('Worker %s: registering birth', self.name)
-        if self.connection.exists(self.key) and not self.connection.hexists(self.key, 'death'):
+        if (
+            self.connection.exists(self.key)
+            and self.connection.hexists(self.key, 'birth')
+            and not self.connection.hexists(self.key, 'death')
+        ):
             msg = 'There exists an active worker named {0!r} already'
             raise ValueError(msg.format(self.name))
         key = self.key
