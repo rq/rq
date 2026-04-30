@@ -10,7 +10,7 @@ from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
 from rq.worker_pool import WorkerPool, run_worker
 from tests import RQTestCase
-from tests.fixtures import CustomJob, _send_shutdown_command, long_running_job, say_hello, add_meta, div_by_zero
+from tests.fixtures import CustomJob, _send_shutdown_command, add_meta, div_by_zero, long_running_job, say_hello
 
 
 def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
@@ -165,3 +165,73 @@ class TestWorkerPool(RQTestCase):
         job.refresh()
         # Custom handler should have been called (add_meta sets foo=1)
         self.assertEqual(job.meta, {'foo': 1})
+
+    def test_request_stop(self):
+        """Test request_stop() changes status to STOPPED"""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+        pool.start_workers(burst=False)
+
+        # Verify workers are running
+        self.assertEqual(len(pool.worker_dict), 1)
+
+        # Call request_stop
+        pool.request_stop()
+
+        # Status should be STOPPED
+        self.assertEqual(pool.status, pool.Status.STOPPED)
+
+        # Clean up
+        pool.stop_workers()
+
+    def test_handle_dead_worker(self):
+        """Test handle_dead_worker() removes worker from worker_dict"""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=2)
+        pool.start_workers(burst=False)
+
+        # There should be two workers
+        self.assertEqual(len(pool.worker_dict), 2)
+
+        # Get a worker data
+        worker_data = list(pool.worker_dict.values())[0]
+
+        # Manually remove the worker from the dict (simulating death)
+        pool.handle_dead_worker(worker_data)
+
+        # Worker should be removed
+        self.assertEqual(len(pool.worker_dict), 1)
+
+        pool.stop_workers()
+
+    def test_stop_worker(self):
+        """Test stop_worker() sends signal to worker"""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+        pool.start_workers(burst=True)
+
+        # There should be one worker
+        self.assertEqual(len(pool.worker_dict), 1)
+
+        worker_data = list(pool.worker_dict.values())[0]
+
+        # Stop the worker
+        pool.stop_worker(worker_data)
+
+        # Wait for process to terminate properly
+        worker_data.process.join(timeout=2.0)
+
+        # Reap workers
+        pool.reap_workers()
+
+        # Worker should be removed
+        self.assertEqual(len(pool.worker_dict), 0)
+
+    def test_start_worker_with_sleep(self):
+        """Test start_worker() with _sleep parameter"""
+        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
+
+        # Start worker with a small sleep
+        pool.start_worker(burst=True, _sleep=0.1)
+
+        # Worker should be spawned
+        self.assertEqual(len(pool.worker_dict), 1)
+
+        pool.stop_workers()
