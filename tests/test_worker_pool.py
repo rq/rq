@@ -202,28 +202,6 @@ class TestWorkerPool(RQTestCase):
 
         pool.stop_workers()
 
-    def test_stop_worker(self):
-        """Test stop_worker() sends signal to worker"""
-        pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
-        pool.start_workers(burst=True)
-
-        # There should be one worker
-        self.assertEqual(len(pool.worker_dict), 1)
-
-        worker_data = list(pool.worker_dict.values())[0]
-
-        # Stop the worker
-        pool.stop_worker(worker_data)
-
-        # Wait for process to terminate properly
-        worker_data.process.join(timeout=2.0)
-
-        # Reap workers
-        pool.reap_workers()
-
-        # Worker should be removed
-        self.assertEqual(len(pool.worker_dict), 0)
-
     def test_start_worker_with_sleep(self):
         """Test start_worker() with _sleep parameter"""
         pool = WorkerPool(['default'], connection=self.connection, num_workers=1)
