@@ -138,6 +138,9 @@ class TestWorkerPool(RQTestCase):
         # Worker should have processed the job
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
 
+        # Clean up
+        pool.stop_workers()
+
     def test_exception_handlers_argument(self):
         """Ensure exception_handlers argument is properly passed to WorkerPool"""
         pool = WorkerPool(
@@ -158,13 +161,14 @@ class TestWorkerPool(RQTestCase):
         pool = WorkerPool(
             [queue], connection=self.connection, num_workers=1, exception_handlers=[add_meta]
         )
-        pool.start(burst=True)
+        try:
+            pool.start(burst=True)
 
-        # Job should be failed (exception handled by custom handler)
-        self.assertEqual(job.get_status(refresh=True), JobStatus.FAILED)
-        job.refresh()
-        # Custom handler should have been called (add_meta sets foo=1)
-        self.assertEqual(job.meta, {'foo': 1})
+            self.assertEqual(job.get_status(refresh=True), JobStatus.FAILED)
+            job.refresh()
+            self.assertEqual(job.meta, {'foo': 1})
+        finally:
+            pool.stop_workers()
 
     def test_request_stop(self):
         """Test request_stop() changes status to STOPPED"""
