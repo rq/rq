@@ -229,7 +229,7 @@ class Job:
         self.allow_dependency_failures: bool | None = None
         self.enqueue_at_front: bool | None = None
         self.group_id: str | None = None
-
+        self.enqueue_at_front_on_retry: bool = False
         self.repeats_left: int | None = None
         self.repeat_intervals: list[int] | None = None
 
@@ -564,6 +564,13 @@ class Job:
     @property
     def has_rate_limit(self) -> bool:
         return bool(self.rate_limit_key and self.rate_limit_concurrency)
+
+    def should_enqueue_at_front(self) -> bool:
+        """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
+        (i.e. ended_at is not None), otherwise returns the value of enqueue_at_front"""
+        if self.enqueue_at_front_on_retry and self.ended_at is not None:
+            return True
+        return bool(self.enqueue_at_front)
 
     def _deserialize_data(self):
         """Deserializes the Job `data` into a tuple.
@@ -1009,6 +1016,10 @@ class Job:
         self.retries_left = int(obj['retries_left']) if obj.get('retries_left') else None
         if obj.get('retry_intervals'):
             self.retry_intervals = json.loads(obj['retry_intervals'].decode())
+        if obj.get('enqueue_at_front_on_retry'):
+            self.enqueue_at_front_on_retry = bool(int(obj['enqueue_at_front_on_retry']))
+        else:
+            self.enqueue_at_front_on_retry = False
 
         self.repeats_left = int(obj['repeats_left']) if obj.get('repeats_left') else None
         if obj.get('repeat_intervals'):
@@ -1070,6 +1081,8 @@ class Job:
             obj['retries_left'] = self.retries_left
         if self.retry_intervals is not None:
             obj['retry_intervals'] = json.dumps(self.retry_intervals)
+        if self.enqueue_at_front_on_retry:
+            obj['enqueue_at_front_on_retry'] = int(self.enqueue_at_front_on_retry)
         if self.origin:
             obj['origin'] = self.origin
         if self.description is not None:
@@ -1534,7 +1547,15 @@ class Job:
             self.log.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
-    def _handle_success(self, result_ttl, pipeline: Pipeline, worker_name: str = ''):
+    def _handle_success(
+        self,
+        result_ttl,
+        pipeline: Pipeline,
+        worker_name: str = '',
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
+    ):
         """Saves and cleanup job after successful execution"""
         self.log.debug('Job %s: handling success...', self.id)
 
@@ -1550,13 +1571,24 @@ class Job:
             ttl=result_ttl,
             worker_name=worker_name,
             pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
 
         if result_ttl != 0:
             finished_job_registry = self.finished_job_registry
             finished_job_registry.add(self, result_ttl, pipeline)
 
-    def _handle_failure(self, exc_string: str, pipeline: Pipeline, worker_name: str = ''):
+    def _handle_failure(
+        self,
+        exc_string: str,
+        pipeline: Pipeline,
+        worker_name: str = '',
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
+    ):
         self.log.debug(
             'Job %s: handling failure: %s', self.id, exc_string[:200] + '...' if len(exc_string) > 200 else exc_string
         )
@@ -1570,9 +1602,27 @@ class Job:
         )
         from .results import Result
 
-        Result.create_failure(self, self.failure_ttl, exc_string=exc_string, worker_name=worker_name, pipeline=pipeline)
+        Result.create_failure(
+            self,
+            self.failure_ttl,
+            exc_string=exc_string,
+            worker_name=worker_name,
+            pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
+        )
 
-    def _handle_retry_result(self, queue: Queue, pipeline: Pipeline, retry: Retry, worker_name: str = ''):
+    def _handle_retry_result(
+        self,
+        queue: Queue,
+        pipeline: Pipeline,
+        retry: Retry,
+        execution_id: str,
+        execution_started_at: datetime,
+        execution_ended_at: datetime,
+        worker_name: str = '',
+    ):
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
@@ -1582,11 +1632,23 @@ class Job:
             queue (Queue): The queue to retry the job on
             pipeline (Pipeline): The Redis pipeline to use
             retry (Retry): The Retry object returned by the job
+            execution_id (str): ID of the Execution that produced this retry
+            execution_started_at (datetime): When the execution started
+            execution_ended_at (datetime): When the execution ended
             worker_name (str): The name of the worker
         """
         from .results import Result
 
-        Result.create_retried(self, self.failure_ttl, worker_name=worker_name, pipeline=pipeline)
+        Result.create_retried(
+            self,
+            self.failure_ttl,
+            return_value=retry,
+            worker_name=worker_name,
+            pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
+        )
         retry_interval = Retry.get_interval(self.number_of_retries or 0, retry.intervals)
         self.number_of_retries = 1 if not self.number_of_retries else self.number_of_retries + 1
         if retry_interval:
@@ -1636,6 +1698,7 @@ class Job:
             queue (Queue): The queue to retry the job on
             pipeline (Pipeline): The Redis' pipeline to use
         """
+
         retry_interval = self.get_retry_interval()
         assert self.retries_left
         self.retries_left = self.retries_left - 1
@@ -1647,7 +1710,7 @@ class Job:
                 'Job %s: scheduled for retry at %s, %s remaining', self.id, scheduled_datetime, self.retries_left
             )
         else:
-            queue._enqueue_job(self, pipeline=pipeline)
+            queue._enqueue_job(self, pipeline=pipeline, at_front=self.enqueue_at_front_on_retry)
             self.log.info('Job %s: enqueued for retry, %s remaining', self.id, self.retries_left)
 
     def register_dependency(self, pipeline: Pipeline | None = None):
@@ -1763,13 +1826,15 @@ _job_stack = LocalStack()
 
 
 class Retry:
-    def __init__(self, max: int, interval: int | Iterable[int] = 0):
+    def __init__(self, max: int, interval: int | Iterable[int] = 0, enqueue_at_front: bool = False):
         """The main object to defined Retry logics for jobs.
 
         Args:
             max (int): The max number of times a job should be retried
             interval (Union[int, List[int]], optional): The interval between retries.
                 Can be a positive number (int) or a list of ints. Defaults to 0 (meaning no interval between retries).
+            enqueue_at_front (bool): Whether the job should be requeued at the front of the queue when retried.
+            Defaults to False.
 
         Raises:
             ValueError: If the `max` argument is lower than 1
@@ -1791,6 +1856,14 @@ class Retry:
 
         self.max = max
         self.intervals = intervals
+        self.enqueue_at_front = enqueue_at_front
+
+    def __repr__(self):
+        interval = self.intervals[0] if len(self.intervals) == 1 else self.intervals
+        return (
+            f'{self.__class__.__name__}('
+            f'max={self.max}, interval={interval!r}, enqueue_at_front={self.enqueue_at_front!r})'
+        )
 
     @classmethod
     def get_interval(cls, count: int, intervals: int | list[int] | None) -> int:
