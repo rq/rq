@@ -32,6 +32,7 @@ from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
+from .rate_limit import RateLimit, RateLimitRegistry
 from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
@@ -62,6 +63,7 @@ class EnqueueData(
             'on_failure',
             'on_stopped',
             'repeat',
+            'rate_limit',
         ],
     )
 ):
@@ -528,6 +530,7 @@ class Queue:
         on_failure: Callback | Callable | None = None,
         on_stopped: Callback | Callable | None = None,
         group_id: str | None = None,
+        rate_limit: RateLimit | None = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -606,6 +609,10 @@ class Queue:
         if repeat:
             job.repeats_left = repeat.times
             job.repeat_intervals = repeat.intervals
+
+        if rate_limit:
+            job.rate_limit_key = rate_limit.key
+            job.rate_limit_concurrency = rate_limit.concurrency
 
         return job
 
@@ -687,6 +694,7 @@ class Queue:
         on_success: Callback | Callable[..., Any] | None = None,
         on_failure: Callback | Callable[..., Any] | None = None,
         on_stopped: Callback | Callable[..., Any] | None = None,
+        rate_limit: RateLimit | None = None,
         pipeline: Pipeline | None = None,
         unique: bool = False,
     ) -> Job:
@@ -744,6 +752,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            rate_limit=rate_limit,
         )
         return self.enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
 
@@ -766,6 +775,7 @@ class Queue:
         on_failure: Callback | Callable | None = None,
         on_stopped: Callback | Callable | None = None,
         repeat: Repeat | None = None,
+        rate_limit: RateLimit | None = None,
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -813,6 +823,7 @@ class Queue:
             on_failure,
             on_stopped,
             repeat,
+            rate_limit,
         )
 
     def enqueue_many(
@@ -857,6 +868,7 @@ class Queue:
                 'on_stopped': job_data.on_stopped,
                 'group_id': group_id,
                 'repeat': job_data.repeat,
+                'rate_limit': job_data.rate_limit,
             }
 
         # Enqueue jobs without dependencies
@@ -952,6 +964,7 @@ class Queue:
         on_success = kwargs.pop('on_success', None)
         on_failure = kwargs.pop('on_failure', None)
         on_stopped = kwargs.pop('on_stopped', None)
+        rate_limit = kwargs.pop('rate_limit', None)
         pipeline = kwargs.pop('pipeline', None)
         unique = kwargs.pop('unique', False)
 
@@ -976,6 +989,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            rate_limit,
             pipeline,
             unique,
             args,
@@ -1010,6 +1024,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            rate_limit,
             pipeline,
             unique,
             args,
@@ -1034,6 +1049,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            rate_limit=rate_limit,
             pipeline=pipeline,
             unique=unique,
         )
@@ -1064,6 +1080,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            rate_limit,
             pipeline,
             unique,  # Not used for scheduled jobs, but parsed for consistency
             args,
@@ -1087,6 +1104,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            rate_limit=rate_limit,
         )
         if at_front:
             job.enqueue_at_front = True
@@ -1162,6 +1180,8 @@ class Queue:
             raise ValueError('unique=True requires an explicit job_id')
         if unique and job._dependency_ids:
             raise ValueError('unique=True is not supported with job dependencies')
+        if unique and job.has_rate_limit:
+            raise ValueError('unique=True is not supported with rate-limited jobs')
 
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
@@ -1172,7 +1192,43 @@ class Queue:
             pipe.execute()
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
+            if job.has_rate_limit:
+                return self._enqueue_rate_limited_job(job)
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
+        return job
+
+    def _enqueue_rate_limited_job(self, job: Job) -> Job:
+        """Enqueue a job through the rate limit registry.
+
+        Saves the job to Redis and adds it to the pending set atomically,
+        then attempts to acquire capacity and enqueue it. If no capacity is
+        available, the job stays in the pending set with RATE_LIMITED status.
+
+        Args:
+            job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
+
+        Returns:
+            Job: The job
+        """
+        job.redis_server_version = self.get_redis_server_version()
+        job.origin = self.name
+        if job.timeout is None:
+            job.timeout = self._default_timeout
+
+        assert job.rate_limit_key
+        assert job.rate_limit_concurrency
+
+        registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
+        job._status = JobStatus.RATE_LIMITED
+        with self.connection.pipeline() as pipe:
+            registry.register(job.rate_limit_concurrency, pipe)
+            job.save(pipeline=pipe)
+            job.cleanup(ttl=job.ttl, pipeline=pipe)
+            registry.add_to_pending(job.id, pipe)
+            pipe.execute()
+
+        registry.acquire_and_enqueue(job.rate_limit_concurrency)
+
         return job
 
     def _enqueue_job(
@@ -1385,6 +1441,8 @@ class Queue:
                     [j.id for j in jobs_to_enqueue],
                 )
 
+                rate_limited_dependents = []
+
                 for dependent in jobs_to_enqueue:
                     enqueue_at_front = dependent.enqueue_at_front or False
 
@@ -1394,7 +1452,9 @@ class Queue:
                     registry.remove(dependent, pipeline=pipe)
                     self.log.debug('Removed job %s from DeferredJobRegistry', dependent.id)
 
-                    if dependent.origin == self.name:
+                    if dependent.has_rate_limit:
+                        rate_limited_dependents.append(dependent)
+                    elif dependent.origin == self.name:
                         self.log.debug(
                             'Enqueueing job %s to current queue %s (at_front=%s)',
                             dependent.id,
@@ -1421,6 +1481,14 @@ class Queue:
 
                 if pipeline is None:
                     pipe.execute()
+
+                # Enqueue rate-limited dependents after the pipeline executes,
+                # since the Lua scripts can't run inside a MULTI transaction.
+                for dependent in rate_limited_dependents:
+                    origin = dependent.origin or self.name
+                    q = self.__class__(name=origin, connection=self.connection)
+                    q._enqueue_rate_limited_job(dependent)
+
                 break
             except WatchError:
                 if pipeline is None:

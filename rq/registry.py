@@ -14,6 +14,7 @@ from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import Queue
+from .rate_limit import RateLimitRegistry
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
@@ -38,6 +39,7 @@ class BaseRegistry:
     job_class = Job
     death_penalty_class = UnixSignalDeathPenalty
     key_template = 'rq:registry:{0}'
+    connection: Redis
 
     def __init__(
         self,
@@ -267,49 +269,60 @@ class StartedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         job_ids = self.get_expired_job_ids(score)
 
-        if job_ids:
-            queue = self.get_queue()
+        if not job_ids:
+            return
 
-            with self.connection.pipeline() as pipeline:
-                for job_id in job_ids:
-                    try:
-                        job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
-                    except NoSuchJobError:
-                        continue
+        queue = self.get_queue()
+        rate_limited_jobs = []
 
-                    job.execute_failure_callback(
-                        self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
+        with self.connection.pipeline() as pipeline:
+            for job_id in job_ids:
+                try:
+                    job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
+                except NoSuchJobError:
+                    continue
+
+                job.execute_failure_callback(
+                    self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
+                )
+
+                if exception_handlers:
+                    for handler in exception_handlers:
+                        fallthrough = handler(job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack())
+                        # Only handlers with explicit return values should disable further
+                        # exc handling, so interpret a None return value as True.
+                        if fallthrough is None:
+                            fallthrough = True
+
+                        if not fallthrough:
+                            break
+
+                retry = job.retries_left and job.retries_left > 0
+
+                if retry:
+                    job.retry(queue, pipeline)
+                else:
+                    exc_string = (
+                        f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
                     )
+                    logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
+                    job.set_status(JobStatus.FAILED, pipeline=pipeline)
+                    job._handle_failure(exc_string, pipeline, worker_name='')
+                    # don't refresh the job status, because the job state is still in the pipeline
+                    queue.enqueue_dependents(job, refresh_job_status=False)
 
-                    if exception_handlers:
-                        for handler in exception_handlers:
-                            fallthrough = handler(
-                                job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
-                            )
-                            # Only handlers with explicit return values should disable further
-                            # exc handling, so interpret a None return value as True.
-                            if fallthrough is None:
-                                fallthrough = True
+                if job.has_rate_limit:
+                    rate_limited_jobs.append(job)
 
-                            if not fallthrough:
-                                break
+            pipeline.zremrangebyscore(self.key, 0, score)
+            pipeline.execute()
 
-                    retry = job.retries_left and job.retries_left > 0
-
-                    if retry:
-                        job.retry(queue, pipeline)
-                    else:
-                        exc_string = (
-                            f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
-                        )
-                        logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
-                        job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                        job._handle_failure(exc_string, pipeline, worker_name='')
-                        # don't refresh the job status, because the job state is still in the pipeline
-                        queue.enqueue_dependents(job, refresh_job_status=False)
-
-                pipeline.zremrangebyscore(self.key, 0, score)
-                pipeline.execute()
+        # Release rate limit capacity for abandoned jobs (must be outside the pipeline
+        # since Lua scripts can't run inside a MULTI transaction)
+        for job in rate_limited_jobs:
+            assert job.rate_limit_key
+            rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
+            rate_limit_registry.release_capacity_and_enqueue(job.id)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
@@ -603,3 +616,8 @@ def clean_registries(queue: Queue, exception_handlers: list | None = None):
     DeferredJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
+
+    from .rate_limit import RateLimitRegistry
+
+    for rate_limit_registry in RateLimitRegistry.all(queue.connection):
+        rate_limit_registry.cleanup()

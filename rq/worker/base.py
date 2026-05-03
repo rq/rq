@@ -46,6 +46,7 @@ from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
+from ..rate_limit import RateLimitRegistry
 from ..registry import StartedJobRegistry, clean_registries
 from ..results import Result
 from ..scheduler import RQScheduler
@@ -748,6 +749,10 @@ class BaseWorker:
                 pipeline.execute()
                 if enqueue_dependents:
                     queue.enqueue_dependents(job)
+                    if job.has_rate_limit:
+                        assert job.rate_limit_key
+                        rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
+                        rate_limit_registry.release_capacity_and_enqueue(job.id)
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
@@ -1473,6 +1478,11 @@ class BaseWorker:
                     self.cleanup_execution(job, pipeline=pipeline)
 
                     pipeline.execute()
+
+                    if job.has_rate_limit:
+                        assert job.rate_limit_key
+                        rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
+                        rate_limit_registry.release_capacity_and_enqueue(job.id)
 
                     assert job.started_at
                     assert job.ended_at

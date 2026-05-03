@@ -67,6 +67,7 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+    RATE_LIMITED = 'rate_limited'
 
 
 def parse_job_id(job_or_execution_id: str) -> str:
@@ -231,6 +232,9 @@ class Job:
         self.enqueue_at_front_on_retry: bool = False
         self.repeats_left: int | None = None
         self.repeat_intervals: list[int] | None = None
+
+        self.rate_limit_key: str | None = None
+        self.rate_limit_concurrency: int | None = None
 
         self._cached_result: Result | None = None
         self.log = logger
@@ -556,6 +560,10 @@ class Job:
             return CALLBACK_TIMEOUT
 
         return self._stopped_callback_timeout
+
+    @property
+    def has_rate_limit(self) -> bool:
+        return bool(self.rate_limit_key and self.rate_limit_concurrency)
 
     def should_enqueue_at_front(self) -> bool:
         """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
@@ -1017,6 +1025,9 @@ class Job:
         if obj.get('repeat_intervals'):
             self.repeat_intervals = json.loads(obj['repeat_intervals'].decode())
 
+        self.rate_limit_key = as_text(obj['rate_limit_key']) if obj.get('rate_limit_key') else None
+        self.rate_limit_concurrency = int(obj['rate_limit_concurrency']) if obj.get('rate_limit_concurrency') else None
+
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
             try:
@@ -1083,6 +1094,11 @@ class Job:
             obj['repeats_left'] = self.repeats_left
         if self.repeat_intervals is not None:
             obj['repeat_intervals'] = json.dumps(self.repeat_intervals)
+
+        if self.rate_limit_key:
+            obj['rate_limit_key'] = self.rate_limit_key
+        if self.rate_limit_concurrency:
+            obj['rate_limit_concurrency'] = self.rate_limit_concurrency
 
         if self._result is not None and include_result:
             try:

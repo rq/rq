@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.exceptions import DuplicateJobError
 from rq.job import JobStatus
+from rq.rate_limit import RateLimit
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -43,6 +44,16 @@ class TestEnqueueJobUnique(RQTestCase):
             queue.schedule_job(job2, scheduled_time, unique=True)
 
         self.assertIn('scheduled-unique-job', str(context.exception))
+
+    def test_unique_with_rate_limit_raises(self):
+        """unique=True with a rate-limited job raises ValueError."""
+        queue = Queue(connection=self.connection)
+        rate_limit = RateLimit(key='rl', concurrency=1)
+
+        with self.assertRaises(ValueError) as context:
+            queue.enqueue(say_hello, job_id='unique-rl-job', unique=True, rate_limit=rate_limit)
+
+        self.assertIn('rate-limited jobs', str(context.exception))
 
     def test_unique_requires_job_id(self):
         """unique=True without an explicit job_id raises ValueError."""
