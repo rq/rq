@@ -216,7 +216,8 @@ class BaseWorker:
         self.failed_job_count: int = 0
         self.total_working_time: float = 0
         self.current_job_working_time: float = 0
-        self.birth_date = None
+        self.birth_date: datetime | None = None
+        self.last_heartbeat: datetime | None = None
         self.scheduler: RQScheduler | None = None
         self.pubsub: PubSub | None = None
         self.pubsub_thread = None
@@ -877,39 +878,37 @@ class BaseWorker:
             else:
                 self.scheduler.start()
 
+    def serialize(self) -> dict:
+        assert self.birth_date is not None and self.last_heartbeat is not None
+        return {
+            'birth': utcformat(self.birth_date),
+            'last_heartbeat': utcformat(self.last_heartbeat),
+            'queues': ','.join(self.queue_names()),
+            'pid': self.pid,
+            'hostname': self.hostname,
+            'ip_address': self.ip_address,
+            'version': self.version,
+            'python_version': self.python_version,
+        }
+
     def register_birth(self):
         """Registers its own birth."""
         self.log.debug('Worker %s: registering birth', self.name)
         if (
-            self.connection.exists(self.key)
-            and self.connection.hexists(self.key, 'birth')
-            and not self.connection.hexists(self.key, 'death')
+            self.connection.exists(key := self.key)
+            and self.connection.hexists(key, 'birth')
+            and not self.connection.hexists(key, 'death')
         ):
             msg = 'There exists an active worker named {0!r} already'
             raise ValueError(msg.format(self.name))
-        key = self.key
-        queues = ','.join(self.queue_names())
-        with self.connection.pipeline() as p:
-            p.delete(key)
-            right_now = now()
-            now_in_string = utcformat(right_now)
-            self.birth_date = right_now
+        with self.connection.pipeline() as pipeline:
+            pipeline.delete(key)
 
-            mapping = {
-                'birth': now_in_string,
-                'last_heartbeat': now_in_string,
-                'queues': queues,
-                'pid': self.pid,
-                'hostname': self.hostname,
-                'ip_address': self.ip_address,
-                'version': self.version,
-                'python_version': self.python_version,
-            }
-
-            p.hset(key, mapping=mapping)
-            worker_registration.register(self, p)
-            p.expire(key, self.worker_ttl + 60)
-            p.execute()
+            self.birth_date = self.last_heartbeat = now()
+            pipeline.hset(key, mapping=self.serialize())
+            worker_registration.register(self, pipeline)
+            pipeline.expire(key, self.worker_ttl + 60)
+            pipeline.execute()
 
     def register_death(self):
         """Registers its own death."""
@@ -1168,8 +1167,9 @@ class BaseWorker:
         """
         timeout = timeout or self.worker_ttl + 60
         connection: Redis | Pipeline = pipeline if pipeline is not None else self.connection
+        self.last_heartbeat = now()
+        connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         connection.expire(self.key, timeout)
-        connection.hset(self.key, 'last_heartbeat', utcformat(now()))
         self.log.debug(
             'Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.',
             self.name,
@@ -1184,7 +1184,9 @@ class BaseWorker:
 
             # Also need to update execution's heartbeat
             self.execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)  # type: ignore
+
             # After transition to job execution is complete, `job.heartbeat()` is no longer needed
+            job_heartbeat_index = len(pipeline)
             job.heartbeat(now(), ttl, pipeline=pipeline, xx=True)
             results = pipeline.execute()
 
@@ -1197,9 +1199,15 @@ class BaseWorker:
             # heartbeat() command. If a new key was created, this means the job was already
             # deleted. In this case, we simply send another delete command to remove the key.
             # https://github.com/rq/rq/issues/1450
+            if results[job_heartbeat_index] == 1:
+                pipeline.delete(job.key)
 
-            if results[7] == 1:
-                self.connection.delete(job.key)
+            # like above, check if the worker's hash expired before `self.heartbeat` was able to
+            # update the expiration
+            if results[0] == 1:
+                pipeline.hset(self.key, mapping=self.serialize())
+
+            pipeline.execute()
 
     def teardown(self):
         if not self.is_horse:
