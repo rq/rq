@@ -91,16 +91,27 @@ def clean_worker_registry(queue: Queue):
     with queue.connection.pipeline() as pipeline:
         for key in keys:
             pipeline.exists(key)
+            pipeline.hexists(key, 'birth')
         results = pipeline.execute()
 
         invalid_keys = []
+        remove_keys = set()
 
-        for i, key_exists in enumerate(results):
-            if not key_exists:
-                invalid_keys.append(keys[i])
+        for i, (key_exists, is_alive) in enumerate(split_list(results, 2)):
+            key = keys[i]
+            if not key_exists or not is_alive:
+                invalid_keys.append(key)
+
+            if key_exists and not is_alive:
+                remove_keys.add(key)
 
         if invalid_keys:
             for invalid_subset in split_list(invalid_keys, MAX_KEYS):
                 pipeline.srem(WORKERS_BY_QUEUE_KEY % queue.name, *invalid_subset)
                 pipeline.srem(REDIS_WORKER_KEYS, *invalid_subset)
+
+                for key in invalid_subset:
+                    if key in remove_keys:
+                        pipeline.delete(key)
+
                 pipeline.execute()
