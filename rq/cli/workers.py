@@ -179,6 +179,7 @@ def worker(
 @main.command()
 @click.option('--burst', '-b', is_flag=True, help='Run in burst mode (quit after all work is done)')
 @click.option('--logging-level', '-l', type=str, default='INFO', help='Set logging level')
+@click.option('--exception-handler', help='Exception handler(s) to use', multiple=True)
 @click.option('--verbose', '-v', is_flag=True, help='Show more output')
 @click.option('--quiet', '-q', is_flag=True, help='Show less output')
 @click.option('--log-format', type=str, default=DEFAULT_LOGGING_FORMAT, help='Set the format of the logs')
@@ -190,6 +191,7 @@ def worker_pool(
     cli_config,
     burst: bool,
     logging_level,
+    exception_handler,
     queues,
     serializer,
     verbose,
@@ -217,6 +219,10 @@ def worker_pool(
     elif quiet:
         logging_level = 'WARNING'
 
+    exception_handlers = []
+    for h in exception_handler:
+        exception_handlers.append(import_attribute(h))
+
     pool = WorkerPool(
         queue_names,
         connection=cli_config.connection,
@@ -224,5 +230,6 @@ def worker_pool(
         serializer=serializer,
         worker_class=cli_config.worker_class,
         job_class=cli_config.job_class,
+        exception_handlers=exception_handlers or None,
     )
     pool.start(burst=burst, logging_level=logging_level)
