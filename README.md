@@ -189,14 +189,14 @@ from myapp import send_newsletter, backup_database
 cron.register(
     backup_database,
     queue_name='maintenance',
-    cron_string='0 3 * * *'
+    cron='0 3 * * *'
 )
 
 # Monthly report on the first day of each month at 8:00 AM
 cron.register(
     generate_monthly_report,
     queue_name='reports',
-    cron_string='0 8 1 * *'
+    cron='0 8 1 * *'
 )
 ```python
 
