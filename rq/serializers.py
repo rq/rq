@@ -31,11 +31,18 @@ class JSONSerializer:
         return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
+_SERIALIZER_ALIASES: dict[str, type] = {
+    'json': JSONSerializer,
+    'pickle': DefaultSerializer,
+}
+
+
 def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer:
     """This function checks the user defined serializer for ('dumps', 'loads') methods
     It returns a default pickle serializer if not found else it returns a MySerializer
     The returned serializer objects implement ('dumps', 'loads') methods
-    Also accepts a string path to serializer that will be loaded as the serializer.
+    Also accepts a string path to serializer that will be loaded as the serializer,
+    or one of the shorthand aliases ``"json"`` and ``"pickle"``.
 
     Args:
         serializer (Callable): The serializer to resolve.
@@ -48,7 +55,10 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
 
     resolved_serializer: object = serializer
     if isinstance(serializer, str):
-        resolved_serializer = import_attribute(serializer)
+        if serializer in _SERIALIZER_ALIASES:
+            resolved_serializer = _SERIALIZER_ALIASES[serializer]
+        else:
+            resolved_serializer = import_attribute(serializer)
 
     if not isinstance(resolved_serializer, Serializer):
         raise NotImplementedError('Serializer should have (dumps, loads) methods.')
