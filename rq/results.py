@@ -37,6 +37,9 @@ class Result:
         exc_string: str | None = None,
         worker_name: str = '',
         serializer=None,
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
     ):
         self.return_value = return_value
         self.exc_string = exc_string
@@ -47,6 +50,9 @@ class Result:
         self.job_id = job_id
         self.id = id
         self.worker_name = worker_name
+        self.execution_id = execution_id
+        self.execution_started_at = execution_started_at
+        self.execution_ended_at = execution_ended_at
 
     def __repr__(self):
         return f'Result(id={self.id}, type={self.Type(self.type).name})'
@@ -61,7 +67,19 @@ class Result:
         return bool(self.id)
 
     @classmethod
-    def create(cls, job, type, ttl, return_value=None, exc_string=None, worker_name='', pipeline=None) -> Result:
+    def create(
+        cls,
+        job,
+        type,
+        ttl,
+        return_value=None,
+        exc_string=None,
+        worker_name='',
+        pipeline=None,
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
+    ) -> Result:
         result = cls(
             job_id=job.id,
             type=type,
@@ -70,12 +88,25 @@ class Result:
             exc_string=exc_string,
             worker_name=worker_name,
             serializer=job.serializer,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
         result.save(ttl=ttl, pipeline=pipeline)
         return result
 
     @classmethod
-    def create_failure(cls, job, ttl, exc_string, worker_name='', pipeline=None) -> Result:
+    def create_failure(
+        cls,
+        job,
+        ttl,
+        exc_string,
+        worker_name='',
+        pipeline=None,
+        execution_id: str | None = None,
+        execution_started_at: datetime | None = None,
+        execution_ended_at: datetime | None = None,
+    ) -> Result:
         result = cls(
             job_id=job.id,
             type=cls.Type.FAILED,
@@ -83,12 +114,25 @@ class Result:
             exc_string=exc_string,
             worker_name=worker_name,
             serializer=job.serializer,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
         result.save(ttl=ttl, pipeline=pipeline)
         return result
 
     @classmethod
-    def create_retried(cls, job, ttl, return_value, worker_name, pipeline=None) -> Result:
+    def create_retried(
+        cls,
+        job,
+        ttl,
+        return_value,
+        worker_name,
+        execution_id: str,
+        execution_started_at: datetime,
+        execution_ended_at: datetime,
+        pipeline=None,
+    ) -> Result:
         return cls.create(
             job,
             cls.Type.RETRIED,
@@ -96,10 +140,23 @@ class Result:
             return_value=return_value,
             worker_name=worker_name,
             pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
 
     @classmethod
-    def create_max_retries_exceeded(cls, job, ttl, return_value, worker_name, pipeline=None) -> Result:
+    def create_max_retries_exceeded(
+        cls,
+        job,
+        ttl,
+        return_value,
+        worker_name,
+        execution_id: str,
+        execution_started_at: datetime,
+        execution_ended_at: datetime,
+        pipeline=None,
+    ) -> Result:
         return cls.create(
             job,
             cls.Type.MAX_RETRIES_EXCEEDED,
@@ -107,6 +164,9 @@ class Result:
             return_value=return_value,
             worker_name=worker_name,
             pipeline=pipeline,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
 
     @classmethod
@@ -152,6 +212,18 @@ class Result:
 
         worker_name = payload.get('worker_name', b'').decode() if payload.get('worker_name') else ''
 
+        execution_id = payload.get('execution_id')
+        if execution_id:
+            execution_id = execution_id.decode()
+
+        execution_started_at = payload.get('execution_started_at')
+        if execution_started_at:
+            execution_started_at = datetime.fromtimestamp(float(execution_started_at), tz=timezone.utc)
+
+        execution_ended_at = payload.get('execution_ended_at')
+        if execution_ended_at:
+            execution_ended_at = datetime.fromtimestamp(float(execution_ended_at), tz=timezone.utc)
+
         return Result(
             job_id,
             Result.Type(int(payload['type'])),
@@ -161,6 +233,9 @@ class Result:
             return_value=return_value,
             exc_string=exc_string,
             worker_name=worker_name,
+            execution_id=execution_id,
+            execution_started_at=execution_started_at,
+            execution_ended_at=execution_ended_at,
         )
 
     @classmethod
@@ -236,6 +311,15 @@ class Result:
 
         if self.return_value is not None:
             data['return_value'] = b64encode(serialized).decode()
+
+        if self.execution_id:
+            data['execution_id'] = self.execution_id
+
+        if self.execution_started_at:
+            data['execution_started_at'] = self.execution_started_at.timestamp()
+
+        if self.execution_ended_at:
+            data['execution_ended_at'] = self.execution_ended_at.timestamp()
 
         # return json.dumps(data)
         return data

@@ -13,17 +13,21 @@ In RQ, the return value of a job is stored in Redis. You can inspect each execut
 ## Job Results
 _New in version 1.12.0._
 
-Job executions results are stored in a `Result` object. If a job is executed multiple times,
-you can access its execution history by calling `job.results()`.
-RQ will store up to 10 latest execution results.
+Each job execution is recorded as a `Result` object. `job.latest_result()`
+returns the most recent result, and `job.results()` returns the job's recorded
+execution history. RQ stores up to the 10 most recent results for each job.
 
-Calling `job.latest_result()` will return the latest `Result` object, which has the
-following attributes:
+Each `Result` has the following attributes:
+
 * `type` - an enum of `SUCCESSFUL`, `FAILED`, `RETRIED` or `STOPPED`
-* `created_at` - the time at which result is created
+* `created_at` - the time at which the result was recorded
 * `return_value` - job's return value, only present if result type is `SUCCESSFUL`
 * `exc_string` - the exception raised by job, only present if result type is `FAILED`
-* `job_id`
+* `job_id` - ID of the job this result belongs to
+* `worker_name` - name of the worker that produced this result
+* `execution_id` - ID of the `Execution` that produced this result
+* `execution_started_at` - datetime when the worker began this execution attempt
+* `execution_ended_at` - datetime when this execution attempt finished
 
 ```python
 job = Job.fetch(id='my_id', connection=redis)

@@ -116,6 +116,16 @@ queue.enqueue(my_function, repeat=Repeat(times=3, interval=30))
 queue.enqueue(my_function, repeat=Repeat(times=3, interval=[5, 10, 15]))
 ```
 
+## Unique Jobs
+
+You can prevent duplicate jobs from being enqueued by using the `unique` parameter:
+
+```python
+job = queue.enqueue(send_email, user_id, job_id='welcome-42', unique=True)
+```
+
+More details can be found in the [docs](https://python-rq.org/docs/#unique-jobs).
+
 ## Retrying Failed Jobs
 
 Retrying failed jobs is also supported:
@@ -179,14 +189,14 @@ from myapp import send_newsletter, backup_database
 cron.register(
     backup_database,
     queue_name='maintenance',
-    cron_string='0 3 * * *'
+    cron='0 3 * * *'
 )
 
 # Monthly report on the first day of each month at 8:00 AM
 cron.register(
     generate_monthly_report,
     queue_name='reports',
-    cron_string='0 8 1 * *'
+    cron='0 8 1 * *'
 )
 ```python
 
@@ -213,6 +223,12 @@ $ rq worker-pool -n 4
 
 More options are documented on [python-rq.org](https://python-rq.org/docs/workers/).
 
+
+## Security
+
+> **Warning:** RQ uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle) as its default serializer, which **is not secure**. Only run RQ against Redis instances that you trust. It is possible to construct malicious pickle data that will execute arbitrary code during unpickling.
+
+To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs (see [docs](https://python-rq.org/docs/jobs/#job--queue-creation-with-custom-serializer)). JSON only supports primitive argument types (str, int, float, bool, list, dict, None).
 
 ## Installation
 

@@ -438,7 +438,7 @@ class CronScheduler:
                 # For now, log the error and continue
 
         # Clear the global registry after we're done
-        _job_data_registry = []  # type: ignore
+        _job_data_registry.clear()
         self.log.info(f"Successfully registered {job_count} cron jobs from '{config_path}'")
         # Method modifies the instance, no need to return self unless chaining is desired
 

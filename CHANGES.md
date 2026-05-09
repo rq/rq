@@ -1,3 +1,12 @@
+### RQ 2.8.0 (2026-04-16)
+* Added support for unique jobs. Passing `unique=True` with `job_id` prevents duplicate jobs from being enqueued or scheduled. Thanks @selwin!
+* `Result` now stores execution metadata (`execution_id`, `execution_started_at` and `execution_ended_at`). Thanks @selwin!
+* `Retry` now supports `enqueue_at_front=True`, allowing retried jobs to be requeued at the front of the queue. Thanks @crazillagodzilla!
+* Custom `job_id` values may only contain letters, numbers, underscores and dashes. Thanks @selwin!
+* When a job is stopped, its dependencies are no longer enqueued. Thanks @selwin!
+* `DeferredJobRegistry` is now scored by job creation time. Thanks @selwin!
+* Workers now print a warning instead of raising an exception when `CLIENT LIST` is not supported. Thanks @selwin and @djmaze!
+
 ### RQ 2.7.0 (2026-02-22)
 * Formal support for Python 3.14. Thanks @selwin!
 * Improve `CronScheduler` monitoring, you can now monitor each `CronJob`'s latest and next scheduled enqueue time. Thanks @selwin!

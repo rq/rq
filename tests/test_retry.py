@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from rq import Queue
+from rq.executions import prepare_execution
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, StartedJobRegistry
 from rq.results import Result
@@ -198,30 +199,49 @@ class TestRetry(RQTestCase):
         """_handle_retry_result() increments number_of_retries, creates result, and enqueues or schedules"""
         queue = Queue(connection=self.connection)
 
+        started = datetime.now(timezone.utc)
+        ended = started + timedelta(seconds=1)
+
         # Test immediate retry (no interval)
         retry = Retry(max=2)
         job = queue.enqueue(say_hello)
         with self.connection.pipeline() as pipeline:
-            job._handle_retry_result(queue, pipeline, retry=retry)
+            job._handle_retry_result(
+                queue,
+                pipeline,
+                retry=retry,
+                execution_id='exec-1',
+                execution_started_at=started,
+                execution_ended_at=ended,
+            )
             pipeline.execute()
         job.refresh()
         self.assertEqual(job.number_of_retries, 1)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
         result = job.latest_result()
         self.assertEqual(result.type, result.Type.RETRIED)
+        self.assertEqual(result.execution_id, 'exec-1')
         self.assertIsInstance(result.return_value, Retry)
 
         # Test scheduled retry (with interval)
         retry = Retry(max=2, interval=10)
         job = queue.enqueue(say_hello)
         with self.connection.pipeline() as pipeline:
-            job._handle_retry_result(queue, pipeline, retry=retry)
+            job._handle_retry_result(
+                queue,
+                pipeline,
+                retry=retry,
+                execution_id='exec-2',
+                execution_started_at=started,
+                execution_ended_at=ended,
+            )
             pipeline.execute()
         job.refresh()
         self.assertEqual(job.number_of_retries, 1)
         self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
         result = job.latest_result()
         self.assertEqual(result.type, result.Type.RETRIED)
+        self.assertEqual(result.execution_id, 'exec-2')
         self.assertIsInstance(result.return_value, Retry)
 
 
@@ -240,8 +260,15 @@ class TestWorkerRetry(RQTestCase):
         job.ended_at = job.started_at + timedelta(seconds=0.75)
         job.number_of_retries = 1
 
+        # Mirror the real worker flow, which sets worker.execution before handle_job_retry.
+        execution = prepare_execution(worker, job)
+
         worker.handle_job_retry(
-            job=job, queue=queue, retry=retry, started_job_registry=StartedJobRegistry(connection=self.connection)
+            job=job,
+            queue=queue,
+            retry=retry,
+            started_job_registry=StartedJobRegistry(connection=self.connection),
+            execution=execution,
         )
 
         job.refresh()
@@ -250,6 +277,8 @@ class TestWorkerRetry(RQTestCase):
         self.assertEqual(result.type, result.Type.MAX_RETRIES_EXCEEDED)
         self.assertIsNone(result.exc_string)
         self.assertIsInstance(result.return_value, Retry)
+        self.assertEqual(result.execution_id, execution.id)
+        self.assertEqual(result.execution_ended_at, job.ended_at)
         self.assertTrue(0 < self.connection.ttl(job.key) <= job.failure_ttl)
         self.assertTrue(0 < self.connection.ttl(Result.get_key(job.id)) <= job.failure_ttl)
 
@@ -264,6 +293,11 @@ class TestWorkerRetry(RQTestCase):
         result = job.latest_result()
         self.assertEqual(result.type, result.Type.RETRIED)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        # Retried result carries execution metadata populated by the worker.
+        self.assertIsNotNone(result.execution_id)
+        self.assertIsNotNone(result.execution_started_at)
+        self.assertIsNotNone(result.execution_ended_at)
 
     def test_job_handle_retry(self):
         """handle_job_retry() increments job.number_of_retries"""
