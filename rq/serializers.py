@@ -47,7 +47,7 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
         return DefaultSerializer
 
     if isinstance(serializer, str):
-        serializer = import_attribute(serializer)  # type: ignore[assignment]
+        serializer = import_attribute(serializer)
 
     assert not isinstance(serializer, str)
 
