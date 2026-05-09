@@ -46,12 +46,11 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
     if not serializer:
         return DefaultSerializer
 
+    resolved_serializer: object = serializer
     if isinstance(serializer, str):
-        serializer = import_attribute(serializer)  # type: ignore[assignment]
+        resolved_serializer = import_attribute(serializer)
 
-    assert not isinstance(serializer, str)
-
-    if not isinstance(serializer, Serializer):
+    if not isinstance(resolved_serializer, Serializer):
         raise NotImplementedError('Serializer should have (dumps, loads) methods.')
 
-    return serializer
+    return resolved_serializer
