@@ -7,7 +7,7 @@ import signal
 import sys
 import time
 from random import shuffle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
@@ -25,12 +25,15 @@ if TYPE_CHECKING:
         pass
 
 
+ExecutionMode = Literal['fork', 'spawn']
+
+
 class Worker(BaseWorker):
-    def __init__(self, queues, *args, execution_mode: str | None = None, **kwargs):
+    def __init__(self, queues, *args, execution_mode: ExecutionMode | None = None, **kwargs):
         super().__init__(queues, *args, **kwargs)
         if not execution_mode:
             execution_mode = 'fork' if sys.platform == 'linux' else 'spawn'
-        self.execution_mode = execution_mode
+        self.execution_mode: ExecutionMode = execution_mode
 
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -223,14 +226,14 @@ worker.main_work_horse(job, queue)
 class ForkWorker(Worker):
     """Worker that always uses os.fork() to spawn work horses."""
 
-    def __init__(self, queues, *args, execution_mode: str = 'fork', **kwargs):
+    def __init__(self, queues, *args, execution_mode: ExecutionMode = 'fork', **kwargs):
         super().__init__(queues, *args, execution_mode=execution_mode, **kwargs)
 
 
 class SpawnWorker(Worker):
     """Worker that always uses os.spawnv() to spawn work horses."""
 
-    def __init__(self, queues, *args, execution_mode: str = 'spawn', **kwargs):
+    def __init__(self, queues, *args, execution_mode: ExecutionMode = 'spawn', **kwargs):
         super().__init__(queues, *args, execution_mode=execution_mode, **kwargs)
 
 
