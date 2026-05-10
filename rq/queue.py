@@ -12,7 +12,6 @@ from functools import total_ordering
 from typing import (
     TYPE_CHECKING,
     Any,
-    NamedTuple,
     Optional,
     cast,
 )
@@ -71,31 +70,6 @@ class EnqueueData(
     """
 
     __slots__ = ()
-
-
-class QueueArgs(NamedTuple):
-    """Helper type to use when calling Queue.parse_args
-    """
-
-    func: str | Callable[..., Any]
-    timeout: int | str | None
-    description: str | None
-    result_ttl: int | None
-    ttl: int | None
-    failure_ttl: int | None
-    depends_on: JobDependencyType | None
-    job_id: str | None
-    at_front: bool
-    meta: dict | None
-    retry: Retry | None
-    repeat: Repeat | None
-    on_success: Callback | Callable | None
-    on_failure: Callback | Callable | None
-    on_stopped: Callback | Callable | None
-    pipeline: Pipeline | None
-    unique: bool
-    args: tuple | list | None
-    kwargs: dict | None
 
 
 @total_ordering
@@ -986,7 +960,7 @@ class Queue:
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 
-        return QueueArgs(
+        return (
             f,
             timeout,
             description,

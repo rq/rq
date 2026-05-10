@@ -16,12 +16,9 @@ class Serializer(Protocol):
     def loads(self, data: bytes, /) -> Any: ...  # pragma: no cover
 
 
-class PickleSerializer:
+class DefaultSerializer:
     dumps: ClassVar[Callable[[Any], bytes]] = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
     loads: ClassVar[Callable[[bytes], Any]] = pickle.loads
-
-
-DefaultSerializer = PickleSerializer
 
 
 class JSONSerializer:
@@ -34,18 +31,11 @@ class JSONSerializer:
         return json.loads(s.decode('utf-8'), *args, **kwargs)
 
 
-_SERIALIZER_ALIASES: dict[str, type] = {
-    'json': JSONSerializer,
-    'pickle': PickleSerializer,
-}
-
-
 def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer:
     """This function checks the user defined serializer for ('dumps', 'loads') methods
     It returns a default pickle serializer if not found else it returns a MySerializer
     The returned serializer objects implement ('dumps', 'loads') methods
-    Also accepts a string path to serializer that will be loaded as the serializer,
-    or one of the shorthand aliases ``"json"`` and ``"pickle"``.
+    Also accepts a string path to serializer that will be loaded as the serializer.
 
     Args:
         serializer (Callable): The serializer to resolve.
@@ -54,16 +44,14 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
         serializer (Callable): An object that implements the SerializerProtocol
     """
     if not serializer:
-        return PickleSerializer
+        return DefaultSerializer
 
-    resolved_serializer: object = serializer
     if isinstance(serializer, str):
-        if serializer in _SERIALIZER_ALIASES:
-            resolved_serializer = _SERIALIZER_ALIASES[serializer]
-        else:
-            resolved_serializer = import_attribute(serializer)
+        serializer = import_attribute(serializer)  # type: ignore[assignment]
 
-    if not isinstance(resolved_serializer, Serializer):
+    assert not isinstance(serializer, str)
+
+    if not isinstance(serializer, Serializer):
         raise NotImplementedError('Serializer should have (dumps, loads) methods.')
 
-    return resolved_serializer
+    return serializer

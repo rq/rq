@@ -2,7 +2,6 @@ import calendar
 import logging
 import time
 from datetime import timedelta, timezone
-from typing import Any
 
 from .exceptions import DuplicateJobError
 from .logutils import blue, green
@@ -45,7 +44,7 @@ UNIQUE_ENQUEUE_SCRIPT = """
 """
 
 # Cache registered scripts per connection
-_registered_scripts: dict[Any, Any] = {}
+_registered_scripts = {}
 
 
 def get_unique_enqueue_script(connection):
@@ -151,7 +150,7 @@ def _build_hset_args(job):
     return hset_args
 
 
-_registered_schedule_scripts: dict[Any, Any] = {}
+_registered_schedule_scripts = {}
 
 
 def get_unique_schedule_script(connection):

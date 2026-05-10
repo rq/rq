@@ -74,8 +74,7 @@ def get_keys(queue: Queue | None = None, connection: Redis | None = None) -> set
         redis = queue.connection
         redis_key = WORKERS_BY_QUEUE_KEY % queue.name
     else:
-        assert connection is not None
-        redis = connection
+        redis = connection  # type: ignore
         redis_key = REDIS_WORKER_KEYS
 
     return {as_text(key) for key in redis.smembers(redis_key)}
