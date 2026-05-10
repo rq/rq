@@ -70,7 +70,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
-* `--serializer`: Serializer to use. Accepts the shorthand `json` or `pickle`, or a dotted import path (e.g. `rq.serializers.JSONSerializer`).
+* `--serializer`: Serializer to use. Accepts `json` or `pickle`, or a dotted import path to your own serializer (e.g. `rq.serializers.JSONSerializer`).
 
 _New in version 1.14.0._
 * `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)

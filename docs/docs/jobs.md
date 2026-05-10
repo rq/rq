@@ -265,10 +265,11 @@ queue = Queue(connection=connection, serializer=JSONSerializer)
 job = queue.enqueue('my_module.count_words', 'https://example.com')
 ```
 
-Then run workers with the same serializer (`json` is shorthand for `rq.serializers.JSONSerializer`; `pickle` for the default):
+Then run workers with the same serializer. Either of these is accepted — `json` is shorthand for the full dotted path (`pickle` is the default):
 
 ```console
 $ rq worker --serializer json
+$ rq worker --serializer rq.serializers.JSONSerializer
 ```
 
 ## Accessing The "current" Job from within the job function
