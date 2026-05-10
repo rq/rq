@@ -21,6 +21,9 @@ class DefaultSerializer:
     loads: ClassVar[Callable[[bytes], Any]] = pickle.loads
 
 
+PickleSerializer = DefaultSerializer
+
+
 class JSONSerializer:
     @staticmethod
     def dumps(*args, **kwargs):
@@ -29,6 +32,12 @@ class JSONSerializer:
     @staticmethod
     def loads(s, *args, **kwargs):
         return json.loads(s.decode('utf-8'), *args, **kwargs)
+
+
+SERIALIZER_ALIASES: dict[str, Serializer] = {
+    'json': JSONSerializer,
+    'pickle': PickleSerializer,
+}
 
 
 def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer:
@@ -44,10 +53,10 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
         serializer (Callable): An object that implements the SerializerProtocol
     """
     if not serializer:
-        return DefaultSerializer
+        return PickleSerializer
 
     if isinstance(serializer, str):
-        serializer = import_attribute(serializer)  # type: ignore[assignment]
+        serializer = SERIALIZER_ALIASES.get(serializer) or import_attribute(serializer)  # type: ignore[assignment]
 
     assert not isinstance(serializer, str)
 
