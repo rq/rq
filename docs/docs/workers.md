@@ -214,7 +214,13 @@ When creating a worker, you can pass in a custom serializer that will be used wh
 
 To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs.
 
-For example, to process jobs that were enqueued with `JSONSerializer`:
+For example, to process jobs that were enqueued with the JSON serializer, pass either the `'json'` shorthand or the `JSONSerializer` class itself:
+
+```python
+from rq import Worker
+
+worker = Worker('foo', serializer='json')
+```
 
 ```python
 from rq import Worker
@@ -224,6 +230,13 @@ worker = Worker('foo', serializer=JSONSerializer)
 ```
 
 You can also use the same serializer when creating the queue object:
+
+```python
+from rq import Queue, Worker
+
+queue = Queue('foo', serializer='json')
+worker = Worker([queue], serializer='json')
+```
 
 ```python
 from rq import Queue, Worker

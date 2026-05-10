@@ -248,7 +248,14 @@ When creating a job or queue, you can pass in a custom serializer that will be u
 
 To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs. JSON only supports primitive argument types (str, int, float, bool, list, dict, None).
 
-For example, to enqueue jobs with `JSONSerializer`:
+For example, to enqueue jobs with the JSON serializer, pass either the `'json'` shorthand or the `JSONSerializer` class itself:
+
+```python
+from rq import Queue
+
+queue = Queue(connection=connection, serializer='json')
+job = queue.enqueue('my_module.count_words', 'https://example.com')
+```
 
 ```python
 from rq import Queue
