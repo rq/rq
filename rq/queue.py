@@ -74,8 +74,7 @@ class EnqueueData(
 
 
 class QueueArgs(NamedTuple):
-    """Helper type to use when calling Queue.parse_args
-    """
+    """Helper type to use when calling Queue.parse_args"""
 
     func: str | Callable[..., Any]
     timeout: int | str | None
@@ -1270,6 +1269,7 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (at_front=%s)', job.id, self.name, at_front)
 
+        is_deferred = job.get_status(refresh=False) == JobStatus.DEFERRED
         self._prepare_for_queue(job)
 
         if unique:
@@ -1279,6 +1279,8 @@ class Queue:
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
+            if is_deferred:
+                self.deferred_job_registry.remove(job, pipeline=pipe)
             self._persist_job(job, pipe)
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
@@ -1301,6 +1303,7 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
 
+        is_deferred = job.get_status(refresh=False) == JobStatus.DEFERRED
         self._prepare_for_queue(job)
 
         if unique:
@@ -1309,6 +1312,8 @@ class Queue:
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
+            if is_deferred:
+                self.deferred_job_registry.remove(job, pipeline=pipe)
             self._persist_job(job, pipe)
 
             if pipeline is None:
