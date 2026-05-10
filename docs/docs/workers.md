@@ -212,15 +212,17 @@ When creating a worker, you can pass in a custom serializer that will be used wh
 
 > **Warning:** RQ uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle) as its default serializer, which **is not secure**. Only run RQ against Redis instances that you trust. It is possible to construct malicious pickle data that will execute arbitrary code during unpickling.
 
-To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs.
+To process jobs that were enqueued with the JSON serializer, pass either the `'json'` shorthand or the `JSONSerializer` class itself:
 
-For example, to process jobs that were enqueued with the JSON serializer, pass either the `'json'` shorthand or the `JSONSerializer` class itself:
+Using the shorthand:
 
 ```python
 from rq import Worker
 
 worker = Worker('foo', serializer='json')
 ```
+
+Using the serializer class:
 
 ```python
 from rq import Worker

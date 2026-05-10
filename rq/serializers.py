@@ -4,7 +4,7 @@ import json
 import pickle
 from collections.abc import Callable
 from functools import partial
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, cast, runtime_checkable
 
 from .utils import import_attribute
 
@@ -56,9 +56,10 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
         return PickleSerializer
 
     if isinstance(serializer, str):
-        serializer = SERIALIZER_ALIASES.get(serializer) or import_attribute(serializer)  # type: ignore[assignment]
-
-    assert not isinstance(serializer, str)
+        serializer_path = serializer
+        serializer = SERIALIZER_ALIASES.get(serializer_path)
+        if not serializer:
+            serializer = cast(Serializer, import_attribute(serializer_path))
 
     if not isinstance(serializer, Serializer):
         raise NotImplementedError('Serializer should have (dumps, loads) methods.')
