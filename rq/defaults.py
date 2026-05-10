@@ -16,9 +16,9 @@ Defaults to the main `Worker` class within the `rq.worker` module
 """
 
 
-DEFAULT_SERIALIZER_CLASS = 'rq.serializers.DefaultSerializer'
+DEFAULT_SERIALIZER_CLASS = 'rq.serializers.PickleSerializer'
 """ The path for the default Serializer class to use.
-Defaults to the main `DefaultSerializer` class within the `rq.serializers` module
+Defaults to the main `PickleSerializer` class within the `rq.serializers` module
 """
 
 

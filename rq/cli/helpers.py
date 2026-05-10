@@ -409,8 +409,7 @@ shared_options = [
         '-S',
         default=DEFAULT_SERIALIZER_CLASS,
         help=(
-            "Serializer to use: 'json', 'pickle', or a dotted import path. "
-            'Defaults to rq.serializers.DefaultSerializer.'
+            "Serializer to use: 'json', 'pickle', or a dotted import path. Defaults to rq.serializers.PickleSerializer."
         ),
     ),
 ]

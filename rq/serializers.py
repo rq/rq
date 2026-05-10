@@ -16,9 +16,12 @@ class Serializer(Protocol):
     def loads(self, data: bytes, /) -> Any: ...  # pragma: no cover
 
 
-class DefaultSerializer:
+class PickleSerializer:
     dumps: ClassVar[Callable[[Any], bytes]] = partial(pickle.dumps, protocol=pickle.HIGHEST_PROTOCOL)
     loads: ClassVar[Callable[[bytes], Any]] = pickle.loads
+
+
+DefaultSerializer = PickleSerializer
 
 
 class JSONSerializer:
@@ -33,7 +36,7 @@ class JSONSerializer:
 
 _SERIALIZER_ALIASES: dict[str, type] = {
     'json': JSONSerializer,
-    'pickle': DefaultSerializer,
+    'pickle': PickleSerializer,
 }
 
 
@@ -51,7 +54,7 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
         serializer (Callable): An object that implements the SerializerProtocol
     """
     if not serializer:
-        return DefaultSerializer
+        return PickleSerializer
 
     resolved_serializer: object = serializer
     if isinstance(serializer, str):

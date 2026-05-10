@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from redis import ConnectionPool, Redis
 
-from rq.serializers import DefaultSerializer
+from rq.serializers import PickleSerializer
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
@@ -53,7 +53,7 @@ class WorkerPool:
         connection: Redis,
         num_workers: int = 1,
         worker_class: type[BaseWorker] = Worker,
-        serializer: Serializer = DefaultSerializer,
+        serializer: Serializer = PickleSerializer,
         job_class: type[Job] = Job,
         queue_class: type[Queue] = Queue,
         *args,
@@ -259,7 +259,7 @@ def run_worker(
     connection_pool_class,
     connection_pool_kwargs: dict,
     worker_class: type[BaseWorker] = Worker,
-    serializer: Serializer = DefaultSerializer,
+    serializer: Serializer = PickleSerializer,
     job_class: type[Job] = Job,
     queue_class: type[Queue] = Queue,
     burst: bool = True,

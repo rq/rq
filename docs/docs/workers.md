@@ -584,6 +584,6 @@ Options:
 * `-n` or `--num-workers <number of worker>`: defaults to 2.
 * `-b` or `--burst`: run workers in burst mode (stops after all jobs in queue have been processed).
 * `-l` or `--logging-level <level>`: defaults to `INFO`. `DEBUG`, `WARNING`, `ERROR` and `CRITICAL` are supported.
-* `-S` or `--serializer <serializer>`: accepts the shorthand `json` or `pickle`, or a dotted import path. Defaults to `rq.serializers.DefaultSerializer`.
+* `-S` or `--serializer <serializer>`: accepts the shorthand `json` or `pickle`, or a dotted import path. Defaults to `rq.serializers.PickleSerializer`.
 * `-P` or `--path <path>`: multiple import paths are supported (e.g `rq worker --path foo --path bar`).
 * `-j` or `--job-class <path.to.Job>`: defaults to `rq.job.Job`.
