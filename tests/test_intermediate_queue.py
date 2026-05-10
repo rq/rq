@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rq import Queue, Worker
+from rq import ForkWorker, Queue
 from rq.intermediate_queue import IntermediateQueue
 from rq.job import JobStatus
 from rq.maintenance import clean_intermediate_queue
@@ -95,8 +95,8 @@ class TestIntermediateQueue(RQTestCase):
 
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # and it's status is still QUEUED
-        with patch.object(Worker, 'execute_job'):
-            worker = Worker(self.queue, connection=self.connection)
+        with patch.object(ForkWorker, 'execute_job'):
+            worker = ForkWorker(self.queue, connection=self.connection)
             worker.work(burst=True)
 
             # If worker.execute_job() does nothing, job status should be `queued`
@@ -140,8 +140,8 @@ class TestIntermediateQueue(RQTestCase):
 
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # and it's status is still QUEUED
-        with patch.object(Worker, 'execute_job'):
-            worker = Worker(self.queue, connection=self.connection)
+        with patch.object(ForkWorker, 'execute_job'):
+            worker = ForkWorker(self.queue, connection=self.connection)
             worker.work(burst=True)
 
             # If worker.execute_job() does nothing, job status should be `queued`
@@ -185,8 +185,8 @@ class TestIntermediateQueue(RQTestCase):
 
         # If job execution fails after it's dequeued, job should be in the intermediate queue
         # and it's status is still QUEUED
-        with patch.object(Worker, 'perform_job'):
-            worker = Worker(self.queue, connection=self.connection)
+        with patch.object(ForkWorker, 'perform_job'):
+            worker = ForkWorker(self.queue, connection=self.connection)
             worker.work(burst=True)
 
             # If worker.perform_job() does nothing, job status should be `queued`
@@ -212,5 +212,5 @@ class TestIntermediateQueue(RQTestCase):
 
     def test_clean_intermediate_queue_deprecation(self):
         with pytest.deprecated_call():
-            worker = Worker(self.queue, connection=self.connection)
+            worker = ForkWorker(self.queue, connection=self.connection)
             clean_intermediate_queue(worker, self.queue)

@@ -17,7 +17,7 @@ from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.timeouts import UnixSignalDeathPenalty
-from rq.worker import Worker, WorkerStatus
+from rq.worker import ForkWorker, WorkerStatus
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -151,7 +151,7 @@ class TestRQCli(CLITestCase):
         job2 = queue.enqueue(div_by_zero)
         job3 = queue.enqueue(div_by_zero)
 
-        worker = Worker([queue], connection=connection)
+        worker = ForkWorker([queue], connection=connection)
         worker.work(burst=True)
 
         self.assertIn(job, registry)
@@ -184,7 +184,7 @@ class TestRQCli(CLITestCase):
         job2 = queue.enqueue(div_by_zero)
         job3 = queue.enqueue(div_by_zero)
 
-        worker = Worker([queue], serializer=JSONSerializer, connection=connection)
+        worker = ForkWorker([queue], serializer=JSONSerializer, connection=connection)
         worker.work(burst=True)
 
         self.assertIn(job, registry)
@@ -249,7 +249,7 @@ class TestRQCli(CLITestCase):
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 0 queue', result.output)
 
-        worker = Worker(['default'], connection=self.connection)
+        worker = ForkWorker(['default'], connection=self.connection)
         worker.register_birth()
         result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
         self.assert_normal_execution(result)
@@ -268,10 +268,10 @@ class TestRQCli(CLITestCase):
         bar_queue = Queue(name='bar', connection=self.connection)
         bar_queue.enqueue(say_hello)
 
-        worker_1 = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker_1 = ForkWorker([foo_queue, bar_queue], connection=self.connection)
         worker_1.register_birth()
 
-        worker_2 = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker_2 = ForkWorker([foo_queue, bar_queue], connection=self.connection)
         worker_2.register_birth()
         worker_2.set_state(WorkerStatus.BUSY)
 
@@ -350,22 +350,23 @@ class TestRQCli(CLITestCase):
         connection = Redis.from_url(self.redis_url)
         q = Queue('default', connection=connection)
         runner = CliRunner()
+        worker_args = ['worker', '-u', self.redis_url, '-b', '-w', 'rq.worker.ForkWorker']
 
         # If exception handler is not given, no custom exception handler is run
         job = q.enqueue(div_by_zero)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        runner.invoke(main, worker_args)
         registry = FailedJobRegistry(queue=q)
         self.assertIn(job, registry)
 
         # If disable-default-exception-handler is given, job is not moved to FailedJobRegistry
         job = q.enqueue(div_by_zero)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--disable-default-exception-handler'])
+        runner.invoke(main, worker_args + ['--disable-default-exception-handler'])
         registry = FailedJobRegistry(queue=q)
         self.assertNotIn(job, registry)
 
         # Both default and custom exception handler is run
         job = q.enqueue(div_by_zero)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--exception-handler', 'tests.fixtures.add_meta'])
+        runner.invoke(main, worker_args + ['--exception-handler', 'tests.fixtures.add_meta'])
         registry = FailedJobRegistry(queue=q)
         self.assertIn(job, registry)
         job.refresh()
@@ -375,11 +376,8 @@ class TestRQCli(CLITestCase):
         job = q.enqueue(div_by_zero)
         runner.invoke(
             main,
-            [
-                'worker',
-                '-u',
-                self.redis_url,
-                '-b',
+            worker_args
+            + [
                 '--exception-handler',
                 'tests.fixtures.add_meta',
                 '--disable-default-exception-handler',
@@ -449,7 +447,7 @@ class TestRQCli(CLITestCase):
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
-        worker = Worker(queue, connection=self.connection)
+        worker = ForkWorker(queue, connection=self.connection)
         worker.work(True)
         self.assertEqual(Job(job_id, connection=self.connection).result, 'Hi there, Stranger!')
 
@@ -475,7 +473,7 @@ class TestRQCli(CLITestCase):
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
-        worker = Worker(queue, serializer=JSONSerializer, connection=self.connection)
+        worker = ForkWorker(queue, serializer=JSONSerializer, connection=self.connection)
         worker.work(True)
         self.assertEqual(
             Job(job_id, serializer=JSONSerializer, connection=self.connection).result, 'Hi there, Stranger!'
@@ -507,7 +505,7 @@ class TestRQCli(CLITestCase):
 
         job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
 
-        worker = Worker(queue, connection=self.connection)
+        worker = ForkWorker(queue, connection=self.connection)
         worker.work(True)
 
         args, kwargs = Job(job_id, connection=self.connection).result
@@ -519,7 +517,7 @@ class TestRQCli(CLITestCase):
         """rq enqueue -u <url> tests.fixtures.say_hello --schedule-in 1s"""
         queue = Queue(connection=self.connection)
         registry = ScheduledJobRegistry(queue=queue)
-        worker = Worker(queue, connection=self.connection)
+        worker = ForkWorker(queue, connection=self.connection)
         scheduler = RQScheduler(queue, self.connection)
 
         self.assertEqual(len(queue), 0)
@@ -556,7 +554,7 @@ class TestRQCli(CLITestCase):
         """
         queue = Queue(connection=self.connection)
         registry = ScheduledJobRegistry(queue=queue)
-        worker = Worker(queue, connection=self.connection)
+        worker = ForkWorker(queue, connection=self.connection)
         scheduler = RQScheduler(queue, self.connection)
 
         self.assertEqual(len(queue), 0)
@@ -818,7 +816,18 @@ class WorkerPoolCLITestCase(CLITestCase):
         runner = CliRunner()
         runner.invoke(
             main,
-            ['worker-pool', 'foo', 'bar', '-u', self.redis_url, '-b', '--serializer', 'rq.serializers.JSONSerializer'],
+            [
+                'worker-pool',
+                'foo',
+                'bar',
+                '-u',
+                self.redis_url,
+                '-b',
+                '--serializer',
+                'rq.serializers.JSONSerializer',
+                '--worker-class',
+                'rq.worker.ForkWorker',
+            ],
         )
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
         self.assertEqual(job_2.get_status(refresh=True), JobStatus.FINISHED)

@@ -21,7 +21,7 @@ from rq.registry import (
 )
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, current_timestamp, now
-from rq.worker import Worker
+from rq.worker import ForkWorker
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, say_hello
 
@@ -255,7 +255,7 @@ class TestFinishedJobRegistry(RQTestCase):
         """Completed jobs are added to FinishedJobRegistry."""
         self.assertEqual(self.registry.get_job_ids(), [])
         queue = Queue(connection=self.connection)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         # Completed jobs are put in FinishedJobRegistry
         job = queue.enqueue(say_hello)
@@ -367,7 +367,7 @@ class TestFailedJobRegistry(RQTestCase):
         queue = Queue(connection=self.connection)
         job = queue.enqueue(div_by_zero, failure_ttl=5)
 
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
         worker.work(burst=True)
 
         registry = FailedJobRegistry(connection=worker.connection)
@@ -420,7 +420,7 @@ class TestFailedJobRegistry(RQTestCase):
         queue = Queue(connection=self.connection, serializer=JSONSerializer)
         job = queue.enqueue(div_by_zero, failure_ttl=5)
 
-        worker = Worker([queue], serializer=JSONSerializer, connection=self.connection)
+        worker = ForkWorker([queue], serializer=JSONSerializer, connection=self.connection)
         worker.work(burst=True)
 
         registry = FailedJobRegistry(connection=worker.connection, serializer=JSONSerializer)
@@ -481,7 +481,7 @@ class TestFailedJobRegistry(RQTestCase):
         """Failed jobs are added to FailedJobRegistry"""
         q = Queue(connection=self.connection)
 
-        w = Worker([q], connection=self.connection)
+        w = ForkWorker([q], connection=self.connection)
         registry = FailedJobRegistry(connection=w.connection)
 
         timestamp = current_timestamp()
@@ -506,7 +506,7 @@ class TestStartedJobRegistry(RQTestCase):
 
     def test_job_deletion(self):
         """Ensure job is removed from StartedJobRegistry when deleted."""
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
 
         job = self.queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
@@ -554,7 +554,7 @@ class TestStartedJobRegistry(RQTestCase):
 
     def test_remove_executions(self):
         """Ensure all executions for a job are removed from registry."""
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
         job = self.queue.enqueue(say_hello)
 
         execution_1 = worker.prepare_execution(job)
@@ -571,7 +571,7 @@ class TestStartedJobRegistry(RQTestCase):
 
     def test_job_execution(self):
         """Job is removed from StartedJobRegistry after execution."""
-        worker = Worker([self.queue], connection=self.connection)
+        worker = ForkWorker([self.queue], connection=self.connection)
 
         job = self.queue.enqueue(say_hello)
         self.assertTrue(job.is_queued)
@@ -655,7 +655,7 @@ class TestStartedJobRegistry(RQTestCase):
     def test_enqueue_dependents_when_parent_job_is_abandoned(self):
         """Enqueuing parent job's dependencies after moving it to FailedJobRegistry due to AbandonedJobError."""
         queue = Queue(connection=self.connection)
-        worker = Worker([queue])
+        worker = ForkWorker([queue])
         failed_job_registry = FailedJobRegistry(connection=self.connection)
         finished_job_registry = FinishedJobRegistry(connection=self.connection)
         deferred_job_registry = DeferredJobRegistry(connection=self.connection)

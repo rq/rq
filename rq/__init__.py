@@ -3,10 +3,11 @@ from .job import Callback, Retry, cancel_job, get_current_job, requeue_job
 from .queue import Queue
 from .repeat import Repeat
 from .version import VERSION
-from .worker import SimpleWorker, SpawnWorker, Worker
+from .worker import ForkWorker, SimpleWorker, SpawnWorker, Worker
 
 __all__ = [
     'Callback',
+    'ForkWorker',
     'Retry',
     'cancel_job',
     'get_current_job',
