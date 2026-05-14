@@ -574,3 +574,4 @@ Options:
 * `-S` or `--serializer <path.to.Serializer>`: defaults to `rq.serializers.DefaultSerializer`. `rq.serializers.JSONSerializer` is also included.
 * `-P` or `--path <path>`: multiple import paths are supported (e.g `rq worker --path foo --path bar`).
 * `-j` or `--job-class <path.to.Job>`: defaults to `rq.job.Job`.
+* `--exception-handler`: path to exception handler class. Multiple exception handlers are supported (e.g `rq worker --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'`).
