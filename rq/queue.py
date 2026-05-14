@@ -12,6 +12,7 @@ from functools import total_ordering
 from typing import (
     TYPE_CHECKING,
     Any,
+    NamedTuple,
     Optional,
     cast,
 )
@@ -70,6 +71,30 @@ class EnqueueData(
     """
 
     __slots__ = ()
+
+
+class QueueArgs(NamedTuple):
+    """Helper type to use when calling Queue.parse_args"""
+
+    func: str | Callable[..., Any]
+    timeout: int | str | None
+    description: str | None
+    result_ttl: int | None
+    ttl: int | None
+    failure_ttl: int | None
+    depends_on: JobDependencyType | None
+    job_id: str | None
+    at_front: bool
+    meta: dict | None
+    retry: Retry | None
+    repeat: Repeat | None
+    on_success: Callback | Callable | None
+    on_failure: Callback | Callable | None
+    on_stopped: Callback | Callable | None
+    pipeline: Pipeline | None
+    unique: bool
+    args: tuple | list | None
+    kwargs: dict | None
 
 
 @total_ordering
@@ -960,7 +985,7 @@ class Queue:
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 
-        return (
+        return QueueArgs(
             f,
             timeout,
             description,
@@ -1244,6 +1269,7 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (at_front=%s)', job.id, self.name, at_front)
 
+        is_deferred = job.get_status(refresh=False) == JobStatus.DEFERRED
         self._prepare_for_queue(job)
 
         if unique:
@@ -1253,6 +1279,8 @@ class Queue:
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
+            if is_deferred:
+                self.deferred_job_registry.remove(job, pipeline=pipe)
             self._persist_job(job, pipe)
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
@@ -1275,6 +1303,7 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
 
+        is_deferred = job.get_status(refresh=False) == JobStatus.DEFERRED
         self._prepare_for_queue(job)
 
         if unique:
@@ -1283,6 +1312,8 @@ class Queue:
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
+            if is_deferred:
+                self.deferred_job_registry.remove(job, pipeline=pipe)
             self._persist_job(job, pipe)
 
             if pipeline is None:
