@@ -4,7 +4,7 @@ import pickletools
 import queue
 import unittest
 
-from rq.serializers import DefaultSerializer, resolve_serializer
+from rq.serializers import DefaultSerializer, JSONSerializer, PickleSerializer, resolve_serializer
 
 
 class TestSerializers(unittest.TestCase):
@@ -12,9 +12,10 @@ class TestSerializers(unittest.TestCase):
         """Ensure function resolve_serializer works correctly"""
         serializer = resolve_serializer(None)
         self.assertIsNotNone(serializer)
-        self.assertEqual(serializer, DefaultSerializer)
+        self.assertEqual(serializer, PickleSerializer)
+        self.assertIs(DefaultSerializer, PickleSerializer)
 
-        # Test round trip with default serializer
+        # Test round trip with pickle serializer
         test_data = {'test': 'data'}
         serialized_data = serializer.dumps(test_data)
         self.assertEqual(serializer.loads(serialized_data), test_data)
@@ -38,3 +39,9 @@ class TestSerializers(unittest.TestCase):
         # Test using path.to.serializer string
         serializer = resolve_serializer('tests.fixtures.Serializer')
         self.assertIsNotNone(serializer)
+
+        # Shorthand aliases
+        self.assertIs(resolve_serializer('json'), JSONSerializer)
+        self.assertIs(resolve_serializer('pickle'), PickleSerializer)
+        self.assertIs(resolve_serializer('rq.serializers.PickleSerializer'), PickleSerializer)
+        self.assertIs(resolve_serializer('rq.serializers.DefaultSerializer'), PickleSerializer)

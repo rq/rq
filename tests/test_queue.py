@@ -44,11 +44,11 @@ class TestQueue(RQTestCase):
 
     def test_create_queue_with_serializer(self):
         """Creating queues with serializer."""
-        # Test using json serializer
         q = Queue('queue-with-serializer', connection=self.connection, serializer=json)
-        self.assertEqual(q.name, 'queue-with-serializer')
-        self.assertEqual(str(q), '<Queue queue-with-serializer>')
-        self.assertIsNotNone(q.serializer)
+        self.assertIs(q.serializer, json)
+
+        q = Queue('queue-with-serializer', connection=self.connection, serializer='json')
+        self.assertIs(q.serializer, JSONSerializer)
 
     def test_create_default_queue(self):
         """Instantiating the default queue."""
