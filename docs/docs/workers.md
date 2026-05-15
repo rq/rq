@@ -214,38 +214,21 @@ When creating a worker, you can pass in a custom serializer that will be used wh
 
 To process jobs that were enqueued with the JSON serializer, pass either the `'json'` shorthand or the `JSONSerializer` class itself:
 
-Using the shorthand:
-
-```python
-from rq import Worker
-
-worker = Worker('foo', serializer='json')
-```
-
-Using the serializer class:
-
 ```python
 from rq import Worker
 from rq.serializers import JSONSerializer
 
-worker = Worker('foo', serializer=JSONSerializer)
+worker = Worker('foo', serializer='json')  # or: serializer=JSONSerializer
 ```
 
 You can also use the same serializer when creating the queue object:
 
 ```python
 from rq import Queue, Worker
-
-queue = Queue('foo', serializer='json')
-worker = Worker([queue], serializer='json')
-```
-
-```python
-from rq import Queue, Worker
 from rq.serializers import JSONSerializer
 
-queue = Queue('foo', serializer=JSONSerializer)
-worker = Worker([queue], serializer=JSONSerializer)
+queue = Queue('foo', serializer='json')        # or: serializer=JSONSerializer
+worker = Worker([queue], serializer='json')    # or: serializer=JSONSerializer
 ```
 
 When starting workers from the command line, pass the serializer (the shorthand `json` resolves to `rq.serializers.JSONSerializer`; a dotted import path also works):

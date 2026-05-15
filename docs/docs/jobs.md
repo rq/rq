@@ -252,16 +252,9 @@ For example, to enqueue jobs with the JSON serializer, pass either the `'json'` 
 
 ```python
 from rq import Queue
-
-queue = Queue(connection=connection, serializer='json')
-job = queue.enqueue('my_module.count_words', 'https://example.com')
-```
-
-```python
-from rq import Queue
 from rq.serializers import JSONSerializer
 
-queue = Queue(connection=connection, serializer=JSONSerializer)
+queue = Queue(connection=connection, serializer='json')  # or: serializer=JSONSerializer
 job = queue.enqueue('my_module.count_words', 'https://example.com')
 ```
 
