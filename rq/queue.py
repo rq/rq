@@ -73,7 +73,7 @@ class EnqueueData(
     __slots__ = ()
 
 
-class QueueArgs(NamedTuple):
+class EnqueueArgs(NamedTuple):
     """Helper type to use when calling Queue.parse_args"""
 
     func: str | Callable[..., Any]
@@ -985,7 +985,7 @@ class Queue:
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 
-        return QueueArgs(
+        return EnqueueArgs(
             f,
             timeout,
             description,
