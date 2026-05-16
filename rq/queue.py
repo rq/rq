@@ -1193,15 +1193,20 @@ class Queue:
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         return job
 
-    def _enqueue_rate_limited_job(self, job: Job) -> Job:
+    def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None) -> Job:
         """Enqueue a job through the rate limit registry.
 
-        Saves the job to Redis and adds it to the pending set atomically,
-        then attempts to acquire capacity and enqueue it. If no capacity is
-        available, the job stays in the pending set with RATE_LIMITED status.
+        Saves the job to Redis and adds it to the pending set atomically, then
+        attempts to acquire capacity and enqueue it. If no capacity is available,
+        the job stays in the pending set with RATE_LIMITED status.
 
         Args:
             job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
+            pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline.
+                This method only appends its rate-limit ops (register + save + cleanup +
+                add_to_pending) and returns; the caller must execute the pipeline and
+                then call RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency)
+                itself. If None, this method creates, executes, and runs acquire_and_enqueue.
 
         Returns:
             Job: The job
@@ -1216,14 +1221,15 @@ class Queue:
 
         registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
         job._status = JobStatus.RATE_LIMITED
-        with self.connection.pipeline() as pipe:
-            registry.register(job.rate_limit_concurrency, pipe)
-            job.save(pipeline=pipe)
-            job.cleanup(ttl=job.ttl, pipeline=pipe)
-            registry.add_to_pending(job.id, pipe)
-            pipe.execute()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        registry.register(job.rate_limit_concurrency, pipe)
+        job.save(pipeline=pipe)
+        job.cleanup(ttl=job.ttl, pipeline=pipe)
+        registry.add_to_pending(job.id, pipe)
 
-        registry.acquire_and_enqueue(job.rate_limit_concurrency)
+        if pipeline is None:
+            pipe.execute()
+            registry.acquire_and_enqueue(job.rate_limit_concurrency)
 
         return job
 

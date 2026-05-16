@@ -273,7 +273,7 @@ class StartedJobRegistry(BaseRegistry):
             return
 
         queue = self.get_queue()
-        rate_limited_jobs = []
+        jobs_to_release = []
 
         with self.connection.pipeline() as pipeline:
             for job_id in job_ids:
@@ -298,6 +298,7 @@ class StartedJobRegistry(BaseRegistry):
                             break
 
                 retry = job.retries_left and job.retries_left > 0
+                retry_interval = job.get_retry_interval() if retry else None
 
                 if retry:
                     job.retry(queue, pipeline)
@@ -311,15 +312,18 @@ class StartedJobRegistry(BaseRegistry):
                     # don't refresh the job status, because the job state is still in the pipeline
                     queue.enqueue_dependents(job, refresh_job_status=False)
 
-                if job.has_rate_limit:
-                    rate_limited_jobs.append(job)
+                # Release the rate-limit slot for final failures and delayed retries.
+                # Immediate retries keep the slot — the job is back on the queue and
+                # will re-run on the slot it already owns.
+                if job.has_rate_limit and not (retry and not retry_interval):
+                    jobs_to_release.append(job)
 
             pipeline.zremrangebyscore(self.key, 0, score)
             pipeline.execute()
 
         # Release rate limit capacity for abandoned jobs (must be outside the pipeline
         # since Lua scripts can't run inside a MULTI transaction)
-        for job in rate_limited_jobs:
+        for job in jobs_to_release:
             assert job.rate_limit_key
             rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
             rate_limit_registry.release_capacity_and_enqueue(job.id)
