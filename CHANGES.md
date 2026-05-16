@@ -1,4 +1,4 @@
-### RQ 2.9.0 (2026-05-15)
+### RQ 2.9.0 (2026-05-16)
 * Added `json` and `pickle` shorthand aliases for serializers. These can now be used when creating queues/workers and with the `--serializer` CLI option. Thanks @selwin!
 * `Queue.parse_args()` now returns a `EnqueueArgs` named tuple. Thanks @libmilos-so!
 * Fixed a race condition that could cause worker keys in Redis to get out of sync when Redis is under load. Thanks @terencehonles!
