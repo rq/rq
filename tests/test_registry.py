@@ -464,6 +464,55 @@ class TestReadyJobRegistry(RQTestCase):
         self.assertEqual(self.registry.count, 0)
         self.assertIn(job.id, queue.get_job_ids())
 
+    def test_enqueue_jobs_concedes_on_watcherror(self):
+        """On WatchError, the loser returns [] and does not enqueue the job."""
+        from redis.client import Pipeline
+        from redis.exceptions import WatchError
+
+        queue = Queue(connection=self.connection)
+        job = Job.create(say_hello, connection=self.connection, origin=queue.name, status=JobStatus.READY_TO_ENQUEUE)
+        job.save()
+        self.registry.add(job)
+
+        original_execute = Pipeline.execute
+
+        def fake_execute(self_pipe, *args, **kwargs):
+            if getattr(self_pipe, 'watching', False):
+                raise WatchError('simulated contention')
+            return original_execute(self_pipe, *args, **kwargs)
+
+        with mock.patch('redis.client.Pipeline.execute', fake_execute):
+            enqueued_jobs = self.registry.enqueue_jobs([job.id])
+
+        self.assertEqual(enqueued_jobs, [])
+        # Loser did not enqueue — no duplicate
+        self.assertEqual(queue.get_job_ids().count(job.id), 0)
+        # EXEC aborted, so the watched zrem didn't fire — entry remains for next cleanup
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+
+    def test_enqueue_jobs_drops_stale_status_under_watch(self):
+        """If the watched re-read finds non-READY status, the entry is dropped inside MULTI."""
+        from redis.client import Pipeline
+
+        queue = Queue(connection=self.connection)
+        job = Job.create(say_hello, connection=self.connection, origin=queue.name, status=JobStatus.READY_TO_ENQUEUE)
+        job.save()
+        self.registry.add(job)
+
+        original_hget = Pipeline.hget
+
+        def fake_hget(self_pipe, name, key):
+            if name == job.key and key == 'status':
+                return b'canceled'
+            return original_hget(self_pipe, name, key)
+
+        with mock.patch('redis.client.Pipeline.hget', fake_hget):
+            enqueued_jobs = self.registry.enqueue_jobs([job.id])
+
+        self.assertEqual(enqueued_jobs, [])
+        self.assertEqual(self.connection.zcard(self.registry.key), 0)
+        self.assertNotIn(job.id, queue.get_job_ids())
+
     def test_clean_registries_invokes_ready_cleanup(self):
         """clean_registries(queue) recovers jobs from the ready registry."""
         queue = Queue(connection=self.connection)

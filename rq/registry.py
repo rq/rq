@@ -8,6 +8,8 @@ import warnings
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, cast
 
+from redis.exceptions import WatchError
+
 from rq.serializers import resolve_serializer
 
 from .defaults import DEFAULT_FAILURE_TTL
@@ -521,13 +523,16 @@ class ReadyJobRegistry(BaseRegistry):
     def enqueue_jobs(self, job_ids: list[str]) -> list[Job]:
         """Move jobs from the ready registry onto the queue list.
 
+        Uses optimistic locking (WATCH/MULTI) per job: if another caller mutates the
+        registry entry or the job's status between read and commit, this method skips
+        that job for now — a later cleanup pass revisits it. This guarantees no
+        duplicate enqueues at the cost of occasionally conceding a contended job.
+
         For each id:
           - if the job no longer exists, drop the stale registry entry;
-          - if the job's status is no longer READY_TO_ENQUEUE, drop the stale entry without enqueuing;
-          - otherwise remove from the registry and enqueue in one pipeline.
-
-        Failures for a single job are logged and leave that job in the registry so a
-        later cleanup can retry it; remaining jobs in the same call are still processed.
+          - if the job's status is no longer READY_TO_ENQUEUE under WATCH, remove the
+            stale entry inside the watched transaction;
+          - otherwise remove from the registry and enqueue atomically.
         """
         if not job_ids:
             return []
@@ -544,10 +549,28 @@ class ReadyJobRegistry(BaseRegistry):
                 self.connection.zrem(self.key, job_id)
                 continue
             try:
-                with self.connection.pipeline() as pipeline:
-                    self.remove(job, pipeline=pipeline)
-                    queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
-                    pipeline.execute()
+                with self.connection.pipeline() as pipe:
+                    pipe.watch(self.key, job.key)
+
+                    # Claim check: this registry must still own the job id.
+                    if pipe.zscore(self.key, job.id) is None:
+                        pipe.unwatch()
+                        continue
+
+                    status = cast('bytes | str | None', pipe.hget(job.key, 'status'))
+                    if not status or JobStatus(as_text(status)) != JobStatus.READY_TO_ENQUEUE:
+                        pipe.multi()
+                        self.remove(job, pipeline=pipe)
+                        pipe.execute()
+                        continue
+
+                    pipe.multi()
+                    self.remove(job, pipeline=pipe)
+                    queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
+                    pipe.execute()
+            except WatchError:
+                logger.info('Ready job %s changed while enqueueing; skipping for now', job_id)
+                continue
             except Exception:
                 logger.exception('Failed to enqueue ready job %s; leaving in ReadyJobRegistry', job_id)
                 continue
