@@ -508,14 +508,51 @@ class ReadyJobRegistry(BaseRegistry):
     key_template = 'rq:ready:{0}'
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
-        """Ready jobs don't expire based on time; recovery is wired up in a later phase."""
-        pass
+        """Recover any jobs that were left in the registry by enqueuing them onto the queue."""
+        job_ids = [self.parse_job_id(job_id) for job_id in self.connection.zrange(self.key, 0, -1)]
+        return self.enqueue_jobs(job_ids)
 
     def add(self, job: Job, ttl: int | None = None, pipeline: Pipeline | None = None, xx: bool = False) -> int:
         """Adds a job to the ready registry, scored by creation time."""
         score = current_timestamp()
         connection = pipeline if pipeline is not None else self.connection
         return connection.zadd(self.key, {job.id: score}, xx=xx)
+
+    def enqueue_jobs(self, job_ids: list[str]) -> list[Job]:
+        """Move jobs from the ready registry onto the queue list.
+
+        For each id:
+          - if the job no longer exists, drop the stale registry entry;
+          - if the job's status is no longer READY_TO_ENQUEUE, drop the stale entry without enqueuing;
+          - otherwise remove from the registry and enqueue in one pipeline.
+
+        Failures for a single job are logged and leave that job in the registry so a
+        later cleanup can retry it; remaining jobs in the same call are still processed.
+        """
+        if not job_ids:
+            return []
+
+        queue = Queue(name=self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer)
+        fetched = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+
+        enqueued: list[Job] = []
+        for job_id, job in zip(job_ids, fetched):
+            if job is None:
+                self.connection.zrem(self.key, job_id)
+                continue
+            if job.get_status() != JobStatus.READY_TO_ENQUEUE:
+                self.connection.zrem(self.key, job_id)
+                continue
+            try:
+                with self.connection.pipeline() as pipeline:
+                    self.remove(job, pipeline=pipeline)
+                    queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
+                    pipeline.execute()
+            except Exception:
+                logger.exception('Failed to enqueue ready job %s; leaving in ReadyJobRegistry', job_id)
+                continue
+            enqueued.append(job)
+        return enqueued
 
 
 class ScheduledJobRegistry(BaseRegistry):
@@ -623,5 +660,9 @@ def clean_registries(queue: Queue, exception_handlers: list | None = None):
     ).cleanup()
 
     DeferredJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    ).cleanup()
+
+    ReadyJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
