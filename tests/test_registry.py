@@ -16,6 +16,7 @@ from rq.registry import (
     DeferredJobRegistry,
     FailedJobRegistry,
     FinishedJobRegistry,
+    ReadyJobRegistry,
     StartedJobRegistry,
     clean_registries,
 )
@@ -329,6 +330,50 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(self.registry.count, 1)
         self.registry.cleanup()
         self.assertEqual(self.registry.count, 1)
+
+
+class TestReadyJobRegistry(RQTestCase):
+    def setUp(self):
+        super().setUp()
+        self.registry = ReadyJobRegistry(connection=self.connection)
+
+    def test_add_and_remove(self):
+        """Adding/removing a job to ReadyJobRegistry."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        self.registry.add(job)
+        self.assertIn(job, self.registry)
+        self.assertEqual(self.registry.get_job_ids(), [job.id])
+
+        self.registry.remove(job)
+        self.assertNotIn(job, self.registry)
+        self.assertEqual(self.registry.get_job_ids(), [])
+
+    def test_queue_property(self):
+        """Queue.ready_job_registry returns a ReadyJobRegistry bound to the queue."""
+        queue = Queue('foo', connection=self.connection)
+        registry = queue.ready_job_registry
+        self.assertIsInstance(registry, ReadyJobRegistry)
+        self.assertEqual(registry.key, 'rq:ready:foo')
+
+    def test_delete_removes_ready_job_from_registry(self):
+        """Deleting a READY_TO_ENQUEUE job removes it from ReadyJobRegistry."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+        self.assertIn(job, self.registry)
+
+        job.delete()
+        self.assertNotIn(job, self.registry)
+
+    def test_job_is_ready_to_enqueue(self):
+        """Job.is_ready_to_enqueue reflects the READY_TO_ENQUEUE status."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        self.assertFalse(job.is_ready_to_enqueue)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.assertTrue(job.is_ready_to_enqueue)
 
 
 class TestFailedJobRegistry(RQTestCase):

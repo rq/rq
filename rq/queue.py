@@ -469,6 +469,13 @@ class Queue:
         return DeferredJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
     @property
+    def ready_job_registry(self):
+        """Returns this queue's ReadyJobRegistry."""
+        from rq.registry import ReadyJobRegistry
+
+        return ReadyJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
+
+    @property
     def scheduled_job_registry(self):
         """Returns this queue's ScheduledJobRegistry."""
         from rq.registry import ScheduledJobRegistry

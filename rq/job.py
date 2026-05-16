@@ -67,6 +67,7 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+    READY_TO_ENQUEUE = 'ready_to_enqueue'
 
 
 def parse_job_id(job_or_execution_id: str) -> str:
@@ -466,6 +467,10 @@ class Job:
     @property
     def is_stopped(self) -> bool:
         return self.get_status() == JobStatus.STOPPED
+
+    @property
+    def is_ready_to_enqueue(self) -> bool:
+        return self.get_status() == JobStatus.READY_TO_ENQUEUE
 
     @property
     def _dependency_id(self):
@@ -1255,6 +1260,14 @@ class Job:
             from .registry import DeferredJobRegistry
 
             registry = DeferredJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.is_ready_to_enqueue:
+            from .registry import ReadyJobRegistry
+
+            registry = ReadyJobRegistry(
                 self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
             )
             registry.remove(self, pipeline=pipeline)

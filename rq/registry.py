@@ -496,6 +496,28 @@ class DeferredJobRegistry(BaseRegistry):
         return connection.zadd(self.key, {job.id: score}, xx=xx)
 
 
+class ReadyJobRegistry(BaseRegistry):
+    """
+    Registry of jobs whose dependencies have been met and are awaiting
+    enqueue onto the queue list. This is a transient, internal recovery
+    state: the happy path enqueues these jobs synchronously after the
+    dependency transaction commits; if the process dies in between,
+    maintenance cleanup picks them up.
+    """
+
+    key_template = 'rq:ready:{0}'
+
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
+        """Ready jobs don't expire based on time; recovery is wired up in a later phase."""
+        pass
+
+    def add(self, job: Job, ttl: int | None = None, pipeline: Pipeline | None = None, xx: bool = False) -> int:
+        """Adds a job to the ready registry, scored by creation time."""
+        score = current_timestamp()
+        connection = pipeline if pipeline is not None else self.connection
+        return connection.zadd(self.key, {job.id: score}, xx=xx)
+
+
 class ScheduledJobRegistry(BaseRegistry):
     """
     Registry of scheduled jobs.
