@@ -299,6 +299,7 @@ class StartedJobRegistry(BaseRegistry):
 
                 retry = job.retries_left and job.retries_left > 0
                 retry_interval = job.get_retry_interval() if retry else None
+                is_immediate_retry = retry and not retry_interval
 
                 if retry:
                     job.retry(queue, pipeline)
@@ -312,10 +313,10 @@ class StartedJobRegistry(BaseRegistry):
                     # don't refresh the job status, because the job state is still in the pipeline
                     queue.enqueue_dependents(job, refresh_job_status=False)
 
-                # Release the rate-limit slot for final failures and delayed retries.
+                # Release the rate-limit slot for final failures and scheduled retries.
                 # Immediate retries keep the slot — the job is back on the queue and
                 # will re-run on the slot it already owns.
-                if job.has_rate_limit and not (retry and not retry_interval):
+                if job.has_rate_limit and not is_immediate_retry:
                     jobs_to_release.append(job)
 
             pipeline.zremrangebyscore(self.key, 0, score)
