@@ -92,6 +92,7 @@ class QueueArgs(NamedTuple):
     on_success: Callback | Callable | None
     on_failure: Callback | Callable | None
     on_stopped: Callback | Callable | None
+    rate_limit: RateLimit | None
     pipeline: Pipeline | None
     unique: bool
     args: tuple | list | None
