@@ -509,7 +509,7 @@ class ReadyJobRegistry(BaseRegistry):
 
     key_template = 'rq:ready:{0}'
 
-    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None) -> list[Job]:
         """Recover any jobs that were left in the registry by enqueuing them onto the queue."""
         job_ids = [self.parse_job_id(job_id) for job_id in self.connection.zrange(self.key, 0, -1)]
         return self.enqueue_jobs(job_ids)
@@ -545,7 +545,7 @@ class ReadyJobRegistry(BaseRegistry):
             if job is None:
                 self.connection.zrem(self.key, job_id)
                 continue
-            if job.get_status() != JobStatus.READY_TO_ENQUEUE:
+            if job.get_status(refresh=False) != JobStatus.READY_TO_ENQUEUE:
                 self.connection.zrem(self.key, job_id)
                 continue
             try:
@@ -665,7 +665,7 @@ class CanceledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue: Queue, exception_handlers: list | None = None):
-    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry, and DeferredJobRegistry of a queue.
+    """Cleans StartedJobRegistry, FinishedJobRegistry, FailedJobRegistry, DeferredJobRegistry, and ReadyJobRegistry.
 
     Args:
         queue (Queue): The queue to clean
