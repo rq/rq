@@ -63,7 +63,6 @@ class EnqueueData(
             'on_failure',
             'on_stopped',
             'repeat',
-            'rate_limit',
         ],
     )
 ):
@@ -775,7 +774,6 @@ class Queue:
         on_failure: Callback | Callable | None = None,
         on_stopped: Callback | Callable | None = None,
         repeat: Repeat | None = None,
-        rate_limit: RateLimit | None = None,
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -823,7 +821,6 @@ class Queue:
             on_failure,
             on_stopped,
             repeat,
-            rate_limit,
         )
 
     def enqueue_many(
@@ -868,7 +865,6 @@ class Queue:
                 'on_stopped': job_data.on_stopped,
                 'group_id': group_id,
                 'repeat': job_data.repeat,
-                'rate_limit': job_data.rate_limit,
             }
 
         # Enqueue jobs without dependencies
