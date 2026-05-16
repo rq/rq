@@ -10,7 +10,7 @@ import zlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from redis import WatchError
@@ -548,7 +548,7 @@ class Job:
                 self._stopped_callback = None
 
         # After deserialization, _stopped_callback is either a callable or None, never UNEVALUATED
-        return cast(Optional[Callable[['Job', 'Redis'], Any]], self._stopped_callback)
+        return cast(Callable[['Job', 'Redis'], Any] | None, self._stopped_callback)
 
     @property
     def stopped_callback_timeout(self) -> int:
@@ -1360,7 +1360,7 @@ class Job:
                 self.enqueue_at_front = self.enqueue_at_front or depends_on_item.enqueue_at_front
                 self.allow_dependency_failures = self.allow_dependency_failures or depends_on_item.allow_failure
                 depends_on_list.extend(list(depends_on_item.dependencies))
-            elif isinstance(depends_on_item, (Job, str)):
+            elif isinstance(depends_on_item, Job | str):
                 depends_on_list.append(depends_on_item)
             else:
                 raise ValueError(
