@@ -513,6 +513,26 @@ class TestReadyJobRegistry(RQTestCase):
         self.assertEqual(self.connection.zcard(self.registry.key), 0)
         self.assertNotIn(job.id, queue.get_job_ids())
 
+    def test_register_jobs_moves_deferred_jobs_to_ready(self):
+        """register_jobs() appends deferred-remove + status-set + ready-add to the caller's pipeline."""
+        queue = Queue(connection=self.connection)
+        deferred_registry = DeferredJobRegistry(connection=self.connection)
+
+        job = Job.create(say_hello, connection=self.connection, origin=queue.name, status=JobStatus.DEFERRED)
+        job.save()
+        deferred_registry.add(job)
+        self.assertIn(job.id, deferred_registry.get_job_ids())
+
+        with self.connection.pipeline() as pipeline:
+            pipeline.watch(self.registry.key)
+            pipeline.multi()
+            self.registry.register_jobs([job], pipeline=pipeline)
+            pipeline.execute()
+
+        self.assertNotIn(job.id, deferred_registry.get_job_ids())
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.READY_TO_ENQUEUE)
+
     def test_clean_registries_invokes_ready_cleanup(self):
         """clean_registries(queue) recovers jobs from the ready registry."""
         queue = Queue(connection=self.connection)

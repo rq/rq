@@ -5,6 +5,7 @@ import logging
 import time
 import traceback
 import warnings
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, cast
 
@@ -519,6 +520,25 @@ class ReadyJobRegistry(BaseRegistry):
         score = current_timestamp()
         connection = pipeline if pipeline is not None else self.connection
         return connection.zadd(self.key, {job.id: score}, xx=xx)
+
+    def register_jobs(self, jobs: Sequence[Job], pipeline: Pipeline) -> None:
+        """Move dependents into the ready state inside the caller's watched transaction.
+
+        For each job, appends three ops to ``pipeline``:
+          1. remove from this queue's DeferredJobRegistry
+          2. set status to READY_TO_ENQUEUE
+          3. add to this ReadyJobRegistry
+
+        All jobs must belong to this registry's queue (``job.origin == self.name``).
+        The caller owns WATCH/MULTI/EXEC; this method only queues commands.
+        """
+        deferred_registry = DeferredJobRegistry(
+            name=self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+        )
+        for job in jobs:
+            deferred_registry.remove(job, pipeline=pipeline)
+            job.set_status(JobStatus.READY_TO_ENQUEUE, pipeline=pipeline)
+            self.add(job, pipeline=pipeline)
 
     def enqueue_jobs(self, job_ids: list[str]) -> list[Job]:
         """Move jobs from the ready registry onto the queue list.
