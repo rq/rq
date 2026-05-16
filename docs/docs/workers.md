@@ -70,7 +70,7 @@ In addition to `--burst`, `rq worker` also accepts these arguments:
 * `--date-format`: Datetime format for the worker logs, defaults to `'%H:%M:%S'`
 * `--disable-job-desc-logging`: Turn off job description logging.
 * `--max-jobs`: Maximum number of jobs to execute.
-* `--serializer`: Path to serializer object (e.g "rq.serializers.DefaultSerializer" or "rq.serializers.JSONSerializer")
+* `--serializer`: Serializer to use. Accepts `json` or `pickle`, or a dotted import path to your own serializer (e.g. `rq.serializers.JSONSerializer`).
 
 _New in version 1.14.0._
 * `--dequeue-strategy`: The strategy to dequeue jobs from multiple queues (one of `default`, `random` or `round_robin`,  defaults to `default`)
@@ -212,15 +212,13 @@ When creating a worker, you can pass in a custom serializer that will be used wh
 
 > **Warning:** RQ uses [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle) as its default serializer, which **is not secure**. Only run RQ against Redis instances that you trust. It is possible to construct malicious pickle data that will execute arbitrary code during unpickling.
 
-To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs.
-
-For example, to process jobs that were enqueued with `JSONSerializer`:
+To process jobs that were enqueued with the JSON serializer, pass either the `'json'` shorthand or the `JSONSerializer` class itself:
 
 ```python
 from rq import Worker
 from rq.serializers import JSONSerializer
 
-worker = Worker('foo', serializer=JSONSerializer)
+worker = Worker('foo', serializer='json')  # or: serializer=JSONSerializer
 ```
 
 You can also use the same serializer when creating the queue object:
@@ -229,14 +227,14 @@ You can also use the same serializer when creating the queue object:
 from rq import Queue, Worker
 from rq.serializers import JSONSerializer
 
-queue = Queue('foo', serializer=JSONSerializer)
-worker = Worker([queue], serializer=JSONSerializer)
+queue = Queue('foo', serializer='json')        # or: serializer=JSONSerializer
+worker = Worker([queue], serializer='json')    # or: serializer=JSONSerializer
 ```
 
-When starting workers from the command line, pass the serializer path:
+When starting workers from the command line, pass the serializer (the shorthand `json` resolves to `rq.serializers.JSONSerializer`; a dotted import path also works):
 
 ```console
-$ rq worker --serializer rq.serializers.JSONSerializer
+$ rq worker --serializer json
 ```
 
 
@@ -571,6 +569,6 @@ Options:
 * `-n` or `--num-workers <number of worker>`: defaults to 2.
 * `-b` or `--burst`: run workers in burst mode (stops after all jobs in queue have been processed).
 * `-l` or `--logging-level <level>`: defaults to `INFO`. `DEBUG`, `WARNING`, `ERROR` and `CRITICAL` are supported.
-* `-S` or `--serializer <path.to.Serializer>`: defaults to `rq.serializers.DefaultSerializer`. `rq.serializers.JSONSerializer` is also included.
+* `-S` or `--serializer <serializer>`: accepts the shorthand `json` or `pickle`, or a dotted import path. Defaults to `rq.serializers.PickleSerializer`.
 * `-P` or `--path <path>`: multiple import paths are supported (e.g `rq worker --path foo --path bar`).
 * `-j` or `--job-class <path.to.Job>`: defaults to `rq.job.Job`.

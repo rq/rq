@@ -88,6 +88,10 @@ class TestWorker(RQTestCase):
         w = Worker(Queue('foo', connection=self.connection), serializer=json)
         self.assertEqual(w.queues[0].name, 'foo')
 
+        # With queue name string and serializer alias
+        w = Worker('foo', serializer='json', connection=self.connection)
+        self.assertIs(w.serializer, JSONSerializer)
+
     def test_work_and_quit(self):
         """Worker processes work, then quits."""
         fooq, barq = Queue('foo', connection=self.connection), Queue('bar', connection=self.connection)

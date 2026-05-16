@@ -4,7 +4,7 @@ import json
 import pickle
 from collections.abc import Callable
 from functools import partial
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, cast, runtime_checkable
 
 from .utils import import_attribute
 
@@ -21,6 +21,9 @@ class DefaultSerializer:
     loads: ClassVar[Callable[[bytes], Any]] = pickle.loads
 
 
+PickleSerializer = DefaultSerializer
+
+
 class JSONSerializer:
     @staticmethod
     def dumps(*args, **kwargs):
@@ -29,6 +32,12 @@ class JSONSerializer:
     @staticmethod
     def loads(s, *args, **kwargs):
         return json.loads(s.decode('utf-8'), *args, **kwargs)
+
+
+SERIALIZER_ALIASES: dict[str, Serializer] = {
+    'json': JSONSerializer,
+    'pickle': PickleSerializer,
+}
 
 
 def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer:
@@ -44,12 +53,13 @@ def resolve_serializer(serializer: Serializer | str | None = None) -> Serializer
         serializer (Callable): An object that implements the SerializerProtocol
     """
     if not serializer:
-        return DefaultSerializer
+        return PickleSerializer
 
     if isinstance(serializer, str):
-        serializer = import_attribute(serializer)  # type: ignore[assignment]
-
-    assert not isinstance(serializer, str)
+        serializer_path = serializer
+        serializer = SERIALIZER_ALIASES.get(serializer_path)
+        if not serializer:
+            serializer = cast(Serializer, import_attribute(serializer_path))
 
     if not isinstance(serializer, Serializer):
         raise NotImplementedError('Serializer should have (dumps, loads) methods.')
