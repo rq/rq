@@ -69,6 +69,39 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: false
 
+  windows-test:
+    name: Windows/Python${{ matrix.python-version }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install and start Memurai
+        run: |
+          choco install memurai-developer --yes
+          Start-Service memurai
+
+      - name: Verify Redis is ready
+        run: |
+          & "C:\Program Files\Memurai\memurai-cli.exe" ping
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install hatch
+
+      - name: Test with pytest
+        run: hatch run test:cov --durations=5
+
   mypy:
     runs-on: ubuntu-latest
     name: Type check
