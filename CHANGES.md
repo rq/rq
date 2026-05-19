@@ -1,3 +1,12 @@
+### RQ 2.9.0 (2026-05-19)
+* Added `json` and `pickle` shorthand aliases for serializers. These can now be used when creating queues/workers and with the `--serializer` CLI option. Thanks @selwin!
+* Fixed a bug where `SpawnWorker` does not use user supplied serializer. Thanks @selwin!
+* `Queue.parse_args()` now returns a `EnqueueArgs` named tuple. Thanks @libmilos-so!
+* Fixed a race condition that could cause worker keys in Redis to get out of sync when Redis is under load. Thanks @terencehonles!
+* Enqueueing deferred jobs now removes them from `DeferredJobRegistry`. Thanks @selwin!
+* `SpawnWorker` now uses `repr()` when reconstructing worker, job and queue identifiers in child processes. Thanks @selwin!
+* Minor typing and cleanup improvements. Thanks @selwin and @rextea!
+
 ### RQ 2.8.0 (2026-04-16)
 * Added support for unique jobs. Passing `unique=True` with `job_id` prevents duplicate jobs from being enqueued or scheduled. Thanks @selwin!
 * `Result` now stores execution metadata (`execution_id`, `execution_started_at` and `execution_ended_at`). Thanks @selwin!
