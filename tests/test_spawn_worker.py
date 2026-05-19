@@ -8,6 +8,7 @@ from rq import Queue
 from rq.job import Job
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
+from rq.serializers import JSONSerializer
 from rq.worker import SpawnWorker
 from tests import RQTestCase, slow
 from tests.fixtures import (
@@ -53,6 +54,30 @@ class TestWorker(RQTestCase):
 
         self.assertNotIn('driver_info', redis_kwargs)
         self.assertIn('driver_info', worker.connection.connection_pool.connection_kwargs)
+
+    def test_worker_normalizes_serializer_arg_for_spawn(self):
+        """_serializer_arg is normalized to str|None so it can be safely embedded in the child source."""
+        import json
+
+        from rq.serializers import PickleSerializer, resolve_serializer
+
+        queue = Queue('foo', connection=self.connection)
+
+        worker = SpawnWorker([queue])
+        self.assertIsNone(worker._serializer_arg)
+        self.assertIs(resolve_serializer(worker._serializer_arg), PickleSerializer)
+
+        worker = SpawnWorker([queue], serializer='json')
+        self.assertEqual(worker._serializer_arg, 'json')
+        self.assertIs(resolve_serializer(worker._serializer_arg), JSONSerializer)
+
+        worker = SpawnWorker([queue], serializer=JSONSerializer)
+        self.assertEqual(worker._serializer_arg, 'rq.serializers.JSONSerializer')
+        self.assertIs(resolve_serializer(worker._serializer_arg), JSONSerializer)
+
+        worker = SpawnWorker([queue], serializer=json)
+        self.assertEqual(worker._serializer_arg, 'json')
+        self.assertIs(resolve_serializer(worker._serializer_arg), JSONSerializer)
 
     def test_invalid_job_id_is_rejected_before_spawn(self):
         queue = Queue('foo', connection=self.connection)
