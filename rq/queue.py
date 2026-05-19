@@ -13,7 +13,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     NamedTuple,
-    Optional,
     cast,
 )
 
@@ -73,7 +72,7 @@ class EnqueueData(
     __slots__ = ()
 
 
-class QueueArgs(NamedTuple):
+class EnqueueArgs(NamedTuple):
     """Helper type to use when calling Queue.parse_args"""
 
     func: str | Callable[..., Any]
@@ -985,7 +984,7 @@ class Queue:
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 
-        return QueueArgs(
+        return EnqueueArgs(
             f,
             timeout,
             description,
@@ -1535,7 +1534,7 @@ class Queue:
                 raise DequeueTimeout(timeout, queue_key)
             return queue_key, result
         else:  # non-blocking variant
-            result = cast(Optional[Any], connection.lmove(queue_key, intermediate_queue.key))
+            result = cast(Any | None, connection.lmove(queue_key, intermediate_queue.key))
             if result is not None:
                 return queue_key, result
             return None

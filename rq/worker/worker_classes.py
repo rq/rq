@@ -189,13 +189,13 @@ from rq.executions import Execution
 
 # Recreate worker instance
 redis = Redis(**{redis_kwargs!r})
-worker = Worker.find_by_key({self.key!r}, connection=redis)
+worker = Worker.find_by_key({self.key!r}, connection=redis, serializer={self._serializer_arg!r})
 if not worker:
     sys.exit(1)
 
 # Reconstruct job, queue and execution objects
-job = Job.fetch({job.id!r}, connection=worker.connection)
-queue = Queue({queue.name!r}, connection=worker.connection)
+job = Job.fetch({job.id!r}, connection=worker.connection, serializer=worker.serializer)
+queue = Queue({queue.name!r}, connection=worker.connection, serializer=worker.serializer)
 execution_id = os.environ["RQ_EXECUTION_ID"]
 worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
 

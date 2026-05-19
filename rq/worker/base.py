@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 import math
 import os
@@ -177,6 +178,12 @@ class BaseWorker:
 
         self.version: str = VERSION
         self.python_version: str = sys.version
+        if serializer is None or isinstance(serializer, str):
+            self._serializer_arg: str | None = serializer
+        elif inspect.ismodule(serializer):
+            self._serializer_arg = serializer.__name__
+        else:
+            self._serializer_arg = f'{serializer.__module__}.{serializer.__qualname__}'  # type: ignore[attr-defined]
         self.serializer = resolve_serializer(serializer)
         self.execution: Execution | None = None
 
@@ -234,7 +241,7 @@ class BaseWorker:
             self.pid = None
             self.ip_address = 'unknown'
 
-        if isinstance(exception_handlers, (list, tuple)):
+        if isinstance(exception_handlers, list | tuple):
             for handler in exception_handlers:
                 self.push_exc_handler(handler)
         elif exception_handlers is not None:
