@@ -18,6 +18,7 @@ from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAU
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
+from .rate_limit import RateLimitRegistry
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
 from .utils import current_timestamp, parse_names
@@ -158,14 +159,36 @@ class RQScheduler:
 
             queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
 
-            with self.connection.pipeline() as pipeline:
-                jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
-                for job in jobs:
-                    if job is not None:
+            jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+            normal_jobs = []
+            rate_limited_jobs = []
+            missing_job_ids = []
+
+            for job_id, job in zip(job_ids, jobs):
+                if job is None:
+                    missing_job_ids.append(job_id)
+                elif job.has_rate_limit:
+                    rate_limited_jobs.append(job)
+                else:
+                    normal_jobs.append(job)
+
+            if normal_jobs or missing_job_ids:
+                with self.connection.pipeline() as pipeline:
+                    for job in normal_jobs:
                         queue._enqueue_job(job, pipeline=pipeline, at_front=job.should_enqueue_at_front())
-                for job_id in job_ids:
-                    registry.remove(job_id, pipeline=pipeline)
-                pipeline.execute()
+                        registry.remove(job.id, pipeline=pipeline)
+                    for job_id in missing_job_ids:
+                        registry.remove(job_id, pipeline=pipeline)
+                    pipeline.execute()
+
+            for job in rate_limited_jobs:
+                with self.connection.pipeline() as pipeline:
+                    registry.remove(job.id, pipeline=pipeline)
+                    queue._enqueue_rate_limited_job(job, pipeline=pipeline)
+                    pipeline.execute()
+                assert job.rate_limit_key and job.rate_limit_concurrency
+                rl_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
+                rl_registry.acquire_and_enqueue(job.rate_limit_concurrency)
         self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):
