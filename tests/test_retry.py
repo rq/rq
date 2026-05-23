@@ -133,7 +133,7 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.retries_left, 2)
         # status should be queued
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
-    
+
     def test_job_create_with_retry(self):
         """Job.create(..., retry=...) works properly"""
         queue = Queue(connection=self.connection)
