@@ -248,6 +248,7 @@ class Job:
         description: str | None = None,
         depends_on: JobDependencyType | None = None,
         timeout: int | None = None,
+        retry: Retry | None = None,
         id: str | None = None,
         origin: str = '',
         meta: dict[str, Any] | None = None,
@@ -364,6 +365,11 @@ class Job:
         job.timeout = parse_timeout(timeout)
         job.meta = meta or {}
         job.group_id = group_id
+
+        if retry is not None:
+            job.retries_left = retry.max
+            job.enqueue_at_front_on_retry = retry.enqueue_at_front
+            job.retry_intervals = retry.intervals
 
         # Process job dependencies
         if depends_on is not None:

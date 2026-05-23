@@ -133,6 +133,43 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.retries_left, 2)
         # status should be queued
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+    
+    def test_job_create_with_retry(self):
+        """Job.create(..., retry=...) works properly"""
+        queue = Queue(connection=self.connection)
+
+        retry = Retry(max=3, interval=5)
+        job = Job.create(div_by_zero, retry=retry)
+        queue.enqueue_job(job)
+
+        with self.connection.pipeline() as pipeline:
+            job.retry(queue, pipeline)
+            pipeline.execute()
+
+        self.assertEqual(job.retries_left, 2)
+        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
+
+        retry = Retry(max=3)
+        job = Job.create(div_by_zero, retry=retry)
+        queue.enqueue_job(job)
+
+        with self.connection.pipeline() as pipeline:
+            job.retry(queue, pipeline)
+            pipeline.execute()
+
+        self.assertEqual(job.retries_left, 2)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+        retry = Retry(max=3, enqueue_at_front=True)
+        job = Job.create(div_by_zero, retry=retry)
+        queue.enqueue_job(job)
+
+        with self.connection.pipeline() as pipeline:
+            job.retry(queue, pipeline)
+            pipeline.execute()
+
+        self.assertEqual(job.retries_left, 2)
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
     def test_retry_interval(self):
         """Retries with intervals are scheduled"""
