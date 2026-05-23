@@ -139,7 +139,7 @@ class TestRetry(RQTestCase):
         queue = Queue(connection=self.connection)
 
         retry = Retry(max=3, interval=5)
-        job = Job.create(div_by_zero, retry=retry)
+        job = Job.create(div_by_zero, retry=retry, connection=self.connection)
         queue.enqueue_job(job)
 
         with self.connection.pipeline() as pipeline:
@@ -150,7 +150,7 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
 
         retry = Retry(max=3)
-        job = Job.create(div_by_zero, retry=retry)
+        job = Job.create(div_by_zero, retry=retry, connection=self.connection)
         queue.enqueue_job(job)
 
         with self.connection.pipeline() as pipeline:
@@ -161,7 +161,7 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
 
         retry = Retry(max=3, enqueue_at_front=True)
-        job = Job.create(div_by_zero, retry=retry)
+        job = Job.create(div_by_zero, retry=retry, connection=self.connection)
         queue.enqueue_job(job)
 
         with self.connection.pipeline() as pipeline:
