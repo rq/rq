@@ -5,6 +5,7 @@ from rq import Worker
 
 
 def test_worker_bootstrap_preserves_configured_log_level():
+    """Worker bootstrap preserves configured log levels by default."""
     connection = Mock()
     connection.connection_pool.connection_kwargs = {}
     worker = Worker(['default'], connection=connection, prepare_for_work=False)
