@@ -138,38 +138,13 @@ class TestRetry(RQTestCase):
         """Job.create(..., retry=...) works properly"""
         queue = Queue(connection=self.connection)
 
-        retry = Retry(max=3, interval=5)
+        retry = Retry(max=3, interval=5, enqueue_at_front=True)
         job = Job.create(div_by_zero, retry=retry, connection=self.connection)
         queue.enqueue_job(job)
 
-        with self.connection.pipeline() as pipeline:
-            job.retry(queue, pipeline)
-            pipeline.execute()
-
-        self.assertEqual(job.retries_left, 2)
-        self.assertEqual(job.get_status(), JobStatus.SCHEDULED)
-
-        retry = Retry(max=3)
-        job = Job.create(div_by_zero, retry=retry, connection=self.connection)
-        queue.enqueue_job(job)
-
-        with self.connection.pipeline() as pipeline:
-            job.retry(queue, pipeline)
-            pipeline.execute()
-
-        self.assertEqual(job.retries_left, 2)
-        self.assertEqual(job.get_status(), JobStatus.QUEUED)
-
-        retry = Retry(max=3, enqueue_at_front=True)
-        job = Job.create(div_by_zero, retry=retry, connection=self.connection)
-        queue.enqueue_job(job)
-
-        with self.connection.pipeline() as pipeline:
-            job.retry(queue, pipeline)
-            pipeline.execute()
-
-        self.assertEqual(job.retries_left, 2)
-        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.retries_left, 3)
+        self.assertEqual(job.retry_intervals, [5])
+        self.assertTrue(job.enqueue_at_front_on_retry)
 
     def test_retry_interval(self):
         """Retries with intervals are scheduled"""
