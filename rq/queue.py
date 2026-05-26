@@ -268,8 +268,16 @@ class Queue:
     def scheduler_pid(self) -> int | None:
         from rq.scheduler import RQScheduler
 
-        pid = self.connection.get(RQScheduler.get_locking_key(self.name))
-        return int(pid.decode()) if pid is not None else None
+        if (value := self.connection.get(RQScheduler.get_locking_key(self.name))) is None:
+            return None
+
+        parts = value.decode('ascii').split(':')
+        if len(parts) == 1:  # an old scheduler which hasn't been restarted
+            return int(parts[0])
+
+        ppid, pid = parts[:2]
+        # PID is only set after forking, so fall back to the parent's PID if the child has not forked yet
+        return int(ppid if not pid else pid)
 
     def acquire_maintenance_lock(self) -> bool:
         """Returns a boolean indicating whether a lock to clean this queue
