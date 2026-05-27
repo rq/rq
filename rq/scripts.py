@@ -32,15 +32,15 @@ def get_registered_script(connection: Redis, source: str) -> Script:
 
 
 # Lua script to delete only owned scheduler locks
-DELETE_SCHEDULER_LOCKS = """
+SCHEDULER_DELETE_LOCKS = """
     -- KEYS[*] = scheduler locks to delete
     -- ARGV[1] = scheduler lock token
 
     local pattern = string.format(':%s$', ARGV[1])
     local count = 0
     for _, key in ipairs(KEYS) do
-        if string.find(redis.call('get', key) or '', pattern) then
-            count = count + redis.call('del', key)
+        if string.find(redis.call('GET', key) or '', pattern) then
+            count = count + redis.call('DEL', key)
         end
     end
 
@@ -48,8 +48,35 @@ DELETE_SCHEDULER_LOCKS = """
 """
 
 
-def delete_scheduler_locks(connection: Redis, token: str, keys: Sequence[str]) -> int:
-    return get_registered_script(connection, DELETE_SCHEDULER_LOCKS)(keys=keys, args=[token])
+def scheduler_delete_locks(connection: Redis, token: str, keys: Sequence[str]) -> int:
+    return get_registered_script(connection, SCHEDULER_DELETE_LOCKS)(keys=keys, args=[token])
+
+
+# Lua script to update only owned scheduler locks to a new value & expiration
+SCHEDULER_UPDATE_LOCKS = """
+    -- KEYS[*] = scheduler locks to update
+    -- ARGV[1] = scheduler lock token
+    -- ARGV[2] = scheduler lock updated value
+    -- ARGV[3] = scheduler lock expiration
+
+    local pattern = string.format(':%s$', ARGV[1])
+    local count = 0
+    for _, key in ipairs(KEYS) do
+        if string.find(redis.call('GET', key) or '', pattern) then
+            count = count + 1
+            redis.call('SET', key, ARGV[2], 'ex', ARGV[3])
+        end
+    end
+
+    return count
+"""
+
+
+def scheduler_update_locks(connection: Redis, token: str, value: str, ex: int, keys: Sequence[str]) -> int:
+    if not value.endswith(f':{token}'):
+        raise ValueError(f'Scheduler value {value!r} will change lock ownership!')
+
+    return get_registered_script(connection, SCHEDULER_UPDATE_LOCKS)(keys=keys, args=[token, value, ex])
 
 
 # Lua script for atomic unique enqueue: check existence, save job, push to queue

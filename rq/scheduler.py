@@ -20,7 +20,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
-from .scripts import delete_scheduler_locks
+from .scripts import scheduler_delete_locks, scheduler_update_locks
 from .serializers import resolve_serializer
 from .utils import current_timestamp, parse_names, split_list
 
@@ -167,16 +167,13 @@ class RQScheduler:
         # update locks with scheduler PID now that it has launched
         self._pid = os.getpid()
         self.lock_acquisition_time = datetime.now()
-        with self.connection.pipeline() as pipeline:
-            for name in successful_locks:
-                pipeline.set(
-                    self.get_locking_key(name),
-                    f'{self._ppid}:{self._pid}:{self._token}',
-                    ex=self.interval + 60,
-                    xx=True,
-                )
-
-            pipeline.execute()
+        scheduler_update_locks(
+            self.connection,
+            self._token,
+            f'{self._ppid}:{self._pid}:{self._token}',
+            self.interval + 60,
+            [self.get_locking_key(name) for name in successful_locks],
+        )
 
         return successful_locks
 
@@ -267,7 +264,7 @@ class RQScheduler:
 
     def release_locks(self):
         """Release acquired locks"""
-        delete_scheduler_locks(
+        scheduler_delete_locks(
             self.connection, self._token, [self.get_locking_key(name) for name in self._acquired_locks]
         )
         self._acquired_locks = set()
