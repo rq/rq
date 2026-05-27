@@ -109,17 +109,19 @@ class RQScheduler:
 
     def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
-        successful_locks = set()
         self.log.debug('Acquiring scheduler lock for %s', ', '.join(self._queue_names))
-        for name in self._queue_names:
-            if self.connection.set(
-                self.get_locking_key(name),
-                f'{self._ppid}:{self._pid or ""}:{self._token}',
-                nx=True,
-                ex=self.interval + 60,
-            ):
-                self.log.info('Acquired scheduler lock for %s', name)
-                successful_locks.add(name)
+        with self.connection.pipeline() as pipeline:
+            for name in self._queue_names:
+                pipeline.set(
+                    self.get_locking_key(name),
+                    f'{self._ppid}:{self._pid or ""}:{self._token}',
+                    nx=True,
+                    ex=self.interval + 60,
+                )
+            result = pipeline.execute()
+
+        if successful_locks := {name for name, locked in zip(self._queue_names, result) if locked}:
+            self.log.info('Acquired scheduler lock for %s', ', '.join(successful_locks))
 
         # Always reset _scheduled_job_registries when acquiring locks
         self._scheduled_job_registries = []
@@ -143,26 +145,37 @@ class RQScheduler:
         Checks initial locks against the scheduler's initialization token, removes any locks that have expired
         during start-up, updates the lock to hold the child process PID, and returns the locks that are still held.
         """
-        successful_locks = set()
         self.log.debug('Checking scheduler lock for %s', ', '.join(self._queue_names))
-        for name in self._queue_names:
-            value = self.connection.get(self.get_locking_key(name))
-            if value and value.decode('ascii').rpartition(':')[-1] == self._token:
-                successful_locks.add(name)
+        with self.connection.pipeline() as pipeline:
+            for name in self._queue_names:
+                pipeline.get(self.get_locking_key(name))
 
-        self._acquired_locks = successful_locks
+            result = pipeline.execute()
+
+        self._acquired_locks = successful_locks = {
+            name
+            for name, value in zip(self._queue_names, result)
+            if value and value.decode('ascii').rpartition(':')[-1] == self._token
+        }
 
         if not successful_locks:
             self.log.info('Scheduler stopping; All locks have expired.')
             self._status = self.Status.STOPPED
             return successful_locks
 
+        # update locks with scheduler PID now that it has launched
         self._pid = os.getpid()
         self.lock_acquisition_time = datetime.now()
-        for name in self._queue_names:
-            self.connection.set(
-                self.get_locking_key(name), f'{self._ppid}:{self._pid}:{self._token}', ex=self.interval + 60, xx=True
-            )
+        with self.connection.pipeline() as pipeline:
+            for name in successful_locks:
+                pipeline.set(
+                    self.get_locking_key(name),
+                    f'{self._ppid}:{self._pid}:{self._token}',
+                    ex=self.interval + 60,
+                    xx=True,
+                )
+
+            pipeline.execute()
 
         return successful_locks
 
@@ -243,12 +256,12 @@ class RQScheduler:
             self._acquired_locks -= lost
             self._scheduled_job_registries = []
 
-        if not self.acquired_locks:
-            self._status = self.Status.STOPPED
-
     def stop(self):
-        self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
-        self.release_locks()
+        if locks := self._acquired_locks:
+            self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(locks))
+            self.release_locks()
+        else:
+            self.log.info('Scheduler stopping, no locks to release')
         self._status = self.Status.STOPPED
 
     def release_locks(self):
@@ -280,6 +293,13 @@ class RQScheduler:
 
             self.enqueue_scheduled_jobs()
             self.heartbeat()
+
+            # if all locks were lost, try to re-obtain a lock or shutdown
+            if not self.acquired_locks:
+                if not self.acquire_locks():
+                    self.stop()
+                    break
+
             time.sleep(self.interval)
 
 
