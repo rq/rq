@@ -1,13 +1,56 @@
+from __future__ import annotations
+
 import calendar
 import logging
 import time
-from datetime import timedelta, timezone
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
+
+from redis import Redis
 
 from .exceptions import DuplicateJobError
 from .logutils import blue, green
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from redis.commands.core import Script
+
+    from .job import Job
+
 logger = logging.getLogger('rq.scripts')
+
+# Cache registered scripts per connection
+_registered_scripts: dict[tuple[str, Redis], Script] = {}
+
+
+def get_registered_script(connection: Redis, source: str) -> Script:
+    """Get or register a Lua script."""
+    if (script := _registered_scripts.get(key := (source, connection))) is None:
+        _registered_scripts[key] = script = connection.register_script(source)
+    return script
+
+
+# Lua script to delete only owned scheduler locks
+DELETE_SCHEDULER_LOCKS = """
+    -- KEYS[*] = scheduler locks to delete
+    -- ARGV[1] = scheduler lock token
+
+    local pattern = string.format(':%s$', ARGV[1])
+    local count = 0
+    for _, key in ipairs(KEYS) do
+        if string.find(redis.call('get', key) or '', pattern) then
+            count = count + redis.call('del', key)
+        end
+    end
+
+    return count
+"""
+
+
+def delete_scheduler_locks(connection: Redis, token: str, keys: Sequence[str]) -> int:
+    return get_registered_script(connection, DELETE_SCHEDULER_LOCKS)(keys=keys, args=[token])
+
 
 # Lua script for atomic unique enqueue: check existence, save job, push to queue
 UNIQUE_ENQUEUE_SCRIPT = """
@@ -44,18 +87,8 @@ UNIQUE_ENQUEUE_SCRIPT = """
     return 1  -- Success
 """
 
-# Cache registered scripts per connection
-_registered_scripts: dict[Any, Any] = {}
 
-
-def get_unique_enqueue_script(connection):
-    """Get or create the registered Lua script for unique enqueue."""
-    if connection not in _registered_scripts:
-        _registered_scripts[connection] = connection.register_script(UNIQUE_ENQUEUE_SCRIPT)
-    return _registered_scripts[connection]
-
-
-def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
+def save_unique_job(connection: Redis, queue_key: str, job: Job, enqueue: bool = True, at_front: bool = False) -> bool:
     """Atomically check uniqueness, save job, and optionally push to queue using Lua script.
 
     Args:
@@ -72,7 +105,7 @@ def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
     Raises:
         DuplicateJobError: If a job with the same ID already exists
     """
-    script = get_unique_enqueue_script(connection)
+    script = get_registered_script(connection, UNIQUE_ENQUEUE_SCRIPT)
 
     hset_args = _build_hset_args(job)
 
@@ -137,7 +170,7 @@ UNIQUE_SCHEDULE_SCRIPT = """
 """
 
 
-def _build_hset_args(job):
+def _build_hset_args(job: Job) -> list[bytes | str]:
     """Build flat list of field/value pairs from job.to_dict() for use in Lua HSET calls."""
     job_data = job.to_dict()
     hset_args = []
@@ -151,17 +184,9 @@ def _build_hset_args(job):
     return hset_args
 
 
-_registered_schedule_scripts: dict[Any, Any] = {}
-
-
-def get_unique_schedule_script(connection):
-    """Get or create the registered Lua script for unique schedule."""
-    if connection not in _registered_schedule_scripts:
-        _registered_schedule_scripts[connection] = connection.register_script(UNIQUE_SCHEDULE_SCRIPT)
-    return _registered_schedule_scripts[connection]
-
-
-def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_datetime):
+def schedule_unique_job(
+    connection: Redis, queue_key: str, registry_key: str, job: Job, scheduled_datetime: datetime
+) -> bool:
     """Atomically check uniqueness, save job, and add to scheduled registry using Lua script.
 
     Args:
@@ -177,7 +202,7 @@ def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_date
     Raises:
         DuplicateJobError: If a job with the same ID already exists
     """
-    script = get_unique_schedule_script(connection)
+    script = get_registered_script(connection, UNIQUE_SCHEDULE_SCRIPT)
 
     hset_args = _build_hset_args(job)
 

@@ -20,6 +20,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
+from .scripts import delete_scheduler_locks
 from .serializers import resolve_serializer
 from .utils import current_timestamp, parse_names, split_list
 
@@ -266,8 +267,9 @@ class RQScheduler:
 
     def release_locks(self):
         """Release acquired locks"""
-        keys = [self.get_locking_key(name) for name in self._acquired_locks]
-        self.connection.delete(*keys)
+        delete_scheduler_locks(
+            self.connection, self._token, [self.get_locking_key(name) for name in self._acquired_locks]
+        )
         self._acquired_locks = set()
 
     def start(self):
