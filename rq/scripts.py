@@ -36,10 +36,11 @@ SCHEDULER_DELETE_LOCKS = """
     -- KEYS[*] = scheduler locks to delete
     -- ARGV[1] = scheduler lock token
 
-    local pattern = string.format(':%s$', ARGV[1])
+    local suffix = string.format(':%s', ARGV[1])
+    local suffix_length = #suffix
     local count = 0
     for _, key in ipairs(KEYS) do
-        if string.find(redis.call('GET', key) or '', pattern) then
+        if string.sub(redis.call('GET', key) or '', -suffix_length) == suffix then
             count = count + redis.call('DEL', key)
         end
     end
@@ -59,10 +60,11 @@ SCHEDULER_UPDATE_LOCKS = """
     -- ARGV[2] = scheduler lock updated value
     -- ARGV[3] = scheduler lock expiration
 
-    local pattern = string.format(':%s$', ARGV[1])
+    local suffix = string.format(':%s', ARGV[1])
+    local suffix_length = #suffix
     local count = 0
     for _, key in ipairs(KEYS) do
-        if string.find(redis.call('GET', key) or '', pattern) then
+        if string.sub(redis.call('GET', key) or '', -suffix_length) == suffix then
             count = count + 1
             redis.call('SET', key, ARGV[2], 'ex', ARGV[3])
         end
