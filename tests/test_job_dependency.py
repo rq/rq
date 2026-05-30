@@ -264,9 +264,12 @@ class TestJobDependency(RQTestCase):
         with self.connection.pipeline() as pipe:
             pipe.watch('some:key')
             self.assertEqual(self.connection.get('some:key'), b'some:value')
-            dependency.cancel(pipeline=pipe, enqueue_dependents=True)
+            dependent_job_ids_by_queue = dependency.cancel(pipeline=pipe, enqueue_dependents=True)
             pipe.set('some:key', b'some:other:value')
             pipe.execute()
+        # Caller-owned pipeline path: drain ready dependents now that EXEC committed
+        for queue_name, ids in dependent_job_ids_by_queue.items():
+            Queue(queue_name, connection=self.connection).ready_job_registry.enqueue_jobs(ids)
         self.assertEqual(self.connection.get('some:key'), b'some:other:value')
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))

@@ -5,7 +5,7 @@ import sys
 import traceback
 import uuid
 import warnings
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timedelta
 from functools import total_ordering
@@ -1364,23 +1364,37 @@ class Queue:
         pipeline: Pipeline | None = None,
         exclude_job_id: str | None = None,
         refresh_job_status: bool = True,
-    ):
-        """Enqueues all jobs in the given job's dependents set and clears it.
+    ) -> dict[str, list[str]]:
+        """Move all of the given job's dependents whose dependencies are met into the
+        per-origin ReadyJobRegistry, then (on the no-pipeline path) drain them onto
+        their respective queues.
 
-        When called without a pipeline, this method uses WATCH/MULTI/EXEC.
-        If you pass a pipeline, only MULTI is called. The rest is up to the
-        caller.
+        When called without a pipeline, this method uses WATCH/MULTI/EXEC and the
+        synchronous-visibility contract is preserved: by the time it returns, the
+        eligible dependents have been pushed onto their origin queues.
+
+        When called with a caller-owned pipeline, only the deferred→ready ops are
+        appended; the caller is responsible for EXECing the pipeline and then
+        draining the returned ids via
+        ``Queue(origin).ready_job_registry.enqueue_jobs(ids)``. If the caller
+        skips the drain, ``ReadyJobRegistry.cleanup()`` recovers the dependents
+        later.
 
         Args:
-            job (Job): The Job to enqueue the dependents
-            pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
-            exclude_job_id (Optional[str], optional): Whether to exclude the job id. Defaults to None.
-            refresh_job_status (bool): whether to refresh job status when checking for dependencies. Defaults to True.
+            job: The job whose dependents to process.
+            pipeline: Optional caller-owned pipeline.
+            exclude_job_id: Skip a specific dependent id.
+            refresh_job_status: Whether to refresh dependent status during dependency check.
+
+        Returns:
+            Map of origin queue name → list of dependent job ids that were moved to ready.
         """
-        from .registry import DeferredJobRegistry
+        from .registry import ReadyJobRegistry
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         dependents_key = job.dependents_key
+
+        job_ids_by_queue_name: dict[str, list[str]] = {}
 
         while True:
             try:
@@ -1416,44 +1430,35 @@ class Queue:
                     break
 
                 self.log.debug(
-                    'Enqueueing %d dependent jobs for job %s: %s',
+                    'Moving %d dependent jobs to ready for job %s: %s',
                     len(jobs_to_enqueue),
                     job.id,
                     [j.id for j in jobs_to_enqueue],
                 )
 
+                # Group dependents by their origin queue so each lands in the correct
+                # ReadyJobRegistry. Reset accumulator on each loop iteration so a
+                # WatchError-induced retry doesn't double-count.
+                job_ids_by_queue_name = {}
+                grouped: dict[str, list[Job]] = defaultdict(list)
                 for dependent in jobs_to_enqueue:
-                    enqueue_at_front = dependent.enqueue_at_front or False
+                    grouped[dependent.origin].append(dependent)
 
-                    registry = DeferredJobRegistry(
-                        dependent.origin, self.connection, job_class=self.job_class, serializer=self.serializer
+                for queue_name, group in grouped.items():
+                    target_registry = ReadyJobRegistry(
+                        name=queue_name,
+                        connection=self.connection,
+                        job_class=self.job_class,
+                        serializer=self.serializer,
                     )
-                    registry.remove(dependent, pipeline=pipe)
-                    self.log.debug('Removed job %s from DeferredJobRegistry', dependent.id)
-
-                    if dependent.origin == self.name:
-                        self.log.debug(
-                            'Enqueueing job %s to current queue %s (at_front=%s)',
-                            dependent.id,
-                            self.name,
-                            enqueue_at_front,
-                        )
-                        self._enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
-                    else:
-                        self.log.debug(
-                            'Enqueueing job %s to different queue %s (at_front=%s)',
-                            dependent.id,
-                            dependent.origin,
-                            enqueue_at_front,
-                        )
-                        queue = self.__class__(name=dependent.origin, connection=self.connection)
-                        queue._enqueue_job(dependent, pipeline=pipe, at_front=enqueue_at_front)
+                    target_registry.register_jobs(group, pipeline=pipe)
+                    job_ids_by_queue_name[queue_name] = [j.id for j in group]
 
                 # Only delete dependents_key if all dependents have been enqueued
                 if len(jobs_to_enqueue) == len(dependent_job_ids):
                     pipe.delete(dependents_key)
                 else:
-                    enqueued_job_ids = [job.id for job in jobs_to_enqueue]
+                    enqueued_job_ids = [j.id for j in jobs_to_enqueue]
                     pipe.srem(dependents_key, *enqueued_job_ids)
 
                 if pipeline is None:
@@ -1461,12 +1466,28 @@ class Queue:
                 break
             except WatchError:
                 if pipeline is None:
+                    job_ids_by_queue_name = {}
                     continue
                 else:
                     # if the pipeline comes from the caller, we re-raise the
                     # exception as it it the responsibility of the caller to
                     # handle it
                     raise
+
+        # On the no-pipeline path, preserve the synchronous-visibility contract by
+        # draining the ready ids onto their origin queues before returning. On the
+        # caller-owned pipeline path, the caller does this after their EXEC.
+        if pipeline is None and job_ids_by_queue_name:
+            for queue_name, ids in job_ids_by_queue_name.items():
+                target_queue = self.__class__(
+                    name=queue_name,
+                    connection=self.connection,
+                    job_class=self.job_class,
+                    serializer=self.serializer,
+                )
+                target_queue.ready_job_registry.enqueue_jobs(ids)
+
+        return job_ids_by_queue_name
 
     def pop_job_id(self) -> str | None:
         """Pops a given job ID from this Redis queue.

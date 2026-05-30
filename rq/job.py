@@ -1158,7 +1158,7 @@ class Job:
         pipeline: Pipeline | None = None,
         enqueue_dependents: bool = False,
         remove_from_dependencies: bool = False,
-    ):
+    ) -> dict[str, list[str]]:
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
 
@@ -1169,9 +1169,20 @@ class Job:
         You can enqueue the jobs dependents optionally,
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
 
+        When called with ``pipeline=external_pipe`` AND ``enqueue_dependents=True``,
+        the caller owns the EXEC and is responsible for draining the returned
+        ``dependent_job_ids_by_queue`` via
+        ``Queue(origin).ready_job_registry.enqueue_jobs(ids)`` after their EXEC.
+        If skipped, ``ReadyJobRegistry.cleanup()`` recovers the dependents later.
+        On the no-pipeline path, the drain happens internally before return.
+
         Args:
             pipeline (Optional[Pipeline], optional): The Redis' pipeline to use. Defaults to None.
             enqueue_dependents (bool, optional): Whether to enqueue dependents jobs. Defaults to False.
+
+        Returns:
+            Map of origin queue name → list of dependent job ids that were moved to
+            ready. Empty dict when ``enqueue_dependents=False`` or no eligible dependents.
 
         Raises:
             InvalidJobOperation: If the job has already been cancelled.
@@ -1182,6 +1193,7 @@ class Job:
         from .registry import CanceledJobRegistry
 
         pipe = pipeline or self.connection.pipeline()
+        dependent_job_ids_by_queue: dict[str, list[str]] = {}
 
         while True:
             try:
@@ -1194,7 +1206,7 @@ class Job:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
-                    q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
+                    dependent_job_ids_by_queue = q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
 
                 if remove_from_dependencies:
                     # Go through all dependencies and remove the current job from each dependency's dependents_key
@@ -1218,6 +1230,8 @@ class Job:
                     # exception as it is the responsibility of the caller to
                     # handle it
                     raise
+
+        return dependent_job_ids_by_queue
 
     def requeue(self, at_front: bool = False) -> Job:
         """Requeues job
