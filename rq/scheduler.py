@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import socket
 import time
 import traceback
 from collections.abc import Iterable
@@ -10,6 +11,7 @@ from datetime import datetime
 from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
+from uuid import uuid4
 
 from redis import ConnectionPool, Redis
 
@@ -20,7 +22,7 @@ from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp, parse_names
+from .utils import current_timestamp, now, parse_names
 
 ForkProcess: type[BaseProcess]
 try:
@@ -54,6 +56,7 @@ class RQScheduler:
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,
+        name: str | None = None,
     ):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks: set[str] = set()
@@ -61,6 +64,14 @@ class RQScheduler:
         self.lock_acquisition_time = None
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
+
+        # Identity, stable across the fork (name is pickled to the child process).
+        self.name: str = name or uuid4().hex
+        self.hostname: str = socket.gethostname()
+        self.created_at: datetime = now()
+        # pid is the worker's pid here; register_birth() resets it to the forked child's pid.
+        self.pid: int = os.getpid()
+        self.last_heartbeat: datetime | None = None
 
         self._connection = None
         self.interval = interval
