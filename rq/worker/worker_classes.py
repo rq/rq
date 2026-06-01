@@ -9,6 +9,7 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
+from ..connections import get_connection_kwargs_for_child_process
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
@@ -166,12 +167,16 @@ class SpawnWorker(Worker):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = self.connection.connection_pool.connection_kwargs.copy()
+        redis_kwargs = get_connection_kwargs_for_child_process(self.connection)
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']
         if redis_kwargs.get('driver_info'):
             del redis_kwargs['driver_info']
+        # redis-py marks unset kwargs (e.g. socket_keepalive_options) with a sentinel object()
+        # whose repr is not valid Python source for the bootstrap below; it just means "use the
+        # default", so drop any such sentinel value.
+        redis_kwargs = {key: value for key, value in redis_kwargs.items() if type(value) is not object}
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
