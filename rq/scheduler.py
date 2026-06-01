@@ -201,9 +201,14 @@ class RQScheduler:
         self.save()
 
     def register_death(self) -> None:
-        """Register this scheduler's death by deleting its metadata hash."""
+        """Register this scheduler's death by deleting its metadata hash.
+
+        Raises:
+            SchedulerNotFound: if no metadata hash exists for this scheduler.
+        """
         self.log.debug('Scheduler %s: registering death', self.name)
-        self.connection.delete(self.key)
+        if not self.connection.delete(self.key):
+            raise SchedulerNotFound(f"Scheduler '{self.name}' not found")
 
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> RQScheduler:

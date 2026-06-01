@@ -200,14 +200,15 @@ class TestScheduler(RQTestCase):
             RQScheduler.fetch('does-not-exist', self.connection)
 
     def test_register_death(self):
-        """register_death() deletes the metadata hash and is a no-op if already gone"""
-        scheduler = RQScheduler(['foo'], connection=self.connection, name='death-test')
+        """register_death() deletes the metadata hash and raises if it is missing"""
+        scheduler = RQScheduler(['foo'], connection=self.connection)
         scheduler.register_birth()
         self.assertTrue(self.connection.exists(scheduler.key))
 
         scheduler.register_death()
         self.assertFalse(self.connection.exists(scheduler.key))
-        scheduler.register_death()  # second call is a harmless no-op
+        with self.assertRaises(SchedulerNotFound):
+            scheduler.register_death()
 
     def test_should_reacquire_locks(self):
         """scheduler.should_reacquire_locks works properly"""
