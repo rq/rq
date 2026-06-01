@@ -173,10 +173,6 @@ class SpawnWorker(Worker):
             del redis_kwargs['retry']
         if redis_kwargs.get('driver_info'):
             del redis_kwargs['driver_info']
-        # redis-py marks unset kwargs (e.g. socket_keepalive_options) with a sentinel object()
-        # whose repr is not valid Python source for the bootstrap below; it just means "use the
-        # default", so drop any such sentinel value.
-        redis_kwargs = {key: value for key, value in redis_kwargs.items() if type(value) is not object}
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
