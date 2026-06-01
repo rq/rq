@@ -263,22 +263,21 @@ class RQScheduler:
         self._stop_requested = True
 
     def heartbeat(self):
-        """Updates the TTL on scheduler keys and the locks"""
+        """Refresh the TTL on the scheduler's metadata hash and its locks."""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
-        if len(self._acquired_locks) > 1:
-            with self.connection.pipeline() as pipeline:
-                for name in self._acquired_locks:
-                    key = self.get_locking_key(name)
-                    pipeline.expire(key, self.interval + 60)
-                pipeline.execute()
-        elif self._acquired_locks:
-            key = self.get_locking_key(next(iter(self._acquired_locks)))
-            self.connection.expire(key, self.interval + 60)
+        self.last_heartbeat = now()
+        with self.connection.pipeline() as pipeline:
+            pipeline.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
+            pipeline.expire(self.key, self.interval + 60)
+            for name in self._acquired_locks:
+                pipeline.expire(self.get_locking_key(name), self.interval + 60)
+            pipeline.execute()
 
     def stop(self):
         self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
         self.release_locks()
         self._status = self.Status.STOPPED
+        self.register_death()
 
     def release_locks(self):
         """Release acquired locks"""
@@ -297,6 +296,7 @@ class RQScheduler:
 
     def work(self):
         self._install_signal_handlers()
+        self.register_birth()
 
         while True:
             if self._stop_requested:

@@ -13,7 +13,7 @@ from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
-from rq.utils import current_timestamp
+from rq.utils import current_timestamp, utcformat
 from rq.worker import Worker
 from tests import RQTestCase, find_empty_redis_database, ssl_test
 
@@ -177,7 +177,7 @@ class TestScheduler(RQTestCase):
         self.assertEqual(int(data[b'pid']), os.getpid())
         self.assertIsNotNone(scheduler.last_heartbeat)
         # The hash carries a TTL
-        self.assertTrue(0 < self.connection.ttl(scheduler.key) <= scheduler.interval + 60)
+        self.assertTrue(scheduler.interval + 55 <= self.connection.ttl(scheduler.key) <= scheduler.interval + 60)
 
         fetched = RQScheduler.fetch(scheduler.name, self.connection)
         self.assertEqual(fetched.name, scheduler.name)
@@ -316,7 +316,7 @@ class TestScheduler(RQTestCase):
         assert queue.scheduler_pid == os.getpid()
 
     def test_heartbeat(self):
-        """Test that heartbeat updates locking keys TTL"""
+        """Test that heartbeat updates the locking keys' TTL and the scheduler's metadata"""
         name_1 = 'lock-test-1'
         name_2 = 'lock-test-2'
         name_3 = 'lock-test-3'
@@ -324,6 +324,7 @@ class TestScheduler(RQTestCase):
         scheduler.acquire_locks()
         scheduler = RQScheduler([name_1, name_2, name_3], self.connection)
         scheduler.acquire_locks()
+        scheduler.register_birth()
 
         locking_key_1 = RQScheduler.get_locking_key(name_1)
         locking_key_2 = RQScheduler.get_locking_key(name_2)
@@ -334,19 +335,27 @@ class TestScheduler(RQTestCase):
             pipeline.expire(locking_key_2, 1000)
             pipeline.expire(locking_key_3, 1000)
             pipeline.execute()
+        self.connection.expire(scheduler.key, 1000)
 
         scheduler.heartbeat()
         self.assertEqual(self.connection.ttl(locking_key_1), 61)
         self.assertEqual(self.connection.ttl(locking_key_2), 61)
         self.assertEqual(self.connection.ttl(locking_key_3), 1000)
 
-        # scheduler.stop() releases locks and sets status to STOPPED
+        # heartbeat() also advances last_heartbeat and refreshes the metadata hash TTL
+        self.assertIsNotNone(scheduler.last_heartbeat)
+        stored = self.connection.hget(scheduler.key, 'last_heartbeat')
+        self.assertEqual(stored.decode(), utcformat(scheduler.last_heartbeat))
+        self.assertTrue(scheduler.interval + 55 <= self.connection.ttl(scheduler.key) <= scheduler.interval + 60)
+
+        # scheduler.stop() releases locks, sets status to STOPPED, and deletes the metadata hash
         scheduler._status = scheduler.Status.WORKING
         scheduler.stop()
         self.assertFalse(self.connection.exists(locking_key_1))
         self.assertFalse(self.connection.exists(locking_key_2))
         self.assertTrue(self.connection.exists(locking_key_3))
         self.assertEqual(scheduler.status, scheduler.Status.STOPPED)
+        self.assertFalse(self.connection.exists(scheduler.key))
 
         # Heartbeat also works properly for schedulers with a single queue
         scheduler = RQScheduler([name_1], self.connection)
