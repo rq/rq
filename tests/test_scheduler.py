@@ -416,6 +416,18 @@ class TestWorker(RQTestCase):
         # The birth/death pair leaves no metadata hash behind
         self.assertFalse(self.connection.exists(worker.scheduler.key))
 
+    def test_work_burst_scheduler_cleans_up_on_error(self):
+        """If enqueue_scheduled_jobs() raises in burst, the lock and metadata hash are still released"""
+        queue = Queue(connection=self.connection)
+        worker = Worker(queues=[queue], connection=self.connection)
+        with mock.patch.object(RQScheduler, 'enqueue_scheduled_jobs', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                worker.work(burst=True, with_scheduler=True)
+
+        assert worker.scheduler
+        self.assertIsNone(self.connection.get(worker.scheduler.get_locking_key('default')))
+        self.assertFalse(self.connection.exists(worker.scheduler.key))
+
     @mock.patch.object(RQScheduler, 'acquire_locks')
     def test_run_maintenance_tasks(self, mocked):
         """scheduler.acquire_locks() is called only when scheduled is enabled"""
