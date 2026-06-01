@@ -306,13 +306,15 @@ class TestScheduler(RQTestCase):
 
     def test_queue_scheduler_pid(self):
         queue = Queue(connection=self.connection)
-        scheduler = RQScheduler(
-            [
-                queue,
-            ],
-            connection=self.connection,
-        )
+        scheduler = RQScheduler([queue], connection=self.connection)
         scheduler.acquire_locks()
+
+        # The lock value is the scheduler's name
+        self.assertEqual(self.connection.get(scheduler.get_locking_key(queue.name)).decode(), scheduler.name)
+        # Until register_birth() writes the metadata hash, the pid is unknown
+        self.assertIsNone(queue.scheduler_pid)
+
+        scheduler.register_birth()
         assert queue.scheduler_pid == os.getpid()
 
     def test_heartbeat(self):
