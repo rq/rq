@@ -9,7 +9,7 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
-from ..connections import get_connection_kwargs_for_child_process
+from ..connections import get_connection_kwargs
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
@@ -167,7 +167,7 @@ class SpawnWorker(Worker):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = get_connection_kwargs_for_child_process(self.connection)
+        redis_kwargs = get_connection_kwargs(self.connection)
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']

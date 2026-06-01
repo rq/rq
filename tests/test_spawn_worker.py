@@ -7,7 +7,7 @@ from multiprocessing import Process
 from redis import Redis
 
 from rq import Queue
-from rq.connections import get_connection_kwargs_for_child_process
+from rq.connections import get_connection_kwargs
 from rq.job import Job
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
@@ -42,14 +42,14 @@ class TestWorker(RQTestCase):
         """SpawnWorker strips connection-local runtime objects before rebuilding Redis in the child.
 
         redis-py 8 adds an unpicklable maintenance-notification handler to connection_kwargs;
-        get_connection_kwargs_for_child_process (used by fork_work_horse) must drop it so the
+        get_connection_kwargs (used by fork_work_horse) must drop it so the
         kwargs can be rebuilt in the spawned process.
         """
         connection = Redis()
         conn_kwargs = connection.connection_pool.connection_kwargs
         conn_kwargs['maint_notifications_pool_handler'] = object()
 
-        redis_kwargs = get_connection_kwargs_for_child_process(connection)
+        redis_kwargs = get_connection_kwargs(connection)
 
         self.assertNotIn('maint_notifications_pool_handler', redis_kwargs)
         self.assertIn('maint_notifications_pool_handler', conn_kwargs)

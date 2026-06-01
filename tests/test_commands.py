@@ -7,6 +7,7 @@ from redis.exceptions import ResponseError
 
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
+from rq.connections import get_connection_kwargs
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.serializers import JSONSerializer
 from rq.worker import WorkerStatus
@@ -30,9 +31,7 @@ class TestCommands(RQTestCase):
         connection = self.connection
         worker = Worker('foo', connection=connection)
 
-        p = Process(
-            target=_send_shutdown_command, args=(worker.name, connection.connection_pool.connection_kwargs.copy())
-        )
+        p = Process(target=_send_shutdown_command, args=(worker.name, get_connection_kwargs(connection)))
         p.start()
         worker.work()
         p.join(1)
@@ -73,16 +72,14 @@ class TestCommands(RQTestCase):
         job = queue.enqueue(long_running_job, 4)
         worker = Worker('foo', connection=connection)
 
-        p = Process(
-            target=_send_kill_horse_command, args=(worker.name, connection.connection_pool.connection_kwargs.copy())
-        )
+        p = Process(target=_send_kill_horse_command, args=(worker.name, get_connection_kwargs(connection)))
         p.start()
         worker.work(burst=True)
         p.join(1)
         job.refresh()
         self.assertIn(job.id, queue.failed_job_registry)
 
-        p = Process(target=start_work, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy()))
+        p = Process(target=start_work, args=('foo', worker.name, get_connection_kwargs(connection)))
         p.start()
         p.join(2)
 
@@ -108,9 +105,7 @@ class TestCommands(RQTestCase):
         with self.assertRaises(NoSuchJobError):
             send_stop_job_command(connection, job_id='1', serializer=JSONSerializer)
 
-        p = Process(
-            target=start_work_burst, args=('foo', worker.name, connection.connection_pool.connection_kwargs.copy())
-        )
+        p = Process(target=start_work_burst, args=('foo', worker.name, get_connection_kwargs(connection)))
         p.start()
         p.join(1)
 

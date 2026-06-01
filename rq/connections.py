@@ -20,7 +20,7 @@ REDIS_RUNTIME_CONNECTION_KWARGS = (
 )
 
 
-def get_connection_kwargs_for_child_process(connection: Redis) -> dict:
+def get_connection_kwargs(connection: Redis) -> dict:
     """Return pool kwargs suitable for rebuilding this Redis connection in a child process."""
     kwargs = connection.connection_pool.connection_kwargs.copy()
     for key in REDIS_RUNTIME_CONNECTION_KWARGS:
@@ -29,7 +29,7 @@ def get_connection_kwargs_for_child_process(connection: Redis) -> dict:
 
 
 def parse_connection(connection: Redis) -> tuple[type[Redis], type[RedisConnection], dict]:
-    connection_pool_kwargs = get_connection_kwargs_for_child_process(connection)
+    connection_pool_kwargs = get_connection_kwargs(connection)
     connection_pool_class = connection.connection_pool.connection_class
 
     return connection.__class__, connection_pool_class, connection_pool_kwargs
