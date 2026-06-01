@@ -232,9 +232,9 @@ class TestDependencies(RQTestCase):
         job_c = queue.enqueue(check_dependencies_are_met, job_id='C', depends_on=['A', 'B'])
 
         job_c.dependencies_are_met()
-        w = Worker([queue], connection=self.connection)
+        w = SimpleWorker([queue], connection=self.connection)
         w.work(burst=True)
-        assert job_c.result
+        assert job_c.return_value(refresh=True)
 
     def test_allow_failures_when_work_horse_killed(self):
         """Ensure that allow_failure is respected when a worker is killed"""
