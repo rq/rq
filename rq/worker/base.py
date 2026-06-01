@@ -875,8 +875,10 @@ class BaseWorker:
         self.scheduler.acquire_locks()
         if self.scheduler.acquired_locks:
             if burst:
+                self.scheduler.register_birth()
                 self.scheduler.enqueue_scheduled_jobs()
                 self.scheduler.release_locks()
+                self.scheduler.register_death()
             else:
                 self.scheduler.start()
 

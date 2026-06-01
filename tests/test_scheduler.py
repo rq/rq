@@ -413,6 +413,8 @@ class TestWorker(RQTestCase):
         worker.work(burst=True, with_scheduler=True)
         assert worker.scheduler
         self.assertIsNone(self.connection.get(worker.scheduler.get_locking_key('default')))
+        # The birth/death pair leaves no metadata hash behind
+        self.assertFalse(self.connection.exists(worker.scheduler.key))
 
     @mock.patch.object(RQScheduler, 'acquire_locks')
     def test_run_maintenance_tasks(self, mocked):
