@@ -18,7 +18,7 @@ from redis.client import Pipeline
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
-from .exceptions import DuplicateSchedulerError, SchedulerNotFound
+from .exceptions import SchedulerNotFound
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
@@ -187,14 +187,10 @@ class RQScheduler:
     def register_birth(self) -> None:
         """Register this scheduler's birth by writing its metadata hash.
 
-        Raises:
-            DuplicateSchedulerError: if a scheduler with this name is already registered.
-                The metadata hash always carries a TTL, so a stale entry from a crashed
-                scheduler clears itself before the same name is reused.
+        Idempotent: re-registering the same name (e.g. when the worker restarts a crashed
+        scheduler process) overwrites the existing hash rather than erroring.
         """
         self.log.debug('Scheduler %s: registering birth', self.name)
-        if self.connection.exists(self.key):
-            raise DuplicateSchedulerError(f"Scheduler '{self.name}' is already registered")
         self.pid = os.getpid()
         self.last_heartbeat = now()
         self.save()

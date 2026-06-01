@@ -8,7 +8,7 @@ import redis
 
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
-from rq.exceptions import DuplicateSchedulerError, NoSuchJobError, SchedulerNotFound
+from rq.exceptions import NoSuchJobError, SchedulerNotFound
 from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
@@ -187,12 +187,12 @@ class TestScheduler(RQTestCase):
         self.assertEqual(fetched.created_at, scheduler.created_at)
         self.assertEqual(fetched.last_heartbeat, scheduler.last_heartbeat)
 
-    def test_register_birth_raises_if_already_registered(self):
-        """register_birth() raises if a scheduler with the same name is already registered"""
+    def test_register_birth_is_idempotent(self):
+        """register_birth() can be called again (e.g. on restart) without error"""
         scheduler = RQScheduler(['foo'], connection=self.connection)
         scheduler.register_birth()
-        with self.assertRaises(DuplicateSchedulerError):
-            scheduler.register_birth()
+        scheduler.register_birth()  # must not raise
+        self.assertTrue(self.connection.exists(scheduler.key))
 
     def test_fetch_missing_scheduler_raises(self):
         """fetch() raises SchedulerNotFound when no metadata hash exists"""
