@@ -14,15 +14,17 @@ from multiprocessing.process import BaseProcess
 from uuid import uuid4
 
 from redis import ConnectionPool, Redis
+from redis.client import Pipeline
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
+from .exceptions import DuplicateSchedulerError, SchedulerNotFound
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp, now, parse_names
+from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
 
 ForkProcess: type[BaseProcess]
 try:
@@ -104,6 +106,11 @@ class RQScheduler:
         return self._status
 
     @property
+    def key(self) -> str:
+        """Redis key holding this scheduler's metadata hash."""
+        return SCHEDULER_KEY_TEMPLATE % self.name
+
+    @property
     def should_reacquire_locks(self):
         """Returns True if lock_acquisition_time is longer than 10 minutes ago"""
         if self._queue_names == self.acquired_locks:
@@ -149,6 +156,66 @@ class RQScheduler:
     def get_locking_key(cls, name: str):
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
+
+    def to_dict(self) -> dict:
+        """Serialize this scheduler's metadata for storage in its Redis hash."""
+        assert self.last_heartbeat is not None
+        return {
+            'name': self.name,
+            'hostname': self.hostname,
+            'pid': str(self.pid),
+            'queues': ','.join(self._queue_names),
+            'created_at': utcformat(self.created_at),
+            'last_heartbeat': utcformat(self.last_heartbeat),
+        }
+
+    def restore(self, raw_data: dict) -> None:
+        """Restore this scheduler's metadata from its Redis hash."""
+        obj = decode_redis_hash(raw_data, decode_values=True)
+        self.name = obj['name']
+        self.hostname = obj['hostname']
+        self.pid = int(obj['pid'])
+        self._queue_names = set(obj['queues'].split(',')) if obj.get('queues') else set()
+        self.created_at = utcparse(obj['created_at'])
+        self.last_heartbeat = utcparse(obj['last_heartbeat']) if obj.get('last_heartbeat') else None
+
+    def save(self, pipeline: Pipeline | None = None) -> None:
+        """Save this scheduler's metadata hash with a TTL."""
+        connection = pipeline if pipeline is not None else self.connection
+        connection.hset(self.key, mapping=self.to_dict())
+        connection.expire(self.key, self.interval + 60)
+
+    def register_birth(self) -> None:
+        """Register this scheduler's birth by writing its metadata hash.
+
+        Raises:
+            DuplicateSchedulerError: if a scheduler with this name is already registered.
+                The metadata hash always carries a TTL, so a stale entry from a crashed
+                scheduler clears itself before the same name is reused.
+        """
+        self.log.debug('Scheduler %s: registering birth', self.name)
+        if self.connection.exists(self.key):
+            raise DuplicateSchedulerError(f"Scheduler '{self.name}' is already registered")
+        self.pid = os.getpid()
+        self.last_heartbeat = now()
+        self.save()
+
+    def register_death(self) -> None:
+        """Register this scheduler's death by deleting its metadata hash."""
+        self.log.debug('Scheduler %s: registering death', self.name)
+        self.connection.delete(self.key)
+
+    @classmethod
+    def fetch(cls, name: str, connection: Redis) -> RQScheduler:
+        """Fetch a scheduler by name, restoring it from its Redis hash."""
+        raw_data = connection.hgetall(SCHEDULER_KEY_TEMPLATE % name)
+        if not raw_data:
+            raise SchedulerNotFound(f"Scheduler with name '{name}' not found")
+        obj = decode_redis_hash(raw_data, decode_values=True)
+        queues = obj['queues'].split(',') if obj.get('queues') else []
+        scheduler = cls(queues, connection=connection, name=name)
+        scheduler.restore(raw_data)
+        return scheduler
 
     def enqueue_scheduled_jobs(self):
         """Enqueue jobs whose timestamp is in the past"""

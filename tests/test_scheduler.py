@@ -8,7 +8,7 @@ import redis
 
 from rq import Queue
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
-from rq.exceptions import NoSuchJobError
+from rq.exceptions import DuplicateSchedulerError, NoSuchJobError, SchedulerNotFound
 from rq.job import Job, Retry
 from rq.registry import FinishedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
@@ -157,6 +157,57 @@ class TestScheduler(RQTestCase):
         scheduler = RQScheduler([foo_queue, 'bar'], connection=self.connection)
         self.assertEqual(scheduler._queue_names, {'foo', 'bar'})
         self.assertEqual(scheduler.status, RQScheduler.Status.STOPPED)
+
+    def test_name(self):
+        """Scheduler generates a unique name and derives its hash key from it"""
+        scheduler = RQScheduler(['foo'], connection=self.connection)
+        self.assertTrue(scheduler.name)
+        self.assertEqual(scheduler.key, f'rq:scheduler:{scheduler.name}')
+
+        # An explicitly provided name is honored
+        named = RQScheduler(['foo'], connection=self.connection, name='my-scheduler')
+        self.assertEqual(named.name, 'my-scheduler')
+
+    def test_register_birth_and_fetch(self):
+        """register_birth() writes a metadata hash that fetch() round-trips"""
+        scheduler = RQScheduler(['foo', 'bar'], connection=self.connection)
+        scheduler.register_birth()
+
+        data = self.connection.hgetall(scheduler.key)
+        self.assertEqual(int(data[b'pid']), os.getpid())
+        self.assertIsNotNone(scheduler.last_heartbeat)
+        # The hash carries a TTL
+        self.assertTrue(0 < self.connection.ttl(scheduler.key) <= scheduler.interval + 60)
+
+        fetched = RQScheduler.fetch(scheduler.name, self.connection)
+        self.assertEqual(fetched.name, scheduler.name)
+        self.assertEqual(fetched.hostname, scheduler.hostname)
+        self.assertEqual(fetched.pid, scheduler.pid)
+        self.assertEqual(fetched._queue_names, {'foo', 'bar'})
+        self.assertEqual(fetched.created_at, scheduler.created_at)
+        self.assertEqual(fetched.last_heartbeat, scheduler.last_heartbeat)
+
+    def test_register_birth_raises_if_already_registered(self):
+        """register_birth() raises if a scheduler with the same name is already registered"""
+        scheduler = RQScheduler(['foo'], connection=self.connection)
+        scheduler.register_birth()
+        with self.assertRaises(DuplicateSchedulerError):
+            scheduler.register_birth()
+
+    def test_fetch_missing_scheduler_raises(self):
+        """fetch() raises SchedulerNotFound when no metadata hash exists"""
+        with self.assertRaises(SchedulerNotFound):
+            RQScheduler.fetch('does-not-exist', self.connection)
+
+    def test_register_death(self):
+        """register_death() deletes the metadata hash and is a no-op if already gone"""
+        scheduler = RQScheduler(['foo'], connection=self.connection, name='death-test')
+        scheduler.register_birth()
+        self.assertTrue(self.connection.exists(scheduler.key))
+
+        scheduler.register_death()
+        self.assertFalse(self.connection.exists(scheduler.key))
+        scheduler.register_death()  # second call is a harmless no-op
 
     def test_should_reacquire_locks(self):
         """scheduler.should_reacquire_locks works properly"""
