@@ -4,7 +4,10 @@ import time
 from datetime import timezone
 from multiprocessing import Process
 
+from redis import Redis
+
 from rq import Queue
+from rq.connections import get_connection_kwargs
 from rq.job import Job
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.results import Result
@@ -36,24 +39,20 @@ class TestWorker(RQTestCase):
         self.assertEqual(registry.get_job_ids(), [])
 
     def test_filters_non_serializable_connection_kwargs(self):
-        """SpawnWorker filters out non-serializable kwargs like driver_info before spawning."""
-        queue = Queue('foo', connection=self.connection)
-        worker = SpawnWorker([queue])
+        """SpawnWorker strips connection-local runtime objects before rebuilding Redis in the child.
 
-        # Inject a non-serializable driver_info into connection kwargs
-        conn_kwargs = worker.connection.connection_pool.connection_kwargs
-        conn_kwargs['driver_info'] = object()
-        self.addCleanup(conn_kwargs.pop, 'driver_info', None)
+        redis-py 8 adds an unpicklable maintenance-notification handler to connection_kwargs;
+        get_connection_kwargs (used by fork_work_horse) must drop it so the
+        kwargs can be rebuilt in the spawned process.
+        """
+        connection = Redis()
+        conn_kwargs = connection.connection_pool.connection_kwargs
+        conn_kwargs['maint_notifications_pool_handler'] = object()
 
-        # SpawnWorker should sanitize a copy before building the script.
-        redis_kwargs = worker.connection.connection_pool.connection_kwargs.copy()
-        if redis_kwargs.get('retry'):
-            del redis_kwargs['retry']
-        if redis_kwargs.get('driver_info'):
-            del redis_kwargs['driver_info']
+        redis_kwargs = get_connection_kwargs(connection)
 
-        self.assertNotIn('driver_info', redis_kwargs)
-        self.assertIn('driver_info', worker.connection.connection_pool.connection_kwargs)
+        self.assertNotIn('maint_notifications_pool_handler', redis_kwargs)
+        self.assertIn('maint_notifications_pool_handler', conn_kwargs)
 
     def test_worker_normalizes_serializer_arg_for_spawn(self):
         """_serializer_arg is normalized to str|None so it can be safely embedded in the child source."""

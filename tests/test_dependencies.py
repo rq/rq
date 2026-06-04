@@ -1,6 +1,7 @@
 from multiprocessing import Process
 
 from rq import Queue, SimpleWorker, Worker
+from rq.connections import get_connection_kwargs
 from rq.job import Dependency, Job, JobStatus
 from rq.utils import current_timestamp
 from tests import RQTestCase
@@ -243,7 +244,7 @@ class TestDependencies(RQTestCase):
         job2 = queue.enqueue(say_hello, depends_on=Dependency(jobs=job, allow_failure=True))
 
         # Wait 1 second before killing the horse to simulate horse terminating unexpectedly
-        p = Process(target=kill_horse, args=('horse_pid_key', self.connection.connection_pool.connection_kwargs, 1))
+        p = Process(target=kill_horse, args=('horse_pid_key', get_connection_kwargs(self.connection), 1))
         p.start()
 
         worker = Worker([queue], connection=self.connection)

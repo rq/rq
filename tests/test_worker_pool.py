@@ -3,7 +3,7 @@ import signal
 from multiprocessing import Process
 from time import sleep
 
-from rq.connections import parse_connection
+from rq.connections import get_connection_kwargs, parse_connection
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.serializers import JSONSerializer
@@ -44,7 +44,7 @@ class TestWorkerPool(RQTestCase):
 
         worker_data = list(pool.worker_dict.values())[0]
         sleep(0.5)
-        _send_shutdown_command(worker_data.name, self.connection.connection_pool.connection_kwargs.copy(), delay=0)
+        _send_shutdown_command(worker_data.name, get_connection_kwargs(self.connection), delay=0)
         # 1 worker should be dead since we sent a shutdown command
         sleep(0.75)
         pool.check_workers(respawn=False)
@@ -67,7 +67,7 @@ class TestWorkerPool(RQTestCase):
 
         worker_data = list(pool.worker_dict.values())[0]
         sleep(0.5)
-        _send_shutdown_command(worker_data.name, self.connection.connection_pool.connection_kwargs.copy(), delay=0)
+        _send_shutdown_command(worker_data.name, get_connection_kwargs(self.connection), delay=0)
         # 1 worker should be dead since we sent a shutdown command
         sleep(0.75)
         pool.reap_workers()
