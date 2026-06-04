@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from rq.serializers import resolve_serializer
 
+from .connections import get_connection_kwargs
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
@@ -66,9 +67,11 @@ class BaseRegistry:
         return self.count
 
     def __eq__(self, other):
-        return (
-            self.name == other.name
-            and self.connection.connection_pool.connection_kwargs == other.connection.connection_pool.connection_kwargs
+        # Compare the portable connection kwargs (stripped of per-connection runtime state such as
+        # redis-py 8's maintenance-notification objects), so a connection rebuilt from
+        # parse_connection still compares equal to the original it was derived from.
+        return self.name == other.name and get_connection_kwargs(self.connection) == get_connection_kwargs(
+            other.connection
         )
 
     def __contains__(self, item: Any) -> bool:
