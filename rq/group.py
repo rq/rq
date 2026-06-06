@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import uuid4
 
-from redis import Redis
+from redis import Redis, RedisCluster
 from redis.client import Pipeline
 
 from . import Queue
@@ -19,7 +19,7 @@ class Group:
     REDIS_GROUP_NAME_PREFIX = 'rq:group:'
     REDIS_GROUP_KEY = 'rq:groups'
 
-    def __init__(self, connection: Redis, name: str | None = None):
+    def __init__(self, connection: Redis | RedisCluster, name: str | None = None):
         self.name = name if name else str(uuid4().hex)
         self.connection = connection
         self.key = f'{self.REDIS_GROUP_NAME_PREFIX}{self.name}'
@@ -77,11 +77,11 @@ class Group:
             pipe.execute()
 
     @classmethod
-    def create(cls, connection: Redis, name: str | None = None):
+    def create(cls, connection: Redis | RedisCluster, name: str | None = None):
         return cls(name=name, connection=connection)
 
     @classmethod
-    def fetch(cls, name: str, connection: Redis):
+    def fetch(cls, name: str, connection: Redis | RedisCluster):
         """Fetch an existing group from Redis"""
         group = cls(name=name, connection=connection)
         if not connection.exists(Group.get_key(group.name)):
@@ -89,7 +89,7 @@ class Group:
         return group
 
     @classmethod
-    def all(cls, connection: Redis) -> list[Group]:
+    def all(cls, connection: Redis | RedisCluster) -> list[Group]:
         "Returns an iterable of all Groups."
         group_keys = [as_text(key) for key in connection.smembers(cls.REDIS_GROUP_KEY)]
         groups = []
@@ -106,7 +106,7 @@ class Group:
         return cls.REDIS_GROUP_NAME_PREFIX + name
 
     @classmethod
-    def clean_registries(cls, connection: Redis):
+    def clean_registries(cls, connection: Redis | RedisCluster):
         """Loop through groups and delete those that have been deleted.
         If group still has jobs in its registry, delete those that have expired"""
         groups = Group.all(connection=connection)

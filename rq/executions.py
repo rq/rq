@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from redis import Redis
+from redis import Redis, RedisCluster
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
@@ -21,7 +21,7 @@ from .utils import as_text, current_timestamp, now, parse_composite_key
 class Execution:
     """Class to represent an execution of a job."""
 
-    def __init__(self, id: str, job_id: str, connection: Redis):
+    def __init__(self, id: str, job_id: str, connection: Redis | RedisCluster):
         self.id = id
         self.job_id = job_id
         self.connection = connection
@@ -51,7 +51,7 @@ class Execution:
         return f'{self.job_id}:{self.id}'
 
     @classmethod
-    def fetch(cls, id: str, job_id: str, connection: Redis) -> Execution:
+    def fetch(cls, id: str, job_id: str, connection: Redis | RedisCluster) -> Execution:
         """Fetch an execution from Redis."""
         execution = cls(id=id, job_id=job_id, connection=connection)
         execution.refresh()
@@ -118,7 +118,7 @@ class ExecutionRegistry(BaseRegistry):
 
     key_template = 'rq:executions:{0}'
 
-    def __init__(self, job_id: str, connection: Redis):
+    def __init__(self, job_id: str, connection: Redis | RedisCluster):
         self.connection = connection
         self.job_id = job_id
         self.key = self.key_template.format(job_id)

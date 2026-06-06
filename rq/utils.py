@@ -25,13 +25,16 @@ from typing import (
     TypeVar,
     overload,
 )
+from redis import RedisError
+from redis.client import Pipeline
+from redis.cluster import ClusterPipeline
 
 from redis.exceptions import ResponseError
 
 from .exceptions import TimeoutFormatError
 
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
 
     from .job import Job
     from .queue import Queue
@@ -451,13 +454,22 @@ def parse_timeout(timeout: int | float | str | None) -> int | None:
     return int(timeout) if timeout is not None else None
 
 
-def get_version(connection: Redis) -> tuple[int, int, int]:
+def is_cluster(connection: Redis | RedisCluster | None) -> bool:
+    if connection is None:
+        return False
+    from redis import RedisCluster
+    if isinstance(connection, RedisCluster):
+        return True
+    return False
+
+
+def get_version(connection: Redis | RedisCluster) -> tuple[int, int, int]:
     """
     Returns tuple of Redis server version.
     This function also correctly handles 4 digit redis server versions.
 
     Args:
-        connection (Redis): The Redis connection.
+        connection (Redis | RedisCluster): The Redis connection.
 
     Returns:
         version (Tuple[int, int, int]): A tuple representing the semantic versioning format (eg. (5, 0, 9))
@@ -565,7 +577,7 @@ def parse_names(queues_or_names: Iterable[str | Queue]) -> list[str]:
     return names
 
 
-def get_connection_from_queues(queues_or_names: Iterable[str | Queue]) -> Redis | None:
+def get_connection_from_queues(queues_or_names: Iterable[str | Queue]) -> Redis | RedisCluster | None:
     """Given a list of strings or queues, returns a connection"""
     from .queue import Queue
 
@@ -596,3 +608,36 @@ def parse_composite_key(composite_key: str) -> tuple[str, str]:
         return (result[0], '')
     job_id, execution_id = result
     return (job_id, execution_id)
+
+
+def try_enable_multi_on_pipeline(pipeline: Pipeline | ClusterPipeline) -> bool:
+    """ Tries to enable an explicit transaction on a pipeline using multi.
+
+    For `redis.client.Pipeline`, we can simply verify that the
+    `explicit_transaction` attribute isn't set to true yet. For
+    `ClusterPipeline`, this is more and a trial error thing. Check the
+    logging output to see what actually happened in case of any weird
+    behavior.
+
+    :param pipeline: the pipeline
+    :returns `True` if explicit transactions had to be enabled as a result
+             of this call, `False` otherwise
+    """
+
+    explicit_transaction = getattr(pipeline, 'explicit_transaction', None)
+    if explicit_transaction is not None:
+        if explicit_transaction:
+            return False
+        pipeline.multi()
+        return True
+
+    try:
+        pipeline.multi()
+    except RedisError as e:
+        # not exactly ideal, since the explicit transaction flag has now apparently moved
+        # to `TransactionStrategy` and both are private on the pipeline, so the exception
+        # seems like the support-ish way of achieving the same?
+        logger.info('failed to enable explicit transaction: %s', e, exc_info=True)
+        return True
+
+    return False

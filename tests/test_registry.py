@@ -515,7 +515,7 @@ class TestStartedJobRegistry(RQTestCase):
         worker.prepare_job_execution(job)
         self.assertIn(execution.job_id, self.registry.get_job_ids())
 
-        pipeline = self.connection.pipeline()
+        pipeline = self.connection.pipeline(transaction=True)
         job.delete(pipeline=pipeline)
         pipeline.execute()
         self.assertNotIn(execution.job_id, self.registry.get_job_ids())

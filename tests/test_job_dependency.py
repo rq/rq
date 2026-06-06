@@ -353,7 +353,7 @@ class TestJobDependency(RQTestCase):
         dependent_job.register_dependency()
         dependent_job.save()
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             dependent_job.fetch_dependencies(watch=True, pipeline=pipeline)
 
             pipeline.multi()
@@ -431,7 +431,7 @@ class TestJobDependency(RQTestCase):
         dependent_job._dependency_ids = [dependency_job.id]
         dependent_job.register_dependency()
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             dependent_job.dependencies_are_met(
                 pipeline=pipeline,
             )

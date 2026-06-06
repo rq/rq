@@ -19,7 +19,7 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
     from redis.client import Pipeline
 
     from rq.executions import Execution
@@ -43,7 +43,7 @@ class BaseRegistry:
     def __init__(
         self,
         name: str = 'default',
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         job_class: type[Job] | None = None,
         queue: Queue | None = None,
         serializer: Serializer | str | None = None,

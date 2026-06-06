@@ -11,9 +11,9 @@ from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
 
-from redis import ConnectionPool, Redis
+from redis import ConnectionPool, Redis, RedisCluster
 
-from .connections import parse_connection
+from .connections import copy_as_dummy_cluster_node, parse_cluster_connection, parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
 from .job import Job
 from .logutils import setup_loghandlers
@@ -44,11 +44,12 @@ class RQScheduler:
     # STOPPED: scheduler is in stopped condition
 
     Status = SchedulerStatus
+    _connection_class: type[Redis] | type[RedisCluster]
 
     def __init__(
         self,
         queues,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         interval=1,
         logging_level: str | int = logging.INFO,
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
@@ -59,7 +60,14 @@ class RQScheduler:
         self._acquired_locks: set[str] = set()
         self._scheduled_job_registries: list[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
-        self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
+
+        if isinstance(connection, RedisCluster):
+            self._connected_to_cluster = True
+            self._connection_class, self._node_connections = parse_cluster_connection(connection)
+        else:
+            self._connected_to_cluster = False
+            self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
+
         self.serializer = resolve_serializer(serializer)
 
         self._connection = None
@@ -79,9 +87,20 @@ class RQScheduler:
     def connection(self):
         if self._connection:
             return self._connection
-        self._connection = self._connection_class(
-            connection_pool=ConnectionPool(connection_class=self._pool_class, **self._pool_kwargs)
-        )
+        if self._connected_to_cluster:
+            cluster_nodes = []
+            for dummy_node, pool_class, pool_kwargs in self._node_connections:
+                node = copy_as_dummy_cluster_node(dummy_node)
+                node.redis_connection = Redis(
+                    connection_pool=ConnectionPool(connection_class=pool_class, **pool_kwargs),
+                )
+                cluster_nodes.append(node)
+            self._connection = self._connection_class(startup_nodes=cluster_nodes)
+        else:
+            self._connection = self._connection_class(
+                connection_pool=ConnectionPool(connection_class=self._pool_class, **self._pool_kwargs)
+            )
+
         return self._connection
 
     @property

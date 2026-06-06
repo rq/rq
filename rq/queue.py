@@ -16,7 +16,7 @@ from typing import (
     cast,
 )
 
-from redis import WatchError
+from redis import RedisCluster, WatchError
 
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
@@ -36,7 +36,8 @@ from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
+from .utils import (as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout,
+    try_enable_multi_on_pipeline)
 
 logger = logging.getLogger('rq.queue')
 
@@ -107,7 +108,7 @@ class Queue:
     @classmethod
     def all(
         cls,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         serializer=None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
@@ -115,7 +116,7 @@ class Queue:
         """Returns an iterable of all Queues.
 
         Args:
-            connection (Optional[Redis], optional): The Redis Connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): The Redis Connection. Defaults to None.
             job_class (Optional[Job], optional): The Job class to use. Defaults to None.
             serializer (optional): The serializer to use. Defaults to None.
             death_penalty_class (Optional[Job], optional): The Death Penalty class to use. Defaults to None.
@@ -141,7 +142,7 @@ class Queue:
     def from_queue_key(
         cls,
         queue_key: str,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
@@ -152,7 +153,7 @@ class Queue:
 
         Args:
             queue_key (str): The queue key
-            connection (Redis): Redis connection. Defaults to None.
+            connection (Redis | Cluster): Redis connection. Defaults to None.
             job_class (Optional[Job], optional): Job class. Defaults to None.
             serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Optional[BaseDeathPenalty], optional): Death penalty class. Defaults to None.
@@ -178,7 +179,7 @@ class Queue:
     def __init__(
         self,
         name: str = 'default',
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         default_timeout: int | None = None,
         is_async: bool = True,
         job_class: str | type[Job] | None = None,
@@ -191,7 +192,7 @@ class Queue:
         Args:
             name (str, optional): The queue name. Defaults to 'default'.
             default_timeout (Optional[int], optional): Queue's default timeout. Defaults to None.
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): Redis connection. Defaults to None.
             is_async (bool, optional): Whether jobs should run "async" (using the worker).
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
             job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
@@ -687,9 +688,10 @@ class Queue:
                         # if pipeline comes from caller, re-raise to them
                         raise
         elif pipeline is not None:
-            # Ensure pipeline in multi mode before returning to caller (if not set before)
-            if not pipeline.explicit_transaction:
-                pipeline.multi()
+            # Ensure pipeline in multi-mode before returning to caller (if not set before or running
+            # in a cluster with transactions enabled by default)
+            try_enable_multi_on_pipeline(pipeline)
+
         return job
 
     def enqueue_call(
@@ -1382,7 +1384,7 @@ class Queue:
                 if pipeline is None:
                     pipe.watch(dependents_key)
 
-                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # type: ignore[attr-defined]
+                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # type: ignore[union-attr]
 
                 # There's no dependents
                 if not dependent_job_ids:
@@ -1472,7 +1474,7 @@ class Queue:
     # The queue_keys type is Sequence[str] instead of Iterable[str]
     # because we loop over it twice, and we don't want user to pass a generator.
     @classmethod
-    def lpop(cls, queue_keys: Sequence[str], timeout: int | None, connection: Redis | None = None):
+    def lpop(cls, queue_keys: Sequence[str], timeout: int | None, connection: Redis | RedisCluster | None = None):
         """Helper method to abstract away from some Redis API details
         where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -1488,7 +1490,7 @@ class Queue:
         Args:
             queue_keys (Sequence[str]): _description_
             timeout (Optional[int]): _description_
-            connection (Optional[Redis], optional): _description_. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): _description_. Defaults to None.
 
         Raises:
             ValueError: If timeout of 0 was passed
@@ -1518,7 +1520,7 @@ class Queue:
             return None
 
     @classmethod
-    def lmove(cls, connection: Redis, queue_key: str, timeout: int | None):
+    def lmove(cls, connection: Redis | RedisCluster, queue_key: str, timeout: int | None):
         """Similar to lpop, but accepts only a single queue key and immediately pushes
         the result to an intermediate queue.
         """
@@ -1544,7 +1546,7 @@ class Queue:
         cls,
         queues: Iterable[Queue],
         timeout: int | None,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
@@ -1562,7 +1564,7 @@ class Queue:
         Args:
             queues (Iterable[Queue]): Iterable of queue objects
             timeout (Optional[int]): Timeout for the LPOP
-            connection (Optional[Redis], optional): Redis Connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): Redis Connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class. Defaults to None.
             serializer (Optional[Union[Serializer, str]], optional): Serializer to use. Defaults to None.
             death_penalty_class (Optional[Type[BaseDeathPenalty]], optional): The death penalty class. Defaults to None.
@@ -1577,7 +1579,7 @@ class Queue:
 
         while True:
             queue_keys = [q.key for q in queues]
-            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
+            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0) and not is_cluster(connection):
                 result = cls.lmove(connection, queue_keys[0], timeout)
             else:
                 result = cls.lpop(queue_keys, timeout, connection=connection)

@@ -19,6 +19,8 @@ from types import FrameType
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from redis import RedisCluster
+
 if TYPE_CHECKING:
     try:
         from resource import struct_rusage
@@ -64,7 +66,7 @@ from ..utils import (
     import_queue_class,
     now,
     utcformat,
-    utcparse,
+    utcparse, try_enable_multi_on_pipeline,
 )
 from ..version import VERSION
 
@@ -135,7 +137,7 @@ class BaseWorker:
         queues: str | Queue | Sequence[str] | Sequence[Queue],
         name: str | None = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         exception_handlers=None,
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         default_worker_ttl: int | None = None,  # TODO remove this arg in 3.0
@@ -166,7 +168,10 @@ class BaseWorker:
             connection = get_connection_from_queues(queues)
 
         assert connection
-        connection = self._set_connection(connection)
+        if isinstance(connection, RedisCluster):
+            connection = self._set_cluster_connection(connection)
+        else:
+            connection = self._set_connection(connection)
         self.connection = connection
         self.redis_server_version = None
 
@@ -247,7 +252,7 @@ class BaseWorker:
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
-    def _set_ip_address(self, connection: Redis) -> None:
+    def _set_ip_address(self, connection: Redis | RedisCluster) -> None:
         try:
             connection.client_setname(self.name)
         except redis.exceptions.ResponseError:
@@ -274,7 +279,7 @@ class BaseWorker:
     def find_by_key(
         cls,
         worker_key: str,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         queue_class: type[Queue] | None = None,
         serializer: Serializer | str | None = None,
@@ -285,7 +290,7 @@ class BaseWorker:
 
         Args:
             worker_key (str): The worker key
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): Redis connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class if custom class is being used. Defaults to None.
             queue_class (Optional[Type[Queue]]): The queue class if a custom class is being used. Defaults to None.
             serializer (Optional[Union[Serializer, str]], optional): The serializer to use. Defaults to None.
@@ -422,6 +427,13 @@ class BaseWorker:
         if (now() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_interval):
             return True
         return False
+
+    def _set_cluster_connection(self, connection: RedisCluster) -> RedisCluster:
+        for node in connection.get_nodes():
+            redis_connection: Redis | None = node.redis_connection
+            if redis_connection is not None:
+                self._set_connection(redis_connection)
+        return connection
 
     def _set_connection(self, connection: Redis) -> Redis:
         """Configures the Redis connection's socket timeout.
@@ -1165,7 +1177,7 @@ class BaseWorker:
             pipeline (Optional[Redis]): A Redis pipeline
         """
         timeout = timeout or self.worker_ttl + 60
-        connection: Redis | Pipeline = pipeline if pipeline is not None else self.connection
+        connection: Redis | RedisCluster | Pipeline = pipeline if pipeline is not None else self.connection
         self.last_heartbeat = now()
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         connection.expire(self.key, timeout)
@@ -1452,11 +1464,10 @@ class BaseWorker:
                     self.log.debug('Worker %s: enqueueing dependents of job %s', self.name, job.id)
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
-                    if not pipeline.explicit_transaction:
+                    if try_enable_multi_on_pipeline(pipeline):
                         # enqueue_dependents didn't call multi after all!
-                        # We have to do it ourselves to make sure everything runs in a transaction
+                        # We had to do it ourselves to make sure everything runs in a transaction
                         self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
-                        pipeline.multi()
 
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore

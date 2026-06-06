@@ -1,5 +1,6 @@
 from redis import Connection as RedisConnection
-from redis import Redis
+from redis import Redis, RedisCluster
+from redis.cluster import ClusterNode
 
 
 class NoRedisConnectionException(Exception):
@@ -36,3 +37,25 @@ def parse_connection(connection: Redis) -> tuple[type[Redis], type[RedisConnecti
     connection_pool_class = connection.connection_pool.connection_class
 
     return connection.__class__, connection_pool_class, connection_pool_kwargs
+
+
+def copy_as_dummy_cluster_node(node: ClusterNode) -> ClusterNode:
+    # create a dummy cluster without the redis connection, so that it is essentially just
+    # a handy struct that we can use now to make typing and our life easier
+    return ClusterNode(host=node.host, port=node.port, server_type=node.server_type)
+
+
+def parse_cluster_connection(connection: RedisCluster) \
+        -> tuple[type[RedisCluster], list[tuple[ClusterNode, type[RedisConnection], dict]]]:
+    node_connections = []
+    for node in connection.get_nodes():
+        if node.redis_connection is None:
+            continue
+        connection_pool_kwargs = get_connection_kwargs(node.redis_connection)
+        connection_pool_class = node.redis_connection.connection_pool.connection_class
+
+        dummy_node = copy_as_dummy_cluster_node(node)
+        node_connections.append((dummy_node, connection_pool_class,
+                                 connection_pool_kwargs))
+
+    return connection.__class__, node_connections

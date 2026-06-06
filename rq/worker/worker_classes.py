@@ -7,17 +7,19 @@ import signal
 import sys
 import time
 from random import shuffle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from ..connections import get_connection_kwargs
+from ..connections import get_connection_kwargs, parse_cluster_connection
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
 from ..timeouts import HorseMonitorTimeoutException
-from ..utils import now
+from ..utils import is_cluster, now
 from .base import SHUTDOWN_SIGNAL, BaseWorker, WorkerStatus, signal_name
 
 if TYPE_CHECKING:
+    from redis import Redis, RedisCluster
+
     from ..queue import Queue
 
     try:
@@ -162,17 +164,44 @@ class SpawnWorker(Worker):
     This implementation is intended for environments where `os.fork()` is not available.
     """
 
-    def fork_work_horse(self, job: Job, queue: Queue):
-        """Spawns a work horse to perform the actual work using os.spawn()."""
-        os.environ['RQ_WORKER_ID'] = self.name
-        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
-
-        redis_kwargs = get_connection_kwargs(self.connection)
+    @classmethod
+    def _process_kwargs(cls, redis_kwargs: dict) -> dict:
         if redis_kwargs.get('retry'):
             # Remove retry from connection kwargs to avoid issues with os.spawnv
             del redis_kwargs['retry']
         if redis_kwargs.get('driver_info'):
             del redis_kwargs['driver_info']
+        if redis_kwargs.get('redis_connect_func'):
+            del redis_kwargs['redis_connect_func']
+        if redis_kwargs.get('oss_cluster_maint_notifications_handler'):
+            del redis_kwargs['oss_cluster_maint_notifications_handler']
+        return redis_kwargs
+
+    def fork_work_horse(self, job: Job, queue: Queue):
+        """Spawns a work horse to perform the actual work using os.spawn()."""
+        os.environ['RQ_WORKER_ID'] = self.name
+        os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
+
+        redis_class = 'Redis'
+        cluster_import = ''
+
+        if not is_cluster(self.connection):
+            redis_kwargs = self._process_kwargs(get_connection_kwargs(cast('Redis', self.connection)))
+            redis_init = f'redis = Redis(**{redis_kwargs!r})'
+        else:
+            redis_class = 'Redis, RedisCluster'
+            cluster_import = 'from redis.cluster import ClusterNode'
+            startup_nodes = []
+            _, cluster_nodes = parse_cluster_connection(cast('RedisCluster', self.connection))
+            for dummy_node, _, pool_kwargs in cluster_nodes:
+                redis_kwargs = self._process_kwargs(pool_kwargs)
+                node_args = [f'"{dummy_node.host}"', f'"{dummy_node.port}"',
+                    f'"{dummy_node.server_type}"', f'Redis(**{redis_kwargs!r})']
+
+                startup_nodes.append(
+                    f'ClusterNode({",".join(node_args)}), ')
+
+            redis_init = 'redis = RedisCluster(startup_nodes=[' + "\n".join(startup_nodes) + '])'
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
@@ -183,13 +212,14 @@ class SpawnWorker(Worker):
                 f"""
 import os
 import sys
-from redis import Redis
+from redis import {redis_class}
+{cluster_import}
 from rq import Worker, Queue
 from rq.job import Job
 from rq.executions import Execution
 
 # Recreate worker instance
-redis = Redis(**{redis_kwargs!r})
+{redis_init}
 worker = Worker.find_by_key({self.key!r}, connection=redis, serializer={self._serializer_arg!r})
 if not worker:
     sys.exit(1)

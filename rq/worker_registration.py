@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
     from redis.client import Pipeline
 
     from .queue import Queue
@@ -54,12 +54,12 @@ def unregister(worker: BaseWorker, pipeline: Pipeline | None = None):
         connection.execute()
 
 
-def get_keys(queue: Queue | None = None, connection: Redis | None = None) -> set[str]:
+def get_keys(queue: Queue | None = None, connection: Redis | RedisCluster | None = None) -> set[str]:
     """Returns a list of worker keys for a given queue.
 
     Args:
-        queue (Optional[&#39;Queue&#39;], optional): The Queue. Defaults to None.
-        connection (Optional[&#39;Redis&#39;], optional): The Redis Connection. Defaults to None.
+        queue (Optional[Queue], optional): The Queue. Defaults to None.
+        connection (Optional[Redis| RedisCluster], optional): The Redis Connection. Defaults to None.
 
     Raises:
         ValueError: If no Queue or Connection is provided.

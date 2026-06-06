@@ -580,7 +580,7 @@ class TestQueue(RQTestCase):
         parent_job = Job.create(func=say_hello, connection=self.connection)
         parent_job.save()
         q = Queue(connection=self.connection)
-        with q.connection.pipeline() as pipe:
+        with q.connection.pipeline(transaction=True) as pipe:
             job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
             self.assertEqual(q.job_ids, [])
             self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
@@ -593,7 +593,7 @@ class TestQueue(RQTestCase):
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.set_status(JobStatus.FINISHED)
         parent_job.save()
-        with q.connection.pipeline() as pipe:
+        with q.connection.pipeline(transaction=True) as pipe:
             job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
             # Pre execute conditions
             self.assertEqual(q.job_ids, [])
@@ -610,6 +610,7 @@ class TestQueue(RQTestCase):
         q = Queue(connection=self.connection)
         with q.connection.pipeline() as pipe:
             pipe.watch(b'fake_key')  # Test watch then enqueue
+        with q.connection.pipeline(transaction=True) as pipe:
             job = q.enqueue_call(say_hello, pipeline=pipe)
             self.assertEqual(q.job_ids, [])
             self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
@@ -644,7 +645,7 @@ class TestQueue(RQTestCase):
         (but at_front still applies)"""
         # Job with unfinished dependency is not immediately enqueued
         q = Queue(connection=self.connection)
-        with q.connection.pipeline() as pipe:
+        with q.connection.pipeline(transaction=True) as pipe:
             job_1_data = Queue.prepare_data(say_hello, job_id='fake_job_id_1', at_front=False)
             job_2_data = Queue.prepare_data(say_hello, job_id='fake_job_id_2', at_front=False)
             job_3_data = Queue.prepare_data(say_hello, job_id='fake_job_id_3', at_front=True)
@@ -665,7 +666,7 @@ class TestQueue(RQTestCase):
 
         queues = [q1, q2, q3]
         jobs = []
-        with self.connection.pipeline() as pipe:
+        with self.connection.pipeline(transaction=True) as pipe:
             for idx, q in enumerate(queues):
                 jobs.append(q.enqueue_call(say_hello, job_id=f'fake_job_id_{idx}', pipeline=pipe))
             for job in jobs:

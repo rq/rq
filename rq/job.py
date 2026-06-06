@@ -13,7 +13,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
-from redis import WatchError
+from redis import RedisCluster, WatchError
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
@@ -174,7 +174,7 @@ class Job:
     _dependency: Job | None
     redis_job_namespace_prefix = 'rq:job:'
 
-    def __init__(self, id: str | None = None, connection: Redis | None = None, serializer=None):
+    def __init__(self, id: str | None = None, connection: Redis | RedisCluster | None = None, serializer=None):
         # Manually check for the presence of the connection argument to preserve
         # backwards compatibility during the transition to RQ v2.0.0.
         if not connection:
@@ -241,7 +241,7 @@ class Job:
         func: FunctionReferenceType,
         args: list | tuple | None = None,
         kwargs: dict[str, Any] | None = None,
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         result_ttl: int | None = None,
         ttl: int | None = None,
         status: JobStatus | None = None,
@@ -271,7 +271,7 @@ class Job:
                 callable.  Defaults to None, meaning no args being passed.
             kwargs (Optional[Dict], optional): A Dictionary of keyword arguments to pass the callable.
                 Defaults to None, meaning no kwargs being passed.
-            connection (Redis): The Redis connection to use. Defaults to None.
+            connection (Redis | RedisCluster): The Redis connection to use. Defaults to None.
                 This will be "resolved" using the `resolve_connection` function when initializing the Job Class.
             result_ttl (Optional[int], optional): The amount of time in seconds the results should live.
                 Defaults to None.
@@ -423,7 +423,7 @@ class Job:
             pipeline (Optional[Pipeline], optional): Optional Redis Pipeline to use. Defaults to None.
         """
         self._status = status
-        connection: Redis = pipeline if pipeline is not None else self.connection
+        connection: Redis | RedisCluster = pipeline if pipeline is not None else self.connection
         connection.hset(self.key, 'status', self._status)
 
     def get_meta(self, refresh: bool = True) -> dict:
@@ -546,7 +546,7 @@ class Job:
         return self._failure_callback_timeout
 
     @property
-    def stopped_callback(self) -> Callable[[Job, Redis], Any] | None:
+    def stopped_callback(self) -> Callable[[Job, Redis | RedisCluster], Any] | None:
         if self._stopped_callback is UNEVALUATED:
             if self._stopped_callback_name:
                 self._stopped_callback = import_attribute(self._stopped_callback_name)
@@ -554,7 +554,7 @@ class Job:
                 self._stopped_callback = None
 
         # After deserialization, _stopped_callback is either a callable or None, never UNEVALUATED
-        return cast(Callable[['Job', 'Redis'], Any] | None, self._stopped_callback)
+        return cast(Callable[['Job', 'Redis | RedisCluster'], Any] | None, self._stopped_callback)
 
     @property
     def stopped_callback_timeout(self) -> int:
@@ -669,7 +669,7 @@ class Job:
         return bool(job_exists)
 
     @classmethod
-    def fetch(cls, id: str, connection: Redis | None = None, serializer=None) -> Job:
+    def fetch(cls, id: str, connection: Redis | RedisCluster | None = None, serializer=None) -> Job:
         """Fetches a persisted Job from its corresponding Redis key and instantiates it
 
         Args:
@@ -686,7 +686,7 @@ class Job:
         return job
 
     @classmethod
-    def fetch_many(cls, job_ids: Iterable[str], connection: Redis, serializer=None) -> list[Job | None]:
+    def fetch_many(cls, job_ids: Iterable[str], connection: Redis | RedisCluster, serializer=None) -> list[Job | None]:
         """
         Bulk version of Job.fetch
 

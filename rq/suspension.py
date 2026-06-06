@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
 
     from rq.worker import BaseWorker
 
@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 WORKERS_SUSPENDED = 'rq:suspended'
 
 
-def is_suspended(connection: Redis, worker: BaseWorker | None = None):
+def is_suspended(connection: Redis | RedisCluster, worker: BaseWorker | None = None):
     """Checks whether a Worker is suspended on a given connection
     PS: pipeline returns a list of responses
     Ref: https://github.com/andymccurdy/redis-py#pipelines
 
     Args:
-        connection (Redis): The Redis Connection
+        connection (Redis | RedisCluster): The Redis Connection
         worker (Optional[Worker], optional): The Worker. Defaults to None.
     """
     with connection.pipeline() as pipeline:
@@ -27,13 +27,13 @@ def is_suspended(connection: Redis, worker: BaseWorker | None = None):
         return pipeline.execute()[-1]
 
 
-def suspend(connection: Redis, ttl: int | None = None):
+def suspend(connection: Redis | RedisCluster, ttl: int | None = None):
     """
     Suspends.
     TTL of 0 will invalidate right away.
 
     Args:
-        connection (Redis): The Redis connection to use..
+        connection (Redis | RedisCluster): The Redis connection to use..
         ttl (Optional[int], optional): time to live in seconds. Defaults to `None`
     """
     connection.set(WORKERS_SUSPENDED, 1)
@@ -41,11 +41,11 @@ def suspend(connection: Redis, ttl: int | None = None):
         connection.expire(WORKERS_SUSPENDED, ttl)
 
 
-def resume(connection: Redis):
+def resume(connection: Redis | RedisCluster):
     """
     Resumes.
 
     Args:
-        connection (Redis): The Redis connection to use..
+        connection (Redis | RedisCluster): The Redis connection to use..
     """
     return connection.delete(WORKERS_SUSPENDED)

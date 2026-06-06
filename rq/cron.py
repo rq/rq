@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from croniter import croniter
-from redis import Redis
+from redis import Redis, RedisCluster
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
@@ -205,11 +205,11 @@ class CronScheduler:
 
     def __init__(
         self,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         logging_level: str | int = logging.INFO,
         name: str = '',
     ):
-        self.connection: Redis = connection
+        self.connection: Redis | RedisCluster = connection
         self._cron_jobs: list[CronJob] = []
         self.hostname: str = socket.gethostname()
         self.pid: int = os.getpid()

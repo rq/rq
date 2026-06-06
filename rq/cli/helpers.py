@@ -11,7 +11,7 @@ from shutil import get_terminal_size
 from typing import cast
 
 import click
-from redis import Redis
+from redis import Redis, RedisCluster
 from redis.sentinel import Sentinel
 
 from rq.defaults import (
@@ -37,7 +37,7 @@ def read_config_file(module):
     return {k: v for k, v in settings.__dict__.items() if k.upper() == k}
 
 
-def get_redis_from_config(settings, connection_class=Redis):
+def get_redis_from_config(settings, connection_class: type[Redis] | type[RedisCluster] = Redis):
     """Returns a StrictRedis instance from a dictionary of settings.
     To use redis sentinel, you must specify a dictionary in the configuration file.
     Example of a dictionary with keys without values:
@@ -51,12 +51,14 @@ def get_redis_from_config(settings, connection_class=Redis):
         master_name = settings['SENTINEL'].get('MASTER_NAME', 'mymaster')
 
         connection_kwargs = {
-            'db': settings['SENTINEL'].get('DB', 0),
             'username': settings['SENTINEL'].get('USERNAME', None),
             'password': settings['SENTINEL'].get('PASSWORD', None),
             'socket_timeout': settings['SENTINEL'].get('SOCKET_TIMEOUT', None),
             'ssl': settings['SENTINEL'].get('SSL', False),
         }
+        # there is no support for multiple database on Redis clusters
+        if not issubclass(connection_class, RedisCluster):
+            connection_kwargs.update({'db': settings['SENTINEL'].get('DB', 0)})
         connection_kwargs.update(settings['SENTINEL'].get('CONNECTION_KWARGS', {}))
         sentinel_kwargs = settings['SENTINEL'].get('SENTINEL_KWARGS', {})
 
@@ -75,7 +77,6 @@ def get_redis_from_config(settings, connection_class=Redis):
     kwargs = {
         'host': settings.get('REDIS_HOST', 'localhost'),
         'port': settings.get('REDIS_PORT', 6379),
-        'db': settings.get('REDIS_DB', 0),
         'password': settings.get('REDIS_PASSWORD', None),
         'ssl': ssl,
         'ssl_ca_certs': settings.get('REDIS_SSL_CA_CERTS', None),
@@ -84,6 +85,10 @@ def get_redis_from_config(settings, connection_class=Redis):
         'ssl_keyfile': settings.get('REDIS_SSL_KEYFILE', None),
         'ssl_certfile': settings.get('REDIS_SSL_CERTFILE', None),
     }
+
+    # well, still not supported
+    if not issubclass(connection_class, RedisCluster):
+        kwargs.update({'db': settings.get('REDIS_DB', 0)})
 
     return connection_class(**kwargs)
 
@@ -372,7 +377,8 @@ class CliConfig:
             raise click.BadParameter(str(exc), param_hint='--queue-class')
 
         try:
-            self.connection_class: type[Redis] = cast(type[Redis], import_attribute(connection_class))
+            self.connection_class: type[Redis | RedisCluster] = (
+                cast(type[Redis | RedisCluster], import_attribute(connection_class)))
         except (ImportError, AttributeError) as exc:
             raise click.BadParameter(str(exc), param_hint='--connection-class')
 
