@@ -1,3 +1,7 @@
+### RQ 2.9.1 (2026-06-06)
+* `Job.create()` now supports `retry` argument. Thanks @sethuvishal!
+* Add compatibility with `redis-py` >= 8. Thanks @selwin!
+
 ### RQ 2.9.0 (2026-05-19)
 * Added `json` and `pickle` shorthand aliases for serializers. These can now be used when creating queues/workers and with the `--serializer` CLI option. Thanks @selwin!
 * Fixed a bug where `SpawnWorker` does not use user supplied serializer. Thanks @selwin!
