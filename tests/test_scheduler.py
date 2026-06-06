@@ -187,6 +187,10 @@ class TestScheduler(RQTestCase):
         self.assertEqual(fetched.created_at, scheduler.created_at)
         self.assertEqual(fetched.last_heartbeat, scheduler.last_heartbeat)
 
+        self.connection.delete(scheduler.key)
+        scheduler.save()
+        self.assertEqual(self.connection.hget(scheduler.key, 'name').decode(), scheduler.name)
+
     def test_register_birth_is_idempotent(self):
         """register_birth() can be called again (e.g. on restart) without error"""
         scheduler = RQScheduler(['foo'], connection=self.connection)
@@ -200,15 +204,14 @@ class TestScheduler(RQTestCase):
             RQScheduler.fetch('does-not-exist', self.connection)
 
     def test_register_death(self):
-        """register_death() deletes the metadata hash and raises if it is missing"""
+        """register_death() returns whether the metadata hash was deleted"""
         scheduler = RQScheduler(['foo'], connection=self.connection)
         scheduler.register_birth()
         self.assertTrue(self.connection.exists(scheduler.key))
 
-        scheduler.register_death()
+        self.assertTrue(scheduler.register_death())
         self.assertFalse(self.connection.exists(scheduler.key))
-        with self.assertRaises(SchedulerNotFound):
-            scheduler.register_death()
+        self.assertFalse(scheduler.register_death())
 
     def test_should_reacquire_locks(self):
         """scheduler.should_reacquire_locks works properly"""

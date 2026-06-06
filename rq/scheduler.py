@@ -180,9 +180,12 @@ class RQScheduler:
 
     def save(self, pipeline: Pipeline | None = None) -> None:
         """Save this scheduler's metadata hash with a TTL."""
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.connection.pipeline()
         connection.hset(self.key, mapping=self.to_dict())
         connection.expire(self.key, self.interval + 60)
+
+        if pipeline is None:
+            connection.execute()
 
     def register_birth(self) -> None:
         """Register this scheduler's birth by writing its metadata hash.
@@ -195,15 +198,14 @@ class RQScheduler:
         self.last_heartbeat = now()
         self.save()
 
-    def register_death(self) -> None:
+    def register_death(self) -> bool:
         """Register this scheduler's death by deleting its metadata hash.
 
-        Raises:
-            SchedulerNotFound: if no metadata hash exists for this scheduler.
+        Returns:
+            True if the scheduler metadata existed and was deleted, False if it was already absent.
         """
         self.log.debug('Scheduler %s: registering death', self.name)
-        if not self.connection.delete(self.key):
-            raise SchedulerNotFound(f"Scheduler '{self.name}' not found")
+        return bool(self.connection.delete(self.key))
 
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> RQScheduler:
