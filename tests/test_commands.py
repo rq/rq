@@ -2,12 +2,11 @@ import time
 from multiprocessing import Process
 from unittest import mock
 
-from redis import Redis
 from redis.exceptions import ResponseError
 
 from rq import Queue, Worker
 from rq.command import send_command, send_kill_horse_command, send_shutdown_command, send_stop_job_command
-from rq.connections import get_connection_kwargs
+from rq.connections import RedisConnectionBuilder
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.serializers import JSONSerializer
 from rq.worker import WorkerStatus
@@ -15,13 +14,14 @@ from tests import RQTestCase
 from tests.fixtures import _send_kill_horse_command, _send_shutdown_command, long_running_job, raise_exc_mock
 
 
-def start_work(queue_name, worker_name, connection_kwargs):
-    worker = Worker(queue_name, name=worker_name, connection=Redis(**connection_kwargs))
+def start_work(queue_name, worker_name, connection_builder: RedisConnectionBuilder):
+    worker = Worker(queue_name, name=worker_name, connection=connection_builder.build_connection())
     worker.work()
 
 
-def start_work_burst(queue_name, worker_name, connection_kwargs):
-    worker = Worker(queue_name, name=worker_name, connection=Redis(**connection_kwargs), serializer=JSONSerializer)
+def start_work_burst(queue_name, worker_name, connection_builder: RedisConnectionBuilder):
+    worker = Worker(queue_name, name=worker_name,
+        connection=connection_builder.build_connection(), serializer=JSONSerializer)
     worker.work(burst=True)
 
 
@@ -29,9 +29,10 @@ class TestCommands(RQTestCase):
     def test_shutdown_command(self):
         """Ensure that shutdown command works properly."""
         connection = self.connection
+        connection_builder = RedisConnectionBuilder.parse_connection(connection)
         worker = Worker('foo', connection=connection)
 
-        p = Process(target=_send_shutdown_command, args=(worker.name, get_connection_kwargs(connection)))
+        p = Process(target=_send_shutdown_command, args=(worker.name, connection_builder))
         p.start()
         worker.work()
         p.join(1)
@@ -68,18 +69,19 @@ class TestCommands(RQTestCase):
     def test_kill_horse_command(self):
         """Ensure that shutdown command works properly."""
         connection = self.connection
+        connection_builder = RedisConnectionBuilder.parse_connection(connection)
         queue = Queue('foo', connection=connection)
         job = queue.enqueue(long_running_job, 4)
         worker = Worker('foo', connection=connection)
 
-        p = Process(target=_send_kill_horse_command, args=(worker.name, get_connection_kwargs(connection)))
+        p = Process(target=_send_kill_horse_command, args=(worker.name, connection_builder))
         p.start()
         worker.work(burst=True)
         p.join(1)
         job.refresh()
         self.assertIn(job.id, queue.failed_job_registry)
 
-        p = Process(target=start_work, args=('foo', worker.name, get_connection_kwargs(connection)))
+        p = Process(target=start_work, args=('foo', worker.name, connection_builder))
         p.start()
         p.join(2)
 
@@ -93,6 +95,7 @@ class TestCommands(RQTestCase):
         """Ensure that stop_job command works properly."""
 
         connection = self.connection
+        connection_builder = RedisConnectionBuilder.parse_connection(connection)
         queue = Queue('foo', connection=connection, serializer=JSONSerializer)
         job = queue.enqueue(long_running_job, 3)
         worker = Worker('foo', connection=connection, serializer=JSONSerializer)
@@ -105,7 +108,7 @@ class TestCommands(RQTestCase):
         with self.assertRaises(NoSuchJobError):
             send_stop_job_command(connection, job_id='1', serializer=JSONSerializer)
 
-        p = Process(target=start_work_burst, args=('foo', worker.name, get_connection_kwargs(connection)))
+        p = Process(target=start_work_burst, args=('foo', worker.name, connection_builder))
         p.start()
         p.join(1)
 

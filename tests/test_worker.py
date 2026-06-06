@@ -19,7 +19,7 @@ import pytest
 import redis.exceptions
 
 from rq import Queue, SimpleWorker, Worker
-from rq.connections import get_connection_kwargs
+from rq.connections import get_connection_kwargs, RedisConnectionBuilder
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
@@ -1040,7 +1040,8 @@ class TestWorker(RQTestCase):
 
         # Suspend the worker, and then send resume command in the background
         q.enqueue(say_hello)
-        p = Process(target=resume_worker, args=(get_connection_kwargs(self.connection), 2))
+        p = Process(target=resume_worker,
+            args=(RedisConnectionBuilder.parse_connection(self.connection), 2))
         p.start()
         w.worker_ttl = 1
         w.work(max_jobs=1)
@@ -1285,7 +1286,10 @@ class TestWorker(RQTestCase):
         """Ensures that the worker correctly updates Redis client connection to have a socket_timeout"""
         q = Queue(connection=self.connection)
         _ = Worker([q], connection=self.connection)
-        connection_kwargs = q.connection.connection_pool.connection_kwargs
+        if not self.connected_to_cluster:
+            connection_kwargs = get_connection_kwargs(q.connection)
+        else:
+            connection_kwargs = get_connection_kwargs(q.connection.get_default_node().redis_connection)
         self.assertEqual(connection_kwargs['socket_timeout'], 415)
 
     def test_worker_version(self):
@@ -1581,8 +1585,12 @@ def schedule_access_self():
 class TestWorkerSubprocess(RQTestCase):
     def setUp(self):
         super().setUp()
-        db_num = self.connection.connection_pool.connection_kwargs['db']
-        self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
+        if not self.connected_to_cluster:
+            db_num = self.connection.connection_pool.connection_kwargs['db']
+            self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
+        else:
+            default_node = self.connection.get_default_node()
+            self.redis_url = f'redis://{default_node.host}:{default_node.port}'
 
     def test_run_empty_queue(self):
         """Run the worker in its own process with an empty queue"""
@@ -1695,7 +1703,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         mock_logger.assert_called_with('Worker %s: killed horse pid %s', w.name, p.pid)
 
     def test_handle_shutdown_request_no_horse(self):
-        """Mutate HerokuWorker so _horse_pid refers to non existent process
+        """Mutate HerokuWorker so _horse_pid refers to non-existent process
         and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo', connection=self.connection)
 

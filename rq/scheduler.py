@@ -11,9 +11,9 @@ from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
 
-from redis import ConnectionPool, Redis, RedisCluster
+from redis import Redis, RedisCluster
 
-from .connections import copy_as_dummy_cluster_node, parse_cluster_connection, parse_connection, RQ_KEY_PREFIX
+from .connections import RQ_KEY_PREFIX, RedisConnectionBuilder
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
 from .job import Job
 from .logutils import setup_loghandlers
@@ -44,7 +44,6 @@ class RQScheduler:
     # STOPPED: scheduler is in stopped condition
 
     Status = SchedulerStatus
-    _connection_class: type[Redis] | type[RedisCluster]
 
     def __init__(
         self,
@@ -60,16 +59,9 @@ class RQScheduler:
         self._acquired_locks: set[str] = set()
         self._scheduled_job_registries: list[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
-
-        if isinstance(connection, RedisCluster):
-            self._connected_to_cluster = True
-            self._connection_class, self._node_connections = parse_cluster_connection(connection)
-        else:
-            self._connected_to_cluster = False
-            self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
-
         self.serializer = resolve_serializer(serializer)
 
+        self._connection_builder = RedisConnectionBuilder.parse_connection(connection)
         self._connection = None
         self.interval = interval
         self._stop_requested = False
@@ -87,21 +79,7 @@ class RQScheduler:
     def connection(self):
         if self._connection:
             return self._connection
-        if self._connected_to_cluster:
-            cluster_nodes = []
-            for dummy_node, pool_class, pool_kwargs in self._node_connections:
-                node = copy_as_dummy_cluster_node(dummy_node)
-                node.redis_connection = Redis(
-                    connection_pool=ConnectionPool(connection_class=pool_class, **pool_kwargs),
-                )
-                cluster_nodes.append(node)
-            self._connection = self._connection_class(startup_nodes=cluster_nodes)
-        else:
-            self._connection = self._connection_class(
-                connection_pool=ConnectionPool(connection_class=self._pool_class, **self._pool_kwargs)
-            )
-
-        return self._connection
+        return self._connection_builder.build_connection()
 
     @property
     def acquired_locks(self):
@@ -177,7 +155,7 @@ class RQScheduler:
 
             queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
 
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
                 for job in jobs:
                     if job is not None:
@@ -202,7 +180,7 @@ class RQScheduler:
         """Updates the TTL on scheduler keys and the locks"""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
         if len(self._acquired_locks) > 1:
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 for name in self._acquired_locks:
                     key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 60)

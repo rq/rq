@@ -42,7 +42,7 @@ def unregister(worker: BaseWorker, pipeline: Pipeline | None = None):
         pipeline (Optional[Pipeline], optional): Redis Pipeline. Defaults to None.
     """
     if pipeline is None:
-        connection = worker.connection.pipeline()
+        connection = worker.connection.pipeline(transaction=True)
     else:
         connection = pipeline
 
@@ -90,7 +90,7 @@ def clean_worker_registry(queue: Queue):
     """
     keys = list(get_keys(queue))
 
-    with queue.connection.pipeline() as pipeline:
+    with queue.connection.pipeline(transaction=True) as pipeline:
         for key in keys:
             pipeline.exists(key)
         results = pipeline.execute()

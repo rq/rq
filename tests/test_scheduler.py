@@ -7,6 +7,7 @@ import pytest
 import redis
 
 from rq import Queue
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.exceptions import NoSuchJobError
 from rq.job import Job, Retry
@@ -499,18 +500,43 @@ class TestQueue(RQTestCase):
     def test_custom_connection_pool(self):
         """Connection pool customizing. Ensure that we can properly set a
         custom connection pool class and pass extra arguments"""
-        custom_conn = redis.Redis(
-            connection_pool=redis.ConnectionPool(
-                connection_class=CustomRedisConnection,
-                db=4,
-                custom_arg='foo',
+
+        default_node = None
+        if not self.connected_to_cluster:
+            custom_conn = redis.Redis(
+                connection_pool=redis.ConnectionPool(
+                    connection_class=CustomRedisConnection,
+                    db=4,
+                    custom_arg='foo',
+                )
             )
-        )
+        else:
+            default_node = self.connection.get_default_node()
+            self.assertIsNotNone(default_node)
+            assert default_node is not None
+
+            custom_conn = redis.RedisCluster(
+                startup_nodes=[default_node],
+                # this is rather awkward - see also the discussion in `rq/connections.py`
+                # I am not sure that we want to have all nodes sharing the same connection pool, so
+                # `RedisConnectionBuilder` will force `RedisCluster` to re-create a `ConnectionPool`
+                # per node again
+                connection_pool=redis.ConnectionPool(
+                    connection_class=CustomRedisConnection,
+                    custom_arg='foo',
+                    **get_connection_kwargs(default_node.redis_connection)
+                )
+            )
 
         queue = Queue(connection=custom_conn)
         scheduler = RQScheduler([queue], connection=custom_conn)
 
-        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+        if not self.connected_to_cluster:
+            node_connection = scheduler.connection
+        else:
+            node_connection = scheduler.connection.get_node(node_name=default_node.name).redis_connection
+
+        scheduler_connection = node_connection.connection_pool.get_connection('info')
 
         self.assertEqual(scheduler_connection.__class__, CustomRedisConnection)
         self.assertEqual(scheduler_connection.get_custom_arg(), 'foo')
@@ -518,11 +544,21 @@ class TestQueue(RQTestCase):
     def test_no_custom_connection_pool(self):
         """Connection pool customizing must not interfere if we're using a standard
         connection (non-pooled)"""
-        standard_conn = redis.Redis(db=5)
+        default_node = None
+        if not self.connected_to_cluster:
+            standard_conn = redis.Redis(db=5)
+        else:
+            default_node = self.connection.get_default_node()
+            standard_conn = redis.RedisCluster(host=default_node.host, port=default_node.port)
 
         queue = Queue(connection=standard_conn)
         scheduler = RQScheduler([queue], connection=standard_conn)
 
-        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+        if not self.connected_to_cluster:
+            node_connection = scheduler.connection
+        else:
+            node_connection = scheduler.connection.get_node(node_name=default_node.name).redis_connection
+
+        scheduler_connection = node_connection.connection_pool.get_connection('info')
 
         self.assertEqual(scheduler_connection.__class__, redis.Connection)

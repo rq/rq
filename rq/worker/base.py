@@ -717,7 +717,7 @@ class BaseWorker:
         `save_exc_to_job` should only be used for testing purposes
         """
         self.log.debug('Worker %s: handling failed execution of job %s', self.name, job.id)
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
                     job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
@@ -913,7 +913,7 @@ class BaseWorker:
         if self.connection.exists(key) and not self.connection.hexists(key, 'death'):
             msg = 'There exists an active worker named {0!r} already'
             raise ValueError(msg.format(self.name))
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             pipeline.delete(key)
 
             self.birth_date = self.last_heartbeat = now()
@@ -925,7 +925,7 @@ class BaseWorker:
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Worker %s: registering death', self.name)
-        with self.connection.pipeline() as p:
+        with self.connection.pipeline(transaction=True) as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             worker_registration.unregister(self, p)
@@ -1190,7 +1190,7 @@ class BaseWorker:
 
     def maintain_heartbeats(self, job: Job):
         """Updates worker, execution and job's last heartbeat fields."""
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
             ttl = int(self.get_heartbeat_ttl(job))
 
@@ -1337,7 +1337,7 @@ class BaseWorker:
         job execution.
         """
         self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
 
@@ -1387,7 +1387,7 @@ class BaseWorker:
             # If max retries exceeded, treat as a terminal failed job but persist
             # a distinct result type so callers can differentiate it from errors.
             self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 self.cleanup_execution(job, pipeline=pipeline)
                 job.failed_job_registry.add(job, ttl=job.failure_ttl, exc_string='', pipeline=pipeline)
@@ -1418,7 +1418,7 @@ class BaseWorker:
                     )
             return
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
             job._handle_retry_result(
@@ -1455,7 +1455,7 @@ class BaseWorker:
         """
         self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             while True:
                 try:
                     # if dependencies are inserted after enqueue_dependents

@@ -536,7 +536,7 @@ class CronScheduler:
         """Register this scheduler's birth in the scheduler registry and save data to Redis hash"""
         self.log.info(f'CronScheduler {self.name}: registering birth...')
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             cron_scheduler_registry.register(self, pipeline)
             self.save(pipeline)
             pipeline.execute()
@@ -550,7 +550,7 @@ class CronScheduler:
         """Send a heartbeat to update this scheduler's last seen timestamp in the registry
         and extend the scheduler's Redis hash TTL.
         """
-        with self.connection.pipeline() as pipe:
+        with self.connection.pipeline(transaction=True) as pipe:
             pipe.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True, ch=True)
             pipe.expire(self.key, 120)
             results = pipe.execute()

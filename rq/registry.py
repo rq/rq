@@ -212,7 +212,7 @@ class BaseRegistry:
         if not result:
             raise InvalidJobOperation
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
@@ -273,7 +273,7 @@ class StartedJobRegistry(BaseRegistry):
         if job_ids:
             queue = self.get_queue()
 
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 for job_id in job_ids:
                     try:
                         job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
@@ -470,7 +470,7 @@ class FailedJobRegistry(BaseRegistry):
         if pipeline:
             p = pipeline
         else:
-            p = self.connection.pipeline()
+            p = self.connection.pipeline(transaction=True)
 
         job._exc_info = exc_string
         job.save(pipeline=p, include_meta=False, include_result=False)

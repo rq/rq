@@ -195,7 +195,7 @@ def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
     # Import here to avoid circular imports
     from .worker.base import WorkerStatus
 
-    with worker.connection.pipeline() as pipeline:
+    with worker.connection.pipeline(transaction=True) as pipeline:
         heartbeat_ttl = worker.get_heartbeat_ttl(job)
         worker.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
         worker.set_state(WorkerStatus.BUSY, pipeline=pipeline)

@@ -12,11 +12,11 @@ import sys
 import time
 from multiprocessing import Process
 
-from redis import Redis
+from redis import Redis, RedisCluster
 
 from rq import Queue, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
-from rq.connections import get_connection_kwargs
+from rq.connections import RedisConnectionBuilder
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.suspension import resume
@@ -74,14 +74,15 @@ def some_calculation(x, y, z=1):
     return x * y / z
 
 
-def rpush(key, value, connection_kwargs: dict, append_worker_name=False, sleep=0):
+def rpush(key, value, connection_builder: RedisConnectionBuilder,
+        append_worker_name=False, sleep=0):
     """Push a value into a list in Redis. Useful for detecting the order in
     which jobs were executed."""
     if sleep:
         time.sleep(sleep)
     if append_worker_name:
         value += ':' + get_current_job().worker_name
-    redis = Redis(**connection_kwargs)
+    redis = connection_builder.build_connection()
     redis.rpush(key, value)
 
 
@@ -219,15 +220,15 @@ class DummyQueue:
     pass
 
 
-def kill_horse(horse_pid_key: str, connection_kwargs: dict, interval: float = 1.5):
+def kill_horse(horse_pid_key: str, connection_builder: RedisConnectionBuilder, interval: float = 1.5):
     """
     Kill the worker horse process by its PID stored in a Redis key.
     :param horse_pid_key: Redis key where the horse PID is stored
-    :param connection_kwargs: Connection parameters for Redis
+    :param connection_builder `ConnectionBuilder` to create a new connection based on the existing
     :param interval: Time to wait before sending the kill signal
     """
     time.sleep(interval)
-    redis = Redis(**connection_kwargs)
+    redis = connection_builder.build_connection()
     value = redis.get(horse_pid_key)
     if value:
         pid = int(value)
@@ -244,10 +245,11 @@ def kill_worker(pid: int, double_kill: bool, interval: float = 1.5):
         os.kill(pid, signal.SIGTERM)
 
 
-def resume_worker(connection_kwargs: dict, interval: float = 1):
+def resume_worker(connection_builder: RedisConnectionBuilder, interval: float = 1):
+    connection = connection_builder.build_connection()
     # Wait and resume RQ
     time.sleep(interval)
-    resume(Redis(**connection_kwargs))
+    resume(connection)
 
 
 class Serializer:
@@ -258,7 +260,8 @@ class Serializer:
         pass
 
 
-def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval=None):
+def start_worker(queue_name, connection_builder: RedisConnectionBuilder, worker_name, burst,
+        job_monitoring_interval=None):
     """
     Start a worker. We accept only serializable args, so that this can be
     executed via multiprocessing.
@@ -269,25 +272,25 @@ def start_worker(queue_name, conn_kwargs, worker_name, burst, job_monitoring_int
     w = Worker(
         [queue_name],
         name=worker_name,
-        connection=Redis(**conn_kwargs),
+        connection=connection_builder.build_connection(),
         job_monitoring_interval=job_monitoring_interval or DEFAULT_JOB_MONITORING_INTERVAL,
     )
     w.work(burst=burst)
 
 
 def start_worker_process(
-    queue_name, connection, worker_name=None, burst=False, job_monitoring_interval: int | None = None
+    queue_name, connection: Redis | RedisCluster, worker_name=None, burst=False, job_monitoring_interval: int | None = None
 ) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.
     """
-    conn_kwargs = get_connection_kwargs(connection)
-    p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
+    connection_builder = RedisConnectionBuilder.parse_connection(connection)
+    p = Process(target=start_worker, args=(queue_name, connection_builder, worker_name, burst, job_monitoring_interval))
     p.start()
     return p
 
 
-def burst_two_workers(queue, connection: Redis, timeout=2, tries=5, pause=0.1):
+def burst_two_workers(queue, connection: Redis | RedisCluster, timeout=2, tries=5, pause=0.1):
     """
     Get two workers working simultaneously in burst mode, on a given queue.
     Return after both workers have finished handling jobs, up to a fixed timeout
@@ -338,15 +341,17 @@ def erroneous_callback(job):
     pass
 
 
-def _send_shutdown_command(worker_name, connection_kwargs, delay=0.25):
+def _send_shutdown_command(worker_name, connection_builder: RedisConnectionBuilder, delay=0.25):
+    connection = connection_builder.build_connection()
     time.sleep(delay)
-    send_shutdown_command(Redis(**connection_kwargs), worker_name)
+    send_shutdown_command(connection, worker_name)
 
 
-def _send_kill_horse_command(worker_name, connection_kwargs, delay=0.25):
+def _send_kill_horse_command(worker_name, connection_builder: RedisConnectionBuilder, delay=0.25):
     """Waits delay before sending kill-horse command"""
+    connection = connection_builder.build_connection()
     time.sleep(delay)
-    send_kill_horse_command(Redis(**connection_kwargs), worker_name)
+    send_kill_horse_command(connection, worker_name)
 
 
 class CustomJob(Job):

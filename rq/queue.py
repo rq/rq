@@ -328,7 +328,7 @@ class Queue:
         if delete_jobs:
             self.empty()
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             pipeline.srem(self.redis_queues_keys, self._key)
             pipeline.delete(self._key)
             pipeline.execute()
@@ -653,7 +653,7 @@ class Queue:
         """
         if len(job._dependency_ids) > 0:
             orig_status = job.get_status(refresh=False)
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
             while True:
                 try:
                     # Also calling watch even if caller
@@ -855,7 +855,7 @@ class Queue:
         Returns:
             List[Job]: A list of enqueued jobs
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -937,7 +937,7 @@ class Queue:
         job.perform()
         job.ended_at = now()
         result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL)
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             job._handle_success(result_ttl=result_ttl, pipeline=pipeline, worker_name='')
             job.cleanup(result_ttl, pipeline=pipeline)
             pipeline.execute()
@@ -1144,7 +1144,7 @@ class Queue:
             schedule_unique_job(self.connection, self.key, registry.key, job, datetime)
             return job
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -1193,7 +1193,7 @@ class Queue:
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
         # Add Queue key set
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
         pipe.sadd(self.redis_queues_keys, self.key)
         if pipeline is None:
             pipe.execute()
@@ -1279,7 +1279,7 @@ class Queue:
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
             save_unique_job(self.connection, self.key, job, at_front=at_front)
         else:
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
             if is_deferred:
                 self.deferred_job_registry.remove(job, pipeline=pipe)
@@ -1312,7 +1312,7 @@ class Queue:
             # Use atomic Lua script for unique check and save (without pushing to queue)
             save_unique_job(self.connection, self.key, job, enqueue=False)
         else:
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
             if is_deferred:
                 self.deferred_job_registry.remove(job, pipeline=pipe)
@@ -1334,13 +1334,13 @@ class Queue:
         Returns:
             Job: The job instance
         """
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             job.prepare_for_execution('sync', pipeline)
 
         try:
             job = self.run_job(job)
         except:  # noqa
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 exc_string = ''.join(traceback.format_exception(*sys.exc_info()))
                 job._handle_failure(exc_string, pipeline, worker_name='')
@@ -1375,7 +1375,7 @@ class Queue:
         """
         from .registry import DeferredJobRegistry
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
         dependents_key = job.dependents_key
 
         while True:

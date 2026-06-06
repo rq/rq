@@ -3,7 +3,7 @@ import signal
 from multiprocessing import Process
 from time import sleep
 
-from rq.connections import get_connection_kwargs, parse_connection
+from rq.connections import  RedisConnectionBuilder
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.serializers import JSONSerializer
@@ -44,7 +44,7 @@ class TestWorkerPool(RQTestCase):
 
         worker_data = list(pool.worker_dict.values())[0]
         sleep(0.5)
-        _send_shutdown_command(worker_data.name, get_connection_kwargs(self.connection), delay=0)
+        _send_shutdown_command(worker_data.name, RedisConnectionBuilder.parse_connection(self.connection), delay=0)
         # 1 worker should be dead since we sent a shutdown command
         sleep(0.75)
         pool.check_workers(respawn=False)
@@ -67,7 +67,7 @@ class TestWorkerPool(RQTestCase):
 
         worker_data = list(pool.worker_dict.values())[0]
         sleep(0.5)
-        _send_shutdown_command(worker_data.name, get_connection_kwargs(self.connection), delay=0)
+        _send_shutdown_command(worker_data.name, RedisConnectionBuilder.parse_connection(self.connection), delay=0)
         # 1 worker should be dead since we sent a shutdown command
         sleep(0.75)
         pool.reap_workers()
@@ -89,7 +89,7 @@ class TestWorkerPool(RQTestCase):
     def test_pool_ignores_consecutive_shutdown_signals(self):
         """If two shutdown signals are sent within one second, only the first one is processed"""
         # Send two shutdown signals within one second while the worker is
-        # working on a long running job. The job should still complete (not killed)
+        # working on a long-running job. The job should still complete (not killed)
         pool = WorkerPool(['foo'], connection=self.connection, num_workers=2)
 
         process_1 = Process(target=wait_and_send_shutdown_signal, args=(os.getpid(), 0.5))
@@ -110,8 +110,8 @@ class TestWorkerPool(RQTestCase):
         queue = Queue('foo', connection=self.connection)
         queue.enqueue(say_hello)
 
-        connection_class, pool_class, pool_kwargs = parse_connection(self.connection)
-        run_worker('test-worker', ['foo'], connection_class, pool_class, pool_kwargs)
+        connection_builder = RedisConnectionBuilder.parse_connection(connection=self.connection)
+        run_worker('test-worker', ['foo'], connection_builder)
         # Worker should have processed the job
         self.assertEqual(len(queue), 0)
 

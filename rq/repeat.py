@@ -92,7 +92,7 @@ class Repeat:
         if job.repeats_left is None or job.repeats_left <= 0:
             raise ValueError(f'Cannot schedule job {job.id}: no repeats left')
 
-        pipe = pipeline if pipeline is not None else job.connection.pipeline()
+        pipe = pipeline if pipeline is not None else job.connection.pipeline(transaction=True)
 
         # Get the interval for this repeat based on remaining repeats
         repeat_count = job.repeats_left - 1  # Count from the end (0-indexed)

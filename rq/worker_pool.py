@@ -13,11 +13,11 @@ from multiprocessing.process import BaseProcess
 from typing import TYPE_CHECKING, NamedTuple
 from uuid import uuid4
 
-from redis import ConnectionPool, Redis
+from redis import Redis, RedisCluster
 
 from rq.serializers import DefaultSerializer
 
-from .connections import parse_connection
+from .connections import RedisConnectionBuilder
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from .job import Job
 from .logutils import setup_loghandlers
@@ -50,7 +50,7 @@ class WorkerPool:
     def __init__(
         self,
         queues: Iterable[str | Queue],
-        connection: Redis,
+        connection: Redis | RedisCluster,
         num_workers: int = 1,
         worker_class: type[BaseWorker] = Worker,
         serializer: Serializer = DefaultSerializer,
@@ -77,7 +77,7 @@ class WorkerPool:
 
         # A dictionary of WorkerData keyed by worker name
         self.worker_dict: dict[str, WorkerData] = {}
-        self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
+        self.connection_builder = RedisConnectionBuilder.parse_connection(connection)
 
     @property
     def queues(self) -> list[Queue]:
@@ -166,7 +166,7 @@ class WorkerPool:
         """Returns the worker process"""
         return ForkProcess(
             target=run_worker,
-            args=(name, self._queue_names, self._connection_class, self._pool_class, self._pool_kwargs),
+            args=(name, self._queue_names, self.connection_builder),
             kwargs={
                 '_sleep': _sleep,
                 'burst': burst,
@@ -255,9 +255,7 @@ class WorkerPool:
 def run_worker(
     worker_name: str,
     queue_names: Iterable[str],
-    connection_class,
-    connection_pool_class,
-    connection_pool_kwargs: dict,
+    connection_builder: RedisConnectionBuilder,
     worker_class: type[BaseWorker] = Worker,
     serializer: Serializer = DefaultSerializer,
     job_class: type[Job] = Job,
@@ -266,9 +264,7 @@ def run_worker(
     logging_level: str = 'INFO',
     _sleep: int = 0,
 ):
-    connection = connection_class(
-        connection_pool=ConnectionPool(connection_class=connection_pool_class, **connection_pool_kwargs)
-    )
+    connection = connection_builder.build_connection()
     queues = [queue_class(name, connection=connection) for name in queue_names]
     worker = worker_class(
         queues,

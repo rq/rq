@@ -37,7 +37,7 @@ class Group:
     def cleanup(self):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
         We assume while running this that alive jobs have all been fetched from Redis in fetch_jobs method"""
-        with self.connection.pipeline() as pipe:  # Use a new pipeline
+        with self.connection.pipeline(transaction=True) as pipe:  # Use a new pipeline
             job_ids = [as_text(job) for job in list(self.connection.smembers(self.key))]
             if not job_ids:
                 return
@@ -54,7 +54,7 @@ class Group:
                 pipe.execute()
 
     def enqueue_many(self, queue: Queue, job_datas: Iterable[EnqueueData], pipeline: Pipeline | None = None):
-        pipe = pipeline if pipeline else self.connection.pipeline()
+        pipe = pipeline if pipeline else self.connection.pipeline(transaction=True)
 
         jobs = queue.enqueue_many(job_datas, group_id=self.name, pipeline=pipe)
 
@@ -72,7 +72,7 @@ class Group:
         return [job for job in Job.fetch_many(job_ids, self.connection) if job is not None]
 
     def delete_job(self, job_id: str, pipeline: Pipeline | None = None):
-        pipe = pipeline if pipeline else self.connection.pipeline()
+        pipe = pipeline if pipeline else self.connection.pipeline(transaction=True)
         pipe.srem(self.key, job_id)
         if pipeline is None:
             pipe.execute()

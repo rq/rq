@@ -1183,7 +1183,7 @@ class Job:
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
-        pipe = pipeline or self.connection.pipeline()
+        pipe = pipeline or self.connection.pipeline(transaction=True)
 
         while True:
             try:

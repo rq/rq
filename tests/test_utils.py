@@ -4,6 +4,7 @@ import sys
 from unittest.mock import Mock, patch
 
 from redis import Redis
+from rq.connections import RedisConnectionBuilder
 
 from rq.exceptions import TimeoutFormatError
 from rq.job import Job
@@ -124,7 +125,7 @@ class TestUtils(RQTestCase):
 
     def test_get_redis_version(self):
         """Ensure get_version works properly"""
-        redis = Redis()
+        redis = RedisConnectionBuilder.parse_connection(connection=self.connection).build_connection()
         self.assertIsInstance(get_version(redis), tuple)
 
         # Parses 3 digit version numbers correctly
