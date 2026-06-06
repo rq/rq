@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from redis import WatchError
 
-from rq.connections import get_connection_kwargs
+from rq.connections import get_connection_kwargs, RQ_KEY_PREFIX
 from rq.job import Dependency, Job, JobStatus, cancel_job
 from rq.queue import Queue
 from rq.registry import (
@@ -260,15 +260,15 @@ class TestJobDependency(RQTestCase):
 
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(1, len(queue.deferred_job_registry))
-        self.connection.set('some:key', b'some:value')
+        self.connection.set(RQ_KEY_PREFIX + 'some:key', b'some:value')
 
-        with self.connection.pipeline() as pipe:
-            pipe.watch('some:key')
-            self.assertEqual(self.connection.get('some:key'), b'some:value')
+        with self.connection.pipeline(transaction=True) as pipe:
+            pipe.watch(RQ_KEY_PREFIX + 'some:key')
+            self.assertEqual(self.connection.get(RQ_KEY_PREFIX + 'some:key'), b'some:value')
             dependency.cancel(pipeline=pipe, enqueue_dependents=True)
-            pipe.set('some:key', b'some:other:value')
+            pipe.set(RQ_KEY_PREFIX + 'some:key', b'some:other:value')
             pipe.execute()
-        self.assertEqual(self.connection.get('some:key'), b'some:other:value')
+        self.assertEqual(self.connection.get(RQ_KEY_PREFIX + 'some:key'), b'some:other:value')
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))
         registry = CanceledJobRegistry(connection=self.connection, queue=queue)
@@ -445,7 +445,7 @@ class TestJobDependency(RQTestCase):
 
     def test_execution_order_with_sole_dependency(self):
         queue = Queue(connection=self.connection)
-        key = 'test_job:job_order'
+        key = RQ_KEY_PREFIX + 'test_job:job_order'
 
         connection_kwargs = get_connection_kwargs(self.connection)
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
@@ -476,8 +476,8 @@ class TestJobDependency(RQTestCase):
     def test_execution_order_with_dual_dependency(self):
         """Test that jobs with dependencies are executed in the correct order."""
         queue = Queue(connection=self.connection)
-        key = 'test_job:job_order'
         connection_kwargs = get_connection_kwargs(self.connection)
+        key = RQ_KEY_PREFIX + 'test_job:job_order'
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_kwargs, True, 0.5], job_id='slow_1')
         job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_kwargs, True, 0.75], job_id='slow_2')

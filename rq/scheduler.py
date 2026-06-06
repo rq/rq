@@ -13,7 +13,7 @@ from multiprocessing.process import BaseProcess
 
 from redis import ConnectionPool, Redis, RedisCluster
 
-from .connections import copy_as_dummy_cluster_node, parse_cluster_connection, parse_connection
+from .connections import copy_as_dummy_cluster_node, parse_cluster_connection, parse_connection, RQ_KEY_PREFIX
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
 from .job import Job
 from .logutils import setup_loghandlers
@@ -28,8 +28,8 @@ try:
 except ValueError:
     ForkProcess = Process
 
-SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
-SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
+SCHEDULER_KEY_TEMPLATE = RQ_KEY_PREFIX + 'rq:scheduler:%s'
+SCHEDULER_LOCKING_KEY_TEMPLATE = RQ_KEY_PREFIX + 'rq:scheduler-lock:%s'
 
 
 class SchedulerStatus(str, Enum):

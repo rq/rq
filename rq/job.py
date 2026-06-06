@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from redis import RedisCluster, WatchError
+from .connections import RQ_KEY_PREFIX
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
@@ -172,7 +173,7 @@ class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data."""
 
     _dependency: Job | None
-    redis_job_namespace_prefix = 'rq:job:'
+    redis_job_namespace_prefix = RQ_KEY_PREFIX + 'rq:job:'
 
     def __init__(self, id: str | None = None, connection: Redis | RedisCluster | None = None, serializer=None):
         # Manually check for the presence of the connection argument to preserve
@@ -1710,7 +1711,7 @@ class Job:
         like:
         ..codeblock:python::
 
-            rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
+            {RQ_KEY_PREFIX}rq:job:job_id:dependents = {'job_id_1', 'job_id_2'}
 
         This method adds the job in its dependencies' dependents sets,
         and adds the job to DeferredJobRegistry.

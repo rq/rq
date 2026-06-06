@@ -17,6 +17,7 @@ from typing import (
 )
 
 from redis import RedisCluster, WatchError
+from .connections import RQ_KEY_PREFIX
 
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
@@ -102,8 +103,8 @@ class Queue:
     job_class: type[Job] = Job
     death_penalty_class: type[BaseDeathPenalty] = UnixSignalDeathPenalty
     DEFAULT_TIMEOUT: int = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix: str = 'rq:queue:'
-    redis_queues_keys: str = 'rq:queues'
+    redis_queue_namespace_prefix: str = RQ_KEY_PREFIX + 'rq:queue:'
+    redis_queues_keys: str = RQ_KEY_PREFIX + 'rq:queues'
 
     @classmethod
     def all(
@@ -263,7 +264,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return f'rq:clean_registries:{self.name}'
+        return f'{RQ_KEY_PREFIX}rq:clean_registries:{self.name}'
 
     @property
     def scheduler_pid(self) -> int | None:
@@ -1579,7 +1580,7 @@ class Queue:
 
         while True:
             queue_keys = [q.key for q in queues]
-            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0) and not is_cluster(connection):
+            if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
                 result = cls.lmove(connection, queue_keys[0], timeout)
             else:
                 result = cls.lpop(queue_keys, timeout, connection=connection)

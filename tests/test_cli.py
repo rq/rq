@@ -12,7 +12,7 @@ from redis import Redis, RedisCluster
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import CliConfig, parse_function_arg, parse_schedule, read_config_file
-from rq.connections import get_connection_kwargs
+from rq.connections import get_connection_kwargs, RQ_KEY_PREFIX
 from rq.job import Job, JobStatus
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
@@ -508,7 +508,7 @@ class TestRQCli(CLITestCase):
         self.assertTrue(result.output.endswith(suffix))
 
         job_id = result.output[len(prefix) : -len(suffix)]
-        queue_key = 'rq:queue:default'
+        queue_key = RQ_KEY_PREFIX + 'rq:queue:default'
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
@@ -536,7 +536,7 @@ class TestRQCli(CLITestCase):
         self.assertTrue(result.output.endswith(suffix))
 
         job_id = result.output[len(prefix) : -len(suffix)]
-        queue_key = 'rq:queue:default'
+        queue_key = RQ_KEY_PREFIX + 'rq:queue:default'
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
@@ -570,7 +570,7 @@ class TestRQCli(CLITestCase):
         )
         self.assert_normal_execution(result)
 
-        job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
+        job_id = self.connection.lrange(RQ_KEY_PREFIX + 'rq:queue:default', 0, -1)[0].decode('ascii')
 
         worker = Worker(queue, connection=self.connection)
         worker.work(True)
@@ -693,7 +693,7 @@ class TestRQCli(CLITestCase):
         self.assert_normal_execution(result)
 
         job = Job.fetch(
-            self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii'), connection=self.connection
+            self.connection.lrange(RQ_KEY_PREFIX + 'rq:queue:default', 0, -1)[0].decode('ascii'), connection=self.connection
         )
 
         self.assertEqual(job.retries_left, 3)

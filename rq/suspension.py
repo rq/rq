@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from rq.connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
     from redis import Redis, RedisCluster
@@ -8,7 +9,7 @@ if TYPE_CHECKING:
     from rq.worker import BaseWorker
 
 
-WORKERS_SUSPENDED = 'rq:suspended'
+WORKERS_SUSPENDED = RQ_KEY_PREFIX + 'rq:suspended'
 
 
 def is_suspended(connection: Redis | RedisCluster, worker: BaseWorker | None = None):

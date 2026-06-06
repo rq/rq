@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from redis import Redis, RedisCluster
+from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
@@ -37,7 +38,7 @@ class Execution:
 
     @property
     def key(self) -> str:
-        return f'rq:execution:{self.composite_key}'
+        return f'{RQ_KEY_PREFIX}rq:execution:{self.composite_key}'
 
     @property
     def job(self) -> Job:
@@ -121,7 +122,7 @@ class ExecutionRegistry(BaseRegistry):
     def __init__(self, job_id: str, connection: Redis | RedisCluster):
         self.connection = connection
         self.job_id = job_id
-        self.key = self.key_template.format(job_id)
+        self.key = RQ_KEY_PREFIX + self.key_template.format(job_id)
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.

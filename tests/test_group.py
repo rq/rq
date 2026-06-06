@@ -3,6 +3,7 @@ from time import sleep
 import pytest
 
 from rq import Queue, SimpleWorker
+from rq.connections import RQ_KEY_PREFIX
 from rq.exceptions import NoSuchGroupError
 from rq.group import Group
 from rq.job import Job
@@ -92,7 +93,7 @@ class TestGroup(RQTestCase):
         q = Queue(connection=self.connection)
         group = Group.create(connection=self.connection)
         group.enqueue_many(q, [self.job_1_data])
-        redis_groups = {as_text(group) for group in self.connection.smembers('rq:groups')}
+        redis_groups = {as_text(group) for group in self.connection.smembers(RQ_KEY_PREFIX + 'rq:groups')}
         assert group.name in redis_groups
         q.empty()
 
@@ -121,7 +122,7 @@ class TestGroup(RQTestCase):
         w.work(burst=True, max_jobs=1)
         sleep(2)
         w.run_maintenance_tasks()
-        redis_groups = {as_text(group) for group in self.connection.smembers('rq:groups')}
+        redis_groups = {as_text(group) for group in self.connection.smembers(RQ_KEY_PREFIX + 'rq:groups')}
         assert group.name not in redis_groups
 
     @pytest.mark.slow
@@ -139,7 +140,7 @@ class TestGroup(RQTestCase):
 
     def test_get_group_key(self):
         group = Group(name='foo', connection=self.connection)
-        self.assertEqual(Group.get_key(group.name), 'rq:group:foo')
+        self.assertEqual(Group.get_key(group.name), RQ_KEY_PREFIX + 'rq:group:foo')
 
     def test_all_returns_all_groups(self):
         q = Queue(connection=self.connection)

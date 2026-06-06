@@ -4,6 +4,7 @@ import calendar
 from datetime import datetime, timedelta, timezone
 
 from rq import Queue
+from rq.connections import RQ_KEY_PREFIX
 from rq.exceptions import DuplicateJobError
 from rq.job import Job, JobStatus
 from rq.scripts import save_unique_job, schedule_unique_job
@@ -154,7 +155,7 @@ class TestScheduleUniqueJob(RQTestCase):
     def test_schedule_unique_job_saves_and_schedules(self):
         """schedule_unique_job saves job data, adds to scheduled registry, registers queue, and handles TTL."""
         queue = Queue(connection=self.connection)
-        registry_key = 'rq:scheduled:default'
+        registry_key = RQ_KEY_PREFIX + 'rq:scheduled:default'
         scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
         expected_timestamp = calendar.timegm(scheduled_time.utctimetuple())
 
@@ -171,8 +172,8 @@ class TestScheduleUniqueJob(RQTestCase):
         score = self.connection.zscore(registry_key, 'sched-job-1')
         self.assertEqual(int(score), expected_timestamp)
 
-        # Verify queue is registered in rq:queues
-        self.assertIn(queue.key.encode(), self.connection.smembers('rq:queues'))
+        # Verify queue is registered in {RQ_KEY_PREFIX}rq:queues
+        self.assertIn(queue.key.encode(), self.connection.smembers(RQ_KEY_PREFIX + 'rq:queues'))
 
         # Verify TTL is set
         ttl = self.connection.ttl(job.key)
@@ -189,7 +190,7 @@ class TestScheduleUniqueJob(RQTestCase):
     def test_schedule_unique_job_raises_on_duplicate(self):
         """schedule_unique_job raises DuplicateJobError when job already exists."""
         queue = Queue(connection=self.connection)
-        registry_key = 'rq:scheduled:default'
+        registry_key = RQ_KEY_PREFIX + 'rq:scheduled:default'
         scheduled_time = datetime.now(timezone.utc) + timedelta(hours=1)
 
         job1 = self._create_job_for_schedule(queue, 'dup-sched-job')

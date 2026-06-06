@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
     from redis import Redis, RedisCluster
@@ -13,8 +14,8 @@ from rq.utils import split_list
 
 from .utils import as_text
 
-WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
-REDIS_WORKER_KEYS = 'rq:workers'
+WORKERS_BY_QUEUE_KEY = RQ_KEY_PREFIX + 'rq:workers:%s'
+REDIS_WORKER_KEYS = RQ_KEY_PREFIX + 'rq:workers'
 MAX_KEYS = 1000
 
 

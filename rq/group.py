@@ -7,6 +7,7 @@ from redis import Redis, RedisCluster
 from redis.client import Pipeline
 
 from . import Queue
+from .connections import RQ_KEY_PREFIX
 from .exceptions import NoSuchGroupError
 from .job import Job
 from .queue import EnqueueData
@@ -16,8 +17,8 @@ from .utils import as_text
 class Group:
     """A Group is a container for tracking multiple jobs with a single identifier."""
 
-    REDIS_GROUP_NAME_PREFIX = 'rq:group:'
-    REDIS_GROUP_KEY = 'rq:groups'
+    REDIS_GROUP_NAME_PREFIX = RQ_KEY_PREFIX + 'rq:group:'
+    REDIS_GROUP_KEY = RQ_KEY_PREFIX + 'rq:groups'
 
     def __init__(self, connection: Redis | RedisCluster, name: str | None = None):
         self.name = name if name else str(uuid4().hex)

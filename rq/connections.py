@@ -3,6 +3,9 @@ from redis import Redis, RedisCluster
 from redis.cluster import ClusterNode
 
 
+RQ_KEY_PREFIX = '{rq}'
+
+
 class NoRedisConnectionException(Exception):
     pass
 

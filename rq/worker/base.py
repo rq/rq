@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from redis import RedisCluster
+from ..connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
     try:
@@ -116,7 +117,7 @@ class WorkerStatus(str, Enum):
 
 
 class BaseWorker:
-    redis_worker_namespace_prefix = 'rq:worker:'
+    redis_worker_namespace_prefix = RQ_KEY_PREFIX + 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = get_default_death_penalty_class()
     queue_class = Queue
@@ -296,7 +297,7 @@ class BaseWorker:
             serializer (Optional[Union[Serializer, str]], optional): The serializer to use. Defaults to None.
 
         Raises:
-            ValueError: If the key doesn't start with `rq:worker:`, the default worker namespace prefix.
+            ValueError: If the key doesn't start with `{RQ_KEY_PREFIX}rq:worker:`, the default worker namespace prefix.
 
         Returns:
             worker (Worker): The Worker instance.
@@ -991,7 +992,7 @@ class BaseWorker:
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname(f'rq:worker:{self.name}: {message}')
+        setprocname(f'{RQ_KEY_PREFIX}rq:worker:{self.name}: {message}')
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""

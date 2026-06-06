@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any
 
 from redis import Redis, RedisCluster
+from .connections import RQ_KEY_PREFIX
 
 from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .job import Job
@@ -15,7 +16,7 @@ from .utils import decode_redis_hash, now
 
 
 def get_key(job_id):
-    return f'rq:results:{job_id}'
+    return f'{RQ_KEY_PREFIX}rq:results:{job_id}'
 
 
 class Result:
@@ -280,7 +281,7 @@ class Result:
 
     @classmethod
     def get_key(cls, job_id):
-        return f'rq:results:{job_id}'
+        return f'{RQ_KEY_PREFIX}rq:results:{job_id}'
 
     def save(self, ttl, pipeline=None):
         """Save result data to Redis"""

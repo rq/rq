@@ -2,6 +2,7 @@ import json
 import os
 import signal
 from typing import TYPE_CHECKING, Any
+from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
     from redis import Redis, RedisCluster
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job
 
-PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
+PUBSUB_CHANNEL_TEMPLATE = RQ_KEY_PREFIX + 'rq:pubsub:%s'
 
 
 def send_command(connection: 'Redis | RedisCluster', worker_name: str, command: str, **kwargs):

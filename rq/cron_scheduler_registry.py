@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from redis import Redis
 from redis.client import Pipeline
+from .connections import RQ_KEY_PREFIX
 
 from .exceptions import DuplicateSchedulerError, SchedulerNotFound
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 
 def get_registry_key() -> str:
     """Get the Redis key for the CronScheduler registry"""
-    return 'rq:cron_schedulers'
+    return RQ_KEY_PREFIX + 'rq:cron_schedulers'
 
 
 def register(cron_scheduler: CronScheduler, pipeline: Pipeline | None = None) -> None:

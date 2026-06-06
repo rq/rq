@@ -5,6 +5,7 @@ import zlib
 from datetime import datetime, timezone
 from pickle import dumps, loads
 from uuid import uuid4
+from rq.connections import RQ_KEY_PREFIX
 
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
@@ -168,9 +169,9 @@ class TestJob(RQTestCase):
         """Fetching jobs."""
         # Prepare test
         self.connection.hset(
-            'rq:job:some_id', 'data', "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n."
+            RQ_KEY_PREFIX + 'rq:job:some_id', 'data', "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n."
         )
-        self.connection.hset('rq:job:some_id', 'created_at', '2012-02-07T22:13:24.123456Z')
+        self.connection.hset(RQ_KEY_PREFIX + 'rq:job:some_id', 'created_at', '2012-02-07T22:13:24.123456Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id', connection=self.connection)

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from rq.serializers import resolve_serializer
 
-from .connections import get_connection_kwargs
+from .connections import get_connection_kwargs, RQ_KEY_PREFIX
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
@@ -58,7 +58,7 @@ class BaseRegistry:
             self.connection = connection  # type: ignore[assignment]
             self.serializer = resolve_serializer(serializer)
 
-        self.key = self.key_template.format(self.name)
+        self.key = RQ_KEY_PREFIX + self.key_template.format(self.name)
         self.job_class = job_class if job_class else Job
         self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)  # type: ignore[assignment]
 
