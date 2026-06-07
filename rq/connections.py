@@ -125,13 +125,13 @@ class RedisConnectionBuilder:
         return f'{redis_class.__module__}.{redis_class.__qualname__}'
 
     def __repr__(self):
-        if self._cluster_nodes is None:
-            raise NoRedisConnectionException()
-        cluster_nodes = []
-        for host, port, server_type in self._cluster_nodes:
-            node_args = [f'"{host}"', f'"{port}"', f'"{server_type}"']
-            cluster_nodes.append(f'({",".join(node_args)}), ')
-        cluster_node_list = '[' + "\n".join(cluster_nodes) + ']'
+        cluster_node_list = 'None'
+        if self._cluster_nodes is not None:
+            cluster_nodes = []
+            for host, port, server_type in self._cluster_nodes:
+                node_args = [f'"{host}"', f'"{port}"', f'"{server_type}"']
+                cluster_nodes.append(f'({",".join(node_args)}), ')
+            cluster_node_list = '[' + "\n".join(cluster_nodes) + ']'
 
         return (f'RedisConnectionBuilder(connection_class=\'{self._fully_qualified_name(self._connection_class)}\', '
             f'connection_in_pool_class=\'{self._fully_qualified_name(self._connection_in_pool_class)}\', '
