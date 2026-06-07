@@ -97,8 +97,8 @@ class TestWorkerRegistry(RQTestCase):
         # Since we registered 11 workers and set the maximum keys to be deleted in each command to 6,
         # `srem` command should be called a total of 4 times.
         # `srem` is called twice per invalid key group; once for WORKERS_BY_QUEUE_KEY and once for REDIS_WORKER_KEYS
-        with (patch('rq.worker_registration.MAX_KEYS', MAX_KEYS), patch('redis.client.Pipeline.srem'),
-                patch('redis.cluster.ClusterPipeline.srem') as mock):
+        with (patch('rq.worker_registration.MAX_KEYS', MAX_KEYS), patch('redis.client.Pipeline.srem') as mock,
+                patch('redis.cluster.ClusterPipeline.srem') as cluster_mock):
             clean_worker_registry(queue)
             expected_call_count = (ceildiv(worker_count, MAX_KEYS)) * SREM_CALL_COUNT
-            self.assertEqual(mock.call_count, expected_call_count)
+            self.assertEqual(cluster_mock.call_count + mock.call_count, expected_call_count)
