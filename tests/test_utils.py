@@ -4,8 +4,8 @@ import sys
 from unittest.mock import Mock, patch
 
 from redis import Redis
-from rq.connections import RedisConnectionBuilder
 
+from rq.connections import RedisConnectionBuilder
 from rq.exceptions import TimeoutFormatError
 from rq.job import Job
 from rq.queue import Queue

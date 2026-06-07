@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 from redis import Redis
 from redis.client import Pipeline
-from .connections import RQ_KEY_PREFIX
 
+from .connections import RQ_KEY_PREFIX
 from .exceptions import DuplicateSchedulerError, SchedulerNotFound
 
 if TYPE_CHECKING:

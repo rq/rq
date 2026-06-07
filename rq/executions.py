@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from redis import Redis, RedisCluster
+
 from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:

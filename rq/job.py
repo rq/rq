@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from redis import RedisCluster, WatchError
-from .connections import RQ_KEY_PREFIX
 
+from .connections import RQ_KEY_PREFIX
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
 from .types import FailureCallbackType, SuccessCallbackType

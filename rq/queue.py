@@ -17,8 +17,8 @@ from typing import (
 )
 
 from redis import RedisCluster, WatchError
-from .connections import RQ_KEY_PREFIX
 
+from .connections import RQ_KEY_PREFIX
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
 if TYPE_CHECKING:
@@ -37,8 +37,16 @@ from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import (as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout,
-    try_enable_multi_on_pipeline)
+from .utils import (
+    as_text,
+    backend_class,
+    compact,
+    get_version,
+    import_attribute,
+    now,
+    parse_timeout,
+    try_enable_multi_on_pipeline,
+)
 
 logger = logging.getLogger('rq.queue')
 

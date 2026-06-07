@@ -3,7 +3,7 @@ import signal
 from multiprocessing import Process
 from time import sleep
 
-from rq.connections import  RedisConnectionBuilder
+from rq.connections import RedisConnectionBuilder
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.serializers import JSONSerializer

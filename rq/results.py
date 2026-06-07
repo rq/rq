@@ -7,8 +7,8 @@ from enum import Enum
 from typing import Any
 
 from redis import Redis, RedisCluster
-from .connections import RQ_KEY_PREFIX
 
+from .connections import RQ_KEY_PREFIX
 from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .job import Job
 from .serializers import resolve_serializer

@@ -19,7 +19,7 @@ import pytest
 import redis.exceptions
 
 from rq import Queue, SimpleWorker, Worker
-from rq.connections import get_connection_kwargs, RedisConnectionBuilder
+from rq.connections import RedisConnectionBuilder, get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry

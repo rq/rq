@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from rq.serializers import resolve_serializer
 
-from .connections import get_connection_kwargs, RQ_KEY_PREFIX
+from .connections import RQ_KEY_PREFIX, get_connection_kwargs
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus

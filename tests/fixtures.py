@@ -279,7 +279,8 @@ def start_worker(queue_name, connection_builder: RedisConnectionBuilder, worker_
 
 
 def start_worker_process(
-    queue_name, connection: Redis | RedisCluster, worker_name=None, burst=False, job_monitoring_interval: int | None = None
+    queue_name, connection: Redis | RedisCluster, worker_name=None,
+    burst=False, job_monitoring_interval: int | None = None
 ) -> Process:
     """
     Use multiprocessing to start a new worker in a separate process.

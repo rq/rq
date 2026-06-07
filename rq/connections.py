@@ -1,9 +1,12 @@
+from collections.abc import Iterable
+from typing import cast
+
 import redis.cluster
-from typing import cast, Iterable, Tuple
-from redis import Connection as RedisConnection, ConnectionPool
-from redis import Redis, RedisCluster
-from redis.cluster import ClusterNode, NodesManager, KWARGS_DISABLED_KEYS
-from rq.utils import is_cluster, import_attribute
+from redis import Connection as RedisConnection
+from redis import ConnectionPool, Redis, RedisCluster
+from redis.cluster import KWARGS_DISABLED_KEYS, ClusterNode, NodesManager
+
+from rq.utils import import_attribute, is_cluster
 
 REALLY_ALL_REDIS_ALLOWED_KEYS = list(redis.cluster.REDIS_ALLOWED_KEYS) + ['health_check_interval', 'retry_on_error']
 
@@ -101,7 +104,7 @@ class RedisConnectionBuilder:
     def __init__(self, connection_class: type[Redis | RedisCluster] | str,
             connection_in_pool_class: type[RedisConnection] | str,
             connection_pool_kwargs: dict,
-            cluster_nodes: list[Tuple[str, int, str | None]] | None):
+            cluster_nodes: list[tuple[str, int, str | None]] | None):
         if isinstance(connection_class, str):
             self._connection_class = cast(type[Redis | RedisCluster], import_attribute(connection_class))
         else:

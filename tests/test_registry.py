@@ -4,8 +4,8 @@ from unittest import mock
 from unittest.mock import ANY
 
 import pytest
-from rq.connections import RQ_KEY_PREFIX
 
+from rq.connections import RQ_KEY_PREFIX
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import AbandonedJobError, InvalidJobOperation
 from rq.executions import Execution

@@ -2,6 +2,7 @@ import json
 import os
 import signal
 from typing import TYPE_CHECKING, Any
+
 from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:

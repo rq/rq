@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from redis import RedisCluster
+
 from ..connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
@@ -66,8 +67,9 @@ from ..utils import (
     import_job_class,
     import_queue_class,
     now,
+    try_enable_multi_on_pipeline,
     utcformat,
-    utcparse, try_enable_multi_on_pipeline,
+    utcparse,
 )
 from ..version import VERSION
 

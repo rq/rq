@@ -3,8 +3,8 @@ import logging
 import time
 from datetime import timedelta, timezone
 from typing import Any
-from .connections import RQ_KEY_PREFIX
 
+from .connections import RQ_KEY_PREFIX
 from .exceptions import DuplicateJobError
 from .logutils import blue, green
 

@@ -9,12 +9,12 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
-from ..connections import RedisConnectionBuilder, NoRedisConnectionException
+from ..connections import NoRedisConnectionException, RedisConnectionBuilder
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
 from ..timeouts import HorseMonitorTimeoutException
-from ..utils import is_cluster, now
+from ..utils import now
 from .base import SHUTDOWN_SIGNAL, BaseWorker, WorkerStatus, signal_name
 
 if TYPE_CHECKING:

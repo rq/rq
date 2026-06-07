@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
 from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:

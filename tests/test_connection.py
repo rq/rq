@@ -1,5 +1,6 @@
 import os
-from redis import ConnectionPool, Redis, SSLConnection, UnixDomainSocketConnection, RedisCluster
+
+from redis import ConnectionPool, Redis, RedisCluster, SSLConnection, UnixDomainSocketConnection
 
 from rq.connections import RedisConnectionBuilder
 from tests import RQTestCase, cluster_test
