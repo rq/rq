@@ -53,8 +53,10 @@ def get_connection_class_from_pool(connection: Redis | RedisCluster | None) -> t
         raise NoRedisConnectionException()
 
     if not is_cluster(connection):
+        connection = cast(Redis, connection)
         return connection.connection_pool.connection_class
 
+    connection = cast(RedisCluster, connection)
     default_node = connection.get_default_node()
     if default_node is None:
         raise NoRedisConnectionException()
@@ -79,6 +81,7 @@ def get_connection_kwargs(connection: Redis | RedisCluster | None) -> dict:
         raise NoRedisConnectionException()
 
     if is_cluster(connection):
+        connection = cast(RedisCluster, connection)
         kwargs = connection.nodes_manager.connection_kwargs
         # unfortunately, the `connection_class` does end up here due to the awkward way we
         # have to smuggle it in the `ConnectionPool`. however, we do not need it in the kwargs
@@ -88,6 +91,7 @@ def get_connection_kwargs(connection: Redis | RedisCluster | None) -> dict:
             if undesired_arg in kwargs:
                 del kwargs[undesired_arg]
     else:
+        connection = cast(Redis, connection)
         kwargs = connection.connection_pool.connection_kwargs.copy()
 
     return _get_kwargs(kwargs)
@@ -150,7 +154,7 @@ class RedisConnectionBuilder:
                 connection.__class__, connection_in_pool_class, connection_pool_kwargs, None
             )
 
-        connection: RedisCluster
+        connection = cast(RedisCluster, connection)
         default_node = connection.get_default_node()
         if default_node is None:
             raise NoRedisConnectionException()
@@ -200,9 +204,9 @@ class RedisConnectionBuilder:
         # another option to approach this problem would be to the `ConnectionPool` ourselves and hand it to
         # `RedisCluster` directly, but I am not sure if this is actually desirable, since all node connections
         # then would inherit the same connection pool and that sounds intuitively like a bad-ish idea.
-        cluster_connection = cast(RedisCluster,
-            self._connection_class(startup_nodes=cluster_nodes)
-        )
+        connection_class = cast(type[RedisCluster], self._connection_class)
+        cluster_connection = connection_class(startup_nodes=cluster_nodes)
+
         cluster_connection.nodes_manager.close()
         connection_pool_kwargs = self._connection_pool_kwargs | {'connection_class': self._connection_in_pool_class}
 

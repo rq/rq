@@ -92,7 +92,7 @@ class CronJob:
         # Filter out None values
         self.job_options = {k: v for k, v in self.job_options.items() if v is not None}
 
-    def enqueue(self, connection: Redis) -> Job:
+    def enqueue(self, connection: Redis | RedisCluster) -> Job:
         """Enqueue this job to its queue and update the next run time"""
         if not self.func:
             raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
