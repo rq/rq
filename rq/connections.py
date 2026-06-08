@@ -1,14 +1,11 @@
 from collections.abc import Iterable
 from typing import cast
 
-import redis.cluster
 from redis import Connection as RedisConnection
 from redis import ConnectionPool, Redis, RedisCluster
-from redis.cluster import KWARGS_DISABLED_KEYS, ClusterNode, NodesManager
+from redis.cluster import ClusterNode, NodesManager
 
 from rq.utils import import_attribute, is_cluster
-
-REALLY_ALL_REDIS_ALLOWED_KEYS = list(redis.cluster.REDIS_ALLOWED_KEYS) + ['health_check_interval', 'retry_on_error']
 
 RQ_KEY_PREFIX = '{rq}'
 
@@ -36,6 +33,16 @@ REDIS_RUNTIME_CONNECTION_KWARGS = (
     # `Connection` metadata
     'redis_connect_func',
     'oss_cluster_maint_notifications_handler',
+    # unfortunately, the `connection_class` does end up here due to the awkward way we
+    # have to smuggle it in the `ConnectionPool`. however, we do not need it in the kwargs
+    # anyway, and it does confuse e.g. `Registry.__eq__`, so let's just drop it if it exists.
+    # the same goes for the `connection_pool`, `retry` and `ssl`
+    'connection_class',
+    'connection_pool',
+    'retry',
+    # this is not accepted by the connection class that is created, i.e. `SSLConnection` doesn't like to be
+    # told that it should do SSL
+    'ssl'
 )
 
 
@@ -83,13 +90,6 @@ def get_connection_kwargs(connection: Redis | RedisCluster | None) -> dict:
     if is_cluster(connection):
         connection = cast(RedisCluster, connection)
         kwargs = connection.nodes_manager.connection_kwargs.copy()
-        # unfortunately, the `connection_class` does end up here due to the awkward way we
-        # have to smuggle it in the `ConnectionPool`. however, we do not need it in the kwargs
-        # anyway, and it does confuse e.g. `Registry.__eq__`, so let's just drop it if it exists.
-        # the same goes for the `connection_pool`
-        for undesired_arg in ['connection_class', 'connection_pool']:
-            if undesired_arg in kwargs:
-                del kwargs[undesired_arg]
     else:
         connection = cast(Redis, connection)
         kwargs = connection.connection_pool.connection_kwargs.copy()
@@ -145,6 +145,10 @@ class RedisConnectionBuilder:
             if key in self._connection_pool_kwargs:
                 del self._connection_pool_kwargs[key]
 
+    @property
+    def connection_pool_kwargs(self):
+        return self._connection_pool_kwargs.copy()
+
     @staticmethod
     def parse_connection(connection: Redis | RedisCluster) -> 'RedisConnectionBuilder':
         connection_pool_kwargs = get_connection_kwargs(connection)
@@ -160,19 +164,18 @@ class RedisConnectionBuilder:
         if default_node is None:
             raise NoRedisConnectionException()
 
-        connection_pool_kwargs = get_connection_kwargs(connection)
         connection_in_pool_class = get_connection_class_from_pool(connection)
 
         # unfortunately, the interaction between `RedisCluster`, its `NodesManager` and `Redis` is rather awkward.
         # the kwargs to `RedisCluster` are sanitized before they are handed over to `NodesManager`, so
         # `NodesManager.connection_kwargs` will not contain any custom arguments beyond what `RedisCluster` accepts.
-        # therefore, we have to include all non-Redis arguments from the node's connection themselves in order to
-        # preserve # the custom kwargs -> this is basically an adaption of `redis.cluster.cleanup_kwargs()`
-        connection_pool_kwargs |= {
-            k: v
-            for k, v in get_connection_kwargs(default_node.redis_connection).items()
-            if k not in REALLY_ALL_REDIS_ALLOWED_KEYS and k not in KWARGS_DISABLED_KEYS
-        }
+
+        # therefore, we need to merge the connection pool arguments and the arguments that have been directly set on
+        # the node's connection to get all possible relevant kwargs. merging, i.e. `dict().update()` is required, so
+        # that we can deal with arguments that are set in both kwargs. we let the arguments from the outer connection
+        # take precedence over the ones set by the node.
+        connection_pool_kwargs = get_connection_kwargs(default_node.redis_connection)
+        connection_pool_kwargs.update(get_connection_kwargs(connection))
 
         cluster_nodes = list(map(
             lambda node: (node.host, node.port, node.server_type),
@@ -202,18 +205,31 @@ class RedisConnectionBuilder:
         # if it thinks that `RedisCluster` has been initialized with an explicit URL. otherwise, it will just hand
         # over the arguments to `Redis` directly and that won't well...
 
-        # another option to approach this problem would be to the `ConnectionPool` ourselves and hand it to
-        # `RedisCluster` directly, but I am not sure if this is actually desirable, since all node connections
-        # then would inherit the same connection pool and that sounds intuitively like a bad-ish idea.
+        # we could simply approach this problem as we do for a single-node redis connection, i.e. building to
+        # the `ConnectionPool` ourselves and then handing it to `RedisCluster` directly, but I am not sure if
+        # this is actually desirable, since all node connections then would inherit the same connection pool
+        # and that sounds intuitively like a bad-ish idea.
         connection_class = cast(type[RedisCluster], self._connection_class)
-        cluster_connection = connection_class(startup_nodes=cluster_nodes)
+        cluster_connection = connection_class(
+            startup_nodes=cluster_nodes,
+            connection_pool=ConnectionPool(
+                connection_class=self._connection_in_pool_class,
+                **self._connection_pool_kwargs
+            )
+        )
+
+        # filter away kwargs that are either set internally by `NodesManager.create_redis_node()` as kwargs
+        filtered_args = ['host', 'port']
+        connection_pool_kwargs = {
+            key: value for key, value in
+            self._connection_pool_kwargs.items() if key not in filtered_args
+        }
 
         cluster_connection.nodes_manager.close()
-        connection_pool_kwargs = self._connection_pool_kwargs | {'connection_class': self._connection_in_pool_class}
-
         cluster_connection.nodes_manager = NodesManager(
             from_url=True,
             startup_nodes=cluster_nodes,
+            connection_class=self._connection_in_pool_class,
             **connection_pool_kwargs
         )
         return cluster_connection

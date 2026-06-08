@@ -67,7 +67,7 @@ def ssl_test(f):
 
 def cluster_test(f):
     f = pytest.mark.cluster_test(f)
-    unittest.skipUnless(get_cluster_host_and_port()[0] is not None, 'No Redis/Valkey cluster host given')(f)
+    return unittest.skipUnless(get_cluster_host_and_port()[0] is not None, 'No Redis/Valkey cluster host given')(f)
 
 
 class RQTestCase(unittest.TestCase):
