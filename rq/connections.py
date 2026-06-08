@@ -82,7 +82,7 @@ def get_connection_kwargs(connection: Redis | RedisCluster | None) -> dict:
 
     if is_cluster(connection):
         connection = cast(RedisCluster, connection)
-        kwargs = connection.nodes_manager.connection_kwargs
+        kwargs = connection.nodes_manager.connection_kwargs.copy()
         # unfortunately, the `connection_class` does end up here due to the awkward way we
         # have to smuggle it in the `ConnectionPool`. however, we do not need it in the kwargs
         # anyway, and it does confuse e.g. `Registry.__eq__`, so let's just drop it if it exists.
