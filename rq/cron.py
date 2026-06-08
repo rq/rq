@@ -494,7 +494,7 @@ class CronScheduler:
             self._cron_jobs = []
 
     @classmethod
-    def fetch(cls, name: str, connection: Redis) -> CronScheduler:
+    def fetch(cls, name: str, connection: Redis | RedisCluster) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
         key = f'{RQ_KEY_PREFIX}rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
@@ -507,7 +507,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> list[CronScheduler]:
+    def all(cls, connection: Redis | RedisCluster, cleanup: bool = True) -> list[CronScheduler]:
         """Returns all CronScheduler instances from the registry
 
         Args:
@@ -636,7 +636,7 @@ def register(
     return job_data
 
 
-def create_cron(connection: Redis) -> CronScheduler:
+def create_cron(connection: Redis | RedisCluster) -> CronScheduler:
     """Create a CronScheduler instance with all registered jobs"""
     cron_instance = CronScheduler(connection=connection)
 
