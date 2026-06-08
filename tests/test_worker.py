@@ -1519,7 +1519,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         fooq = Queue('foo', connection=self.connection)
         self.assertEqual(fooq.count, 0)
         w = Worker(fooq)
-        sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
+        sentinel_file = '/tmp/.rq_sentinel_horse_death_sets_job_failed'
         if os.path.exists(sentinel_file):
             os.remove(sentinel_file)
         fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
@@ -1576,8 +1576,8 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         self.assertFalse(psutil.pid_exists(subprocess_pid))
 
 
-def schedule_access_self():
-    q = Queue('default', connection=find_empty_redis_database())
+def schedule_access_self(connected_to_cluster):
+    q = Queue('default', connection=find_empty_redis_database(can_be_non_empty=connected_to_cluster))
     q.enqueue(access_self)
 
 
@@ -1588,19 +1588,21 @@ class TestWorkerSubprocess(RQTestCase):
         if not self.connected_to_cluster:
             db_num = self.connection.connection_pool.connection_kwargs['db']
             self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
+            self.runner_args = []
         else:
             default_node = self.connection.get_default_node()
             self.redis_url = f'redis://{default_node.host}:{default_node.port}'
+            self.runner_args = ["--connection-class", "redis.RedisCluster"]
 
     def test_run_empty_queue(self):
         """Run the worker in its own process with an empty queue"""
-        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
+        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
 
     def test_run_access_self(self):
         """Schedule a job, then run the worker as subprocess"""
         q = Queue(connection=self.connection)
         job = q.enqueue(access_self)
-        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
+        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
         registry = FinishedJobRegistry(queue=q)
         self.assertIn(job, registry)
         assert q.count == 0
@@ -1609,8 +1611,8 @@ class TestWorkerSubprocess(RQTestCase):
     def test_run_scheduled_access_self(self):
         """Schedule a job that schedules a job, then run the worker as subprocess"""
         q = Queue(connection=self.connection)
-        job = q.enqueue(schedule_access_self)
-        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
+        job = q.enqueue(schedule_access_self, (self.connected_to_cluster,))
+        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
         registry = FinishedJobRegistry(queue=q)
         self.assertIn(job, registry)
         assert q.count == 0
@@ -1626,6 +1628,8 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
 
     def tearDown(self):
         shutil.rmtree(self.sandbox, ignore_errors=True)
+        if self.connected_to_cluster:
+            self.connection.flushdb()
 
     @slow
     def test_immediate_shutdown(self):
