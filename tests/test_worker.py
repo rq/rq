@@ -1612,17 +1612,6 @@ def schedule_access_self(connected_to_cluster):
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='Fails on OS X')
 class TestWorkerSubprocess(RQTestCase):
-    def setUp(self):
-        super().setUp()
-        if not self.connected_to_cluster:
-            db_num = self.connection.connection_pool.connection_kwargs['db']
-            self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
-            self.runner_args = []
-        else:
-            default_node = self.connection.get_default_node()
-            self.redis_url = f'redis://{default_node.host}:{default_node.port}'
-            self.runner_args = ["--connection-class", "redis.RedisCluster"]
-
     def test_run_empty_queue(self):
         """Run the worker in its own process with an empty queue"""
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)

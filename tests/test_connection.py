@@ -24,8 +24,10 @@ class TestConnectionInheritance(RQTestCase):
     def test_parse_cluster_connection(self):
         cluster_host = os.environ.get('REDIS_CLUSTER_HOST') # must be present
         cluster_port = os.environ.get('REDIS_CLUSTER_PORT', 6379)
+        url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
+        args = '?ssl_cert_reqs=none' if self.uses_ssl else ''
         connection = RedisCluster(
-            url=f'redis://{cluster_host}:{cluster_port}',
+            url=f'{url_prefix}{cluster_host}:{cluster_port}{args}',
         )
         connection_builder = RedisConnectionBuilder.parse_connection(connection)
         self.assertEqual(connection_builder._connection_class, RedisCluster)
@@ -33,10 +35,10 @@ class TestConnectionInheritance(RQTestCase):
         assert connection_builder._cluster_nodes is not None
         self.assertEqual(len(connection_builder._cluster_nodes), 3)
 
-        for node in connection_builder._cluster_nodes:
-            other_node = connection.get_node(node.host, node.port)
+        for host, port, server_type in connection_builder._cluster_nodes:
+            other_node = connection.get_node(host, port)
             self.assertIsNotNone(other_node)
-            self.assertEqual(other_node.host, node.host)
-            self.assertEqual(other_node.port, node.port)
-            self.assertEqual(other_node.server_type, node.server_type)
-            self.assertEqual(node.server_type, 'primary')
+            self.assertEqual(other_node.host, host)
+            self.assertEqual(other_node.port, port)
+            self.assertEqual(other_node.server_type, server_type)
+            self.assertEqual(server_type, 'primary')

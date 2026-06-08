@@ -26,16 +26,6 @@ from tests.fixtures import div_by_zero, say_hello
 class CLITestCase(RQTestCase):
     def setUp(self):
         super().setUp()
-        if not self.connected_to_cluster:
-            db_num = self.connection.connection_pool.connection_kwargs['db']
-            self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
-            self.connection: Redis | RedisCluster = Redis.from_url(self.redis_url)
-            self.runner_args = []
-        else:
-            default_node = self.connection.get_default_node()
-            self.redis_url = f'redis://{default_node.host}:{default_node.port}'
-            self.connection: Redis | RedisCluster = RedisCluster.from_url(self.redis_url)
-            self.runner_args = ["--connection-class", "redis.RedisCluster"]
 
     def tearDown(self):
         if self.connected_to_cluster:
@@ -1050,7 +1040,9 @@ class CronCLITestCase(CLITestCase):
             test_host = random_node.host
             test_port = random_node.port
             test_db = None
-            test_url = f'redis://{test_host}:{test_port}'
+            url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
+            args = '?ssl_cert_reqs=none' if self.uses_ssl else ''
+            test_url = f'{url_prefix}{test_host}:{test_port}{args}'
 
         with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
             mock_cron.start.side_effect = lambda: None

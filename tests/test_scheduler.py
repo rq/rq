@@ -16,7 +16,7 @@ from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from tests import RQTestCase, find_empty_redis_database, ssl_test
+from tests import RQTestCase, find_empty_redis_database, skip_with_ssl_enabled, ssl_test
 
 from .fixtures import kill_worker, say_hello
 
@@ -402,7 +402,10 @@ class TestWorker(RQTestCase):
 
     @ssl_test
     def test_work_with_ssl(self):
-        connection = find_empty_redis_database(ssl=True)
+        if self.connection.get_connection_kwargs().get('ssl', False):
+            connection = find_empty_redis_database(ssl=True)
+        else:
+            connection = self.connection
         queue = Queue(connection=connection)
         worker = Worker(queues=[queue], connection=connection)
         p = Process(target=kill_worker, args=(os.getpid(), False, 5))
@@ -497,6 +500,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [2])
 
+    @skip_with_ssl_enabled
     def test_custom_connection_pool(self):
         """Connection pool customizing. Ensure that we can properly set a
         custom connection pool class and pass extra arguments"""
@@ -541,6 +545,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(scheduler_connection.__class__, CustomRedisConnection)
         self.assertEqual(scheduler_connection.get_custom_arg(), 'foo')
 
+    @skip_with_ssl_enabled
     def test_no_custom_connection_pool(self):
         """Connection pool customizing must not interfere if we're using a standard
         connection (non-pooled)"""

@@ -79,7 +79,7 @@ jobs:
           fail_ci_if_error: false
 
   cluster-test:
-    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}${{ matrix.variant }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -90,10 +90,19 @@ jobs:
         python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
         redis-version: [ 6, 7, 8 ]
         redis-py-version: [ 8 ]
+        variant: [ "-ssl", "" ]
+        exclude:
+          # there is some weirdness going on when trying to build a Redis 6 cluster with SSL enabled,
+          # since somehow port 0 turns up in the discovered cluster nodes, e.g.:
+          #   Error 111 connecting to 172.17.0.2:0. Connection refused.
+          - redis-version: 6
+            variant: '-ssl'
+
     env:
       # allow concurrency also when running under act locally with the same docker
       # daemon for convenience
-      REDIS_CONTAINER_PREFIX: "job-${{ matrix.python-version }}-${{ matrix.redis-version }}-${{ matrix.redis-py-version }}-redis-"
+      REDIS_CONTAINER_PREFIX:
+        "job-${{ matrix.python-version }}-${{ matrix.redis-version }}-${{ matrix.redis-py-version }}-redis${{ matrix.variant }}-"
 
     steps:
       - uses: actions/checkout@v6
@@ -106,23 +115,57 @@ jobs:
       - name: Create three-node Cluster
         run: |
           set -x
-          redis-cli() {
-            docker run --rm redis:${{ matrix.redis-py-version }} redis-cli "$@"
-          }
+          ssl_path="$(pwd)/tests/ssl_config/cluster"
+          if [ "${{ matrix.variant }}" != '' ]; then
+            client_args=( --tls --cacert "/ssl-certs/cacerts.pem" )
+            
+            get_server_args() {
+              local -n args=$1
+              local i=$2
+              args=( 
+                    --port 0 --tls-port 6379 --tls-auth-clients no --tls-cert-file "/ssl-certs/redis-${i}.pem" 
+                    --tls-key-file "/ssl-certs/redis-${i}.key" --tls-ca-cert-file "/ssl-certs/cacerts.pem"
+              )
+            }
+            echo "RUN_SSL_TESTS=1" >> $GITHUB_ENV
+            echo "ALWAYS_USE_SSL=1" >> $GITHUB_ENV
+          else
+            client_args=()
+            get_server_args() {
+              :
+            }
+          fi
+
           get_container_ip() {
-            docker inspect  -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$1"
+            local container_name=${1}
+            docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${container_name}"
           }
+  
+          redis-cli() {
+            docker run -v "${ssl_path}:/ssl-certs" --rm redis:${{ matrix.redis-py-version }} \
+              redis-cli ${client_args[@]} "$@"
+          }
+
           for i in {1,2,3}; do
-            docker run --name "${REDIS_CONTAINER_PREFIX}${i}" --rm -d redis:${{ matrix.redis-version }} \
+            server_args=()
+            get_server_args 'server_args' ${i}
+            container_name="${REDIS_CONTAINER_PREFIX}${i}"
+            
+            docker run --name "${container_name}" -v "${ssl_path}:/ssl-certs" --rm -d \
+              redis:${{ matrix.redis-version }} \
               --cluster-enabled yes --cluster-node-timeout 5000 \
-              --cluster-config-file /tmp/nodes.conf --appendonly no
+              --cluster-config-file /tmp/nodes.conf --appendonly no \
+              ${server_args[@]}
+            
+            container_ip=$(get_container_ip "${container_name}")
+            eval "redis_${i}=${container_ip}"
+
+            # make sure that the container is resolvable also when running locally under act
+            sudo sh -c "echo -ne '\n${container_ip} redis-${i}' >> /etc/hosts"
+            
+            until redis-cli -h ${container_ip} -p 6379 ping; do sleep 1; done
           done
-          redis_1=$(get_container_ip "${REDIS_CONTAINER_PREFIX}1")
-          redis_2=$(get_container_ip "${REDIS_CONTAINER_PREFIX}2")
-          redis_3=$(get_container_ip "${REDIS_CONTAINER_PREFIX}3")
-          for container in ${redis_1} ${redis_2} ${redis_3}; do
-            until redis-cli -h ${container} -p 6379 ping; do sleep 1; done
-          done
+          
           redis-cli --cluster create $redis_1:6379 $redis_2:6379 $redis_3:6379 --cluster-replicas 0 --cluster-yes
           until [ "$(redis-cli -h $redis_1 -p 6379 cluster info | grep -c cluster_state:ok)" -ge 1 ]; do sleep 1; done
           # export the first node's IP to the env, so that the test runner can use it
@@ -141,6 +184,7 @@ jobs:
           # use tiny for sub-reaping, so that we don't run into inconvenient "zombiefication" during testing. 
           # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
           sudo apt-get update && sudo apt-get install -y tini
+          export ALWAYS_USE_SSL RUN_SSL_TESTS
           RUN_SLOW_TESTS_TOO=1 REDIS_CLUSTER_HOST=${redis_1} tini -s -w hatch -- run test:cov --durations=5
 
       - name: Upload coverage to Codecov
