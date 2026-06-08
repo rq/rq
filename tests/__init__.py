@@ -8,6 +8,15 @@ from redis import Redis, RedisCluster
 from rq.utils import get_version, is_cluster
 
 
+def get_cluster_host_and_port() -> tuple[str | None, int]:
+    cluster_host = (os.environ.get('REDIS_CLUSTER_HOST', None)
+        or os.environ.get('VALKEY_CLUSTER_HOST', None))
+    cluster_port = int((os.environ.get('REDIS_CLUSTER_PORT', None)
+        or os.environ.get('VALKEY_CLUSTER_PORT', 6379)))
+
+    return cluster_host, cluster_port
+
+
 def find_empty_redis_database(ssl=False, can_be_non_empty=False) -> Redis | RedisCluster:
     """On a single redis instance, tries to connect to a random Redis
     database (starting from 4), and will use/connect it when no keys are
@@ -22,10 +31,7 @@ def find_empty_redis_database(ssl=False, can_be_non_empty=False) -> Redis | Redi
         # disable certificate validation
         connection_kwargs['ssl_cert_reqs'] = None  # type: ignore
 
-    cluster_host = (os.environ.get('REDIS_CLUSTER_HOST', None)
-        or os.environ.get('VALKEY_CLUSTER_HOST', None))
-    cluster_port = (os.environ.get('REDIS_CLUSTER_PORT', None)
-        or os.environ.get('VALKEY_CLUSTER_PORT', 6379))
+    cluster_host, cluster_port = get_cluster_host_and_port()
     if cluster_host is not None:
         testconn = RedisCluster(host=cluster_host, port=cluster_port, **connection_kwargs)  # type: ignore
         if testconn.dbsize() == 0 or can_be_non_empty:
@@ -61,7 +67,7 @@ def ssl_test(f):
 
 def cluster_test(f):
     f = pytest.mark.cluster_test(f)
-    unittest.skipUnless(os.environ.get('REDIS_CLUSTER_HOST'), 'No Redis cluster host given')(f)
+    unittest.skipUnless(get_cluster_host_and_port()[0] is not None, 'No Redis/Valkey cluster host given')(f)
 
 
 class RQTestCase(unittest.TestCase):
