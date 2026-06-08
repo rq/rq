@@ -129,7 +129,8 @@ class RedisConnectionBuilder:
         if self._cluster_nodes is not None:
             cluster_nodes = []
             for host, port, server_type in self._cluster_nodes:
-                node_args = [f'"{host}"', f'"{port}"', f'"{server_type}"']
+                server_type_str = f'"{server_type}"' if server_type is not None else 'None'
+                node_args = [f'"{host}"', f'{port}', server_type_str]
                 cluster_nodes.append(f'({",".join(node_args)}), ')
             cluster_node_list = '[' + "\n".join(cluster_nodes) + ']'
 
