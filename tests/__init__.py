@@ -97,7 +97,7 @@ class RQTestCase(unittest.TestCase):
         # prepare accordingly and won't leave a mess (we like our hygiene there too)
         cls.connected_to_cluster = is_cluster(cls.connection)
         # Shut up logging
-        #logging.disable(logging.ERROR)
+        logging.disable(logging.ERROR)
 
     def setUp(self):
         # Flush beforewards (we like our hygiene)
