@@ -1640,7 +1640,7 @@ class TestWorkerSubprocess(RQTestCase):
     def test_run_scheduled_access_self(self):
         """Schedule a job that schedules a job, then run the worker as subprocess"""
         q = Queue(connection=self.connection)
-        job = q.enqueue(schedule_access_self, (self.connected_to_cluster,))
+        job = q.enqueue(schedule_access_self, self.connected_to_cluster)
         subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
         registry = FinishedJobRegistry(queue=q)
         self.assertIn(job, registry)
