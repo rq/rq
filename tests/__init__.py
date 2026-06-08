@@ -22,8 +22,10 @@ def find_empty_redis_database(ssl=False, can_be_non_empty=False) -> Redis | Redi
         # disable certificate validation
         connection_kwargs['ssl_cert_reqs'] = None  # type: ignore
 
-    cluster_host = os.environ.get('REDIS_CLUSTER_HOST', None)
-    cluster_port = os.environ.get('REDIS_CLUSTER_PORT', 6379)
+    cluster_host = (os.environ.get('REDIS_CLUSTER_HOST', None)
+        or os.environ.get('VALKEY_CLUSTER_HOST', None))
+    cluster_port = (os.environ.get('REDIS_CLUSTER_PORT', None)
+        or os.environ.get('VALKEY_CLUSTER_PORT', 6379))
     if cluster_host is not None:
         testconn = RedisCluster(host=cluster_host, port=cluster_port, **connection_kwargs)  # type: ignore
         if testconn.dbsize() == 0 or can_be_non_empty:
