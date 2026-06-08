@@ -478,10 +478,17 @@ class TestJobDependency(RQTestCase):
         queue = Queue(connection=self.connection)
         connection_builder = RedisConnectionBuilder.parse_connection(self.connection)
         key = RQ_KEY_PREFIX + 'test_job:job_order'
+
+        job_1_delay = 0.5
+        # Increase the delay for the second job when connected to a cluster. Establishing the cluster connection
+        # likely might take a bit longer, since the client needs to discover all nodes and then establish separate
+        # connections to each node. Therefore, this test seems to become a bit flaky with the execution order not
+        # as clear anymore as it used to be. A larger delay for the second job should make things more clear.
+        job_2_delay = 0.75 if not self.connected_to_cluster else 1.5
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, 0.5],
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, job_1_delay],
             job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_builder, True, 0.75],
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_builder, True, job_2_delay],
             job_id='slow_2')
         job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_builder, True])
         job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_builder, True])
@@ -496,9 +503,9 @@ class TestJobDependency(RQTestCase):
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
         # the two. Job "B" should be completed before job "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, 0.5],
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, job_1_delay],
             job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_builder, True, 0.75],
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_builder, True, job_2_delay],
             job_id='slow_2')
         job_A = queue.enqueue(
             fixtures.rpush, args=[key, 'A', connection_builder, False], depends_on=['slow_1', 'slow_2']
