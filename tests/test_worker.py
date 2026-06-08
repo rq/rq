@@ -1573,6 +1573,35 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=fooq)
         self.assertIn(job, failed_job_registry)
         self.assertEqual(fooq.count, 0)
+
+        # Unfortunately, when running locally with act, all processes are in the end effectively children
+        # of tail... Yeah, I was surprised too, but see here:
+        #
+        # USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+        # root         1  0.0  0.0   2732  1664 pts/0    Ss+  00:46   0:00 tail -f /dev/null
+        # root       338  0.0  0.0      0     0 ?        Z    00:46   0:00 [sleep] <defunct>
+        #
+        # Well, since tail wasn't really designed to be the init process, it doesn't know that apart
+        # from showing log files, its duties also now suddenly including reaping left-over children by
+        # other processes. Therefore, the process stays a zombie and these processes still show of course
+        # still up in the process list, so we're able to detect it.
+        #
+        # Fun fact: What makes this especially hard to debug is that it simply works in any standard container
+        # with e.g. bash as "init" process, so I was getting quite confused before taking a peek into the act
+        # containers themselves.
+        #
+        # Unfortunatley, there is not such an easy way out of this: We cannot take over the duty of init here
+        # directly, since the work horse isolated itself into its own process group, so we are not its parent
+        # anymore, and it is not longer our duty to reap it.
+        #
+        # Fortunately, there is at least some somewhat elegant way out of this: Linux 3.4 introduced the
+        # `prctl` flag `PR_SET_CHILD_SUBREAPER`, so that an arbitrary process can become the subreaper of a
+        # domain, e.g. like this container, see:
+        # https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html
+        #
+        # The popular tiny init substitute tini offers this option right out of the box, so we can simply use it
+        # as part of the CI, see:
+        # https://github.com/krallin/tini#subreaping
         self.assertFalse(psutil.pid_exists(subprocess_pid))
 
 

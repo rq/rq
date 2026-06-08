@@ -68,7 +68,10 @@ jobs:
 
       - name: Test with pytest
         run: |
-          RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
+          # use tiny for sub-reaping, so that we don't run into inconvenient "zombiefication" during testing. 
+          # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
+          sudo apt-get update && sudo apt-get install -y tini
+          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1
         with:
@@ -135,7 +138,10 @@ jobs:
       - name: Test with pytest
         run: |
           set -x
-          RUN_SLOW_TESTS_TOO=1 REDIS_CLUSTER_HOST=${redis_1} hatch run test:cov tests/test_worker.py --durations=5
+          # use tiny for sub-reaping, so that we don't run into inconvenient "zombiefication" during testing. 
+          # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
+          sudo apt-get update && sudo apt-get install -y tini
+          RUN_SLOW_TESTS_TOO=1 REDIS_CLUSTER_HOST=${redis_1} tini -s -w hatch -- run test:cov --durations=5
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1
