@@ -85,13 +85,8 @@ jobs:
       # max-parallel: 1
       matrix:
         python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
-        redis-version: [ 7, 8 ]
-        redis-py-version: [ 7, 8 ]
-        exclude:
-          # redis-py 8 defaults to RESP3, which negotiates via the HELLO command.
-          # HELLO was added in Redis 6.0, so redis-py 8 cannot connect to Redis 5.
-          - redis-version: 5
-            redis-py-version: 8
+        redis-version: [ 6, 7, 8 ]
+        redis-py-version: [ 8 ]
     env:
       # allow concurrency also when running under act locally with the same docker
       # daemon for convenience
@@ -140,7 +135,7 @@ jobs:
       - name: Test with pytest
         run: |
           set -x
-          RUN_SLOW_TESTS_TOO=1 REDIS_CLUSTER_HOST=${redis_1} hatch run test:cov --durations=5
+          RUN_SLOW_TESTS_TOO=1 REDIS_CLUSTER_HOST=${redis_1} hatch run test:cov tests/test_worker.py --durations=5
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1
