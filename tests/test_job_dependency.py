@@ -480,11 +480,10 @@ class TestJobDependency(RQTestCase):
         key = RQ_KEY_PREFIX + 'test_job:job_order'
 
         job_1_delay = 0.5
-        # Increase the delay for the second job when connected to a cluster. Establishing the cluster connection
-        # likely might take a bit longer, since the client needs to discover all nodes and then establish separate
-        # connections to each node. Therefore, this test seems to become a bit flaky with the execution order not
-        # as clear anymore as it used to be. A larger delay for the second job should make things more clear.
-        job_2_delay = 0.75 if not self.connected_to_cluster else 1.5
+        # Increase the delay for the second job. This test seems to become a bit flaky with the execution order not
+        # as clear anymore as it used to be when establishing the connection takes a bit longer (e.g. due cluster, SSL
+        # or random interference). The larger delay should make the ordering more consistent.
+        job_2_delay = 1.5
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, job_1_delay],
             job_id='slow_1')
