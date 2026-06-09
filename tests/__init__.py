@@ -49,6 +49,22 @@ def find_empty_redis_database(can_be_non_empty=False) -> Redis | RedisCluster:
     if run_tests_with_ssl():
         connection_kwargs['ssl'] = True
         # use bundled CA certificates to allow certificate validation
+        #
+        # Redis/Valkey Clusters advertise their nodes using IP addresses, so certificates with just
+        # DNS names work won't work for cluster setups. That's a bit annoying. To work around this
+        # issue without having to generate certificates on the fly, each of the included certificates
+        # also contain IP SANs for all IP addresses in the first /24 block of the default docker subnet.
+        # The following commands can be used to generate them:
+        #
+        # ```
+        # ips=$(echo IP:172.17.0.{1..255}, )
+        # for host in redis-{1..3} redis; do
+        #   openssl req -x509 -newkey rsa:4096 -keyout ${host}.key -out ${host}.pem -sha256 \
+        #   -days 36500 -nodes -subj "/CN=${host}" -addext "subjectAltName = ${ips}DNS:${host}"
+        # done
+        # cat *.pem > cacerts.pem
+        # ```
+
         connection_kwargs['ssl_ca_certs'] = CA_CERTS_PATH
 
     if run_cluster_tests():
