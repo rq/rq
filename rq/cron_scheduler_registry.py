@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from redis import Redis
+from redis import Redis, RedisCluster
 from redis.client import Pipeline
 
 from .connections import RQ_KEY_PREFIX
@@ -60,7 +60,7 @@ def unregister(cron_scheduler: CronScheduler, pipeline: Pipeline | None = None) 
         raise SchedulerNotFound(f"CronScheduler '{cron_scheduler.name}' not found in registry")
 
 
-def get_keys(connection: Redis) -> list[str]:
+def get_keys(connection: Redis | RedisCluster) -> list[str]:
     """Get all registered CronScheduler names from the registry
 
     Args:
@@ -79,7 +79,7 @@ def get_keys(connection: Redis) -> list[str]:
     return [key.decode('utf-8') if isinstance(key, bytes) else key for key in keys]
 
 
-def cleanup(connection: Redis, threshold: int = 120) -> int:
+def cleanup(connection: Redis | RedisCluster, threshold: int = 120) -> int:
     """Remove stale CronScheduler entries from the registry
 
     Removes schedulers that haven't sent a heartbeat in more than `threshold` seconds.
