@@ -298,7 +298,7 @@ class TestRQCli(CLITestCase):
         self.assertIn('2 workers, 2 queues', result.output)
 
         result = runner.invoke(
-            main, ['info', 'foo', 'bar', '--by-queue', '-u', self.redis_url, '--only-workers']
+            main, ['info', 'foo', 'bar', '--by-queue', '-u', self.redis_url, '--only-workers'] + self.runner_args
         )
 
         self.assert_normal_execution(result)
@@ -934,7 +934,9 @@ class WorkerPoolCLITestCase(CLITestCase):
     def test_job_class_argument(self):
         """rq worker-pool -u <url> -b --job-class rq.job.Job"""
         runner = CliRunner()
-        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.Job'])
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.Job'] + self.runner_args
+        )
         self.assert_normal_execution(result)
 
         # This one fails because Job class doesn't exist
