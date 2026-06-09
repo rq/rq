@@ -1,4 +1,3 @@
-import os
 
 from redis import ConnectionPool, Redis, RedisCluster, SSLConnection, UnixDomainSocketConnection
 
@@ -22,12 +21,8 @@ class TestConnectionInheritance(RQTestCase):
 
     @cluster_test
     def test_parse_cluster_connection(self):
-        cluster_host = os.environ.get('REDIS_CLUSTER_HOST') # must be present
-        cluster_port = os.environ.get('REDIS_CLUSTER_PORT', 6379)
-        url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
-        args = '?ssl_cert_reqs=none' if self.uses_ssl else ''
         connection = RedisCluster(
-            url=f'{url_prefix}{cluster_host}:{cluster_port}{args}',
+            url=self.redis_url,
         )
         connection_builder = RedisConnectionBuilder.parse_connection(connection)
         self.assertEqual(connection_builder._connection_class, RedisCluster)

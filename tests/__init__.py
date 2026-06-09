@@ -1,3 +1,4 @@
+import functools
 import logging
 import os
 import unittest
@@ -5,19 +6,38 @@ import unittest
 import pytest
 from redis import Redis, RedisCluster
 
-from rq.utils import get_version, is_cluster
+from rq.utils import get_version
+
+CA_CERTS_PATH = 'tests/ssl_config/cacerts.pem'
 
 
-def get_cluster_host_and_port() -> tuple[str | None, int]:
-    cluster_host = (os.environ.get('REDIS_CLUSTER_HOST', None)
-        or os.environ.get('VALKEY_CLUSTER_HOST', None))
-    cluster_port = int(os.environ.get('REDIS_CLUSTER_PORT', None)
-        or os.environ.get('VALKEY_CLUSTER_PORT', 6379))
+# tests might modify the environment, so make sure to cache all values and
+# stay away from well-known environment variables like `REDIS_HOST` just in
+# case...
+@functools.cache
+def get_host_and_port() -> tuple[str, int]:
+    host = os.environ.get('TEST_HOST', '127.0.0.1')
+    port = int(os.environ.get('TEST_PORT', 6379))
 
-    return cluster_host, cluster_port
+    return host, port
 
 
-def find_empty_redis_database(ssl=False, can_be_non_empty=False) -> Redis | RedisCluster:
+@functools.cache
+def run_tests_with_ssl():
+    return os.environ.get('TEST_WITH_SSL') in ['1', 'true']
+
+
+@functools.cache
+def run_cluster_tests():
+    return os.environ.get('RUN_CLUSTER_TESTS') in ['1', 'true']
+
+
+@functools.cache
+def run_slow_tests():
+    return os.environ.get('RUN_SLOW_TESTS_TOO') in ['1', 'true']
+
+
+def find_empty_redis_database(can_be_non_empty=False) -> Redis | RedisCluster:
     """On a single redis instance, tries to connect to a random Redis
     database (starting from 4), and will use/connect it when no keys are
     in there. As Redis clusters do not support database selection, there
@@ -25,22 +45,20 @@ def find_empty_redis_database(ssl=False, can_be_non_empty=False) -> Redis | Redi
     is guaranteed to be empty.
     """
     connection_kwargs = {}
-    cluster_host, cluster_port = get_cluster_host_and_port()
-    if ssl or os.environ.get('ALWAYS_USE_SSL', None) is not None:
-        if cluster_host is None:
-            connection_kwargs['port'] = 9736
+    host, port = get_host_and_port()
+    if run_tests_with_ssl():
         connection_kwargs['ssl'] = True
-        # disable certificate validation
-        connection_kwargs['ssl_cert_reqs'] = 'none' # use str here, so that we always have the same type in the kwargs
+        # use bundled CA certificates to allow certificate validation
+        connection_kwargs['ssl_ca_certs'] = CA_CERTS_PATH
 
-    if cluster_host is not None:
-        testconn = RedisCluster(host=cluster_host, port=cluster_port, **connection_kwargs)  # type: ignore
+    if run_cluster_tests():
+        testconn = RedisCluster(host=host, port=port, **connection_kwargs)  # type: ignore
         if testconn.dbsize() == 0 or can_be_non_empty:
             return testconn
     else:
         for dbnum in range(4, 17):
             db_kwargs = connection_kwargs | {'db': dbnum}
-            testconn = Redis(**db_kwargs)  # type: ignore
+            testconn = Redis(host=host, port=port, **db_kwargs)  # type: ignore
             empty = testconn.dbsize() == 0
             if empty or can_be_non_empty:
                 return testconn
@@ -58,23 +76,20 @@ def min_redis_version(ver: tuple[int, ...]):
 
 def slow(f):
     f = pytest.mark.slow(f)
-    return unittest.skipUnless(os.environ.get('RUN_SLOW_TESTS_TOO'), 'Slow tests disabled')(f)
+    slow_tests = run_slow_tests()
+    return unittest.skipUnless(slow_tests, 'Slow tests disabled')(f)
 
 
 def skip_with_ssl_enabled(f):
     f = pytest.mark.skip_with_ssl_enabled(f)
-    use_ssl = os.environ.get('RUN_SSL_TESTS') or os.environ.get('ALWAYS_USE_SSL')
-    return unittest.skipIf(use_ssl, 'SSL tests disabled')(f)
-
-
-def ssl_test(f):
-    f = pytest.mark.ssl_test(f)
-    return unittest.skipUnless(os.environ.get('RUN_SSL_TESTS'), 'SSL tests disabled')(f)
+    use_ssl = run_tests_with_ssl()
+    return unittest.skipIf(use_ssl, 'Skipped when SSL is enabled')(f)
 
 
 def cluster_test(f):
     f = pytest.mark.cluster_test(f)
-    return unittest.skipUnless(get_cluster_host_and_port()[0] is not None, 'No Redis/Valkey cluster host given')(f)
+    use_cluster = run_cluster_tests()
+    return unittest.skipUnless(use_cluster, 'Cluster tests disabled')(f)
 
 
 class RQTestCase(unittest.TestCase):
@@ -91,11 +106,12 @@ class RQTestCase(unittest.TestCase):
     def setUpClass(cls):
         # Set up connection to Redis
         cls.connection = find_empty_redis_database()
-        cls.uses_ssl = cls.connection.get_connection_kwargs().get('ssl', False)
 
-        # Let tests know when we're connected to a cluster, so that they can
-        # prepare accordingly and won't leave a mess (we like our hygiene there too)
-        cls.connected_to_cluster = is_cluster(cls.connection)
+        # Let tests know when we're using SSL or are connected to a cluster, so that
+        # they can prepare accordingly and won't leave a mess (we like our hygiene there too)
+        cls.uses_ssl = run_tests_with_ssl()
+        cls.connected_to_cluster = run_cluster_tests()
+
         # Shut up logging
         logging.disable(logging.ERROR)
 
@@ -104,11 +120,11 @@ class RQTestCase(unittest.TestCase):
         self.connection.flushdb()
 
         url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
-        args = '?ssl_cert_reqs=none' if self.uses_ssl else ''
-        port = self.connection.get_connection_kwargs().get('port', 6379)
+        args = f'?ssl_ca_certs={CA_CERTS_PATH}' if self.uses_ssl else ''
+        host, port = get_host_and_port()
         if not self.connected_to_cluster:
             db_num = self.connection.connection_pool.connection_kwargs['db']
-            self.redis_url = f'{url_prefix}127.0.0.1:{port}/{db_num}{args}'
+            self.redis_url = f'{url_prefix}{host}:{port}/{db_num}{args}'
             self.connection: Redis | RedisCluster = Redis.from_url(self.redis_url)
             self.runner_args = []
         else:
