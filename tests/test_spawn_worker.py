@@ -122,8 +122,9 @@ def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     os.kill(pid, signal.SIGKILL)
 
 
-class TimeoutTestCase:
+class TimeoutTestCase(RQTestCase):
     def setUp(self):
+        super().setUp()
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
         self.killtimeout = 15
@@ -136,7 +137,7 @@ class TimeoutTestCase:
         )
 
 
-class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+class WorkerShutdownTestCase(TimeoutTestCase):
     @slow
     def test_idle_worker_warm_shutdown(self):
         """worker with no ongoing job receiving single SIGTERM signal and shutting down"""

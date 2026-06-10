@@ -24,15 +24,6 @@ from tests.fixtures import div_by_zero, say_hello
 
 
 class CLITestCase(RQTestCase):
-    def setUp(self):
-        super().setUp()
-
-    def tearDown(self):
-        if self.connected_to_cluster:
-            # don't forget to flush the db again to avoid bricking the other tests, since we only
-            # have a single db
-            self.connection.flushdb()
-        self.connection.close()
 
     def assert_normal_execution(self, result):
         if result.exit_code == 0:

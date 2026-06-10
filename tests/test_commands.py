@@ -43,7 +43,7 @@ class TestCommands(RQTestCase):
         worker = Worker('foo', connection=connection)
         worker.subscribe()
 
-        assert worker.pubsub_thread.is_alive()
+        self.assertTrue(worker.pubsub_thread.is_alive())
 
         # Kill the Redis connection
         for client in connection.client_list():
@@ -53,7 +53,7 @@ class TestCommands(RQTestCase):
                 pass
 
         time.sleep(0.0)  # Allow other threads to run
-        assert worker.pubsub_thread.is_alive()
+        self.assertTrue(worker.pubsub_thread.is_alive())
 
     def test_pubsub_thread_exits_other_error(self):
         """Ensure that the pubsub thread  exits on other than redis.exceptions.ConnectionError"""
@@ -64,7 +64,7 @@ class TestCommands(RQTestCase):
             worker.subscribe()
             worker.pubsub_thread.join()
 
-        assert not worker.pubsub_thread.is_alive()
+        self.assertFalse(worker.pubsub_thread.is_alive())
 
     def test_kill_horse_command(self):
         """Ensure that shutdown command works properly."""

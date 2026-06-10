@@ -87,7 +87,7 @@ jobs:
           # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
           sudo apt-get update && sudo apt-get install -y tini
           export TEST_WITH_SSL TEST_HOST TEST_PORT RUN_CLUSTER_TESTS
-          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5
+          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5 -v -s
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1
@@ -160,7 +160,7 @@ jobs:
           # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
           sudo apt-get update && sudo apt-get install -y tini
           export TEST_WITH_SSL TEST_HOST TEST_PORT RUN_CLUSTER_TESTS
-          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5
+          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5 -v -s
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6.0.1

@@ -108,13 +108,13 @@ class WorkerPool:
         # `bool(self.worker_dict)` sometimes returns True even if the dict is empty
         return self.number_of_active_workers == 0
 
-    def reap_workers(self):
+    def reap_workers(self, join_time=0.1):
         """Removes dead workers from worker_dict"""
         self.log.debug('Reaping dead workers')
         worker_datas = list(self.worker_dict.values())
 
         for data in worker_datas:
-            data.process.join(0.1)
+            data.process.join(join_time)
             if data.process.is_alive():
                 self.log.debug('Worker %s with pid %d is alive', data.name, data.pid)
             else:

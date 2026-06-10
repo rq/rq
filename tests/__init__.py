@@ -6,6 +6,7 @@ import unittest
 import pytest
 from redis import Redis, RedisCluster
 
+from rq.connections import RedisConnectionBuilder
 from rq.utils import get_version
 
 CA_CERTS_PATH = 'tests/ssl_config/cacerts.pem'
@@ -120,8 +121,11 @@ class RQTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Set up connection to Redis
-        cls.connection = find_empty_redis_database()
+        # Find an empty database if non-cluster and test connection initially, then
+        # save the connection settings to having the shared class connection object in
+        # multiple test instances
+        with find_empty_redis_database() as connection:
+            cls.connection_builder = RedisConnectionBuilder.parse_connection(connection)
 
         # Let tests know when we're using SSL or are connected to a cluster, so that
         # they can prepare accordingly and won't leave a mess (we like our hygiene there too)
@@ -132,28 +136,37 @@ class RQTestCase(unittest.TestCase):
         logging.disable(logging.ERROR)
 
     def setUp(self):
+        with self.connection_builder.build_connection() as connection:
+            url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
+            args = f'?ssl_ca_certs={CA_CERTS_PATH}' if self.uses_ssl else ''
+            if not self.connected_to_cluster:
+                host = connection.connection_pool.connection_kwargs['host']
+                port = connection.connection_pool.connection_kwargs['port']
+                db_num = connection.connection_pool.connection_kwargs['db']
+                self.redis_url = f'{url_prefix}{host}:{port}/{db_num}{args}'
+                self.connection: Redis | RedisCluster = Redis.from_url(self.redis_url)
+                self.runner_args = []
+            else:
+                default_node = connection.get_default_node()
+                self.redis_url = f'{url_prefix}{default_node.host}:{default_node.port}{args}'
+                self.connection: Redis | RedisCluster = RedisCluster.from_url(self.redis_url)
+                self.runner_args = ["--connection-class", "redis.RedisCluster"]
+
         # Flush beforewards (we like our hygiene)
         self.connection.flushdb()
 
-        url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
-        args = f'?ssl_ca_certs={CA_CERTS_PATH}' if self.uses_ssl else ''
-        host, port = get_host_and_port()
-        if not self.connected_to_cluster:
-            db_num = self.connection.connection_pool.connection_kwargs['db']
-            self.redis_url = f'{url_prefix}{host}:{port}/{db_num}{args}'
-            self.connection: Redis | RedisCluster = Redis.from_url(self.redis_url)
-            self.runner_args = []
-        else:
-            default_node = self.connection.get_default_node()
-            self.redis_url = f'{url_prefix}{default_node.host}:{default_node.port}{args}'
-            self.connection: Redis | RedisCluster = RedisCluster.from_url(self.redis_url)
-            self.runner_args = ["--connection-class", "redis.RedisCluster"]
-
     def tearDown(self):
         # Flush afterwards
-        self.connection.flushdb()
+        try:
+            self.connection.flushdb()
+            self.connection.close()
+        except Exception as e:
+            logging.error(e)
+            # make sure that the db gets flushed even if the connection has
+            # been damaged by the test by simply using a new connection
+            with self.connection_builder.build_connection() as connection:
+                connection.flushdb()
 
     @classmethod
     def tearDownClass(cls):
         logging.disable(logging.NOTSET)
-        cls.connection.close()

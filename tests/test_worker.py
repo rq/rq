@@ -1436,8 +1436,9 @@ def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     os.kill(pid, signal.SIGKILL)
 
 
-class TimeoutTestCase:
+class TimeoutTestCase(RQTestCase):
     def setUp(self):
+        super().setUp()
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
         self.killtimeout = 15
@@ -1450,7 +1451,7 @@ class TimeoutTestCase:
         )
 
 
-class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+class WorkerShutdownTestCase(TimeoutTestCase):
     @slow
     def test_idle_worker_warm_shutdown(self):
         """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
@@ -1638,16 +1639,15 @@ class TestWorkerSubprocess(RQTestCase):
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='requires Linux signals')
 @skipIf('pypy' in sys.version.lower(), 'these tests often fail on pypy')
-class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+class HerokuWorkerShutdownTestCase(TimeoutTestCase):
     def setUp(self):
         super().setUp()
         self.sandbox = '/tmp/rq_shutdown/'
         os.makedirs(self.sandbox)
 
     def tearDown(self):
+        super().tearDown()
         shutil.rmtree(self.sandbox, ignore_errors=True)
-        if self.connected_to_cluster:
-            self.connection.flushdb()
 
     @slow
     def test_immediate_shutdown(self):
