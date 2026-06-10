@@ -122,7 +122,7 @@ lint.isort.section-order = [
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
-markers = [ "slow", "ssl_test" ]
+markers = [ "slow", "skip_with_ssl_enabled", "cluster_test" ]
 
 [tool.mypy]
 allow_redefinition = true
