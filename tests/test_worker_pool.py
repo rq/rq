@@ -40,10 +40,10 @@ class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
         self.assertEqual(len(pool.worker_dict.keys()), 2)
 
         worker_data = list(pool.worker_dict.values())[0]
-        sleep(0.5)
+        sleep(2)
         _send_shutdown_command(worker_data.name, self.connection_builder, delay=0)
         # 1 worker should be dead since we sent a shutdown command
-        sleep(0.75)
+        sleep(1)
         pool.check_workers(respawn=False)
         self.assertEqual(len(pool.worker_dict.keys()), 1)
 
@@ -60,7 +60,7 @@ class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
         self.assertEqual(len(pool.worker_dict.keys()), 2)
 
         worker_data = list(pool.worker_dict.values())[0]
-        sleep(0.5)
+        sleep(2)
         _send_shutdown_command(worker_data.name, self.connection_builder, delay=0)
         # 1 worker should be dead since we sent a shutdown command
         pool.reap_workers(5)
