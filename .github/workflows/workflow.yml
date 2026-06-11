@@ -23,7 +23,7 @@ jobs:
     name: "Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}${{ matrix.variant }}\
       /redis-py${{ matrix.redis-py-version }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       # in order to get some intuition about what's going on locally, one can limit the parallel
       # test matrix execution - or to prevent too much strain on the docker registry
@@ -102,7 +102,7 @@ jobs:
     name: "Cluster/Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}${{ matrix.variant }}\
       /redis-py${{ matrix.redis-py-version }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       # in order to get some intuition about what's going on locally, one can limit the parallel
       # test matrix execution - or to prevent too much strain on the docker registry

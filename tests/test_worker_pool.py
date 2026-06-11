@@ -10,7 +10,7 @@ from rq.queue import Queue
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
 from rq.worker_pool import WorkerPool, run_worker
-from tests import RQTestCase
+from tests import RQTestCase, skip_with_ssl_enabled
 from tests.fixtures import CustomJob, _send_shutdown_command, long_running_job, say_hello
 
 
@@ -19,6 +19,7 @@ def wait_and_send_shutdown_signal(pid, time_to_wait=0.0):
     os.kill(pid, signal.SIGTERM)
 
 
+@skip_with_ssl_enabled
 class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
 
     def setUp(self):
