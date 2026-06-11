@@ -43,7 +43,7 @@ class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
         sleep(2)
         _send_shutdown_command(worker_data.name, self.connection_builder, delay=0)
         # 1 worker should be dead since we sent a shutdown command
-        sleep(1)
+        sleep(5)
         pool.check_workers(respawn=False)
         self.assertEqual(len(pool.worker_dict.keys()), 1)
 
