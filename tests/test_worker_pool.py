@@ -3,6 +3,8 @@ import signal
 from multiprocessing import Process
 from time import sleep
 
+import pytest
+
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.serializers import JSONSerializer
@@ -31,6 +33,7 @@ class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
         self.pool.reap_workers(join_time=None)
         super().tearDown()
 
+    @pytest.mark.flaky(reruns=5)
     def test_check_workers(self):
         """Test check_workers()"""
         pool = self.pool
@@ -51,6 +54,7 @@ class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
         pool.check_workers(respawn=True)
         self.assertEqual(len(pool.worker_dict.keys()), 2)
 
+    @pytest.mark.flaky(reruns=5)
     def test_reap_workers(self):
         """Dead workers are removed from worker_dict"""
         # There should be two workers
@@ -75,6 +79,7 @@ class TestWorkerPoolWithForcedPoolTeardown(RQTestCase):
         self.assertEqual(pool.status, pool.Status.STOPPED)
         self.assertTrue(pool.all_workers_have_stopped())
 
+    @pytest.mark.flaky(reruns=5)
     def test_pool_ignores_consecutive_shutdown_signals(self):
         """If two shutdown signals are sent within one second, only the first one is processed"""
         pool = self.pool

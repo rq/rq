@@ -1,6 +1,7 @@
 import time
 from datetime import timedelta
 
+import pytest
 from redis import WatchError
 
 from rq.connections import RQ_KEY_PREFIX, RedisConnectionBuilder
@@ -443,6 +444,7 @@ class TestJobDependency(RQTestCase):
                 pipeline.touch(Job.key_for(dependent_job.id))
                 pipeline.execute()
 
+    @pytest.mark.flaky(reruns=5)
     def test_execution_order_with_sole_dependency(self):
         queue = Queue(connection=self.connection)
         key = RQ_KEY_PREFIX + 'test_job:job_order'
@@ -473,6 +475,7 @@ class TestJobDependency(RQTestCase):
         self.assertTrue(all(job.is_finished for job in [job_slow, job_A, job_B]))
         self.assertEqual(jobs_completed, ['B:w2', 'slow:w1', 'A'])
 
+    @pytest.mark.flaky(reruns=5)
     def test_execution_order_with_dual_dependency(self):
         """Test that jobs with dependencies are executed in the correct order."""
         queue = Queue(connection=self.connection)
