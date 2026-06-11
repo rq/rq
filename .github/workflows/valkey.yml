@@ -30,8 +30,8 @@ jobs:
 
     strategy:
       # in order to get some intuition about what's going on locally, one can limit the parallel
-      # test matrix execution
-      # max-parallel: 1
+      # test matrix execution - or to prevent too much strain on the docker registry
+      max-parallel: 5
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
         valkey-version: ["7.2", "8.0", "9.0"]
@@ -104,8 +104,8 @@ jobs:
     timeout-minutes: 10
     strategy:
       # in order to get some intuition about what's going on locally, one can limit the parallel
-      # test matrix execution
-      # max-parallel: 1
+      # test matrix execution - or to prevent too much strain on the docker registry
+      max-parallel: 5
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
         valkey-version: ["7.2", "8.0", "9.0"]

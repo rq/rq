@@ -26,8 +26,8 @@ jobs:
     timeout-minutes: 10
     strategy:
       # in order to get some intuition about what's going on locally, one can limit the parallel
-      # test matrix execution
-      # max-parallel: 1
+      # test matrix execution - or to prevent too much strain on the docker registry
+      max-parallel: 5
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         redis-version: [5, 6, 7, 8]
@@ -105,8 +105,8 @@ jobs:
     timeout-minutes: 10
     strategy:
       # in order to get some intuition about what's going on locally, one can limit the parallel
-      # test matrix execution
-      # max-parallel: 1
+      # test matrix execution - or to prevent too much strain on the docker registry
+      max-parallel: 5
       matrix:
         python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
         redis-version: [ 6, 7, 8 ]
