@@ -99,7 +99,7 @@ jobs:
   cluster-valkey:
     name:
       "Cluster/Py${{ matrix.python-version }}/Valkey${{ matrix.valkey-version }}\
-       ${{ matrix.valkey-variant }}/redis-py${{ matrix.redis-py-version }}"
+       ${{ matrix.variant }}/redis-py${{ matrix.redis-py-version }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
