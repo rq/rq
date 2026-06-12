@@ -212,9 +212,7 @@ class RQScheduler:
         raw_data = connection.hgetall(SCHEDULER_KEY_TEMPLATE % name)
         if not raw_data:
             raise SchedulerNotFound(f"Scheduler with name '{name}' not found")
-        obj = decode_redis_hash(raw_data, decode_values=True)
-        queues = obj['queues'].split(',') if obj.get('queues') else []
-        scheduler = cls(queues, connection=connection, name=name)
+        scheduler = cls([], connection=connection, name=name)
         scheduler.restore(raw_data)
         return scheduler
 
