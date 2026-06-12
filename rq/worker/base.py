@@ -866,19 +866,14 @@ class BaseWorker:
         """
         self.scheduler = RQScheduler(
             self.queues,
+            burst=burst,
             connection=self.connection,
             logging_level=logging_level if logging_level is not None else self.log.level,
             date_format=date_format,
             log_format=log_format,
             serializer=self.serializer,
         )
-        self.scheduler.acquire_locks()
-        if self.scheduler.acquired_locks:
-            if burst:
-                self.scheduler.enqueue_scheduled_jobs()
-                self.scheduler.release_locks()
-            else:
-                self.scheduler.start()
+        self.scheduler.acquire_locks(auto_start=True)
 
     def serialize(self) -> dict:
         assert self.birth_date is not None and self.last_heartbeat is not None
@@ -1010,7 +1005,11 @@ class BaseWorker:
         No need to try to start scheduler on first run
         """
         if self.last_cleaned_at:
-            if self.scheduler and (not self.scheduler._process or not self.scheduler._process.is_alive()):
+            if (
+                self.scheduler
+                and not self.scheduler.burst
+                and (not self.scheduler._process or not self.scheduler._process.is_alive())
+            ):
                 self.scheduler.acquire_locks(auto_start=True)
         self.clean_registries()
         Group.clean_registries(connection=self.connection)

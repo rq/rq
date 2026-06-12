@@ -198,6 +198,18 @@ class TestScheduler(RQTestCase):
         self.assertEqual(scheduler.acquire_locks(), {name_3})
         self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
 
+    def test_lock_acquisition_race(self):
+        queue = 'race'
+        first = RQScheduler([queue], self.connection)
+        second = RQScheduler([queue], self.connection)
+
+        self.assertEqual(first.acquire_locks(), {queue})
+        self.connection.delete(first.get_locking_key(queue))  # simulate expiration
+        self.assertEqual(second.acquire_locks(), {queue})
+
+        self.assertFalse(first._check_and_update_locks())
+        self.assertEqual(second._check_and_update_locks(), {queue})
+
     def test_lock_acquisition_with_auto_start(self):
         """Test lock acquisition with auto_start=True"""
         scheduler = RQScheduler(['auto-start'], self.connection)
@@ -270,8 +282,10 @@ class TestScheduler(RQTestCase):
         name_3 = 'lock-test-3'
         scheduler = RQScheduler([name_3], self.connection)
         scheduler.acquire_locks()
+        self.assertEqual(scheduler.acquired_locks, {name_3})
         scheduler = RQScheduler([name_1, name_2, name_3], self.connection)
         scheduler.acquire_locks()
+        self.assertEqual(scheduler.acquired_locks, {name_1, name_2})
 
         locking_key_1 = RQScheduler.get_locking_key(name_1)
         locking_key_2 = RQScheduler.get_locking_key(name_2)
@@ -284,6 +298,7 @@ class TestScheduler(RQTestCase):
             pipeline.execute()
 
         scheduler.heartbeat()
+        self.assertEqual(scheduler.acquired_locks, {name_1, name_2})
         self.assertEqual(self.connection.ttl(locking_key_1), 61)
         self.assertEqual(self.connection.ttl(locking_key_2), 61)
         self.assertEqual(self.connection.ttl(locking_key_3), 1000)
@@ -296,12 +311,26 @@ class TestScheduler(RQTestCase):
         self.assertTrue(self.connection.exists(locking_key_3))
         self.assertEqual(scheduler.status, scheduler.Status.STOPPED)
 
-        # Heartbeat also works properly for schedulers with a single queue
-        scheduler = RQScheduler([name_1], self.connection)
+    def test_heartbeat_race(self):
+        queue = 'race'
+
+        # Heartbeat detects lock expiration
+        scheduler = RQScheduler([queue], self.connection)
         scheduler.acquire_locks()
-        self.connection.expire(locking_key_1, 1000)
+        self.connection.delete(locking_key := scheduler.get_locking_key(queue))  # simulate expiration
         scheduler.heartbeat()
-        self.assertEqual(self.connection.ttl(locking_key_1), 61)
+        self.assertFalse(scheduler.acquired_locks)
+
+        # Heartbeat detects lock ownership change
+        first = RQScheduler([queue], self.connection)
+        second = RQScheduler([queue], self.connection)
+        first.acquire_locks()
+        self.connection.delete(locking_key)  # simulate expiration
+        second.acquire_locks()
+        first.heartbeat()
+        self.assertFalse(first.acquired_locks)
+        second.heartbeat()
+        self.assertEqual(second.acquired_locks, {queue})
 
     def test_enqueue_scheduled_jobs(self):
         """Scheduler can enqueue scheduled jobs"""
