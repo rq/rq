@@ -875,8 +875,8 @@ class BaseWorker:
         self.scheduler.acquire_locks()
         if self.scheduler.acquired_locks:
             if burst:
-                self.scheduler.register_birth()
                 try:
+                    self.scheduler.register_birth()
                     self.scheduler.enqueue_scheduled_jobs()
                 finally:
                     self.scheduler.release_locks()
