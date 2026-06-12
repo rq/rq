@@ -14,10 +14,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from croniter import croniter
-from redis import Redis
+from redis import Redis, RedisCluster
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
+from .connections import RQ_KEY_PREFIX
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
@@ -91,7 +92,7 @@ class CronJob:
         # Filter out None values
         self.job_options = {k: v for k, v in self.job_options.items() if v is not None}
 
-    def enqueue(self, connection: Redis) -> Job:
+    def enqueue(self, connection: Redis | RedisCluster) -> Job:
         """Enqueue this job to its queue and update the next run time"""
         if not self.func:
             raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
@@ -205,11 +206,11 @@ class CronScheduler:
 
     def __init__(
         self,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         logging_level: str | int = logging.INFO,
         name: str = '',
     ):
-        self.connection: Redis = connection
+        self.connection: Redis | RedisCluster = connection
         self._cron_jobs: list[CronJob] = []
         self.hostname: str = socket.gethostname()
         self.pid: int = os.getpid()
@@ -445,7 +446,7 @@ class CronScheduler:
     @property
     def key(self) -> str:
         """Redis key for this CronScheduler instance"""
-        return f'rq:cron_scheduler:{self.name}'
+        return f'{RQ_KEY_PREFIX}rq:cron_scheduler:{self.name}'
 
     def to_dict(self) -> dict:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
@@ -493,9 +494,9 @@ class CronScheduler:
             self._cron_jobs = []
 
     @classmethod
-    def fetch(cls, name: str, connection: Redis) -> CronScheduler:
+    def fetch(cls, name: str, connection: Redis | RedisCluster) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
-        key = f'rq:cron_scheduler:{name}'
+        key = f'{RQ_KEY_PREFIX}rq:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
         if not raw_data:
@@ -506,7 +507,7 @@ class CronScheduler:
         return scheduler
 
     @classmethod
-    def all(cls, connection: Redis, cleanup: bool = True) -> list[CronScheduler]:
+    def all(cls, connection: Redis | RedisCluster, cleanup: bool = True) -> list[CronScheduler]:
         """Returns all CronScheduler instances from the registry
 
         Args:
@@ -535,7 +536,7 @@ class CronScheduler:
         """Register this scheduler's birth in the scheduler registry and save data to Redis hash"""
         self.log.info(f'CronScheduler {self.name}: registering birth...')
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             cron_scheduler_registry.register(self, pipeline)
             self.save(pipeline)
             pipeline.execute()
@@ -549,7 +550,7 @@ class CronScheduler:
         """Send a heartbeat to update this scheduler's last seen timestamp in the registry
         and extend the scheduler's Redis hash TTL.
         """
-        with self.connection.pipeline() as pipe:
+        with self.connection.pipeline(transaction=True) as pipe:
             pipe.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True, ch=True)
             pipe.expire(self.key, 120)
             results = pipe.execute()
@@ -635,7 +636,7 @@ def register(
     return job_data
 
 
-def create_cron(connection: Redis) -> CronScheduler:
+def create_cron(connection: Redis | RedisCluster) -> CronScheduler:
     """Create a CronScheduler instance with all registered jobs"""
     cron_instance = CronScheduler(connection=connection)
 

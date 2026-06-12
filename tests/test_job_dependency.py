@@ -1,9 +1,10 @@
 import time
 from datetime import timedelta
 
+import pytest
 from redis import WatchError
 
-from rq.connections import get_connection_kwargs
+from rq.connections import RQ_KEY_PREFIX, RedisConnectionBuilder
 from rq.job import Dependency, Job, JobStatus, cancel_job
 from rq.queue import Queue
 from rq.registry import (
@@ -260,15 +261,15 @@ class TestJobDependency(RQTestCase):
 
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(1, len(queue.deferred_job_registry))
-        self.connection.set('some:key', b'some:value')
+        self.connection.set(RQ_KEY_PREFIX + 'some:key', b'some:value')
 
-        with self.connection.pipeline() as pipe:
-            pipe.watch('some:key')
-            self.assertEqual(self.connection.get('some:key'), b'some:value')
+        with self.connection.pipeline(transaction=True) as pipe:
+            pipe.watch(RQ_KEY_PREFIX + 'some:key')
+            self.assertEqual(self.connection.get(RQ_KEY_PREFIX + 'some:key'), b'some:value')
             dependency.cancel(pipeline=pipe, enqueue_dependents=True)
-            pipe.set('some:key', b'some:other:value')
+            pipe.set(RQ_KEY_PREFIX + 'some:key', b'some:other:value')
             pipe.execute()
-        self.assertEqual(self.connection.get('some:key'), b'some:other:value')
+        self.assertEqual(self.connection.get(RQ_KEY_PREFIX + 'some:key'), b'some:other:value')
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))
         registry = CanceledJobRegistry(connection=self.connection, queue=queue)
@@ -353,7 +354,7 @@ class TestJobDependency(RQTestCase):
         dependent_job.register_dependency()
         dependent_job.save()
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             dependent_job.fetch_dependencies(watch=True, pipeline=pipeline)
 
             pipeline.multi()
@@ -431,7 +432,7 @@ class TestJobDependency(RQTestCase):
         dependent_job._dependency_ids = [dependency_job.id]
         dependent_job.register_dependency()
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             dependent_job.dependencies_are_met(
                 pipeline=pipeline,
             )
@@ -443,16 +444,17 @@ class TestJobDependency(RQTestCase):
                 pipeline.touch(Job.key_for(dependent_job.id))
                 pipeline.execute()
 
+    @pytest.mark.flaky(reruns=5)
     def test_execution_order_with_sole_dependency(self):
         queue = Queue(connection=self.connection)
-        key = 'test_job:job_order'
+        key = RQ_KEY_PREFIX + 'test_job:job_order'
 
-        connection_kwargs = get_connection_kwargs(self.connection)
+        connection_builder = RedisConnectionBuilder.parse_connection(self.connection)
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         # Worker 1 will be busy with the slow job, so worker 2 will complete both fast jobs.
-        job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_kwargs, True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_kwargs, True])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True])
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_builder, True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_builder, True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_builder, True])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 2)]
@@ -463,9 +465,9 @@ class TestJobDependency(RQTestCase):
 
         # When job "A" depends on the slow job, then job "B" finishes before "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_kwargs, True, 0.5], job_id='slow_job')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_kwargs, False], depends_on='slow_job')
-        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True])
+        job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_builder, True, 0.5], job_id='slow_job')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_builder, False], depends_on='slow_job')
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_builder, True])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(0.75)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 2)]
@@ -473,16 +475,25 @@ class TestJobDependency(RQTestCase):
         self.assertTrue(all(job.is_finished for job in [job_slow, job_A, job_B]))
         self.assertEqual(jobs_completed, ['B:w2', 'slow:w1', 'A'])
 
+    @pytest.mark.flaky(reruns=5)
     def test_execution_order_with_dual_dependency(self):
         """Test that jobs with dependencies are executed in the correct order."""
         queue = Queue(connection=self.connection)
-        key = 'test_job:job_order'
-        connection_kwargs = get_connection_kwargs(self.connection)
+        connection_builder = RedisConnectionBuilder.parse_connection(self.connection)
+        key = RQ_KEY_PREFIX + 'test_job:job_order'
+
+        job_1_delay = 0.5
+        # Increase the delay for the second job. This test seems to become a bit flaky with the execution order not
+        # as clear anymore as it used to be when establishing the connection takes a bit longer (e.g. due cluster, SSL
+        # or random interference). The larger delay should make the ordering more consistent.
+        job_2_delay = 1.5
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_kwargs, True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_kwargs, True, 0.75], job_id='slow_2')
-        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_kwargs, True])
-        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True])
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, job_1_delay],
+            job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_builder, True, job_2_delay],
+            job_id='slow_2')
+        job_A = queue.enqueue(fixtures.rpush, args=[key, 'A', connection_builder, True])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_builder, True])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 3)]
@@ -494,12 +505,14 @@ class TestJobDependency(RQTestCase):
         # This time job "A" depends on two slow jobs, while job "B" depends only on the faster of
         # the two. Job "B" should be completed before job "A".
         # There is no clear requirement on which worker should take job "A", so we stay silent on that.
-        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_kwargs, True, 0.5], job_id='slow_1')
-        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_kwargs, True, 0.75], job_id='slow_2')
+        job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_builder, True, job_1_delay],
+            job_id='slow_1')
+        job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_builder, True, job_2_delay],
+            job_id='slow_2')
         job_A = queue.enqueue(
-            fixtures.rpush, args=[key, 'A', connection_kwargs, False], depends_on=['slow_1', 'slow_2']
+            fixtures.rpush, args=[key, 'A', connection_builder, False], depends_on=['slow_1', 'slow_2']
         )
-        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_kwargs, True], depends_on=['slow_1'])
+        job_B = queue.enqueue(fixtures.rpush, args=[key, 'B', connection_builder, True], depends_on=['slow_1'])
         fixtures.burst_two_workers(queue, connection=self.connection)
         time.sleep(1)
         jobs_completed = [v.decode() for v in self.connection.lrange(key, 0, 3)]

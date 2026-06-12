@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from redis import Redis
+from redis import Redis, RedisCluster
 
 from rq.utils import now
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class IntermediateQueue:
-    def __init__(self, queue_key: str, connection: Redis):
+    def __init__(self, queue_key: str, connection: Redis | RedisCluster):
         self.queue_key = queue_key
         self.key = self.get_intermediate_queue_key(queue_key)
         self.connection = connection

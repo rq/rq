@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .connections import RQ_KEY_PREFIX
+
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
     from redis.client import Pipeline
 
     from .queue import Queue
@@ -13,8 +15,8 @@ from rq.utils import split_list
 
 from .utils import as_text
 
-WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
-REDIS_WORKER_KEYS = 'rq:workers'
+WORKERS_BY_QUEUE_KEY = RQ_KEY_PREFIX + 'rq:workers:%s'
+REDIS_WORKER_KEYS = RQ_KEY_PREFIX + 'rq:workers'
 MAX_KEYS = 1000
 
 
@@ -41,7 +43,7 @@ def unregister(worker: BaseWorker, pipeline: Pipeline | None = None):
         pipeline (Optional[Pipeline], optional): Redis Pipeline. Defaults to None.
     """
     if pipeline is None:
-        connection = worker.connection.pipeline()
+        connection = worker.connection.pipeline(transaction=True)
     else:
         connection = pipeline
 
@@ -54,12 +56,12 @@ def unregister(worker: BaseWorker, pipeline: Pipeline | None = None):
         connection.execute()
 
 
-def get_keys(queue: Queue | None = None, connection: Redis | None = None) -> set[str]:
+def get_keys(queue: Queue | None = None, connection: Redis | RedisCluster | None = None) -> set[str]:
     """Returns a list of worker keys for a given queue.
 
     Args:
-        queue (Optional[&#39;Queue&#39;], optional): The Queue. Defaults to None.
-        connection (Optional[&#39;Redis&#39;], optional): The Redis Connection. Defaults to None.
+        queue (Optional[Queue], optional): The Queue. Defaults to None.
+        connection (Optional[Redis| RedisCluster], optional): The Redis Connection. Defaults to None.
 
     Raises:
         ValueError: If no Queue or Connection is provided.
@@ -89,7 +91,7 @@ def clean_worker_registry(queue: Queue):
     """
     keys = list(get_keys(queue))
 
-    with queue.connection.pipeline() as pipeline:
+    with queue.connection.pipeline(transaction=True) as pipeline:
         for key in keys:
             pipeline.exists(key)
         results = pipeline.execute()

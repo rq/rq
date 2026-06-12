@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from redis import Redis
+from redis import Redis, RedisCluster
 
+from .connections import RQ_KEY_PREFIX
 from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .job import Job
 from .serializers import resolve_serializer
@@ -15,7 +16,7 @@ from .utils import decode_redis_hash, now
 
 
 def get_key(job_id):
-    return f'rq:results:{job_id}'
+    return f'{RQ_KEY_PREFIX}rq:results:{job_id}'
 
 
 class Result:
@@ -30,7 +31,7 @@ class Result:
         self,
         job_id: str,
         type: Type,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         id: str | None = None,
         created_at: datetime | None = None,
         return_value: Any | None = None,
@@ -193,7 +194,8 @@ class Result:
         job.connection.delete(cls.get_key(job.id))
 
     @classmethod
-    def restore(cls, job_id: str, result_id: str, payload: dict, connection: Redis, serializer=None) -> Result:
+    def restore(cls, job_id: str, result_id: str, payload: dict, connection: Redis | RedisCluster,
+            serializer=None) -> Result:
         """Create a Result object from given Redis payload"""
         created_at = datetime.fromtimestamp(int(result_id.split('-')[0]) / 1000, tz=timezone.utc)
         payload = decode_redis_hash(payload)
@@ -279,7 +281,7 @@ class Result:
 
     @classmethod
     def get_key(cls, job_id):
-        return f'rq:results:{job_id}'
+        return f'{RQ_KEY_PREFIX}rq:results:{job_id}'
 
     def save(self, ttl, pipeline=None):
         """Save result data to Redis"""

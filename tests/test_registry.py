@@ -5,6 +5,7 @@ from unittest.mock import ANY
 
 import pytest
 
+from rq.connections import RQ_KEY_PREFIX
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import AbandonedJobError, InvalidJobOperation
 from rq.executions import Execution
@@ -51,7 +52,7 @@ class TestRegistry(RQTestCase):
         self.assertEqual(registry.serializer, JSONSerializer)
 
     def test_key(self):
-        self.assertEqual(self.registry.key, 'rq:registry:default')
+        self.assertEqual(self.registry.key, RQ_KEY_PREFIX + 'rq:registry:default')
 
     def test_custom_job_class(self):
         registry = BaseRegistry(job_class=CustomJob)
@@ -232,7 +233,7 @@ class TestFinishedJobRegistry(RQTestCase):
         self.registry = FinishedJobRegistry(connection=self.connection)
 
     def test_key(self):
-        self.assertEqual(self.registry.key, 'rq:finished:default')
+        self.assertEqual(self.registry.key, RQ_KEY_PREFIX + 'rq:finished:default')
 
     def test_cleanup(self):
         """Finished job registry removes expired jobs."""
@@ -279,7 +280,7 @@ class TestDeferredRegistry(RQTestCase):
         self.registry = DeferredJobRegistry(connection=self.connection)
 
     def test_key(self):
-        self.assertEqual(self.registry.key, 'rq:deferred:default')
+        self.assertEqual(self.registry.key, RQ_KEY_PREFIX + 'rq:deferred:default')
 
     def test_add(self):
         """Adding a job to DeferredJobsRegistry."""
@@ -515,7 +516,7 @@ class TestStartedJobRegistry(RQTestCase):
         worker.prepare_job_execution(job)
         self.assertIn(execution.job_id, self.registry.get_job_ids())
 
-        pipeline = self.connection.pipeline()
+        pipeline = self.connection.pipeline(transaction=True)
         job.delete(pipeline=pipeline)
         pipeline.execute()
         self.assertNotIn(execution.job_id, self.registry.get_job_ids())

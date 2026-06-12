@@ -16,8 +16,9 @@ from typing import (
     cast,
 )
 
-from redis import WatchError
+from redis import RedisCluster, WatchError
 
+from .connections import RQ_KEY_PREFIX
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 
 if TYPE_CHECKING:
@@ -36,7 +37,16 @@ from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
-from .utils import as_text, backend_class, compact, get_version, import_attribute, now, parse_timeout
+from .utils import (
+    as_text,
+    backend_class,
+    compact,
+    get_version,
+    import_attribute,
+    now,
+    parse_timeout,
+    try_enable_multi_on_pipeline,
+)
 
 logger = logging.getLogger('rq.queue')
 
@@ -101,13 +111,13 @@ class Queue:
     job_class: type[Job] = Job
     death_penalty_class: type[BaseDeathPenalty] = UnixSignalDeathPenalty
     DEFAULT_TIMEOUT: int = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix: str = 'rq:queue:'
-    redis_queues_keys: str = 'rq:queues'
+    redis_queue_namespace_prefix: str = RQ_KEY_PREFIX + 'rq:queue:'
+    redis_queues_keys: str = RQ_KEY_PREFIX + 'rq:queues'
 
     @classmethod
     def all(
         cls,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         serializer=None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
@@ -115,7 +125,7 @@ class Queue:
         """Returns an iterable of all Queues.
 
         Args:
-            connection (Optional[Redis], optional): The Redis Connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): The Redis Connection. Defaults to None.
             job_class (Optional[Job], optional): The Job class to use. Defaults to None.
             serializer (optional): The serializer to use. Defaults to None.
             death_penalty_class (Optional[Job], optional): The Death Penalty class to use. Defaults to None.
@@ -141,7 +151,7 @@ class Queue:
     def from_queue_key(
         cls,
         queue_key: str,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
@@ -152,7 +162,7 @@ class Queue:
 
         Args:
             queue_key (str): The queue key
-            connection (Redis): Redis connection. Defaults to None.
+            connection (Redis | Cluster): Redis connection. Defaults to None.
             job_class (Optional[Job], optional): Job class. Defaults to None.
             serializer (Optional[Union[Serializer, str]], optional): Serializer. Defaults to None.
             death_penalty_class (Optional[BaseDeathPenalty], optional): Death penalty class. Defaults to None.
@@ -178,7 +188,7 @@ class Queue:
     def __init__(
         self,
         name: str = 'default',
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         default_timeout: int | None = None,
         is_async: bool = True,
         job_class: str | type[Job] | None = None,
@@ -191,7 +201,7 @@ class Queue:
         Args:
             name (str, optional): The queue name. Defaults to 'default'.
             default_timeout (Optional[int], optional): Queue's default timeout. Defaults to None.
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): Redis connection. Defaults to None.
             is_async (bool, optional): Whether jobs should run "async" (using the worker).
                 If `is_async` is false, jobs will run on the same process from where it was called. Defaults to True.
             job_class (Union[str, 'Job', optional): Job class or a string referencing the Job class path.
@@ -262,7 +272,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return f'rq:clean_registries:{self.name}'
+        return f'{RQ_KEY_PREFIX}rq:clean_registries:{self.name}'
 
     @property
     def scheduler_pid(self) -> int | None:
@@ -326,7 +336,7 @@ class Queue:
         if delete_jobs:
             self.empty()
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             pipeline.srem(self.redis_queues_keys, self._key)
             pipeline.delete(self._key)
             pipeline.execute()
@@ -651,7 +661,7 @@ class Queue:
         """
         if len(job._dependency_ids) > 0:
             orig_status = job.get_status(refresh=False)
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
             while True:
                 try:
                     # Also calling watch even if caller
@@ -687,9 +697,10 @@ class Queue:
                         # if pipeline comes from caller, re-raise to them
                         raise
         elif pipeline is not None:
-            # Ensure pipeline in multi mode before returning to caller (if not set before)
-            if not pipeline.explicit_transaction:
-                pipeline.multi()
+            # Ensure pipeline in multi-mode before returning to caller (if not set before or running
+            # in a cluster with transactions enabled by default)
+            try_enable_multi_on_pipeline(pipeline)
+
         return job
 
     def enqueue_call(
@@ -852,7 +863,7 @@ class Queue:
         Returns:
             List[Job]: A list of enqueued jobs
         """
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -934,7 +945,7 @@ class Queue:
         job.perform()
         job.ended_at = now()
         result_ttl = job.get_result_ttl(default_ttl=DEFAULT_RESULT_TTL)
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             job._handle_success(result_ttl=result_ttl, pipeline=pipeline, worker_name='')
             job.cleanup(result_ttl, pipeline=pipeline)
             pipeline.execute()
@@ -1141,7 +1152,7 @@ class Queue:
             schedule_unique_job(self.connection, self.key, registry.key, job, datetime)
             return job
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
         # Add Queue key set
         pipe.sadd(self.redis_queues_keys, self.key)
@@ -1190,7 +1201,7 @@ class Queue:
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
         # Add Queue key set
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
         pipe.sadd(self.redis_queues_keys, self.key)
         if pipeline is None:
             pipe.execute()
@@ -1276,7 +1287,7 @@ class Queue:
             # Note: pipeline is ignored when unique=True because the Lua script is atomic
             save_unique_job(self.connection, self.key, job, at_front=at_front)
         else:
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
             if is_deferred:
                 self.deferred_job_registry.remove(job, pipeline=pipe)
@@ -1309,7 +1320,7 @@ class Queue:
             # Use atomic Lua script for unique check and save (without pushing to queue)
             save_unique_job(self.connection, self.key, job, enqueue=False)
         else:
-            pipe = pipeline if pipeline is not None else self.connection.pipeline()
+            pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
 
             if is_deferred:
                 self.deferred_job_registry.remove(job, pipeline=pipe)
@@ -1331,13 +1342,13 @@ class Queue:
         Returns:
             Job: The job instance
         """
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             job.prepare_for_execution('sync', pipeline)
 
         try:
             job = self.run_job(job)
         except:  # noqa
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 exc_string = ''.join(traceback.format_exception(*sys.exc_info()))
                 job._handle_failure(exc_string, pipeline, worker_name='')
@@ -1372,7 +1383,7 @@ class Queue:
         """
         from .registry import DeferredJobRegistry
 
-        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        pipe = pipeline if pipeline is not None else self.connection.pipeline(transaction=True)
         dependents_key = job.dependents_key
 
         while True:
@@ -1382,7 +1393,7 @@ class Queue:
                 if pipeline is None:
                     pipe.watch(dependents_key)
 
-                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # type: ignore[attr-defined]
+                dependent_job_ids = {as_text(_id) for _id in pipe.smembers(dependents_key)}  # type: ignore[union-attr]
 
                 # There's no dependents
                 if not dependent_job_ids:
@@ -1472,7 +1483,7 @@ class Queue:
     # The queue_keys type is Sequence[str] instead of Iterable[str]
     # because we loop over it twice, and we don't want user to pass a generator.
     @classmethod
-    def lpop(cls, queue_keys: Sequence[str], timeout: int | None, connection: Redis | None = None):
+    def lpop(cls, queue_keys: Sequence[str], timeout: int | None, connection: Redis | RedisCluster | None = None):
         """Helper method to abstract away from some Redis API details
         where LPOP accepts only a single key, whereas BLPOP
         accepts multiple.  So if we want the non-blocking LPOP, we need to
@@ -1488,7 +1499,7 @@ class Queue:
         Args:
             queue_keys (Sequence[str]): _description_
             timeout (Optional[int]): _description_
-            connection (Optional[Redis], optional): _description_. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): _description_. Defaults to None.
 
         Raises:
             ValueError: If timeout of 0 was passed
@@ -1518,7 +1529,7 @@ class Queue:
             return None
 
     @classmethod
-    def lmove(cls, connection: Redis, queue_key: str, timeout: int | None):
+    def lmove(cls, connection: Redis | RedisCluster, queue_key: str, timeout: int | None):
         """Similar to lpop, but accepts only a single queue key and immediately pushes
         the result to an intermediate queue.
         """
@@ -1544,7 +1555,7 @@ class Queue:
         cls,
         queues: Iterable[Queue],
         timeout: int | None,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         serializer: Serializer | str | None = None,
         death_penalty_class: type[BaseDeathPenalty] | None = None,
@@ -1562,7 +1573,7 @@ class Queue:
         Args:
             queues (Iterable[Queue]): Iterable of queue objects
             timeout (Optional[int]): Timeout for the LPOP
-            connection (Optional[Redis], optional): Redis Connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): Redis Connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class. Defaults to None.
             serializer (Optional[Union[Serializer, str]], optional): Serializer to use. Defaults to None.
             death_penalty_class (Optional[Type[BaseDeathPenalty]], optional): The death penalty class. Defaults to None.

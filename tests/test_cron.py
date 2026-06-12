@@ -9,10 +9,8 @@ from multiprocessing import Process
 from typing import cast
 from unittest.mock import patch
 
-from redis import Redis
-
 from rq import Queue, utils
-from rq.connections import get_connection_kwargs
+from rq.connections import RedisConnectionBuilder
 from rq.cron import CronJob, CronScheduler, _job_data_registry
 from rq.cron_scheduler_registry import get_keys, get_registry_key
 from rq.exceptions import SchedulerNotFound
@@ -24,9 +22,9 @@ class BreakLoop(Exception):
     pass
 
 
-def run_scheduler(redis_connection_kwargs):
+def run_scheduler(connection_builder: RedisConnectionBuilder):
     """Target function to run the scheduler in a separate process."""
-    scheduler = CronScheduler(connection=Redis(**redis_connection_kwargs))
+    scheduler = CronScheduler(connection=connection_builder.build_connection())
     # Register a job that runs every second to keep the scheduler busy
     scheduler.register(do_nothing, 'default', interval=1)
     scheduler.start()
@@ -783,8 +781,8 @@ class TestCronScheduler(RQTestCase):
 
     def test_sigint_handling(self):
         """Test that sending SIGINT to the process stops the scheduler"""
-        conn_kwargs = get_connection_kwargs(self.connection)
-        scheduler_process = Process(target=run_scheduler, args=(conn_kwargs,))
+        connection_builder = RedisConnectionBuilder.parse_connection(self.connection)
+        scheduler_process = Process(target=run_scheduler, args=(connection_builder,))
         scheduler_process.start()
         assert scheduler_process.pid
 

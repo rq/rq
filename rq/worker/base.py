@@ -19,6 +19,10 @@ from types import FrameType
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from redis import RedisCluster
+
+from ..connections import RQ_KEY_PREFIX
+
 if TYPE_CHECKING:
     try:
         from resource import struct_rusage
@@ -63,6 +67,7 @@ from ..utils import (
     import_job_class,
     import_queue_class,
     now,
+    try_enable_multi_on_pipeline,
     utcformat,
     utcparse,
 )
@@ -114,7 +119,7 @@ class WorkerStatus(str, Enum):
 
 
 class BaseWorker:
-    redis_worker_namespace_prefix = 'rq:worker:'
+    redis_worker_namespace_prefix = RQ_KEY_PREFIX + 'rq:worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = get_default_death_penalty_class()
     queue_class = Queue
@@ -135,7 +140,7 @@ class BaseWorker:
         queues: str | Queue | Sequence[str] | Sequence[Queue],
         name: str | None = None,
         default_result_ttl=DEFAULT_RESULT_TTL,
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         exception_handlers=None,
         maintenance_interval: int = DEFAULT_MAINTENANCE_TASK_INTERVAL,
         default_worker_ttl: int | None = None,  # TODO remove this arg in 3.0
@@ -166,7 +171,10 @@ class BaseWorker:
             connection = get_connection_from_queues(queues)
 
         assert connection
-        connection = self._set_connection(connection)
+        if isinstance(connection, RedisCluster):
+            connection = self._set_cluster_connection(connection)
+        else:
+            connection = self._set_connection(connection)
         self.connection = connection
         self.redis_server_version = None
 
@@ -247,7 +255,7 @@ class BaseWorker:
         elif exception_handlers is not None:
             self.push_exc_handler(exception_handlers)
 
-    def _set_ip_address(self, connection: Redis) -> None:
+    def _set_ip_address(self, connection: Redis | RedisCluster) -> None:
         try:
             connection.client_setname(self.name)
         except redis.exceptions.ResponseError:
@@ -274,7 +282,7 @@ class BaseWorker:
     def find_by_key(
         cls,
         worker_key: str,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         job_class: type[Job] | None = None,
         queue_class: type[Queue] | None = None,
         serializer: Serializer | str | None = None,
@@ -285,13 +293,13 @@ class BaseWorker:
 
         Args:
             worker_key (str): The worker key
-            connection (Optional[Redis], optional): Redis connection. Defaults to None.
+            connection (Optional[Redis | RedisCluster], optional): Redis connection. Defaults to None.
             job_class (Optional[Type[Job]], optional): The job class if custom class is being used. Defaults to None.
             queue_class (Optional[Type[Queue]]): The queue class if a custom class is being used. Defaults to None.
             serializer (Optional[Union[Serializer, str]], optional): The serializer to use. Defaults to None.
 
         Raises:
-            ValueError: If the key doesn't start with `rq:worker:`, the default worker namespace prefix.
+            ValueError: If the key doesn't start with `{RQ_KEY_PREFIX}rq:worker:`, the default worker namespace prefix.
 
         Returns:
             worker (Worker): The Worker instance.
@@ -422,6 +430,13 @@ class BaseWorker:
         if (now() - self.last_cleaned_at) > timedelta(seconds=self.maintenance_interval):
             return True
         return False
+
+    def _set_cluster_connection(self, connection: RedisCluster) -> RedisCluster:
+        for node in connection.get_nodes():
+            redis_connection: Redis | None = node.redis_connection
+            if redis_connection is not None:
+                self._set_connection(redis_connection)
+        return connection
 
     def _set_connection(self, connection: Redis) -> Redis:
         """Configures the Redis connection's socket timeout.
@@ -704,7 +719,7 @@ class BaseWorker:
         `save_exc_to_job` should only be used for testing purposes
         """
         self.log.debug('Worker %s: handling failed execution of job %s', self.name, job.id)
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             if started_job_registry is None:
                 started_job_registry = StartedJobRegistry(
                     job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
@@ -900,7 +915,7 @@ class BaseWorker:
         if self.connection.exists(key) and not self.connection.hexists(key, 'death'):
             msg = 'There exists an active worker named {0!r} already'
             raise ValueError(msg.format(self.name))
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             pipeline.delete(key)
 
             self.birth_date = self.last_heartbeat = now()
@@ -912,7 +927,7 @@ class BaseWorker:
     def register_death(self):
         """Registers its own death."""
         self.log.debug('Worker %s: registering death', self.name)
-        with self.connection.pipeline() as p:
+        with self.connection.pipeline(transaction=True) as p:
             # We cannot use self.state = 'dead' here, because that would
             # rollback the pipeline
             worker_registration.unregister(self, p)
@@ -979,7 +994,7 @@ class BaseWorker:
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname(f'rq:worker:{self.name}: {message}')
+        setprocname(f'{RQ_KEY_PREFIX}rq:worker:{self.name}: {message}')
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""
@@ -1165,7 +1180,7 @@ class BaseWorker:
             pipeline (Optional[Redis]): A Redis pipeline
         """
         timeout = timeout or self.worker_ttl + 60
-        connection: Redis | Pipeline = pipeline if pipeline is not None else self.connection
+        connection: Redis | RedisCluster | Pipeline = pipeline if pipeline is not None else self.connection
         self.last_heartbeat = now()
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         connection.expire(self.key, timeout)
@@ -1177,7 +1192,7 @@ class BaseWorker:
 
     def maintain_heartbeats(self, job: Job):
         """Updates worker, execution and job's last heartbeat fields."""
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
             ttl = int(self.get_heartbeat_ttl(job))
 
@@ -1324,7 +1339,7 @@ class BaseWorker:
         job execution.
         """
         self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
             self.set_current_job_working_time(0, pipeline=pipeline)
 
@@ -1374,7 +1389,7 @@ class BaseWorker:
             # If max retries exceeded, treat as a terminal failed job but persist
             # a distinct result type so callers can differentiate it from errors.
             self.log.warning('Worker %s: job %s has exceeded maximum retry attempts (%d)', self.name, job.id, retry.max)
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 job.set_status(JobStatus.FAILED, pipeline=pipeline)
                 self.cleanup_execution(job, pipeline=pipeline)
                 job.failed_job_registry.add(job, ttl=job.failure_ttl, exc_string='', pipeline=pipeline)
@@ -1405,7 +1420,7 @@ class BaseWorker:
                     )
             return
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
             job._handle_retry_result(
@@ -1442,7 +1457,7 @@ class BaseWorker:
         """
         self.log.debug('Worker %s: handling successful execution of job %s', self.name, job.id)
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             while True:
                 try:
                     # if dependencies are inserted after enqueue_dependents
@@ -1452,11 +1467,10 @@ class BaseWorker:
                     self.log.debug('Worker %s: enqueueing dependents of job %s', self.name, job.id)
                     queue.enqueue_dependents(job, pipeline=pipeline)
 
-                    if not pipeline.explicit_transaction:
+                    if try_enable_multi_on_pipeline(pipeline):
                         # enqueue_dependents didn't call multi after all!
-                        # We have to do it ourselves to make sure everything runs in a transaction
+                        # We had to do it ourselves to make sure everything runs in a transaction
                         self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
-                        pipeline.multi()
 
                     self.increment_successful_job_count(pipeline=pipeline)
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore

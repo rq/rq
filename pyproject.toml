@@ -55,6 +55,7 @@ dev = [
   "psutil>=7",
   "pytest>=8.3.5",
   "pytest-cov>=5",
+  "pytest-rerunfailures>=16.3",
   "ruff>=0.9.9",
   "tox>=4.24.1",
   "types-greenlet>=3.1.0.20241221",
@@ -87,6 +88,7 @@ dependencies = [
   "psutil",
   "pytest",
   "pytest-cov",
+  "pytest-rerunfailures",
   "ruff",
   "tox",
   "types-greenlet",
@@ -122,7 +124,7 @@ lint.isort.section-order = [
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
-markers = [ "slow", "ssl_test" ]
+markers = [ "slow", "skip_with_ssl_enabled", "cluster_test" ]
 
 [tool.mypy]
 allow_redefinition = true

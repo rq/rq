@@ -3,18 +3,20 @@ import os
 import signal
 from typing import TYPE_CHECKING, Any
 
+from .connections import RQ_KEY_PREFIX
+
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
 
     from .worker import BaseWorker
 
 from rq.exceptions import InvalidJobOperation
 from rq.job import Job
 
-PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
+PUBSUB_CHANNEL_TEMPLATE = RQ_KEY_PREFIX + 'rq:pubsub:%s'
 
 
-def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
+def send_command(connection: 'Redis | RedisCluster', worker_name: str, command: str, **kwargs):
     """
     Sends a command to a worker.
     A command is just a string, available commands are:
@@ -26,7 +28,7 @@ def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
     Workers listen to the PubSub, and `handle` the specific command.
 
     Args:
-        connection (Redis): A Redis Connection
+        connection (Redis | RedisCluster): A Redis Connection
         worker_name (str): The Job ID
     """
     payload = {'command': command}
@@ -45,34 +47,34 @@ def parse_payload(payload: dict[Any, Any]) -> dict[Any, Any]:
     return json.loads(payload['data'].decode())
 
 
-def send_shutdown_command(connection: 'Redis', worker_name: str):
+def send_shutdown_command(connection: 'Redis | RedisCluster', worker_name: str):
     """
     Sends a command to shutdown a worker.
 
     Args:
-        connection (Redis): A Redis Connection
+        connection (Redis | RedisCluster): A Redis Connection
         worker_name (str): The Job ID
     """
     send_command(connection, worker_name, 'shutdown')
 
 
-def send_kill_horse_command(connection: 'Redis', worker_name: str):
+def send_kill_horse_command(connection: 'Redis | RedisCluster', worker_name: str):
     """
     Tell worker to kill it's horse
 
     Args:
-        connection (Redis): A Redis Connection
+        connection (Redis | RedisCluster): A Redis Connection
         worker_name (str): The Job ID
     """
     send_command(connection, worker_name, 'kill-horse')
 
 
-def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
+def send_stop_job_command(connection: 'Redis | RedisCluster', job_id: str, serializer=None):
     """
     Instruct a worker to stop a job
 
     Args:
-        connection (Redis): A Redis Connection
+        connection (Redis | RedisCluster): A Redis Connection
         job_id (str): The Job ID
         serializer (): The serializer
     """

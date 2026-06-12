@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pickle import dumps, loads
 from uuid import uuid4
 
+from rq.connections import RQ_KEY_PREFIX
 from rq.defaults import CALLBACK_TIMEOUT
 from rq.exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from rq.executions import Execution
@@ -168,9 +169,10 @@ class TestJob(RQTestCase):
         """Fetching jobs."""
         # Prepare test
         self.connection.hset(
-            'rq:job:some_id', 'data', "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n."
+            RQ_KEY_PREFIX + 'rq:job:some_id', 'data',
+                "(S'tests.fixtures.some_calculation'\nN(I3\nI4\nt(dp1\nS'z'\nI2\nstp2\n."
         )
-        self.connection.hset('rq:job:some_id', 'created_at', '2012-02-07T22:13:24.123456Z')
+        self.connection.hset(RQ_KEY_PREFIX + 'rq:job:some_id', 'created_at', '2012-02-07T22:13:24.123456Z')
 
         # Fetch returns a job
         job = Job.fetch('some_id', connection=self.connection)
@@ -179,7 +181,9 @@ class TestJob(RQTestCase):
         self.assertIsNone(job.instance)
         self.assertEqual(job.args, (3, 4))
         self.assertEqual(job.kwargs, dict(z=2))
-        self.assertEqual(job.created_at, datetime(2012, 2, 7, 22, 13, 24, 123456, tzinfo=timezone.utc))
+        self.assertEqual(job.created_at,
+            datetime(2012, 2, 7, 22, 13, 24, 123456,
+            tzinfo=timezone.utc))
 
         # Job.fetch also works with execution IDs
         queue = Queue(connection=self.connection)

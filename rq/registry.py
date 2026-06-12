@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from rq.serializers import resolve_serializer
 
-from .connections import get_connection_kwargs
+from .connections import RQ_KEY_PREFIX, get_connection_kwargs
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
@@ -19,7 +19,7 @@ from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
 if TYPE_CHECKING:
-    from redis import Redis
+    from redis import Redis, RedisCluster
     from redis.client import Pipeline
 
     from rq.executions import Execution
@@ -43,7 +43,7 @@ class BaseRegistry:
     def __init__(
         self,
         name: str = 'default',
-        connection: Redis | None = None,
+        connection: Redis | RedisCluster | None = None,
         job_class: type[Job] | None = None,
         queue: Queue | None = None,
         serializer: Serializer | str | None = None,
@@ -58,7 +58,7 @@ class BaseRegistry:
             self.connection = connection  # type: ignore[assignment]
             self.serializer = resolve_serializer(serializer)
 
-        self.key = self.key_template.format(self.name)
+        self.key = RQ_KEY_PREFIX + self.key_template.format(self.name)
         self.job_class = job_class if job_class else Job
         self.death_penalty_class = backend_class(self, 'death_penalty_class', override=death_penalty_class)  # type: ignore[assignment]
 
@@ -212,7 +212,7 @@ class BaseRegistry:
         if not result:
             raise InvalidJobOperation
 
-        with self.connection.pipeline() as pipeline:
+        with self.connection.pipeline(transaction=True) as pipeline:
             queue = Queue(job.origin, connection=self.connection, job_class=self.job_class, serializer=serializer)
             job.started_at = None
             job.ended_at = None
@@ -273,7 +273,7 @@ class StartedJobRegistry(BaseRegistry):
         if job_ids:
             queue = self.get_queue()
 
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 for job_id in job_ids:
                     try:
                         job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
@@ -470,7 +470,7 @@ class FailedJobRegistry(BaseRegistry):
         if pipeline:
             p = pipeline
         else:
-            p = self.connection.pipeline()
+            p = self.connection.pipeline(transaction=True)
 
         job._exc_info = exc_string
         job.save(pipeline=p, include_meta=False, include_result=False)

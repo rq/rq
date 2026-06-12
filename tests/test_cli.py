@@ -7,11 +7,12 @@ from uuid import uuid4
 
 import pytest
 from click.testing import CliRunner
-from redis import Redis
+from redis import Redis, RedisCluster
 
 from rq import Queue
 from rq.cli import main
 from rq.cli.helpers import CliConfig, parse_function_arg, parse_schedule, read_config_file
+from rq.connections import RQ_KEY_PREFIX, get_connection_kwargs
 from rq.job import Job, JobStatus
 from rq.registry import FailedJobRegistry, ScheduledJobRegistry
 from rq.scheduler import RQScheduler
@@ -23,14 +24,6 @@ from tests.fixtures import div_by_zero, say_hello
 
 
 class CLITestCase(RQTestCase):
-    def setUp(self):
-        super().setUp()
-        db_num = self.connection.connection_pool.connection_kwargs['db']
-        self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
-        self.connection: Redis = Redis.from_url(self.redis_url)
-
-    def tearDown(self):
-        self.connection.close()
 
     def assert_normal_execution(self, result):
         if result.exit_code == 0:
@@ -73,51 +66,55 @@ class TestRQCli(CLITestCase):
 
     def test_config_file_logging(self):
         runner = CliRunner()
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '-c', 'tests.config_files.dummy_logging'])
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b',
+            '-c', 'tests.config_files.dummy_logging'] + self.runner_args)
         self.assert_normal_execution(result)
 
     def test_config_file_option(self):
         """"""
         cli_config = CliConfig(config='tests.config_files.dummy')
+        connection_kwargs = get_connection_kwargs(cli_config.connection)
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            connection_kwargs['host'],
             'testhost.example.com',
         )
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '--config', str(cli_config.config)])
+        result = runner.invoke(main, ['info', '--config', str(cli_config.config)] + self.runner_args)
         self.assertEqual(result.exit_code, 1)
 
     def test_config_file_default_options(self):
         """"""
         cli_config = CliConfig(config='tests.config_files.dummy')
-
+        connection_kwargs = get_connection_kwargs(cli_config.connection)
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            get_connection_kwargs(cli_config.connection)['host'],
             'testhost.example.com',
         )
-        self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['port'], 6379)
-        self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['db'], 0)
-        self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['password'], None)
+        self.assertEqual(connection_kwargs['port'], 6379)
+        self.assertEqual(connection_kwargs['db'], 0)
+        self.assertEqual(connection_kwargs['password'], None)
 
     def test_config_file_default_options_override(self):
         """"""
         cli_config = CliConfig(config='tests.config_files.dummy_override')
 
+        connection_kwargs = get_connection_kwargs(cli_config.connection)
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            connection_kwargs['host'],
             'testhost.example.com',
         )
-        self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['port'], 6378)
-        self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['db'], 2)
-        self.assertEqual(cli_config.connection.connection_pool.connection_kwargs['password'], '123')
+        self.assertEqual(connection_kwargs['port'], 6378)
+        self.assertEqual(connection_kwargs['db'], 2)
+        self.assertEqual(connection_kwargs['password'], '123')
 
     def test_config_env_vars(self):
         os.environ['REDIS_HOST'] = 'testhost.example.com'
 
         cli_config = CliConfig()
 
+        connection_kwargs = get_connection_kwargs(cli_config.connection)
         self.assertEqual(
-            cli_config.connection.connection_pool.connection_kwargs['host'],
+            connection_kwargs['host'],
             'testhost.example.com',
         )
 
@@ -158,7 +155,10 @@ class TestRQCli(CLITestCase):
         self.assertIn(job2, registry)
         self.assertIn(job3, registry)
 
-        result = runner.invoke(main, ['requeue', '-u', self.redis_url, '--queue', 'requeue', job.id])
+        result = runner.invoke(main, ['requeue', '-u', self.redis_url, '--queue',
+            'requeue', job.id] + self.runner_args)
+        self.assert_normal_execution(result)
+        self.assertNotIn(job, registry)
         self.assert_normal_execution(result)
 
         # Only the first specified job is requeued
@@ -166,7 +166,9 @@ class TestRQCli(CLITestCase):
         self.assertIn(job2, registry)
         self.assertIn(job3, registry)
 
-        result = runner.invoke(main, ['requeue', '-u', self.redis_url, '--queue', 'requeue', '--all'])
+        result = runner.invoke(
+            main, ['requeue', '-u', self.redis_url, '--queue', 'requeue', '--all'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         # With --all flag, all failed jobs are requeued
         self.assertNotIn(job2, registry)
@@ -192,7 +194,8 @@ class TestRQCli(CLITestCase):
         self.assertIn(job3, registry)
 
         result = runner.invoke(
-            main, ['requeue', '-u', self.redis_url, '--queue', 'requeue', '-S', 'rq.serializers.JSONSerializer', job.id]
+            main, ['requeue', '-u', self.redis_url, '--queue',
+                'requeue', '-S', 'rq.serializers.JSONSerializer', job.id] + self.runner_args
         )
         self.assert_normal_execution(result)
 
@@ -203,7 +206,8 @@ class TestRQCli(CLITestCase):
 
         result = runner.invoke(
             main,
-            ['requeue', '-u', self.redis_url, '--queue', 'requeue', '-S', 'rq.serializers.JSONSerializer', '--all'],
+            ['requeue', '-u', self.redis_url, '--queue',
+                'requeue', '-S', 'rq.serializers.JSONSerializer', '--all'] + self.runner_args,
         )
         self.assert_normal_execution(result)
         # With --all flag, all failed jobs are requeued
@@ -213,21 +217,21 @@ class TestRQCli(CLITestCase):
     def test_info(self):
         """rq info -u <url>"""
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '-u', self.redis_url])
+        result = runner.invoke(main, ['info', '-u', self.redis_url] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertIn('0 queues, 0 jobs total', result.output)
 
         queue = Queue(connection=self.connection)
         queue.enqueue(say_hello)
 
-        result = runner.invoke(main, ['info', '-u', self.redis_url])
+        result = runner.invoke(main, ['info', '-u', self.redis_url] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertIn('1 queues, 1 jobs total', result.output)
 
     def test_info_only_queues(self):
         """rq info -u <url> --only-queues (-Q)"""
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-queues'])
+        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-queues'] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertIn('0 queues, 0 jobs total', result.output)
 
@@ -241,24 +245,26 @@ class TestRQCli(CLITestCase):
     def test_info_only_workers(self):
         """rq info -u <url> --only-workers (-W)"""
         runner = CliRunner()
-        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
+        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 0 queue', result.output)
 
-        result = runner.invoke(main, ['info', '--by-queue', '-u', self.redis_url, '--only-workers'])
+        result = runner.invoke(
+            main, ['info', '--by-queue', '-u', self.redis_url, '--only-workers'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 0 queue', result.output)
 
         worker = Worker(['default'], connection=self.connection)
         worker.register_birth()
-        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
+        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertIn('1 workers, 0 queues', result.output)
         worker.register_death()
 
         queue = Queue(connection=self.connection)
         queue.enqueue(say_hello)
-        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'])
+        result = runner.invoke(main, ['info', '-u', self.redis_url, '--only-workers'] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertIn('0 workers, 1 queues', result.output)
 
@@ -275,12 +281,16 @@ class TestRQCli(CLITestCase):
         worker_2.register_birth()
         worker_2.set_state(WorkerStatus.BUSY)
 
-        result = runner.invoke(main, ['info', 'foo', 'bar', '-u', self.redis_url, '--only-workers'])
+        result = runner.invoke(
+            main, ['info', 'foo', 'bar', '-u', self.redis_url, '--only-workers'] + self.runner_args
+        )
 
         self.assert_normal_execution(result)
         self.assertIn('2 workers, 2 queues', result.output)
 
-        result = runner.invoke(main, ['info', 'foo', 'bar', '--by-queue', '-u', self.redis_url, '--only-workers'])
+        result = runner.invoke(
+            main, ['info', 'foo', 'bar', '--by-queue', '-u', self.redis_url, '--only-workers'] + self.runner_args
+        )
 
         self.assert_normal_execution(result)
         # Ensure both queues' workers are shown
@@ -291,7 +301,7 @@ class TestRQCli(CLITestCase):
     def test_worker(self):
         """rq worker -u <url> -b"""
         runner = CliRunner()
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'] + self.runner_args)
         self.assert_normal_execution(result)
 
     def test_worker_and_worker_pool_serializer_json_alias(self):
@@ -300,7 +310,9 @@ class TestRQCli(CLITestCase):
 
         queue = Queue('worker-json', connection=self.connection, serializer=JSONSerializer)
         job = queue.enqueue(say_hello, 'Hello')
-        result = runner.invoke(main, ['worker', 'worker-json', '-u', self.redis_url, '-b', '--serializer', 'json'])
+        result = runner.invoke(main,
+            ['worker', 'worker-json', '-u', self.redis_url, '-b', '--serializer', 'json'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
 
@@ -308,7 +320,8 @@ class TestRQCli(CLITestCase):
         job = queue.enqueue(say_hello, 'Hello')
         result = runner.invoke(
             main,
-            ['worker-pool', 'worker-pool-json', '-u', self.redis_url, '-b', '--serializer', 'json'],
+            ['worker-pool', 'worker-pool-json', '-u', self.redis_url,
+                '-b', '--serializer', 'json'] + self.runner_args,
         )
         self.assert_normal_execution(result)
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
@@ -317,7 +330,9 @@ class TestRQCli(CLITestCase):
         """rq worker -u <url> /tmp/.."""
         pid = self.tmpdir.join('rq.pid')
         runner = CliRunner()
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--pid', str(pid)])
+        result = runner.invoke(
+            main, ['worker', '-u', self.redis_url, '-b', '--pid', str(pid)] + self.runner_args
+        )
         self.assertGreater(len(pid.read()), 0)
         self.assert_normal_execution(result)
 
@@ -328,18 +343,18 @@ class TestRQCli(CLITestCase):
         registry = ScheduledJobRegistry(queue=queue)
 
         runner = CliRunner()
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertEqual(len(registry), 1)  # 1 job still scheduled
 
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--with-scheduler'])
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--with-scheduler'] + self.runner_args)
         self.assert_normal_execution(result)
         self.assertEqual(len(registry), 0)  # Job has been enqueued
 
     def test_worker_logging_options(self):
         """--quiet and --verbose logging options are supported"""
         runner = CliRunner()
-        args = ['worker', '-u', self.redis_url, '-b']
+        args = ['worker', '-u', self.redis_url, '-b'] + self.runner_args
         result = runner.invoke(main, args + ['--verbose'])
         self.assert_normal_execution(result)
         result = runner.invoke(main, args + ['--quiet'])
@@ -352,15 +367,15 @@ class TestRQCli(CLITestCase):
     def test_worker_dequeue_strategy(self):
         """--quiet and --verbose logging options are supported"""
         runner = CliRunner()
-        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'random']
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'random'] + self.runner_args
         result = runner.invoke(main, args)
         self.assert_normal_execution(result)
 
-        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'round_robin']
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'round_robin'] + self.runner_args
         result = runner.invoke(main, args)
         self.assert_normal_execution(result)
 
-        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'wrong']
+        args = ['worker', '-u', self.redis_url, '-b', '--dequeue-strategy', 'wrong'] + self.runner_args
         result = runner.invoke(main, args)
         self.assertEqual(result.exit_code, 1)
 
@@ -372,19 +387,24 @@ class TestRQCli(CLITestCase):
 
         # If exception handler is not given, no custom exception handler is run
         job = q.enqueue(div_by_zero)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        runner.invoke(main, ['worker', '-u', self.redis_url, '-b'] + self.runner_args)
         registry = FailedJobRegistry(queue=q)
         self.assertIn(job, registry)
 
         # If disable-default-exception-handler is given, job is not moved to FailedJobRegistry
         job = q.enqueue(div_by_zero)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--disable-default-exception-handler'])
+        runner.invoke(
+            main, ['worker', '-u', self.redis_url, '-b', '--disable-default-exception-handler'] + self.runner_args
+        )
         registry = FailedJobRegistry(queue=q)
         self.assertNotIn(job, registry)
 
         # Both default and custom exception handler is run
         job = q.enqueue(div_by_zero)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '-b', '--exception-handler', 'tests.fixtures.add_meta'])
+        runner.invoke(
+            main, ['worker', '-u', self.redis_url, '-b',
+                '--exception-handler', 'tests.fixtures.add_meta'] + self.runner_args
+        )
         registry = FailedJobRegistry(queue=q)
         self.assertIn(job, registry)
         job.refresh()
@@ -402,7 +422,7 @@ class TestRQCli(CLITestCase):
                 '--exception-handler',
                 'tests.fixtures.add_meta',
                 '--disable-default-exception-handler',
-            ],
+            ] + self.runner_args,
         )
         registry = FailedJobRegistry(queue=q)
         self.assertNotIn(job, registry)
@@ -415,26 +435,26 @@ class TestRQCli(CLITestCase):
         rq resume -u <url>
         """
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url] + self.runner_args)
         self.assert_normal_execution(result)
 
-        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
+        result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'] + self.runner_args)
         self.assertEqual(result.exit_code, 1)
         self.assertEqual(result.output.strip(), 'RQ is currently suspended, to resume job execution run "rq resume"')
 
-        result = runner.invoke(main, ['resume', '-u', self.redis_url])
+        result = runner.invoke(main, ['resume', '-u', self.redis_url] + self.runner_args)
         self.assert_normal_execution(result)
 
     def test_suspend_with_ttl(self):
         """rq suspend -u <url> --duration=2"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '1'])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '1'] + self.runner_args)
         self.assert_normal_execution(result)
 
     def test_suspend_with_invalid_ttl(self):
         """rq suspend -u <url> --duration=0"""
         runner = CliRunner()
-        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '0'])
+        result = runner.invoke(main, ['suspend', '-u', self.redis_url, '--duration', '0'] + self.runner_args)
 
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Duration must be an integer greater than 1', result.output)
@@ -445,7 +465,10 @@ class TestRQCli(CLITestCase):
         q = Queue('default', connection=connection, serializer=JSONSerializer)
         runner = CliRunner()
         job = q.enqueue(say_hello)
-        runner.invoke(main, ['worker', '-u', self.redis_url, '--serializer rq.serializer.JSONSerializer'])
+        runner.invoke(
+            main,
+            ['worker', '-u', self.redis_url, '--serializer rq.serializer.JSONSerializer'] + self.runner_args
+        )
         self.assertIn(job.id, q.job_ids)
 
     def test_cli_enqueue(self):
@@ -454,7 +477,9 @@ class TestRQCli(CLITestCase):
         self.assertTrue(queue.is_empty())
 
         runner = CliRunner()
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello'])
+        result = runner.invoke(
+            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello'] + self.runner_args
+        )
         self.assert_normal_execution(result)
 
         prefix = "Enqueued tests.fixtures.say_hello() with job-id '"
@@ -464,7 +489,7 @@ class TestRQCli(CLITestCase):
         self.assertTrue(result.output.endswith(suffix))
 
         job_id = result.output[len(prefix) : -len(suffix)]
-        queue_key = 'rq:queue:default'
+        queue_key = RQ_KEY_PREFIX + 'rq:queue:default'
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
@@ -479,7 +504,9 @@ class TestRQCli(CLITestCase):
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '-S', 'rq.serializers.JSONSerializer', 'tests.fixtures.say_hello']
+            main,
+            ['enqueue', '-u', self.redis_url, '-S', 'rq.serializers.JSONSerializer',
+                'tests.fixtures.say_hello'] + self.runner_args
         )
         self.assert_normal_execution(result)
 
@@ -490,7 +517,7 @@ class TestRQCli(CLITestCase):
         self.assertTrue(result.output.endswith(suffix))
 
         job_id = result.output[len(prefix) : -len(suffix)]
-        queue_key = 'rq:queue:default'
+        queue_key = RQ_KEY_PREFIX + 'rq:queue:default'
         self.assertEqual(self.connection.llen(queue_key), 1)
         self.assertEqual(self.connection.lrange(queue_key, 0, -1)[0].decode('ascii'), job_id)
 
@@ -520,11 +547,11 @@ class TestRQCli(CLITestCase):
                 'json:=[3.0, true]',
                 'nojson=abc',
                 'file=@tests/test.json',
-            ],
+            ] + self.runner_args,
         )
         self.assert_normal_execution(result)
 
-        job_id = self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii')
+        job_id = self.connection.lrange(RQ_KEY_PREFIX + 'rq:queue:default', 0, -1)[0].decode('ascii')
 
         worker = Worker(queue, connection=self.connection)
         worker.work(True)
@@ -546,7 +573,8 @@ class TestRQCli(CLITestCase):
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello', '--schedule-in', '10s']
+            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                '--schedule-in', '10s'] + self.runner_args
         )
         self.assert_normal_execution(result)
 
@@ -583,7 +611,8 @@ class TestRQCli(CLITestCase):
 
         runner = CliRunner()
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello', '--schedule-at', '2021-01-01T00:00:00']
+            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                '--schedule-at', '2021-01-01T00:00:00'] + self.runner_args
         )
         self.assert_normal_execution(result)
 
@@ -603,7 +632,8 @@ class TestRQCli(CLITestCase):
         self.assertEqual(len(registry), 0)
 
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello', '--schedule-at', '2100-01-01T00:00:00']
+            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.say_hello',
+                '--schedule-at', '2100-01-01T00:00:00'] + self.runner_args
         )
         self.assert_normal_execution(result)
 
@@ -639,12 +669,13 @@ class TestRQCli(CLITestCase):
                 '20',
                 '--retry-interval',
                 '40',
-            ],
+            ] + self.runner_args,
         )
         self.assert_normal_execution(result)
 
         job = Job.fetch(
-            self.connection.lrange('rq:queue:default', 0, -1)[0].decode('ascii'), connection=self.connection
+            self.connection.lrange(
+                RQ_KEY_PREFIX + 'rq:queue:default', 0, -1)[0].decode('ascii'), connection=self.connection
         )
 
         self.assertEqual(job.retries_left, 3)
@@ -664,17 +695,23 @@ class TestRQCli(CLITestCase):
         """
         runner = CliRunner()
 
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', ':invalid_json'])
+        result = runner.invoke(
+            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', ':invalid_json'] + self.runner_args
+        )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('Unable to parse 1. non keyword argument as JSON.', result.output)
 
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '%invalid_eval_statement']
+            main,
+            ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '%invalid_eval_statement'] + self.runner_args
         )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('Unable to eval 1. non keyword argument as Python object.', result.output)
 
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'key=value', 'key=value'])
+        result = runner.invoke(
+            main,
+            ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', 'key=value', 'key=value'] + self.runner_args
+        )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("You can't specify multiple values for the same keyword.", result.output)
 
@@ -689,12 +726,14 @@ class TestRQCli(CLITestCase):
                 '1s',
                 '--schedule-at',
                 '2000-01-01T00:00:00',
-            ],
+            ] + self.runner_args,
         )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("You can't specify both --schedule-in and --schedule-at", result.output)
 
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '@not_existing_file'])
+        result = runner.invoke(main,
+            ['enqueue', '-u', self.redis_url, 'tests.fixtures.echo', '@not_existing_file'] + self.runner_args
+        )
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn('Not found', result.output)
 
@@ -725,14 +764,17 @@ class TestRQCli(CLITestCase):
         runner = CliRunner()
 
         id = str(uuid4())
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc'])
+        result = runner.invoke(main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), (['abc'], {}))
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc=def']
+            main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'abc=def'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -740,7 +782,9 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':{"json": "abc"}']
+            main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id,
+                'tests.fixtures.echo', ':{"json": "abc"}'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -748,33 +792,42 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:={"json": "abc"}']
+            main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id,
+                'tests.fixtures.echo', 'key:={"json": "abc"}'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([], {'key': {'json': 'abc'}}))
 
         id = str(uuid4())
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%1, 2'])
+        result = runner.invoke(main, ['enqueue', '-u', self.redis_url,
+            '--job-id', id, 'tests.fixtures.echo', '%1, 2'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([(1, 2)], {}))
 
         id = str(uuid4())
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%None'])
+        result = runner.invoke(main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%None'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([None], {}))
 
         id = str(uuid4())
-        result = runner.invoke(main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%True'])
+        result = runner.invoke(main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '%True'] + self.runner_args
+        )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
         self.assertEqual((job.args, job.kwargs), ([True], {}))
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%=(1, 2)']
+            main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%=(1, 2)'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -782,7 +835,9 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key%={"foo": True}']
+            main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id,
+                'tests.fixtures.echo', 'key%={"foo": True}'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -790,7 +845,9 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', '@tests/test.json']
+            main,
+            ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo',
+                '@tests/test.json'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -798,7 +855,8 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key=@tests/test.json']
+            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo',
+                'key=@tests/test.json'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -806,7 +864,8 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', ':@tests/test.json']
+            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo',
+                ':@tests/test.json'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -814,7 +873,8 @@ class TestRQCli(CLITestCase):
 
         id = str(uuid4())
         result = runner.invoke(
-            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo', 'key:=@tests/test.json']
+            main, ['enqueue', '-u', self.redis_url, '--job-id', id, 'tests.fixtures.echo',
+                'key:=@tests/test.json'] + self.runner_args
         )
         self.assert_normal_execution(result)
         job = Job.fetch(id, connection=self.connection)
@@ -825,7 +885,7 @@ class WorkerPoolCLITestCase(CLITestCase):
     def test_worker_pool_burst_and_num_workers(self):
         """rq worker-pool -u <url> -b -n 3"""
         runner = CliRunner()
-        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '-n', '3'])
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '-n', '3'] + self.runner_args)
         self.assert_normal_execution(result)
 
     def test_serializer_and_queue_argument(self):
@@ -837,7 +897,8 @@ class WorkerPoolCLITestCase(CLITestCase):
         runner = CliRunner()
         runner.invoke(
             main,
-            ['worker-pool', 'foo', 'bar', '-u', self.redis_url, '-b', '--serializer', 'rq.serializers.JSONSerializer'],
+            ['worker-pool', 'foo', 'bar', '-u', self.redis_url, '-b',
+                '--serializer', 'rq.serializers.JSONSerializer'] + self.runner_args,
         )
         self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
         self.assertEqual(job_2.get_status(refresh=True), JobStatus.FINISHED)
@@ -845,35 +906,41 @@ class WorkerPoolCLITestCase(CLITestCase):
     def test_worker_class_argument(self):
         """rq worker-pool -u <url> -b --worker-class rq.Worker"""
         runner = CliRunner()
-        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--worker-class', 'rq.Worker'])
+        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url,
+            '-b', '--worker-class', 'rq.Worker'] + self.runner_args)
         self.assert_normal_execution(result)
         result = runner.invoke(
-            main, ['worker-pool', '-u', self.redis_url, '-b', '--worker-class', 'rq.worker.SimpleWorker']
+            main, ['worker-pool', '-u', self.redis_url, '-b',
+                '--worker-class', 'rq.worker.SimpleWorker'] + self.runner_args
         )
         self.assert_normal_execution(result)
 
         # This one fails because the worker class doesn't exist
         result = runner.invoke(
-            main, ['worker-pool', '-u', self.redis_url, '-b', '--worker-class', 'rq.worker.NonExistantWorker']
+            main, ['worker-pool', '-u', self.redis_url, '-b',
+                '--worker-class', 'rq.worker.NonExistantWorker'] + self.runner_args
         )
         self.assertNotEqual(result.exit_code, 0)
 
     def test_job_class_argument(self):
         """rq worker-pool -u <url> -b --job-class rq.job.Job"""
         runner = CliRunner()
-        result = runner.invoke(main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.Job'])
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.Job'] + self.runner_args
+        )
         self.assert_normal_execution(result)
 
         # This one fails because Job class doesn't exist
         result = runner.invoke(
-            main, ['worker-pool', '-u', self.redis_url, '-b', '--job-class', 'rq.job.NonExistantJob']
+            main, ['worker-pool', '-u', self.redis_url, '-b',
+                '--job-class', 'rq.job.NonExistantJob'] + self.runner_args
         )
         self.assertNotEqual(result.exit_code, 0)
 
     def test_worker_pool_logging_options(self):
         """--quiet and --verbose logging options are supported"""
         runner = CliRunner()
-        args = ['worker-pool', '-u', self.redis_url, '-b']
+        args = ['worker-pool', '-u', self.redis_url, '-b'] + self.runner_args
         result = runner.invoke(main, args + ['--verbose'])
         self.assert_normal_execution(result)
         result = runner.invoke(main, args + ['--quiet'])
@@ -929,7 +996,8 @@ class CronCLITestCase(CLITestCase):
             mock_cron.start.side_effect = lambda: None
 
             result = runner.invoke(
-                main, ['cron', '--logging-level', 'DEBUG', self.cron_config_path, '-u', self.redis_url]
+                main, ['cron', '--logging-level', 'DEBUG', self.cron_config_path,
+                    '-u', self.redis_url] + self.runner_args
             )
 
             self.assert_normal_execution(result)
@@ -950,25 +1018,50 @@ class CronCLITestCase(CLITestCase):
         runner = CliRunner()
         mock_cron = MagicMock()
 
-        # Use a distinctive non-default URL with different host, port, and DB
-        test_url = 'redis://test-host:7777/5'
+        # Use a distinctive non-default URL with different host, port and db (on non-clusters)
+        if not self.connected_to_cluster:
+            test_host = 'test-host'
+            test_port = 7777
+            test_db = 5
+            test_url = f'redis://{test_host}:{test_port}/{test_db}'
+        else:
+            # `RedisCluster` objects can only be created if the cluster is reachable, so
+            # any URL won't work without further mocking. however, these URLs are already
+            # not default and will change with the test setup. in addition, we can simply use
+            # a random cluster node to spice things up a little :)
+            random_node = self.connection.get_random_node()
+            test_host = random_node.host
+            test_port = random_node.port
+            test_db = None
+            url_prefix = 'rediss://' if self.uses_ssl else 'redis://'
+            args = '?ssl_cert_reqs=none' if self.uses_ssl else ''
+            test_url = f'{url_prefix}{test_host}:{test_port}{args}'
 
         with patch('rq.cli.cli_cron.CronScheduler', return_value=mock_cron) as mock_cron_class:
             mock_cron.start.side_effect = lambda: None
 
-            result = runner.invoke(main, ['cron', self.cron_config_path, '-u', test_url])
+            result = runner.invoke(main, ['cron', self.cron_config_path, '-u', test_url] + self.runner_args)
 
             self.assert_normal_execution(result)
 
             # Verify that Cron was called with a connection from the provided URL
             mock_cron_class.assert_called_once()
-            connection = mock_cron_class.call_args[1]['connection']
+            connection: Redis | RedisCluster = mock_cron_class.call_args[1]['connection']
 
             # Verify all connection parameters match our custom URL
-            connection_kwargs = connection.connection_pool.connection_kwargs
-            self.assertEqual(connection_kwargs['host'], 'test-host')
-            self.assertEqual(connection_kwargs['port'], 7777)
-            self.assertEqual(connection_kwargs['db'], 5)
+            if not self.connected_to_cluster:
+                connection_kwargs = get_connection_kwargs(connection)
+            else:
+                # concrete connection arguments for cluster are per node, not per cluster
+                # however, we should be able to get the same node as above again here
+                # to compare its kwargs
+                connection_kwargs = get_connection_kwargs(
+                    connection.get_node(test_host, test_port).redis_connection
+                )
+            self.assertEqual(connection_kwargs['host'], test_host)
+            self.assertEqual(connection_kwargs['port'], test_port)
+            if test_db is not None:
+                self.assertEqual(connection_kwargs['db'], test_db)
 
             # Verify config loading and start were called
             mock_cron.load_config_from_file.assert_called_once_with(self.cron_config_path)

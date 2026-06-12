@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from rq import Queue, Retry
+from rq.connections import RQ_KEY_PREFIX
 from rq.exceptions import DuplicateJobError
 from rq.job import Job, JobStatus
 from rq.registry import (
@@ -193,7 +194,7 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.origin, q.name)
 
         # Inspect data inside Redis
-        q_key = 'rq:queue:default'
+        q_key = RQ_KEY_PREFIX + 'rq:queue:default'
         self.assertEqual(self.connection.llen(q_key), 1)
         self.assertEqual(self.connection.lrange(q_key, 0, -1)[0].decode('ascii'), job_id)
 
@@ -580,7 +581,7 @@ class TestQueue(RQTestCase):
         parent_job = Job.create(func=say_hello, connection=self.connection)
         parent_job.save()
         q = Queue(connection=self.connection)
-        with q.connection.pipeline() as pipe:
+        with q.connection.pipeline(transaction=True) as pipe:
             job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
             self.assertEqual(q.job_ids, [])
             self.assertEqual(job.get_status(refresh=False), JobStatus.DEFERRED)
@@ -593,7 +594,7 @@ class TestQueue(RQTestCase):
         # Jobs dependent on finished jobs are immediately enqueued
         parent_job.set_status(JobStatus.FINISHED)
         parent_job.save()
-        with q.connection.pipeline() as pipe:
+        with q.connection.pipeline(transaction=True) as pipe:
             job = q.enqueue_call(say_hello, depends_on=parent_job, pipeline=pipe)
             # Pre execute conditions
             self.assertEqual(q.job_ids, [])
@@ -608,15 +609,16 @@ class TestQueue(RQTestCase):
     def test_enqueue_job_with_no_dependency_prior_watch_and_pipeline(self):
         """Jobs are enqueued only when their dependencies are finished, and by the caller when passing a pipeline."""
         q = Queue(connection=self.connection)
-        with q.connection.pipeline() as pipe:
-            pipe.watch(b'fake_key')  # Test watch then enqueue
+        with q.connection.pipeline(transaction=True) as pipe:
+            fake_key = RQ_KEY_PREFIX + 'fake_key'
+            pipe.watch(fake_key)  # Test watch then enqueue
             job = q.enqueue_call(say_hello, pipeline=pipe)
             self.assertEqual(q.job_ids, [])
             self.assertEqual(job.get_status(refresh=False), JobStatus.QUEUED)
             # Not in queue before execute, since passed in pipeline
             self.assertEqual(len(q), 0)
             # Make sure modifying key doesn't cause issues, if in multi mode won't fail
-            pipe.set(b'fake_key', b'fake_value')
+            pipe.set(fake_key, 'fake_value')
             pipe.execute()
             # Only in registry after execute, since passed in pipeline
         self.assertEqual(len(q), 1)
@@ -644,7 +646,7 @@ class TestQueue(RQTestCase):
         (but at_front still applies)"""
         # Job with unfinished dependency is not immediately enqueued
         q = Queue(connection=self.connection)
-        with q.connection.pipeline() as pipe:
+        with q.connection.pipeline(transaction=True) as pipe:
             job_1_data = Queue.prepare_data(say_hello, job_id='fake_job_id_1', at_front=False)
             job_2_data = Queue.prepare_data(say_hello, job_id='fake_job_id_2', at_front=False)
             job_3_data = Queue.prepare_data(say_hello, job_id='fake_job_id_3', at_front=True)
@@ -665,7 +667,7 @@ class TestQueue(RQTestCase):
 
         queues = [q1, q2, q3]
         jobs = []
-        with self.connection.pipeline() as pipe:
+        with self.connection.pipeline(transaction=True) as pipe:
             for idx, q in enumerate(queues):
                 jobs.append(q.enqueue_call(say_hello, job_id=f'fake_job_id_{idx}', pipeline=pipe))
             for job in jobs:

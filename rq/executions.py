@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from redis import Redis
+from redis import Redis, RedisCluster
+
+from .connections import RQ_KEY_PREFIX
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
@@ -21,7 +23,7 @@ from .utils import as_text, current_timestamp, now, parse_composite_key
 class Execution:
     """Class to represent an execution of a job."""
 
-    def __init__(self, id: str, job_id: str, connection: Redis):
+    def __init__(self, id: str, job_id: str, connection: Redis | RedisCluster):
         self.id = id
         self.job_id = job_id
         self.connection = connection
@@ -37,7 +39,7 @@ class Execution:
 
     @property
     def key(self) -> str:
-        return f'rq:execution:{self.composite_key}'
+        return f'{RQ_KEY_PREFIX}rq:execution:{self.composite_key}'
 
     @property
     def job(self) -> Job:
@@ -51,7 +53,7 @@ class Execution:
         return f'{self.job_id}:{self.id}'
 
     @classmethod
-    def fetch(cls, id: str, job_id: str, connection: Redis) -> Execution:
+    def fetch(cls, id: str, job_id: str, connection: Redis | RedisCluster) -> Execution:
         """Fetch an execution from Redis."""
         execution = cls(id=id, job_id=job_id, connection=connection)
         execution.refresh()
@@ -118,10 +120,10 @@ class ExecutionRegistry(BaseRegistry):
 
     key_template = 'rq:executions:{0}'
 
-    def __init__(self, job_id: str, connection: Redis):
+    def __init__(self, job_id: str, connection: Redis | RedisCluster):
         self.connection = connection
         self.job_id = job_id
-        self.key = self.key_template.format(job_id)
+        self.key = RQ_KEY_PREFIX + self.key_template.format(job_id)
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
@@ -194,7 +196,7 @@ def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
     # Import here to avoid circular imports
     from .worker.base import WorkerStatus
 
-    with worker.connection.pipeline() as pipeline:
+    with worker.connection.pipeline(transaction=True) as pipeline:
         heartbeat_ttl = worker.get_heartbeat_ttl(job)
         worker.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
         worker.set_state(WorkerStatus.BUSY, pipeline=pipeline)

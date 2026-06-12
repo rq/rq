@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from typing import TypeAlias
 
-    from redis import Redis
+    from redis import Redis, RedisCluster
 
     from .job import Dependency, Job
 
@@ -25,7 +25,7 @@ JobDependencyType: TypeAlias = 'Dependency | Job | str | list[Dependency | Job |
 A simple helper definition for the `depends_on` parameter when creating a job.
 """
 
-SuccessCallbackType = Callable[['Job', 'Redis', Any], Any]
+SuccessCallbackType = Callable[['Job', "'Redis' | 'RedisCluster'", Any], Any]
 FailureCallbackType = Callable[
-    ['Job', 'Redis', type[BaseException] | None, BaseException | None, TracebackType | None], Any
+    ['Job', "'Redis' | 'RedisCluster'", type[BaseException] | None, BaseException | None, TracebackType | None], Any
 ]

@@ -7,6 +7,7 @@ import pytest
 import redis
 
 from rq import Queue
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL
 from rq.exceptions import NoSuchJobError
 from rq.job import Job, Retry
@@ -15,7 +16,7 @@ from rq.scheduler import RQScheduler
 from rq.serializers import JSONSerializer
 from rq.utils import current_timestamp
 from rq.worker import Worker
-from tests import RQTestCase, find_empty_redis_database, ssl_test
+from tests import RQTestCase, skip_with_ssl_enabled
 
 from .fixtures import kill_worker, say_hello
 
@@ -399,21 +400,6 @@ class TestWorker(RQTestCase):
         registry = FinishedJobRegistry(queue=queue)
         self.assertEqual(len(registry), 1)
 
-    @ssl_test
-    def test_work_with_ssl(self):
-        connection = find_empty_redis_database(ssl=True)
-        queue = Queue(connection=connection)
-        worker = Worker(queues=[queue], connection=connection)
-        p = Process(target=kill_worker, args=(os.getpid(), False, 5))
-
-        p.start()
-        queue.enqueue_at(datetime(2019, 1, 1, tzinfo=timezone.utc), say_hello)
-        worker.work(burst=False, with_scheduler=True)
-        p.join(1)
-        self.assertIsNotNone(worker.scheduler)
-        registry = FinishedJobRegistry(queue=queue)
-        self.assertEqual(len(registry), 1)
-
     def test_work_with_serializer(self):
         queue = Queue(connection=self.connection, serializer=JSONSerializer)
         worker = Worker(queues=[queue], connection=self.connection, serializer=JSONSerializer)
@@ -496,21 +482,52 @@ class TestQueue(RQTestCase):
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [2])
 
+    @skip_with_ssl_enabled
     def test_custom_connection_pool(self):
         """Connection pool customizing. Ensure that we can properly set a
         custom connection pool class and pass extra arguments"""
-        custom_conn = redis.Redis(
-            connection_pool=redis.ConnectionPool(
-                connection_class=CustomRedisConnection,
-                db=4,
-                custom_arg='foo',
+
+        default_node = None
+        if not self.connected_to_cluster:
+            kwargs = get_connection_kwargs(self.connection)
+            kwargs.update({
+                'connection_class': CustomRedisConnection,
+                'custom_arg': 'foo',
+                'db': 4,
+            })
+
+            custom_conn = redis.Redis(
+                connection_pool=redis.ConnectionPool(**kwargs)
             )
-        )
+        else:
+            default_node = self.connection.get_default_node()
+            self.assertIsNotNone(default_node)
+            assert default_node is not None
+
+            kwargs = get_connection_kwargs(default_node.redis_connection)
+            kwargs.update({
+                'connection_class': CustomRedisConnection,
+                'custom_arg': 'foo',
+            })
+
+            custom_conn = redis.RedisCluster(
+                startup_nodes=[default_node],
+                # this is rather awkward - see also the discussion in `rq/connections.py`
+                # I am not sure that we want to have all nodes sharing the same connection pool, so
+                # `RedisConnectionBuilder` will force `RedisCluster` to re-create a `ConnectionPool`
+                # per node again
+                connection_pool=redis.ConnectionPool(**kwargs)
+            )
 
         queue = Queue(connection=custom_conn)
         scheduler = RQScheduler([queue], connection=custom_conn)
 
-        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+        if not self.connected_to_cluster:
+            node_connection = scheduler.connection
+        else:
+            node_connection = scheduler.connection.get_node(node_name=default_node.name).redis_connection
+
+        scheduler_connection = node_connection.connection_pool.get_connection('info')
 
         self.assertEqual(scheduler_connection.__class__, CustomRedisConnection)
         self.assertEqual(scheduler_connection.get_custom_arg(), 'foo')
@@ -518,11 +535,28 @@ class TestQueue(RQTestCase):
     def test_no_custom_connection_pool(self):
         """Connection pool customizing must not interfere if we're using a standard
         connection (non-pooled)"""
-        standard_conn = redis.Redis(db=5)
+        default_node = None
+        if not self.connected_to_cluster:
+            kwargs = get_connection_kwargs(self.connection)
+            kwargs.update({'db': 5})
+            standard_conn = redis.Redis(ssl=self.uses_ssl, **kwargs)
+        else:
+            default_node = self.connection.get_default_node()
+            standard_conn = redis.RedisCluster(
+                ssl=self.uses_ssl,
+                **get_connection_kwargs(
+                    self.connection.get_default_node().redis_connection
+                )
+            )
 
         queue = Queue(connection=standard_conn)
         scheduler = RQScheduler([queue], connection=standard_conn)
 
-        scheduler_connection = scheduler.connection.connection_pool.get_connection('info')
+        if not self.connected_to_cluster:
+            node_connection = scheduler.connection
+        else:
+            node_connection = scheduler.connection.get_node(node_name=default_node.name).redis_connection
 
-        self.assertEqual(scheduler_connection.__class__, redis.Connection)
+        scheduler_connection = node_connection.connection_pool.get_connection('info')
+
+        self.assertEqual(scheduler_connection.__class__, redis.Connection if not self.uses_ssl else redis.SSLConnection)

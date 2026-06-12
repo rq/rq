@@ -4,6 +4,7 @@ import time
 from datetime import timedelta, timezone
 from typing import Any
 
+from .connections import RQ_KEY_PREFIX
 from .exceptions import DuplicateJobError
 from .logutils import blue, green
 
@@ -11,8 +12,8 @@ logger = logging.getLogger('rq.scripts')
 
 # Lua script for atomic unique enqueue: check existence, save job, push to queue
 UNIQUE_ENQUEUE_SCRIPT = """
-    -- KEYS[1] = job key (rq:job:{job_id})
-    -- KEYS[2] = queue key (rq:queue:{queue_name})
+    -- KEYS[1] = job key ({RQ_KEY_PREFIX}rq:job:{job_id})
+    -- KEYS[2] = queue key ({RQ_KEY_PREFIX}rq:queue:{queue_name})
     -- ARGV[1] = job_id
     -- ARGV[2] = push direction ("L", "R", or "N" for no push)
     -- ARGV[3] = TTL in seconds (-1 for no TTL)
@@ -102,13 +103,13 @@ def save_unique_job(connection, queue_key, job, enqueue=True, at_front=False):
 
 # Lua script for atomic unique schedule: check existence, save job, add to scheduled registry
 UNIQUE_SCHEDULE_SCRIPT = """
-    -- KEYS[1] = job key (rq:job:{job_id})
-    -- KEYS[2] = scheduled registry key (rq:scheduled:{queue_name})
-    -- KEYS[3] = queues key (rq:queues)
+    -- KEYS[1] = job key ({RQ_KEY_PREFIX}rq:job:{job_id})
+    -- KEYS[2] = scheduled registry key ({RQ_KEY_PREFIX}rq:scheduled:{queue_name})
+    -- KEYS[3] = queues key ({RQ_KEY_PREFIX}rq:queues)
     -- ARGV[1] = job_id
     -- ARGV[2] = TTL in seconds (-1 for no TTL)
     -- ARGV[3] = scheduled timestamp (UTC)
-    -- ARGV[4] = queue key (rq:queue:{queue_name})
+    -- ARGV[4] = queue key ({RQ_KEY_PREFIX}rq:queue:{queue_name})
     -- ARGV[5+] = field1, value1, field2, value2, ... for HSET
 
     -- Check if job hash already exists
@@ -166,8 +167,8 @@ def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_date
 
     Args:
         connection: Redis connection
-        queue_key (str): The Redis key for the queue (e.g. rq:queue:default)
-        registry_key (str): The Redis key for the scheduled registry (e.g. rq:scheduled:default)
+        queue_key (str): The Redis key for the queue (e.g. {RQ_KEY_PREFIX}rq:queue:default)
+        registry_key (str): The Redis key for the scheduled registry (e.g. {RQ_KEY_PREFIX}rq:scheduled:default)
         job (Job): The job to schedule
         scheduled_datetime (datetime): The scheduled execution time
 
@@ -190,7 +191,7 @@ def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_date
         scheduled_datetime = scheduled_datetime.replace(tzinfo=tz)
     timestamp = calendar.timegm(scheduled_datetime.utctimetuple())
 
-    queues_key = 'rq:queues'
+    queues_key = RQ_KEY_PREFIX + 'rq:queues'
 
     result = script(
         keys=[job.key, registry_key, queues_key],

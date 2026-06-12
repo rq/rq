@@ -11,9 +11,9 @@ from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
 
-from redis import ConnectionPool, Redis
+from redis import Redis, RedisCluster
 
-from .connections import parse_connection
+from .connections import RQ_KEY_PREFIX, RedisConnectionBuilder
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
 from .job import Job
 from .logutils import setup_loghandlers
@@ -28,8 +28,8 @@ try:
 except ValueError:
     ForkProcess = Process
 
-SCHEDULER_KEY_TEMPLATE = 'rq:scheduler:%s'
-SCHEDULER_LOCKING_KEY_TEMPLATE = 'rq:scheduler-lock:%s'
+SCHEDULER_KEY_TEMPLATE = RQ_KEY_PREFIX + 'rq:scheduler:%s'
+SCHEDULER_LOCKING_KEY_TEMPLATE = RQ_KEY_PREFIX + 'rq:scheduler-lock:%s'
 
 
 class SchedulerStatus(str, Enum):
@@ -48,7 +48,7 @@ class RQScheduler:
     def __init__(
         self,
         queues,
-        connection: Redis,
+        connection: Redis | RedisCluster,
         interval=1,
         logging_level: str | int = logging.INFO,
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
@@ -59,9 +59,9 @@ class RQScheduler:
         self._acquired_locks: set[str] = set()
         self._scheduled_job_registries: list[ScheduledJobRegistry] = []
         self.lock_acquisition_time = None
-        self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
 
+        self._connection_builder = RedisConnectionBuilder.parse_connection(connection)
         self._connection = None
         self.interval = interval
         self._stop_requested = False
@@ -79,10 +79,7 @@ class RQScheduler:
     def connection(self):
         if self._connection:
             return self._connection
-        self._connection = self._connection_class(
-            connection_pool=ConnectionPool(connection_class=self._pool_class, **self._pool_kwargs)
-        )
-        return self._connection
+        return self._connection_builder.build_connection()
 
     @property
     def acquired_locks(self):
@@ -158,7 +155,7 @@ class RQScheduler:
 
             queue = Queue(registry.name, connection=self.connection, serializer=self.serializer)
 
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
                 for job in jobs:
                     if job is not None:
@@ -183,7 +180,7 @@ class RQScheduler:
         """Updates the TTL on scheduler keys and the locks"""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
         if len(self._acquired_locks) > 1:
-            with self.connection.pipeline() as pipeline:
+            with self.connection.pipeline(transaction=True) as pipeline:
                 for name in self._acquired_locks:
                     key = self.get_locking_key(name)
                     pipeline.expire(key, self.interval + 60)

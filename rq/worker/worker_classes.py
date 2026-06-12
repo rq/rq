@@ -9,7 +9,7 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
-from ..connections import get_connection_kwargs
+from ..connections import NoRedisConnectionException, RedisConnectionBuilder
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
 from ..job import Job, JobStatus
@@ -167,12 +167,15 @@ class SpawnWorker(Worker):
         os.environ['RQ_WORKER_ID'] = self.name
         os.environ['RQ_EXECUTION_ID'] = self.execution.id  # type: ignore
 
-        redis_kwargs = get_connection_kwargs(self.connection)
-        if redis_kwargs.get('retry'):
+        if self.connection is None:
+            raise NoRedisConnectionException()
+
+        connection_builder = RedisConnectionBuilder.parse_connection(self.connection)
+        connection_builder.filter_kwargs([
             # Remove retry from connection kwargs to avoid issues with os.spawnv
-            del redis_kwargs['retry']
-        if redis_kwargs.get('driver_info'):
-            del redis_kwargs['driver_info']
+            'retry',
+            'driver_info'
+        ])
 
         child_pid = os.spawnv(
             os.P_NOWAIT,
@@ -183,14 +186,15 @@ class SpawnWorker(Worker):
                 f"""
 import os
 import sys
-from redis import Redis
 from rq import Worker, Queue
 from rq.job import Job
+from rq.connections import RedisConnectionBuilder
 from rq.executions import Execution
 
 # Recreate worker instance
-redis = Redis(**{redis_kwargs!r})
-worker = Worker.find_by_key({self.key!r}, connection=redis, serializer={self._serializer_arg!r})
+connection_builder = {connection_builder!r}
+connection = connection_builder.build_connection()
+worker = Worker.find_by_key({self.key!r}, connection=connection, serializer={self._serializer_arg!r})
 if not worker:
     sys.exit(1)
 

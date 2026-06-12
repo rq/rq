@@ -13,38 +13,46 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CLI_COMMAND: "redis-cli"
+  IMAGE_NAME: "redis"
+
 jobs:
-  ssl-test:
-    name: Run SSL tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Build the Docker test image for tox
-        uses: docker/build-push-action@v6
-        with:
-          file: tests/Dockerfile
-          tags: rqtest-image:latest
-          push: false
-      - name: Launch tox SSL env only (will only run SSL specific tests)
-        uses: addnab/docker-run-action@v3
-        with:
-          image: rqtest-image:latest
-          run: stunnel & redis-server & RUN_SSL_TESTS=1 hatch run tox run -e ssl
 
   test:
-    name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
+    name: "Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}${{ matrix.variant }}\
+      /redis-py${{ matrix.redis-py-version }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
+      # in order to get some intuition about what's going on locally, one can limit the parallel
+      # test matrix execution - or to prevent too much strain on the docker registry
+      max-parallel: 5
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         redis-version: [5, 6, 7, 8]
         redis-py-version: [5, 6, 8]
+        variant: [ "ssl", "" ]
         exclude:
           # redis-py 8 defaults to RESP3, which negotiates via the HELLO command.
           # HELLO was added in Redis 6.0, so redis-py 8 cannot connect to Redis 5.
           - redis-version: 5
             redis-py-version: 8
+          # skip SSL testing for older redis versions (version 6 is quite weird - see below)
+          - redis-version: 5
+            variant: "ssl"
+          - redis-version: 6
+            variant: "ssl"
+    env:
+          # allow concurrency also when running under act locally with the same docker
+          # daemon for convenience
+          CONTAINER_PREFIX:
+            "job-${{ matrix.python-version }}-${{ matrix.redis-version }}\
+              -${{ matrix.redis-py-version }}-redis${{ matrix.variant }}-"
+
+          # test settings
+          NODE_TYPE: "standalone"
+          RUN_CLUSTER_TESTS: "0"
 
     steps:
       - uses: actions/checkout@v6
@@ -54,10 +62,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Start Redis
-        uses: supercharge/redis-github-action@1.8.1
-        with:
-          redis-version: ${{ matrix.redis-version }}
+      - name: Create single-node
+        run: |
+          set -x
+          if [ "${{ matrix.variant }}" == "ssl" ]; then
+            USE_SSL=true
+            echo "TEST_WITH_SSL=1" >> "${GITHUB_ENV}"
+          fi
+
+          export NODE_IMAGE="${IMAGE_NAME}:${{ matrix.redis-version }}" \
+            SSL_PATH="$(pwd)/tests/ssl_config" CONTAINER_PREFIX USE_SSL
+
+          bash tests/bootstrap_redis.sh
+          TEST_HOST=$(cat /tmp/test_host)
+          echo "TEST_HOST=${TEST_HOST}" >> "${GITHUB_ENV}"
 
       - name: Install dependencies
         run: |
@@ -68,7 +86,89 @@ jobs:
 
       - name: Test with pytest
         run: |
-          RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
+          # use tiny for sub-reaping, so that we don't run into inconvenient "zombiefication" during testing. 
+          # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
+          sudo apt-get update && sudo apt-get install -y tini
+          export TEST_WITH_SSL TEST_HOST TEST_PORT RUN_CLUSTER_TESTS
+          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5 -v -s
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6.0.1
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  cluster-test:
+    name: "Cluster/Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}${{ matrix.variant }}\
+      /redis-py${{ matrix.redis-py-version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # in order to get some intuition about what's going on locally, one can limit the parallel
+      # test matrix execution - or to prevent too much strain on the docker registry
+      max-parallel: 5
+      matrix:
+        python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
+        redis-version: [ 6, 7, 8 ]
+        redis-py-version: [ 8 ]
+        variant: [ "ssl", "" ]
+        exclude:
+          # there is some weirdness going on when trying to build a Redis 6 cluster with SSL enabled,
+          # since somehow port 0 turns up in the discovered cluster nodes, e.g.:
+          #   Error 111 connecting to 172.17.0.2:0. Connection refused.
+          - redis-version: 6
+            variant: "ssl"
+
+    env:
+      # allow concurrency also when running under act locally with the same docker
+      # daemon for convenience
+      CONTAINER_PREFIX:
+        "cluster-job-${{ matrix.python-version }}-${{ matrix.redis-version }}\
+          -${{ matrix.redis-py-version }}-redis${{ matrix.variant }}-"
+
+      # test settings
+      NODE_TYPE: "cluster"
+      RUN_CLUSTER_TESTS: "1"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Create three-node Cluster
+        run: |
+          set -x
+          if [ "${{ matrix.variant }}" == "ssl" ]; then
+            USE_SSL=true
+            echo "TEST_WITH_SSL=1" >> "${GITHUB_ENV}"
+          fi
+
+          export NODE_IMAGE="${IMAGE_NAME}:${{ matrix.redis-version }}" \
+            SSL_PATH="$(pwd)/tests/ssl_config" CONTAINER_PREFIX USE_SSL
+
+          bash tests/bootstrap_redis.sh
+          TEST_HOST=$(cat /tmp/test_host)
+          echo "TEST_HOST=${TEST_HOST}" >> "${GITHUB_ENV}"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install hatch "virtualenv<20.27"
+          hatch run test:python -m ensurepip --upgrade
+          hatch run test:python -m pip install redis==${{ matrix.redis-py-version }}
+
+      - name: Test with pytest
+        run: |
+          set -x
+          # use tiny for sub-reaping, so that we don't run into inconvenient "zombiefication" during testing. 
+          # for a more detailed explanation see the comment in `WorkerShutdownTestCase.test_work_horse_force_death`.
+          sudo apt-get update && sudo apt-get install -y tini
+          export TEST_WITH_SSL TEST_HOST TEST_PORT RUN_CLUSTER_TESTS
+          RUN_SLOW_TESTS_TOO=1 tini -s -w hatch -- run test:cov --durations=5 -v -s
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7.0.0
         with:

@@ -19,7 +19,7 @@ import pytest
 import redis.exceptions
 
 from rq import Queue, SimpleWorker, Worker
-from rq.connections import get_connection_kwargs
+from rq.connections import RedisConnectionBuilder, get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
@@ -1040,7 +1040,8 @@ class TestWorker(RQTestCase):
 
         # Suspend the worker, and then send resume command in the background
         q.enqueue(say_hello)
-        p = Process(target=resume_worker, args=(get_connection_kwargs(self.connection), 2))
+        p = Process(target=resume_worker,
+            args=(RedisConnectionBuilder.parse_connection(self.connection), 2))
         p.start()
         w.worker_ttl = 1
         w.work(max_jobs=1)
@@ -1285,7 +1286,10 @@ class TestWorker(RQTestCase):
         """Ensures that the worker correctly updates Redis client connection to have a socket_timeout"""
         q = Queue(connection=self.connection)
         _ = Worker([q], connection=self.connection)
-        connection_kwargs = q.connection.connection_pool.connection_kwargs
+        if not self.connected_to_cluster:
+            connection_kwargs = get_connection_kwargs(q.connection)
+        else:
+            connection_kwargs = get_connection_kwargs(q.connection.get_default_node().redis_connection)
         self.assertEqual(connection_kwargs['socket_timeout'], 415)
 
     def test_worker_version(self):
@@ -1432,8 +1436,9 @@ def wait_and_kill_work_horse(pid, time_to_wait=0.0):
     os.kill(pid, signal.SIGKILL)
 
 
-class TimeoutTestCase:
+class TimeoutTestCase(RQTestCase):
     def setUp(self):
+        super().setUp()
         # we want tests to fail if signal are ignored and the work remain
         # running, so set a signal to kill them after X seconds
         self.killtimeout = 15
@@ -1446,7 +1451,7 @@ class TimeoutTestCase:
         )
 
 
-class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+class WorkerShutdownTestCase(TimeoutTestCase):
     @slow
     def test_idle_worker_warm_shutdown(self):
         """worker with no ongoing job receiving single SIGTERM signal and shutting down"""
@@ -1515,7 +1520,7 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         fooq = Queue('foo', connection=self.connection)
         self.assertEqual(fooq.count, 0)
         w = Worker(fooq)
-        sentinel_file = '/tmp/.rq_sentinel_work_horse_death'
+        sentinel_file = '/tmp/.rq_sentinel_horse_death_sets_job_failed'
         if os.path.exists(sentinel_file):
             os.remove(sentinel_file)
         fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
@@ -1569,30 +1574,54 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=fooq)
         self.assertIn(job, failed_job_registry)
         self.assertEqual(fooq.count, 0)
+
+        # Unfortunately, when running locally with act, all processes are in the end effectively children
+        # of tail... Yeah, I was surprised too, but see here:
+        #
+        # USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+        # root         1  0.0  0.0   2732  1664 pts/0    Ss+  00:46   0:00 tail -f /dev/null
+        # root       338  0.0  0.0      0     0 ?        Z    00:46   0:00 [sleep] <defunct>
+        #
+        # Well, since tail wasn't really designed to be the init process, it doesn't know that apart
+        # from showing log files, its duties also now suddenly including reaping left-over children by
+        # other processes. Therefore, the process stays a zombie and these processes still show of course
+        # still up in the process list, so we're able to detect it.
+        #
+        # Fun fact: What makes this especially hard to debug is that it simply works in any standard container
+        # with e.g. bash as "init" process, so I was getting quite confused before taking a peek into the act
+        # containers themselves.
+        #
+        # Unfortunatley, there is not such an easy way out of this: We cannot take over the duty of init here
+        # directly, since the work horse isolated itself into its own process group, so we are not its parent
+        # anymore, and it is not longer our duty to reap it.
+        #
+        # Fortunately, there is at least some somewhat elegant way out of this: Linux 3.4 introduced the
+        # `prctl` flag `PR_SET_CHILD_SUBREAPER`, so that an arbitrary process can become the subreaper of a
+        # domain, e.g. like this container, see:
+        # https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html
+        #
+        # The popular tiny init substitute tini offers this option right out of the box, so we can simply use it
+        # as part of the CI, see:
+        # https://github.com/krallin/tini#subreaping
         self.assertFalse(psutil.pid_exists(subprocess_pid))
 
 
-def schedule_access_self():
-    q = Queue('default', connection=find_empty_redis_database())
+def schedule_access_self(connected_to_cluster):
+    q = Queue('default', connection=find_empty_redis_database(can_be_non_empty=connected_to_cluster))
     q.enqueue(access_self)
 
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='Fails on OS X')
 class TestWorkerSubprocess(RQTestCase):
-    def setUp(self):
-        super().setUp()
-        db_num = self.connection.connection_pool.connection_kwargs['db']
-        self.redis_url = f'redis://127.0.0.1:6379/{db_num}'
-
     def test_run_empty_queue(self):
         """Run the worker in its own process with an empty queue"""
-        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
+        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
 
     def test_run_access_self(self):
         """Schedule a job, then run the worker as subprocess"""
         q = Queue(connection=self.connection)
         job = q.enqueue(access_self)
-        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
+        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
         registry = FinishedJobRegistry(queue=q)
         self.assertIn(job, registry)
         assert q.count == 0
@@ -1601,8 +1630,8 @@ class TestWorkerSubprocess(RQTestCase):
     def test_run_scheduled_access_self(self):
         """Schedule a job that schedules a job, then run the worker as subprocess"""
         q = Queue(connection=self.connection)
-        job = q.enqueue(schedule_access_self)
-        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'])
+        job = q.enqueue(schedule_access_self, self.connected_to_cluster)
+        subprocess.check_call(['rqworker', '-u', self.redis_url, '-b'] + self.runner_args)
         registry = FinishedJobRegistry(queue=q)
         self.assertIn(job, registry)
         assert q.count == 0
@@ -1610,13 +1639,14 @@ class TestWorkerSubprocess(RQTestCase):
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason='requires Linux signals')
 @skipIf('pypy' in sys.version.lower(), 'these tests often fail on pypy')
-class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
+class HerokuWorkerShutdownTestCase(TimeoutTestCase):
     def setUp(self):
         super().setUp()
         self.sandbox = '/tmp/rq_shutdown/'
         os.makedirs(self.sandbox)
 
     def tearDown(self):
+        super().tearDown()
         shutil.rmtree(self.sandbox, ignore_errors=True)
 
     @slow
@@ -1695,7 +1725,7 @@ class HerokuWorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         mock_logger.assert_called_with('Worker %s: killed horse pid %s', w.name, p.pid)
 
     def test_handle_shutdown_request_no_horse(self):
-        """Mutate HerokuWorker so _horse_pid refers to non existent process
+        """Mutate HerokuWorker so _horse_pid refers to non-existent process
         and test handle_warm_shutdown_request"""
         w = HerokuWorker('foo', connection=self.connection)
 
