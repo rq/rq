@@ -19,6 +19,7 @@ import pytest
 import redis.exceptions
 
 from rq import ForkWorker, Queue, SimpleWorker, Worker
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
@@ -87,6 +88,10 @@ class TestWorker(RQTestCase):
         # With queue having serializer
         w = ForkWorker(Queue('foo', connection=self.connection), serializer=json)
         self.assertEqual(w.queues[0].name, 'foo')
+
+        # With queue name string and serializer alias
+        w = Worker('foo', serializer='json', connection=self.connection)
+        self.assertIs(w.serializer, JSONSerializer)
 
     def test_work_and_quit(self):
         """ForkWorker processes work, then quits."""
@@ -1035,7 +1040,7 @@ class TestWorker(RQTestCase):
 
         # Suspend the worker, and then send resume command in the background
         q.enqueue(say_hello)
-        p = Process(target=resume_worker, args=(self.connection.connection_pool.connection_kwargs.copy(), 2))
+        p = Process(target=resume_worker, args=(get_connection_kwargs(self.connection), 2))
         p.start()
         w.worker_ttl = 1
         w.work(max_jobs=1)

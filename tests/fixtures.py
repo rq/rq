@@ -16,6 +16,7 @@ from redis import Redis
 
 from rq import Queue, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.suspension import resume
@@ -280,7 +281,7 @@ def start_worker_process(
     """
     Use multiprocessing to start a new worker in a separate process.
     """
-    conn_kwargs = connection.connection_pool.connection_kwargs
+    conn_kwargs = get_connection_kwargs(connection)
     p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
     p.start()
     return p

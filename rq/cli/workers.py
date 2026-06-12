@@ -3,7 +3,6 @@ import logging.config
 import os
 import sys
 import warnings
-from typing import TYPE_CHECKING, cast
 
 import click
 from redis.exceptions import ConnectionError
@@ -23,12 +22,9 @@ from rq.defaults import (
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
 )
-from rq.serializers import DefaultSerializer
+from rq.serializers import resolve_serializer
 from rq.suspension import is_suspended
 from rq.worker_pool import WorkerPool
-
-if TYPE_CHECKING:
-    from rq.serializers import Serializer
 
 
 @main.command()
@@ -206,10 +202,7 @@ def worker_pool(
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
-    if serializer:
-        serializer = cast('Serializer', import_attribute(serializer))
-    else:
-        serializer = DefaultSerializer
+    serializer = resolve_serializer(serializer)
 
     # if --verbose or --quiet, use the appropriate logging level
     if verbose:

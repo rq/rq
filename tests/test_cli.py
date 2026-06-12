@@ -294,6 +294,25 @@ class TestRQCli(CLITestCase):
         result = runner.invoke(main, ['worker', '-u', self.redis_url, '-b'])
         self.assert_normal_execution(result)
 
+    def test_worker_and_worker_pool_serializer_json_alias(self):
+        """rq worker/worker-pool -u <url> -b --serializer json"""
+        runner = CliRunner()
+
+        queue = Queue('worker-json', connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello, 'Hello')
+        result = runner.invoke(main, ['worker', 'worker-json', '-u', self.redis_url, '-b', '--serializer', 'json'])
+        self.assert_normal_execution(result)
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
+        queue = Queue('worker-pool-json', connection=self.connection, serializer=JSONSerializer)
+        job = queue.enqueue(say_hello, 'Hello')
+        result = runner.invoke(
+            main,
+            ['worker-pool', 'worker-pool-json', '-u', self.redis_url, '-b', '--serializer', 'json'],
+        )
+        self.assert_normal_execution(result)
+        self.assertEqual(job.get_status(refresh=True), JobStatus.FINISHED)
+
     def test_worker_pid(self):
         """rq worker -u <url> /tmp/.."""
         pid = self.tmpdir.join('rq.pid')

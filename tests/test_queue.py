@@ -44,11 +44,11 @@ class TestQueue(RQTestCase):
 
     def test_create_queue_with_serializer(self):
         """Creating queues with serializer."""
-        # Test using json serializer
         q = Queue('queue-with-serializer', connection=self.connection, serializer=json)
-        self.assertEqual(q.name, 'queue-with-serializer')
-        self.assertEqual(str(q), '<Queue queue-with-serializer>')
-        self.assertIsNotNone(q.serializer)
+        self.assertIs(q.serializer, json)
+
+        q = Queue('queue-with-serializer', connection=self.connection, serializer='json')
+        self.assertIs(q.serializer, JSONSerializer)
 
     def test_create_default_queue(self):
         """Instantiating the default queue."""
@@ -560,6 +560,19 @@ class TestQueue(RQTestCase):
         self.assertEqual(q.job_ids, [job.id])
         self.assertEqual(job.timeout, Queue.DEFAULT_TIMEOUT)
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
+
+    def test_enqueue_deferred_job_removes_it_from_deferred_registry(self):
+        """Enqueueing a deferred job removes it from DeferredJobRegistry."""
+        q = Queue(connection=self.connection)
+        job = Job.create(func=say_hello, connection=self.connection, origin=q.name, status=JobStatus.DEFERRED)
+        job.save()
+        q.deferred_job_registry.add(job)
+
+        q._enqueue_job(job)
+
+        self.assertEqual(q.job_ids, [job.id])
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertNotIn(job, q.deferred_job_registry)
 
     def test_enqueue_job_with_dependency_and_pipeline(self):
         """Jobs are enqueued only when their dependencies are finished, and by the caller when passing a pipeline."""

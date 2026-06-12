@@ -408,7 +408,7 @@ shared_options = [
         '--serializer',
         '-S',
         default=DEFAULT_SERIALIZER_CLASS,
-        help='Path to serializer, defaults to rq.serializers.DefaultSerializer',
+        help='Serializer to use. Accepts json, pickle, or a dotted import path.',
     ),
 ]
 

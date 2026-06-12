@@ -37,9 +37,17 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-        redis-version: [5, 6, 7]
-        redis-py-version: [5, 6]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        redis-version: [5, 6, 7, 8]
+        redis-py-version: [5, 6, 8]
+        exclude:
+          # redis-py 6 negotiates RESP3 via HELLO, which Redis 5 (pre-6.0) doesn't support
+          - redis-version: 5
+            redis-py-version: 6
+          # redis-py 8 defaults to RESP3, which negotiates via the HELLO command.
+          # HELLO was added in Redis 6.0, so redis-py 8 cannot connect to Redis 5.
+          - redis-version: 5
+            redis-py-version: 8
 
     steps:
       - uses: actions/checkout@v6
@@ -58,13 +66,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install hatch "virtualenv<20.27"
-          pip install redis==${{ matrix.redis-py-version }}
+          hatch run test:python -m ensurepip --upgrade
+          hatch run test:python -m pip install redis==${{ matrix.redis-py-version }}
 
       - name: Test with pytest
         run: |
           RUN_SLOW_TESTS_TOO=1 hatch run test:cov --durations=5
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6.0.0
+        uses: codecov/codecov-action@v7.0.0
         with:
           files: ./coverage.xml
           fail_ci_if_error: false

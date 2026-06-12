@@ -13,7 +13,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     NamedTuple,
-    Optional,
     cast,
 )
 
@@ -73,9 +72,8 @@ class EnqueueData(
     __slots__ = ()
 
 
-class QueueArgs(NamedTuple):
-    """Helper type to use when calling Queue.parse_args
-    """
+class EnqueueArgs(NamedTuple):
+    """Helper type to use when calling Queue.parse_args"""
 
     func: str | Callable[..., Any]
     timeout: int | str | None
@@ -268,10 +266,13 @@ class Queue:
 
     @property
     def scheduler_pid(self) -> int | None:
-        from rq.scheduler import RQScheduler
+        from rq.scheduler import SCHEDULER_KEY_TEMPLATE, RQScheduler
 
-        pid = self.connection.get(RQScheduler.get_locking_key(self.name))
-        return int(pid.decode()) if pid is not None else None
+        name = self.connection.get(RQScheduler.get_locking_key(self.name))
+        if name is None:
+            return None
+        pid = self.connection.hget(SCHEDULER_KEY_TEMPLATE % name.decode(), 'pid')
+        return int(pid) if pid else None
 
     def acquire_maintenance_lock(self) -> bool:
         """Returns a boolean indicating whether a lock to clean this queue
@@ -986,7 +987,7 @@ class Queue:
             args = kwargs.pop('args', None)
             kwargs = kwargs.pop('kwargs', None)
 
-        return QueueArgs(
+        return EnqueueArgs(
             f,
             timeout,
             description,
@@ -1270,6 +1271,7 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (at_front=%s)', job.id, self.name, at_front)
 
+        is_deferred = job.get_status(refresh=False) == JobStatus.DEFERRED
         self._prepare_for_queue(job)
 
         if unique:
@@ -1279,6 +1281,8 @@ class Queue:
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
+            if is_deferred:
+                self.deferred_job_registry.remove(job, pipeline=pipe)
             self._persist_job(job, pipe)
             self.push_job_id(job.id, pipeline=pipe, at_front=at_front)
 
@@ -1301,6 +1305,7 @@ class Queue:
         """
         self.log.debug('Enqueueing job %s to queue %s (sync execution)', job.id, self.name)
 
+        is_deferred = job.get_status(refresh=False) == JobStatus.DEFERRED
         self._prepare_for_queue(job)
 
         if unique:
@@ -1309,6 +1314,8 @@ class Queue:
         else:
             pipe = pipeline if pipeline is not None else self.connection.pipeline()
 
+            if is_deferred:
+                self.deferred_job_registry.remove(job, pipeline=pipe)
             self._persist_job(job, pipe)
 
             if pipeline is None:
@@ -1530,7 +1537,7 @@ class Queue:
                 raise DequeueTimeout(timeout, queue_key)
             return queue_key, result
         else:  # non-blocking variant
-            result = cast(Optional[Any], connection.lmove(queue_key, intermediate_queue.key))
+            result = cast(Any | None, connection.lmove(queue_key, intermediate_queue.key))
             if result is not None:
                 return queue_key, result
             return None
