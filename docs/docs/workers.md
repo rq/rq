@@ -412,7 +412,8 @@ rq worker -w rq.worker.RandomWorker q1 q2 q3
 _New in version 2.2.0._
 
 The `SpawnWorker` uses `os.spawn()` instead of `os.fork()` to run jobs. This is useful in environments
-where `fork()` is not available, like Windows or newer versions of MacOS.
+where `fork()` is unsafe or unavailable, like newer versions of macOS. It does not run on Windows,
+which lacks the Unix process APIs RQ uses to manage work horses.
 
 Usage:
 ```python
@@ -433,7 +434,7 @@ The main differences between these workers are:
 - SimpleWorker: No process forking, simpler but less isolated execution. Also no periodic heartbeats during job executions.
 - RoundRobinWorker: Fair scheduling across queues
 - RandomWorker: Random queue selection for load balancing
-- SpawnWorker: Windows compatibility using spawn() instead of fork()
+- SpawnWorker: Uses spawn() instead of fork() for platforms where fork() is unsafe or unavailable (e.g. macOS)
 
 Choose the appropriate worker type based on your needs for job isolation, queue scheduling, and platform compatibility.
 

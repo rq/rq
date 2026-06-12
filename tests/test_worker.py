@@ -93,6 +93,32 @@ class TestWorker(RQTestCase):
         w = Worker('foo', serializer='json', connection=self.connection)
         self.assertIs(w.serializer, JSONSerializer)
 
+    def test_start_method_validation(self):
+        """Worker rejects invalid start_method values at construction."""
+        with self.assertRaises(ValueError):
+            Worker('foo', start_method='bad', connection=self.connection)
+
+    def test_start_method_default(self):
+        """start_method defaults to fork on Linux and spawn elsewhere."""
+        with mock.patch('rq.worker.worker_classes.sys.platform', 'linux'):
+            w = Worker('foo', connection=self.connection)
+            self.assertEqual(w.start_method, 'fork')
+
+        with mock.patch('rq.worker.worker_classes.sys.platform', 'darwin'):
+            w = Worker('foo', connection=self.connection)
+            self.assertEqual(w.start_method, 'spawn')
+
+        # Explicit start_method overrides the platform default
+        with mock.patch('rq.worker.worker_classes.sys.platform', 'linux'):
+            w = Worker('foo', start_method='spawn', connection=self.connection)
+            self.assertEqual(w.start_method, 'spawn')
+
+    def test_worker_not_supported_on_windows(self):
+        """Worker raises early on Windows instead of failing mid-job."""
+        with mock.patch('rq.worker.worker_classes.sys.platform', 'win32'):
+            with self.assertRaises(RuntimeError):
+                Worker('foo', connection=self.connection)
+
     def test_work_and_quit(self):
         """ForkWorker processes work, then quits."""
         fooq, barq = Queue('foo', connection=self.connection), Queue('bar', connection=self.connection)

@@ -26,15 +26,19 @@ if TYPE_CHECKING:
         pass
 
 
-ExecutionMode = Literal['fork', 'spawn']
+StartMethod = Literal['fork', 'spawn']
 
 
 class Worker(BaseWorker):
-    def __init__(self, queues, *args, execution_mode: ExecutionMode | None = None, **kwargs):
+    def __init__(self, queues, *args, start_method: StartMethod | None = None, **kwargs):
+        if sys.platform == 'win32':
+            raise RuntimeError('Worker is not supported on Windows. Use SimpleWorker instead.')
         super().__init__(queues, *args, **kwargs)
-        if not execution_mode:
-            execution_mode = 'fork' if sys.platform == 'linux' else 'spawn'
-        self.execution_mode: ExecutionMode = execution_mode
+        if not start_method:
+            start_method = 'fork' if sys.platform == 'linux' else 'spawn'
+        if start_method not in ('fork', 'spawn'):
+            raise ValueError(f"start_method must be 'fork' or 'spawn', not {start_method!r}")
+        self.start_method: StartMethod = start_method
 
     def kill_horse(self, sig: signal.Signals = SHUTDOWN_SIGNAL):
         """Kill the horse but catch "No such process" error has the horse could already be dead.
@@ -64,15 +68,15 @@ class Worker(BaseWorker):
     def fork_work_horse(self, job: Job, queue: Queue):
         """Spawns a work horse to perform the actual work and passes it a job.
 
-        Uses os.fork() when execution_mode is 'fork', or os.spawnv() when execution_mode is 'spawn'.
+        Uses os.fork() when start_method is 'fork', or os.spawnv() when start_method is 'spawn'.
 
         Args:
             job (Job): The Job that will be ran
             queue (Queue): The queue
         """
-        if self.execution_mode == 'fork':
+        if self.start_method == 'fork':
             self._fork_work_horse(job, queue)
-        elif self.execution_mode == 'spawn':
+        elif self.start_method == 'spawn':
             self._spawn_work_horse(job, queue)
 
     def _fork_work_horse(self, job: Job, queue: Queue):
@@ -227,15 +231,15 @@ worker.main_work_horse(job, queue)
 class ForkWorker(Worker):
     """Worker that always uses os.fork() to spawn work horses."""
 
-    def __init__(self, queues, *args, execution_mode: ExecutionMode = 'fork', **kwargs):
-        super().__init__(queues, *args, execution_mode=execution_mode, **kwargs)
+    def __init__(self, queues, *args, start_method: StartMethod = 'fork', **kwargs):
+        super().__init__(queues, *args, start_method=start_method, **kwargs)
 
 
 class SpawnWorker(Worker):
     """Worker that always uses os.spawnv() to spawn work horses."""
 
-    def __init__(self, queues, *args, execution_mode: ExecutionMode = 'spawn', **kwargs):
-        super().__init__(queues, *args, execution_mode=execution_mode, **kwargs)
+    def __init__(self, queues, *args, start_method: StartMethod = 'spawn', **kwargs):
+        super().__init__(queues, *args, start_method=start_method, **kwargs)
 
 
 class SimpleWorker(BaseWorker):
