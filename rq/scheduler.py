@@ -71,8 +71,7 @@ class RQScheduler:
         self.name: str = name or uuid4().hex
         self.hostname: str = socket.gethostname()
         self.created_at: datetime = now()
-        # pid is the worker's pid here; register_birth() resets it to the forked child's pid.
-        self.pid: int = os.getpid()
+        self.pid: int = 0  # set in register_birth(), once the scheduler process has forked
         self.last_heartbeat: datetime | None = None
 
         self._connection = None
