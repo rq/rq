@@ -754,10 +754,13 @@ class BaseWorker:
 
             try:
                 pipeline.execute()
-                if enqueue_dependents:
-                    queue.enqueue_dependents(job)
+                # Fire failed webhooks only after the terminal failure is persisted, and
+                # skip retried/stopped jobs. Placed before enqueue_dependents (which can raise)
+                # so dispatch isn't lost if dependent enqueueing fails; send_webhooks never raises.
                 if not retry and not job_is_stopped:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
+                if enqueue_dependents:
+                    queue.enqueue_dependents(job)
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
