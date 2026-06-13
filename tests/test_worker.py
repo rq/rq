@@ -19,6 +19,7 @@ import pytest
 import redis.exceptions
 
 from rq import Queue, SimpleWorker, Worker
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_MAINTENANCE_TASK_INTERVAL, DEFAULT_WORKER_TTL
 from rq.job import Job, JobStatus, Retry
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
@@ -1039,7 +1040,7 @@ class TestWorker(RQTestCase):
 
         # Suspend the worker, and then send resume command in the background
         q.enqueue(say_hello)
-        p = Process(target=resume_worker, args=(self.connection.connection_pool.connection_kwargs.copy(), 2))
+        p = Process(target=resume_worker, args=(get_connection_kwargs(self.connection), 2))
         p.start()
         w.worker_ttl = 1
         w.work(max_jobs=1)

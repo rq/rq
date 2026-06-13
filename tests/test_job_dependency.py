@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from redis import WatchError
 
+from rq.connections import get_connection_kwargs
 from rq.job import Dependency, Job, JobStatus, cancel_job
 from rq.queue import Queue
 from rq.registry import (
@@ -446,7 +447,7 @@ class TestJobDependency(RQTestCase):
         queue = Queue(connection=self.connection)
         key = 'test_job:job_order'
 
-        connection_kwargs = self.connection.connection_pool.connection_kwargs
+        connection_kwargs = get_connection_kwargs(self.connection)
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         # Worker 1 will be busy with the slow job, so worker 2 will complete both fast jobs.
         job_slow = queue.enqueue(fixtures.rpush, args=[key, 'slow', connection_kwargs, True, 0.5], job_id='slow_job')
@@ -476,7 +477,7 @@ class TestJobDependency(RQTestCase):
         """Test that jobs with dependencies are executed in the correct order."""
         queue = Queue(connection=self.connection)
         key = 'test_job:job_order'
-        connection_kwargs = self.connection.connection_pool.connection_kwargs
+        connection_kwargs = get_connection_kwargs(self.connection)
         # When there are no dependencies, the two fast jobs ("A" and "B") run in the order enqueued.
         job_slow_1 = queue.enqueue(fixtures.rpush, args=[key, 'slow_1', connection_kwargs, True, 0.5], job_id='slow_1')
         job_slow_2 = queue.enqueue(fixtures.rpush, args=[key, 'slow_2', connection_kwargs, True, 0.75], job_id='slow_2')
