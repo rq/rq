@@ -3,16 +3,15 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from rq.job import Job, JobStatus
-from rq.queue import Queue
-from rq.results import Result
 from rq.webhook import Webhook
-from tests import RQTestCase, min_redis_version
+from tests import RQTestCase
 
 from .fixtures import say_hello
 
 
 class WebhookTestCase(RQTestCase):
-    def test_init_defaults(self):
+    def test_init(self):
+        # Defaults
         webhook = Webhook('http://example.com/hook', 'finished')
         self.assertEqual(webhook.url, 'http://example.com/hook')
         self.assertEqual(webhook.job_status, 'finished')
@@ -20,7 +19,7 @@ class WebhookTestCase(RQTestCase):
         self.assertIsNone(webhook.headers)
         self.assertEqual(webhook.timeout, 10)
 
-    def test_init_full(self):
+        # All fields set explicitly
         webhook = Webhook(
             'https://example.com/hook',
             'failed',
@@ -94,25 +93,27 @@ class WebhookTestCase(RQTestCase):
             },
         )
 
-    def test_from_dict_round_trip(self):
+    def test_from_dict(self):
+        # Round-trips a fully-specified webhook
         webhook = Webhook('http://example.com', 'finished', method='POST', headers={'X-A': 'b'}, timeout=3)
         self.assertEqual(Webhook.from_dict(webhook.to_dict()), webhook)
 
-    def test_from_dict_defaults(self):
+        # Fills defaults for missing optional fields
         webhook = Webhook.from_dict({'url': 'http://example.com', 'job_status': 'failed'})
         self.assertEqual(webhook, Webhook('http://example.com', 'failed'))
 
-    def test_from_dict_revalidates(self):
+        # Re-validates its input
         with self.assertRaises(ValueError):
             Webhook.from_dict({'url': 'http://example.com', 'job_status': 'stopped'})
 
-    def test_build_payload_finished(self):
+    def test_get_payload(self):
         job = Job.create(say_hello, connection=self.connection)
         job.enqueued_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         job.ended_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
         job._result = {'answer': 42}
 
-        payload = Webhook('http://example.com', 'finished').build_payload(job)
+        # Finished: includes the job result
+        payload = Webhook('http://example.com', 'finished').get_payload(job)
         self.assertEqual(
             payload,
             {
@@ -126,25 +127,23 @@ class WebhookTestCase(RQTestCase):
         )
         json.dumps(payload)  # the whole payload must be JSON-serializable
 
-    def test_build_payload_unserializable_result(self):
-        """Results that can't be JSON-serialized fall back to str()"""
-        job = Job.create(say_hello, connection=self.connection)
+        # Finished: results that can't be JSON-serialized fall back to str()
         job._result = object()
-
-        payload = Webhook('http://example.com', 'finished').build_payload(job)
+        payload = Webhook('http://example.com', 'finished').get_payload(job)
         self.assertEqual(payload['result'], str(job._result))
         json.dumps(payload)
 
-    @min_redis_version((5, 0, 0))
-    def test_build_payload_failed(self):
-        queue = Queue(connection=self.connection)
-        job = queue.enqueue(say_hello)
-        Result.create_failure(job, ttl=10, exc_string='Traceback: division by zero')
-
-        payload = Webhook('http://example.com', 'failed').build_payload(job)
+        # Failed: includes exc_info from the supplied exception string, never a result
+        failed_webhook = Webhook('http://example.com', 'failed')
+        payload = failed_webhook.get_payload(job, exc_string='Traceback: division by zero')
         self.assertEqual(payload['status'], 'failed')
         self.assertEqual(payload['exc_info'], 'Traceback: division by zero')
         self.assertNotIn('result', payload)
+        json.dumps(payload)
+
+        # Failed: exc_info is None when no exception string is supplied
+        payload = failed_webhook.get_payload(job)
+        self.assertIsNone(payload['exc_info'])
         json.dumps(payload)
 
     def test_send_get(self):
@@ -163,18 +162,17 @@ class WebhookTestCase(RQTestCase):
 
     def test_send_post(self):
         job = Job.create(say_hello, connection=self.connection)
-        job._result = 'ok'
-        webhook = Webhook('http://example.com/hook', 'finished', method='POST')
+        webhook = Webhook('http://example.com/hook', 'failed', method='POST')
 
         with patch('rq.webhook.urlopen') as urlopen_mock:
-            webhook.send(job)
+            webhook.send(job, exc_string='boom')
 
         request = urlopen_mock.call_args.args[0]
         self.assertEqual(request.get_method(), 'POST')
         self.assertEqual(request.get_header('Content-type'), 'application/json')
         body = json.loads(request.data.decode('utf-8'))
         self.assertEqual(body['job_id'], job.id)
-        self.assertEqual(body['result'], 'ok')
+        self.assertEqual(body['exc_info'], 'boom')
 
     def test_send_swallows_errors(self):
         """A dead endpoint must never raise out of send()"""
@@ -198,11 +196,12 @@ class JobWebhookTestCase(RQTestCase):
         job = Job.create(say_hello, connection=self.connection)
         self.assertEqual(job.webhooks, [])
 
-    def test_create_rejects_bare_webhook(self):
+    def test_create_rejects_invalid_webhooks(self):
+        # A bare Webhook (not wrapped in a list)
         with self.assertRaises(TypeError):
             Job.create(say_hello, connection=self.connection, webhooks=Webhook('http://example.com', 'finished'))
 
-    def test_create_rejects_non_webhook_items(self):
+        # A list containing non-Webhook items
         with self.assertRaises(TypeError):
             Job.create(say_hello, connection=self.connection, webhooks=['http://example.com'])
 
@@ -233,15 +232,17 @@ class JobWebhookTestCase(RQTestCase):
         fetched_job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(fetched_job.webhooks, [])
 
-    def test_trigger_webhooks_sends_only_matching(self):
+    def test_send_webhooks(self):
         finished_webhook = Webhook('http://example.com/done', 'finished')
         failed_webhook = Webhook('http://example.com/fail', 'failed')
         job = Job.create(say_hello, connection=self.connection, webhooks=[finished_webhook, failed_webhook])
 
+        # Only the matching webhook is sent
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
-            job.trigger_webhooks('finished')
-        send_mock.assert_called_once_with(finished_webhook, job)
+            job.send_webhooks('finished')
+        send_mock.assert_called_once_with(finished_webhook, job, exc_string=None)
 
+        # JobStatus enum matches, and exc_string is forwarded to the matching webhook
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
-            job.trigger_webhooks(JobStatus.FAILED)
-        send_mock.assert_called_once_with(failed_webhook, job)
+            job.send_webhooks(JobStatus.FAILED, exc_string='boom')
+        send_mock.assert_called_once_with(failed_webhook, job, exc_string='boom')

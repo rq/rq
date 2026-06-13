@@ -75,7 +75,7 @@ class Webhook:
             timeout=data.get('timeout', 10),
         )
 
-    def build_payload(self, job: Job) -> dict[str, Any]:
+    def get_payload(self, job: Job, *, exc_string: str | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {
             'job_id': job.id,
             'func_name': job.func_name,
@@ -90,22 +90,16 @@ class Webhook:
             except TypeError:
                 payload['result'] = str(job._result)
         else:
-            from .results import Result
-
-            latest_result = job.latest_result()
-            if latest_result and latest_result.type == Result.Type.FAILED:
-                payload['exc_info'] = latest_result.exc_string
-            else:
-                payload['exc_info'] = None
+            payload['exc_info'] = exc_string
         return payload
 
-    def send(self, job: Job) -> None:
+    def send(self, job: Job, *, exc_string: str | None = None) -> None:
         """Performs the HTTP request. Errors are logged, never raised."""
         try:
             if self.method == 'GET':
                 request = Request(self.url, headers=self.headers or {}, method='GET')
             else:
-                body = json.dumps(self.build_payload(job)).encode('utf-8')
+                body = json.dumps(self.get_payload(job, exc_string=exc_string)).encode('utf-8')
                 headers = {'Content-Type': 'application/json', **(self.headers or {})}
                 request = Request(self.url, data=body, headers=headers, method='POST')
             with urlopen(request, timeout=self.timeout):

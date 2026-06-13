@@ -1557,13 +1557,14 @@ class Job:
             self.log.exception('Job %s: error while executing stopped callback', self.id)
             raise
 
-    def trigger_webhooks(self, status: str | JobStatus) -> None:
+    def send_webhooks(self, status: str | JobStatus, *, exc_string: str | None = None) -> None:
         """Sends every webhook registered for the given terminal job status.
+        `exc_string` is included in the payload of `failed` webhooks.
         Send errors are logged by `Webhook.send()`, never raised."""
         for webhook in self.webhooks:
             if webhook.job_status == status:
                 self.log.debug('Job %s: sending %s webhook to %s', self.id, webhook.job_status, webhook.url)
-                webhook.send(self)
+                webhook.send(self, exc_string=exc_string)
 
     def _handle_success(
         self,
