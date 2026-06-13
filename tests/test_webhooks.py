@@ -1,8 +1,9 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from rq.job import Job, JobStatus
+from rq.queue import Queue
 from rq.webhook import Webhook
 from tests import RQTestCase
 
@@ -246,3 +247,42 @@ class JobWebhookTestCase(RQTestCase):
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             job.send_webhooks(JobStatus.FAILED, exc_string='boom')
         send_mock.assert_called_once_with(failed_webhook, job, exc_string='boom')
+
+
+class QueueWebhookTestCase(RQTestCase):
+    """Webhooks must thread through every enqueue path onto the persisted job."""
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(connection=self.connection)
+        self.webhooks = [
+            Webhook('http://example.com/done', 'finished'),
+            Webhook('http://example.com/fail', 'failed'),
+        ]
+
+    def test_enqueue(self):
+        job = self.queue.enqueue(say_hello, webhooks=self.webhooks)
+        self.assertEqual(job.webhooks, self.webhooks)
+
+    def test_enqueue_call(self):
+        job = self.queue.enqueue_call(say_hello, webhooks=self.webhooks)
+        self.assertEqual(job.webhooks, self.webhooks)
+
+    def test_enqueue_at(self):
+        job = self.queue.enqueue_at(datetime.now(timezone.utc), say_hello, webhooks=self.webhooks)
+        self.assertEqual(job.webhooks, self.webhooks)
+
+    def test_enqueue_in(self):
+        job = self.queue.enqueue_in(timedelta(seconds=60), say_hello, webhooks=self.webhooks)
+        self.assertEqual(job.webhooks, self.webhooks)
+
+    def test_enqueue_many(self):
+        job_data = Queue.prepare_data(say_hello, webhooks=self.webhooks)
+        job = self.queue.enqueue_many([job_data])[0]
+        self.assertEqual(job.webhooks, self.webhooks)
+
+    def test_webhooks_persisted(self):
+        """Webhooks survive enqueue + a fresh fetch from Redis."""
+        job = self.queue.enqueue(say_hello, webhooks=self.webhooks)
+        fetched_job = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(fetched_job.webhooks, self.webhooks)
