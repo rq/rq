@@ -2,12 +2,13 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from rq.job import Job, JobStatus
+from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
 from rq.webhook import Webhook
+from rq.worker import SimpleWorker
 from tests import RQTestCase
 
-from .fixtures import say_hello
+from .fixtures import div_by_zero, fail_while_retries_remain, say_hello
 
 
 class WebhookTestCase(RQTestCase):
@@ -193,10 +194,6 @@ class JobWebhookTestCase(RQTestCase):
         job = Job.create(say_hello, connection=self.connection, webhooks=webhooks)
         self.assertEqual(job.webhooks, webhooks)
 
-    def test_create_without_webhooks(self):
-        job = Job.create(say_hello, connection=self.connection)
-        self.assertEqual(job.webhooks, [])
-
     def test_create_rejects_invalid_webhooks(self):
         # A bare Webhook (not wrapped in a list)
         with self.assertRaises(TypeError):
@@ -217,21 +214,15 @@ class JobWebhookTestCase(RQTestCase):
         fetched_job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(fetched_job.webhooks, webhooks)
 
-    def test_job_without_webhooks_restores_empty_list(self):
-        """Jobs saved without webhooks (e.g. by older RQ versions) restore with []"""
+    def test_missing_or_corrupted_webhooks_field_restores_empty_list(self):
+        # Missing field (e.g. jobs saved by older RQ versions)
         job = Job.create(say_hello, connection=self.connection)
         job.save()
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).webhooks, [])
 
-        fetched_job = Job.fetch(job.id, connection=self.connection)
-        self.assertEqual(fetched_job.webhooks, [])
-
-    def test_corrupted_webhooks_field_restores_empty_list(self):
-        job = Job.create(say_hello, connection=self.connection)
-        job.save()
+        # Corrupted field falls back to [] instead of raising
         self.connection.hset(job.key, 'webhooks', b'not-json')
-
-        fetched_job = Job.fetch(job.id, connection=self.connection)
-        self.assertEqual(fetched_job.webhooks, [])
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).webhooks, [])
 
     def test_send_webhooks(self):
         finished_webhook = Webhook('http://example.com/done', 'finished')
@@ -286,3 +277,62 @@ class QueueWebhookTestCase(RQTestCase):
         job = self.queue.enqueue(say_hello, webhooks=self.webhooks)
         fetched_job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(fetched_job.webhooks, self.webhooks)
+
+
+class WorkerWebhookTestCase(RQTestCase):
+    """The worker dispatches matching webhooks once the job reaches a terminal state.
+
+    These tests assert which webhooks the worker hands to `Webhook.send` (and with what
+    `exc_string`); the HTTP request and error-swallowing mechanics are covered by `WebhookTestCase`.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(connection=self.connection)
+        self.worker = SimpleWorker([self.queue], connection=self.connection)
+        self.finished_webhook = Webhook('http://example.com/done', 'finished')
+        self.failed_webhook = Webhook('http://example.com/fail', 'failed')
+
+    @staticmethod
+    def fired_webhooks(send_mock):
+        # autospec records the bound instance as the first positional arg
+        return [call.args[0] for call in send_mock.call_args_list]
+
+    def test_terminal_status_fires_only_matching_webhook(self):
+        # A successful job fires only the finished webhook
+        self.queue.enqueue(say_hello, webhooks=[self.finished_webhook, self.failed_webhook])
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.worker.work(burst=True)
+        self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])
+
+        # A failing job fires only the failed webhook, with the exception string forwarded
+        self.queue.enqueue(div_by_zero, 1, webhooks=[self.finished_webhook, self.failed_webhook])
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.worker.work(burst=True)
+        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+        self.assertIn('ZeroDivisionError', send_mock.call_args.kwargs['exc_string'])
+
+    def test_retry_exhausted_fires_failed_once(self):
+        """Intermediate retry attempts don't fire; only the terminal failure does."""
+        self.queue.enqueue(div_by_zero, 1, retry=Retry(max=1, interval=0), webhooks=[self.failed_webhook])
+
+        # First attempt fails and is requeued for retry: the failed webhook must not fire
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.worker.work(burst=True, max_jobs=1)
+        self.assertEqual(self.fired_webhooks(send_mock), [])
+
+        # Draining the requeued job reaches terminal failure: now it fires exactly once
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.worker.work(burst=True)
+        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+
+    def test_retry_then_success_skips_failed(self):
+        """A job that fails then succeeds fires finished, never failed."""
+        self.queue.enqueue(
+            fail_while_retries_remain,
+            retry=Retry(max=1, interval=0),
+            webhooks=[self.finished_webhook, self.failed_webhook],
+        )
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.worker.work(burst=True)
+        self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])

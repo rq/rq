@@ -62,6 +62,14 @@ def div_by_zero(x):
     return x / 0
 
 
+def fail_while_retries_remain():
+    """Raises while retries remain, succeeds on the final attempt."""
+    job = get_current_job()
+    if job.retries_left and job.retries_left > 0:
+        raise Exception('failing while retries remain')
+    return 'success'
+
+
 def long_process():
     time.sleep(60)
     return

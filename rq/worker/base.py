@@ -756,6 +756,8 @@ class BaseWorker:
                 pipeline.execute()
                 if enqueue_dependents:
                     queue.enqueue_dependents(job)
+                if not retry and not job_is_stopped:
+                    job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
@@ -1563,6 +1565,7 @@ class BaseWorker:
                 job._status = JobStatus.FINISHED
                 job.execute_success_callback(self.death_penalty_class, return_value)
                 self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
+                job.send_webhooks(JobStatus.FINISHED)
 
         except:  # NOQA
             self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
