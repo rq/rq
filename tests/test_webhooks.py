@@ -183,3 +183,65 @@ class WebhookTestCase(RQTestCase):
 
         with patch('rq.webhook.urlopen', side_effect=ConnectionError('endpoint down')):
             webhook.send(job)  # should not raise
+
+
+class JobWebhookTestCase(RQTestCase):
+    def test_create_with_webhooks(self):
+        webhooks = [
+            Webhook('http://example.com/done', 'finished'),
+            Webhook('http://example.com/fail', 'failed'),
+        ]
+        job = Job.create(say_hello, connection=self.connection, webhooks=webhooks)
+        self.assertEqual(job.webhooks, webhooks)
+
+    def test_create_without_webhooks(self):
+        job = Job.create(say_hello, connection=self.connection)
+        self.assertEqual(job.webhooks, [])
+
+    def test_create_rejects_bare_webhook(self):
+        with self.assertRaises(TypeError):
+            Job.create(say_hello, connection=self.connection, webhooks=Webhook('http://example.com', 'finished'))
+
+    def test_create_rejects_non_webhook_items(self):
+        with self.assertRaises(TypeError):
+            Job.create(say_hello, connection=self.connection, webhooks=['http://example.com'])
+
+    def test_webhooks_survive_redis_round_trip(self):
+        webhooks = [
+            Webhook('http://example.com/done', 'finished', method='POST', headers={'X-A': 'b'}, timeout=5),
+            Webhook('http://example.com/fail', 'failed'),
+        ]
+        job = Job.create(say_hello, connection=self.connection, webhooks=webhooks)
+        job.save()
+
+        fetched_job = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(fetched_job.webhooks, webhooks)
+
+    def test_job_without_webhooks_restores_empty_list(self):
+        """Jobs saved without webhooks (e.g. by older RQ versions) restore with []"""
+        job = Job.create(say_hello, connection=self.connection)
+        job.save()
+
+        fetched_job = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(fetched_job.webhooks, [])
+
+    def test_corrupted_webhooks_field_restores_empty_list(self):
+        job = Job.create(say_hello, connection=self.connection)
+        job.save()
+        self.connection.hset(job.key, 'webhooks', b'not-json')
+
+        fetched_job = Job.fetch(job.id, connection=self.connection)
+        self.assertEqual(fetched_job.webhooks, [])
+
+    def test_trigger_webhooks_sends_only_matching(self):
+        finished_webhook = Webhook('http://example.com/done', 'finished')
+        failed_webhook = Webhook('http://example.com/fail', 'failed')
+        job = Job.create(say_hello, connection=self.connection, webhooks=[finished_webhook, failed_webhook])
+
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            job.trigger_webhooks('finished')
+        send_mock.assert_called_once_with(finished_webhook, job)
+
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            job.trigger_webhooks(JobStatus.FAILED)
+        send_mock.assert_called_once_with(failed_webhook, job)
