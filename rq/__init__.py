@@ -3,6 +3,7 @@ from .job import Callback, Retry, cancel_job, get_current_job, requeue_job
 from .queue import Queue
 from .repeat import Repeat
 from .version import VERSION
+from .webhook import Webhook
 from .worker import SimpleWorker, SpawnWorker, Worker
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     'SpawnWorker',
     'Worker',
     'Repeat',
+    'Webhook',
 ]
 
 __version__ = VERSION

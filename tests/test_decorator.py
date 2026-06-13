@@ -3,6 +3,7 @@ from unittest import mock
 from rq.decorators import job
 from rq.job import Job, Retry
 from rq.queue import Queue
+from rq.webhook import Webhook
 from rq.worker import DEFAULT_RESULT_TTL
 from tests import RQTestCase
 
@@ -192,6 +193,18 @@ class TestDecorator(RQTestCase):
         result = hello.enqueue()
         result_job = Job.fetch(id=result.id, connection=self.connection)
         self.assertEqual(result_job.success_callback, print)
+
+    def test_decorator_accepts_webhooks_as_argument(self):
+        """Ensure that passing webhooks to the decorator sets them on the job."""
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+
+        @job('default', connection=self.connection, webhooks=webhooks)
+        def hello():
+            return 'Hello'
+
+        result = hello.enqueue()
+        result_job = Job.fetch(id=result.id, connection=self.connection)
+        self.assertEqual(result_job.webhooks, webhooks)
 
     def test_decorator_custom_queue_class(self):
         """Ensure that a custom queue class can be passed to the job decorator"""
