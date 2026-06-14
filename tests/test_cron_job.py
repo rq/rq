@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler
 from rq.utils import NOT_JSON_SERIALIZABLE
+from rq.webhook import Webhook
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -60,6 +61,29 @@ class TestCronJob(RQTestCase):
         self.assertEqual(cron_job.job_options['ttl'], ttl)
         self.assertEqual(cron_job.job_options['failure_ttl'], failure_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
+
+    def test_cron_job_with_webhooks(self):
+        """CronJob stores webhooks in job_options and validates them at registration time"""
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, webhooks=webhooks)
+        self.assertEqual(cron_job.job_options['webhooks'], webhooks)
+
+        # A bare Webhook (not wrapped in a list)
+        with self.assertRaises(TypeError):
+            CronJob(
+                func=say_hello,
+                queue_name=self.queue.name,
+                interval=60,
+                webhooks=Webhook('http://example.com', 'finished'),
+            )
+
+        # A list containing a non-Webhook item
+        with self.assertRaises(TypeError):
+            CronJob(func=say_hello, queue_name=self.queue.name, interval=60, webhooks=['http://example.com'])
+
+        # An empty list is dropped (not stored), matching Job's behavior
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, webhooks=[])
+        self.assertNotIn('webhooks', cron_job.job_options)
 
     def test_get_next_enqueue_time(self):
         """Test that get_next_enqueue_time correctly calculates the next run time"""
@@ -129,6 +153,13 @@ class TestCronJob(RQTestCase):
         self.assertEqual(job.timeout, timeout_value)
         # Verify job can be executed without TypeError
         job.perform()
+
+    def test_enqueue_with_webhooks(self):
+        """Webhooks are attached to the job produced by enqueue"""
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, webhooks=webhooks)
+        job = cron_job.enqueue(self.connection)
+        self.assertEqual(job.webhooks, webhooks)
 
     def test_set_enqueue_time(self):
         """Test that set_enqueue_time correctly sets latest run time and updates next run time"""
@@ -333,6 +364,20 @@ class TestCronJob(RQTestCase):
         self.assertEqual(restored_job.kwargs, original_job.kwargs)
         # Assert job_options preserved
         self.assertEqual(restored_job.job_options, original_job.job_options)
+
+    def test_webhooks_serialization_roundtrip(self):
+        """Webhooks survive to_dict/from_dict, rebuilt as Webhook instances"""
+        webhooks = [
+            Webhook('http://example.com/done', 'finished', method='POST', timeout=5),
+            Webhook('http://example.com/fail', 'failed'),
+        ]
+        job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, webhooks=webhooks)
+
+        data = job.to_dict()
+        self.assertIsInstance(data['webhooks'], str)  # serialized to a JSON string for storage
+
+        restored = CronJob.from_dict(data)
+        self.assertEqual(restored.job_options['webhooks'], webhooks)
 
     def test_non_serializable_arguments(self):
         """Test that from_dict gracefully handles the non-serializable placeholder through Redis"""
