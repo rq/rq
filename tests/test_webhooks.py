@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
@@ -285,23 +285,18 @@ class WorkerWebhookTestCase(RQTestCase):
         self.finished_webhook = Webhook('http://example.com/done', 'finished')
         self.failed_webhook = Webhook('http://example.com/fail', 'failed')
 
-    @staticmethod
-    def fired_webhooks(send_mock):
-        # autospec records the bound instance as the first positional arg
-        return [call.args[0] for call in send_mock.call_args_list]
-
     def test_terminal_status_fires_only_matching_webhook(self):
         # A successful job fires only the finished webhook
         self.queue.enqueue(say_hello, webhooks=[self.finished_webhook, self.failed_webhook])
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True)
-        self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])
+        send_mock.assert_called_once_with(self.finished_webhook, ANY, exc_string=ANY)
 
         # A failing job fires only the failed webhook, with the exception string forwarded
         self.queue.enqueue(div_by_zero, 1, webhooks=[self.finished_webhook, self.failed_webhook])
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True)
-        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+        send_mock.assert_called_once_with(self.failed_webhook, ANY, exc_string=ANY)
         self.assertIn('ZeroDivisionError', send_mock.call_args.kwargs['exc_string'])
 
     def test_retry_exhausted_fires_failed_once(self):
@@ -311,12 +306,12 @@ class WorkerWebhookTestCase(RQTestCase):
         # First attempt fails and is requeued for retry: the failed webhook must not fire
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True, max_jobs=1)
-        self.assertEqual(self.fired_webhooks(send_mock), [])
+        send_mock.assert_not_called()
 
         # Draining the requeued job reaches terminal failure: now it fires exactly once
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True)
-        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+        send_mock.assert_called_once_with(self.failed_webhook, ANY, exc_string=ANY)
 
     def test_retry_then_success_skips_failed(self):
         """A job that fails then succeeds fires finished, never failed."""
@@ -327,14 +322,14 @@ class WorkerWebhookTestCase(RQTestCase):
         )
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True)
-        self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])
+        send_mock.assert_called_once_with(self.finished_webhook, ANY, exc_string=ANY)
 
     def test_return_based_retry_exhaustion_fires_failed(self):
         """A job returning Retry until exhausted fires the failed webhook on terminal failure."""
         self.queue.enqueue(returns_retry, webhooks=[self.finished_webhook, self.failed_webhook])
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True)
-        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+        send_mock.assert_called_once_with(self.failed_webhook, ANY, exc_string=ANY)
 
 
 class SyncWebhookTestCase(RQTestCase):
@@ -346,17 +341,13 @@ class SyncWebhookTestCase(RQTestCase):
         self.finished_webhook = Webhook('http://example.com/done', 'finished')
         self.failed_webhook = Webhook('http://example.com/fail', 'failed')
 
-    @staticmethod
-    def fired_webhooks(send_mock):
-        return [call.args[0] for call in send_mock.call_args_list]
-
     def test_finished_fires_only_finished(self):
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.queue.enqueue(say_hello, webhooks=[self.finished_webhook, self.failed_webhook])
-        self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])
+        send_mock.assert_called_once_with(self.finished_webhook, ANY, exc_string=ANY)
 
     def test_failed_fires_only_failed_with_exc_info(self):
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.queue.enqueue(div_by_zero, 1, webhooks=[self.finished_webhook, self.failed_webhook])
-        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+        send_mock.assert_called_once_with(self.failed_webhook, ANY, exc_string=ANY)
         self.assertIn('ZeroDivisionError', send_mock.call_args.kwargs['exc_string'])
