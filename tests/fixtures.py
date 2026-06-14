@@ -70,6 +70,13 @@ def fail_while_retries_remain():
     return 'success'
 
 
+def returns_retry():
+    """Always returns a Retry object (return-based retry)."""
+    from rq import Retry
+
+    return Retry(max=1)
+
+
 def long_process():
     time.sleep(60)
     return

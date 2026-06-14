@@ -1370,9 +1370,11 @@ class Queue:
 
             if job.failure_callback:
                 job.failure_callback(job, self.connection, *sys.exc_info())
+            job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
         else:
             if job.success_callback:
                 job.success_callback(job, self.connection, job.return_value())
+            job.send_webhooks(JobStatus.FINISHED)
 
         return job
 

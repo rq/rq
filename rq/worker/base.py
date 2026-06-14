@@ -1404,6 +1404,9 @@ class BaseWorker:
 
                 try:
                     pipeline.execute()
+                    # Terminal failure (retries exhausted): fire failed webhooks after the failure is
+                    # persisted, before enqueue_dependents. No exception here, so exc_string is empty.
+                    job.send_webhooks(JobStatus.FAILED, exc_string='')
                     queue.enqueue_dependents(job)
                 except Exception as e:
                     self.log.error(

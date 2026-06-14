@@ -8,7 +8,7 @@ from rq.webhook import Webhook
 from rq.worker import SimpleWorker
 from tests import RQTestCase
 
-from .fixtures import div_by_zero, fail_while_retries_remain, say_hello
+from .fixtures import div_by_zero, fail_while_retries_remain, returns_retry, say_hello
 
 
 class WebhookTestCase(RQTestCase):
@@ -328,3 +328,35 @@ class WorkerWebhookTestCase(RQTestCase):
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
             self.worker.work(burst=True)
         self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])
+
+    def test_return_based_retry_exhaustion_fires_failed(self):
+        """A job returning Retry until exhausted fires the failed webhook on terminal failure."""
+        self.queue.enqueue(returns_retry, webhooks=[self.finished_webhook, self.failed_webhook])
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.worker.work(burst=True)
+        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+
+
+class SyncWebhookTestCase(RQTestCase):
+    """Jobs executed synchronously (is_async=False) also fire webhooks, since they bypass the worker."""
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(connection=self.connection, is_async=False)
+        self.finished_webhook = Webhook('http://example.com/done', 'finished')
+        self.failed_webhook = Webhook('http://example.com/fail', 'failed')
+
+    @staticmethod
+    def fired_webhooks(send_mock):
+        return [call.args[0] for call in send_mock.call_args_list]
+
+    def test_finished_fires_only_finished(self):
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.queue.enqueue(say_hello, webhooks=[self.finished_webhook, self.failed_webhook])
+        self.assertEqual(self.fired_webhooks(send_mock), [self.finished_webhook])
+
+    def test_failed_fires_only_failed_with_exc_info(self):
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.queue.enqueue(div_by_zero, 1, webhooks=[self.finished_webhook, self.failed_webhook])
+        self.assertEqual(self.fired_webhooks(send_mock), [self.failed_webhook])
+        self.assertIn('ZeroDivisionError', send_mock.call_args.kwargs['exc_string'])
