@@ -261,7 +261,7 @@ class Job:
         on_success: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_failure: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_stopped: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ) -> Job:
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -300,7 +300,7 @@ class Job:
                 fails. Defaults to None. Passing a callable is deprecated.
             on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
                 is stopped. Defaults to None. Passing a callable is deprecated.
-            webhooks (Optional[List[Webhook]], optional): Webhooks to send when the job reaches a matching
+            webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send when the job reaches a matching
                 terminal state (`finished` or `failed`). Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
@@ -364,9 +364,9 @@ class Job:
             job._stopped_callback_timeout = on_stopped.timeout
 
         if webhooks:
-            if not isinstance(webhooks, list) or not all(isinstance(webhook, Webhook) for webhook in webhooks):
-                raise TypeError('webhooks must be a list of Webhook instances')
-            job.webhooks = webhooks
+            if not isinstance(webhooks, Sequence) or not all(isinstance(webhook, Webhook) for webhook in webhooks):
+                raise TypeError('webhooks must be a sequence of Webhook instances')
+            job.webhooks = list(webhooks)
 
         # Extra meta data
         job.description = description or job.get_call_string()

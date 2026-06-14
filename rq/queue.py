@@ -96,7 +96,7 @@ class EnqueueArgs(NamedTuple):
     unique: bool
     args: tuple | list | None
     kwargs: dict | None
-    webhooks: list[Webhook] | None
+    webhooks: Sequence[Webhook] | None
 
 
 @total_ordering
@@ -557,7 +557,7 @@ class Queue:
         on_success: Callback | Callable | None = None,
         on_failure: Callback | Callable | None = None,
         on_stopped: Callback | Callable | None = None,
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
         group_id: str | None = None,
     ) -> Job:
         """Creates a job based on parameters given
@@ -583,7 +583,7 @@ class Queue:
                 None. Callable is deprecated.
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
-            webhooks (Optional[List[Webhook]], optional): Webhooks to send on matching terminal job statuses.
+            webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send on matching terminal job statuses.
                 Defaults to None.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
@@ -723,7 +723,7 @@ class Queue:
         on_stopped: Callback | Callable[..., Any] | None = None,
         pipeline: Pipeline | None = None,
         unique: bool = False,
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ) -> Job:
         """Creates a job to represent the delayed function call and enqueues it.
 
@@ -754,7 +754,7 @@ class Queue:
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
             unique (bool, optional): If True, raises DuplicateJobError if a job with the same ID exists.
                 Defaults to False.
-            webhooks (Optional[List[Webhook]], optional): Webhooks to send on matching terminal job statuses.
+            webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send on matching terminal job statuses.
                 Defaults to None.
 
         Returns:
@@ -804,7 +804,7 @@ class Queue:
         on_failure: Callback | Callable | None = None,
         on_stopped: Callback | Callable | None = None,
         repeat: Repeat | None = None,
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ) -> EnqueueData:
         """Need this till support dropped for python_version < 3.7, where defaults can be specified for named tuples
         And can keep this logic within EnqueueData
@@ -830,7 +830,7 @@ class Queue:
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callback for on stopped. Defaults to
                 None. Callable is deprecated.
             repeat (Optional[Repeat], optional): Repeat object. Defaults to None.
-            webhooks (Optional[List[Webhook]], optional): Webhooks to send on matching terminal job statuses.
+            webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send on matching terminal job statuses.
                 Defaults to None.
 
         Returns:

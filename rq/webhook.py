@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -57,7 +57,8 @@ class Webhook:
             raise ValueError(f'timeout must be a positive integer, got {timeout!r}')
 
         self.url = url
-        self.job_status = cast("Literal['finished', 'failed']", status_value)
+        # Assign literal constants so the field's Literal type holds without a cast
+        self.job_status = 'finished' if status_value == 'finished' else 'failed'
         self.method = method
         self.headers = headers
         self.timeout = timeout

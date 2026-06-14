@@ -9,7 +9,7 @@ import socket
 import sys
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -55,17 +55,17 @@ class CronJob:
         ttl: int | None = None,
         failure_ttl: int | None = None,
         meta: dict | None = None,
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ):
         if interval and cron:
             raise ValueError('Cannot specify both interval and cron parameters')
         if not interval and not cron:
             raise ValueError('Must specify either interval or cron parameter')
 
-        if webhooks is not None and (
-            not isinstance(webhooks, list) or not all(isinstance(webhook, Webhook) for webhook in webhooks)
+        if webhooks and (
+            not isinstance(webhooks, Sequence) or not all(isinstance(webhook, Webhook) for webhook in webhooks)
         ):
-            raise TypeError('webhooks must be a list of Webhook instances')
+            raise TypeError('webhooks must be a sequence of Webhook instances')
 
         if func:
             self.func: Callable | None = func
@@ -94,8 +94,9 @@ class CronJob:
             'ttl': ttl,
             'failure_ttl': failure_ttl,
             'meta': meta,
-            # Drop an empty list so it isn't stored/serialized, matching Job (which omits empty webhooks)
-            'webhooks': webhooks or None,
+            # Normalize to a list and drop an empty sequence so it isn't stored/serialized,
+            # matching Job (which omits empty webhooks)
+            'webhooks': list(webhooks) if webhooks else None,
         }
         # Filter out None values
         self.job_options = {k: v for k, v in self.job_options.items() if v is not None}
@@ -274,7 +275,7 @@ class CronScheduler:
         ttl: int | None = None,
         failure_ttl: int | None = None,
         meta: dict | None = None,
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
@@ -618,7 +619,7 @@ def register(
     ttl: int | None = None,
     failure_ttl: int | None = None,
     meta: dict | None = None,
-    webhooks: list[Webhook] | None = None,
+    webhooks: Sequence[Webhook] | None = None,
 ) -> dict:
     """
     Register a function to be run as a cron job by adding its definition

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +35,7 @@ class job:  # noqa
         on_failure: Callback | Callable[..., Any] | None = None,
         on_success: Callback | Callable[..., Any] | None = None,
         on_stopped: Callback | Callable[..., Any] | None = None,
-        webhooks: list[Webhook] | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ):
         """A decorator that adds a ``enqueue`` method to the decorated function,
         which in turn creates a RQ job when called. Accepts a required
@@ -70,7 +70,7 @@ class job:  # noqa
                 to None.
             on_stopped (Optional[Union[Callback, Callable[..., Any]]], optional): Callable to run when stopped. Defaults
                 to None.
-            webhooks (Optional[List[Webhook]], optional): Webhooks to send on matching terminal job statuses.
+            webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send on matching terminal job statuses.
                 Defaults to None.
         """
         self.queue = queue
