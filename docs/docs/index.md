@@ -433,8 +433,7 @@ If the value starts with `@`, `:` or `%` or includes `=` it would be recognised 
 _New in version 2.10._
 
 Webhooks notify an external HTTP endpoint when a job reaches a terminal state (`finished` or
-`failed`). They are useful for status pings, audit trails and lightweight integrations where
-writing an importable callback function is unnecessary.
+`failed`). They are useful for monitoring, status pings and audit trails.
 
 Pass a sequence of `Webhook` objects via the `webhooks` argument; each fires only on its
 `job_status`:
@@ -448,9 +447,8 @@ queue.enqueue(say_hello,
 ```
 
 To be notified on both outcomes, pass one `Webhook` for each. The `webhooks` argument is also
-accepted by `enqueue_call`, `enqueue_at`, `enqueue_in`, `enqueue_many` and the
-[`@job` decorator](#the-job-decorator). Cron jobs can use webhooks for heartbeat monitoring; see
-[cron jobs](/docs/cron/#webhooks).
+accepted by `enqueue_call`, `enqueue_at` and `enqueue_in`, the [`@job` decorator](#the-job-decorator),
+and `Queue.prepare_data()` for `enqueue_many`. Cron jobs can use webhooks for heartbeat monitoring; see [cron jobs](/docs/cron/#webhooks).
 
 ### Webhook Options
 
@@ -463,7 +461,7 @@ accepted by `enqueue_call`, `enqueue_at`, `enqueue_in`, `enqueue_many` and the
 * `headers`: an optional dict of HTTP headers.
 * `timeout`: request timeout in seconds (default `10`).
 
-A `GET` webhook requests `url` with no body. A `POST` webhook sends a JSON payload describing the job:
+A `POST` webhook sends a JSON payload describing the job:
 
 ```json
 {
@@ -475,23 +473,17 @@ A `GET` webhook requests `url` with no body. A `POST` webhook sends a JSON paylo
 }
 ```
 
-`failed` POST webhooks additionally include `exc_info` (the exception traceback). The job result is
-not sent. `GET` webhooks send no body.
+`failed` POST webhooks additionally include `exc_info` (the exception traceback).
 
 ### Firing Semantics
 
-Webhooks are stored with the job as JSON-serializable data, so they don't require an importable
-function like callbacks do. The worker sends them once the job's terminal state is persisted:
+Webhooks are sent once the job's terminal state is persisted:
 
 * A `finished` webhook fires after `on_success` runs and the job's successful result is saved.
-* A `failed` webhook fires after the failure is persisted as a terminal failure (which also runs
-  after `on_failure`). It is **not** sent for attempts that will be [retried](/docs/exceptions/#retrying-failed-jobs)
-  or for jobs that are [stopped](/docs/workers/#stopping-a-job).
-* Webhooks also fire for jobs executed synchronously (a queue created with `is_async=False`).
+* A `failed` webhook fires after the failure is persisted as a terminal failure (which also runs after `on_failure`). It is **not** sent for attempts that will be [retried](/docs/exceptions/#retrying-failed-jobs) or for jobs that are [stopped](/docs/workers/#stopping-a-job).
 
-Delivery is best-effort: send errors (an unreachable endpoint, a timeout, an HTTP error) are
-logged and swallowed, so a failing webhook never affects job execution. Sending is blocking, so a
-slow endpoint can delay the worker by up to `timeout` seconds.
+Delivery is best-effort: send errors (unreachable endpoint, timeout, HTTP error) are
+logged and swallowed, so a failing webhook never affects job execution. Sending is blocking, so a slow endpoint can delay the worker by up to `timeout` seconds.
 
 
 ## Working with Queues

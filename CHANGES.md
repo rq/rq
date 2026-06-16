@@ -1,5 +1,5 @@
 ### Unreleased
-* Added webhook job notifications. Passing `webhooks=[Webhook(url, job_status='finished'), ...]` to `enqueue`, `enqueue_at`/`enqueue_in`, `enqueue_many`, the `@job` decorator, or `cron.register` sends an HTTP request to the given URL when the job finishes or fails. Thanks @selwin!
+* Added [webhook notifications](https://python-rq.org/docs/#webhooks) to notify external end points when a job finishes or fails. Thanks @selwin!
 
 ### RQ 2.9.1 (2026-06-06)
 * `Job.create()` now supports `retry` argument. Thanks @sethuvishal!
