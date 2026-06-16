@@ -457,8 +457,8 @@ accepted by `enqueue_call`, `enqueue_at`, `enqueue_in`, `enqueue_many` and the
 `Webhook` accepts the following arguments:
 
 * `url` (required): the `http://` or `https://` endpoint to request.
-* `job_status` (required): `'finished'` or `'failed'` (the `JobStatus` enum is also accepted). The
-  webhook fires only when the job reaches this state.
+* `job_status` (required): `'finished'` or `'failed'`. The webhook fires only when the job reaches
+  this state.
 * `method`: `'GET'` (default) or `'POST'`.
 * `headers`: an optional dict of HTTP headers.
 * `timeout`: request timeout in seconds (default `10`).

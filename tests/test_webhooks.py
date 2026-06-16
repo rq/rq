@@ -51,8 +51,6 @@ class WebhookTestCase(RQTestCase):
             Webhook('http://example.com', None)
         with self.assertRaises(ValueError):
             Webhook('http://example.com', 'stopped')
-        with self.assertRaises(ValueError):
-            Webhook('http://example.com', JobStatus.STOPPED)
 
     def test_method_validation(self):
         with self.assertRaises(ValueError):
@@ -75,7 +73,7 @@ class WebhookTestCase(RQTestCase):
             Webhook('http://example.com', 'finished', timeout=1.5)
 
     def test_to_dict(self):
-        webhook = Webhook('http://example.com', JobStatus.FAILED, method='POST', timeout=5)
+        webhook = Webhook('http://example.com', 'failed', method='POST', timeout=5)
         self.assertEqual(
             webhook.to_dict(),
             {

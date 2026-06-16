@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 if TYPE_CHECKING:
-    from .job import Job, JobStatus
+    from .job import Job
 
 logger = logging.getLogger('rq.webhook')
 
@@ -33,7 +32,7 @@ class Webhook:
     def __init__(
         self,
         url: str,
-        job_status: Literal['finished', 'failed'] | JobStatus,
+        job_status: Literal['finished', 'failed'],
         *,
         method: Literal['GET', 'POST'] = 'GET',
         headers: dict[str, str] | None = None,
@@ -43,22 +42,20 @@ class Webhook:
         if parsed is None or parsed.scheme not in ('http', 'https') or not parsed.netloc:
             raise ValueError(f'url must be an http:// or https:// URL, got {url!r}')
 
-        status_value = job_status.value if isinstance(job_status, Enum) else job_status
-        if status_value not in ('finished', 'failed'):
+        if job_status not in ('finished', 'failed'):
             raise ValueError(f"job_status must be 'finished' or 'failed', got {job_status!r}")
 
         if method not in ('GET', 'POST'):
             raise ValueError(f"method must be 'GET' or 'POST', got {method!r}")
 
-        if headers is not None and not isinstance(headers, dict):
+        if headers and not isinstance(headers, dict):
             raise TypeError(f'headers must be a dict or None, got {type(headers).__name__}')
 
         if not isinstance(timeout, int) or timeout <= 0:
             raise ValueError(f'timeout must be a positive integer, got {timeout!r}')
 
         self.url = url
-        # Assign literal constants so the field's Literal type holds without a cast
-        self.job_status = 'finished' if status_value == 'finished' else 'failed'
+        self.job_status = job_status
         self.method = method
         self.headers = headers
         self.timeout = timeout
