@@ -125,13 +125,14 @@ cron.register(
     backup_database,
     queue_name='maintenance',
     cron='0 2 * * *',
-    webhooks=[Webhook('https://example.com', 'finished')],
+    webhooks=[
+        Webhook('https://example.com/finished', 'finished'),
+        Webhook('https://example.com/failed', 'failed'),
+    ],
 )
 ```
 
-If your monitoring endpoint exposes a distinct failure URL, add a second `Webhook` with
-`job_status='failed'`. See [Webhooks](/docs/#webhooks) for the full options, payload schema, and
-firing semantics.
+See [Webhooks](/docs/#webhooks) for the full options, payload schema and firing semantics.
 
 ## Configuration Files
 
