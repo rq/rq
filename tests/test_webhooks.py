@@ -104,9 +104,8 @@ class WebhookTestCase(RQTestCase):
         job = Job.create(say_hello, connection=self.connection)
         job.enqueued_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         job.ended_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
-        job._result = {'answer': 42}
 
-        # Finished: includes the job result
+        # Finished: job metadata only (the result is intentionally not included)
         payload = Webhook('http://example.com', 'finished').get_payload(job)
         self.assertEqual(
             payload,
@@ -116,23 +115,15 @@ class WebhookTestCase(RQTestCase):
                 'status': 'finished',
                 'enqueued_at': job.enqueued_at.isoformat(),
                 'ended_at': job.ended_at.isoformat(),
-                'result': {'answer': 42},
             },
         )
         json.dumps(payload)  # the whole payload must be JSON-serializable
 
-        # Finished: results that can't be JSON-serialized fall back to str()
-        job._result = object()
-        payload = Webhook('http://example.com', 'finished').get_payload(job)
-        self.assertEqual(payload['result'], str(job._result))
-        json.dumps(payload)
-
-        # Failed: includes exc_info from the supplied exception string, never a result
+        # Failed: includes exc_info from the supplied exception string
         failed_webhook = Webhook('http://example.com', 'failed')
         payload = failed_webhook.get_payload(job, exc_string='Traceback: division by zero')
         self.assertEqual(payload['status'], 'failed')
         self.assertEqual(payload['exc_info'], 'Traceback: division by zero')
-        self.assertNotIn('result', payload)
         json.dumps(payload)
 
         # Failed: exc_info is None when no exception string is supplied

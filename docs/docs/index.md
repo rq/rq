@@ -471,13 +471,12 @@ A `GET` webhook requests `url` with no body. A `POST` webhook sends a JSON paylo
   "func_name": "myapp.say_hello",
   "status": "finished",
   "enqueued_at": "2026-06-15T12:00:00+00:00",
-  "ended_at": "2026-06-15T12:00:05+00:00",
-  "result": "..."
+  "ended_at": "2026-06-15T12:00:05+00:00"
 }
 ```
 
-`result` is included only for `finished` POST webhooks (stringified if it is not JSON-serializable);
-`exc_info` (the exception traceback) replaces it for `failed` POST webhooks. `GET` webhooks send no body.
+`failed` POST webhooks additionally include `exc_info` (the exception traceback). The job result is
+not sent. `GET` webhooks send no body.
 
 ### Firing Semantics
 

@@ -84,13 +84,7 @@ class Webhook:
             'enqueued_at': job.enqueued_at.isoformat() if job.enqueued_at else None,
             'ended_at': job.ended_at.isoformat() if job.ended_at else None,
         }
-        if self.job_status == 'finished':
-            try:
-                json.dumps(job._result)
-                payload['result'] = job._result
-            except TypeError:
-                payload['result'] = str(job._result)
-        else:
+        if self.job_status == 'failed':
             payload['exc_info'] = exc_string
         return payload
 
