@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from rq import Queue, Worker
+from rq import ForkWorker, Queue
 from rq.utils import ceildiv
 from rq.worker_registration import (
     REDIS_WORKER_KEYS,
@@ -18,17 +18,17 @@ class TestWorkerRegistry(RQTestCase):
         """Ensure worker.key is correctly set in Redis."""
         foo_queue = Queue(name='foo', connection=self.connection)
         bar_queue = Queue(name='bar', connection=self.connection)
-        worker = Worker([foo_queue, bar_queue], connection=self.connection)
+        worker = ForkWorker([foo_queue, bar_queue], connection=self.connection)
 
         register(worker)
         redis = worker.connection
 
         self.assertTrue(redis.sismember(worker.redis_workers_keys, worker.key))
-        self.assertEqual(Worker.count(connection=redis), 1)
+        self.assertEqual(ForkWorker.count(connection=redis), 1)
         self.assertTrue(redis.sismember(WORKERS_BY_QUEUE_KEY % foo_queue.name, worker.key))
-        self.assertEqual(Worker.count(queue=foo_queue), 1)
+        self.assertEqual(ForkWorker.count(queue=foo_queue), 1)
         self.assertTrue(redis.sismember(WORKERS_BY_QUEUE_KEY % bar_queue.name, worker.key))
-        self.assertEqual(Worker.count(queue=bar_queue), 1)
+        self.assertEqual(ForkWorker.count(queue=bar_queue), 1)
 
         unregister(worker)
         self.assertFalse(redis.sismember(worker.redis_workers_keys, worker.key))
@@ -41,9 +41,9 @@ class TestWorkerRegistry(RQTestCase):
         bar_queue = Queue(name='bar', connection=self.connection)
         baz_queue = Queue(name='baz', connection=self.connection)
 
-        worker1 = Worker([foo_queue, bar_queue], connection=self.connection)
-        worker2 = Worker([foo_queue], connection=self.connection)
-        worker3 = Worker([baz_queue], connection=self.connection)
+        worker1 = ForkWorker([foo_queue, bar_queue], connection=self.connection)
+        worker2 = ForkWorker([foo_queue], connection=self.connection)
+        worker3 = ForkWorker([baz_queue], connection=self.connection)
 
         self.assertEqual(set(), get_keys(foo_queue))
 
@@ -68,7 +68,7 @@ class TestWorkerRegistry(RQTestCase):
     def test_clean_registry(self):
         """clean_registry removes worker keys that don't exist in Redis"""
         queue = Queue(name='foo', connection=self.connection)
-        worker = Worker([queue], connection=self.connection)
+        worker = ForkWorker([queue], connection=self.connection)
 
         register(worker)
         redis = worker.connection
@@ -91,7 +91,7 @@ class TestWorkerRegistry(RQTestCase):
 
         queue = Queue(name='foo', connection=self.connection)
         for i in range(worker_count):
-            worker = Worker([queue], connection=self.connection)
+            worker = ForkWorker([queue], connection=self.connection)
             register(worker)
 
         # Since we registered 11 workers and set the maximum keys to be deleted in each command to 6,
