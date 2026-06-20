@@ -216,7 +216,6 @@ cron.register(
     queue_name='reports',
     cron='0 8 1 * *'
 )
-```python
 
 Cron jobs can also send webhooks to a monitoring endpoint when a scheduled run finishes or fails:
 
