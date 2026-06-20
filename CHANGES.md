@@ -1,3 +1,11 @@
+### RQ 2.10.0 (2026-06-20)
+* Added [webhook notifications](https://python-rq.org/docs/#webhooks) to notify external end points when a job finishes or fails. Thanks @selwin!
+* RQScheduler now has a stable identity and persisted metadata. Thanks @selwin!
+
+### RQ 2.9.1 (2026-06-06)
+* `Job.create()` now supports `retry` argument. Thanks @sethuvishal!
+* Add compatibility with `redis-py` >= 8. Thanks @selwin!
+
 ### RQ 2.9.0 (2026-05-19)
 * Added `json` and `pickle` shorthand aliases for serializers. These can now be used when creating queues/workers and with the `--serializer` CLI option. Thanks @selwin!
 * Fixed a bug where `SpawnWorker` does not use user supplied serializer. Thanks @selwin!

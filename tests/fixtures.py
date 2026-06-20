@@ -16,6 +16,7 @@ from redis import Redis
 
 from rq import Queue, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
 from rq.job import Job
 from rq.suspension import resume
@@ -59,6 +60,21 @@ def raise_exc_mock():
 def div_by_zero(x):
     """Prepare for a division-by-zero exception."""
     return x / 0
+
+
+def fail_while_retries_remain():
+    """Raises while retries remain, succeeds on the final attempt."""
+    job = get_current_job()
+    if job.retries_left and job.retries_left > 0:
+        raise Exception('failing while retries remain')
+    return 'success'
+
+
+def returns_retry():
+    """Always returns a Retry object (return-based retry)."""
+    from rq import Retry
+
+    return Retry(max=1)
 
 
 def long_process():
@@ -280,7 +296,7 @@ def start_worker_process(
     """
     Use multiprocessing to start a new worker in a separate process.
     """
-    conn_kwargs = connection.connection_pool.connection_kwargs
+    conn_kwargs = get_connection_kwargs(connection)
     p = Process(target=start_worker, args=(queue_name, conn_kwargs, worker_name, burst, job_monitoring_interval))
     p.start()
     return p

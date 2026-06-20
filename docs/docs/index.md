@@ -429,6 +429,63 @@ If the first character of `[value]` is `@` the subsequent path will be read.
 If the value starts with `@`, `:` or `%` or includes `=` it would be recognised as something else.
 
 
+## Webhooks
+_New in version 2.10._
+
+Webhooks notify an external HTTP endpoint when a job reaches a terminal state (`finished` or
+`failed`). They are useful for monitoring, status pings and audit trails.
+
+Pass a sequence of `Webhook` objects via the `webhooks` argument; each fires only on its
+`job_status`:
+
+```python
+from rq import Webhook
+
+queue.enqueue(say_hello,
+              webhooks=[Webhook('https://example.com/finished', job_status='finished'),
+                        Webhook('https://example.com/failed', job_status='failed', method='POST')])
+```
+
+To be notified on both outcomes, pass one `Webhook` for each. The `webhooks` argument is also
+accepted by `enqueue_call`, `enqueue_at` and `enqueue_in`, the [`@job` decorator](#the-job-decorator),
+and `Queue.prepare_data()` for `enqueue_many`. Cron jobs can use webhooks for heartbeat monitoring; see [cron jobs](/docs/cron/#webhooks).
+
+### Webhook Options
+
+`Webhook` accepts the following arguments:
+
+* `url` (required): the `http://` or `https://` endpoint to request.
+* `job_status` (required): `'finished'` or `'failed'`. The webhook fires only when the job reaches
+  this state.
+* `method`: `'GET'` (default) or `'POST'`.
+* `headers`: an optional dict of HTTP headers.
+* `timeout`: request timeout in seconds (default `10`).
+
+A `POST` webhook sends a JSON payload describing the job:
+
+```json
+{
+  "job_id": "...",
+  "func_name": "myapp.say_hello",
+  "status": "finished",
+  "enqueued_at": "2026-06-15T12:00:00+00:00",
+  "ended_at": "2026-06-15T12:00:05+00:00"
+}
+```
+
+`failed` POST webhooks additionally include `exc_info` (the exception traceback).
+
+### Firing Semantics
+
+Webhooks are sent once the job's terminal state is persisted:
+
+* A `finished` webhook fires after `on_success` runs and the job's successful result is saved.
+* A `failed` webhook fires after the failure is persisted as a terminal failure (which also runs after `on_failure`). It is **not** sent for attempts that will be [retried](/docs/exceptions/#retrying-failed-jobs) or for jobs that are [stopped](/docs/workers/#stopping-a-job).
+
+Delivery is best-effort: send errors (unreachable endpoint, timeout, HTTP error) are
+logged and swallowed, so a failing webhook never affects job execution. Sending is blocking, so a slow endpoint can delay the worker by up to `timeout` seconds.
+
+
 ## Working with Queues
 
 Besides enqueuing jobs, Queues have a few useful methods:

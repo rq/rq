@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import socket
 import time
 import traceback
 from collections.abc import Iterable
@@ -10,17 +11,20 @@ from datetime import datetime
 from enum import Enum
 from multiprocessing import Process, get_context
 from multiprocessing.process import BaseProcess
+from uuid import uuid4
 
 from redis import ConnectionPool, Redis
+from redis.client import Pipeline
 
 from .connections import parse_connection
 from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_SCHEDULER_FALLBACK_PERIOD
+from .exceptions import SchedulerNotFound
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
-from .utils import current_timestamp, parse_names
+from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
 
 ForkProcess: type[BaseProcess]
 try:
@@ -54,6 +58,7 @@ class RQScheduler:
         date_format=DEFAULT_LOGGING_DATE_FORMAT,
         log_format=DEFAULT_LOGGING_FORMAT,
         serializer=None,
+        name: str | None = None,
     ):
         self._queue_names = set(parse_names(queues))
         self._acquired_locks: set[str] = set()
@@ -61,6 +66,13 @@ class RQScheduler:
         self.lock_acquisition_time = None
         self._connection_class, self._pool_class, self._pool_kwargs = parse_connection(connection)
         self.serializer = resolve_serializer(serializer)
+
+        # Identity, stable across the fork (name is pickled to the child process).
+        self.name: str = name or uuid4().hex
+        self.hostname: str = socket.gethostname()
+        self.created_at: datetime = now()
+        self.pid: int = 0  # set in register_birth(), once the scheduler process has forked
+        self.last_heartbeat: datetime | None = None
 
         self._connection = None
         self.interval = interval
@@ -93,6 +105,11 @@ class RQScheduler:
         return self._status
 
     @property
+    def key(self) -> str:
+        """Redis key holding this scheduler's metadata hash."""
+        return SCHEDULER_KEY_TEMPLATE % self.name
+
+    @property
     def should_reacquire_locks(self):
         """Returns True if lock_acquisition_time is longer than 10 minutes ago"""
         if self._queue_names == self.acquired_locks:
@@ -104,10 +121,9 @@ class RQScheduler:
     def acquire_locks(self, auto_start=False):
         """Returns names of queue it successfully acquires lock on"""
         successful_locks = set()
-        pid = os.getpid()
         self.log.debug('Acquiring scheduler lock for %s', ', '.join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), pid, nx=True, ex=self.interval + 60):
+            if self.connection.set(self.get_locking_key(name), self.name, nx=True, ex=self.interval + 60):
                 self.log.info('Acquired scheduler lock for %s', name)
                 successful_locks.add(name)
 
@@ -138,6 +154,67 @@ class RQScheduler:
     def get_locking_key(cls, name: str):
         """Returns scheduler key for a given queue name"""
         return SCHEDULER_LOCKING_KEY_TEMPLATE % name
+
+    def to_dict(self) -> dict:
+        """Serialize this scheduler's metadata for storage in its Redis hash."""
+        assert self.last_heartbeat is not None
+        return {
+            'name': self.name,
+            'hostname': self.hostname,
+            'pid': str(self.pid),
+            'queues': ','.join(self._queue_names),
+            'created_at': utcformat(self.created_at),
+            'last_heartbeat': utcformat(self.last_heartbeat),
+        }
+
+    def restore(self, raw_data: dict) -> None:
+        """Restore this scheduler's metadata from its Redis hash."""
+        obj = decode_redis_hash(raw_data, decode_values=True)
+        self.name = obj['name']
+        self.hostname = obj['hostname']
+        self.pid = int(obj['pid'])
+        self._queue_names = set(obj['queues'].split(',')) if obj.get('queues') else set()
+        self.created_at = utcparse(obj['created_at'])
+        self.last_heartbeat = utcparse(obj['last_heartbeat']) if obj.get('last_heartbeat') else None
+
+    def save(self, pipeline: Pipeline | None = None) -> None:
+        """Save this scheduler's metadata hash with a TTL."""
+        connection = pipeline if pipeline is not None else self.connection.pipeline()
+        connection.hset(self.key, mapping=self.to_dict())
+        connection.expire(self.key, self.interval + 60)
+
+        if pipeline is None:
+            connection.execute()
+
+    def register_birth(self) -> None:
+        """Register this scheduler's birth by writing its metadata hash.
+
+        Idempotent: re-registering the same name (e.g. when the worker restarts a crashed
+        scheduler process) overwrites the existing hash rather than erroring.
+        """
+        self.log.debug('Scheduler %s: registering birth', self.name)
+        self.pid = os.getpid()
+        self.last_heartbeat = now()
+        self.save()
+
+    def register_death(self) -> bool:
+        """Register this scheduler's death by deleting its metadata hash.
+
+        Returns:
+            True if the scheduler metadata existed and was deleted, False if it was already absent.
+        """
+        self.log.debug('Scheduler %s: registering death', self.name)
+        return bool(self.connection.delete(self.key))
+
+    @classmethod
+    def fetch(cls, name: str, connection: Redis) -> RQScheduler:
+        """Fetch a scheduler by name, restoring it from its Redis hash."""
+        raw_data = connection.hgetall(SCHEDULER_KEY_TEMPLATE % name)
+        if not raw_data:
+            raise SchedulerNotFound(f"Scheduler with name '{name}' not found")
+        scheduler = cls([], connection=connection, name=name)
+        scheduler.restore(raw_data)
+        return scheduler
 
     def enqueue_scheduled_jobs(self):
         """Enqueue jobs whose timestamp is in the past"""
@@ -180,22 +257,21 @@ class RQScheduler:
         self._stop_requested = True
 
     def heartbeat(self):
-        """Updates the TTL on scheduler keys and the locks"""
+        """Refresh the TTL on the scheduler's metadata hash and its locks."""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
-        if len(self._acquired_locks) > 1:
-            with self.connection.pipeline() as pipeline:
-                for name in self._acquired_locks:
-                    key = self.get_locking_key(name)
-                    pipeline.expire(key, self.interval + 60)
-                pipeline.execute()
-        elif self._acquired_locks:
-            key = self.get_locking_key(next(iter(self._acquired_locks)))
-            self.connection.expire(key, self.interval + 60)
+        self.last_heartbeat = now()
+        with self.connection.pipeline() as pipeline:
+            pipeline.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
+            pipeline.expire(self.key, self.interval + 60)
+            for name in self._acquired_locks:
+                pipeline.expire(self.get_locking_key(name), self.interval + 60)
+            pipeline.execute()
 
     def stop(self):
         self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
         self.release_locks()
         self._status = self.Status.STOPPED
+        self.register_death()
 
     def release_locks(self):
         """Release acquired locks"""
@@ -214,6 +290,7 @@ class RQScheduler:
 
     def work(self):
         self._install_signal_handlers()
+        self.register_birth()
 
         while True:
             if self._stop_requested:

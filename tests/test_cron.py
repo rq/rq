@@ -11,10 +11,12 @@ from unittest.mock import patch
 
 from redis import Redis
 
-from rq import Queue, utils
+from rq import Queue, cron, utils
+from rq.connections import get_connection_kwargs
 from rq.cron import CronJob, CronScheduler, _job_data_registry
 from rq.cron_scheduler_registry import get_keys, get_registry_key
 from rq.exceptions import SchedulerNotFound
+from rq.webhook import Webhook
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
@@ -220,6 +222,33 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(cron_job.job_options['job_timeout'], timeout)
         self.assertEqual(cron_job.job_options['result_ttl'], result_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
+
+    def test_register_with_webhooks(self):
+        """scheduler.register() stores webhooks and validates them immediately"""
+        scheduler = CronScheduler(connection=self.connection)
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+
+        cron_job = scheduler.register(func=say_hello, queue_name=self.queue_name, interval=30, webhooks=webhooks)
+        self.assertEqual(cron_job.job_options['webhooks'], webhooks)
+
+        # Direct registration fails fast on invalid webhooks
+        with self.assertRaises(TypeError):
+            scheduler.register(func=say_hello, queue_name=self.queue_name, interval=30, webhooks=['bad'])
+
+    def test_module_register_forwards_webhooks(self):
+        """cron.register() carries webhooks into job_data and reach the enqueued job"""
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+
+        job_data = cron.register(say_hello, queue_name=self.queue_name, interval=60, webhooks=webhooks)
+        self.assertEqual(job_data['webhooks'], webhooks)
+
+        scheduler = cron.create_cron(self.connection)
+        self.assertEqual(scheduler.get_jobs()[0].job_options['webhooks'], webhooks)
+
+        scheduler.enqueue_jobs()
+        jobs = Queue(self.queue_name, connection=self.connection).get_jobs()
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0].webhooks, webhooks)
 
     def test_load_config_from_file_method(self):  # Renamed test
         """Test loading cron configuration using the instance method"""
@@ -782,31 +811,44 @@ class TestCronScheduler(RQTestCase):
 
     def test_sigint_handling(self):
         """Test that sending SIGINT to the process stops the scheduler"""
-        conn_kwargs = self.connection.connection_pool.connection_kwargs
+        conn_kwargs = get_connection_kwargs(self.connection)
         scheduler_process = Process(target=run_scheduler, args=(conn_kwargs,))
         scheduler_process.start()
         assert scheduler_process.pid
-        time.sleep(0.2)
+
         # Ensure scheduler is registered (name will have random suffix)
         scheduler_prefix = f'{socket.gethostname()}:{scheduler_process.pid}:'
 
-        # Find scheduler with matching prefix
-        matching_scheduler = None
-        for key in get_keys(self.connection):
-            if key.startswith(scheduler_prefix):
-                matching_scheduler = key
-                break
+        try:
+            # Find scheduler with matching prefix
+            deadline = time.time() + 5
+            matching_scheduler = None
+            keys = []
+            while time.time() < deadline and scheduler_process.is_alive():
+                keys = get_keys(self.connection)
+                matching_scheduler = next((key for key in keys if key.startswith(scheduler_prefix)), None)
+                if matching_scheduler:
+                    break
+                time.sleep(0.05)
 
-        self.assertTrue(matching_scheduler)
+            self.assertTrue(
+                matching_scheduler,
+                f'Cron scheduler {scheduler_prefix} was not registered. '
+                f'Process exitcode: {scheduler_process.exitcode}. Registered schedulers: {keys}',
+            )
 
-        os.kill(scheduler_process.pid, signal.SIGINT)
+            os.kill(scheduler_process.pid, signal.SIGINT)
 
-        scheduler_process.join(timeout=2)
-        self.assertFalse(scheduler_process.is_alive())
+            scheduler_process.join(timeout=2)
+            self.assertFalse(scheduler_process.is_alive())
 
-        # Verify scheduler is no longer registered
-        keys = get_keys(self.connection)
-        self.assertEqual([key for key in keys if key.startswith(scheduler_prefix)], [])
+            # Verify scheduler is no longer registered
+            keys = get_keys(self.connection)
+            self.assertEqual([key for key in keys if key.startswith(scheduler_prefix)], [])
+        finally:
+            if scheduler_process.is_alive():
+                scheduler_process.terminate()
+                scheduler_process.join(timeout=2)
 
     def test_last_heartbeat_property(self):
         """Test that last_heartbeat property works correctly in all scenarios"""

@@ -49,6 +49,7 @@ from .utils import (
     str_to_date,
     utcformat,
 )
+from .webhook import Webhook
 
 logger = logging.getLogger('rq.job')
 
@@ -196,6 +197,7 @@ class Job:
         self._failure_callback: Callable[[Job, Redis, Unpack[tuple[ExcInfo]]], Any] | UnevaluatedType = UNEVALUATED
         self._stopped_callback_name: str | None = None
         self._stopped_callback: Callable[[Job, Redis], Any] | UnevaluatedType | None = UNEVALUATED
+        self.webhooks: list[Webhook] = []
         self.description: str | None = None
         self.origin: str = ''
         self.enqueued_at: datetime | None = None
@@ -260,6 +262,7 @@ class Job:
         on_success: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_failure: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
         on_stopped: Callback | Callable[..., Any] | None = None,  # Callable is deprecated
+        webhooks: Sequence[Webhook] | None = None,
     ) -> Job:
         """Creates a new Job instance for the given function, arguments, and
         keyword arguments.
@@ -298,6 +301,8 @@ class Job:
                 fails. Defaults to None. Passing a callable is deprecated.
             on_stopped (Optional[Union['Callback', Callable[..., Any]]], optional): A callback to run when/if the Job
                 is stopped. Defaults to None. Passing a callable is deprecated.
+            webhooks (Optional[Sequence[Webhook]], optional): Webhooks to send when the job reaches a matching
+                terminal state (`finished` or `failed`). Defaults to None.
             group_id (Optional[str], optional): A group ID that the job is being added to. Defaults to None.
 
         Raises:
@@ -307,6 +312,7 @@ class Job:
             ValueError: If `on_failure` is not a Callback or function or string
             ValueError: If `on_success` is not a Callback or function or string
             ValueError: If `on_stopped` is not a Callback or function or string
+            TypeError: If `webhooks` is not a list of Webhook instances
 
         Returns:
             Job: A job instance.
@@ -357,6 +363,11 @@ class Job:
                 on_stopped = Callback(on_stopped)  # backward compatibility
             job._stopped_callback_name = on_stopped.name
             job._stopped_callback_timeout = on_stopped.timeout
+
+        if webhooks:
+            if not isinstance(webhooks, Sequence) or not all(isinstance(webhook, Webhook) for webhook in webhooks):
+                raise TypeError('webhooks must be a sequence of Webhook instances')
+            job.webhooks = list(webhooks)
 
         # Extra meta data
         job.description = description or job.get_call_string()
@@ -1003,6 +1014,13 @@ class Job:
         if 'stopped_callback_timeout' in obj:
             self._stopped_callback_timeout = int(obj['stopped_callback_timeout'])
 
+        if obj.get('webhooks'):
+            try:
+                self.webhooks = [Webhook.from_dict(data) for data in json.loads(obj['webhooks'].decode())]
+            except Exception:
+                self.log.warning('Job %s: failed to deserialize webhooks', self.id, exc_info=True)
+                self.webhooks = []
+
         dep_ids = obj.get('dependency_ids')
         dep_id = obj.get('dependency_id')  # for backwards compatibility
         self._dependency_ids = json.loads(dep_ids.decode()) if dep_ids else [dep_id.decode()] if dep_id else []
@@ -1110,6 +1128,8 @@ class Job:
             obj['failure_callback_timeout'] = self._failure_callback_timeout
         if self._stopped_callback_timeout is not None:
             obj['stopped_callback_timeout'] = self._stopped_callback_timeout
+        if self.webhooks:
+            obj['webhooks'] = json.dumps([webhook.to_dict() for webhook in self.webhooks])
         if self.result_ttl is not None:
             obj['result_ttl'] = self.result_ttl
         if self.failure_ttl is not None:
@@ -1563,6 +1583,15 @@ class Job:
         except Exception:  # noqa
             self.log.exception('Job %s: error while executing stopped callback', self.id)
             raise
+
+    def send_webhooks(self, status: str | JobStatus, *, exc_string: str | None = None) -> None:
+        """Sends every webhook registered for the given terminal job status.
+        `exc_string` is included in the payload of `failed` webhooks.
+        Send errors are logged by `Webhook.send()`, never raised."""
+        for webhook in self.webhooks:
+            if webhook.job_status == status:
+                self.log.debug('Job %s: sending %s webhook to %s', self.id, webhook.job_status, webhook.url)
+                webhook.send(self, exc_string=exc_string)
 
     def _handle_success(
         self,
