@@ -1268,6 +1268,13 @@ class Job:
                     # exception as it is the responsibility of the caller to
                     # handle it
                     raise
+            except Exception:
+                # Release the connection on any other error so a mid-transaction failure
+                # (after WATCH) doesn't abandon the pipeline while it still holds a
+                # connection in a WATCH state, leaking it from the pool.
+                if pipeline is None:
+                    pipe.reset()
+                raise
 
         # Drain ready dependents onto their queues only after the cancel transaction has
         # committed. On the caller-owned pipeline path the external caller drains the
