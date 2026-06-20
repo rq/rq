@@ -77,6 +77,12 @@ class TestRateLimitRegistry(RQTestCase):
             self.rate_limit_registry.add_to_pending(job_id, pipe, timestamp=timestamp)
             pipe.execute()
 
+    def _make_job(self, status: JobStatus, origin: str = 'default') -> Job:
+        """Helper to create and save a job with the given status."""
+        job = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin=origin, status=status)
+        job.save()
+        return job
+
     def test_add_to_pending(self):
         """Jobs added to pending are ordered by timestamp."""
         self._add_to_pending('job1', timestamp=1)
@@ -91,13 +97,7 @@ class TestRateLimitRegistry(RQTestCase):
         result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=2)
         self.assertIsNone(result)
 
-        job = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job.save()
+        job = self._make_job(status=JobStatus.RATE_LIMITED)
 
         self._add_to_pending(job.id)
         result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=2)
@@ -121,20 +121,8 @@ class TestRateLimitRegistry(RQTestCase):
 
     def test_acquire_and_enqueue_enqueues_oldest_first(self):
         """acquire_and_enqueue enqueues the oldest pending job (lowest score)."""
-        job1 = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job1.save()
-        job2 = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job2.save()
+        job1 = self._make_job(status=JobStatus.RATE_LIMITED)
+        job2 = self._make_job(status=JobStatus.RATE_LIMITED)
 
         self._add_to_pending(job1.id, timestamp=1)
         self._add_to_pending(job2.id, timestamp=2)
@@ -157,13 +145,7 @@ class TestRateLimitRegistry(RQTestCase):
 
         # Releasing with a pending job enqueues it
         self.connection.zadd(self.rate_limit_registry.active_key, {'active2': 1})
-        job = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job.save()
+        job = self._make_job(status=JobStatus.RATE_LIMITED)
         self._add_to_pending(job.id)
 
         result = self.rate_limit_registry.release_capacity_and_enqueue('active2')
@@ -179,13 +161,7 @@ class TestRateLimitRegistry(RQTestCase):
         """cancel removes an active job and enqueues the next pending job."""
         self.connection.zadd(self.rate_limit_registry.active_key, {'active1': 1})
 
-        job2 = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job2.save()
+        job2 = self._make_job(status=JobStatus.RATE_LIMITED)
         self._add_to_pending(job2.id)
 
         result = self.rate_limit_registry.cancel('active1')
@@ -209,12 +185,6 @@ class TestRateLimitRegistry(RQTestCase):
         """cancel is a no-op for jobs not in any set."""
         result = self.rate_limit_registry.cancel('nonexistent')
         self.assertIsNone(result)
-
-    def _make_job(self, status: JobStatus, origin: str = 'default') -> Job:
-        """Helper to create and save a job with the given status."""
-        job = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin=origin, status=status)
-        job.save()
-        return job
 
     def test_cleanup_releases_missing_active_job(self):
         """cleanup() frees an active slot whose job no longer exists."""
@@ -360,20 +330,8 @@ class TestRateLimitRegistry(RQTestCase):
         registry_a = RateLimitRegistry(key='key_a', connection=self.connection)
         registry_b = RateLimitRegistry(key='key_b', connection=self.connection)
 
-        job_a = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job_a.save()
-        job_b = Job.create(
-            func='tests.fixtures.say_hello',
-            connection=self.connection,
-            origin='default',
-            status=JobStatus.RATE_LIMITED,
-        )
-        job_b.save()
+        job_a = self._make_job(status=JobStatus.RATE_LIMITED)
+        job_b = self._make_job(status=JobStatus.RATE_LIMITED)
 
         with self.connection.pipeline() as pipe:
             registry_a.add_to_pending(job_a.id, pipe)
