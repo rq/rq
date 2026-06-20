@@ -22,7 +22,6 @@ from .exceptions import SchedulerNotFound
 from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
-from .rate_limit import RateLimitRegistry
 from .registry import ScheduledJobRegistry
 from .serializers import resolve_serializer
 from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
@@ -263,9 +262,8 @@ class RQScheduler:
                     registry.remove(job.id, pipeline=pipeline)
                     queue._enqueue_rate_limited_job(job, pipeline=pipeline)
                     pipeline.execute()
-                assert job.rate_limit_key and job.rate_limit_concurrency
-                rl_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
-                rl_registry.acquire_and_enqueue(job.rate_limit_concurrency)
+                assert job.rate_limit_concurrency
+                job.rate_limit_registry.acquire_and_enqueue(job.rate_limit_concurrency)
         self._status = self.Status.STARTED
 
     def _install_signal_handlers(self):

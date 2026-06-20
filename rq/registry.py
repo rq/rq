@@ -331,9 +331,7 @@ class StartedJobRegistry(BaseRegistry):
         # Release rate limit capacity for abandoned jobs (must be outside the pipeline
         # since Lua scripts can't run inside a MULTI transaction)
         for job in jobs_to_release:
-            assert job.rate_limit_key
-            rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
-            rate_limit_registry.release_capacity_and_enqueue(job.id)
+            job.rate_limit_registry.release_capacity_and_enqueue(job.id)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
@@ -614,10 +612,8 @@ class ReadyJobRegistry(BaseRegistry):
                         # rate-limit ops here and acquire after the transaction.
                         queue._enqueue_rate_limited_job(job, pipeline=pipe)
                         pipe.execute()
-                        assert job.rate_limit_key and job.rate_limit_concurrency
-                        RateLimitRegistry(key=job.rate_limit_key, connection=self.connection).acquire_and_enqueue(
-                            job.rate_limit_concurrency
-                        )
+                        assert job.rate_limit_concurrency
+                        job.rate_limit_registry.acquire_and_enqueue(job.rate_limit_concurrency)
                     else:
                         queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
                         pipe.execute()

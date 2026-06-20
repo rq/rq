@@ -32,7 +32,7 @@ from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .logutils import blue, green
-from .rate_limit import RateLimit, RateLimitRegistry
+from .rate_limit import RateLimit
 from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
@@ -1273,10 +1273,9 @@ class Queue:
         if job.timeout is None:
             job.timeout = self._default_timeout
 
-        assert job.rate_limit_key
         assert job.rate_limit_concurrency
 
-        registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
+        registry = job.rate_limit_registry
         job._status = JobStatus.RATE_LIMITED
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         registry.register(job.rate_limit_concurrency, pipe)
@@ -1458,8 +1457,9 @@ class Queue:
         `enqueue_ready_jobs_by_queue` to enqueue the dependents.
 
         When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. When a
-        pipeline is passed the ops are appended to the caller's transaction and the
-        caller is responsible for EXEC.
+        pipeline is passed it must already be in WATCH mode, because this method
+        needs immediate reads before appending writes to the caller's transaction.
+        The caller is responsible for EXEC.
 
         Args:
             job: The job whose dependents to process.
@@ -1473,6 +1473,9 @@ class Queue:
         from .registry import ReadyJobRegistry
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        if pipeline is not None and not pipeline.watching:
+            raise ValueError('move_dependents_to_ready() requires a watched pipeline when pipeline is provided')
+
         dependents_key = job.dependents_key
 
         job_ids_by_queue_name: dict[str, list[str]] = {}

@@ -1214,9 +1214,10 @@ class Job:
 
         On the no-pipeline path, the whole thing runs in cancel's own WATCH/MULTI/EXEC and
         the dependents are enqueued before this method returns. When called with
-        ``pipeline=external_pipe``, the deferred→ready ops are appended to the caller's
-        transaction; the caller owns the EXEC and is responsible for draining the returned
-        mapping via ``Queue.enqueue_ready_jobs_by_queue(mapping)`` afterwards (otherwise
+        ``pipeline=external_pipe``, the pipeline must already be in WATCH mode. The
+        deferred→ready ops are appended to the caller's transaction; the caller owns
+        the EXEC and is responsible for draining the returned mapping via
+        ``Queue.enqueue_ready_jobs_by_queue(mapping)`` afterwards (otherwise
         ``ReadyJobRegistry.cleanup()`` recovers the dependents later).
 
         Args:
@@ -1583,6 +1584,13 @@ class Job:
         return FinishedJobRegistry(
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
+
+    @property
+    def rate_limit_registry(self):
+        from .rate_limit import RateLimitRegistry
+
+        assert self.rate_limit_key
+        return RateLimitRegistry(key=self.rate_limit_key, connection=self.connection)
 
     def execute_success_callback(self, death_penalty_class: type[BaseDeathPenalty], result: Any):
         """Executes success_callback for a job.

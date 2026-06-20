@@ -47,7 +47,6 @@ from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
-from ..rate_limit import RateLimitRegistry
 from ..registry import StartedJobRegistry, clean_registries
 from ..results import Result
 from ..scheduler import RQScheduler
@@ -765,17 +764,13 @@ class BaseWorker:
                 if enqueue_dependents:
                     queue.enqueue_dependents(job)
                     if job.has_rate_limit:
-                        assert job.rate_limit_key
-                        rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
-                        rate_limit_registry.release_capacity_and_enqueue(job.id)
+                        job.rate_limit_registry.release_capacity_and_enqueue(job.id)
                 elif retry and retry_interval and job.has_rate_limit:
                     # Delayed retry of a rate-limited job: release the active slot
                     # so the scheduled retry can re-acquire when it becomes due.
                     # Immediate retries (interval == 0) keep the slot — the job
                     # goes back on the queue and runs on its existing slot.
-                    assert job.rate_limit_key
-                    rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
-                    rate_limit_registry.release_capacity_and_enqueue(job.id)
+                    job.rate_limit_registry.release_capacity_and_enqueue(job.id)
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
@@ -1523,9 +1518,7 @@ class BaseWorker:
                     queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
                     if job.has_rate_limit:
-                        assert job.rate_limit_key
-                        rate_limit_registry = RateLimitRegistry(key=job.rate_limit_key, connection=self.connection)
-                        rate_limit_registry.release_capacity_and_enqueue(job.id)
+                        job.rate_limit_registry.release_capacity_and_enqueue(job.id)
 
                     assert job.started_at
                     assert job.ended_at

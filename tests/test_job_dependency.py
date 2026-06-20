@@ -264,6 +264,17 @@ class TestJobDependency(RQTestCase):
         self.connection.set('some:key', b'some:value')
 
         with self.connection.pipeline() as pipe:
+            with self.assertRaises(ValueError) as context:
+                dependency.cancel(pipeline=pipe, enqueue_dependents=True)
+
+        self.assertIn('requires a watched pipeline', str(context.exception))
+        self.assertEqual(dependency.get_status(), JobStatus.QUEUED)
+        self.assertEqual(dependent.get_status(), JobStatus.DEFERRED)
+        self.assertIn(dependent.id, queue.deferred_job_registry.get_job_ids(cleanup=False))
+        self.assertNotIn(dependent.id, queue.ready_job_registry.get_job_ids(cleanup=False))
+        self.assertNotIn(dependent.id, queue.get_job_ids())
+
+        with self.connection.pipeline() as pipe:
             pipe.watch('some:key')
             self.assertEqual(self.connection.get('some:key'), b'some:value')
             dependent_job_ids_by_queue = dependency.cancel(pipeline=pipe, enqueue_dependents=True)
