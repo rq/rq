@@ -572,3 +572,4 @@ Options:
 * `-S` or `--serializer <serializer>`: accepts the shorthand `json` or `pickle`, or a dotted import path. Defaults to `rq.serializers.PickleSerializer`.
 * `-P` or `--path <path>`: multiple import paths are supported (e.g `rq worker --path foo --path bar`).
 * `-j` or `--job-class <path.to.Job>`: defaults to `rq.job.Job`.
+* `--exception-handler`: path to exception handler class. Multiple exception handlers are supported (e.g `rq worker-pool --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'`).
