@@ -68,6 +68,7 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+    READY_TO_ENQUEUE = 'ready_to_enqueue'
 
 
 def parse_job_id(job_or_execution_id: str) -> str:
@@ -483,6 +484,10 @@ class Job:
     @property
     def is_stopped(self) -> bool:
         return self.get_status() == JobStatus.STOPPED
+
+    @property
+    def is_ready_to_enqueue(self) -> bool:
+        return self.get_status() == JobStatus.READY_TO_ENQUEUE
 
     @property
     def _dependency_id(self):
@@ -1179,7 +1184,7 @@ class Job:
         pipeline: Pipeline | None = None,
         enqueue_dependents: bool = False,
         remove_from_dependencies: bool = False,
-    ):
+    ) -> dict[str, list[str]]:
         """Cancels the given job, which will prevent the job from ever being
         ran (or inspected).
 
@@ -1187,12 +1192,24 @@ class Job:
         without worrying about the internals required to implement job
         cancellation.
 
-        You can enqueue the jobs dependents optionally,
-        Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
+        You can optionally enqueue the job's dependents. When ``enqueue_dependents`` is
+        True, eligible dependents are moved deferred→ready atomically with this job's
+        CANCELED status, then enqueued onto their queues.
+
+        On the no-pipeline path, the whole thing runs in cancel's own WATCH/MULTI/EXEC and
+        the dependents are enqueued before this method returns. When called with
+        ``pipeline=external_pipe``, the deferred→ready ops are appended to the caller's
+        transaction; the caller owns the EXEC and is responsible for draining the returned
+        mapping via ``Queue.enqueue_ready_jobs_by_queue(mapping)`` afterwards (otherwise
+        ``ReadyJobRegistry.cleanup()`` recovers the dependents later).
 
         Args:
             pipeline (Optional[Pipeline], optional): The Redis' pipeline to use. Defaults to None.
             enqueue_dependents (bool, optional): Whether to enqueue dependents jobs. Defaults to False.
+
+        Returns:
+            Map of origin queue name → list of dependent job ids that were moved to
+            ready. Empty dict when ``enqueue_dependents=False`` or no eligible dependents.
 
         Raises:
             InvalidJobOperation: If the job has already been cancelled.
@@ -1203,6 +1220,7 @@ class Job:
         from .registry import CanceledJobRegistry
 
         pipe = pipeline or self.connection.pipeline()
+        dependent_job_ids_by_queue: dict[str, list[str]] = {}
 
         while True:
             try:
@@ -1210,12 +1228,22 @@ class Job:
                     name=self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
                 )
 
-                self.set_status(JobStatus.CANCELED, pipeline=pipe)
                 if enqueue_dependents:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
-                    q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
+                    # Move dependents to ready inside THIS transaction (pass pipe, not the
+                    # original pipeline arg) so the deferred→ready transition commits
+                    # atomically with the CANCELED status below. Reads run immediately while
+                    # watching; move() calls multi() once it has dependents to write.
+                    dependent_job_ids_by_queue = q.move_dependents_to_ready(self, pipeline=pipe, exclude_job_id=self.id)
+
+                # Ensure a transaction is open before buffering cancel's own writes. move()
+                # only calls multi() when there are dependents, so guard like the worker does.
+                if pipeline is None and not pipe.explicit_transaction:
+                    pipe.multi()
+
+                self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
                 if remove_from_dependencies:
                     # Go through all dependencies and remove the current job from each dependency's dependents_key
@@ -1233,12 +1261,28 @@ class Job:
                 break
             except WatchError:
                 if pipeline is None:
+                    dependent_job_ids_by_queue = {}
                     continue
                 else:
                     # if the pipeline comes from the caller, we re-raise the
                     # exception as it is the responsibility of the caller to
                     # handle it
                     raise
+            except Exception:
+                # Release the connection on any other error so a mid-transaction failure
+                # (after WATCH) doesn't abandon the pipeline while it still holds a
+                # connection in a WATCH state, leaking it from the pool.
+                if pipeline is None:
+                    pipe.reset()
+                raise
+
+        # Drain ready dependents onto their queues only after the cancel transaction has
+        # committed. On the caller-owned pipeline path the external caller drains the
+        # returned mapping after their own EXEC.
+        if pipeline is None and enqueue_dependents:
+            q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
+
+        return dependent_job_ids_by_queue
 
     def requeue(self, at_front: bool = False) -> Job:
         """Requeues job
@@ -1281,6 +1325,14 @@ class Job:
             from .registry import DeferredJobRegistry
 
             registry = DeferredJobRegistry(
+                self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
+            )
+            registry.remove(self, pipeline=pipeline)
+
+        elif self.is_ready_to_enqueue:
+            from .registry import ReadyJobRegistry
+
+            registry = ReadyJobRegistry(
                 self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
             )
             registry.remove(self, pipeline=pipeline)

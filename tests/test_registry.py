@@ -16,6 +16,7 @@ from rq.registry import (
     DeferredJobRegistry,
     FailedJobRegistry,
     FinishedJobRegistry,
+    ReadyJobRegistry,
     StartedJobRegistry,
     clean_registries,
 )
@@ -329,6 +330,243 @@ class TestDeferredRegistry(RQTestCase):
         self.assertEqual(self.registry.count, 1)
         self.registry.cleanup()
         self.assertEqual(self.registry.count, 1)
+
+
+class TestReadyJobRegistry(RQTestCase):
+    def setUp(self):
+        super().setUp()
+        self.registry = ReadyJobRegistry(connection=self.connection)
+
+    def test_add_and_remove(self):
+        """Adding/removing a job to ReadyJobRegistry."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+        self.assertIn(job, self.registry)
+        self.assertEqual(self.registry.get_job_ids(cleanup=False), [job.id])
+
+        self.registry.remove(job)
+        self.assertNotIn(job, self.registry)
+        self.assertEqual(self.registry.get_job_ids(cleanup=False), [])
+
+    def test_queue_property(self):
+        """Queue.ready_job_registry returns a ReadyJobRegistry bound to the queue."""
+        queue = Queue('foo', connection=self.connection)
+        registry = queue.ready_job_registry
+        self.assertIsInstance(registry, ReadyJobRegistry)
+        self.assertEqual(registry.key, 'rq:ready:foo')
+
+    def test_delete_removes_ready_job_from_registry(self):
+        """Deleting a READY_TO_ENQUEUE job removes it from ReadyJobRegistry."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+        self.assertIn(job, self.registry)
+
+        job.delete()
+        self.assertNotIn(job, self.registry)
+
+    def test_job_is_ready_to_enqueue(self):
+        """Job.is_ready_to_enqueue reflects the READY_TO_ENQUEUE status."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        self.assertFalse(job.is_ready_to_enqueue)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.assertTrue(job.is_ready_to_enqueue)
+
+    def test_enqueue_jobs_moves_ready_jobs_to_queue(self):
+        """enqueue_jobs() enqueues READY_TO_ENQUEUE jobs (respecting enqueue_at_front),
+        sets their status to QUEUED, and removes them from the registry."""
+        queue = Queue(connection=self.connection)
+        sentinel = queue.enqueue(say_hello)
+
+        back_job = queue.enqueue(say_hello)
+        queue.remove(back_job)
+        back_job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(back_job)
+
+        enqueued_jobs = self.registry.enqueue_jobs([back_job.id])
+        self.assertEqual(enqueued_jobs, [back_job])
+        self.assertNotIn(back_job.id, self.registry.get_job_ids(cleanup=False))
+        self.assertEqual(Job.fetch(back_job.id, connection=self.connection).get_status(), JobStatus.QUEUED)
+        self.assertEqual(queue.get_job_ids(), [sentinel.id, back_job.id])
+
+        front_job = queue.enqueue(say_hello)
+        queue.remove(front_job)
+        front_job.enqueue_at_front = True
+        front_job.save()
+        front_job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(front_job)
+
+        self.registry.enqueue_jobs([front_job.id])
+        self.assertEqual(queue.get_job_ids(), [front_job.id, sentinel.id, back_job.id])
+
+    def test_enqueue_jobs_drops_stale_entries(self):
+        """Stale entries — wrong status or missing job — are removed without enqueuing."""
+        queue = Queue(connection=self.connection)
+
+        # Wrong status: registry says ready, but job's status was changed
+        stale_status_job = queue.enqueue(say_hello)
+        queue.remove(stale_status_job)
+        self.registry.add(stale_status_job)
+        stale_status_job.set_status(JobStatus.CANCELED)
+
+        # Missing job: dangling registry entry pointing at a deleted job
+        missing_job = queue.enqueue(say_hello)
+        missing_job.delete()
+        self.connection.zadd(self.registry.key, {missing_job.id: current_timestamp()})
+
+        self.assertEqual(self.connection.zcard(self.registry.key), 2)
+
+        enqueued_jobs = self.registry.enqueue_jobs([stale_status_job.id, missing_job.id])
+
+        self.assertEqual(enqueued_jobs, [])
+        self.assertEqual(self.connection.zcard(self.registry.key), 0)
+        self.assertEqual(queue.get_job_ids(), [])
+
+    def test_enqueue_jobs_isolates_failures(self):
+        """A failure on one job leaves it in the registry; other jobs still enqueue."""
+        queue = Queue(connection=self.connection)
+        job_a = queue.enqueue(say_hello)
+        job_b = queue.enqueue(say_hello)
+        queue.remove(job_a)
+        queue.remove(job_b)
+        for job in (job_a, job_b):
+            job.set_status(JobStatus.READY_TO_ENQUEUE)
+            self.registry.add(job)
+
+        original = Queue._enqueue_job
+
+        def fake_enqueue(self_queue, job, *args, **kwargs):
+            if job.id == job_b.id:
+                raise RuntimeError()
+            return original(self_queue, job, *args, **kwargs)
+
+        with mock.patch.object(Queue, '_enqueue_job', fake_enqueue):
+            enqueued_jobs = self.registry.enqueue_jobs([job_a.id, job_b.id])
+
+        self.assertEqual(enqueued_jobs, [job_a])
+        self.assertIn(job_b.id, self.registry.get_job_ids(cleanup=False))
+        self.assertNotIn(job_a.id, self.registry.get_job_ids(cleanup=False))
+
+    def test_cleanup_recovers_ready_jobs(self):
+        """ReadyJobRegistry.cleanup() enqueues anything left in the registry."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        queue.remove(job)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+
+        self.registry.cleanup()
+
+        self.assertEqual(self.registry.count, 0)
+        self.assertIn(job.id, queue.get_job_ids())
+
+    def test_enqueue_jobs_concedes_on_watcherror(self):
+        """On WatchError, the loser returns [] and does not enqueue the job."""
+        from redis.client import Pipeline
+        from redis.exceptions import WatchError
+
+        queue = Queue(connection=self.connection)
+        job = Job.create(say_hello, connection=self.connection, origin=queue.name, status=JobStatus.READY_TO_ENQUEUE)
+        job.save()
+        self.registry.add(job)
+
+        original_execute = Pipeline.execute
+
+        def fake_execute(self_pipe, *args, **kwargs):
+            if getattr(self_pipe, 'watching', False):
+                raise WatchError('simulated contention')
+            return original_execute(self_pipe, *args, **kwargs)
+
+        with mock.patch('redis.client.Pipeline.execute', fake_execute):
+            enqueued_jobs = self.registry.enqueue_jobs([job.id])
+
+        self.assertEqual(enqueued_jobs, [])
+        # Loser did not enqueue — no duplicate
+        self.assertEqual(queue.get_job_ids().count(job.id), 0)
+        # EXEC aborted, so the watched zrem didn't fire — entry remains for next cleanup
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+
+    def test_enqueue_jobs_drops_stale_status_under_watch(self):
+        """If the watched re-read finds non-READY status, the entry is dropped inside MULTI."""
+        from redis.client import Pipeline
+
+        queue = Queue(connection=self.connection)
+        job = Job.create(say_hello, connection=self.connection, origin=queue.name, status=JobStatus.READY_TO_ENQUEUE)
+        job.save()
+        self.registry.add(job)
+
+        original_hget = Pipeline.hget
+
+        def fake_hget(self_pipe, name, key):
+            if name == job.key and key == 'status':
+                return b'canceled'
+            return original_hget(self_pipe, name, key)
+
+        with mock.patch('redis.client.Pipeline.hget', fake_hget):
+            enqueued_jobs = self.registry.enqueue_jobs([job.id])
+
+        self.assertEqual(enqueued_jobs, [])
+        self.assertEqual(self.connection.zcard(self.registry.key), 0)
+        self.assertNotIn(job.id, queue.get_job_ids())
+
+    def test_register_jobs_moves_deferred_jobs_to_ready(self):
+        """register_jobs() appends deferred-remove + status-set + ready-add to the caller's pipeline."""
+        queue = Queue(connection=self.connection)
+        deferred_registry = DeferredJobRegistry(connection=self.connection)
+
+        job = Job.create(say_hello, connection=self.connection, origin=queue.name, status=JobStatus.DEFERRED)
+        job.save()
+        deferred_registry.add(job)
+        self.assertIn(job.id, deferred_registry.get_job_ids())
+
+        with self.connection.pipeline() as pipeline:
+            pipeline.watch(self.registry.key)
+            pipeline.multi()
+            self.registry.register_jobs([job], pipeline=pipeline)
+            pipeline.execute()
+
+        self.assertNotIn(job.id, deferred_registry.get_job_ids())
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.READY_TO_ENQUEUE)
+
+    def test_clean_registries_invokes_ready_cleanup(self):
+        """clean_registries(queue) recovers jobs from the ready registry."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        queue.remove(job)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+
+        clean_registries(queue)
+
+        self.assertEqual(self.registry.count, 0)
+        self.assertIn(job.id, queue.get_job_ids())
+
+    def test_enqueue_ready_jobs_by_queue_isolates_drain_failure(self):
+        """A drain failure is swallowed; the job stays ready and is recovered by cleanup."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        queue.remove(job)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+
+        # Patch scoped to ONLY the drain call — if it leaked into clean_registries below,
+        # recovery would fail for the wrong reason.
+        with mock.patch.object(ReadyJobRegistry, 'enqueue_jobs', side_effect=RuntimeError()):
+            queue.enqueue_ready_jobs_by_queue({queue.name: [job.id]})  # must not raise
+
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.READY_TO_ENQUEUE)
+        self.assertNotIn(job.id, queue.get_job_ids())
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+
+        # Real enqueue_jobs (patch lifted) recovers the job.
+        clean_registries(queue)
+        self.assertEqual(self.registry.count, 0)
+        self.assertIn(job.id, queue.get_job_ids())
 
 
 class TestFailedJobRegistry(RQTestCase):

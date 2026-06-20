@@ -1150,17 +1150,19 @@ class TestWorker(RQTestCase):
     def test_job_dependency_race_condition(self):
         """Dependencies added while the job gets finished shouldn't get lost."""
 
-        # This patches the enqueue_dependents to enqueue a new dependency AFTER
-        # the original code was executed.
-        orig_enqueue_dependents = Queue.enqueue_dependents
+        # This patches move_dependents_to_ready (the method the worker calls inside its
+        # watched transaction) to enqueue a new dependency AFTER the original code ran,
+        # forcing the WatchError + retry the test exercises.
+        orig_move_dependents_to_ready = Queue.move_dependents_to_ready
 
-        def new_enqueue_dependents(self, job, *args, **kwargs):
-            orig_enqueue_dependents(self, job, *args, **kwargs)
+        def new_move_dependents_to_ready(self, job, *args, **kwargs):
+            result = orig_move_dependents_to_ready(self, job, *args, **kwargs)
             if hasattr(Queue, '_add_enqueue') and Queue._add_enqueue is not None and Queue._add_enqueue.id == job.id:
                 Queue._add_enqueue = None
                 Queue(connection=self.connection).enqueue_call(say_hello, depends_on=job)
+            return result
 
-        Queue.enqueue_dependents = new_enqueue_dependents
+        Queue.move_dependents_to_ready = new_move_dependents_to_ready
 
         q = Queue(connection=self.connection)
         w = Worker([q])

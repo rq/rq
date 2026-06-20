@@ -32,6 +32,7 @@ The status of a job can be one of the following:
 * `failed`: Jobs that encountered errors during execution or expired before being executed.
 * `started`: The job has started execution. This status includes the job execution support mechanisms, such as setting the worker name and setting up heartbeat information.
 * `deferred`: The job is not ready for execution because its dependencies have not finished successfully yet.
+* `ready_to_enqueue`: An internal, transient status for a job whose dependencies have completed and that is about to be enqueued. Jobs pass through it briefly during dependency resolution and crash recovery; it is not user-actionable.
 * `scheduled`: Jobs created to run at a future date or jobs that are retried after a retry interval.
 * `stopped`: The job was stopped because the worker was stopped.
 * `canceled`: The job has been manually canceled and will not be executed, even if it is part of a dependency chain.

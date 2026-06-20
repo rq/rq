@@ -5,8 +5,11 @@ import logging
 import time
 import traceback
 import warnings
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, cast
+
+from redis.exceptions import WatchError
 
 from rq.serializers import resolve_serializer
 
@@ -499,6 +502,105 @@ class DeferredJobRegistry(BaseRegistry):
         return connection.zadd(self.key, {job.id: score}, xx=xx)
 
 
+class ReadyJobRegistry(BaseRegistry):
+    """
+    Registry of jobs whose dependencies have been met and are awaiting
+    enqueue onto the queue list. This is a transient, internal recovery
+    state: the happy path enqueues these jobs synchronously after the
+    dependency transaction commits; if the process dies in between,
+    maintenance cleanup picks them up.
+    """
+
+    key_template = 'rq:ready:{0}'
+
+    def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None) -> list[Job]:
+        """Recover any jobs that were left in the registry by enqueuing them onto the queue."""
+        job_ids = [self.parse_job_id(job_id) for job_id in self.connection.zrange(self.key, 0, -1)]
+        return self.enqueue_jobs(job_ids)
+
+    def add(self, job: Job, ttl: int | None = None, pipeline: Pipeline | None = None, xx: bool = False) -> int:
+        """Adds a job to the ready registry, scored by creation time."""
+        score = current_timestamp()
+        connection = pipeline if pipeline is not None else self.connection
+        return connection.zadd(self.key, {job.id: score}, xx=xx)
+
+    def register_jobs(self, jobs: Sequence[Job], pipeline: Pipeline) -> None:
+        """Move dependents into the ready state inside the caller's watched transaction.
+
+        For each job, appends three ops to ``pipeline``:
+          1. remove from this queue's DeferredJobRegistry
+          2. set status to READY_TO_ENQUEUE
+          3. add to this ReadyJobRegistry
+
+        All jobs must belong to this registry's queue (``job.origin == self.name``).
+        The caller owns WATCH/MULTI/EXEC; this method only queues commands.
+        """
+        deferred_registry = DeferredJobRegistry(
+            name=self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer
+        )
+        for job in jobs:
+            deferred_registry.remove(job, pipeline=pipeline)
+            job.set_status(JobStatus.READY_TO_ENQUEUE, pipeline=pipeline)
+            self.add(job, pipeline=pipeline)
+
+    def enqueue_jobs(self, job_ids: list[str]) -> list[Job]:
+        """Move jobs from the ready registry onto the queue list.
+
+        Uses optimistic locking (WATCH/MULTI) per job: if another caller mutates the
+        registry entry or the job's status between read and commit, this method skips
+        that job for now — a later cleanup pass revisits it. This guarantees no
+        duplicate enqueues at the cost of occasionally conceding a contended job.
+
+        For each id:
+          - if the job no longer exists, drop the stale registry entry;
+          - if the job's status is no longer READY_TO_ENQUEUE under WATCH, remove the
+            stale entry inside the watched transaction;
+          - otherwise remove from the registry and enqueue atomically.
+        """
+        if not job_ids:
+            return []
+
+        queue = Queue(name=self.name, connection=self.connection, job_class=self.job_class, serializer=self.serializer)
+        fetched = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+
+        enqueued: list[Job] = []
+        for job_id, job in zip(job_ids, fetched):
+            if job is None:
+                self.connection.zrem(self.key, job_id)
+                continue
+            if job.get_status(refresh=False) != JobStatus.READY_TO_ENQUEUE:
+                self.connection.zrem(self.key, job_id)
+                continue
+            try:
+                with self.connection.pipeline() as pipe:
+                    pipe.watch(self.key, job.key)
+
+                    # Claim check: this registry must still own the job id.
+                    if pipe.zscore(self.key, job.id) is None:
+                        pipe.unwatch()
+                        continue
+
+                    status = cast('bytes | str | None', pipe.hget(job.key, 'status'))
+                    if not status or JobStatus(as_text(status)) != JobStatus.READY_TO_ENQUEUE:
+                        pipe.multi()
+                        self.remove(job, pipeline=pipe)
+                        pipe.execute()
+                        continue
+
+                    pipe.multi()
+                    self.remove(job, pipeline=pipe)
+                    queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
+                    pipe.execute()
+            except WatchError:
+                logger.info('Ready job %s changed while enqueueing; skipping for now', job_id)
+                continue
+            except Exception:
+                logger.exception('Failed to enqueue ready job %s; leaving in ReadyJobRegistry', job_id)
+                continue
+            enqueued.append(job)
+        return enqueued
+
+
 class ScheduledJobRegistry(BaseRegistry):
     """
     Registry of scheduled jobs.
@@ -586,7 +688,7 @@ class CanceledJobRegistry(BaseRegistry):
 
 
 def clean_registries(queue: Queue, exception_handlers: list | None = None):
-    """Cleans StartedJobRegistry, FinishedJobRegistry and FailedJobRegistry, and DeferredJobRegistry of a queue.
+    """Cleans StartedJobRegistry, FinishedJobRegistry, FailedJobRegistry, DeferredJobRegistry, and ReadyJobRegistry.
 
     Args:
         queue (Queue): The queue to clean
@@ -604,5 +706,9 @@ def clean_registries(queue: Queue, exception_handlers: list | None = None):
     ).cleanup()
 
     DeferredJobRegistry(
+        name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
+    ).cleanup()
+
+    ReadyJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()

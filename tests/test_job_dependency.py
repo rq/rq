@@ -1,5 +1,6 @@
 import time
 from datetime import timedelta
+from unittest import mock
 
 from redis import WatchError
 
@@ -265,9 +266,11 @@ class TestJobDependency(RQTestCase):
         with self.connection.pipeline() as pipe:
             pipe.watch('some:key')
             self.assertEqual(self.connection.get('some:key'), b'some:value')
-            dependency.cancel(pipeline=pipe, enqueue_dependents=True)
+            dependent_job_ids_by_queue = dependency.cancel(pipeline=pipe, enqueue_dependents=True)
             pipe.set('some:key', b'some:other:value')
             pipe.execute()
+        # Caller-owned pipeline path: drain ready dependents now that EXEC committed
+        queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
         self.assertEqual(self.connection.get('some:key'), b'some:other:value')
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))
@@ -279,6 +282,74 @@ class TestJobDependency(RQTestCase):
         # If job is deleted, it's also removed from CanceledJobRegistry
         dependency.delete()
         self.assertNotIn(dependency, registry)
+
+    def test_cancel_does_not_queue_dependents_before_cancel_commits(self):
+        """No dependent reaches the queue unless the cancel transaction commits."""
+        queue = Queue(connection=self.connection)
+        job_1 = queue.enqueue(fixtures.say_hello)
+        job_2 = queue.enqueue(fixtures.say_hello, depends_on=job_1)
+
+        # Raise on the last write before the cancel pipeline executes, so the transaction
+        # (including the buffered deferred→ready ops) never commits.
+        with mock.patch.object(CanceledJobRegistry, 'add', side_effect=RuntimeError()):
+            with self.assertRaises(RuntimeError):
+                job_1.cancel(enqueue_dependents=True)
+
+        # Parent cancellation never committed (get_status refreshes from Redis):
+        self.assertNotEqual(job_1.get_status(), JobStatus.CANCELED)
+        # Dependent was NOT prematurely advanced — still deferred, not moved to ready, not queued.
+        # Use cleanup=False on the ready registry: a cleanup-triggering accessor would drain it.
+        self.assertEqual(job_2.get_status(), JobStatus.DEFERRED)
+        self.assertIn(job_2.id, queue.deferred_job_registry.get_job_ids(cleanup=False))
+        self.assertNotIn(job_2.id, queue.ready_job_registry.get_job_ids(cleanup=False))
+        self.assertNotIn(job_2.id, queue.get_job_ids())
+
+    def test_cancel_post_commit_drain_failure_leaves_consistent_state(self):
+        """If draining fails after the cancel commits, the parent is canceled and the
+        dependent is parked in the ready registry (recovery itself is covered by the
+        ReadyJobRegistry cleanup tests)."""
+        queue = Queue(connection=self.connection)
+        job_1 = queue.enqueue(fixtures.say_hello)
+        job_2 = queue.enqueue(fixtures.say_hello, depends_on=job_1)
+
+        # Fail before any drain happens: CANCELED + deferred→ready have already committed.
+        with mock.patch.object(Queue, 'enqueue_ready_jobs_by_queue', side_effect=RuntimeError()):
+            with self.assertRaises(RuntimeError):
+                job_1.cancel(enqueue_dependents=True)
+
+        self.assertEqual(job_1.get_status(), JobStatus.CANCELED)
+        self.assertEqual(job_2.get_status(), JobStatus.READY_TO_ENQUEUE)
+        self.assertIn(job_2.id, queue.ready_job_registry.get_job_ids(cleanup=False))
+        self.assertNotIn(job_2.id, queue.get_job_ids())
+
+    def test_cancel_enqueue_dependents_retries_cleanly_on_watcherror(self):
+        """A single WatchError on the cancel transaction retries without double-enqueueing."""
+        queue = Queue(connection=self.connection)
+        job_1 = queue.enqueue(fixtures.say_hello)
+        job_2 = queue.enqueue(fixtures.say_hello, depends_on=job_1)
+
+        from redis.client import Pipeline
+
+        original_execute = Pipeline.execute
+        calls = {'n': 0}
+
+        def flaky_execute(self_pipe, *args, **kwargs):
+            if getattr(self_pipe, 'watching', False) and calls['n'] == 0:
+                calls['n'] += 1
+                # Real Pipeline.execute resets the pipe in a finally even on WatchError;
+                # mirror that so the cancel retry starts from a clean pipe.
+                self_pipe.reset()
+                raise WatchError('simulated contention')
+            return original_execute(self_pipe, *args, **kwargs)
+
+        with mock.patch('redis.client.Pipeline.execute', flaky_execute):
+            job_1.cancel(enqueue_dependents=True)
+
+        self.assertEqual(job_1.get_status(), JobStatus.CANCELED)
+        self.assertEqual(job_2.get_status(), JobStatus.QUEUED)
+        self.assertEqual(queue.get_job_ids().count(job_2.id), 1)
+        self.assertEqual(len(queue.deferred_job_registry), 0)
+        self.assertEqual(queue.ready_job_registry.get_job_ids(cleanup=False), [])
 
     def test_canceling_job_removes_it_from_dependency_dependents_key(self):
         """Cancel child jobs and verify their IDs are removed from the parent's dependents_key."""
