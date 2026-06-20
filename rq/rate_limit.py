@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import cached_property
 
 from redis import Redis
@@ -169,7 +170,7 @@ class RateLimitRegistry:
             timestamp = current_timestamp()
         pipeline.zadd(self.pending_key, {job_id: timestamp})
 
-    def acquire_and_enqueue(self, max_concurrency: int) -> str | None:
+    def acquire_and_enqueue(self, max_concurrency: int, enqueued_at: datetime | None = None) -> str | None:
         """Try to enqueue the next pending job.
 
         Atomically checks if there's capacity, and if so pops from pending,
@@ -178,14 +179,19 @@ class RateLimitRegistry:
 
         Args:
             max_concurrency: Maximum number of concurrent jobs allowed.
+            enqueued_at: The timestamp to record as the job's `enqueued_at`.
+                Defaults to the current time. Callers can pass this so they can
+                mirror the stored value onto the in-memory job without a re-read.
 
         Returns:
             The enqueued job_id, or None if no capacity or no pending jobs.
         """
+        if enqueued_at is None:
+            enqueued_at = now()
         timestamp = current_timestamp()
         result = self._acquire_script(
             keys=[self.active_key, self.pending_key],
-            args=[max_concurrency, timestamp, utcformat(now())],
+            args=[max_concurrency, timestamp, utcformat(enqueued_at)],
         )
         if result is not None:
             return as_text(result)

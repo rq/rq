@@ -232,9 +232,12 @@ class TestRateLimitEnqueue(RQTestCase):
         job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
         job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
 
-        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
-        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
-        self.assertEqual(job3.get_status(), JobStatus.RATE_LIMITED)
+        # A job that immediately acquires capacity returns an object already
+        # reflecting QUEUED status and enqueued_at — no refresh() needed.
+        self.assertEqual(job1.get_status(refresh=False), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(refresh=False), JobStatus.QUEUED)
+        self.assertEqual(job3.get_status(refresh=False), JobStatus.RATE_LIMITED)
+        self.assertIsNotNone(job1.enqueued_at)
 
         # Verify rate limit fields are persisted
         self.assertTrue(job1.has_rate_limit)

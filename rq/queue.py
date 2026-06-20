@@ -1287,7 +1287,13 @@ class Queue:
 
         if pipeline is None:
             pipe.execute()
-            registry.acquire_and_enqueue(job.rate_limit_concurrency)
+            enqueued_at = now()
+            enqueued_job_id = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
+            if enqueued_job_id == job.id:
+                # This job acquired capacity immediately and is queued in Redis; mirror
+                # that onto the returned object so it isn't stale (status + enqueued_at).
+                job._status = JobStatus.QUEUED
+                job.enqueued_at = enqueued_at
 
         return job
 
