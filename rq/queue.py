@@ -1385,27 +1385,23 @@ class Queue:
 
         return job
 
-    def enqueue_dependents(
+    def move_dependents_to_ready(
         self,
         job: Job,
         pipeline: Pipeline | None = None,
         exclude_job_id: str | None = None,
         refresh_job_status: bool = True,
     ) -> dict[str, list[str]]:
-        """Move all of the given job's dependents whose dependencies are met into the
-        per-origin ReadyJobRegistry, then (on the no-pipeline path) drain them onto
-        their respective queues.
+        """Move the given job's eligible dependents from deferred to ready.
 
-        When called without a pipeline, this method uses WATCH/MULTI/EXEC and the
-        synchronous-visibility contract is preserved: by the time it returns, the
-        eligible dependents have been pushed onto their origin queues.
+        Selects dependents whose dependencies are met (and which aren't canceled) and
+        moves them into their origin ``ReadyJobRegistry`` via ``register_jobs``. This
+        does not push them onto the queue list; ``enqueue_ready_jobs_by_queue`` does that
+        with the returned mapping once the transition has committed.
 
-        When called with a caller-owned pipeline, only the deferred→ready ops are
-        appended; the caller is responsible for EXECing the pipeline and then
-        draining the returned ids via
-        ``Queue(origin).ready_job_registry.enqueue_jobs(ids)``. If the caller
-        skips the drain, ``ReadyJobRegistry.cleanup()`` recovers the dependents
-        later.
+        When ``pipeline`` is ``None`` this method runs its own WATCH/MULTI/EXEC. When a
+        pipeline is passed the ops are appended to the caller's transaction and the
+        caller is responsible for EXEC.
 
         Args:
             job: The job whose dependents to process.
@@ -1436,7 +1432,7 @@ class Queue:
                 if not dependent_job_ids:
                     break
 
-                jobs_to_enqueue = [
+                jobs_to_mark_ready = [
                     dependent_job
                     for dependent_job in self.job_class.fetch_many(
                         dependent_job_ids, connection=self.connection, serializer=self.serializer
@@ -1453,14 +1449,14 @@ class Queue:
 
                 pipe.multi()
 
-                if not jobs_to_enqueue:
+                if not jobs_to_mark_ready:
                     break
 
                 self.log.debug(
                     'Moving %d dependent jobs to ready for job %s: %s',
-                    len(jobs_to_enqueue),
+                    len(jobs_to_mark_ready),
                     job.id,
-                    [j.id for j in jobs_to_enqueue],
+                    [j.id for j in jobs_to_mark_ready],
                 )
 
                 # Group dependents by their origin queue so each lands in the correct
@@ -1468,7 +1464,7 @@ class Queue:
                 # WatchError-induced retry doesn't double-count.
                 job_ids_by_queue_name = {}
                 grouped: dict[str, list[Job]] = defaultdict(list)
-                for dependent in jobs_to_enqueue:
+                for dependent in jobs_to_mark_ready:
                     grouped[dependent.origin].append(dependent)
 
                 for queue_name, group in grouped.items():
@@ -1481,12 +1477,12 @@ class Queue:
                     target_registry.register_jobs(group, pipeline=pipe)
                     job_ids_by_queue_name[queue_name] = [j.id for j in group]
 
-                # Only delete dependents_key if all dependents have been enqueued
-                if len(jobs_to_enqueue) == len(dependent_job_ids):
+                # Only delete dependents_key if all dependents have been moved to ready
+                if len(jobs_to_mark_ready) == len(dependent_job_ids):
                     pipe.delete(dependents_key)
                 else:
-                    enqueued_job_ids = [j.id for j in jobs_to_enqueue]
-                    pipe.srem(dependents_key, *enqueued_job_ids)
+                    ready_job_ids = [j.id for j in jobs_to_mark_ready]
+                    pipe.srem(dependents_key, *ready_job_ids)
 
                 if pipeline is None:
                     pipe.execute()
@@ -1501,11 +1497,20 @@ class Queue:
                     # handle it
                     raise
 
-        # On the no-pipeline path, preserve the synchronous-visibility contract by
-        # draining the ready ids onto their origin queues before returning. On the
-        # caller-owned pipeline path, the caller does this after their EXEC.
-        if pipeline is None and job_ids_by_queue_name:
-            for queue_name, ids in job_ids_by_queue_name.items():
+        return job_ids_by_queue_name
+
+    def enqueue_ready_jobs_by_queue(self, job_ids_by_queue_name: dict[str, list[str]]) -> None:
+        """Enqueue ready dependents onto their origin queues.
+
+        Call with the mapping returned by ``move_dependents_to_ready`` once the
+        deferred→ready transition has committed. Per-queue failures are logged and left
+        for ``ReadyJobRegistry.cleanup()`` to recover; they are never lost.
+
+        Args:
+            job_ids_by_queue_name: Map of origin queue name → list of ready job ids.
+        """
+        for queue_name, ids in job_ids_by_queue_name.items():
+            try:
                 target_queue = self.__class__(
                     name=queue_name,
                     connection=self.connection,
@@ -1513,7 +1518,37 @@ class Queue:
                     serializer=self.serializer,
                 )
                 target_queue.ready_job_registry.enqueue_jobs(ids)
+            except Exception:
+                self.log.exception(
+                    'Failed to drain ready dependents for queue %s; leaving for ReadyJobRegistry.cleanup()',
+                    queue_name,
+                )
 
+    def enqueue_dependents(
+        self,
+        job: Job,
+        exclude_job_id: str | None = None,
+        refresh_job_status: bool = True,
+    ) -> dict[str, list[str]]:
+        """Move the given job's eligible dependents to ready and enqueue them.
+
+        High-level convenience that owns its transaction: it runs phase 1
+        (``move_dependents_to_ready``) and then phase 2 (``enqueue_ready_jobs_by_queue``).
+        Callers that need to bundle the deferred→ready transition into their own
+        transaction should call the two methods directly instead.
+
+        Args:
+            job: The job whose dependents to process.
+            exclude_job_id: Skip a specific dependent id.
+            refresh_job_status: Whether to refresh dependent status during dependency check.
+
+        Returns:
+            Map of origin queue name → list of dependent job ids that were moved to ready.
+        """
+        job_ids_by_queue_name = self.move_dependents_to_ready(
+            job, exclude_job_id=exclude_job_id, refresh_job_status=refresh_job_status
+        )
+        self.enqueue_ready_jobs_by_queue(job_ids_by_queue_name)
         return job_ids_by_queue_name
 
     def pop_job_id(self) -> str | None:

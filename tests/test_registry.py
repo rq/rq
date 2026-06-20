@@ -546,6 +546,28 @@ class TestReadyJobRegistry(RQTestCase):
         self.assertEqual(self.registry.count, 0)
         self.assertIn(job.id, queue.get_job_ids())
 
+    def test_enqueue_ready_jobs_by_queue_isolates_drain_failure(self):
+        """A drain failure is swallowed; the job stays ready and is recovered by cleanup."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+        queue.remove(job)
+        job.set_status(JobStatus.READY_TO_ENQUEUE)
+        self.registry.add(job)
+
+        # Patch scoped to ONLY the drain call — if it leaked into clean_registries below,
+        # recovery would fail for the wrong reason.
+        with mock.patch.object(ReadyJobRegistry, 'enqueue_jobs', side_effect=RuntimeError('boom')):
+            queue.enqueue_ready_jobs_by_queue({queue.name: [job.id]})  # must not raise
+
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.READY_TO_ENQUEUE)
+        self.assertNotIn(job.id, queue.get_job_ids())
+        self.assertIn(job.id, self.registry.get_job_ids(cleanup=False))
+
+        # Real enqueue_jobs (patch lifted) recovers the job.
+        clean_registries(queue)
+        self.assertEqual(self.registry.count, 0)
+        self.assertIn(job.id, queue.get_job_ids())
+
 
 class TestFailedJobRegistry(RQTestCase):
     def test_default_failure_ttl(self):

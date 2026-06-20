@@ -1457,15 +1457,15 @@ class BaseWorker:
         with self.connection.pipeline() as pipeline:
             while True:
                 try:
-                    # if dependencies are inserted after enqueue_dependents
+                    # if dependencies are inserted after move_dependents_to_ready
                     # a WatchError is thrown by execute()
                     pipeline.watch(job.dependents_key)
-                    # enqueue_dependents might call multi() on the pipeline
-                    self.log.debug('Worker %s: enqueueing dependents of job %s', self.name, job.id)
-                    dependent_job_ids_by_queue = queue.enqueue_dependents(job, pipeline=pipeline)
+                    # move_dependents_to_ready might call multi() on the pipeline
+                    self.log.debug('Worker %s: moving dependents of job %s to ready', self.name, job.id)
+                    dependent_job_ids_by_queue = queue.move_dependents_to_ready(job, pipeline=pipeline)
 
                     if not pipeline.explicit_transaction:
-                        # enqueue_dependents didn't call multi after all!
+                        # move_dependents_to_ready didn't call multi after all!
                         # We have to do it ourselves to make sure everything runs in a transaction
                         self.log.debug('Worker %s: calling multi() on pipeline for job %s', self.name, job.id)
                         pipeline.multi()
@@ -1503,25 +1503,9 @@ class BaseWorker:
                     pipeline.execute()
 
                     # Drain ready dependents onto their origin queues now that the
-                    # deferred→ready transition has committed. Failures here fall
-                    # through to ReadyJobRegistry.cleanup() for recovery.
-                    for queue_name, ids in dependent_job_ids_by_queue.items():
-                        try:
-                            target_queue = self.queue_class(
-                                name=queue_name,
-                                connection=self.connection,
-                                job_class=self.job_class,
-                                serializer=self.serializer,
-                            )
-                            target_queue.ready_job_registry.enqueue_jobs(ids)
-                        except Exception:
-                            self.log.exception(
-                                'Worker %s: failed to drain ready dependents for queue %s (job %s); '
-                                'leaving for ReadyJobRegistry.cleanup()',
-                                self.name,
-                                queue_name,
-                                job.id,
-                            )
+                    # deferred→ready transition has committed. Per-queue failures are
+                    # logged and left for ReadyJobRegistry.cleanup() to recover.
+                    queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
                     assert job.started_at
                     assert job.ended_at

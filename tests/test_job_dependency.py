@@ -269,8 +269,7 @@ class TestJobDependency(RQTestCase):
             pipe.set('some:key', b'some:other:value')
             pipe.execute()
         # Caller-owned pipeline path: drain ready dependents now that EXEC committed
-        for queue_name, ids in dependent_job_ids_by_queue.items():
-            Queue(queue_name, connection=self.connection).ready_job_registry.enqueue_jobs(ids)
+        queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
         self.assertEqual(self.connection.get('some:key'), b'some:other:value')
         self.assertEqual(1, len(queue.get_jobs()))
         self.assertEqual(0, len(queue.deferred_job_registry))

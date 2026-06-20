@@ -1196,11 +1196,10 @@ class Job:
         Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
 
         When called with ``pipeline=external_pipe`` AND ``enqueue_dependents=True``,
-        the caller owns the EXEC and is responsible for draining the returned
-        ``dependent_job_ids_by_queue`` via
-        ``Queue(origin).ready_job_registry.enqueue_jobs(ids)`` after their EXEC.
-        If skipped, ``ReadyJobRegistry.cleanup()`` recovers the dependents later.
-        On the no-pipeline path, the drain happens internally before return.
+        the caller owns the EXEC and is responsible for draining the returned mapping
+        via ``Queue.enqueue_ready_jobs_by_queue(mapping)`` after their EXEC. If skipped,
+        ``ReadyJobRegistry.cleanup()`` recovers the dependents later. On the no-pipeline
+        path, the drain happens internally before return.
 
         Args:
             pipeline (Optional[Pipeline], optional): The Redis' pipeline to use. Defaults to None.
@@ -1232,7 +1231,19 @@ class Job:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
-                    dependent_job_ids_by_queue = q.enqueue_dependents(self, pipeline=pipeline, exclude_job_id=self.id)
+                    # Phase 1 — move dependents to ready.
+                    dependent_job_ids_by_queue = q.move_dependents_to_ready(
+                        self, pipeline=pipeline, exclude_job_id=self.id
+                    )
+                    # Phase 2 (no-pipeline path only) — drain immediately, because
+                    # move_dependents_to_ready committed its own transaction here and
+                    # this cancel may WATCH-retry below (which would reset the returned
+                    # mapping). Draining now mirrors the old single-call behavior; it is
+                    # safe across retries since enqueue_jobs skips already-queued jobs.
+                    # On the caller-owned pipeline path the external caller drains the
+                    # returned mapping after their EXEC.
+                    if pipeline is None:
+                        q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
                 if remove_from_dependencies:
                     # Go through all dependencies and remove the current job from each dependency's dependents_key
