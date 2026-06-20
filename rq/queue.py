@@ -1235,6 +1235,8 @@ class Queue:
             raise ValueError('unique=True is not supported with job dependencies')
         if unique and job.has_rate_limit:
             raise ValueError('unique=True is not supported with rate-limited jobs')
+        if job.has_rate_limit and not self._is_async:
+            raise ValueError('rate_limit is not supported on synchronous queues (is_async=False)')
 
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)

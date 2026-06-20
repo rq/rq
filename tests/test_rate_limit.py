@@ -218,6 +218,12 @@ class TestRateLimitEnqueue(RQTestCase):
         super().setUp()
         self.queue = Queue('default', connection=self.connection)
 
+    def test_rate_limit_rejected_on_sync_queue(self):
+        """RateLimit is not supported on synchronous (is_async=False) queues."""
+        sync_queue = Queue('default', connection=self.connection, is_async=False)
+        with self.assertRaises(ValueError):
+            sync_queue.enqueue(say_hello, rate_limit=RateLimit(key='test', concurrency=1))
+
     def test_enqueue_with_rate_limit(self):
         """Jobs exceeding concurrency limit are deferred, others are queued."""
         rate_limit = RateLimit(key='test', concurrency=2)
