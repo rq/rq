@@ -1299,6 +1299,13 @@ class Job:
         if pipeline is None and enqueue_dependents:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
+        # The CANCELED status is now committed. Drop the job from its rate-limit
+        # registry (frees an active slot / removes a pending entry) and promote the
+        # next pending job. Post-commit, no-pipeline only — external-pipeline callers
+        # are responsible for rate-limit cleanup themselves.
+        if pipeline is None and self.has_rate_limit:
+            self.rate_limit_registry.cancel(self.id)
+
         return dependent_job_ids_by_queue
 
     def requeue(self, at_front: bool = False) -> Job:
@@ -1406,6 +1413,13 @@ class Job:
             group.delete_job(self.id, pipeline=pipeline)
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
+
+        # Drop the job from its rate-limit registry and promote the next pending job.
+        # cancel() only removes by id (and promotes a different job), so running it
+        # after the hash delete is safe. No-pipeline only — external-pipeline callers
+        # are responsible for rate-limit cleanup themselves.
+        if pipeline is None and self.has_rate_limit:
+            self.rate_limit_registry.cancel(self.id)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):
         """Delete jobs depending on this job.

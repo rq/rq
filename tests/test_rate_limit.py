@@ -372,6 +372,52 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertEqual(rate_limit_registry.get_active_job_count(), 1)
         self.assertIn(job2.id, rate_limit_registry.get_active_job_ids())
 
+    def test_cancel_removes_from_registry_and_promotes_pending(self):
+        """Canceling a pending rate-limited job removes it (without promotion);
+        canceling the active job frees its slot and promotes the next pending job.
+        Promoting job3 — not the older job2 — proves the canceled job2 is gone
+        from pending and cannot be resurrected."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # active
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        # Canceling a pending job removes it without promoting (it wasn't active).
+        job2.cancel()
+        self.assertNotIn(job2.id, registry.get_pending_job_ids())
+        self.assertIn(job1.id, registry.get_active_job_ids())
+
+        # Canceling the active job frees its slot and promotes the next pending job.
+        job1.cancel()
+        self.assertNotIn(job1.id, registry.get_active_job_ids())
+        self.assertIn(job3.id, registry.get_active_job_ids())
+        self.assertEqual(job3.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.CANCELED)
+
+    def test_delete_removes_from_registry_and_promotes_pending(self):
+        """Deleting a pending rate-limited job removes it (without promotion);
+        deleting the active job frees its slot and promotes the next pending job.
+        Promoting job3 — not the older job2 — proves the deleted job2 is gone."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # active
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        # Deleting a pending job removes it without promoting (it wasn't active).
+        job2.delete()
+        self.assertNotIn(job2.id, registry.get_pending_job_ids())
+        self.assertIn(job1.id, registry.get_active_job_ids())
+
+        # Deleting the active job frees its slot and promotes the next pending job.
+        job1.delete()
+        self.assertNotIn(job1.id, registry.get_active_job_ids())
+        self.assertIn(job3.id, registry.get_active_job_ids())
+        self.assertEqual(job3.get_status(), JobStatus.QUEUED)
+
     def test_release_on_abandoned_job_cleanup(self):
         """When StartedJobRegistry cleans up an abandoned rate-limited job,
         capacity is released and the next pending job is enqueued."""
