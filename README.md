@@ -142,6 +142,24 @@ queue.enqueue(say_hello, retry=Retry(max=3, interval=[10, 30, 60]))
 
 For a more complete example, refer to the [docs][d].  But this is the essence.
 
+## Webhooks
+
+RQ can send an HTTP request to a URL when a job finishes or fails, without writing a callback function:
+
+```python
+from rq import Webhook
+
+queue.enqueue(
+    say_hello,
+    webhooks=[
+        Webhook('https://example.com/finished', job_status='finished'),
+        Webhook('https://example.com/failed', job_status='failed', method='POST'),
+    ],
+)
+```
+
+More details can be found in the [docs](https://python-rq.org/docs/#webhooks).
+
 ## Interval and Cron Job Scheduling
 
 RQ >= 2.5 provides built-in job scheduling functionality that supports both simple interval-based scheduling and flexible cron syntax.

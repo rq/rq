@@ -754,6 +754,11 @@ class BaseWorker:
 
             try:
                 pipeline.execute()
+                # Fire failed webhooks only after the terminal failure is persisted, and
+                # skip retried/stopped jobs. Placed before enqueue_dependents (which can raise)
+                # so dispatch isn't lost if dependent enqueueing fails; send_webhooks never raises.
+                if not retry and not job_is_stopped:
+                    job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
                 if enqueue_dependents:
                     queue.enqueue_dependents(job)
             except Exception as e:
@@ -1399,6 +1404,9 @@ class BaseWorker:
 
                 try:
                     pipeline.execute()
+                    # Terminal failure (retries exhausted): fire failed webhooks after the failure is
+                    # persisted, before enqueue_dependents. No exception here, so exc_string is empty.
+                    job.send_webhooks(JobStatus.FAILED, exc_string='')
                     queue.enqueue_dependents(job)
                 except Exception as e:
                     self.log.error(
@@ -1563,6 +1571,7 @@ class BaseWorker:
                 job._status = JobStatus.FINISHED
                 job.execute_success_callback(self.death_penalty_class, return_value)
                 self.handle_job_success(job=job, queue=queue, started_job_registry=started_job_registry)
+                job.send_webhooks(JobStatus.FINISHED)
 
         except:  # NOQA
             self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)

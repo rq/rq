@@ -111,6 +111,29 @@ cron.register(frequent_task, queue_name='default', cron='*/15 * * * *')
 cron.register(weekly_report, queue_name='reports', cron='0 18 * * 0')
 ```
 
+## Webhooks
+
+__New in version 2.10__
+
+Webhooks are a convenient way to monitor scheduled jobs over HTTP — for example, pinging a
+monitoring or dead-man's-switch endpoint when a run finishes or fails:
+
+```python
+from rq import Webhook
+
+cron.register(
+    backup_database,
+    queue_name='maintenance',
+    cron='0 2 * * *',
+    webhooks=[
+        Webhook('https://example.com/finished', 'finished'),
+        Webhook('https://example.com/failed', 'failed'),
+    ],
+)
+```
+
+See [Webhooks](/docs/#webhooks) for the full options, payload schema and firing semantics.
+
 ## Configuration Files
 
 ### Basic Configuration

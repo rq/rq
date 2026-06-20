@@ -11,11 +11,12 @@ from unittest.mock import patch
 
 from redis import Redis
 
-from rq import Queue, utils
+from rq import Queue, cron, utils
 from rq.connections import get_connection_kwargs
 from rq.cron import CronJob, CronScheduler, _job_data_registry
 from rq.cron_scheduler_registry import get_keys, get_registry_key
 from rq.exceptions import SchedulerNotFound
+from rq.webhook import Webhook
 from tests import RQTestCase
 from tests.fixtures import div_by_zero, do_nothing, say_hello
 
@@ -221,6 +222,33 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(cron_job.job_options['job_timeout'], timeout)
         self.assertEqual(cron_job.job_options['result_ttl'], result_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
+
+    def test_register_with_webhooks(self):
+        """scheduler.register() stores webhooks and validates them immediately"""
+        scheduler = CronScheduler(connection=self.connection)
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+
+        cron_job = scheduler.register(func=say_hello, queue_name=self.queue_name, interval=30, webhooks=webhooks)
+        self.assertEqual(cron_job.job_options['webhooks'], webhooks)
+
+        # Direct registration fails fast on invalid webhooks
+        with self.assertRaises(TypeError):
+            scheduler.register(func=say_hello, queue_name=self.queue_name, interval=30, webhooks=['bad'])
+
+    def test_module_register_forwards_webhooks(self):
+        """cron.register() carries webhooks into job_data and reach the enqueued job"""
+        webhooks = [Webhook('http://example.com/done', 'finished')]
+
+        job_data = cron.register(say_hello, queue_name=self.queue_name, interval=60, webhooks=webhooks)
+        self.assertEqual(job_data['webhooks'], webhooks)
+
+        scheduler = cron.create_cron(self.connection)
+        self.assertEqual(scheduler.get_jobs()[0].job_options['webhooks'], webhooks)
+
+        scheduler.enqueue_jobs()
+        jobs = Queue(self.queue_name, connection=self.connection).get_jobs()
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0].webhooks, webhooks)
 
     def test_load_config_from_file_method(self):  # Renamed test
         """Test loading cron configuration using the instance method"""

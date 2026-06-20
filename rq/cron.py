@@ -9,7 +9,7 @@ import socket
 import sys
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -35,6 +35,7 @@ from .utils import (
     utcparse,
     validate_absolute_path,
 )
+from .webhook import Webhook
 
 
 class CronJob:
@@ -54,11 +55,17 @@ class CronJob:
         ttl: int | None = None,
         failure_ttl: int | None = None,
         meta: dict | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ):
         if interval and cron:
             raise ValueError('Cannot specify both interval and cron parameters')
         if not interval and not cron:
             raise ValueError('Must specify either interval or cron parameter')
+
+        if webhooks and (
+            not isinstance(webhooks, Sequence) or not all(isinstance(webhook, Webhook) for webhook in webhooks)
+        ):
+            raise TypeError('webhooks must be a sequence of Webhook instances')
 
         if func:
             self.func: Callable | None = func
@@ -87,6 +94,9 @@ class CronJob:
             'ttl': ttl,
             'failure_ttl': failure_ttl,
             'meta': meta,
+            # Normalize to a list and drop an empty sequence so it isn't stored/serialized,
+            # matching Job (which omits empty webhooks)
+            'webhooks': list(webhooks) if webhooks else None,
         }
         # Filter out None values
         self.job_options = {k: v for k, v in self.job_options.items() if v is not None}
@@ -148,10 +158,15 @@ class CronJob:
             'next_enqueue_time': utcformat(self.next_enqueue_time) if self.next_enqueue_time else None,
         }
         # Add job options, filtering out None values
-        # meta uses safe_json_dumps, others are kept as-is (integers)
+        # meta uses safe_json_dumps and webhooks are serialized to JSON; others are kept as-is (integers)
         for k, v in self.job_options.items():
             if v is not None:
-                obj[k] = safe_json_dumps(v) if k == 'meta' else v
+                if k == 'meta':
+                    obj[k] = safe_json_dumps(v)
+                elif k == 'webhooks':
+                    obj[k] = json.dumps([webhook.to_dict() for webhook in v])
+                else:
+                    obj[k] = v
         return obj
 
     @classmethod
@@ -176,6 +191,14 @@ class CronJob:
         if meta and meta != NOT_JSON_SERIALIZABLE:
             meta = json.loads(meta)
 
+        # Restore webhooks - parse the JSON string from to_dict, else skip (missing or unserializable
+        # placeholder). Unlike meta, webhooks are validated in __init__, so the sentinel can't pass through.
+        webhooks = data.get('webhooks')
+        if webhooks and webhooks != NOT_JSON_SERIALIZABLE:
+            webhooks = [Webhook.from_dict(webhook) for webhook in json.loads(webhooks)]
+        else:
+            webhooks = None
+
         job = cls(
             queue_name=data['queue_name'],
             func_name=data['func_name'],
@@ -188,6 +211,7 @@ class CronJob:
             ttl=data.get('ttl'),
             failure_ttl=data.get('failure_ttl'),
             meta=meta,
+            webhooks=webhooks,
         )
 
         # Restore timing information if present
@@ -251,6 +275,7 @@ class CronScheduler:
         ttl: int | None = None,
         failure_ttl: int | None = None,
         meta: dict | None = None,
+        webhooks: Sequence[Webhook] | None = None,
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
@@ -265,6 +290,7 @@ class CronScheduler:
             ttl=ttl,
             failure_ttl=failure_ttl,
             meta=meta,
+            webhooks=webhooks,
         )
 
         self._cron_jobs.append(cron_job)
@@ -593,6 +619,7 @@ def register(
     ttl: int | None = None,
     failure_ttl: int | None = None,
     meta: dict | None = None,
+    webhooks: Sequence[Webhook] | None = None,
 ) -> dict:
     """
     Register a function to be run as a cron job by adding its definition
@@ -623,6 +650,7 @@ def register(
         'ttl': ttl,
         'failure_ttl': failure_ttl,
         'meta': meta,
+        'webhooks': webhooks,
     }
     # Add to the global registry
     _job_data_registry.append(job_data)
