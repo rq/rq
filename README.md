@@ -218,6 +218,23 @@ cron.register(
 )
 ```python
 
+Cron jobs can also send webhooks to a monitoring endpoint when a scheduled run finishes or fails:
+
+```python
+from rq import cron, Webhook
+
+# Ping a monitoring endpoint after the nightly backup finishes or fails
+cron.register(
+    backup_database,
+    queue_name='maintenance',
+    cron='0 3 * * *',
+    webhooks=[
+        Webhook('https://example.com/finished', 'finished'),
+        Webhook('https://example.com/failed', 'failed'),
+    ],
+)
+```
+
 More details on functionality can be found in the [docs](https://python-rq.org/docs/cron/).
 
 ### The Worker
