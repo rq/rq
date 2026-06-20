@@ -5,6 +5,10 @@ on:
     branches:
       - master
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.rst"
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -35,15 +39,27 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    # A curated covering set rather than a full cartesian product: RQ uses a
+    # small, stable set of Redis commands, so the Valkey version axis rarely
+    # changes behavior. Every Python, every Valkey and every redis-py version
+    # is exercised at least once.
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13", "3.14"]
-        valkey-version: ["7.2", "8.0", "9.0"]
-        redis-py-version: ["5", "6", "7", "8"]
+        include:
+          - { python-version: "3.14", valkey-version: "9.0", redis-py-version: "8" }
+          - { python-version: "3.14", valkey-version: "8.0", redis-py-version: "7" }
+          - { python-version: "3.14", valkey-version: "7.2", redis-py-version: "8" }
+          - { python-version: "3.13", valkey-version: "9.0", redis-py-version: "6" }
+          - { python-version: "3.13", valkey-version: "8.0", redis-py-version: "8" }
+          - { python-version: "3.13", valkey-version: "7.2", redis-py-version: "5" }
+          - { python-version: "3.12", valkey-version: "9.0", redis-py-version: "5" }
+          - { python-version: "3.12", valkey-version: "8.0", redis-py-version: "6" }
+          - { python-version: "3.12", valkey-version: "7.2", redis-py-version: "7" }
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6.2.0

@@ -5,6 +5,10 @@ on:
     branches:
       - master
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.rst"
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -18,7 +22,7 @@ jobs:
     name: Run SSL tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Build the Docker test image for tox
         uses: docker/build-push-action@v6
         with:
@@ -35,22 +39,34 @@ jobs:
     name: Python${{ matrix.python-version }}/Redis${{ matrix.redis-version }}/redis-py${{ matrix.redis-py-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    # A curated covering set rather than a full cartesian product: RQ uses a
+    # small, stable set of Redis commands, so the server version axis rarely
+    # changes behavior. Every Python, every Redis and every redis-py version is
+    # exercised at least once, plus the RESP3-negotiation and minimum-supported
+    # boundary combinations.
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-        redis-version: [5, 6, 7, 8]
-        redis-py-version: [5, 6, 8]
-        exclude:
-          # redis-py 6 negotiates RESP3 via HELLO, which Redis 5 (pre-6.0) doesn't support
-          - redis-version: 5
-            redis-py-version: 6
-          # redis-py 8 defaults to RESP3, which negotiates via the HELLO command.
-          # HELLO was added in Redis 6.0, so redis-py 8 cannot connect to Redis 5.
-          - redis-version: 5
-            redis-py-version: 8
+        include:
+          - { python-version: "3.14", redis-version: 8, redis-py-version: 8 }
+          - { python-version: "3.14", redis-version: 7, redis-py-version: 8 }
+          - { python-version: "3.14", redis-version: 6, redis-py-version: 6 }
+          # Redis 5 predates HELLO, so it only works with redis-py 5 (RESP2)
+          - { python-version: "3.14", redis-version: 5, redis-py-version: 5 }
+          - { python-version: "3.13", redis-version: 8, redis-py-version: 8 }
+          - { python-version: "3.13", redis-version: 8, redis-py-version: 6 }
+          - { python-version: "3.12", redis-version: 7, redis-py-version: 6 }
+          - { python-version: "3.13", redis-version: 7, redis-py-version: 7 }
+          - { python-version: "3.12", redis-version: 8, redis-py-version: 5 }
+          - { python-version: "3.11", redis-version: 6, redis-py-version: 5 }
+          - { python-version: "3.11", redis-version: 8, redis-py-version: 8 }
+          - { python-version: "3.10", redis-version: 8, redis-py-version: 8 }
+          # Minimum-supported floor
+          - { python-version: "3.10", redis-version: 5, redis-py-version: 5 }
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6.2.0
@@ -83,7 +99,7 @@ jobs:
     name: Type check
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v6.2.0
