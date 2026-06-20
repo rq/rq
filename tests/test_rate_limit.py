@@ -418,6 +418,71 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertIn(job3.id, registry.get_active_job_ids())
         self.assertEqual(job3.get_status(), JobStatus.QUEUED)
 
+    def test_cancel_with_pipeline_removes_from_registry(self):
+        """Canceling via a caller-owned pipeline buffers the rate-limit removal into the
+        transaction (no in-transaction promotion). A canceled pending job is dropped and
+        cannot be resurrected; the freed slot is promoted by later cleanup."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # active
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        # Cancel the pending job via a pipeline → dropped from pending on EXEC.
+        pipe = self.connection.pipeline()
+        job2.cancel(pipeline=pipe)
+        pipe.execute()
+        self.assertNotIn(job2.id, registry.get_pending_job_ids())
+        self.assertIn(job1.id, registry.get_active_job_ids())
+
+        # Cancel the active job via a pipeline → dropped from active on EXEC, but the
+        # pending job is not promoted inside the caller transaction.
+        pipe = self.connection.pipeline()
+        job1.cancel(pipeline=pipe)
+        pipe.execute()
+        self.assertNotIn(job1.id, registry.get_active_job_ids())
+        self.assertEqual(registry.get_active_job_count(), 0)
+        self.assertIn(job3.id, registry.get_pending_job_ids())
+
+        # Maintenance cleanup promotes job3 — not the canceled job2 — proving job2 is
+        # gone from pending and cannot be resurrected.
+        registry.cleanup()
+        self.assertIn(job3.id, registry.get_active_job_ids())
+        self.assertEqual(job3.get_status(), JobStatus.QUEUED)
+
+    def test_delete_with_pipeline_removes_from_registry(self):
+        """Deleting via a caller-owned pipeline buffers the rate-limit removal into the
+        transaction (no in-transaction promotion). A deleted pending job is dropped and
+        cannot be resurrected; the freed slot is promoted by later cleanup."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # active
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # pending
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        # Delete the pending job via a pipeline → dropped from pending on EXEC.
+        pipe = self.connection.pipeline()
+        job2.delete(pipeline=pipe)
+        pipe.execute()
+        self.assertNotIn(job2.id, registry.get_pending_job_ids())
+        self.assertIn(job1.id, registry.get_active_job_ids())
+
+        # Delete the active job via a pipeline → dropped from active on EXEC, but the
+        # pending job is not promoted inside the caller transaction.
+        pipe = self.connection.pipeline()
+        job1.delete(pipeline=pipe)
+        pipe.execute()
+        self.assertNotIn(job1.id, registry.get_active_job_ids())
+        self.assertEqual(registry.get_active_job_count(), 0)
+        self.assertIn(job3.id, registry.get_pending_job_ids())
+
+        # Maintenance cleanup promotes job3 — not the deleted job2 — proving job2 is gone.
+        registry.cleanup()
+        self.assertIn(job3.id, registry.get_active_job_ids())
+        self.assertEqual(job3.get_status(), JobStatus.QUEUED)
+
     def test_release_on_abandoned_job_cleanup(self):
         """When StartedJobRegistry cleans up an abandoned rate-limited job,
         capacity is released and the next pending job is enqueued."""

@@ -1273,6 +1273,15 @@ class Job:
                     self.origin, self.connection, job_class=self.__class__, serializer=self.serializer
                 )
                 registry.add(self, pipeline=pipe)
+
+                # Caller-owned pipeline: buffer the rate-limit removal into the same
+                # transaction so the active/pending entry drops atomically with the
+                # CANCELED status. No promotion here — the caller may discard the
+                # transaction; the next release or maintenance cleanup promotes the
+                # pending job.
+                if pipeline is not None and self.has_rate_limit:
+                    self.rate_limit_registry.cancel(self.id, pipeline=pipe)
+
                 if pipeline is None:
                     pipe.execute()
                 break
@@ -1299,10 +1308,11 @@ class Job:
         if pipeline is None and enqueue_dependents:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
-        # The CANCELED status is now committed. Drop the job from its rate-limit
-        # registry (frees an active slot / removes a pending entry) and promote the
-        # next pending job. Post-commit, no-pipeline only — external-pipeline callers
-        # are responsible for rate-limit cleanup themselves.
+        # No-pipeline path: the CANCELED status is committed, so remove the job from its
+        # rate-limit registry (frees an active slot / drops a pending entry) and promote
+        # the next pending job. The caller-pipeline path already buffered the removal into
+        # the transaction above; only its promotion is deferred to the next release/acquire
+        # or maintenance cleanup.
         if pipeline is None and self.has_rate_limit:
             self.rate_limit_registry.cancel(self.id)
 
@@ -1414,12 +1424,11 @@ class Job:
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
-        # Drop the job from its rate-limit registry and promote the next pending job.
-        # cancel() only removes by id (and promotes a different job), so running it
-        # after the hash delete is safe. No-pipeline only — external-pipeline callers
-        # are responsible for rate-limit cleanup themselves.
-        if pipeline is None and self.has_rate_limit:
-            self.rate_limit_registry.cancel(self.id)
+        if self.has_rate_limit:
+            # No-pipeline: remove + promote immediately (after the hash delete above).
+            # Caller-owned pipeline: buffer the ZREMs into the caller's transaction without
+            # promoting — the next release/acquire or maintenance cleanup promotes.
+            self.rate_limit_registry.cancel(self.id, pipeline=pipeline)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):
         """Delete jobs depending on this job.

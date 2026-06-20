@@ -218,15 +218,25 @@ class RateLimitRegistry:
             return as_text(result)
         return None
 
-    def cancel(self, job_id: str) -> str | None:
+    def cancel(self, job_id: str, pipeline: Pipeline | None = None) -> str | None:
         """Remove a job from rate limit tracking and enqueue the next pending job if needed.
 
         Args:
             job_id: The job ID to remove.
+            pipeline: If provided, only the ZREM (active + pending) ops are buffered onto
+                the caller's transaction and no job is promoted — promotion is left to the
+                next release/acquire or maintenance cleanup, since the caller may still
+                discard the transaction. If None, removal runs immediately and, if the job
+                was active, the next pending job is promoted.
 
         Returns:
             The enqueued job_id, or None.
         """
+        if pipeline is not None:
+            pipeline.zrem(self.active_key, job_id)
+            pipeline.zrem(self.pending_key, job_id)
+            return None
+
         was_active = self.connection.zrem(self.active_key, job_id)
         self.connection.zrem(self.pending_key, job_id)
         if was_active:
