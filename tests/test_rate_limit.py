@@ -91,7 +91,12 @@ class TestRateLimitRegistry(RQTestCase):
         result = self.rate_limit_registry.acquire_and_enqueue(max_concurrency=2)
         self.assertIsNone(result)
 
-        job = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job.save()
 
         self._add_to_pending(job.id)
@@ -116,9 +121,19 @@ class TestRateLimitRegistry(RQTestCase):
 
     def test_acquire_and_enqueue_enqueues_oldest_first(self):
         """acquire_and_enqueue enqueues the oldest pending job (lowest score)."""
-        job1 = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job1 = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job1.save()
-        job2 = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job2 = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job2.save()
 
         self._add_to_pending(job1.id, timestamp=1)
@@ -142,7 +157,12 @@ class TestRateLimitRegistry(RQTestCase):
 
         # Releasing with a pending job enqueues it
         self.connection.zadd(self.rate_limit_registry.active_key, {'active2': 1})
-        job = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job.save()
         self._add_to_pending(job.id)
 
@@ -159,7 +179,12 @@ class TestRateLimitRegistry(RQTestCase):
         """cancel removes an active job and enqueues the next pending job."""
         self.connection.zadd(self.rate_limit_registry.active_key, {'active1': 1})
 
-        job2 = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job2 = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job2.save()
         self._add_to_pending(job2.id)
 
@@ -185,14 +210,169 @@ class TestRateLimitRegistry(RQTestCase):
         result = self.rate_limit_registry.cancel('nonexistent')
         self.assertIsNone(result)
 
+    def _make_job(self, status: JobStatus, origin: str = 'default') -> Job:
+        """Helper to create and save a job with the given status."""
+        job = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin=origin, status=status)
+        job.save()
+        return job
+
+    def test_cleanup_releases_missing_active_job(self):
+        """cleanup() frees an active slot whose job no longer exists."""
+        self.connection.zadd(self.rate_limit_registry.active_key, {'gone': 1})
+
+        self.rate_limit_registry.cleanup()
+
+        self.assertNotIn('gone', self.rate_limit_registry.get_active_job_ids())
+
+    def test_cleanup_releases_terminal_active_jobs(self):
+        """cleanup() frees active slots held by jobs in a terminal state."""
+        finished_job = self._make_job(status=JobStatus.FINISHED)
+        failed_job = self._make_job(status=JobStatus.FAILED)
+        canceled_job = self._make_job(status=JobStatus.CANCELED)
+        stopped_job = self._make_job(status=JobStatus.STOPPED)
+        self.connection.zadd(
+            self.rate_limit_registry.active_key,
+            {finished_job.id: 1, failed_job.id: 2, canceled_job.id: 3, stopped_job.id: 4},
+        )
+
+        self.rate_limit_registry.cleanup()
+
+        active_ids = self.rate_limit_registry.get_active_job_ids()
+        self.assertNotIn(finished_job.id, active_ids)
+        self.assertNotIn(failed_job.id, active_ids)
+        self.assertNotIn(canceled_job.id, active_ids)
+        self.assertNotIn(stopped_job.id, active_ids)
+
+    def test_cleanup_releases_scheduled_active_job(self):
+        """cleanup() frees an active slot held by a scheduled job (a delayed
+        retry whose slot release failed); a terminal-only check would miss it."""
+        scheduled_job = self._make_job(status=JobStatus.SCHEDULED)
+        self.connection.zadd(self.rate_limit_registry.active_key, {scheduled_job.id: 1})
+
+        self.rate_limit_registry.cleanup()
+
+        self.assertNotIn(scheduled_job.id, self.rate_limit_registry.get_active_job_ids())
+
+    def test_cleanup_releases_malformed_status_active_jobs(self):
+        """cleanup() frees active slots with a malformed or missing status
+        without crashing (no full Job hydration)."""
+        bogus_status_job = self._make_job(status=JobStatus.QUEUED)
+        self.connection.hset(bogus_status_job.key, 'status', 'bogus')
+        missing_status_job = self._make_job(status=JobStatus.QUEUED)
+        self.connection.hdel(missing_status_job.key, 'status')
+        self.connection.zadd(self.rate_limit_registry.active_key, {bogus_status_job.id: 1, missing_status_job.id: 2})
+
+        self.rate_limit_registry.cleanup()
+
+        active_ids = self.rate_limit_registry.get_active_job_ids()
+        self.assertNotIn(bogus_status_job.id, active_ids)
+        self.assertNotIn(missing_status_job.id, active_ids)
+
+    def test_cleanup_keeps_legitimately_active_jobs(self):
+        """cleanup() does not evict jobs that are queued or started."""
+        queued_job = self._make_job(status=JobStatus.QUEUED)
+        started_job = self._make_job(status=JobStatus.STARTED)
+        self.connection.zadd(self.rate_limit_registry.active_key, {queued_job.id: 1, started_job.id: 2})
+
+        self.rate_limit_registry.cleanup()
+
+        active_ids = self.rate_limit_registry.get_active_job_ids()
+        self.assertIn(queued_job.id, active_ids)
+        self.assertIn(started_job.id, active_ids)
+
+    def test_cleanup_promotes_pending_after_releasing_stale_active(self):
+        """Freeing a stale active slot makes room to promote a pending job."""
+        registry = RateLimitRegistry(key='solo', connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            registry.register(1, pipe)
+            pipe.execute()
+
+        self.connection.zadd(registry.active_key, {'gone': 1})
+        pending_job = self._make_job(status=JobStatus.RATE_LIMITED)
+        self._add_to_pending_for(registry, pending_job.id)
+
+        registry.cleanup()
+
+        self.assertNotIn('gone', registry.get_active_job_ids())
+        self.assertIn(pending_job.id, registry.get_active_job_ids())
+        self.assertEqual(registry.get_pending_job_count(), 0)
+        self.assertIn(pending_job.id, self.queue.job_ids)
+        self.assertEqual(pending_job.get_status(), JobStatus.QUEUED)
+
+    def test_cleanup_stale_pending_does_not_crash_promotion(self):
+        """A stale pending id (no job hash) is pruned instead of crashing the
+        promotion, and a valid pending job behind it is still promoted."""
+        registry = RateLimitRegistry(key='solo', connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            registry.register(1, pipe)
+            pipe.execute()
+
+        self.connection.zadd(registry.active_key, {'gone': 1})
+        pending_job = self._make_job(status=JobStatus.RATE_LIMITED)
+        self._add_to_pending_for(registry, 'stale-pending', timestamp=1)
+        self._add_to_pending_for(registry, pending_job.id, timestamp=2)
+
+        registry.cleanup()
+
+        self.assertNotIn('stale-pending', registry.get_pending_job_ids())
+        self.assertIn(pending_job.id, registry.get_active_job_ids())
+        self.assertIn(pending_job.id, self.queue.job_ids)
+
+    def test_cleanup_skips_non_rate_limited_pending(self):
+        """A pending entry whose job is not rate_limited (e.g. canceled) is
+        pruned without being promoted; the next valid pending job is promoted."""
+        registry = RateLimitRegistry(key='solo', connection=self.connection)
+        with self.connection.pipeline() as pipe:
+            registry.register(1, pipe)
+            pipe.execute()
+
+        canceled_job = self._make_job(status=JobStatus.CANCELED)
+        pending_job = self._make_job(status=JobStatus.RATE_LIMITED)
+        self._add_to_pending_for(registry, canceled_job.id, timestamp=1)
+        self._add_to_pending_for(registry, pending_job.id, timestamp=2)
+
+        registry.cleanup()
+
+        self.assertNotIn(canceled_job.id, registry.get_pending_job_ids())
+        self.assertNotIn(canceled_job.id, registry.get_active_job_ids())
+        self.assertNotIn(canceled_job.id, self.queue.job_ids)
+        self.assertIn(pending_job.id, registry.get_active_job_ids())
+
+    def test_cleanup_removes_registry_with_only_stale_active(self):
+        """cleanup() deletes the registry when active holds only stale ids and
+        pending is empty."""
+        self.connection.zadd(self.rate_limit_registry.active_key, {'gone1': 1, 'gone2': 2})
+
+        self.rate_limit_registry.cleanup()
+
+        self.assertEqual(RateLimitRegistry.all(self.connection), [])
+        self.assertFalse(self.connection.sismember(RateLimitRegistry.rl_keys_key, 'test'))
+        self.assertFalse(self.connection.exists(self.rate_limit_registry.config_key))
+
+    def _add_to_pending_for(self, registry, job_id, timestamp=None):
+        """Helper to add a job to a given registry's pending set."""
+        with self.connection.pipeline() as pipe:
+            registry.add_to_pending(job_id, pipe, timestamp=timestamp)
+            pipe.execute()
+
     def test_different_keys_are_independent(self):
         """Registries with different keys don't interfere with each other."""
         registry_a = RateLimitRegistry(key='key_a', connection=self.connection)
         registry_b = RateLimitRegistry(key='key_b', connection=self.connection)
 
-        job_a = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job_a = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job_a.save()
-        job_b = Job.create(func='tests.fixtures.say_hello', connection=self.connection, origin='default')
+        job_b = Job.create(
+            func='tests.fixtures.say_hello',
+            connection=self.connection,
+            origin='default',
+            status=JobStatus.RATE_LIMITED,
+        )
         job_b.save()
 
         with self.connection.pipeline() as pipe:

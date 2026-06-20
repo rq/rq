@@ -28,9 +28,10 @@ class RateLimit:
 
 
 # Lua script: Atomically acquire capacity and enqueue the next pending job.
-# Checks if active count < max_concurrency. If capacity available:
-#   ZPOPMIN from pending, ZADD to active, read job's origin to derive queue key,
-#   RPUSH to queue, HSET status to queued.
+# Checks if active count < max_concurrency. If capacity available, pops pending
+# jobs until it finds a valid one (origin set and status == 'rate_limited'),
+# discarding stale entries along the way, then ZADD to active, RPUSH to queue,
+# HSET status to queued.
 # Returns enqueued job_id or nil.
 # KEYS: active_key, pending_key
 # ARGV: max_concurrency, timestamp, enqueued_at
@@ -41,15 +42,22 @@ local timestamp = tonumber(ARGV[2])
 local enqueued_at = ARGV[3]
 
 if active_count < max_concurrency then
-    local result = redis.call('ZPOPMIN', KEYS[2])
-    if #result > 0 then
+    while true do
+        local result = redis.call('ZPOPMIN', KEYS[2])
+        if #result == 0 then
+            return nil
+        end
         local job_id = result[1]
         local origin = redis.call('HGET', 'rq:job:' .. job_id, 'origin')
-        local queue_key = 'rq:queue:' .. origin
-        redis.call('ZADD', KEYS[1], timestamp, job_id)
-        redis.call('RPUSH', queue_key, job_id)
-        redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
-        return job_id
+        local status = redis.call('HGET', 'rq:job:' .. job_id, 'status')
+        if origin and status == 'rate_limited' then
+            redis.call('ZADD', KEYS[1], timestamp, job_id)
+            redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
+            redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
+            return job_id
+        end
+        -- stale pending job (missing hash, no origin, or non-rate_limited status):
+        -- it's already popped, so loop to the next
     end
 end
 return nil
@@ -70,15 +78,22 @@ redis.call('ZREM', KEYS[1], completed_job_id)
 
 local active_count = redis.call('ZCARD', KEYS[1])
 if active_count < max_concurrency then
-    local result = redis.call('ZPOPMIN', KEYS[2])
-    if #result > 0 then
+    while true do
+        local result = redis.call('ZPOPMIN', KEYS[2])
+        if #result == 0 then
+            return nil
+        end
         local job_id = result[1]
         local origin = redis.call('HGET', 'rq:job:' .. job_id, 'origin')
-        local queue_key = 'rq:queue:' .. origin
-        redis.call('ZADD', KEYS[1], timestamp, job_id)
-        redis.call('RPUSH', queue_key, job_id)
-        redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
-        return job_id
+        local status = redis.call('HGET', 'rq:job:' .. job_id, 'status')
+        if origin and status == 'rate_limited' then
+            redis.call('ZADD', KEYS[1], timestamp, job_id)
+            redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
+            redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
+            return job_id
+        end
+        -- stale pending job (missing hash, no origin, or non-rate_limited status):
+        -- it's already popped, so loop to the next
     end
 end
 return nil
@@ -243,13 +258,43 @@ class RateLimitRegistry:
             return self.acquire_and_enqueue(self.max_concurrency)
         return None
 
-    def cleanup(self) -> None:
-        """Enqueue pending jobs if there is available capacity, then remove
-        the registry if both active and pending are empty.
+    def _release_stale_active_jobs(self) -> None:
+        """Free active slots whose job no longer exists or is not in a state
+        that legitimately holds a slot (queued or started).
 
-        Called during periodic maintenance to handle cases where jobs
-        are stuck in pending (e.g., worker crashed before releasing capacity).
+        Any other state — missing, terminal, scheduled or malformed — means the
+        slot leaked and should be freed so pending jobs can proceed.
         """
+        from .job import Job, JobStatus  # local import avoids circular import
+
+        active_statuses = (JobStatus.QUEUED, JobStatus.STARTED)
+        job_ids = self.get_active_job_ids()
+        if not job_ids:
+            return
+
+        # Read only the status field, defensively. We avoid hydrating full Job
+        # objects (Job.restore raises on a malformed status), so an unknown or
+        # missing status is simply not in the allowlist and treated as stale.
+        with self.connection.pipeline() as pipeline:
+            for job_id in job_ids:
+                pipeline.hget(Job.key_for(job_id), 'status')
+            raw_statuses = pipeline.execute()
+
+        for job_id, raw_status in zip(job_ids, raw_statuses):
+            status = as_text(raw_status) if raw_status else None
+            if status not in active_statuses:
+                self.release_capacity_and_enqueue(job_id)
+
+    def cleanup(self) -> None:
+        """Free stale active slots, enqueue pending jobs if there is available
+        capacity, then remove the registry if both active and pending are empty.
+
+        Called during periodic maintenance to handle cases where jobs are stuck
+        in pending (e.g., worker crashed before releasing capacity) or where a
+        job left the active set holding a slot it should have released.
+        """
+        self._release_stale_active_jobs()
+
         if self.max_concurrency and self.acquire_and_enqueue(self.max_concurrency):
             return
 
