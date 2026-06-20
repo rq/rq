@@ -441,7 +441,7 @@ class TestReadyJobRegistry(RQTestCase):
 
         def fake_enqueue(self_queue, job, *args, **kwargs):
             if job.id == job_b.id:
-                raise RuntimeError('boom')
+                raise RuntimeError()
             return original(self_queue, job, *args, **kwargs)
 
         with mock.patch.object(Queue, '_enqueue_job', fake_enqueue):
@@ -556,7 +556,7 @@ class TestReadyJobRegistry(RQTestCase):
 
         # Patch scoped to ONLY the drain call — if it leaked into clean_registries below,
         # recovery would fail for the wrong reason.
-        with mock.patch.object(ReadyJobRegistry, 'enqueue_jobs', side_effect=RuntimeError('boom')):
+        with mock.patch.object(ReadyJobRegistry, 'enqueue_jobs', side_effect=RuntimeError()):
             queue.enqueue_ready_jobs_by_queue({queue.name: [job.id]})  # must not raise
 
         self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.READY_TO_ENQUEUE)

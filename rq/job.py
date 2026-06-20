@@ -1192,14 +1192,16 @@ class Job:
         without worrying about the internals required to implement job
         cancellation.
 
-        You can enqueue the jobs dependents optionally,
-        Same pipelining behavior as Queue.enqueue_dependents on whether or not a pipeline is passed in.
+        You can optionally enqueue the job's dependents. When ``enqueue_dependents`` is
+        True, eligible dependents are moved deferred→ready atomically with this job's
+        CANCELED status, then enqueued onto their queues.
 
-        When called with ``pipeline=external_pipe`` AND ``enqueue_dependents=True``,
-        the caller owns the EXEC and is responsible for draining the returned mapping
-        via ``Queue.enqueue_ready_jobs_by_queue(mapping)`` after their EXEC. If skipped,
-        ``ReadyJobRegistry.cleanup()`` recovers the dependents later. On the no-pipeline
-        path, the drain happens internally before return.
+        On the no-pipeline path, the whole thing runs in cancel's own WATCH/MULTI/EXEC and
+        the dependents are enqueued before this method returns. When called with
+        ``pipeline=external_pipe``, the deferred→ready ops are appended to the caller's
+        transaction; the caller owns the EXEC and is responsible for draining the returned
+        mapping via ``Queue.enqueue_ready_jobs_by_queue(mapping)`` afterwards (otherwise
+        ``ReadyJobRegistry.cleanup()`` recovers the dependents later).
 
         Args:
             pipeline (Optional[Pipeline], optional): The Redis' pipeline to use. Defaults to None.
@@ -1226,24 +1228,22 @@ class Job:
                     name=self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
                 )
 
-                self.set_status(JobStatus.CANCELED, pipeline=pipe)
                 if enqueue_dependents:
                     # Only WATCH if no pipeline passed, otherwise caller is responsible
                     if pipeline is None:
                         pipe.watch(self.dependents_key)
-                    # Phase 1 — move dependents to ready.
-                    dependent_job_ids_by_queue = q.move_dependents_to_ready(
-                        self, pipeline=pipeline, exclude_job_id=self.id
-                    )
-                    # Phase 2 (no-pipeline path only) — drain immediately, because
-                    # move_dependents_to_ready committed its own transaction here and
-                    # this cancel may WATCH-retry below (which would reset the returned
-                    # mapping). Draining now mirrors the old single-call behavior; it is
-                    # safe across retries since enqueue_jobs skips already-queued jobs.
-                    # On the caller-owned pipeline path the external caller drains the
-                    # returned mapping after their EXEC.
-                    if pipeline is None:
-                        q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
+                    # Move dependents to ready inside THIS transaction (pass pipe, not the
+                    # original pipeline arg) so the deferred→ready transition commits
+                    # atomically with the CANCELED status below. Reads run immediately while
+                    # watching; move() calls multi() once it has dependents to write.
+                    dependent_job_ids_by_queue = q.move_dependents_to_ready(self, pipeline=pipe, exclude_job_id=self.id)
+
+                # Ensure a transaction is open before buffering cancel's own writes. move()
+                # only calls multi() when there are dependents, so guard like the worker does.
+                if pipeline is None and not pipe.explicit_transaction:
+                    pipe.multi()
+
+                self.set_status(JobStatus.CANCELED, pipeline=pipe)
 
                 if remove_from_dependencies:
                     # Go through all dependencies and remove the current job from each dependency's dependents_key
@@ -1261,12 +1261,19 @@ class Job:
                 break
             except WatchError:
                 if pipeline is None:
+                    dependent_job_ids_by_queue = {}
                     continue
                 else:
                     # if the pipeline comes from the caller, we re-raise the
                     # exception as it is the responsibility of the caller to
                     # handle it
                     raise
+
+        # Drain ready dependents onto their queues only after the cancel transaction has
+        # committed. On the caller-owned pipeline path the external caller drains the
+        # returned mapping after their own EXEC.
+        if pipeline is None and enqueue_dependents:
+            q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
         return dependent_job_ids_by_queue
 
