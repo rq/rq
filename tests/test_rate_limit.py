@@ -8,7 +8,7 @@ from rq.registry import ScheduledJobRegistry, StartedJobRegistry
 from rq.scheduler import RQScheduler
 from rq.worker import SimpleWorker
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, say_hello
+from tests.fixtures import div_by_zero, returns_retry, returns_retry_with_delay, say_hello
 
 
 class TestRateLimit(RQTestCase):
@@ -482,6 +482,69 @@ class TestRateLimitRetry(RQTestCase):
         self.assertIn(job1.id, registry.get_active_job_ids())
         self.assertNotIn(job2.id, registry.get_active_job_ids())
         self.assertIn(job2.id, registry.get_pending_job_ids())
+
+    def test_returned_delayed_retry_releases_slot(self):
+        """A job that returns Retry(interval>0) releases its slot, which lets
+        a pending same-key job promote into the freed capacity."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(returns_retry_with_delay, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        # job1 is scheduled for retry, slot released; job2 promoted to active.
+        self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
+        self.assertIn(job1.id, ScheduledJobRegistry(queue=self.queue).get_job_ids())
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertNotIn(job1.id, registry.get_active_job_ids())
+        self.assertIn(job2.id, registry.get_active_job_ids())
+
+    def test_returned_immediate_retry_keeps_slot(self):
+        """A job that returns Retry(interval=0) keeps its active slot."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(returns_retry, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        # job1 is back on the queue holding its slot; job2 still pending.
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertIn(job1.id, registry.get_active_job_ids())
+        self.assertNotIn(job2.id, registry.get_active_job_ids())
+        self.assertIn(job2.id, registry.get_pending_job_ids())
+
+    def test_returned_retry_exhausted_releases_slot(self):
+        """When a returned-Retry job exhausts its retries, the terminal failure
+        releases its slot and the next pending same-key job is promoted."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        job1 = self.queue.enqueue(returns_retry, rate_limit=rate_limit)
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+
+        # First run retries immediately (keeps slot), second run exhausts retries.
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=2)
+
+        # job1 terminally failed, slot released; job2 promoted to active.
+        self.assertEqual(job1.get_status(), JobStatus.FAILED)
+        self.assertIn(job1.id, self.queue.failed_job_registry.get_job_ids())
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertNotIn(job1.id, registry.get_active_job_ids())
+        self.assertIn(job2.id, registry.get_active_job_ids())
 
     def _simulate_abandoned_job(self, job):
         """Put `job` into a state where it's execution has expired without

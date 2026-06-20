@@ -1717,11 +1717,12 @@ class Job:
         execution_started_at: datetime,
         execution_ended_at: datetime,
         worker_name: str = '',
-    ):
+    ) -> int:
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
-        and requeues or schedules the job for retry.
+        and requeues or schedules the job for retry. Returns the retry
+        interval in seconds (0 for an immediate retry).
 
         Args:
             queue (Queue): The queue to retry the job on
@@ -1763,6 +1764,7 @@ class Job:
                 self.id,
                 retry.max - (self.number_of_retries or 0),
             )
+        return retry_interval
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.

@@ -77,6 +77,13 @@ def returns_retry():
     return Retry(max=1)
 
 
+def returns_retry_with_delay():
+    """Always returns a delayed Retry object (return-based retry)."""
+    from rq import Retry
+
+    return Retry(max=1, interval=30)
+
+
 def long_process():
     time.sleep(60)
     return

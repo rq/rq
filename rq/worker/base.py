@@ -1418,6 +1418,8 @@ class BaseWorker:
                     # persisted, before enqueue_dependents. No exception here, so exc_string is empty.
                     job.send_webhooks(JobStatus.FAILED, exc_string='')
                     queue.enqueue_dependents(job)
+                    if job.has_rate_limit:
+                        job.rate_limit_registry.release_capacity_and_enqueue(job.id)
                 except Exception as e:
                     self.log.error(
                         'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
@@ -1430,7 +1432,7 @@ class BaseWorker:
         with self.connection.pipeline() as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
-            job._handle_retry_result(
+            retry_interval = job._handle_retry_result(
                 queue=queue,
                 pipeline=pipeline,
                 retry=retry,
@@ -1441,6 +1443,13 @@ class BaseWorker:
             )
             self.cleanup_execution(job, pipeline=pipeline)
             pipeline.execute()
+
+            # Delayed retry of a rate-limited job: release the active slot so the
+            # scheduled retry can re-acquire when it becomes due. Immediate retries
+            # (interval == 0) keep the slot — the job goes back on the queue and runs
+            # on its existing slot.
+            if retry_interval and job.has_rate_limit:
+                job.rate_limit_registry.release_capacity_and_enqueue(job.id)
 
             self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
 
