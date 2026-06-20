@@ -1394,12 +1394,11 @@ class Queue:
     ) -> dict[str, list[str]]:
         """Move the given job's eligible dependents from deferred to ready.
 
-        Selects dependents whose dependencies are met (and which aren't canceled) and
-        moves them into their origin ``ReadyJobRegistry`` via ``register_jobs``. This
-        does not push them onto the queue list; ``enqueue_ready_jobs_by_queue`` does that
-        with the returned mapping once the transition has committed.
+        Move dependents whose dependencies are met (and which aren't canceled) to
+        `ReadyJobRegistry` via `register_jobs`. Usually followed up by
+        `enqueue_ready_jobs_by_queue` to enqueue the dependents.
 
-        When ``pipeline`` is ``None`` this method runs its own WATCH/MULTI/EXEC. When a
+        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. When a
         pipeline is passed the ops are appended to the caller's transaction and the
         caller is responsible for EXEC.
 
@@ -1502,10 +1501,6 @@ class Queue:
     def enqueue_ready_jobs_by_queue(self, job_ids_by_queue_name: dict[str, list[str]]) -> None:
         """Enqueue ready dependents onto their origin queues.
 
-        Call with the mapping returned by ``move_dependents_to_ready`` once the
-        deferred→ready transition has committed. Per-queue failures are logged and left
-        for ``ReadyJobRegistry.cleanup()`` to recover; they are never lost.
-
         Args:
             job_ids_by_queue_name: Map of origin queue name → list of ready job ids.
         """
@@ -1531,11 +1526,6 @@ class Queue:
         refresh_job_status: bool = True,
     ) -> dict[str, list[str]]:
         """Move the given job's eligible dependents to ready and enqueue them.
-
-        High-level convenience that owns its transaction: it runs phase 1
-        (``move_dependents_to_ready``) and then phase 2 (``enqueue_ready_jobs_by_queue``).
-        Callers that need to bundle the deferred→ready transition into their own
-        transaction should call the two methods directly instead.
 
         Args:
             job: The job whose dependents to process.
