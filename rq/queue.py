@@ -1255,15 +1255,15 @@ class Queue:
     def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None) -> Job:
         """Enqueue a job through the rate limit registry.
 
-        Saves the job to Redis and adds it to the pending set atomically, then
+        Saves the job to Redis and adds it to the rate_limited set atomically, then
         attempts to acquire capacity and enqueue it. If no capacity is available,
-        the job stays in the pending set with RATE_LIMITED status.
+        the job stays in the rate_limited set with RATE_LIMITED status.
 
         Args:
             job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
             pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline.
                 This method only appends its rate-limit ops (register + save + cleanup +
-                add_to_pending) and returns; the caller must execute the pipeline and
+                add_to_rate_limited) and returns; the caller must execute the pipeline and
                 then call RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency)
                 itself. If None, this method creates, executes, and runs acquire_and_enqueue.
 
@@ -1283,7 +1283,7 @@ class Queue:
         registry.register(job.rate_limit_concurrency, pipe)
         job.save(pipeline=pipe)
         job.cleanup(ttl=job.ttl, pipeline=pipe)
-        registry.add_to_pending(job.id, pipe)
+        registry.add_to_rate_limited(job.id, pipe)
 
         if pipeline is None:
             pipe.execute()

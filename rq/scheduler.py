@@ -237,14 +237,14 @@ class RQScheduler:
 
             jobs = Job.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
             normal_jobs = []
-            rate_limited_jobs = []
+            jobs_with_rate_limit = []
             missing_job_ids = []
 
             for job_id, job in zip(job_ids, jobs):
                 if job is None:
                     missing_job_ids.append(job_id)
                 elif job.has_rate_limit:
-                    rate_limited_jobs.append(job)
+                    jobs_with_rate_limit.append(job)
                 else:
                     normal_jobs.append(job)
 
@@ -257,7 +257,7 @@ class RQScheduler:
                         registry.remove(job_id, pipeline=pipeline)
                     pipeline.execute()
 
-            for job in rate_limited_jobs:
+            for job in jobs_with_rate_limit:
                 with self.connection.pipeline() as pipeline:
                     registry.remove(job.id, pipeline=pipeline)
                     queue._enqueue_rate_limited_job(job, pipeline=pipeline)

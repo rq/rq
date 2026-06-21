@@ -1275,10 +1275,10 @@ class Job:
                 registry.add(self, pipeline=pipe)
 
                 # Caller-owned pipeline: buffer the rate-limit removal into the same
-                # transaction so the active/pending entry drops atomically with the
+                # transaction so the allowed/rate_limited entry drops atomically with the
                 # CANCELED status. No promotion here — the caller may discard the
                 # transaction; the next release or maintenance cleanup promotes the
-                # pending job.
+                # rate_limited job.
                 if pipeline is not None and self.has_rate_limit:
                     self.rate_limit_registry.cancel(self.id, pipeline=pipe)
 
@@ -1309,8 +1309,8 @@ class Job:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
         # No-pipeline path: the CANCELED status is committed, so remove the job from its
-        # rate-limit registry (frees an active slot / drops a pending entry) and promote
-        # the next pending job. The caller-pipeline path already buffered the removal into
+        # rate-limit registry (frees an allowed slot / drops a rate_limited entry) and promote
+        # the next rate_limited job. The caller-pipeline path already buffered the removal into
         # the transaction above; only its promotion is deferred to the next release/acquire
         # or maintenance cleanup.
         if pipeline is None and self.has_rate_limit:
