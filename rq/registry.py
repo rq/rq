@@ -17,7 +17,7 @@ from .connections import get_connection_kwargs
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
-from .job_lifecycle import call_exception_handlers
+from .job_lifecycle import call_exception_handlers, record_job_failure
 from .queue import Queue
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
@@ -309,8 +309,7 @@ class StartedJobRegistry(BaseRegistry):
                             f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
                         )
                         logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
-                        job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                        job._handle_failure(exc_string, pipeline, worker_name='')
+                        record_job_failure(job, exc_string, pipeline)
                         # don't refresh the job status, because the job state is still in the pipeline
                         queue.enqueue_dependents(job, refresh_job_status=False)
                         failed_jobs.append((job, exc_string))

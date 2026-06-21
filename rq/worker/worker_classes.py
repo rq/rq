@@ -130,10 +130,7 @@ class Worker(BaseWorker):
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
-            self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
-            if job.stopped_callback:
-                job.execute_stopped_callback(self.death_penalty_class)
-            self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
+            self._handle_stopped_job(job, queue)
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             job.ended_at = now()
 
@@ -144,6 +141,20 @@ class Worker(BaseWorker):
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+
+    def _handle_stopped_job(self, job: Job, queue: Queue):
+        """Move a deliberately stopped job to the FailedJobRegistry.
+
+        A raising stopped callback must not prevent the job from being failed, so it is
+        logged and swallowed here.
+        """
+        self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
+        if job.stopped_callback:
+            try:
+                job.execute_stopped_callback(self.death_penalty_class)
+            except Exception:
+                self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
+        self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
 
     def execute_job(self, job: Job, queue: Queue):
         """Spawns a work horse to perform the actual work and passes it a job.

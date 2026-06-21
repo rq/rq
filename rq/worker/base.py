@@ -9,7 +9,6 @@ import signal
 import socket
 import sys
 import time
-import traceback
 import warnings
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
@@ -45,7 +44,7 @@ from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
 from ..executions import Execution, cleanup_execution, prepare_execution
 from ..group import Group
 from ..job import Job, JobStatus, Retry
-from ..job_lifecycle import call_exception_handlers
+from ..job_lifecycle import call_exception_handlers, format_exc_info
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
 from ..registry import StartedJobRegistry, clean_registries
@@ -1273,7 +1272,7 @@ class BaseWorker:
         being properly logged, so we guard against it here.
         """
         self.log.debug('Worker %s: handling exception for %s.', self.name, job.id)
-        exc_string = ''.join(traceback.format_exception(*exc_info))
+        exc_string = format_exc_info(exc_info)
         try:
             extra = {'func': job.func_name, 'arguments': job.args, 'kwargs': job.kwargs}
             func_name = job.func_name
@@ -1573,13 +1572,13 @@ class BaseWorker:
 
             self.handle_execution_ended(job, queue, job.failure_callback_timeout)
             exc_info = sys.exc_info()
-            exc_string = ''.join(traceback.format_exception(*exc_info))
+            exc_string = format_exc_info(exc_info)
 
             try:
                 job.execute_failure_callback(self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
-                exc_string = ''.join(traceback.format_exception(*exc_info))
+                exc_string = format_exc_info(exc_info)
 
             # TODO: reversing the order of handle_job_failure() and handle_exception()
             # causes Sentry test to fail

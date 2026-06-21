@@ -1,6 +1,13 @@
+import sys
+import traceback
 from unittest import mock
 
-from rq.job_lifecycle import call_exception_handlers
+from rq.job import JobStatus
+from rq.job_lifecycle import call_exception_handlers, format_exc_info, record_job_failure
+from rq.queue import Queue
+from rq.registry import FailedJobRegistry
+from tests import RQTestCase
+from tests.fixtures import say_hello
 
 
 def test_none_return_continues_chain():
@@ -37,3 +44,28 @@ def test_falsy_return_stops_chain():
 
     first.assert_called_once_with(job, 'exc')
     second.assert_not_called()
+
+
+def test_format_exc_info():
+    """Formats an exc_info tuple exactly like ''.join(traceback.format_exception(...))."""
+    try:
+        raise ValueError('boom')
+    except ValueError:
+        exc_info = sys.exc_info()
+        assert format_exc_info(exc_info) == ''.join(traceback.format_exception(*exc_info))
+        assert 'ValueError: boom' in format_exc_info(exc_info)
+
+
+class RecordJobFailureTestCase(RQTestCase):
+    def test_record_job_failure(self):
+        """record_job_failure sets FAILED status and persists the failure."""
+        queue = Queue(connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        with self.connection.pipeline() as pipeline:
+            record_job_failure(job, 'boom traceback', pipeline)
+            pipeline.execute()
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertIn(job.id, FailedJobRegistry(connection=self.connection))
+        self.assertIn('boom traceback', job.latest_result().exc_string)

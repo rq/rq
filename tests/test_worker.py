@@ -38,6 +38,7 @@ from tests.fixtures import (
     create_file_after_timeout_and_setpgrp,
     div_by_zero,
     do_nothing,
+    erroneous_callback,
     kill_worker,
     launch_process_within_worker_and_store_pid,
     long_running_job,
@@ -1532,6 +1533,20 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         failed_job_registry = FailedJobRegistry(queue=fooq)
         self.assertIn(job, failed_job_registry)
         self.assertEqual(fooq.count, 0)
+
+    def test_stopped_job_failed_even_if_stopped_callback_raises(self):
+        """A raising stopped callback must not stop a deliberately-stopped job from being
+        moved to the FailedJobRegistry."""
+        queue = Queue('foo', connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        # erroneous_callback takes only `job`, so it raises when invoked as a stopped callback
+        job = queue.enqueue(say_hello, on_stopped=erroneous_callback)
+        worker._stopped_job_id = job.id
+
+        worker._handle_stopped_job(job, queue)
+
+        self.assertIn(job, FailedJobRegistry(queue=queue))
+        self.assertEqual(job.get_status(), JobStatus.STOPPED)
 
     @slow
     def test_work_horse_force_death(self):
