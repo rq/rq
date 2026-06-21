@@ -879,9 +879,9 @@ class TestStartedJobRegistry(RQTestCase):
             mock_handler_no_return = mock.MagicMock()
             mock_handler_no_return.return_value = None
             self.registry.cleanup(exception_handlers=[mock_handler_no_return, mock_handler])
-            mocked.assert_called_once_with(self.queue.death_penalty_class, AbandonedJobError, ANY, ANY)
-            mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
-            mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
+            mocked.assert_called_once_with(self.queue.death_penalty_class, AbandonedJobError, ANY, None)
+            mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, None)
+            mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, None)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()

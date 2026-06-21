@@ -3,7 +3,6 @@ from __future__ import annotations
 import calendar
 import logging
 import time
-import traceback
 import warnings
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -285,12 +284,13 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
-                    stack = traceback.extract_stack()
+                    # No real failure traceback exists for an abandoned job (the work-horse died
+                    # in another process), so pass None in the exc_info traceback slot.
                     # A raising failure callback must not abort the batch or stop the job from
                     # being moved to the FailedJobRegistry, so log and swallow it here.
                     try:
                         job.execute_failure_callback(
-                            self.death_penalty_class, AbandonedJobError, AbandonedJobError(), stack
+                            self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None
                         )
                     except Exception:
                         logger.exception(
@@ -298,7 +298,7 @@ class StartedJobRegistry(BaseRegistry):
                         )
 
                     if exception_handlers:
-                        call_exception_handlers(exception_handlers, job, AbandonedJobError, AbandonedJobError(), stack)
+                        call_exception_handlers(exception_handlers, job, AbandonedJobError, AbandonedJobError(), None)
 
                     retry = job.retries_left and job.retries_left > 0
 
