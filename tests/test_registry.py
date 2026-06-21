@@ -900,7 +900,7 @@ class TestStartedJobRegistry(RQTestCase):
         self.connection.zadd(self.registry.key, {f'{first_job.id}:execution_id': 1})
         self.connection.zadd(self.registry.key, {f'{second_job.id}:execution_id': 1})
 
-        with mock.patch.object(Job, 'execute_failure_callback', side_effect=Exception('boom')):
+        with mock.patch.object(Job, 'execute_failure_callback', side_effect=Exception()):
             self.registry.cleanup()
 
         # Both jobs were still moved to FailedJobRegistry and removed from the started registry
