@@ -45,6 +45,7 @@ from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
 from ..executions import Execution, cleanup_execution, prepare_execution
 from ..group import Group
 from ..job import Job, JobStatus, Retry
+from ..job_lifecycle import call_exception_handlers
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
 from ..registry import StartedJobRegistry, clean_registries
@@ -701,7 +702,6 @@ class BaseWorker:
             2. Removing the job from StartedJobRegistry
             3. Setting the workers current job to None
             4. Add the job to FailedJobRegistry
-        `save_exc_to_job` should only be used for testing purposes
         """
         self.log.debug('Worker %s: handling failed execution of job %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
@@ -748,9 +748,9 @@ class BaseWorker:
 
             if retry:
                 job.retry(queue, pipeline)
-                enqueue_dependents = False
+                should_enqueue_dependents = False
             else:
-                enqueue_dependents = True
+                should_enqueue_dependents = True
 
             try:
                 pipeline.execute()
@@ -759,7 +759,7 @@ class BaseWorker:
                 # so dispatch isn't lost if dependent enqueueing fails; send_webhooks never raises.
                 if not retry and not job_is_stopped:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
-                if enqueue_dependents:
+                if should_enqueue_dependents:
                     queue.enqueue_dependents(job)
             except Exception as e:
                 # Ensure that custom exception handlers are called
@@ -770,7 +770,6 @@ class BaseWorker:
                     job.id,
                     e,
                 )
-                pass
 
     def set_current_job_working_time(self, current_job_working_time: float, pipeline: Pipeline | None = None):
         """Sets the current job working time in seconds
@@ -1295,17 +1294,7 @@ class BaseWorker:
             extra=extra,
         )
 
-        for handler in self._exc_handlers:
-            self.log.debug('Worker %s: invoking exception handler %s', self.name, handler)
-            fallthrough = handler(job, *exc_info)
-
-            # Only handlers with explicit return values should disable further
-            # exc handling, so interpret a None return value as True.
-            if fallthrough is None:
-                fallthrough = True
-
-            if not fallthrough:
-                break
+        call_exception_handlers(self._exc_handlers, job, *exc_info)
 
     def push_exc_handler(self, handler_func):
         """Pushes an exception handler onto the exc handler stack."""

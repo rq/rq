@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest import mock
 
 from rq import Queue, Worker
 from rq.job import UNEVALUATED, Callback, Job, JobStatus
@@ -161,6 +162,29 @@ class SyncJobCallback(RQTestCase):
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
+
+    def test_sync_routes_success_through_execute_success_callback(self):
+        """Sync execution dispatches the success callback via execute_success_callback
+        (gaining timeout wrapping), not by calling the raw callback directly."""
+        queue = Queue(is_async=False, connection=self.connection)
+        with mock.patch.object(Job, 'execute_success_callback') as mocked:
+            queue.enqueue(say_hello, on_success=save_result)
+        mocked.assert_called_once()
+        self.assertIs(mocked.call_args.args[0], queue.death_penalty_class)
+
+    def test_sync_routes_failure_through_execute_failure_callback(self):
+        """Sync execution dispatches the failure callback via execute_failure_callback."""
+        queue = Queue(is_async=False, connection=self.connection)
+        with mock.patch.object(Job, 'execute_failure_callback') as mocked:
+            queue.enqueue(div_by_zero, on_failure=save_exception)
+        mocked.assert_called_once()
+        self.assertIs(mocked.call_args.args[0], queue.death_penalty_class)
+
+    def test_sync_failure_callback_exception_propagates(self):
+        """A raising sync failure callback propagates out, as before the refactor."""
+        queue = Queue(is_async=False, connection=self.connection)
+        with self.assertRaises(Exception):
+            queue.enqueue(div_by_zero, on_failure=erroneous_callback)
 
     def test_stopped_callback(self):
         """queue.enqueue* methods with on_stopped is persisted correctly"""
