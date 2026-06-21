@@ -319,17 +319,15 @@ class StartedJobRegistry(BaseRegistry):
                     # don't refresh the job status, because the job state is still in the pipeline
                     queue.enqueue_dependents(job, refresh_job_status=False)
 
-                # Release the rate-limit slot for final failures and scheduled retries.
-                # Immediate retries keep the slot — the job is back on the queue and
-                # will re-run on the slot it already owns.
+                # Final failures and scheduled (delayed) retries release the slot; immediate
+                # retries keep it — the job is back on the queue and reruns on the slot it owns.
                 if job.has_rate_limit and not is_immediate_retry:
                     jobs_to_release.append(job)
 
             pipeline.zremrangebyscore(self.key, 0, score)
             pipeline.execute()
 
-        # Release rate limit capacity for abandoned jobs (must be outside the pipeline
-        # since Lua scripts can't run inside a MULTI transaction)
+        # Release outside the pipeline — Lua scripts can't run inside a MULTI transaction.
         for job in jobs_to_release:
             job.rate_limit_registry.release_capacity_and_enqueue(job.id)
 
@@ -606,10 +604,9 @@ class ReadyJobRegistry(BaseRegistry):
                     pipe.multi()
                     self.remove(job, pipeline=pipe)
                     if job.has_rate_limit:
-                        # Route rate-limited dependents through the rate limit
-                        # registry rather than straight onto the queue. The Lua
-                        # acquire script can't run inside MULTI, so queue the
-                        # rate-limit ops here and acquire after the transaction.
+                        # Route rate-limited dependents through the rate limit registry, not
+                        # straight onto the queue. The Lua acquire script can't run inside
+                        # MULTI, so queue the ops here and acquire after the transaction.
                         queue._enqueue_rate_limited_job(job, pipeline=pipe)
                         pipe.execute()
                         assert job.rate_limit_concurrency

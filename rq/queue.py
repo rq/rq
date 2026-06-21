@@ -1261,11 +1261,11 @@ class Queue:
 
         Args:
             job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
-            pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline.
-                This method only appends its rate-limit ops (register + save + cleanup +
-                add_to_rate_limited) and returns; the caller must execute the pipeline and
-                then call RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency)
-                itself. If None, this method creates, executes, and runs acquire_and_enqueue.
+            pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline: this
+                method only appends its rate-limit ops and returns; the caller must execute
+                the pipeline and then call
+                RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency) itself.
+                If None, this method executes and runs acquire_and_enqueue.
 
         Returns:
             Job: The job
@@ -1290,8 +1290,6 @@ class Queue:
             enqueued_at = now()
             enqueued_job_id = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
             if enqueued_job_id == job.id:
-                # This job acquired capacity immediately and is queued in Redis; mirror
-                # that onto the returned object so it isn't stale (status + enqueued_at).
                 job._status = JobStatus.QUEUED
                 job.enqueued_at = enqueued_at
 
@@ -1464,10 +1462,9 @@ class Queue:
         `ReadyJobRegistry` via `register_jobs`. Usually followed up by
         `enqueue_ready_jobs_by_queue` to enqueue the dependents.
 
-        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. When a
-        pipeline is passed it must already be in WATCH mode, because this method
-        needs immediate reads before appending writes to the caller's transaction.
-        The caller is responsible for EXEC.
+        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. A passed
+        pipeline must already be in WATCH mode (this method reads before appending its
+        writes); the caller is responsible for EXEC.
 
         Args:
             job: The job whose dependents to process.

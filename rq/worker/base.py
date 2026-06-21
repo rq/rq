@@ -766,10 +766,9 @@ class BaseWorker:
                     if job.has_rate_limit:
                         job.rate_limit_registry.release_capacity_and_enqueue(job.id)
                 elif retry and retry_interval and job.has_rate_limit:
-                    # Delayed retry of a rate-limited job: release the allowed slot
-                    # so the scheduled retry can re-acquire when it becomes due.
-                    # Immediate retries (interval == 0) keep the slot — the job
-                    # goes back on the queue and runs on its existing slot.
+                    # Delayed retry: release the allowed slot so the scheduled retry can
+                    # re-acquire when due. Immediate retries (interval 0) keep the slot and
+                    # rerun on it.
                     job.rate_limit_registry.release_capacity_and_enqueue(job.id)
             except Exception as e:
                 # Ensure that custom exception handlers are called
@@ -1444,10 +1443,8 @@ class BaseWorker:
             self.cleanup_execution(job, pipeline=pipeline)
             pipeline.execute()
 
-            # Delayed retry of a rate-limited job: release the allowed slot so the
-            # scheduled retry can re-acquire when it becomes due. Immediate retries
-            # (interval == 0) keep the slot — the job goes back on the queue and runs
-            # on its existing slot.
+            # Delayed retry: release the allowed slot so the scheduled retry can re-acquire
+            # when due. Immediate retries (interval 0) keep the slot and rerun on it.
             if retry_interval and job.has_rate_limit:
                 job.rate_limit_registry.release_capacity_and_enqueue(job.id)
 

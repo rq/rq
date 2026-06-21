@@ -27,12 +27,9 @@ class RateLimit:
         self.concurrency = concurrency
 
 
-# Lua script: Atomically allow the next rate_limited job to be enqueued.
-# Checks if allowed count < max_concurrency. If capacity available, pops
-# rate_limited jobs until it finds a valid one (origin set and status ==
-# 'rate_limited'), discarding stale entries along the way, then ZADD to allowed,
-# RPUSH to queue, HSET status to queued.
-# Returns enqueued job_id or nil.
+# Lua: if allowed < max_concurrency, pop the next valid rate_limited job (skipping
+# stale entries), add it to allowed, RPUSH to its queue and mark it queued.
+# Returns the enqueued job_id or nil.
 # KEYS: allowed_key, rate_limited_key
 # ARGV: max_concurrency, timestamp, enqueued_at
 ACQUIRE_AND_ENQUEUE_SCRIPT = """
@@ -63,9 +60,8 @@ end
 return nil
 """
 
-# Lua script: Release capacity from a completed job and allow the next rate_limited job.
-# Removes completed job from allowed, then runs the same acquire logic.
-# Returns enqueued job_id or nil.
+# Lua: remove a completed job from allowed, then run the same acquire logic.
+# Returns the enqueued job_id or nil.
 # KEYS: allowed_key, rate_limited_key
 # ARGV: completed_job_id, max_concurrency, timestamp, enqueued_at
 RELEASE_CAPACITY_SCRIPT = """
@@ -100,12 +96,10 @@ return nil
 """
 
 
-# Lua script: Atomically clean up an empty rate limit registry.
-# If both allowed and rate_limited sets are empty, removes the key from
-# rq:rl-keys, and deletes the config hash and sorted sets.
+# Lua: if both allowed and rate_limited sets are empty, drop the key from rq:rl-keys
+# and delete the config hash and sorted sets. Returns 1 if cleaned up, 0 if not empty.
 # KEYS: allowed_key, rate_limited_key, config_key
 # ARGV: rl_keys_key, key
-# Returns 1 if cleaned up, 0 if not empty.
 CLEANUP_REGISTRY_SCRIPT = """
 if redis.call('ZCARD', KEYS[1]) == 0 and redis.call('ZCARD', KEYS[2]) == 0 then
     redis.call('SREM', ARGV[1], ARGV[2])
@@ -272,9 +266,8 @@ class RateLimitRegistry:
         if not job_ids:
             return
 
-        # Read only the status field, defensively. We avoid hydrating full Job
-        # objects (Job.restore raises on a malformed status), so an unknown or
-        # missing status is simply not in the allowlist and treated as stale.
+        # Read only the status field — hydrating a full Job (Job.restore) raises on a
+        # malformed status; here an unknown/missing status is just treated as stale.
         with self.connection.pipeline() as pipeline:
             for job_id in job_ids:
                 pipeline.hget(Job.key_for(job_id), 'status')
