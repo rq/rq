@@ -1395,9 +1395,9 @@ class Queue:
         `ReadyJobRegistry` via `register_jobs`. Usually followed up by
         `enqueue_ready_jobs_by_queue` to enqueue the dependents.
 
-        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. When a
-        pipeline is passed the ops are appended to the caller's transaction and the
-        caller is responsible for EXEC.
+        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. A passed
+        pipeline must already be in WATCH mode (this method reads before appending its
+        writes); the caller is responsible for EXEC.
 
         Args:
             job: The job whose dependents to process.
@@ -1411,6 +1411,9 @@ class Queue:
         from .registry import ReadyJobRegistry
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        if pipeline is not None and not pipeline.watching:
+            raise ValueError('move_dependents_to_ready() requires a watched pipeline when pipeline is provided')
+
         dependents_key = job.dependents_key
 
         job_ids_by_queue_name: dict[str, list[str]] = {}
