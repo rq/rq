@@ -4,6 +4,7 @@ from unittest.mock import ANY, patch
 
 from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
+from rq.registry import StartedJobRegistry
 from rq.webhook import Webhook
 from rq.worker import SimpleWorker
 from tests import RQTestCase
@@ -340,3 +341,32 @@ class SyncWebhookTestCase(RQTestCase):
             self.queue.enqueue(div_by_zero, 1, webhooks=[self.finished_webhook, self.failed_webhook])
         send_mock.assert_called_once_with(self.failed_webhook, ANY, exc_string=ANY)
         self.assertIn('ZeroDivisionError', send_mock.call_args.kwargs['exc_string'])
+
+
+class AbandonedJobWebhookTestCase(RQTestCase):
+    """StartedJobRegistry.cleanup() fires the failed webhook when an abandoned job is moved
+    to the FailedJobRegistry, matching the worker and sync paths."""
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(connection=self.connection)
+        self.registry = StartedJobRegistry(connection=self.connection)
+        self.finished_webhook = Webhook('http://example.com/done', 'finished')
+        self.failed_webhook = Webhook('http://example.com/fail', 'failed')
+
+    def test_abandoned_terminal_failure_fires_failed_webhook(self):
+        job = self.queue.enqueue(say_hello, webhooks=[self.finished_webhook, self.failed_webhook])
+        self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
+
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.registry.cleanup()
+        send_mock.assert_called_once_with(self.failed_webhook, ANY, exc_string=ANY)
+
+    def test_abandoned_retry_does_not_fire_failed_webhook(self):
+        """A job with retries left is requeued, not failed, so no webhook fires."""
+        job = self.queue.enqueue(div_by_zero, 1, retry=Retry(max=1), webhooks=[self.failed_webhook])
+        self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
+
+        with patch.object(Webhook, 'send', autospec=True) as send_mock:
+            self.registry.cleanup()
+        send_mock.assert_not_called()
