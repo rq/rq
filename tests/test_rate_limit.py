@@ -269,28 +269,10 @@ class TestRateLimitRegistry(RQTestCase):
         self.assertIn(rate_limited_job.id, self.queue.job_ids)
         self.assertEqual(rate_limited_job.get_status(), JobStatus.QUEUED)
 
-    def test_cleanup_stale_rate_limited_does_not_crash_promotion(self):
-        """A stale rate_limited id (no job hash) is pruned instead of crashing the
-        promotion, and a valid rate_limited job behind it is still promoted."""
-        registry = RateLimitRegistry(key='solo', connection=self.connection)
-        with self.connection.pipeline() as pipe:
-            registry.register(1, pipe)
-            pipe.execute()
-
-        self.connection.zadd(registry.allowed_key, {'gone': 1})
-        rate_limited_job = self._make_job(status=JobStatus.RATE_LIMITED)
-        self._add_to_rate_limited_for(registry, 'stale-rate-limited', timestamp=1)
-        self._add_to_rate_limited_for(registry, rate_limited_job.id, timestamp=2)
-
-        registry.cleanup()
-
-        self.assertNotIn('stale-rate-limited', registry.get_rate_limited_job_ids())
-        self.assertIn(rate_limited_job.id, registry.get_allowed_job_ids())
-        self.assertIn(rate_limited_job.id, self.queue.job_ids)
-
     def test_cleanup_skips_non_rate_limited_entry(self):
-        """A rate_limited entry whose job is not rate_limited (e.g. canceled) is
-        pruned without being promoted; the next valid rate_limited job is promoted."""
+        """A rate_limited entry that can't be promoted — a stale id with no job hash,
+        or a job in a non-rate_limited state (e.g. canceled) — is pruned without being
+        promoted or crashing; the next valid rate_limited job is still promoted."""
         registry = RateLimitRegistry(key='solo', connection=self.connection)
         with self.connection.pipeline() as pipe:
             registry.register(1, pipe)
@@ -298,15 +280,18 @@ class TestRateLimitRegistry(RQTestCase):
 
         canceled_job = self._make_job(status=JobStatus.CANCELED)
         rate_limited_job = self._make_job(status=JobStatus.RATE_LIMITED)
-        self._add_to_rate_limited_for(registry, canceled_job.id, timestamp=1)
-        self._add_to_rate_limited_for(registry, rate_limited_job.id, timestamp=2)
+        self._add_to_rate_limited_for(registry, 'stale-missing-hash', timestamp=1)
+        self._add_to_rate_limited_for(registry, canceled_job.id, timestamp=2)
+        self._add_to_rate_limited_for(registry, rate_limited_job.id, timestamp=3)
 
         registry.cleanup()
 
+        self.assertNotIn('stale-missing-hash', registry.get_rate_limited_job_ids())
         self.assertNotIn(canceled_job.id, registry.get_rate_limited_job_ids())
         self.assertNotIn(canceled_job.id, registry.get_allowed_job_ids())
         self.assertNotIn(canceled_job.id, self.queue.job_ids)
         self.assertIn(rate_limited_job.id, registry.get_allowed_job_ids())
+        self.assertIn(rate_limited_job.id, self.queue.job_ids)
 
     def test_cleanup_removes_registry_with_only_stale_allowed(self):
         """cleanup() deletes the registry when allowed holds only stale ids and
