@@ -11,38 +11,30 @@ from tests.fixtures import say_hello
 
 
 class JobLifecycleTestCase(RQTestCase):
-    def test_none_return_continues_chain(self):
-        """A handler returning None does not disable the rest of the chain."""
+    def test_chain_continues_unless_handler_returns_falsy(self):
+        """None/truthy continue the chain; an explicit falsy return stops it."""
         job = object()
-        first = mock.MagicMock(return_value=None)
-        second = mock.MagicMock(return_value=None)
 
-        call_exception_handlers([first, second], job, 'exc')
+        # None return continues to the next handler
+        first_mock = mock.MagicMock(return_value=None)
+        second_mock = mock.MagicMock(return_value=None)
+        call_exception_handlers([first_mock, second_mock], job, 'exc')
+        first_mock.assert_called_once_with(job, 'exc')
+        second_mock.assert_called_once_with(job, 'exc')
 
-        first.assert_called_once_with(job, 'exc')
-        second.assert_called_once_with(job, 'exc')
+        # Truthy return continues to the next handler
+        first_mock = mock.MagicMock(return_value=True)
+        second_mock = mock.MagicMock(return_value=True)
+        call_exception_handlers([first_mock, second_mock], job, 'exc')
+        first_mock.assert_called_once_with(job, 'exc')
+        second_mock.assert_called_once_with(job, 'exc')
 
-    def test_truthy_return_continues_chain(self):
-        """A handler returning a truthy value continues to the next handler."""
-        job = object()
-        first = mock.MagicMock(return_value=True)
-        second = mock.MagicMock(return_value=True)
-
-        call_exception_handlers([first, second], job, 'exc')
-
-        first.assert_called_once_with(job, 'exc')
-        second.assert_called_once_with(job, 'exc')
-
-    def test_falsy_return_stops_chain(self):
-        """A handler returning an explicit falsy value stops the remaining handlers."""
-        job = object()
-        first = mock.MagicMock(return_value=False)
-        second = mock.MagicMock()
-
-        call_exception_handlers([first, second], job, 'exc')
-
-        first.assert_called_once_with(job, 'exc')
-        second.assert_not_called()
+        # An explicit falsy return stops the remaining handlers
+        first_mock = mock.MagicMock(return_value=False)
+        second_mock = mock.MagicMock()
+        call_exception_handlers([first_mock, second_mock], job, 'exc')
+        first_mock.assert_called_once_with(job, 'exc')
+        second_mock.assert_not_called()
 
     def test_format_exc_info(self):
         """Formats an exc_info tuple exactly like ''.join(traceback.format_exception(...))."""

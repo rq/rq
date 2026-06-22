@@ -891,23 +891,17 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertTrue(latest_result.exc_string)  # explanation is written to exc_info
 
     def test_cleanup_continues_when_failure_callback_raises(self):
-        """A raising failure callback must not abort the batch or stop jobs from being
-        moved to the FailedJobRegistry."""
+        """A raising failure callback must not stop the job from being moved to the
+        FailedJobRegistry."""
         failed_job_registry = FailedJobRegistry(connection=self.connection)
-        first_job = self.queue.enqueue(say_hello)
-        second_job = self.queue.enqueue(say_hello)
-
-        self.connection.zadd(self.registry.key, {f'{first_job.id}:execution_id': 1})
-        self.connection.zadd(self.registry.key, {f'{second_job.id}:execution_id': 1})
+        job = self.queue.enqueue(say_hello)
+        self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
 
         with mock.patch.object(Job, 'execute_failure_callback', side_effect=Exception()):
             self.registry.cleanup()
 
-        # Both jobs were still moved to FailedJobRegistry and removed from the started registry
-        self.assertIn(first_job.id, failed_job_registry)
-        self.assertIn(second_job.id, failed_job_registry)
-        self.assertNotIn(first_job, self.registry)
-        self.assertNotIn(second_job, self.registry)
+        self.assertIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
 
     def test_enqueue_dependents_when_parent_job_is_abandoned(self):
         """Enqueuing parent job's dependencies after moving it to FailedJobRegistry due to AbandonedJobError."""

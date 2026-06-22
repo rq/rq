@@ -163,18 +163,16 @@ class SyncJobCallback(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
-    def test_sync_routes_success_through_execute_success_callback(self):
-        """Sync execution dispatches the success callback via execute_success_callback
-        (gaining timeout wrapping), not by calling the raw callback directly."""
+    def test_sync_routes_callbacks_through_execute_methods(self):
+        """Sync execution dispatches callbacks via execute_*_callback (gaining timeout
+        wrapping), not by calling the raw callbacks directly."""
         queue = Queue(is_async=False, connection=self.connection)
+
         with mock.patch.object(Job, 'execute_success_callback') as mocked:
             queue.enqueue(say_hello, on_success=save_result)
         mocked.assert_called_once()
         self.assertIs(mocked.call_args.args[0], queue.death_penalty_class)
 
-    def test_sync_routes_failure_through_execute_failure_callback(self):
-        """Sync execution dispatches the failure callback via execute_failure_callback."""
-        queue = Queue(is_async=False, connection=self.connection)
         with mock.patch.object(Job, 'execute_failure_callback') as mocked:
             queue.enqueue(div_by_zero, on_failure=save_exception)
         mocked.assert_called_once()
