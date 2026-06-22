@@ -3,7 +3,6 @@ from __future__ import annotations
 import calendar
 import logging
 import time
-import traceback
 import warnings
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -17,6 +16,7 @@ from .connections import get_connection_kwargs
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
+from .job_lifecycle import call_exception_handlers, record_job_failure
 from .queue import Queue
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
@@ -275,6 +275,7 @@ class StartedJobRegistry(BaseRegistry):
 
         if job_ids:
             queue = self.get_queue()
+            failed_jobs = []
 
             with self.connection.pipeline() as pipeline:
                 for job_id in job_ids:
@@ -283,22 +284,21 @@ class StartedJobRegistry(BaseRegistry):
                     except NoSuchJobError:
                         continue
 
-                    job.execute_failure_callback(
-                        self.death_penalty_class, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
-                    )
+                    # No real failure traceback exists for an abandoned job (the work-horse died
+                    # in another process), so pass None in the exc_info traceback slot.
+                    # A raising failure callback must not abort the batch or stop the job from
+                    # being moved to the FailedJobRegistry, so log and swallow it here.
+                    try:
+                        job.execute_failure_callback(
+                            self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None
+                        )
+                    except Exception:
+                        logger.exception(
+                            '%s cleanup: failure callback for job %s raised', self.__class__.__name__, job.id
+                        )
 
                     if exception_handlers:
-                        for handler in exception_handlers:
-                            fallthrough = handler(
-                                job, AbandonedJobError, AbandonedJobError(), traceback.extract_stack()
-                            )
-                            # Only handlers with explicit return values should disable further
-                            # exc handling, so interpret a None return value as True.
-                            if fallthrough is None:
-                                fallthrough = True
-
-                            if not fallthrough:
-                                break
+                        call_exception_handlers(exception_handlers, job, AbandonedJobError, AbandonedJobError(), None)
 
                     retry = job.retries_left and job.retries_left > 0
 
@@ -309,13 +309,17 @@ class StartedJobRegistry(BaseRegistry):
                             f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
                         )
                         logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
-                        job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                        job._handle_failure(exc_string, pipeline, worker_name='')
+                        record_job_failure(job, exc_string, pipeline)
                         # don't refresh the job status, because the job state is still in the pipeline
                         queue.enqueue_dependents(job, refresh_job_status=False)
+                        failed_jobs.append((job, exc_string))
 
                 pipeline.zremrangebyscore(self.key, 0, score)
                 pipeline.execute()
+
+            # Fire failed webhooks only after the terminal failures are persisted.
+            for failed_job, exc_string in failed_jobs:
+                failed_job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf

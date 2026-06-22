@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import traceback
 import uuid
 import warnings
 from collections import defaultdict, namedtuple
@@ -31,6 +30,7 @@ from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
+from .job_lifecycle import format_exc_info, record_job_failure
 from .logutils import blue, green
 from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
@@ -1370,17 +1370,14 @@ class Queue:
             job = self.run_job(job)
         except:  # noqa
             with self.connection.pipeline() as pipeline:
-                job.set_status(JobStatus.FAILED, pipeline=pipeline)
-                exc_string = ''.join(traceback.format_exception(*sys.exc_info()))
-                job._handle_failure(exc_string, pipeline, worker_name='')
+                exc_string = format_exc_info(sys.exc_info())
+                record_job_failure(job, exc_string, pipeline)
                 pipeline.execute()
 
-            if job.failure_callback:
-                job.failure_callback(job, self.connection, *sys.exc_info())
+            job.execute_failure_callback(self.death_penalty_class, *sys.exc_info())
             job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
         else:
-            if job.success_callback:
-                job.success_callback(job, self.connection, job.return_value())
+            job.execute_success_callback(self.death_penalty_class, job.return_value())
             job.send_webhooks(JobStatus.FINISHED)
 
         return job

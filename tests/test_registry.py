@@ -879,9 +879,9 @@ class TestStartedJobRegistry(RQTestCase):
             mock_handler_no_return = mock.MagicMock()
             mock_handler_no_return.return_value = None
             self.registry.cleanup(exception_handlers=[mock_handler_no_return, mock_handler])
-            mocked.assert_called_once_with(self.queue.death_penalty_class, AbandonedJobError, ANY, ANY)
-            mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
-            mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, ANY)
+            mocked.assert_called_once_with(self.queue.death_penalty_class, AbandonedJobError, ANY, None)
+            mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, None)
+            mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, None)
         self.assertIn(job.id, failed_job_registry)
         self.assertNotIn(job, self.registry)
         job.refresh()
@@ -889,6 +889,19 @@ class TestStartedJobRegistry(RQTestCase):
         latest_result = job.latest_result()
         self.assertIsNotNone(latest_result)
         self.assertTrue(latest_result.exc_string)  # explanation is written to exc_info
+
+    def test_cleanup_continues_when_failure_callback_raises(self):
+        """A raising failure callback must not stop the job from being moved to the
+        FailedJobRegistry."""
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
+
+        with mock.patch.object(Job, 'execute_failure_callback', side_effect=Exception()):
+            self.registry.cleanup()
+
+        self.assertIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
 
     def test_enqueue_dependents_when_parent_job_is_abandoned(self):
         """Enqueuing parent job's dependencies after moving it to FailedJobRegistry due to AbandonedJobError."""
