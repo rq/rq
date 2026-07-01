@@ -32,6 +32,7 @@ from .intermediate_queue import IntermediateQueue
 from .job import Callback, Job, JobStatus
 from .job_lifecycle import format_exc_info, record_job_failure
 from .logutils import blue, green
+from .rate_limit import RateLimit
 from .repeat import Repeat
 from .scripts import save_unique_job, schedule_unique_job
 from .serializers import Serializer, resolve_serializer
@@ -92,6 +93,7 @@ class EnqueueArgs(NamedTuple):
     on_success: Callback | Callable | None
     on_failure: Callback | Callable | None
     on_stopped: Callback | Callable | None
+    rate_limit: RateLimit | None
     pipeline: Pipeline | None
     unique: bool
     args: tuple | list | None
@@ -566,6 +568,7 @@ class Queue:
         on_stopped: Callback | Callable | None = None,
         webhooks: Sequence[Webhook] | None = None,
         group_id: str | None = None,
+        rate_limit: RateLimit | None = None,
     ) -> Job:
         """Creates a job based on parameters given
 
@@ -648,6 +651,10 @@ class Queue:
             job.repeats_left = repeat.times
             job.repeat_intervals = repeat.intervals
 
+        if rate_limit:
+            job.rate_limit_key = rate_limit.key
+            job.rate_limit_concurrency = rate_limit.concurrency
+
         return job
 
     def setup_dependencies(self, job: Job, pipeline: Pipeline | None = None) -> Job:
@@ -728,6 +735,7 @@ class Queue:
         on_success: Callback | Callable[..., Any] | None = None,
         on_failure: Callback | Callable[..., Any] | None = None,
         on_stopped: Callback | Callable[..., Any] | None = None,
+        rate_limit: RateLimit | None = None,
         pipeline: Pipeline | None = None,
         unique: bool = False,
         webhooks: Sequence[Webhook] | None = None,
@@ -788,6 +796,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            rate_limit=rate_limit,
             webhooks=webhooks,
         )
         return self.enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
@@ -1002,6 +1011,7 @@ class Queue:
         on_success = kwargs.pop('on_success', None)
         on_failure = kwargs.pop('on_failure', None)
         on_stopped = kwargs.pop('on_stopped', None)
+        rate_limit = kwargs.pop('rate_limit', None)
         webhooks = kwargs.pop('webhooks', None)
         pipeline = kwargs.pop('pipeline', None)
         unique = kwargs.pop('unique', False)
@@ -1027,6 +1037,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            rate_limit,
             pipeline,
             unique,
             args,
@@ -1062,6 +1073,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            rate_limit,
             pipeline,
             unique,
             args,
@@ -1087,6 +1099,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            rate_limit=rate_limit,
             webhooks=webhooks,
             pipeline=pipeline,
             unique=unique,
@@ -1118,6 +1131,7 @@ class Queue:
             on_success,
             on_failure,
             on_stopped,
+            rate_limit,
             pipeline,
             unique,  # Not used for scheduled jobs, but parsed for consistency
             args,
@@ -1142,6 +1156,7 @@ class Queue:
             on_success=on_success,
             on_failure=on_failure,
             on_stopped=on_stopped,
+            rate_limit=rate_limit,
             webhooks=webhooks,
         )
         if at_front:
@@ -1218,6 +1233,10 @@ class Queue:
             raise ValueError('unique=True requires an explicit job_id')
         if unique and job._dependency_ids:
             raise ValueError('unique=True is not supported with job dependencies')
+        if unique and job.has_rate_limit:
+            raise ValueError('unique=True is not supported with rate-limited jobs')
+        if job.has_rate_limit and not self._is_async:
+            raise ValueError('rate_limit is not supported on synchronous queues (is_async=False)')
 
         job.origin = self.name
         job = self.setup_dependencies(job, pipeline=pipeline)
@@ -1228,7 +1247,52 @@ class Queue:
             pipe.execute()
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
+            if job.has_rate_limit:
+                return self._enqueue_rate_limited_job(job)
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
+        return job
+
+    def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None) -> Job:
+        """Enqueue a job through the rate limit registry.
+
+        Saves the job to Redis and adds it to the rate_limited set atomically, then
+        attempts to acquire capacity and enqueue it. If no capacity is available,
+        the job stays in the rate_limited set with RATE_LIMITED status.
+
+        Args:
+            job (Job): The job to enqueue (must have rate_limit_key and rate_limit_concurrency set)
+            pipeline (Optional[Pipeline]): If provided, the caller owns the pipeline: this
+                method only appends its rate-limit ops and returns; the caller must execute
+                the pipeline and then call
+                RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency) itself.
+                If None, this method executes and runs acquire_and_enqueue.
+
+        Returns:
+            Job: The job
+        """
+        job.redis_server_version = self.get_redis_server_version()
+        job.origin = self.name
+        if job.timeout is None:
+            job.timeout = self._default_timeout
+
+        assert job.rate_limit_concurrency
+
+        registry = job.rate_limit_registry
+        job._status = JobStatus.RATE_LIMITED
+        pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        registry.register(job.rate_limit_concurrency, pipe)
+        job.save(pipeline=pipe)
+        job.cleanup(ttl=job.ttl, pipeline=pipe)
+        registry.add_to_rate_limited(job.id, pipe)
+
+        if pipeline is None:
+            pipe.execute()
+            enqueued_at = now()
+            enqueued_job_id = registry.acquire_and_enqueue(job.rate_limit_concurrency, enqueued_at=enqueued_at)
+            if enqueued_job_id == job.id:
+                job._status = JobStatus.QUEUED
+                job.enqueued_at = enqueued_at
+
         return job
 
     def _enqueue_job(
@@ -1395,9 +1459,9 @@ class Queue:
         `ReadyJobRegistry` via `register_jobs`. Usually followed up by
         `enqueue_ready_jobs_by_queue` to enqueue the dependents.
 
-        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. When a
-        pipeline is passed the ops are appended to the caller's transaction and the
-        caller is responsible for EXEC.
+        When `pipeline` is `None` this method runs its own WATCH/MULTI/EXEC. A passed
+        pipeline must already be in WATCH mode (this method reads before appending its
+        writes); the caller is responsible for EXEC.
 
         Args:
             job: The job whose dependents to process.
@@ -1411,6 +1475,9 @@ class Queue:
         from .registry import ReadyJobRegistry
 
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
+        if pipeline is not None and not pipeline.watching:
+            raise ValueError('move_dependents_to_ready() requires a watched pipeline when pipeline is provided')
+
         dependents_key = job.dependents_key
 
         job_ids_by_queue_name: dict[str, list[str]] = {}

@@ -18,6 +18,7 @@ from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .job_lifecycle import call_exception_handlers, record_job_failure
 from .queue import Queue
+from .rate_limit import RateLimitRegistry
 from .timeouts import BaseDeathPenalty, UnixSignalDeathPenalty
 from .utils import as_text, backend_class, current_timestamp, now, parse_composite_key
 
@@ -42,6 +43,7 @@ class BaseRegistry:
     job_class = Job
     death_penalty_class = UnixSignalDeathPenalty
     key_template = 'rq:registry:{0}'
+    connection: Redis
 
     def __init__(
         self,
@@ -273,53 +275,63 @@ class StartedJobRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         job_ids = self.get_expired_job_ids(score)
 
-        if job_ids:
-            queue = self.get_queue()
-            failed_jobs = []
+        if not job_ids:
+            return
 
-            with self.connection.pipeline() as pipeline:
-                for job_id in job_ids:
-                    try:
-                        job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
-                    except NoSuchJobError:
-                        continue
+        queue = self.get_queue()
+        jobs_to_release = []
+        failed_jobs = []
 
-                    # No real failure traceback exists for an abandoned job (the work-horse died
-                    # in another process), so pass None in the exc_info traceback slot.
-                    # A raising failure callback must not abort the batch or stop the job from
-                    # being moved to the FailedJobRegistry, so log and swallow it here.
-                    try:
-                        job.execute_failure_callback(
-                            self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None
-                        )
-                    except Exception:
-                        logger.exception(
-                            '%s cleanup: failure callback for job %s raised', self.__class__.__name__, job.id
-                        )
+        with self.connection.pipeline() as pipeline:
+            for job_id in job_ids:
+                try:
+                    job = self.job_class.fetch(job_id, connection=self.connection, serializer=self.serializer)
+                except NoSuchJobError:
+                    continue
 
-                    if exception_handlers:
-                        call_exception_handlers(exception_handlers, job, AbandonedJobError, AbandonedJobError(), None)
+                # No real failure traceback exists for an abandoned job (the work-horse died
+                # in another process), so pass None in the exc_info traceback slot.
+                # A raising failure callback must not abort the batch or stop the job from
+                # being moved to the FailedJobRegistry, so log and swallow it here.
+                try:
+                    job.execute_failure_callback(self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None)
+                except Exception:
+                    logger.exception('%s cleanup: failure callback for job %s raised', self.__class__.__name__, job.id)
 
-                    retry = job.retries_left and job.retries_left > 0
+                if exception_handlers:
+                    call_exception_handlers(exception_handlers, job, AbandonedJobError, AbandonedJobError(), None)
 
-                    if retry:
-                        job.retry(queue, pipeline)
-                    else:
-                        exc_string = (
-                            f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
-                        )
-                        logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
-                        record_job_failure(job, exc_string, pipeline)
-                        # don't refresh the job status, because the job state is still in the pipeline
-                        queue.enqueue_dependents(job, refresh_job_status=False)
-                        failed_jobs.append((job, exc_string))
+                retry = job.retries_left and job.retries_left > 0
+                retry_interval = job.get_retry_interval() if retry else None
+                is_immediate_retry = retry and not retry_interval
 
-                pipeline.zremrangebyscore(self.key, 0, score)
-                pipeline.execute()
+                if retry:
+                    job.retry(queue, pipeline)
+                else:
+                    exc_string = (
+                        f'Moved to {FailedJobRegistry.__name__}, due to {AbandonedJobError.__name__}, at {now()}'
+                    )
+                    logger.warning('%s cleanup: %s %s', self.__class__.__name__, job.id, exc_string)
+                    record_job_failure(job, exc_string, pipeline)
+                    # don't refresh the job status, because the job state is still in the pipeline
+                    queue.enqueue_dependents(job, refresh_job_status=False)
+                    failed_jobs.append((job, exc_string))
 
-            # Fire failed webhooks only after the terminal failures are persisted.
-            for failed_job, exc_string in failed_jobs:
-                failed_job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
+                # Final failures and scheduled (delayed) retries release the slot; immediate
+                # retries keep it — the job is back on the queue and reruns on the slot it owns.
+                if job.has_rate_limit and not is_immediate_retry:
+                    jobs_to_release.append(job)
+
+            pipeline.zremrangebyscore(self.key, 0, score)
+            pipeline.execute()
+
+        # Fire failed webhooks only after the terminal failures are persisted.
+        for failed_job, exc_string in failed_jobs:
+            failed_job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
+
+        # Release outside the pipeline — Lua scripts can't run inside a MULTI transaction.
+        for job in jobs_to_release:
+            job.rate_limit_registry.release_capacity_and_enqueue(job.id)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
@@ -593,8 +605,17 @@ class ReadyJobRegistry(BaseRegistry):
 
                     pipe.multi()
                     self.remove(job, pipeline=pipe)
-                    queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
-                    pipe.execute()
+                    if job.has_rate_limit:
+                        # Route rate-limited dependents through the rate limit registry, not
+                        # straight onto the queue. The Lua acquire script can't run inside
+                        # MULTI, so queue the ops here and acquire after the transaction.
+                        queue._enqueue_rate_limited_job(job, pipeline=pipe)
+                        pipe.execute()
+                        assert job.rate_limit_concurrency
+                        job.rate_limit_registry.acquire_and_enqueue(job.rate_limit_concurrency)
+                    else:
+                        queue._enqueue_job(job, pipeline=pipe, at_front=job.should_enqueue_at_front())
+                        pipe.execute()
             except WatchError:
                 logger.info('Ready job %s changed while enqueueing; skipping for now', job_id)
                 continue
@@ -716,3 +737,6 @@ def clean_registries(queue: Queue, exception_handlers: list | None = None):
     ReadyJobRegistry(
         name=queue.name, connection=queue.connection, job_class=queue.job_class, serializer=queue.serializer
     ).cleanup()
+
+    for rate_limit_registry in RateLimitRegistry.all(queue.connection):
+        rate_limit_registry.cleanup()
