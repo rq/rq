@@ -1248,11 +1248,11 @@ class Queue:
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
             if job.has_rate_limit:
-                return self._enqueue_rate_limited_job(job)
+                return self._enqueue_rate_limited_job(job, at_front=at_front)
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         return job
 
-    def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None) -> Job:
+    def _enqueue_rate_limited_job(self, job: Job, pipeline: Pipeline | None = None, at_front: bool = False) -> Job:
         """Enqueue a job through the rate limit registry.
 
         Saves the job to Redis and adds it to the rate_limited set atomically, then
@@ -1266,6 +1266,9 @@ class Queue:
                 the pipeline and then call
                 RateLimitRegistry.acquire_and_enqueue(job.rate_limit_concurrency) itself.
                 If None, this method executes and runs acquire_and_enqueue.
+            at_front (bool): Whether the job should be pushed to the front of its queue when
+                promoted. Persisted on the job so the (possibly later, cross-worker) promotion
+                can honor it.
 
         Returns:
             Job: The job
@@ -1279,6 +1282,8 @@ class Queue:
 
         registry = job.rate_limit_registry
         job._status = JobStatus.RATE_LIMITED
+        if at_front:
+            job.enqueue_at_front = True
         pipe = pipeline if pipeline is not None else self.connection.pipeline()
         registry.register(job.rate_limit_concurrency, pipe)
         job.save(pipeline=pipe)

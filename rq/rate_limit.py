@@ -49,7 +49,11 @@ if allowed_count < max_concurrency then
         local status = redis.call('HGET', 'rq:job:' .. job_id, 'status')
         if origin and status == 'rate_limited' then
             redis.call('ZADD', KEYS[1], timestamp, job_id)
-            redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
+            if redis.call('HGET', 'rq:job:' .. job_id, 'enqueue_at_front') == '1' then
+                redis.call('LPUSH', 'rq:queue:' .. origin, job_id)
+            else
+                redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
+            end
             redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
             return job_id
         end

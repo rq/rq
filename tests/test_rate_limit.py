@@ -376,6 +376,16 @@ class TestRateLimitEnqueue(RQTestCase):
         # Only the first 2 jobs should be in the queue
         self.assertEqual(len(self.queue.job_ids), 2)
 
+    def test_enqueue_at_front_promotes_to_queue_front(self):
+        """at_front promotes a rate-limited job to the front of its queue; the default is the back."""
+        rate_limit = RateLimit(key='test', concurrency=5)
+
+        back_job = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        front_job = self.queue.enqueue(say_hello, rate_limit=rate_limit, at_front=True)
+
+        self.assertEqual(front_job.get_status(refresh=False), JobStatus.QUEUED)
+        self.assertEqual(self.queue.job_ids, [front_job.id, back_job.id])
+
     def test_enqueue_with_rate_limit_and_dependencies(self):
         """Rate limit check happens after dependencies are met."""
         rate_limit = RateLimit(key='test', concurrency=1)
