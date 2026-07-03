@@ -1233,6 +1233,10 @@ class Job:
         """
         if self.is_canceled:
             raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.id}')
+        if pipeline is not None and self.has_rate_limit:
+            # Promotion is a Lua script that can't run in the caller's MULTI, so the slot
+            # can't be freed atomically here — forbid it rather than leak a slot until cleanup.
+            raise InvalidJobOperation('Cannot cancel a rate-limited job with a caller-supplied pipeline')
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
@@ -1274,12 +1278,6 @@ class Job:
                 )
                 registry.add(self, pipeline=pipe)
 
-                # Caller-owned pipeline: buffer the rate-limit removal into the same transaction
-                # so it drops atomically with the CANCELED status. Promotion is deferred — the
-                # caller may discard the transaction; the next release or cleanup promotes.
-                if pipeline is not None and self.has_rate_limit:
-                    self.rate_limit_registry.cancel(self.id, pipeline=pipe)
-
                 if pipeline is None:
                     pipe.execute()
                 break
@@ -1306,10 +1304,7 @@ class Job:
         if pipeline is None and enqueue_dependents:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
-        # No-pipeline path: CANCELED is committed, so remove the job from its rate-limit
-        # registry and promote the next rate_limited job. The caller-pipeline path already
-        # buffered the removal above; only its promotion is deferred.
-        if pipeline is None and self.has_rate_limit:
+        if self.has_rate_limit:
             self.rate_limit_registry.cancel(self.id)
 
         return dependent_job_ids_by_queue

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from rq.exceptions import InvalidJobOperation
 from rq.executions import Execution
 from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
@@ -541,38 +542,22 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertIn(job3.id, registry.get_allowed_job_ids())
         self.assertEqual(job3.get_status(), JobStatus.QUEUED)
 
-    def test_cancel_with_pipeline_removes_from_registry(self):
-        """Canceling via a caller-owned pipeline buffers the rate-limit removal into the
-        transaction (no in-transaction promotion). A canceled rate_limited job is dropped and
-        cannot be resurrected; the freed slot is promoted by later cleanup."""
+    def test_cancel_with_pipeline_is_disallowed(self):
+        """Canceling a rate-limited job with a caller-owned pipeline is forbidden: the slot
+        can't be freed and the next job promoted atomically from inside the caller's MULTI, so
+        the combination raises instead of silently leaking a slot until cleanup."""
         rate_limit = RateLimit(key='test', concurrency=1)
 
         job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # allowed
-        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # rate_limited
-        job3 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # rate_limited
         registry = RateLimitRegistry(key='test', connection=self.connection)
 
-        # Cancel the rate_limited job via a pipeline → dropped from rate_limited on EXEC.
         pipe = self.connection.pipeline()
-        job2.cancel(pipeline=pipe)
-        pipe.execute()
-        self.assertNotIn(job2.id, registry.get_rate_limited_job_ids())
+        with self.assertRaises(InvalidJobOperation):
+            job1.cancel(pipeline=pipe)
+
+        # The job is untouched — still allowed, not canceled.
         self.assertIn(job1.id, registry.get_allowed_job_ids())
-
-        # Cancel the allowed job via a pipeline → dropped from allowed on EXEC, but the
-        # rate_limited job is not promoted inside the caller transaction.
-        pipe = self.connection.pipeline()
-        job1.cancel(pipeline=pipe)
-        pipe.execute()
-        self.assertNotIn(job1.id, registry.get_allowed_job_ids())
-        self.assertEqual(registry.get_allowed_job_count(), 0)
-        self.assertIn(job3.id, registry.get_rate_limited_job_ids())
-
-        # Maintenance cleanup promotes job3 — not the canceled job2 — proving job2 is
-        # gone from rate_limited and cannot be resurrected.
-        registry.cleanup()
-        self.assertIn(job3.id, registry.get_allowed_job_ids())
-        self.assertEqual(job3.get_status(), JobStatus.QUEUED)
+        self.assertNotEqual(job1.get_status(refresh=True), JobStatus.CANCELED)
 
     def test_delete_with_pipeline_removes_from_registry(self):
         """Deleting via a caller-owned pipeline buffers the rate-limit removal into the
