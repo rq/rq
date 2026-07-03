@@ -60,40 +60,9 @@ end
 return nil
 """
 
-# Lua: remove a completed job from allowed, then run the same acquire logic.
-# Returns the enqueued job_id or nil.
-# KEYS: allowed_key, rate_limited_key
-# ARGV: completed_job_id, max_concurrency, timestamp, enqueued_at
-RELEASE_CAPACITY_SCRIPT = """
-local completed_job_id = ARGV[1]
-local max_concurrency = tonumber(ARGV[2])
-local timestamp = tonumber(ARGV[3])
-local enqueued_at = ARGV[4]
-
-redis.call('ZREM', KEYS[1], completed_job_id)
-
-local allowed_count = redis.call('ZCARD', KEYS[1])
-if allowed_count < max_concurrency then
-    while true do
-        local result = redis.call('ZPOPMIN', KEYS[2])
-        if #result == 0 then
-            return nil
-        end
-        local job_id = result[1]
-        local origin = redis.call('HGET', 'rq:job:' .. job_id, 'origin')
-        local status = redis.call('HGET', 'rq:job:' .. job_id, 'status')
-        if origin and status == 'rate_limited' then
-            redis.call('ZADD', KEYS[1], timestamp, job_id)
-            redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
-            redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
-            return job_id
-        end
-        -- stale rate_limited job (missing hash, no origin, or non-rate_limited status):
-        -- it's already popped, so loop to the next
-    end
-end
-return nil
-"""
+# Release = remove the completed job from allowed (ARGV[4]) then run the acquire script.
+# ARGV: max_concurrency, timestamp, enqueued_at, completed_job_id
+RELEASE_AND_ENQUEUE_SCRIPT = "redis.call('ZREM', KEYS[1], ARGV[4])\n" + ACQUIRE_AND_ENQUEUE_SCRIPT
 
 
 # Lua: if both allowed and rate_limited sets are empty, drop the key from rq:rl-keys
@@ -125,7 +94,7 @@ class RateLimitRegistry:
         self.key = key
         self.connection = connection
         self._acquire_script = connection.register_script(ACQUIRE_AND_ENQUEUE_SCRIPT)
-        self._release_script = connection.register_script(RELEASE_CAPACITY_SCRIPT)
+        self._release_script = connection.register_script(RELEASE_AND_ENQUEUE_SCRIPT)
         self._cleanup_script = connection.register_script(CLEANUP_REGISTRY_SCRIPT)
 
     def register(self, max_concurrency: int, pipeline: Pipeline) -> None:
@@ -206,7 +175,7 @@ class RateLimitRegistry:
             return as_text(result)
         return None
 
-    def release_capacity_and_enqueue(self, job_id: str) -> str | None:
+    def release_and_enqueue(self, job_id: str) -> str | None:
         """Release capacity from a completed job and enqueue the next rate_limited job.
 
         Atomically removes the job from allowed, then tries to enqueue the next
@@ -221,7 +190,7 @@ class RateLimitRegistry:
         timestamp = current_timestamp()
         result = self._release_script(
             keys=[self.allowed_key, self.rate_limited_key],
-            args=[job_id, self.max_concurrency, timestamp, utcformat(now())],
+            args=[self.max_concurrency, timestamp, utcformat(now()), job_id],
         )
         if result is not None:
             return as_text(result)
@@ -276,7 +245,7 @@ class RateLimitRegistry:
         for job_id, raw_status in zip(job_ids, raw_statuses):
             status = as_text(raw_status) if raw_status else None
             if status not in allowed_statuses:
-                self.release_capacity_and_enqueue(job_id)
+                self.release_and_enqueue(job_id)
 
     def cleanup(self) -> None:
         """Free stale allowed slots, enqueue rate_limited jobs if there is available

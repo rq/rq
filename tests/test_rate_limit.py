@@ -132,15 +132,15 @@ class TestRateLimitRegistry(RQTestCase):
         self.assertEqual(result, job1.id)
         self.assertEqual(self.rate_limit_registry.get_rate_limited_job_ids(), [job2.id])
 
-    def test_release_capacity_and_enqueue(self):
-        """release_capacity_and_enqueue removes from allowed and enqueues next rate_limited job."""
+    def test_release_and_enqueue(self):
+        """release_and_enqueue removes from allowed and enqueues next rate_limited job."""
         # Releasing a nonexistent job is a no-op
-        result = self.rate_limit_registry.release_capacity_and_enqueue('nonexistent')
+        result = self.rate_limit_registry.release_and_enqueue('nonexistent')
         self.assertIsNone(result)
 
         # Releasing with no rate_limited jobs returns None
         self.connection.zadd(self.rate_limit_registry.allowed_key, {'allowed1': 1})
-        result = self.rate_limit_registry.release_capacity_and_enqueue('allowed1')
+        result = self.rate_limit_registry.release_and_enqueue('allowed1')
         self.assertIsNone(result)
         self.assertEqual(self.rate_limit_registry.get_allowed_job_count(), 0)
 
@@ -149,7 +149,7 @@ class TestRateLimitRegistry(RQTestCase):
         job = self._make_job(status=JobStatus.RATE_LIMITED)
         self._add_to_rate_limited(job.id)
 
-        result = self.rate_limit_registry.release_capacity_and_enqueue('allowed2')
+        result = self.rate_limit_registry.release_and_enqueue('allowed2')
         self.assertEqual(result, job.id)
         self.assertNotIn('allowed2', self.rate_limit_registry.get_allowed_job_ids())
         self.assertIn(job.id, self.rate_limit_registry.get_allowed_job_ids())

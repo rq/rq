@@ -331,7 +331,7 @@ class StartedJobRegistry(BaseRegistry):
 
         # Release outside the pipeline — Lua scripts can't run inside a MULTI transaction.
         for job in jobs_to_release:
-            job.rate_limit_registry.release_capacity_and_enqueue(job.id)
+            job.rate_limit_registry.release_and_enqueue(job.id)
 
     def add_execution(self, execution: Execution, pipeline: Pipeline, ttl: int = 0, xx: bool = False) -> int:
         """Adds an execution to a registry with expiry time of now + ttl, unless it's -1 which is set to +inf
