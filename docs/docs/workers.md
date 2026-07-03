@@ -320,6 +320,10 @@ $ rq worker -c settings
 
 Alternatively, you can also pass in these options via environment variables.
 
+## Logging
+
+RQ logs to the `rq.worker`, `rq.job`, `rq.queue`, `rq.scheduler`, `rq.cron` and `rq.worker_pool` loggers. RQ only sets up its own log handlers when no handler is configured anywhere in the logger hierarchy, so if your application configures logging first, RQ leaves it untouched.
+
 ## Custom Worker Classes
 
 There are times when you want to customize the worker's behavior. Some of the
