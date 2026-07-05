@@ -745,6 +745,8 @@ class BaseWorker:
             if job.started_at and job.ended_at:
                 self.increment_total_working_time(job.ended_at - job.started_at, pipeline)
 
+            retry_interval = job.get_retry_interval() if retry else None
+
             if retry:
                 job.retry(queue, pipeline)
                 should_enqueue_dependents = False
@@ -760,6 +762,13 @@ class BaseWorker:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
                 if should_enqueue_dependents:
                     queue.enqueue_dependents(job)
+                    if job.has_rate_limit:
+                        job.rate_limit_registry.release_and_enqueue(job.id)
+                elif retry and retry_interval and job.has_rate_limit:
+                    # Delayed retry: release the allowed slot so the scheduled retry can
+                    # re-acquire when due. Immediate retries (interval 0) keep the slot and
+                    # rerun on it.
+                    job.rate_limit_registry.release_and_enqueue(job.id)
             except Exception as e:
                 # Ensure that custom exception handlers are called
                 # even if Redis is down
@@ -1396,6 +1405,8 @@ class BaseWorker:
                     # persisted, before enqueue_dependents. No exception here, so exc_string is empty.
                     job.send_webhooks(JobStatus.FAILED, exc_string='')
                     queue.enqueue_dependents(job)
+                    if job.has_rate_limit:
+                        job.rate_limit_registry.release_and_enqueue(job.id)
                 except Exception as e:
                     self.log.error(
                         'Worker %s: exception during pipeline execute or enqueue_dependents for job %s: %s',
@@ -1408,7 +1419,7 @@ class BaseWorker:
         with self.connection.pipeline() as pipeline:
             self.increment_failed_job_count(pipeline=pipeline)
             self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
-            job._handle_retry_result(
+            retry_interval = job._handle_retry_result(
                 queue=queue,
                 pipeline=pipeline,
                 retry=retry,
@@ -1419,6 +1430,11 @@ class BaseWorker:
             )
             self.cleanup_execution(job, pipeline=pipeline)
             pipeline.execute()
+
+            # Delayed retry: release the allowed slot so the scheduled retry can re-acquire
+            # when due. Immediate retries (interval 0) keep the slot and rerun on it.
+            if retry_interval and job.has_rate_limit:
+                job.rate_limit_registry.release_and_enqueue(job.id)
 
             self.log.debug('Worker %s: finished handling retry of job %s', self.name, job.id)
 
@@ -1494,6 +1510,9 @@ class BaseWorker:
                     # deferred→ready transition has committed. Per-queue failures are
                     # logged and left for ReadyJobRegistry.cleanup() to recover.
                     queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
+
+                    if job.has_rate_limit:
+                        job.rate_limit_registry.release_and_enqueue(job.id)
 
                     assert job.started_at
                     assert job.ended_at

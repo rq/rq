@@ -68,6 +68,7 @@ class JobStatus(str, Enum):
     SCHEDULED = 'scheduled'
     STOPPED = 'stopped'
     CANCELED = 'canceled'
+    RATE_LIMITED = 'rate_limited'
     READY_TO_ENQUEUE = 'ready_to_enqueue'
 
 
@@ -234,6 +235,9 @@ class Job:
         self.enqueue_at_front_on_retry: bool = False
         self.repeats_left: int | None = None
         self.repeat_intervals: list[int] | None = None
+
+        self.rate_limit_key: str | None = None
+        self.rate_limit_concurrency: int | None = None
 
         self._cached_result: Result | None = None
         self.log = logger
@@ -578,6 +582,10 @@ class Job:
             return CALLBACK_TIMEOUT
 
         return self._stopped_callback_timeout
+
+    @property
+    def has_rate_limit(self) -> bool:
+        return bool(self.rate_limit_key and self.rate_limit_concurrency)
 
     def should_enqueue_at_front(self) -> bool:
         """returns true when the argument enqueue_at_front_on_retry is true and the job has been executed at least once
@@ -1046,6 +1054,9 @@ class Job:
         if obj.get('repeat_intervals'):
             self.repeat_intervals = json.loads(obj['repeat_intervals'].decode())
 
+        self.rate_limit_key = as_text(obj['rate_limit_key']) if obj.get('rate_limit_key') else None
+        self.rate_limit_concurrency = int(obj['rate_limit_concurrency']) if obj.get('rate_limit_concurrency') else None
+
         raw_exc_info = obj.get('exc_info')
         if raw_exc_info:
             try:
@@ -1112,6 +1123,11 @@ class Job:
             obj['repeats_left'] = self.repeats_left
         if self.repeat_intervals is not None:
             obj['repeat_intervals'] = json.dumps(self.repeat_intervals)
+
+        if self.rate_limit_key:
+            obj['rate_limit_key'] = self.rate_limit_key
+        if self.rate_limit_concurrency:
+            obj['rate_limit_concurrency'] = self.rate_limit_concurrency
 
         if self._result is not None and include_result:
             try:
@@ -1198,9 +1214,10 @@ class Job:
 
         On the no-pipeline path, the whole thing runs in cancel's own WATCH/MULTI/EXEC and
         the dependents are enqueued before this method returns. When called with
-        ``pipeline=external_pipe``, the deferred→ready ops are appended to the caller's
-        transaction; the caller owns the EXEC and is responsible for draining the returned
-        mapping via ``Queue.enqueue_ready_jobs_by_queue(mapping)`` afterwards (otherwise
+        ``pipeline=external_pipe``, the pipeline must already be in WATCH mode. The
+        deferred→ready ops are appended to the caller's transaction; the caller owns
+        the EXEC and is responsible for draining the returned mapping via
+        ``Queue.enqueue_ready_jobs_by_queue(mapping)`` afterwards (otherwise
         ``ReadyJobRegistry.cleanup()`` recovers the dependents later).
 
         Args:
@@ -1216,6 +1233,11 @@ class Job:
         """
         if self.is_canceled:
             raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.id}')
+        if pipeline is not None and self.has_rate_limit:
+            # Promotion only runs after the caller's EXEC, which happens after cancel()
+            # returns — the slot would sit freed with nobody promoted until the next
+            # release or cleanup. Forbid the combination instead.
+            raise InvalidJobOperation('Cannot cancel a rate-limited job with a caller-supplied pipeline')
         from .queue import Queue
         from .registry import CanceledJobRegistry
 
@@ -1256,6 +1278,7 @@ class Job:
                     self.origin, self.connection, job_class=self.__class__, serializer=self.serializer
                 )
                 registry.add(self, pipeline=pipe)
+
                 if pipeline is None:
                     pipe.execute()
                 break
@@ -1281,6 +1304,9 @@ class Job:
         # returned mapping after their own EXEC.
         if pipeline is None and enqueue_dependents:
             q.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
+
+        if self.has_rate_limit:
+            self.rate_limit_registry.cancel(self.id)
 
         return dependent_job_ids_by_queue
 
@@ -1389,6 +1415,12 @@ class Job:
             group.delete_job(self.id, pipeline=pipeline)
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
+
+        if self.has_rate_limit:
+            # No-pipeline: remove + promote immediately (after the hash delete above).
+            # Caller-owned pipeline: buffer the ZREMs into the caller's transaction without
+            # promoting — the next release/acquire or maintenance cleanup promotes.
+            self.rate_limit_registry.cancel(self.id, pipeline=pipeline)
 
     def delete_dependents(self, pipeline: Pipeline | None = None):
         """Delete jobs depending on this job.
@@ -1568,6 +1600,13 @@ class Job:
             self.origin, connection=self.connection, job_class=self.__class__, serializer=self.serializer
         )
 
+    @property
+    def rate_limit_registry(self):
+        from .rate_limit import RateLimitRegistry
+
+        assert self.rate_limit_key
+        return RateLimitRegistry(key=self.rate_limit_key, connection=self.connection)
+
     def execute_success_callback(self, death_penalty_class: type[BaseDeathPenalty], result: Any):
         """Executes success_callback for a job.
         with timeout .
@@ -1693,11 +1732,12 @@ class Job:
         execution_started_at: datetime,
         execution_ended_at: datetime,
         worker_name: str = '',
-    ):
+    ) -> int:
         """Handles jobs that return a Retry object as its result.
 
         Creates a RETRIED result record, increments number_of_retries,
-        and requeues or schedules the job for retry.
+        and requeues or schedules the job for retry. Returns the retry
+        interval in seconds (0 for an immediate retry).
 
         Args:
             queue (Queue): The queue to retry the job on
@@ -1739,6 +1779,7 @@ class Job:
                 self.id,
                 retry.max - (self.number_of_retries or 0),
             )
+        return retry_interval
 
     def get_retry_interval(self) -> int:
         """Returns the desired retry interval.
