@@ -386,7 +386,6 @@ class BaseWorker:
         self.version = data.get('version') or VERSION
         self.python_version = data.get('python_version') or sys.version
         self._state = data.get('state', '?')
-        self._job_id = data.get('current_job')
 
         if data.get('last_heartbeat'):
             self.last_heartbeat = utcparse(data['last_heartbeat'])
@@ -795,45 +794,27 @@ class BaseWorker:
                     e,
                 )
 
-    def set_current_job_id(self, job_id: str | None = None, pipeline: Pipeline | None = None):
-        """Sets the current job id.
-        If `None` is used it will delete the current job key.
-
-        Args:
-            job_id (Optional[str], optional): The job id. Defaults to None.
-            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        if job_id is None:
-            connection.hdel(self.key, 'current_job')
-        else:
-            connection.hset(self.key, 'current_job', job_id)
-
-    def get_current_job_id(self, pipeline: Pipeline | None = None) -> str | None:
-        """Retrieves the current job id.
-
-        Args:
-            pipeline (Optional[&#39;Pipeline&#39;], optional): The pipeline to use. Defaults to None.
+    def get_current_job_id(self) -> str | None:
+        """Job id of one of this worker's active executions, `None` when idle.
 
         Returns:
-            job_id (Optional[str): The job id
+            job_id (Optional[str]): The job id
         """
-        connection = pipeline if pipeline is not None else self.connection
-        result = connection.hget(self.key, 'current_job')
-        if result is None:
-            return None
-        return as_text(result)
+        execution = self.execution
+        return execution.job_id if execution else None
 
     def get_current_job(self) -> Job | None:
-        """Returns the currently executing job instance.
+        """The job one of this worker's active executions is running, `None` when idle.
 
         Returns:
-            job (Job): The job instance.
+            job (Optional[Job]): The job instance.
         """
-        job_id = self.get_current_job_id()
-        if job_id is None:
+        execution = self.execution
+        if not execution:
             return None
-        return self.job_class.fetch(job_id, self.connection, self.serializer)
+        if not execution._job:
+            execution._job = self.job_class.fetch(execution.job_id, self.connection, self.serializer)
+        return execution._job
 
     def set_state(self, state: str, pipeline: Pipeline | None = None):
         """Sets the worker's state.
@@ -1338,8 +1319,6 @@ class BaseWorker:
         """
         self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
-            self.set_current_job_id(job.id, pipeline=pipeline)
-
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)

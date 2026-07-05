@@ -145,7 +145,6 @@ class TestWorker(RQTestCase):
         worker = Worker.find_by_key(w.key, connection=self.connection)
         self.assertEqual(worker.queues, queues)
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
-        self.assertEqual(worker._job_id, None)
         self.assertIn(worker.key, Worker.all_keys(worker.connection))
         self.assertEqual(worker.version, VERSION)
 
@@ -878,15 +877,35 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_failed, True)
 
     def test_get_current_job(self):
-        """Ensure worker.get_current_job() works properly"""
-        q = Queue(connection=self.connection)
-        worker = Worker([q])
-        job = q.enqueue_call(say_hello)
+        """worker.get_current_job() and get_current_job_id() derive from worker.execution"""
+        queue = Queue(connection=self.connection, job_class=CustomJob)
+        worker = Worker([queue], job_class=CustomJob)
+        job = queue.enqueue_call(say_hello)
 
-        self.assertEqual(self.connection.hget(worker.key, 'current_job'), None)
-        worker.set_current_job_id(job.id)
-        self.assertEqual(worker.get_current_job_id(), as_text(self.connection.hget(worker.key, 'current_job')))
+        self.assertIsNone(worker.get_current_job_id())
+        self.assertIsNone(worker.get_current_job())
+
+        execution = worker.prepare_execution(job)
+        self.assertEqual(worker.get_current_job_id(), job.id)
+        # The seeded in-process job instance is returned, no Redis refetch
+        self.assertIs(worker.get_current_job(), execution._job)
         self.assertEqual(worker.get_current_job(), job)
+        # The legacy current_job hash field is never written
+        self.assertIsNone(self.connection.hget(worker.key, 'current_job'))
+
+        # On a cache miss (an execution reconstructed from Redis, e.g. in the SpawnWorker
+        # child), the job is fetched with the worker's job class and hydrates the cache
+        execution._job = None
+        fetched_job = worker.get_current_job()
+        self.assertIsInstance(fetched_job, CustomJob)
+        self.assertIs(execution._job, fetched_job)
+        self.assertIs(worker.get_current_job(), fetched_job)
+
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
+            pipeline.execute()
+        self.assertIsNone(worker.get_current_job_id())
+        self.assertIsNone(worker.get_current_job())
 
     def test_custom_job_class(self):
         """Ensure Worker accepts custom job class."""
