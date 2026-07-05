@@ -250,7 +250,6 @@ class CronScheduler:
                 log_format=DEFAULT_LOGGING_FORMAT,
                 date_format=DEFAULT_LOGGING_DATE_FORMAT,
             )
-            self.log.propagate = False
 
     def __eq__(self, other) -> bool:
         """Equality does not take the database/connection into account"""

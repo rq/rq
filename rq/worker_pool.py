@@ -62,9 +62,7 @@ class WorkerPool:
     ):
         self.num_workers: int = num_workers
         self._workers: list[Worker] = []
-        setup_loghandlers('INFO', DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, name=__name__)
         self.log: logging.Logger = logging.getLogger(__name__)
-        # self.log: logging.Logger = logger
         self._queue_names: list[str] = parse_names(queues)
         self.connection = connection
         self.name: str = uuid4().hex
@@ -281,7 +279,7 @@ def run_worker(
         serializer=serializer,
         job_class=job_class,
         queue_class=queue_class,
-        exception_handlers=exception_handlers
+        exception_handlers=exception_handlers,
     )
     worker.log.info('Starting worker started with PID %s', os.getpid())
     time.sleep(_sleep)
