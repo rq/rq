@@ -260,7 +260,7 @@ class TestFinishedJobRegistry(RQTestCase):
 
         # Completed jobs are put in FinishedJobRegistry
         job = queue.enqueue(say_hello)
-        worker.perform_job(job, queue)
+        worker.perform_job(job, queue, worker.prepare_execution(job))
         self.assertEqual(self.registry.get_job_ids(), [job.id])
 
         # When job is deleted, it should be removed from FinishedJobRegistry
@@ -270,7 +270,7 @@ class TestFinishedJobRegistry(RQTestCase):
 
         # Failed jobs are not put in FinishedJobRegistry
         failed_job = queue.enqueue(div_by_zero)
-        worker.perform_job(failed_job, queue)
+        worker.perform_job(failed_job, queue, worker.prepare_execution(failed_job))
         self.assertEqual(self.registry.get_job_ids(), [])
 
 
@@ -819,7 +819,7 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
         self.assertTrue(job.is_started)
 
-        worker.perform_job(job, self.queue)
+        worker.perform_job(job, self.queue, execution)
         self.assertNotIn(job.id, self.registry.get_job_ids())
         self.assertNotIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
         self.assertTrue(job.is_finished)
@@ -831,7 +831,7 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertIn(job.id, self.registry.get_job_ids())
         self.assertIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
 
-        worker.perform_job(job, self.queue)
+        worker.perform_job(job, self.queue, execution)
         self.assertNotIn(job.id, self.registry.get_job_ids())
         self.assertNotIn((job.id, execution.id), self.registry.get_job_and_execution_ids())
 

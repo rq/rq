@@ -18,6 +18,7 @@ from ..utils import now
 from .base import SHUTDOWN_SIGNAL, BaseWorker, WorkerStatus, signal_name
 
 if TYPE_CHECKING:
+    from ..executions import Execution
     from ..queue import Queue
 
     try:
@@ -71,14 +72,15 @@ class Worker(BaseWorker):
             self._horse_pid = child_pid
             self.procline(f'Forked {child_pid} at {time.time()}')
 
-    def monitor_work_horse(self, job: Job, queue: Queue):
+    def monitor_work_horse(self, job: Job, queue: Queue, execution: Execution):
         """The worker will monitor the work horse and make sure that it
         either executes successfully or the status of the job is set to
         failed
 
         Args:
-            job (Job): _description_
-            queue (Queue): _description_
+            job (Job): The job being run by the work horse
+            queue (Queue): The queue the job was dequeued from
+            execution (Execution): The execution running the job
         """
         retpid = ret_val = rusage = None
         job.started_at = now()
@@ -99,7 +101,7 @@ class Worker(BaseWorker):
                     self.wait_for_horse()
                     break
 
-                self.maintain_heartbeats(job)
+                self.maintain_heartbeats(job, execution)
 
             except OSError as e:
                 # In case we encountered an OSError due to EINTR (which is
@@ -130,7 +132,7 @@ class Worker(BaseWorker):
 
         if self._stopped_job_id == job.id:
             # Work-horse killed deliberately
-            self._handle_stopped_job(job, queue)
+            self._handle_stopped_job(job, queue, execution)
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
             job.ended_at = now()
 
@@ -140,9 +142,9 @@ class Worker(BaseWorker):
             self.log.warning('Worker %s: job %s failed (%s)', self.name, job.id, exc_string)
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
-            self.handle_job_failure(job, queue=queue, exc_string=exc_string)
+            self.handle_job_failure(job, queue=queue, exc_string=exc_string, execution=execution)
 
-    def _handle_stopped_job(self, job: Job, queue: Queue):
+    def _handle_stopped_job(self, job: Job, queue: Queue, execution: Execution):
         """Move a deliberately stopped job to the FailedJobRegistry.
 
         A raising stopped callback must not prevent the job from being failed, so it is
@@ -154,7 +156,9 @@ class Worker(BaseWorker):
                 job.execute_stopped_callback(self.death_penalty_class)
             except Exception:
                 self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
-        self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user, work-horse terminated.')
+        self.handle_job_failure(
+            job, queue=queue, exc_string='Job stopped by user, work-horse terminated.', execution=execution
+        )
 
     def execute_job(self, job: Job, queue: Queue):
         """Spawns a work horse to perform the actual work and passes it a job.
@@ -162,9 +166,9 @@ class Worker(BaseWorker):
         within the given timeout bounds, or will end the work horse with
         SIGALRM.
         """
-        self.prepare_execution(job)
+        execution = self.prepare_execution(job)
         self.fork_work_horse(job, queue)
-        self.monitor_work_horse(job, queue)
+        self.monitor_work_horse(job, queue, execution)
         self.set_state(WorkerStatus.IDLE)
 
 
@@ -226,8 +230,8 @@ worker.main_work_horse(job, queue)
 class SimpleWorker(BaseWorker):
     def execute_job(self, job: Job, queue: Queue):
         """Execute job in same thread/process, do not fork()"""
-        self.prepare_execution(job)
-        self.perform_job(job, queue)
+        execution = self.prepare_execution(job)
+        self.perform_job(job, queue, execution)
         self.set_state(WorkerStatus.IDLE)
 
     def get_heartbeat_ttl(self, job: Job) -> int:

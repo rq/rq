@@ -319,7 +319,8 @@ class TestWorker(RQTestCase):
         # Now we try to run the job...
         w = Worker([q], connection=self.connection)
         job, queue = w.dequeue_job_and_maintain_ttl(10)
-        w.perform_job(job, queue)
+        execution = w.prepare_execution(job)
+        w.perform_job(job, queue, execution)
 
         # An exception should be logged here at ERROR level
         self.assertIn('DeserializationError', mock_logger_error.call_args[0][3])
@@ -352,15 +353,15 @@ class TestWorker(RQTestCase):
         queue = Queue(connection=self.connection)
         worker = Worker([queue], connection=self.connection)
         job = queue.enqueue(say_hello)
-        worker.prepare_execution(job)
+        execution = worker.prepare_execution(job)
         worker.prepare_job_execution(job)
-        worker.maintain_heartbeats(job)
+        worker.maintain_heartbeats(job, execution)
         self.assertTrue(self.connection.exists(worker.key))
         self.assertTrue(self.connection.exists(job.key))
 
         self.connection.delete(job.key)
 
-        worker.maintain_heartbeats(job)
+        worker.maintain_heartbeats(job, execution)
         self.assertFalse(self.connection.exists(job.key))
 
     @slow
@@ -477,16 +478,18 @@ class TestWorker(RQTestCase):
         registry = StartedJobRegistry(connection=worker.connection)
         job.started_at = now()
         job.ended_at = job.started_at + timedelta(seconds=0.75)
+        execution = worker.prepare_execution(job)
         worker.handle_job_failure(job, queue)
-        worker.handle_job_success(job, queue, registry)
+        worker.handle_job_success(job, queue, registry, execution)
 
         worker.refresh()
         self.assertEqual(worker.failed_job_count, 1)
         self.assertEqual(worker.successful_job_count, 1)
         self.assertEqual(worker.total_working_time, 1.5)  # 1.5 seconds
 
+        execution = worker.prepare_execution(job)
         worker.handle_job_failure(job, queue)
-        worker.handle_job_success(job, queue, registry)
+        worker.handle_job_success(job, queue, registry, execution)
 
         worker.refresh()
         self.assertEqual(worker.failed_job_count, 2)
@@ -541,7 +544,8 @@ class TestWorker(RQTestCase):
         worker = Worker([queue])
         worker.register_birth()
 
-        worker.perform_job(job, queue)
+        execution = worker.prepare_execution(job)
+        worker.perform_job(job, queue, execution)
         worker.refresh()
         # total_working_time should be a little bit more than 0.05 seconds
         self.assertGreaterEqual(worker.total_working_time, 0.05)
@@ -1231,7 +1235,7 @@ class TestWorker(RQTestCase):
 
         w = Worker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
-        w.perform_job(job, q)
+        w.perform_job(job, q, w.prepare_execution(job))
         mock_logger_info.assert_called_with('Result is kept for %s seconds', 10)
         self.assertIn('Result is kept for %s seconds', [c[0][0] for c in mock_logger_info.call_args_list])
 
@@ -1245,7 +1249,7 @@ class TestWorker(RQTestCase):
 
         w = TestWorker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
-        w.perform_job(job, q)
+        w.perform_job(job, q, w.prepare_execution(job))
         self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
 
     @mock.patch('rq.worker.logger.info')
@@ -1272,7 +1276,7 @@ class TestWorker(RQTestCase):
         q = Queue(connection=self.connection)
         w = Worker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
-        w.perform_job(job, q)
+        w.perform_job(job, q, w.prepare_execution(job))
         self.assertIn('Frank', mock_logger_info.call_args_list[0][0][1])
 
     @mock.patch('rq.worker.logger.info')
@@ -1281,7 +1285,7 @@ class TestWorker(RQTestCase):
         q = Queue(connection=self.connection)
         w = Worker([q], log_job_description=False, connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
-        w.perform_job(job, q)
+        w.perform_job(job, q, w.prepare_execution(job))
         self.assertNotIn('Frank', mock_logger_info.call_args_list[0][0][1])
 
     def test_worker_configures_socket_timeout(self):
@@ -1523,10 +1527,11 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             os.remove(sentinel_file)
         fooq.enqueue(create_file_after_timeout, sentinel_file, 100)
         job, queue = w.dequeue_job_and_maintain_ttl(5)
+        execution = w.prepare_execution(job)
         w.fork_work_horse(job, queue)
         p = Process(target=wait_and_kill_work_horse, args=(w._horse_pid, 0.5))
         p.start()
-        w.monitor_work_horse(job, queue)
+        w.monitor_work_horse(job, queue, execution)
         job_status = job.get_status()
         p.join(1)
         self.assertEqual(job_status, JobStatus.FAILED)
@@ -1542,8 +1547,9 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         # erroneous_callback takes only `job`, so it raises when invoked as a stopped callback
         job = queue.enqueue(say_hello, on_stopped=erroneous_callback)
         worker._stopped_job_id = job.id
+        execution = worker.prepare_execution(job)
 
-        worker._handle_stopped_job(job, queue)
+        worker._handle_stopped_job(job, queue, execution)
 
         self.assertIn(job, FailedJobRegistry(queue=queue))
         self.assertEqual(job.get_status(), JobStatus.STOPPED)
@@ -1573,9 +1579,9 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
             subprocess_pid = int(f.read().strip())
         self.assertTrue(psutil.pid_exists(subprocess_pid))
 
-        w.prepare_execution(job)
+        execution = w.prepare_execution(job)
         with mock.patch.object(w, 'handle_work_horse_killed', wraps=w.handle_work_horse_killed) as mocked:
-            w.monitor_work_horse(job, queue)
+            w.monitor_work_horse(job, queue, execution)
             self.assertEqual(mocked.call_count, 1)
         fudge_factor = 1
         total_time = w.job_monitoring_interval + 65 + fudge_factor
