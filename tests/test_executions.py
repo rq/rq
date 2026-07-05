@@ -32,7 +32,7 @@ class TestRegistry(RQTestCase):
         """Test adding and deleting executions"""
         job = self.queue.enqueue(say_hello)
         pipeline = self.connection.pipeline()
-        execution = Execution.create(job=job, ttl=100, pipeline=pipeline)
+        execution = Execution.create(job=job, ttl=100, pipeline=pipeline, worker_name='foo')
         pipeline.execute()
         created_at = execution.created_at
         composite_key = execution.composite_key
@@ -43,6 +43,12 @@ class TestRegistry(RQTestCase):
         self.assertEqual(execution.created_at.timestamp(), created_at.timestamp())
         self.assertEqual(execution.composite_key, composite_key)
         self.assertEqual(execution.last_heartbeat.timestamp(), created_at.timestamp())
+        self.assertEqual(execution.worker_name, 'foo')
+
+        # Execution hashes written before worker_name existed refresh to an empty string
+        self.connection.hdel(execution.key, 'worker_name')
+        execution.refresh()
+        self.assertEqual(execution.worker_name, '')
 
         execution.delete(job=job, pipeline=pipeline)
         pipeline.execute()
@@ -152,6 +158,7 @@ class TestRegistry(RQTestCase):
         execution = job.get_executions()[0]
         self.assertEqual(len(job.get_executions()), 1)
         self.assertIn(execution.job_id, job.started_job_registry.get_job_ids())
+        self.assertEqual(execution.worker_name, 'w1')  # prepare_execution() stamps the worker's name
 
         last_heartbeat = execution.last_heartbeat
         last_heartbeat = now()
