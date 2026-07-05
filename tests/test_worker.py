@@ -348,6 +348,22 @@ class TestWorker(RQTestCase):
         self.connection.hdel(w.key, 'birth')
         w.refresh()
 
+    def test_get_heartbeat_ttl(self):
+        """get_heartbeat_ttl() derives the TTL from the working_time argument"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        job = queue.enqueue(say_hello, job_timeout=100)
+
+        self.assertEqual(
+            worker.get_heartbeat_ttl(job, working_time=0),
+            min(100, worker.job_monitoring_interval) + 60,
+        )
+        self.assertEqual(worker.get_heartbeat_ttl(job, working_time=95), 65)
+
+        job.timeout = None
+        self.assertEqual(worker.get_heartbeat_ttl(job, working_time=0), worker.job_monitoring_interval + 60)
+        self.assertEqual(worker.get_heartbeat_ttl(job, working_time=95), worker.job_monitoring_interval + 60)
+
     def test_maintain_heartbeats(self):
         """worker.maintain_heartbeats() shouldn't create new job keys"""
         queue = Queue(connection=self.connection)

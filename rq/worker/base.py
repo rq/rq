@@ -222,7 +222,6 @@ class BaseWorker:
         self.successful_job_count: int = 0
         self.failed_job_count: int = 0
         self.total_working_time: float = 0
-        self.current_job_working_time: float = 0
         self.birth_date: datetime | None = None
         self.last_heartbeat: datetime | None = None
         self.scheduler: RQScheduler | None = None
@@ -402,9 +401,6 @@ class BaseWorker:
         self.failed_job_count = int(data['failed_job_count']) if data.get('failed_job_count') else 0
         self.successful_job_count = int(data['successful_job_count']) if data.get('successful_job_count') else 0
         self.total_working_time = float(data['total_working_time']) if data.get('total_working_time') else 0
-        self.current_job_working_time = (
-            float(data['current_job_working_time']) if data.get('current_job_working_time') else 0
-        )
 
         if data.get('queues'):
             self.queues = [
@@ -780,17 +776,6 @@ class BaseWorker:
                     e,
                 )
 
-    def set_current_job_working_time(self, current_job_working_time: float, pipeline: Pipeline | None = None):
-        """Sets the current job working time in seconds
-
-        Args:
-            current_job_working_time (float): The current job working time in seconds
-            pipeline (Optional[Pipeline], optional): Pipeline to use. Defaults to None.
-        """
-        self.current_job_working_time = current_job_working_time
-        connection = pipeline if pipeline is not None else self.connection
-        connection.hset(self.key, 'current_job_working_time', current_job_working_time)
-
     def set_current_job_id(self, job_id: str | None = None, pipeline: Pipeline | None = None):
         """Sets the current job id.
         If `None` is used it will delete the current job key.
@@ -1067,17 +1052,19 @@ class BaseWorker:
             sleep_time=60, daemon=True, exception_handler=self._pubsub_exception_handler
         )
 
-    def get_heartbeat_ttl(self, job: Job) -> int:
+    def get_heartbeat_ttl(self, job: Job, working_time: float = 0.0) -> int:
         """Get's the TTL for the next heartbeat.
 
         Args:
             job (Job): The Job
+            working_time (float): Seconds the execution has been running,
+                derived from `Execution.created_at`. Defaults to 0.0.
 
         Returns:
             int: The heartbeat TTL.
         """
         if job.timeout and job.timeout > 0:
-            remaining_execution_time = job.timeout - self.current_job_working_time
+            remaining_execution_time = job.timeout - working_time
             return int(min(remaining_execution_time, self.job_monitoring_interval)) + 60
         else:
             return self.job_monitoring_interval + 60
@@ -1196,7 +1183,7 @@ class BaseWorker:
         """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = int(self.get_heartbeat_ttl(job))
+            ttl = int(self.get_heartbeat_ttl(job, working_time=execution.working_time))
 
             # Also need to update execution's heartbeat
             execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
@@ -1333,7 +1320,6 @@ class BaseWorker:
         self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
             self.set_current_job_id(job.id, pipeline=pipeline)
-            self.set_current_job_working_time(0, pipeline=pipeline)
 
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)

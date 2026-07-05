@@ -50,6 +50,11 @@ class Execution:
     def composite_key(self):
         return f'{self.job_id}:{self.id}'
 
+    @property
+    def working_time(self) -> float:
+        """Seconds elapsed since this execution was created."""
+        return (now() - self.created_at).total_seconds()
+
     @classmethod
     def fetch(cls, id: str, job_id: str, connection: Redis) -> Execution:
         """Fetch an execution from Redis."""
