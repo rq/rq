@@ -82,6 +82,8 @@ results are kept. Expired jobs will be automatically deleted. Defaults to 500 se
 * `on_stopped` allows you to run a function after a job is stopped
 * `unique`: when set to `True`, prevents duplicate jobs with the same `job_id` from being enqueued.
 See [Unique Jobs](#unique-jobs) below.
+* `rate_limit` limits how many jobs sharing a key may be queued or executing.
+See [Concurrency Rate Limits](#concurrency-rate-limits) below.
 * `args` and `kwargs`: use these to explicitly pass arguments and keyword to the
   underlying job function. This is useful if your function happens to have
   conflicting argument names with RQ, for example `description` or `ttl`.
@@ -223,6 +225,39 @@ job = queue.enqueue_in(timedelta(minutes=30), my_task, job_id='scheduled-task', 
 
 **Limitations:**
 - `unique=True` is not supported with job dependencies (`depends_on`).
+
+### Concurrency Rate Limits
+_New in version 2.11.0._
+
+Use `RateLimit` to cap how many jobs sharing a key may be queued or executing at
+the same time:
+
+```python
+from redis import Redis
+from rq import Queue, RateLimit
+
+queue = Queue(connection=Redis())
+rate_limit = RateLimit(key='reports', concurrency=2)
+
+job_1 = queue.enqueue(generate_report, 1, rate_limit=rate_limit)
+job_2 = queue.enqueue(generate_report, 2, rate_limit=rate_limit)
+job_3 = queue.enqueue(generate_report, 3, rate_limit=rate_limit)
+```
+
+The first two jobs are `queued`. The third has the `rate_limited` status and is
+not placed on a queue until one of the first two jobs releases its slot. Waiting
+jobs are admitted in enqueue order, and `at_front=True` still controls where an
+admitted job is placed on its queue.
+
+The key identifies the shared limit across all workers and queues using the same
+Redis database. A key has one concurrency setting, so every producer using that
+key must use the same `concurrency` value.
+
+Rate limits also apply after scheduled jobs become due and after job dependencies
+are satisfied. An immediate retry keeps its slot; a delayed retry releases its
+slot and must acquire one again when it becomes due. Normal job completion,
+failure, cancellation, or deletion releases the slot and admits the next waiting
+job.
 
 ## Job dependencies
 

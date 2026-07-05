@@ -126,6 +126,18 @@ job = queue.enqueue(send_email, user_id, job_id='welcome-42', unique=True)
 
 More details can be found in the [docs](https://python-rq.org/docs/#unique-jobs).
 
+## Rate Limiting
+
+RQ 2.11.0 adds concurrency-based rate limits for jobs sharing a key:
+
+```python
+from rq import RateLimit
+
+queue.enqueue(generate_report, rate_limit=RateLimit(key='reports', concurrency=2))
+```
+
+More details can be found in the [docs](https://python-rq.org/docs/#concurrency-rate-limits).
+
 ## Retrying Failed Jobs
 
 Retrying failed jobs is also supported:

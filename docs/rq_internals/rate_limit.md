@@ -4,8 +4,8 @@ layout: docs
 ---
 
 This page explains how RQ's rate limiting works under the hood and why it is built the
-way it is. It's aimed at contributors, not users of the API (usage is one line:
-`queue.enqueue(f, rate_limit=RateLimit(key='reports', concurrency=2))`).
+way it is. It's aimed at contributors; see the [user guide](/docs/#concurrency-rate-limits)
+for the public API and supported behavior.
 
 The strategy implemented today is **concurrency-based**: it caps how many jobs sharing
 a key can be queued or executing at the same time, across all workers and queues using
@@ -105,8 +105,8 @@ waiting. `RateLimitRegistry.cleanup()` reconciles this. It runs as part of
   the stored config. Two jobs registering different values for the same key can
   over-admit.
 - **Delayed retry placement** — `Retry(enqueue_at_front=True)` is not honored when a
-  delayed retry re-enters through the rate limiter; promotion uses the original enqueue
-  placement.
+  delayed retry re-enters through the rate limiter; promotion uses the job's original
+  enqueue placement.
 - **Returned job status can briefly lag** — `enqueue()` returns an in-memory job whose
   status can be stale if a concurrent release promoted it in a narrow window;
   `refresh()` corrects it.
