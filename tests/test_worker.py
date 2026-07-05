@@ -959,6 +959,31 @@ class TestWorker(RQTestCase):
         job.refresh()
         self.assertGreater(job.meta['ttl'], job_timeout)
 
+    def test_execution_property(self):
+        """worker.execution is a read/write view over worker.executions"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        job = queue.enqueue(say_hello)
+
+        self.assertIsNone(worker.execution)
+
+        first_execution = worker.prepare_execution(job)
+        self.assertEqual(worker.execution, first_execution)
+        self.assertEqual(worker.executions, {first_execution.id: first_execution})
+
+        # Assigning None clears the sole execution
+        worker.execution = None
+        self.assertEqual(worker.executions, {})
+
+        # Assigning an execution registers it alongside existing ones
+        worker.execution = first_execution
+        second_execution = worker.prepare_execution(job)
+        self.assertIn(worker.execution, (first_execution, second_execution))
+
+        # Clearing is ambiguous when more than one execution is active
+        with self.assertRaises(ValueError):
+            worker.execution = None
+
     def test_prepare_job_execution(self):
         """Prepare job execution does the necessary bookkeeping."""
         queue = Queue(connection=self.connection)

@@ -185,7 +185,7 @@ class BaseWorker:
         else:
             self._serializer_arg = f'{serializer.__module__}.{serializer.__qualname__}'  # type: ignore[attr-defined]
         self.serializer = resolve_serializer(serializer)
-        self.execution: Execution | None = None
+        self.executions: dict[str, Execution] = {}
 
         queues = [
             (
@@ -433,6 +433,25 @@ class BaseWorker:
             timeout_config = {'socket_timeout': self.connection_timeout}
             connection.connection_pool.connection_kwargs.update(timeout_config)
         return connection
+
+    @property
+    def execution(self) -> Execution | None:
+        """One of the worker's active executions, `None` when idle."""
+        if not self.executions:
+            return None
+        return next(iter(self.executions.values()))
+
+    @execution.setter
+    def execution(self, execution: Execution | None):
+        if execution is None:
+            if len(self.executions) > 1:
+                raise ValueError(
+                    'Cannot clear worker.execution when multiple executions are active, '
+                    'remove the entry from worker.executions instead'
+                )
+            self.executions.clear()
+        else:
+            self.executions[execution.id] = execution
 
     @property
     def dequeue_timeout(self) -> int:
