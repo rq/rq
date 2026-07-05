@@ -91,11 +91,10 @@ class Worker(BaseWorker):
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
-                # Send a heartbeat to keep the worker alive.
-                self.set_current_job_working_time((now() - job.started_at).total_seconds())
+                working_time = execution.working_time
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
-                if job.timeout != -1 and self.current_job_working_time > (job.timeout + 60):  # type: ignore
+                if job.timeout != -1 and working_time > (job.timeout + 60):  # type: ignore
                     self.heartbeat(self.job_monitoring_interval + 60)
                     self.kill_horse()
                     self.wait_for_horse()
@@ -115,7 +114,6 @@ class Worker(BaseWorker):
                 # Send a heartbeat to keep the worker alive.
                 self.heartbeat()
 
-        self.set_current_job_working_time(0)
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
 
         self.log.debug(
@@ -234,12 +232,13 @@ class SimpleWorker(BaseWorker):
         self.perform_job(job, queue, execution)
         self.set_state(WorkerStatus.IDLE)
 
-    def get_heartbeat_ttl(self, job: Job) -> int:
+    def get_heartbeat_ttl(self, job: Job, working_time: float = 0.0) -> int:
         """-1" means that jobs never timeout. In this case, we should _not_ do -1 + 60 = 59.
         We should just stick to DEFAULT_WORKER_TTL.
 
         Args:
             job (Job): The Job
+            working_time (float): Unused; accepted for signature compatibility.
 
         Returns:
             ttl (int): TTL

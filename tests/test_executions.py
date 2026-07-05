@@ -1,3 +1,4 @@
+from datetime import timedelta
 from time import sleep
 from unittest.mock import patch
 
@@ -54,6 +55,16 @@ class TestRegistry(RQTestCase):
         pipeline.execute()
 
         self.assertFalse(self.connection.exists(execution.key))
+
+    def test_working_time(self):
+        """Execution.working_time is the seconds elapsed since created_at"""
+        job = self.queue.enqueue(say_hello)
+        pipeline = self.connection.pipeline()
+        execution = Execution.create(job=job, ttl=100, pipeline=pipeline)
+        pipeline.execute()
+
+        with patch('rq.executions.now', return_value=execution.created_at + timedelta(seconds=5)):
+            self.assertEqual(execution.working_time, 5.0)
 
     def test_execution_registry(self):
         """Test the ExecutionRegistry class"""
