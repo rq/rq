@@ -134,6 +134,9 @@ def setup_loghandlers(
         error_handler.addFilter(lambda record: record.levelno >= logging.ERROR)
         logger.addHandler(handler)
         logger.addHandler(error_handler)
+        # Stop propagation so records aren't duplicated by handlers the
+        # application attaches to an ancestor logger later on
+        logger.propagate = False
 
     if level is not None:
         # The level may be a numeric value (e.g. when using the logging module constants)

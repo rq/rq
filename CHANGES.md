@@ -1,5 +1,6 @@
 ### RQ 2.11.0 (unreleased)
 * Refactored how job dependencies are handled. Introduced `READY_TO_ENQUEUE` job status and ReadyJobRegistry. Thanks @selwin!
+* RQ now disables propagation on loggers it configures itself to prevent double logging when applications configure logging afterwards. Thanks @selwin!
 
 ### RQ 2.10.0 (2026-06-20)
 * Added [webhook notifications](https://python-rq.org/docs/#webhooks) to notify external end points when a job finishes or fails. Thanks @selwin!
