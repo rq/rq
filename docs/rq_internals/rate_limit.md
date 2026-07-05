@@ -16,13 +16,13 @@ the same Redis database.
 - **slot** — one unit of capacity; a key with `concurrency=N` has N slots.
 - **allowed** — jobs currently holding a slot (queued or executing).
 - **rate_limited** — jobs waiting for a slot; also the `JobStatus` they carry.
-- **promote** — move the oldest waiting job into allowed and push it onto its queue.
+- **promote** — move the oldest waiting job into `allowed` and push it onto its queue.
 - **rate limit registry** — the per-key bookkeeper (`RateLimitRegistry`) that maintains
-  the allowed and rate_limited sets and performs promotion.
+  the `allowed` and `rate_limited` sets and performs promotion.
 
 ## The Mental Model
 
-A step by step example — three jobs sharing a rate limit that allows two at a time:
+A step-by-step example — three jobs sharing a rate limit that allows two at a time:
 
 ```python
 rate_limit = RateLimit(key='reports', concurrency=2)
@@ -72,15 +72,12 @@ Jobs persist `rate_limit_key` and `rate_limit_concurrency` on their hash;
 
 - `acquire_and_enqueue` — if `ZCARD(allowed) < concurrency`, pop the oldest waiting
   job, add it to `allowed`, push it onto its origin queue and mark it `queued`.
-- `release_and_enqueue` — remove a finished job from `allowed`, then run the same
+- `release_and_enqueue` — remove a job from `allowed`, then run the same
   acquire logic. The release script is the acquire script with one `ZREM` prepended —
   a single shared body, so the two can't drift.
 
 Each operation runs as a single Lua script, so the capacity check and the promotion
 execute atomically in Redis and cannot interleave across concurrent workers.
-
-These scripts always run as their own Redis calls, after any surrounding transaction
-has committed — never buffered inside one.
 
 ## Interactions Worth Knowing
 
@@ -97,8 +94,8 @@ releasing it, and deferred promotions leave freed capacity while jobs are still
 waiting. `RateLimitRegistry.cleanup()` reconciles this. It runs as part of
 `clean_registries`, the periodic registry maintenance performed by workers, and:
 
-1. Releases any `allowed` entry whose job no longer exists or is not `queued`/`started`,
-2. Promotes waiting jobs if that opened capacity,
+1. Releases stale `allowed` entries and attempts to promote a waiter after each release.
+2. Attempts another promotion in case capacity was freed elsewhere.
 3. Deletes the registry once both sets are empty.
 
 ## Known Sharp Edges
@@ -107,8 +104,9 @@ waiting. `RateLimitRegistry.cleanup()` reconciles this. It runs as part of
   registrant wins, but enqueue-time acquire uses the per-job value while release reads
   the stored config. Two jobs registering different values for the same key can
   over-admit.
-- **`at_front` on retry** — only enqueue-time `at_front` is honored on promotion; a
-  retried job doesn't carry retry-specific front placement.
+- **Delayed retry placement** — `Retry(enqueue_at_front=True)` is not honored when a
+  delayed retry re-enters through the rate limiter; promotion uses the original enqueue
+  placement.
 - **Returned job status can briefly lag** — `enqueue()` returns an in-memory job whose
   status can be stale if a concurrent release promoted it in a narrow window;
   `refresh()` corrects it.
