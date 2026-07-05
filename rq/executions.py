@@ -17,14 +17,14 @@ from .registry import BaseRegistry, StartedJobRegistry
 from .utils import as_text, current_timestamp, now, parse_composite_key
 
 
-# TODO: add execution.worker
 class Execution:
     """Class to represent an execution of a job."""
 
-    def __init__(self, id: str, job_id: str, connection: Redis):
+    def __init__(self, id: str, job_id: str, connection: Redis, worker_name: str = ''):
         self.id = id
         self.job_id = job_id
         self.connection = connection
+        self.worker_name = worker_name
         right_now = now()
         self.created_at = right_now
         self.last_heartbeat = right_now
@@ -64,6 +64,7 @@ class Execution:
             raise ValueError(f'Execution {self.id} not found in Redis')
         self.created_at = datetime.fromtimestamp(float(data[b'created_at']), tz=timezone.utc)
         self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']), tz=timezone.utc)
+        self.worker_name = as_text(data.get(b'worker_name', b''))
 
     @classmethod
     def from_composite_key(cls, composite_key: str, connection: Redis) -> Execution:
@@ -72,10 +73,10 @@ class Execution:
         return cls(id=execution_id, job_id=job_id, connection=connection)
 
     @classmethod
-    def create(cls, job: Job, ttl: int, pipeline: Pipeline) -> Execution:
+    def create(cls, job: Job, ttl: int, pipeline: Pipeline, worker_name: str = '') -> Execution:
         """Save execution data to Redis."""
         id = uuid4().hex
-        execution = cls(id=id, job_id=job.id, connection=job.connection)
+        execution = cls(id=id, job_id=job.id, connection=job.connection, worker_name=worker_name)
         execution.save(ttl=ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
         job.started_job_registry.add_execution(execution, pipeline=pipeline, ttl=ttl, xx=False)
@@ -99,6 +100,7 @@ class Execution:
             'id': self.id,
             'created_at': self.created_at.timestamp(),
             'last_heartbeat': self.last_heartbeat.timestamp(),
+            'worker_name': self.worker_name,
         }
 
     def heartbeat(self, started_job_registry: StartedJobRegistry, ttl: int, pipeline: Pipeline):
@@ -196,7 +198,7 @@ def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
 
     with worker.connection.pipeline() as pipeline:
         heartbeat_ttl = worker.get_heartbeat_ttl(job)
-        worker.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline)
+        worker.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline, worker_name=worker.name)
         worker.set_state(WorkerStatus.BUSY, pipeline=pipeline)
         pipeline.execute()
     return worker.execution
