@@ -202,7 +202,7 @@ def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
     return worker.execution
 
 
-def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline) -> None:
+def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline, execution: Execution | None = None) -> None:
     """Cleans up the execution of a job.
     It will remove the job execution record from the StartedJobRegistry and delete the Execution object.
 
@@ -210,9 +210,11 @@ def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline) -> None:
         worker: The worker to clean up execution for
         job: The job whose execution is being cleaned up
         pipeline: Redis pipeline to use for the cleanup
+        execution: The execution to clean up
     """
     logger.debug('Cleaning up execution of job %s', job.id)
     worker.set_current_job_id(None, pipeline=pipeline)
-    if worker.execution is not None:
-        worker.execution.delete(job=job, pipeline=pipeline)
+    if execution:
+        execution.delete(job=job, pipeline=pipeline)
+    if worker.execution is execution:
         worker.execution = None
