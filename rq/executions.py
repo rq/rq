@@ -203,10 +203,11 @@ def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
 
     with worker.connection.pipeline() as pipeline:
         heartbeat_ttl = worker.get_heartbeat_ttl(job)
-        worker.execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline, worker_name=worker.name)
+        execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline, worker_name=worker.name)
+        worker.executions[execution.id] = execution
         worker.set_state(WorkerStatus.BUSY, pipeline=pipeline)
         pipeline.execute()
-    return worker.execution
+    return execution
 
 
 def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline, execution: Execution | None = None) -> None:
@@ -223,5 +224,4 @@ def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline, executio
     worker.set_current_job_id(None, pipeline=pipeline)
     if execution:
         execution.delete(job=job, pipeline=pipeline)
-    if worker.execution is execution:
-        worker.execution = None
+        worker.executions.pop(execution.id, None)

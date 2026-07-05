@@ -66,6 +66,23 @@ class TestRegistry(RQTestCase):
         with patch('rq.executions.now', return_value=execution.created_at + timedelta(seconds=5)):
             self.assertEqual(execution.working_time, 5.0)
 
+    def test_worker_executions_tracking(self):
+        """prepare_execution registers executions; cleanup_execution removes exactly its entry"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+
+        first_execution = worker.prepare_execution(job)
+        second_execution = worker.prepare_execution(job)
+        self.assertEqual(
+            worker.executions,
+            {first_execution.id: first_execution, second_execution.id: second_execution},
+        )
+
+        pipeline = self.connection.pipeline()
+        worker.cleanup_execution(job, pipeline=pipeline, execution=first_execution)
+        pipeline.execute()
+        self.assertEqual(worker.executions, {second_execution.id: second_execution})
+
     def test_execution_registry(self):
         """Test the ExecutionRegistry class"""
         job = self.queue.enqueue(say_hello)
