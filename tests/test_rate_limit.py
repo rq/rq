@@ -553,9 +553,9 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertEqual(job3.get_status(), JobStatus.QUEUED)
 
     def test_cancel_with_pipeline_is_disallowed(self):
-        """Canceling a rate-limited job with a caller-owned pipeline is forbidden: the slot
-        can't be freed and the next job promoted atomically from inside the caller's MULTI, so
-        the combination raises instead of silently leaking a slot until cleanup."""
+        """Canceling a rate-limited job with a caller-owned pipeline is forbidden: promotion
+        could only run after the caller's EXEC, leaving a freed slot with nobody promoted
+        until cleanup, so the combination raises instead."""
         rate_limit = RateLimit(key='test', concurrency=1)
 
         job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # allowed

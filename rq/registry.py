@@ -329,7 +329,8 @@ class StartedJobRegistry(BaseRegistry):
         for failed_job, exc_string in failed_jobs:
             failed_job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
 
-        # Release outside the pipeline — Lua scripts can't run inside a MULTI transaction.
+        # Release after the transaction commits so promotion observes the persisted
+        # failure state and its result is acted on directly.
         for job in jobs_to_release:
             job.rate_limit_registry.release_and_enqueue(job.id)
 
@@ -607,8 +608,8 @@ class ReadyJobRegistry(BaseRegistry):
                     self.remove(job, pipeline=pipe)
                     if job.has_rate_limit:
                         # Route rate-limited dependents through the rate limit registry, not
-                        # straight onto the queue. The Lua acquire script can't run inside
-                        # MULTI, so queue the ops here and acquire after the transaction.
+                        # straight onto the queue. Promotion deliberately runs after EXEC so
+                        # it observes committed state — buffer the ops, then acquire.
                         queue._enqueue_rate_limited_job(job, pipeline=pipe)
                         pipe.execute()
                         assert job.rate_limit_concurrency

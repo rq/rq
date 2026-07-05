@@ -1234,8 +1234,9 @@ class Job:
         if self.is_canceled:
             raise InvalidJobOperation(f'Cannot cancel already canceled job: {self.id}')
         if pipeline is not None and self.has_rate_limit:
-            # Promotion is a Lua script that can't run in the caller's MULTI, so the slot
-            # can't be freed atomically here — forbid it rather than leak a slot until cleanup.
+            # Promotion only runs after the caller's EXEC, which happens after cancel()
+            # returns — the slot would sit freed with nobody promoted until the next
+            # release or cleanup. Forbid the combination instead.
             raise InvalidJobOperation('Cannot cancel a rate-limited job with a caller-supplied pipeline')
         from .queue import Queue
         from .registry import CanceledJobRegistry

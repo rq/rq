@@ -43,6 +43,11 @@ navigation:
         url: /patterns/supervisor/
       - text: Systemd
         url: /patterns/systemd/
+  - text: Internals
+    url: /rq_internals/rate_limit/
+    subs:
+      - text: Rate Limiting
+        url: /rq_internals/rate_limit/
   - text: Contributing
     url: /contrib/
     subs:
