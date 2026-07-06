@@ -182,10 +182,12 @@ print('Total working time: '+ worker.total_working_time)  # In seconds
 * `pid` - worker's process ID
 * `queues` - queues on which this worker is listening for jobs
 * `state` - possible states are `suspended`, `started`, `busy` and `idle`
+* `get_current_executions()` - the executions the worker is currently running
 * `last_heartbeat` - the last time this worker was seen
 * `birth_date` - time of worker's instantiation
 * `successful_job_count` - number of jobs finished successfully
 * `failed_job_count` - number of failed jobs processed
+* `current_execution_count` - number of executions the worker currently handling
 * `total_working_time` - amount of time spent executing jobs, in seconds
 
 If you only want to know the number of workers for monitoring purposes,

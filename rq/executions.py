@@ -16,6 +16,8 @@ from .job import Job
 from .registry import BaseRegistry, StartedJobRegistry
 from .utils import as_text, current_timestamp, now, parse_composite_key
 
+WORKER_EXECUTIONS_KEY_TEMPLATE = 'rq:worker:{0}:executions'
+
 
 class Execution:
     """Class to represent an execution of a job."""
@@ -35,6 +37,9 @@ class Execution:
             return False
         return self.id == other.id
 
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     @property
     def key(self) -> str:
         return f'rq:execution:{self.composite_key}'
@@ -49,6 +54,11 @@ class Execution:
     @property
     def composite_key(self):
         return f'{self.job_id}:{self.id}'
+
+    @property
+    def worker_executions_key(self) -> str:
+        """Redis key of the execution index of the worker running this execution."""
+        return WORKER_EXECUTIONS_KEY_TEMPLATE.format(self.worker_name)
 
     @property
     def working_time(self) -> float:
@@ -67,6 +77,10 @@ class Execution:
         data = self.connection.hgetall(self.key)
         if not data:
             raise ValueError(f'Execution {self.id} not found in Redis')
+        self.restore(data)
+
+    def restore(self, data: dict):
+        """Restore execution attributes from raw Redis hash data."""
         self.created_at = datetime.fromtimestamp(float(data[b'created_at']), tz=timezone.utc)
         self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']), tz=timezone.utc)
         self.worker_name = as_text(data.get(b'worker_name', b''))
@@ -86,6 +100,10 @@ class Execution:
         execution.save(ttl=ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
         job.started_job_registry.add_execution(execution, pipeline=pipeline, ttl=ttl, xx=False)
+        if worker_name:
+            # Register in the worker's execution index; the worker's heartbeat keeps its TTL refreshed
+            pipeline.sadd(execution.worker_executions_key, execution.composite_key)
+            pipeline.expire(execution.worker_executions_key, ttl + 60)
         return execution
 
     def save(self, ttl: int, pipeline: Pipeline | None = None):
@@ -100,6 +118,8 @@ class Execution:
         pipeline.delete(self.key)
         job.started_job_registry.remove_execution(execution=self, pipeline=pipeline)
         ExecutionRegistry(job_id=self.job_id, connection=self.connection).remove(execution=self, pipeline=pipeline)
+        if self.worker_name:
+            pipeline.srem(self.worker_executions_key, self.composite_key)
 
     def serialize(self) -> dict:
         return {

@@ -41,7 +41,7 @@ from ..defaults import (
     DEFAULT_WORKER_TTL,
 )
 from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
-from ..executions import Execution, cleanup_execution, prepare_execution
+from ..executions import WORKER_EXECUTIONS_KEY_TEMPLATE, Execution, cleanup_execution, prepare_execution
 from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import call_exception_handlers, format_exc_info
@@ -453,6 +453,11 @@ class BaseWorker:
             self.executions[execution.id] = execution
 
     @property
+    def executions_key(self) -> str:
+        """Redis key of the set holding this worker's active execution composite keys."""
+        return WORKER_EXECUTIONS_KEY_TEMPLATE.format(self.name)
+
+    @property
     def dequeue_timeout(self) -> int:
         return max(1, self.worker_ttl - 15)
 
@@ -816,6 +821,39 @@ class BaseWorker:
             execution._job = self.job_class.fetch(execution.job_id, self.connection, self.serializer)
         return execution._job
 
+    @property
+    def current_execution_count(self) -> int:
+        """Number of executions this worker is currently handling"""
+        return self.connection.scard(self.executions_key)
+
+    def get_current_executions(self) -> list[Execution]:
+        """The worker's active executions, read from its execution index in Redis.
+        Works on hydrated workers (e.g. `Worker.all()`), so other processes can
+        monitor what a worker is running. Stale index members whose execution hash
+        has expired are filtered out and removed.
+
+        Returns:
+            executions (list[Execution]): The active executions.
+        """
+        composite_keys = [as_text(member) for member in self.connection.smembers(self.executions_key)]
+        if not composite_keys:
+            return []
+        executions = [Execution.from_composite_key(key, connection=self.connection) for key in composite_keys]
+        with self.connection.pipeline() as pipeline:
+            for execution in executions:
+                pipeline.hgetall(execution.key)
+            results = pipeline.execute()
+
+            active_executions = []
+            for execution, data in zip(executions, results):
+                if not data:
+                    pipeline.srem(self.executions_key, execution.composite_key)
+                    continue
+                execution.restore(data)
+                active_executions.append(execution)
+            pipeline.execute()
+        return active_executions
+
     def set_state(self, state: str, pipeline: Pipeline | None = None):
         """Sets the worker's state.
 
@@ -920,6 +958,7 @@ class BaseWorker:
             worker_registration.unregister(self, p)
             p.hset(self.key, 'death', utcformat(now()))
             p.expire(self.key, 60)
+            p.delete(self.executions_key)
             p.execute()
 
     @property
@@ -1173,6 +1212,7 @@ class BaseWorker:
         self.last_heartbeat = now()
         connection.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
         connection.expire(self.key, timeout)
+        connection.expire(self.executions_key, timeout)
         self.log.debug(
             'Worker %s: sent heartbeat to prevent worker timeout. Next one should arrive in %s seconds.',
             self.name,

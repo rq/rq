@@ -5,8 +5,8 @@ from unittest.mock import patch
 from rq.executions import Execution, ExecutionRegistry
 from rq.job import Job
 from rq.queue import Queue
-from rq.utils import current_timestamp, now
-from rq.worker import Worker
+from rq.utils import as_text, current_timestamp, now
+from rq.worker import SimpleWorker, Worker
 from tests import RQTestCase
 from tests.fixtures import long_running_job, say_hello, start_worker_process
 
@@ -82,6 +82,78 @@ class TestRegistry(RQTestCase):
         worker.cleanup_execution(job, pipeline=pipeline, execution=first_execution)
         pipeline.execute()
         self.assertEqual(worker.executions, {second_execution.id: second_execution})
+
+    def test_execution_index_add_remove(self):
+        """prepare_execution adds to the worker's execution index; cleanup_execution removes its
+        entry; current_execution_count follows the index size"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        worker.register_birth()
+        self.assertEqual(worker.current_execution_count, 0)
+
+        first_execution = worker.prepare_execution(job)
+        second_execution = worker.prepare_execution(job)
+        members = {as_text(member) for member in self.connection.smembers(worker.executions_key)}
+        self.assertEqual(members, {first_execution.composite_key, second_execution.composite_key})
+        self.assertTrue(0 < self.connection.ttl(worker.executions_key) <= worker.worker_ttl + 60)
+        self.assertEqual(worker.current_execution_count, 2)
+
+        pipeline = self.connection.pipeline()
+        worker.cleanup_execution(job, pipeline=pipeline, execution=first_execution)
+        pipeline.execute()
+        members = {as_text(member) for member in self.connection.smembers(worker.executions_key)}
+        self.assertEqual(members, {second_execution.composite_key})
+        self.assertEqual(worker.current_execution_count, 1)
+
+    def test_execution_index_ttl_follows_heartbeat(self):
+        """worker.heartbeat() refreshes the execution index TTL alongside the worker key"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        worker.prepare_execution(job)
+
+        worker.heartbeat(timeout=1000)
+        self.assertTrue(worker.worker_ttl + 60 < self.connection.ttl(worker.executions_key) <= 1000)
+
+    def test_execution_index_deleted_on_death(self):
+        """register_death() deletes the worker's execution index"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        worker.register_birth()
+        worker.prepare_execution(job)
+
+        worker.register_death()
+        self.assertFalse(self.connection.exists(worker.executions_key))
+
+    def test_get_current_executions_from_hydrated_worker(self):
+        """A hydrated worker reads active executions from the index"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        worker.register_birth()
+        first_execution = worker.prepare_execution(job)
+        second_execution = worker.prepare_execution(job)
+
+        hydrated_worker = Worker.find_by_key(worker.key, connection=self.connection)
+        assert hydrated_worker
+        executions = hydrated_worker.get_current_executions()
+        self.assertEqual(set(executions), {first_execution, second_execution})
+
+    def test_get_current_executions_self_heals_stale_members(self):
+        """Index members whose execution hash expired are filtered out and removed from the set"""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        first_execution = worker.prepare_execution(job)
+        second_execution = worker.prepare_execution(job)
+
+        self.connection.delete(first_execution.key)  # simulate an expired execution hash
+        self.assertEqual(worker.get_current_executions(), [second_execution])
+
+    def test_execution_index_empty_after_work(self):
+        """After a worker finishes its jobs, the execution index holds nothing"""
+        self.queue.enqueue(say_hello)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(burst=True)
+        self.assertEqual(self.connection.scard(worker.executions_key), 0)
+        self.assertEqual(worker.get_current_executions(), [])
 
     def test_execution_registry(self):
         """Test the ExecutionRegistry class"""
@@ -159,6 +231,8 @@ class TestRegistry(RQTestCase):
 
         self.assertNotIn(execution.job_id, job.started_job_registry.get_job_ids())
         self.assertFalse(self.connection.exists(registry.key))
+        # Deleting an execution also removes it from its worker's execution index
+        self.assertEqual(self.connection.scard(worker.executions_key), 0)
 
     def test_get_execution_ids(self):
         """ExecutionRegistry.get_execution_ids() should return a list of execution IDs"""
