@@ -842,11 +842,7 @@ class BaseWorker:
 
     @property
     def current_execution_count(self) -> int:
-        """Number of executions this worker is currently handling, from a single
-        `SCARD` on the execution index — cheaper than `len(worker.get_current_executions())`,
-        which hydrates every execution. May briefly count a stale index member that
-        `get_current_executions()` would filter out.
-        """
+        """Number of executions this worker is currently handling"""
         return self.connection.scard(self.executions_key)
 
     def get_current_executions(self) -> list[Execution]:
