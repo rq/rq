@@ -197,8 +197,11 @@ class TestIntermediateQueue(RQTestCase):
             self.assertEqual(intermediate_queue.get_job_ids(), [job.id])
 
             self.assertIn(job.id, job.started_job_registry.get_job_ids())
+            # The worker's in-process execution is dropped once the horse exits,
+            # but the execution itself is still in Redis
+            execution = job.get_executions()[0]
             self.assertIn(
-                (worker.execution.job_id, worker.execution.id),
+                (execution.job_id, execution.id),
                 job.started_job_registry.get_job_and_execution_ids(),
             )
 
