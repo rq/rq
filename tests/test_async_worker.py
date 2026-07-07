@@ -6,10 +6,11 @@ from unittest.mock import patch
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.worker import AsyncWorker
-from tests import RQTestCase
+from tests import RQTestCase, min_redis_version
 from tests.fixtures import kill_worker, rpush, say_hello
 
 
+@min_redis_version((6, 2, 0))
 class TestAsyncWorker(RQTestCase):
     def setUp(self):
         super().setUp()
@@ -94,10 +95,7 @@ class TestAsyncWorker(RQTestCase):
 
         kill_process = Process(target=kill_worker, args=(os.getpid(), False, 0.5))
         kill_process.start()
-        with (
-            patch.object(AsyncWorker, 'simulated_job_duration', 2),
-            patch.object(AsyncWorker, 'blocking_dequeue_timeout', 1),
-        ):
+        with patch.object(AsyncWorker, 'simulated_job_duration', 2):
             worker.work()
         kill_process.join()
 
@@ -107,36 +105,74 @@ class TestAsyncWorker(RQTestCase):
     def test_cold_shutdown_cancels_in_flight_execution(self):
         """Second signal cancels the in-flight execution; work() returns
         cleanly (no SystemExit, unlike the sync worker) and the job stays
-        STARTED for the reaper to recover."""
+        STARTED until StartedJobRegistry cleanup eventually fails it as
+        abandoned."""
         job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         kill_process = Process(target=kill_worker, args=(os.getpid(), True, 0.5))
         kill_process.start()
         started_at = time.monotonic()
-        with (
-            patch.object(AsyncWorker, 'simulated_job_duration', 20),
-            patch.object(AsyncWorker, 'blocking_dequeue_timeout', 1),
-        ):
+        with patch.object(AsyncWorker, 'simulated_job_duration', 20):
             worker.work()
         kill_process.join()
 
         self.assertLess(time.monotonic() - started_at, 10)
         self.assertEqual(job.get_status(), JobStatus.STARTED)
 
-    def test_idle_shutdown_wakes_after_dequeue_block(self):
-        """A signal during an idle blocking dequeue is noticed once the block
-        times out."""
+    def test_idle_shutdown_cancels_blocking_dequeue(self):
+        """A signal during an idle blocking dequeue interrupts it immediately —
+        the default block is ~worker_ttl seconds, so a fast return proves the
+        BLMOVE await was cancelled rather than timing out."""
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         kill_process = Process(target=kill_worker, args=(os.getpid(), False, 0.5))
         kill_process.start()
         started_at = time.monotonic()
-        with patch.object(AsyncWorker, 'blocking_dequeue_timeout', 1):
-            self.assertFalse(worker.work())
+        self.assertFalse(worker.work())
         kill_process.join()
 
-        self.assertLess(time.monotonic() - started_at, 4)
+        self.assertLess(time.monotonic() - started_at, 3)
+
+    def test_admission_exception_drains_in_flight_execution(self):
+        """A crash on the admission path (here: preparing the second job's
+        execution) still drains in-flight executions before work() raises."""
+        first_job = self.queue.enqueue(say_hello)
+        self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        original_prepare_execution = AsyncWorker.prepare_execution
+
+        def prepare_or_raise(worker_self, job):
+            if job.id == first_job.id:
+                return original_prepare_execution(worker_self, job)
+            raise ValueError('boom')
+
+        with (
+            patch.object(AsyncWorker, 'simulated_job_duration', 1),
+            patch.object(AsyncWorker, 'prepare_execution', prepare_or_raise),
+        ):
+            with self.assertRaises(ValueError):
+                worker.work(burst=True)
+
+        self.assertEqual(first_job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(worker.executions, {})
+
+    def test_missing_job_is_skipped(self):
+        """A dequeued id whose job hash no longer exists is skipped; the next
+        job still runs."""
+        missing_job = self.queue.enqueue(say_hello)
+        surviving_job = self.queue.enqueue(say_hello)
+        self.connection.delete(missing_job.key)
+
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        self.assertTrue(worker.work(burst=True))
+        self.assertEqual(surviving_job.get_status(), JobStatus.FINISHED)
+
+    def test_old_redis_server_raises(self):
+        with patch('rq.worker.async_worker.get_version', return_value=(6, 0, 0)):
+            with self.assertRaises(RuntimeError):
+                AsyncWorker([self.queue], connection=self.connection)
 
     def test_multiple_queues_raise(self):
         other_queue = Queue('other', connection=self.connection)
