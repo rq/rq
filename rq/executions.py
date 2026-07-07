@@ -224,6 +224,7 @@ def prepare_execution(worker: BaseWorker, job: Job) -> Execution:
     with worker.connection.pipeline() as pipeline:
         heartbeat_ttl = worker.get_heartbeat_ttl(job)
         execution = Execution.create(job, heartbeat_ttl, pipeline=pipeline, worker_name=worker.name)
+        execution._job = job  # seed the lazy cache so execution.job never refetches
         worker.executions[execution.id] = execution
         worker.set_state(WorkerStatus.BUSY, pipeline=pipeline)
         pipeline.execute()

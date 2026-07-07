@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from rq.job import JobStatus
 from rq.queue import Queue
+from rq.utils import current_timestamp
 from rq.worker import AsyncWorker
 from tests import RQTestCase, min_redis_version
 from tests.fixtures import kill_worker, rpush, say_hello
@@ -71,12 +72,47 @@ class TestAsyncWorker(RQTestCase):
         job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
-        with patch.object(AsyncWorker, 'handle_job_success', side_effect=ValueError('boom')):
+        with patch.object(AsyncWorker, 'handle_job_success', side_effect=ValueError):
             worker.work(burst=True)
 
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertIn(job, self.queue.failed_job_registry)
         self.assertEqual(worker.executions, {})
+
+    def test_failed_job_records_ended_at_and_working_time(self):
+        """The failure path sets job.ended_at before finalizing, so the
+        failure result gets an end timestamp and working time is counted."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        with patch.object(AsyncWorker, '_finish_job_without_performing', side_effect=ValueError):
+            worker.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertIsNotNone(job.ended_at)
+        worker.refresh()
+        self.assertGreater(worker.total_working_time, 0)
+
+    def test_heartbeat_tick_maintains_executions(self):
+        """_heartbeat_tick refreshes the execution TTL and StartedJobRegistry
+        score, so an execution outliving its initial TTL isn't reaped as
+        abandoned while still running."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        worker.register_birth()
+        self.addCleanup(worker.register_death)
+        execution = worker.prepare_execution(job)
+        registry = self.queue.started_job_registry
+
+        # Simulate staleness: execution key about to expire, registry score in the past.
+        self.connection.expire(execution.key, 1)
+        self.connection.zadd(registry.key, {execution.composite_key: 1})
+
+        worker._heartbeat_tick()
+
+        self.assertGreater(self.connection.ttl(execution.key), 30)
+        self.assertGreater(self.connection.zscore(registry.key, execution.composite_key), current_timestamp())
 
     def test_hydration_via_all_and_find_by_key(self):
         """Worker discovery constructs AsyncWorker with no queues."""
@@ -146,7 +182,7 @@ class TestAsyncWorker(RQTestCase):
         def prepare_or_raise(worker_self, job):
             if job.id == first_job.id:
                 return original_prepare_execution(worker_self, job)
-            raise ValueError('boom')
+            raise ValueError
 
         with (
             patch.object(AsyncWorker, 'simulated_job_duration', 1),
