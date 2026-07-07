@@ -1,11 +1,13 @@
+import os
 import time
+from multiprocessing import Process
 from unittest.mock import patch
 
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.worker import AsyncWorker
 from tests import RQTestCase
-from tests.fixtures import rpush, say_hello
+from tests.fixtures import kill_worker, rpush, say_hello
 
 
 class TestAsyncWorker(RQTestCase):
@@ -84,6 +86,57 @@ class TestAsyncWorker(RQTestCase):
             self.assertEqual([hydrated_worker.name for hydrated_worker in hydrated_workers], [worker.name])
         finally:
             worker.register_death()
+
+    def test_warm_shutdown_drains_in_flight_execution(self):
+        """First signal stops admission, lets the in-flight execution finish."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        kill_process = Process(target=kill_worker, args=(os.getpid(), False, 0.5))
+        kill_process.start()
+        with (
+            patch.object(AsyncWorker, 'simulated_job_duration', 2),
+            patch.object(AsyncWorker, 'blocking_dequeue_timeout', 1),
+        ):
+            worker.work()
+        kill_process.join()
+
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(worker.executions, {})
+
+    def test_cold_shutdown_cancels_in_flight_execution(self):
+        """Second signal cancels the in-flight execution; work() returns
+        cleanly (no SystemExit, unlike the sync worker) and the job stays
+        STARTED for the reaper to recover."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        kill_process = Process(target=kill_worker, args=(os.getpid(), True, 0.5))
+        kill_process.start()
+        started_at = time.monotonic()
+        with (
+            patch.object(AsyncWorker, 'simulated_job_duration', 20),
+            patch.object(AsyncWorker, 'blocking_dequeue_timeout', 1),
+        ):
+            worker.work()
+        kill_process.join()
+
+        self.assertLess(time.monotonic() - started_at, 10)
+        self.assertEqual(job.get_status(), JobStatus.STARTED)
+
+    def test_idle_shutdown_wakes_after_dequeue_block(self):
+        """A signal during an idle blocking dequeue is noticed once the block
+        times out."""
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        kill_process = Process(target=kill_worker, args=(os.getpid(), False, 0.5))
+        kill_process.start()
+        started_at = time.monotonic()
+        with patch.object(AsyncWorker, 'blocking_dequeue_timeout', 1):
+            self.assertFalse(worker.work())
+        kill_process.join()
+
+        self.assertLess(time.monotonic() - started_at, 4)
 
     def test_multiple_queues_raise(self):
         other_queue = Queue('other', connection=self.connection)
