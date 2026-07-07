@@ -108,11 +108,9 @@ class AsyncWorker(BaseWorker):
                 shutdown_event.set()
 
         loop = asyncio.get_running_loop()
-        installed_signals = []
         for shutdown_signal in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(shutdown_signal, request_shutdown)
-                installed_signals.append(shutdown_signal)
             except (ValueError, RuntimeError, NotImplementedError):
                 break  # work() off the main thread or unsupported platform: signals keep default behavior
 
@@ -195,8 +193,6 @@ class AsyncWorker(BaseWorker):
             heartbeat_task.cancel()
             stop_wait.cancel()
             await asyncio.gather(heartbeat_task, stop_wait, return_exceptions=True)
-            for installed_signal in installed_signals:
-                loop.remove_signal_handler(installed_signal)
             await async_connection.aclose()  # type: ignore[attr-defined]  # types-redis stubs predate aclose
         return admitted_jobs > 0
 
