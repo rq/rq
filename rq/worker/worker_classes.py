@@ -116,6 +116,10 @@ class Worker(BaseWorker):
 
         self._horse_pid = 0  # Set horse PID to 0, horse has finished working
 
+        # The horse's cleanup_execution() only popped its own copy of `executions`,
+        # so the parent process drops its entry here
+        self.executions.pop(execution.id, None)
+
         self.log.debug(
             'Worker %s: work horse finished for job %s: retpid=%s, ret_val=%s', self.name, job.id, retpid, ret_val
         )
@@ -212,6 +216,7 @@ job = Job.fetch({job.id!r}, connection=worker.connection, serializer=worker.seri
 queue = Queue({queue.name!r}, connection=worker.connection, serializer=worker.serializer)
 execution_id = os.environ["RQ_EXECUTION_ID"]
 worker.execution = Execution.fetch(execution_id, job.id, connection=worker.connection)
+worker.execution._job = job
 
 # Set up work horse
 os.setpgrp()
