@@ -1098,8 +1098,7 @@ class BaseWorker:
 
         Args:
             job (Job): The Job
-            working_time (float): Seconds the execution has been running,
-                derived from `Execution.created_at`. Defaults to 0.0.
+            working_time (float): Seconds the job has been running. Defaults to 0.0.
 
         Returns:
             int: The heartbeat TTL.
@@ -1225,7 +1224,8 @@ class BaseWorker:
         """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = int(self.get_heartbeat_ttl(job, working_time=execution.working_time))
+            working_time = (now() - job.started_at).total_seconds() if job.started_at else 0.0
+            ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
 
             # Also need to update execution's heartbeat
             execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)

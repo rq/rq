@@ -379,6 +379,22 @@ class TestWorker(RQTestCase):
         worker.maintain_heartbeats(job, execution)
         self.assertFalse(self.connection.exists(job.key))
 
+    def test_maintain_heartbeats_working_time_from_started_at(self):
+        """maintain_heartbeats() measures working time from job.started_at, not execution.created_at"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        job = queue.enqueue(say_hello, job_timeout=100)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+
+        # Execution created 50s ago (prepare/fork overhead); monitor clock started 5s ago
+        execution.created_at = now() - timedelta(seconds=50)
+        job.started_at = now() - timedelta(seconds=5)
+
+        with mock.patch.object(worker, 'get_heartbeat_ttl', wraps=worker.get_heartbeat_ttl) as mocked_ttl:
+            worker.maintain_heartbeats(job, execution)
+        self.assertAlmostEqual(mocked_ttl.call_args.kwargs['working_time'], 5.0, delta=1)
+
     @slow
     def test_heartbeat_survives_lost_connection(self):
         with mock.patch.object(Worker, 'heartbeat') as mocked:

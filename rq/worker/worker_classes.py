@@ -91,7 +91,7 @@ class Worker(BaseWorker):
                 break
             except HorseMonitorTimeoutException:
                 # Horse has not exited yet and is still running.
-                working_time = execution.working_time
+                working_time = (now() - job.started_at).total_seconds()
 
                 # Kill the job from this side if something is really wrong (interpreter lock/etc).
                 if job.timeout != -1 and working_time > (job.timeout + 60):  # type: ignore
