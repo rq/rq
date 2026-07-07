@@ -901,11 +901,21 @@ class TestWorker(RQTestCase):
         self.assertIs(execution._job, fetched_job)
         self.assertIs(worker.get_current_job(), fetched_job)
 
+        # A hydrated worker sees the running job through the persisted execution index
+        hydrated_worker = Worker.find_by_key(worker.key, connection=self.connection, job_class=CustomJob)
+        self.assertEqual(hydrated_worker.get_current_job_id(), job.id)
+        hydrated_job = hydrated_worker.get_current_job()
+        self.assertEqual(hydrated_job, job)
+        self.assertIsInstance(hydrated_job, CustomJob)
+
         with self.connection.pipeline() as pipeline:
             worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
             pipeline.execute()
         self.assertIsNone(worker.get_current_job_id())
         self.assertIsNone(worker.get_current_job())
+
+        # The hydrated view also clears once the execution is cleaned up
+        self.assertIsNone(hydrated_worker.get_current_job())
 
     def test_custom_job_class(self):
         """Ensure Worker accepts custom job class."""

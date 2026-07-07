@@ -435,10 +435,12 @@ class BaseWorker:
 
     @property
     def execution(self) -> Execution | None:
-        """One of the worker's active executions, `None` when idle."""
-        if not self.executions:
-            return None
-        return next(iter(self.executions.values()))
+        """One of the worker's active executions, `None` when idle. Falls back to the
+        persisted execution index so hydrated workers (`Worker.all()`) also see it."""
+        if self.executions:
+            return next(iter(self.executions.values()))
+        executions = self.get_current_executions()
+        return executions[0] if executions else None
 
     @execution.setter
     def execution(self, execution: Execution | None):
