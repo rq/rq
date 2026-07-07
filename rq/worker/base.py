@@ -186,6 +186,7 @@ class BaseWorker:
             self._serializer_arg = f'{serializer.__module__}.{serializer.__qualname__}'  # type: ignore[attr-defined]
         self.serializer = resolve_serializer(serializer)
         self.executions: dict[str, Execution] = {}
+        self._executions: list[Execution] = []  # cached result of get_current_executions()
 
         queues = [
             (
@@ -828,32 +829,38 @@ class BaseWorker:
         """Number of executions this worker is currently handling"""
         return self.connection.scard(self.executions_key)
 
-    def get_current_executions(self) -> list[Execution]:
+    def get_current_executions(self, refresh: bool = False) -> list[Execution]:
         """The worker's active executions, read from its execution index in Redis.
         Works on hydrated workers (e.g. `Worker.all()`), so other processes can
         monitor what a worker is running. Stale index members whose execution hash
-        has expired are filtered out and removed.
+        has expired are filtered out and removed. The result is cached on the
+        instance; pass `refresh=True` to refetch from Redis.
+
+        Args:
+            refresh (bool): Whether to refetch from Redis instead of using the cache.
 
         Returns:
             executions (list[Execution]): The active executions.
         """
+        if not refresh and self._executions:
+            return self._executions
+        active_executions: list[Execution] = []
         composite_keys = [as_text(member) for member in self.connection.smembers(self.executions_key)]
-        if not composite_keys:
-            return []
-        executions = [Execution.from_composite_key(key, connection=self.connection) for key in composite_keys]
-        with self.connection.pipeline() as pipeline:
-            for execution in executions:
-                pipeline.hgetall(execution.key)
-            results = pipeline.execute()
+        if composite_keys:
+            executions = [Execution.from_composite_key(key, connection=self.connection) for key in composite_keys]
+            with self.connection.pipeline() as pipeline:
+                for execution in executions:
+                    pipeline.hgetall(execution.key)
+                results = pipeline.execute()
 
-            active_executions = []
-            for execution, data in zip(executions, results):
-                if not data:
-                    pipeline.srem(self.executions_key, execution.composite_key)
-                    continue
-                execution.restore(data)
-                active_executions.append(execution)
-            pipeline.execute()
+                for execution, data in zip(executions, results):
+                    if not data:
+                        pipeline.srem(self.executions_key, execution.composite_key)
+                        continue
+                    execution.restore(data)
+                    active_executions.append(execution)
+                pipeline.execute()
+        self._executions = active_executions
         return active_executions
 
     def set_state(self, state: str, pipeline: Pipeline | None = None):

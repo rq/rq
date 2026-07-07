@@ -930,7 +930,9 @@ class TestWorker(RQTestCase):
         self.assertIsNone(worker.get_current_job_id())
         self.assertIsNone(worker.get_current_job())
 
-        # The hydrated view also clears once the execution is cleaned up
+        # The hydrated view serves its cached executions until refreshed
+        self.assertEqual(hydrated_worker.get_current_job_id(), job.id)
+        hydrated_worker.get_current_executions(refresh=True)
         self.assertIsNone(hydrated_worker.get_current_job())
 
     def test_custom_job_class(self):
