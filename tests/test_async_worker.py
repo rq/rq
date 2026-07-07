@@ -3,10 +3,11 @@ import time
 from multiprocessing import Process
 from unittest.mock import patch
 
+from rq.command import handle_stop_job_command
 from rq.job import JobStatus
 from rq.queue import Queue
 from rq.utils import current_timestamp
-from rq.worker import AsyncWorker
+from rq.worker import AsyncWorker, WorkerStatus
 from tests import RQTestCase, min_redis_version
 from tests.fixtures import kill_worker, rpush, say_hello
 
@@ -101,7 +102,6 @@ class TestAsyncWorker(RQTestCase):
         job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
         worker.register_birth()
-        self.addCleanup(worker.register_death)
         execution = worker.prepare_execution(job)
         registry = self.queue.started_job_registry
 
@@ -113,6 +113,52 @@ class TestAsyncWorker(RQTestCase):
 
         self.assertGreater(self.connection.ttl(execution.key), 30)
         self.assertGreater(self.connection.zscore(registry.key, execution.composite_key), current_timestamp())
+        worker.register_death()
+
+    def test_heartbeat_tick_converges_worker_state(self):
+        """Every tick writes the truthful state, healing a stale write from a
+        tick/admission interleave."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        worker.register_birth()
+
+        execution = worker.prepare_execution(job)
+        worker.set_state(WorkerStatus.IDLE)
+        worker._heartbeat_tick()
+        self.assertEqual(worker.get_state(), WorkerStatus.BUSY)
+
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
+            pipeline.execute()
+        worker.set_state(WorkerStatus.BUSY)
+        worker._heartbeat_tick()
+        self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
+        worker.register_death()
+
+    def test_current_job_accessors_raise(self):
+        """The scalar current-job view is meaningless with many concurrent
+        executions."""
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        with self.assertRaises(NotImplementedError):
+            worker.get_current_job_id()
+        with self.assertRaises(NotImplementedError):
+            worker.get_current_job()
+        with self.assertRaises(NotImplementedError):
+            worker.execution
+
+    def test_stop_job_command_does_not_raise(self):
+        """A raw stop-job payload resolves against worker.executions, so it
+        can't kill the pub/sub thread on a multi-execution worker."""
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        execution = worker.prepare_execution(job)
+        try:
+            handle_stop_job_command(worker, {'command': 'stop-job', 'job_id': job.id})
+            self.assertEqual(worker._stopped_job_id, job.id)
+        finally:
+            with self.connection.pipeline() as pipeline:
+                worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
+                pipeline.execute()
 
     def test_hydration_via_all_and_find_by_key(self):
         """Worker discovery constructs AsyncWorker with no queues."""

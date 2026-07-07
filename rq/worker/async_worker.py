@@ -246,9 +246,14 @@ class AsyncWorker(BaseWorker):
         and be failed as abandoned while still running.
         """
         if not self.executions:
-            self.set_state(WorkerStatus.IDLE)
-            self.heartbeat()
+            with self.connection.pipeline() as pipeline:
+                self.set_state(WorkerStatus.IDLE, pipeline=pipeline)
+                self.heartbeat(pipeline=pipeline)
+                pipeline.execute()
             return
+        # Re-assert BUSY: a tick racing an admission can land a stale IDLE
+        # write, so every tick converges the state to the truth.
+        self.set_state(WorkerStatus.BUSY)
         # TODO: batch this into a bulk heartbeat (one pipeline for all executions)
         # instead of one maintain_heartbeats() round trip per execution.
         for execution in list(self.executions.values()):  # handler threads pop entries mid-pass
@@ -262,6 +267,20 @@ class AsyncWorker(BaseWorker):
         except Exception:
             exc_string = format_exc_info(sys.exc_info())
             await asyncio.to_thread(self._fail_job, job, queue, execution, exc_string)
+
+    @property
+    def execution(self) -> Execution | None:
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
+    @execution.setter
+    def execution(self, execution: Execution | None):
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
+    def get_current_job_id(self, pipeline=None) -> str | None:
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
+    def get_current_job(self) -> Job | None:
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
 
     def _start_job(self, job: Job):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
