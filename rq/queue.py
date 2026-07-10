@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
-from .defaults import DEFAULT_RESULT_TTL
+from .defaults import DEFAULT_RESULT_TTL, RQ_KEY_PREFIX
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
@@ -104,8 +104,8 @@ class Queue:
     job_class: type[Job] = Job
     death_penalty_class: type[BaseDeathPenalty] = UnixSignalDeathPenalty
     DEFAULT_TIMEOUT: int = 180  # Default timeout seconds.
-    redis_queue_namespace_prefix: str = 'rq:queue:'
-    redis_queues_keys: str = 'rq:queues'
+    redis_queue_namespace_prefix: str = RQ_KEY_PREFIX + ':queue:'
+    redis_queues_keys: str = RQ_KEY_PREFIX + ':queues'
 
     @classmethod
     def all(
@@ -265,7 +265,7 @@ class Queue:
     @property
     def registry_cleaning_key(self):
         """Redis key used to indicate this queue has been cleaned."""
-        return f'rq:clean_registries:{self.name}'
+        return f'{RQ_KEY_PREFIX}:clean_registries:{self.name}'
 
     @property
     def scheduler_pid(self) -> int | None:

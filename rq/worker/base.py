@@ -40,6 +40,7 @@ from ..defaults import (
     DEFAULT_MAINTENANCE_TASK_INTERVAL,
     DEFAULT_RESULT_TTL,
     DEFAULT_WORKER_TTL,
+    RQ_KEY_PREFIX,
 )
 from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
 from ..executions import Execution, cleanup_execution, prepare_execution
@@ -114,7 +115,7 @@ class WorkerStatus(str, Enum):
 
 
 class BaseWorker:
-    redis_worker_namespace_prefix = 'rq:worker:'
+    redis_worker_namespace_prefix = RQ_KEY_PREFIX + ':worker:'
     redis_workers_keys = worker_registration.REDIS_WORKER_KEYS
     death_penalty_class = get_default_death_penalty_class()
     queue_class = Queue
@@ -988,7 +989,7 @@ class BaseWorker:
 
         This can be used to make `ps -ef` output more readable.
         """
-        setprocname(f'rq:worker:{self.name}: {message}')
+        setprocname(f'{RQ_KEY_PREFIX}:worker:{self.name}: {message}')
 
     def set_shutdown_requested_date(self):
         """Sets the date on which the worker received a (warm) shutdown request"""

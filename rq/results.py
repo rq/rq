@@ -8,14 +8,14 @@ from typing import Any
 
 from redis import Redis
 
-from .defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from .defaults import RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .job import Job
 from .serializers import resolve_serializer
 from .utils import decode_redis_hash, now
 
 
 def get_key(job_id):
-    return f'rq:results:{job_id}'
+    return f'{RQ_KEY_PREFIX}:results:{job_id}'
 
 
 class Result:
@@ -279,7 +279,7 @@ class Result:
 
     @classmethod
     def get_key(cls, job_id):
-        return f'rq:results:{job_id}'
+        return f'{RQ_KEY_PREFIX}:results:{job_id}'
 
     def save(self, ttl, pipeline=None):
         """Save result data to Redis"""

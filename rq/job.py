@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from redis import WatchError
 
-from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from .defaults import CALLBACK_TIMEOUT, RQ_KEY_PREFIX, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from .timeouts import BaseDeathPenalty, JobTimeoutException
 from .types import FailureCallbackType, SuccessCallbackType
 
@@ -173,7 +173,7 @@ class Job:
     """A Job is just a convenient datastructure to pass around job (meta) data."""
 
     _dependency: Job | None
-    redis_job_namespace_prefix = 'rq:job:'
+    redis_job_namespace_prefix = RQ_KEY_PREFIX + ':job:'
 
     def __init__(self, id: str | None = None, connection: Redis | None = None, serializer=None):
         # Manually check for the presence of the connection argument to preserve

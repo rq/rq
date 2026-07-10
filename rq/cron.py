@@ -18,7 +18,7 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
+from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL, RQ_KEY_PREFIX
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
@@ -471,7 +471,7 @@ class CronScheduler:
     @property
     def key(self) -> str:
         """Redis key for this CronScheduler instance"""
-        return f'rq:cron_scheduler:{self.name}'
+        return f'{RQ_KEY_PREFIX}:cron_scheduler:{self.name}'
 
     def to_dict(self) -> dict:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
@@ -521,7 +521,7 @@ class CronScheduler:
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
-        key = f'rq:cron_scheduler:{name}'
+        key = f'{RQ_KEY_PREFIX}:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
         if not raw_data:

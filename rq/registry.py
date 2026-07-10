@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 from rq.serializers import resolve_serializer
 
 from .connections import get_connection_kwargs
-from .defaults import DEFAULT_FAILURE_TTL
+from .defaults import DEFAULT_FAILURE_TTL, RQ_KEY_PREFIX
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
 from .job import Job, JobStatus
 from .queue import Queue
@@ -38,7 +38,7 @@ class BaseRegistry:
 
     job_class = Job
     death_penalty_class = UnixSignalDeathPenalty
-    key_template = 'rq:registry:{0}'
+    key_template = RQ_KEY_PREFIX + ':registry:{0}'
 
     def __init__(
         self,
@@ -255,7 +255,7 @@ class StartedJobRegistry(BaseRegistry):
     Each entry is a {job_id}:{execution_id}
     """
 
-    key_template = 'rq:wip:{0}'
+    key_template = RQ_KEY_PREFIX + ':wip:{0}'
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove abandoned jobs from registry and add them to FailedJobRegistry.
@@ -422,7 +422,7 @@ class FinishedJobRegistry(BaseRegistry):
     registry after they have successfully completed for monitoring purposes.
     """
 
-    key_template = 'rq:finished:{0}'
+    key_template = RQ_KEY_PREFIX + ':finished:{0}'
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
@@ -440,7 +440,7 @@ class FailedJobRegistry(BaseRegistry):
     Registry of containing failed jobs.
     """
 
-    key_template = 'rq:failed:{0}'
+    key_template = RQ_KEY_PREFIX + ':failed:{0}'
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Remove expired jobs from registry.
@@ -486,7 +486,7 @@ class DeferredJobRegistry(BaseRegistry):
     Registry of deferred jobs (waiting for another job to finish).
     """
 
-    key_template = 'rq:deferred:{0}'
+    key_template = RQ_KEY_PREFIX + ':deferred:{0}'
 
     def cleanup(self, timestamp: float | None = None, exception_handlers: list | None = None):
         """Deferred jobs don't expire based on time, so cleanup is a no-op."""
@@ -504,7 +504,7 @@ class ScheduledJobRegistry(BaseRegistry):
     Registry of scheduled jobs.
     """
 
-    key_template = 'rq:scheduled:{0}'
+    key_template = RQ_KEY_PREFIX + ':scheduled:{0}'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -579,7 +579,7 @@ class ScheduledJobRegistry(BaseRegistry):
 
 
 class CanceledJobRegistry(BaseRegistry):
-    key_template = 'rq:canceled:{0}'
+    key_template = RQ_KEY_PREFIX + ':canceled:{0}'
 
     def get_expired_job_ids(self, timestamp: float | None = None):
         raise NotImplementedError

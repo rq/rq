@@ -1,3 +1,9 @@
+import os
+
+RQ_KEY_PREFIX = os.environ.get('RQ_KEY_PREFIX', 'rq')
+"""The prefix used for all Redis keys managed by RQ.
+Override via the RQ_KEY_PREFIX environment variable before importing rq."""
+
 DEFAULT_JOB_CLASS = 'rq.job.Job'
 """ The path for the default Job class to use.
 Defaults to the main `Job` class within the `rq.job` module
