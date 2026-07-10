@@ -11,10 +11,11 @@ if TYPE_CHECKING:
 
 from rq.utils import split_list
 
+from .defaults import RQ_KEY_PREFIX
 from .utils import as_text
 
-WORKERS_BY_QUEUE_KEY = 'rq:workers:%s'
-REDIS_WORKER_KEYS = 'rq:workers'
+WORKERS_BY_QUEUE_KEY = RQ_KEY_PREFIX + ':workers:%s'
+REDIS_WORKER_KEYS = RQ_KEY_PREFIX + ':workers'
 MAX_KEYS = 1000
 
 

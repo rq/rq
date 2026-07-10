@@ -6,6 +6,7 @@ from functools import cached_property
 from redis import Redis
 from redis.client import Pipeline
 
+from .defaults import RQ_KEY_PREFIX
 from .utils import as_text, current_timestamp, now, utcformat
 
 
@@ -32,7 +33,7 @@ class RateLimit:
 # Returns the enqueued job_id or nil.
 # KEYS: allowed_key, rate_limited_key
 # ARGV: max_concurrency, timestamp, enqueued_at
-ACQUIRE_AND_ENQUEUE_SCRIPT = """
+ACQUIRE_AND_ENQUEUE_SCRIPT = f"""
 local allowed_count = redis.call('ZCARD', KEYS[1])
 local max_concurrency = tonumber(ARGV[1])
 local timestamp = tonumber(ARGV[2])
@@ -45,16 +46,16 @@ if allowed_count < max_concurrency then
             return nil
         end
         local job_id = result[1]
-        local origin = redis.call('HGET', 'rq:job:' .. job_id, 'origin')
-        local status = redis.call('HGET', 'rq:job:' .. job_id, 'status')
+        local origin = redis.call('HGET', '{RQ_KEY_PREFIX}:job:' .. job_id, 'origin')
+        local status = redis.call('HGET', '{RQ_KEY_PREFIX}:job:' .. job_id, 'status')
         if origin and status == 'rate_limited' then
             redis.call('ZADD', KEYS[1], timestamp, job_id)
-            if redis.call('HGET', 'rq:job:' .. job_id, 'enqueue_at_front') == '1' then
-                redis.call('LPUSH', 'rq:queue:' .. origin, job_id)
+            if redis.call('HGET', '{RQ_KEY_PREFIX}:job:' .. job_id, 'enqueue_at_front') == '1' then
+                redis.call('LPUSH', '{RQ_KEY_PREFIX}:queue:' .. origin, job_id)
             else
-                redis.call('RPUSH', 'rq:queue:' .. origin, job_id)
+                redis.call('RPUSH', '{RQ_KEY_PREFIX}:queue:' .. origin, job_id)
             end
-            redis.call('HSET', 'rq:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
+            redis.call('HSET', '{RQ_KEY_PREFIX}:job:' .. job_id, 'status', 'queued', 'enqueued_at', enqueued_at)
             return job_id
         end
         -- stale rate_limited job (missing hash, no origin, or non-rate_limited status):
@@ -92,7 +93,7 @@ class RateLimitRegistry:
     - rq:rl:{key}:rate_limited — sorted set of job IDs the limiter is holding back
     """
 
-    rl_keys_key = 'rq:rl-keys'
+    rl_keys_key = RQ_KEY_PREFIX + ':rl-keys'
 
     def __init__(self, key: str, connection: Redis):
         self.key = key
@@ -120,15 +121,15 @@ class RateLimitRegistry:
 
     @property
     def config_key(self) -> str:
-        return f'rq:rl:{self.key}'
+        return f'{RQ_KEY_PREFIX}:rl:{self.key}'
 
     @property
     def allowed_key(self) -> str:
-        return f'rq:rl:{self.key}:allowed'
+        return f'{RQ_KEY_PREFIX}:rl:{self.key}:allowed'
 
     @property
     def rate_limited_key(self) -> str:
-        return f'rq:rl:{self.key}:rate_limited'
+        return f'{RQ_KEY_PREFIX}:rl:{self.key}:rate_limited'
 
     def get_allowed_job_ids(self) -> list[str]:
         """Returns job IDs in the allowed set, ordered by timestamp."""
