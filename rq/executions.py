@@ -96,6 +96,7 @@ class Execution:
         """Save execution data to Redis."""
         id = uuid4().hex
         execution = cls(id=id, job_id=job.id, connection=job.connection, worker_name=worker_name)
+        execution._job = job
         execution.save(ttl=ttl, pipeline=pipeline)
         ExecutionRegistry(job_id=job.id, connection=pipeline).add(execution=execution, ttl=ttl, pipeline=pipeline)
         job.started_job_registry.add_execution(execution, pipeline=pipeline, ttl=ttl, xx=False)
@@ -242,7 +243,6 @@ def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline, executio
         execution: The execution to clean up
     """
     logger.debug('Cleaning up execution of job %s', job.id)
-    worker.set_current_job_id(None, pipeline=pipeline)
     if execution:
         execution.delete(job=job, pipeline=pipeline)
         worker.executions.pop(execution.id, None)

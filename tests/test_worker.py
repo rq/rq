@@ -145,7 +145,6 @@ class TestWorker(RQTestCase):
         worker = Worker.find_by_key(w.key, connection=self.connection)
         self.assertEqual(worker.queues, queues)
         self.assertEqual(worker.get_state(), WorkerStatus.STARTED)
-        self.assertEqual(worker._job_id, None)
         self.assertIn(worker.key, Worker.all_keys(worker.connection))
         self.assertEqual(worker.version, VERSION)
 
@@ -379,6 +378,22 @@ class TestWorker(RQTestCase):
 
         worker.maintain_heartbeats(job, execution)
         self.assertFalse(self.connection.exists(job.key))
+
+    def test_maintain_heartbeats_working_time_from_started_at(self):
+        """maintain_heartbeats() measures working time from job.started_at, not execution.created_at"""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        job = queue.enqueue(say_hello, job_timeout=100)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+
+        # Execution created 50s ago (prepare/fork overhead); monitor clock started 5s ago
+        execution.created_at = now() - timedelta(seconds=50)
+        job.started_at = now() - timedelta(seconds=5)
+
+        with mock.patch.object(worker, 'get_heartbeat_ttl', wraps=worker.get_heartbeat_ttl) as mocked_ttl:
+            worker.maintain_heartbeats(job, execution)
+        self.assertAlmostEqual(mocked_ttl.call_args.kwargs['working_time'], 5.0, delta=1)
 
     @slow
     def test_heartbeat_survives_lost_connection(self):
@@ -878,15 +893,47 @@ class TestWorker(RQTestCase):
         self.assertEqual(job.is_failed, True)
 
     def test_get_current_job(self):
-        """Ensure worker.get_current_job() works properly"""
-        q = Queue(connection=self.connection)
-        worker = Worker([q])
-        job = q.enqueue_call(say_hello)
+        """worker.get_current_job() and get_current_job_id() derive from worker.execution"""
+        queue = Queue(connection=self.connection, job_class=CustomJob)
+        worker = Worker([queue], job_class=CustomJob)
+        job = queue.enqueue_call(say_hello)
 
-        self.assertEqual(self.connection.hget(worker.key, 'current_job'), None)
-        worker.set_current_job_id(job.id)
-        self.assertEqual(worker.get_current_job_id(), as_text(self.connection.hget(worker.key, 'current_job')))
+        self.assertIsNone(worker.get_current_job_id())
+        self.assertIsNone(worker.get_current_job())
+
+        execution = worker.prepare_execution(job)
+        self.assertEqual(worker.get_current_job_id(), job.id)
+        # The seeded in-process job instance is returned, no Redis refetch
+        self.assertIs(worker.get_current_job(), execution._job)
         self.assertEqual(worker.get_current_job(), job)
+        # The legacy current_job hash field is never written
+        self.assertIsNone(self.connection.hget(worker.key, 'current_job'))
+
+        # On a cache miss (an execution reconstructed from Redis, e.g. in the SpawnWorker
+        # child), the job is fetched with the worker's job class and hydrates the cache
+        execution._job = None
+        fetched_job = worker.get_current_job()
+        self.assertIsInstance(fetched_job, CustomJob)
+        self.assertIs(execution._job, fetched_job)
+        self.assertIs(worker.get_current_job(), fetched_job)
+
+        # A hydrated worker sees the running job through the persisted execution index
+        hydrated_worker = Worker.find_by_key(worker.key, connection=self.connection, job_class=CustomJob)
+        self.assertEqual(hydrated_worker.get_current_job_id(), job.id)
+        hydrated_job = hydrated_worker.get_current_job()
+        self.assertEqual(hydrated_job, job)
+        self.assertIsInstance(hydrated_job, CustomJob)
+
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
+            pipeline.execute()
+        self.assertIsNone(worker.get_current_job_id())
+        self.assertIsNone(worker.get_current_job())
+
+        # The hydrated view serves its cached executions until refreshed
+        self.assertEqual(hydrated_worker.get_current_job_id(), job.id)
+        hydrated_worker.get_current_executions(refresh=True)
+        self.assertIsNone(hydrated_worker.get_current_job())
 
     def test_custom_job_class(self):
         """Ensure Worker accepts custom job class."""

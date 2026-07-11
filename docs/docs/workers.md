@@ -182,8 +182,7 @@ print('Total working time: '+ worker.total_working_time)  # In seconds
 * `pid` - worker's process ID
 * `queues` - queues on which this worker is listening for jobs
 * `state` - possible states are `suspended`, `started`, `busy` and `idle`
-* `current_job` - the job it's currently executing (if any)
-* `get_current_executions()` - the executions the worker is currently running
+* `get_current_executions()` - the executions the worker is currently running, cached after the first call; pass `refresh=True` to refetch from Redis
 * `last_heartbeat` - the last time this worker was seen
 * `birth_date` - time of worker's instantiation
 * `successful_job_count` - number of jobs finished successfully

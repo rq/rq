@@ -125,7 +125,7 @@ class TestRegistry(RQTestCase):
         self.assertFalse(self.connection.exists(worker.executions_key))
 
     def test_get_current_executions_from_hydrated_worker(self):
-        """A hydrated worker reads active executions from the index"""
+        """A hydrated worker reads active executions from the index and caches them"""
         job = self.queue.enqueue(say_hello)
         worker = Worker([self.queue], connection=self.connection)
         worker.register_birth()
@@ -136,6 +136,11 @@ class TestRegistry(RQTestCase):
         assert hydrated_worker
         executions = hydrated_worker.get_current_executions()
         self.assertEqual(set(executions), {first_execution, second_execution})
+
+        # The result is cached: a change in Redis is only visible with refresh=True
+        self.connection.delete(first_execution.key)
+        self.assertEqual(set(hydrated_worker.get_current_executions()), {first_execution, second_execution})
+        self.assertEqual(hydrated_worker.get_current_executions(refresh=True), [second_execution])
 
     def test_get_current_executions_self_heals_stale_members(self):
         """Index members whose execution hash expired are filtered out and removed from the set"""

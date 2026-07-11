@@ -186,6 +186,7 @@ class BaseWorker:
             self._serializer_arg = f'{serializer.__module__}.{serializer.__qualname__}'  # type: ignore[attr-defined]
         self.serializer = resolve_serializer(serializer)
         self.executions: dict[str, Execution] = {}
+        self._executions: list[Execution] = []  # cached result of get_current_executions()
 
         queues = [
             (
@@ -386,7 +387,6 @@ class BaseWorker:
         self.version = data.get('version') or VERSION
         self.python_version = data.get('python_version') or sys.version
         self._state = data.get('state', '?')
-        self._job_id = data.get('current_job')
 
         if data.get('last_heartbeat'):
             self.last_heartbeat = utcparse(data['last_heartbeat'])
@@ -436,10 +436,12 @@ class BaseWorker:
 
     @property
     def execution(self) -> Execution | None:
-        """One of the worker's active executions, `None` when idle."""
-        if not self.executions:
-            return None
-        return next(iter(self.executions.values()))
+        """One of the worker's active executions, `None` when idle. Falls back to the
+        persisted execution index so hydrated workers (`Worker.all()`) also see it."""
+        if self.executions:
+            return next(iter(self.executions.values()))
+        executions = self.get_current_executions()
+        return executions[0] if executions else None
 
     @execution.setter
     def execution(self, execution: Execution | None):
@@ -800,77 +802,65 @@ class BaseWorker:
                     e,
                 )
 
-    def set_current_job_id(self, job_id: str | None = None, pipeline: Pipeline | None = None):
-        """Sets the current job id.
-        If `None` is used it will delete the current job key.
-
-        Args:
-            job_id (Optional[str], optional): The job id. Defaults to None.
-            pipeline (Optional[Pipeline], optional): The pipeline to use. Defaults to None.
-        """
-        connection = pipeline if pipeline is not None else self.connection
-        if job_id is None:
-            connection.hdel(self.key, 'current_job')
-        else:
-            connection.hset(self.key, 'current_job', job_id)
-
-    def get_current_job_id(self, pipeline: Pipeline | None = None) -> str | None:
-        """Retrieves the current job id.
-
-        Args:
-            pipeline (Optional[&#39;Pipeline&#39;], optional): The pipeline to use. Defaults to None.
+    def get_current_job_id(self) -> str | None:
+        """Job id of one of this worker's active executions, `None` when idle.
 
         Returns:
-            job_id (Optional[str): The job id
+            job_id (Optional[str]): The job id
         """
-        connection = pipeline if pipeline is not None else self.connection
-        result = connection.hget(self.key, 'current_job')
-        if result is None:
-            return None
-        return as_text(result)
+        execution = self.execution
+        return execution.job_id if execution else None
 
     def get_current_job(self) -> Job | None:
-        """Returns the currently executing job instance.
+        """The job one of this worker's active executions is running, `None` when idle.
 
         Returns:
-            job (Job): The job instance.
+            job (Optional[Job]): The job instance.
         """
-        job_id = self.get_current_job_id()
-        if job_id is None:
+        execution = self.execution
+        if not execution:
             return None
-        return self.job_class.fetch(job_id, self.connection, self.serializer)
+        if not execution._job:
+            execution._job = self.job_class.fetch(execution.job_id, self.connection, self.serializer)
+        return execution._job
 
     @property
     def current_execution_count(self) -> int:
         """Number of executions this worker is currently handling"""
         return self.connection.scard(self.executions_key)
 
-    def get_current_executions(self) -> list[Execution]:
+    def get_current_executions(self, refresh: bool = False) -> list[Execution]:
         """The worker's active executions, read from its execution index in Redis.
         Works on hydrated workers (e.g. `Worker.all()`), so other processes can
         monitor what a worker is running. Stale index members whose execution hash
-        has expired are filtered out and removed.
+        has expired are filtered out and removed. The result is cached on the
+        instance; pass `refresh=True` to refetch from Redis.
+
+        Args:
+            refresh (bool): Whether to refetch from Redis instead of using the cache.
 
         Returns:
             executions (list[Execution]): The active executions.
         """
+        if not refresh and self._executions:
+            return self._executions
+        active_executions: list[Execution] = []
         composite_keys = [as_text(member) for member in self.connection.smembers(self.executions_key)]
-        if not composite_keys:
-            return []
-        executions = [Execution.from_composite_key(key, connection=self.connection) for key in composite_keys]
-        with self.connection.pipeline() as pipeline:
-            for execution in executions:
-                pipeline.hgetall(execution.key)
-            results = pipeline.execute()
+        if composite_keys:
+            executions = [Execution.from_composite_key(key, connection=self.connection) for key in composite_keys]
+            with self.connection.pipeline() as pipeline:
+                for execution in executions:
+                    pipeline.hgetall(execution.key)
+                results = pipeline.execute()
 
-            active_executions = []
-            for execution, data in zip(executions, results):
-                if not data:
-                    pipeline.srem(self.executions_key, execution.composite_key)
-                    continue
-                execution.restore(data)
-                active_executions.append(execution)
-            pipeline.execute()
+                for execution, data in zip(executions, results):
+                    if not data:
+                        pipeline.srem(self.executions_key, execution.composite_key)
+                        continue
+                    execution.restore(data)
+                    active_executions.append(execution)
+                pipeline.execute()
+        self._executions = active_executions
         return active_executions
 
     def set_state(self, state: str, pipeline: Pipeline | None = None):
@@ -1115,8 +1105,7 @@ class BaseWorker:
 
         Args:
             job (Job): The Job
-            working_time (float): Seconds the execution has been running,
-                derived from `Execution.created_at`. Defaults to 0.0.
+            working_time (float): Seconds the job has been running. Defaults to 0.0.
 
         Returns:
             int: The heartbeat TTL.
@@ -1242,7 +1231,8 @@ class BaseWorker:
         """Updates worker, execution and job's last heartbeat fields."""
         with self.connection.pipeline() as pipeline:
             self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
-            ttl = int(self.get_heartbeat_ttl(job, working_time=execution.working_time))
+            working_time = (now() - job.started_at).total_seconds() if job.started_at else 0.0
+            ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
 
             # Also need to update execution's heartbeat
             execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
@@ -1378,8 +1368,6 @@ class BaseWorker:
         """
         self.log.debug('Worker %s: preparing for execution of job ID %s', self.name, job.id)
         with self.connection.pipeline() as pipeline:
-            self.set_current_job_id(job.id, pipeline=pipeline)
-
             heartbeat_ttl = self.get_heartbeat_ttl(job)
             self.heartbeat(heartbeat_ttl, pipeline=pipeline)
             job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
