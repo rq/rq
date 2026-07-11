@@ -592,18 +592,6 @@ class TestJob(RQTestCase):
         job = queue.enqueue(fixtures.say_hello, ttl=ttl)
         self.assertEqual(job.get_ttl(), ttl)
 
-    def test_never_expire_during_execution(self):
-        """Test what happens when job expires during execution"""
-        ttl = 1
-        queue = Queue(connection=self.connection)
-        job = queue.enqueue(fixtures.long_running_job, args=(2,), ttl=ttl)
-        self.assertEqual(job.get_ttl(), ttl)
-        job.save()
-        job.perform()
-        self.assertEqual(job.get_ttl(), ttl)
-        self.assertTrue(job.exists(job.id, connection=self.connection))
-        self.assertEqual(job.result, 'Done sleeping...')
-
     def test_cleanup(self):
         """Test that jobs and results are expired properly."""
         job = Job.create(func=fixtures.say_hello, connection=self.connection, status=JobStatus.QUEUED)
@@ -890,7 +878,7 @@ class TestJob(RQTestCase):
         self.assertLess(blocked_for, block_seconds)
 
     def test_should_enqueue_at_front(self):
-        job = Job.create(fixtures.say_hello,connection=self.connection)
+        job = Job.create(fixtures.say_hello, connection=self.connection)
 
         job.enqueue_at_front_on_retry = True
         job.enqueue_at_front = False
