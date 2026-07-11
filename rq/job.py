@@ -1446,7 +1446,6 @@ class Job:
         Returns:
             result (Any): The job result
         """
-        self.connection.persist(self.key)
         token = _current_job.set(self)
         try:
             self._result = self._execute()
