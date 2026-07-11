@@ -1373,6 +1373,7 @@ class BaseWorker:
             job.heartbeat(now(), heartbeat_ttl, pipeline=pipeline)
 
             job.prepare_for_execution(self.name, pipeline=pipeline)
+            pipeline.persist(job.key)
             if remove_from_intermediate_queue:
                 from ..queue import Queue
 

@@ -1037,6 +1037,7 @@ class TestWorker(RQTestCase):
         job = queue.enqueue(say_hello)
         worker = Worker([queue])
         worker.prepare_execution(job)
+        self.connection.expire(job.key, 60)
         worker.prepare_job_execution(job)
 
         # Updates working queue, job execution should be there
@@ -1053,6 +1054,7 @@ class TestWorker(RQTestCase):
         # job status is also updated
         self.assertEqual(job._status, JobStatus.STARTED)
         self.assertEqual(job.worker_name, worker.name)
+        self.assertEqual(self.connection.ttl(job.key), -1)
 
     @min_redis_version((6, 2, 0))
     def test_prepare_job_execution_removes_key_from_intermediate_queue(self):
