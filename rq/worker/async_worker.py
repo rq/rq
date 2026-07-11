@@ -11,7 +11,7 @@ from ..connections import get_connection_kwargs
 from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from ..executions import Execution
 from ..intermediate_queue import IntermediateQueue
-from ..job import Job, JobStatus
+from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import format_exc_info
 from ..queue import Queue
 from ..utils import as_text, get_version, now
@@ -19,14 +19,7 @@ from .base import BaseWorker, DequeueStrategy, WorkerStatus
 
 
 class AsyncWorker(BaseWorker):
-    """Proof-of-concept worker that admits jobs onto an asyncio event loop.
-
-    Jobs are not actually performed: each admitted job "runs" as an
-    `asyncio.sleep` of `simulated_job_duration` seconds and then finalizes
-    through the normal success handlers.
-    """
-
-    simulated_job_duration: float = 5  # ponytail: stands in for performing the job, Stage 3 replaces
+    """Proof-of-concept worker that runs coroutine jobs on an asyncio event loop."""
 
     def __init__(self, *args, max_concurrency: int = 100, **kwargs):
         super().__init__(*args, **kwargs)
@@ -262,28 +255,17 @@ class AsyncWorker(BaseWorker):
     async def _run_execution(self, job: Job, queue: Queue, execution: Execution):
         try:
             await asyncio.to_thread(self._start_job, job)
-            await asyncio.sleep(self.simulated_job_duration)
-            await asyncio.to_thread(self._finish_job_without_performing, job, queue, execution)
+            result = await job.perform_async()
+            if isinstance(result, Retry):
+                raise TypeError('AsyncWorker does not support jobs returning Retry')
+            await asyncio.to_thread(self._finish_job, job, queue, execution, result)
         except Exception:
             exc_string = format_exc_info(sys.exc_info())
             await asyncio.to_thread(self._fail_job, job, queue, execution, exc_string)
 
-    @property
-    def execution(self) -> Execution | None:
-        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
-
-    @execution.setter
-    def execution(self, execution: Execution | None):
-        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
-
-    def get_current_job_id(self, pipeline=None) -> str | None:
-        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
-
-    def get_current_job(self) -> Job | None:
-        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
-
     def _start_job(self, job: Job):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        job.connection.persist(job.key)
         job.started_at = now()
 
     def _fail_job(self, job: Job, queue: Queue, execution: Execution, exc_string: str):
@@ -300,12 +282,10 @@ class AsyncWorker(BaseWorker):
             execution=execution,
         )
 
-    def _finish_job_without_performing(self, job: Job, queue: Queue, execution: Execution):
-        """The success half of `perform_job`, minus performing the job (and
-        minus callbacks and webhooks, which the POC skips).
-        """
+    def _finish_job(self, job: Job, queue: Queue, execution: Execution, result):
+        """Finalize a successfully performed coroutine job."""
         self.handle_execution_ended(job, queue, job.success_callback_timeout)
-        job._result = None
+        job._result = result
         job._status = JobStatus.FINISHED
         self.handle_job_success(
             job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution

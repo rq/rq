@@ -5,6 +5,7 @@ fixtures has a slightly different characteristics.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import signal
 import subprocess
@@ -37,6 +38,21 @@ def say_hello(name=None):
 async def say_hello_async(name=None):
     """A async job with a single argument and a return value."""
     return say_hello(name)
+
+
+async def sleep_async(seconds, result=None):
+    await asyncio.sleep(seconds)
+    return result
+
+
+async def raise_async():
+    raise ValueError('async failure')
+
+
+async def current_job_id_after_sleep(seconds):
+    await asyncio.sleep(seconds)
+    job = get_current_job()
+    return job.id if job else None
 
 
 def say_hello_unicode(name=None):

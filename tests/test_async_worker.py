@@ -9,7 +9,14 @@ from rq.queue import Queue
 from rq.utils import current_timestamp
 from rq.worker import AsyncWorker, WorkerStatus
 from tests import RQTestCase, min_redis_version
-from tests.fixtures import kill_worker, rpush, say_hello
+from tests.fixtures import (
+    current_job_id_after_sleep,
+    kill_worker,
+    raise_async,
+    say_hello,
+    say_hello_async,
+    sleep_async,
+)
 
 
 @min_redis_version((6, 2, 0))
@@ -17,16 +24,10 @@ class TestAsyncWorker(RQTestCase):
     def setUp(self):
         super().setUp()
         self.queue = Queue(connection=self.connection)
-        # Non-timing tests don't need the simulated execution to take time.
-        patcher = patch.object(AsyncWorker, 'simulated_job_duration', 0)
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
-    def test_burst_finishes_jobs_without_performing_them(self):
-        """Admitted jobs land FINISHED, but their functions never run."""
-        connection_kwargs = self.connection.connection_pool.connection_kwargs
-        first_job = self.queue.enqueue(rpush, 'sentinel', 'value', connection_kwargs)
-        second_job = self.queue.enqueue(rpush, 'sentinel', 'value', connection_kwargs)
+    def test_burst_performs_jobs_and_persists_results(self):
+        first_job = self.queue.enqueue(say_hello_async, 'Alice')
+        second_job = self.queue.enqueue(say_hello_async, 'Bob')
 
         worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
         processed = worker.work(burst=True)
@@ -36,31 +37,27 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(second_job.get_status(), JobStatus.FINISHED)
         self.assertIn(first_job, self.queue.finished_job_registry)
         self.assertIn(second_job, self.queue.finished_job_registry)
-        # The job function was never called: no rpush happened.
-        self.assertFalse(self.connection.exists('sentinel'))
+        self.assertEqual(first_job.latest_result().return_value, 'Hi there, Alice!')
+        self.assertEqual(second_job.latest_result().return_value, 'Hi there, Bob!')
         self.assertEqual(worker.executions, {})
         self.assertIsNotNone(worker.death_date)
 
     def test_concurrent_executions_overlap(self):
-        """Two simulated 0.5s executions at max_concurrency=2 overlap."""
-        self.queue.enqueue(say_hello)
-        self.queue.enqueue(say_hello)
+        self.queue.enqueue(sleep_async, 0.5)
+        self.queue.enqueue(sleep_async, 0.5)
         worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
 
-        with patch.object(AsyncWorker, 'simulated_job_duration', 0.5):
-            started_at = time.monotonic()
-            worker.work(burst=True)
+        started_at = time.monotonic()
+        worker.work(burst=True)
         self.assertLess(time.monotonic() - started_at, 0.95)
 
     def test_max_concurrency_one_runs_jobs_sequentially(self):
-        """At max_concurrency=1 the same two executions run back to back."""
-        self.queue.enqueue(say_hello)
-        self.queue.enqueue(say_hello)
+        self.queue.enqueue(sleep_async, 0.5)
+        self.queue.enqueue(sleep_async, 0.5)
         worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=1)
 
-        with patch.object(AsyncWorker, 'simulated_job_duration', 0.5):
-            started_at = time.monotonic()
-            worker.work(burst=True)
+        started_at = time.monotonic()
+        worker.work(burst=True)
         self.assertGreaterEqual(time.monotonic() - started_at, 1.0)
 
     def test_empty_queue_returns_false(self):
@@ -70,7 +67,7 @@ class TestAsyncWorker(RQTestCase):
     def test_failed_finalization_does_not_leak_executions(self):
         """A crash while finalizing routes through handle_job_failure and
         leaves no stale entry in worker.executions."""
-        job = self.queue.enqueue(say_hello)
+        job = self.queue.enqueue(say_hello_async)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         with patch.object(AsyncWorker, 'handle_job_success', side_effect=ValueError):
@@ -83,11 +80,10 @@ class TestAsyncWorker(RQTestCase):
     def test_failed_job_records_ended_at_and_working_time(self):
         """The failure path sets job.ended_at before finalizing, so the
         failure result gets an end timestamp and working time is counted."""
-        job = self.queue.enqueue(say_hello)
+        job = self.queue.enqueue(raise_async)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
-        with patch.object(AsyncWorker, '_finish_job_without_performing', side_effect=ValueError):
-            worker.work(burst=True)
+        worker.work(burst=True)
 
         job.refresh()
         self.assertEqual(job.get_status(), JobStatus.FAILED)
@@ -135,16 +131,22 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
         worker.register_death()
 
-    def test_current_job_accessors_raise(self):
-        """The scalar current-job view is meaningless with many concurrent
-        executions."""
-        worker = AsyncWorker([self.queue], connection=self.connection)
-        with self.assertRaises(NotImplementedError):
-            worker.get_current_job_id()
-        with self.assertRaises(NotImplementedError):
-            worker.get_current_job()
-        with self.assertRaises(NotImplementedError):
-            worker.execution
+    def test_current_job_is_local_to_each_coroutine(self):
+        first_job = self.queue.enqueue(current_job_id_after_sleep, 0.1)
+        second_job = self.queue.enqueue(current_job_id_after_sleep, 0.1)
+
+        AsyncWorker([self.queue], connection=self.connection, max_concurrency=2).work(burst=True)
+
+        self.assertEqual(first_job.latest_result().return_value, first_job.id)
+        self.assertEqual(second_job.latest_result().return_value, second_job.id)
+
+    def test_sync_job_fails(self):
+        job = self.queue.enqueue(say_hello)
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertIn(job, self.queue.failed_job_registry)
 
     def test_stop_job_command_does_not_raise(self):
         """A raw stop-job payload resolves against worker.executions, so it
@@ -172,13 +174,12 @@ class TestAsyncWorker(RQTestCase):
 
     def test_warm_shutdown_drains_in_flight_execution(self):
         """First signal stops admission, lets the in-flight execution finish."""
-        job = self.queue.enqueue(say_hello)
+        job = self.queue.enqueue(sleep_async, 2)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         kill_process = Process(target=kill_worker, args=(os.getpid(), False, 0.5))
         kill_process.start()
-        with patch.object(AsyncWorker, 'simulated_job_duration', 2):
-            worker.work()
+        worker.work()
         kill_process.join()
 
         self.assertEqual(job.get_status(), JobStatus.FINISHED)
@@ -189,14 +190,13 @@ class TestAsyncWorker(RQTestCase):
         cleanly (no SystemExit, unlike the sync worker) and the job stays
         STARTED until StartedJobRegistry cleanup eventually fails it as
         abandoned."""
-        job = self.queue.enqueue(say_hello)
+        job = self.queue.enqueue(sleep_async, 20)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         kill_process = Process(target=kill_worker, args=(os.getpid(), True, 0.5))
         kill_process.start()
         started_at = time.monotonic()
-        with patch.object(AsyncWorker, 'simulated_job_duration', 20):
-            worker.work()
+        worker.work()
         kill_process.join()
 
         self.assertLess(time.monotonic() - started_at, 10)
@@ -219,8 +219,8 @@ class TestAsyncWorker(RQTestCase):
     def test_admission_exception_drains_in_flight_execution(self):
         """A crash on the admission path (here: preparing the second job's
         execution) still drains in-flight executions before work() raises."""
-        first_job = self.queue.enqueue(say_hello)
-        self.queue.enqueue(say_hello)
+        first_job = self.queue.enqueue(sleep_async, 1)
+        self.queue.enqueue(say_hello_async)
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         original_prepare_execution = AsyncWorker.prepare_execution
@@ -230,10 +230,7 @@ class TestAsyncWorker(RQTestCase):
                 return original_prepare_execution(worker_self, job)
             raise ValueError
 
-        with (
-            patch.object(AsyncWorker, 'simulated_job_duration', 1),
-            patch.object(AsyncWorker, 'prepare_execution', prepare_or_raise),
-        ):
+        with patch.object(AsyncWorker, 'prepare_execution', prepare_or_raise):
             with self.assertRaises(ValueError):
                 worker.work(burst=True)
 
@@ -244,7 +241,7 @@ class TestAsyncWorker(RQTestCase):
         """A dequeued id whose job hash no longer exists is skipped; the next
         job still runs."""
         missing_job = self.queue.enqueue(say_hello)
-        surviving_job = self.queue.enqueue(say_hello)
+        surviving_job = self.queue.enqueue(say_hello_async)
         self.connection.delete(missing_job.key)
 
         worker = AsyncWorker([self.queue], connection=self.connection)
