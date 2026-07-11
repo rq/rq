@@ -263,9 +263,22 @@ class AsyncWorker(BaseWorker):
             exc_string = format_exc_info(sys.exc_info())
             await asyncio.to_thread(self._fail_job, job, queue, execution, exc_string)
 
+    @property
+    def execution(self) -> Execution | None:
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
+    @execution.setter
+    def execution(self, execution: Execution | None):
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
+    def get_current_job_id(self, pipeline=None) -> str | None:
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
+    def get_current_job(self) -> Job | None:
+        raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
+
     def _start_job(self, job: Job):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
-        job.connection.persist(job.key)
         job.started_at = now()
 
     def _fail_job(self, job: Job, queue: Queue, execution: Execution, exc_string: str):

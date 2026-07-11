@@ -28,6 +28,7 @@ class TestAsyncWorker(RQTestCase):
     def test_burst_performs_jobs_and_persists_results(self):
         first_job = self.queue.enqueue(say_hello_async, 'Alice')
         second_job = self.queue.enqueue(say_hello_async, 'Bob')
+        sync_job = self.queue.enqueue(say_hello)
 
         worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
         processed = worker.work(burst=True)
@@ -39,6 +40,8 @@ class TestAsyncWorker(RQTestCase):
         self.assertIn(second_job, self.queue.finished_job_registry)
         self.assertEqual(first_job.latest_result().return_value, 'Hi there, Alice!')
         self.assertEqual(second_job.latest_result().return_value, 'Hi there, Bob!')
+        self.assertEqual(sync_job.get_status(), JobStatus.FAILED)
+        self.assertIn(sync_job, self.queue.failed_job_registry)
         self.assertEqual(worker.executions, {})
         self.assertIsNotNone(worker.death_date)
 
@@ -140,14 +143,6 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(first_job.latest_result().return_value, first_job.id)
         self.assertEqual(second_job.latest_result().return_value, second_job.id)
 
-    def test_sync_job_fails(self):
-        job = self.queue.enqueue(say_hello)
-
-        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
-
-        self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIn(job, self.queue.failed_job_registry)
-
     def test_stop_job_command_does_not_raise(self):
         """A raw stop-job payload resolves against worker.executions, so it
         can't kill the pub/sub thread on a multi-execution worker."""
@@ -217,8 +212,12 @@ class TestAsyncWorker(RQTestCase):
         self.assertLess(time.monotonic() - started_at, 3)
 
     def test_admission_exception_drains_in_flight_execution(self):
-        """A crash on the admission path (here: preparing the second job's
-        execution) still drains in-flight executions before work() raises."""
+        """An admission-loop error does not abandon an execution already in flight.
+
+        The first job starts normally, then preparing the second execution raises.
+        The admission loop must wait for the first task to finish and clean up its
+        execution before propagating the error from worker.work().
+        """
         first_job = self.queue.enqueue(sleep_async, 1)
         self.queue.enqueue(say_hello_async)
         worker = AsyncWorker([self.queue], connection=self.connection)
@@ -228,6 +227,7 @@ class TestAsyncWorker(RQTestCase):
         def prepare_or_raise(worker_self, job):
             if job.id == first_job.id:
                 return original_prepare_execution(worker_self, job)
+            # Simulate a failure after the first job has already been admitted.
             raise ValueError
 
         with patch.object(AsyncWorker, 'prepare_execution', prepare_or_raise):
@@ -235,6 +235,7 @@ class TestAsyncWorker(RQTestCase):
                 worker.work(burst=True)
 
         self.assertEqual(first_job.get_status(), JobStatus.FINISHED)
+        # The admission loop's finally block drained and cleaned up the first task.
         self.assertEqual(worker.executions, {})
 
     def test_missing_job_is_skipped(self):
