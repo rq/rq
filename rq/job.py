@@ -8,6 +8,7 @@ import re
 import warnings
 import zlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
@@ -34,7 +35,6 @@ if TYPE_CHECKING:
 
 
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
-from .local import LocalStack
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import (
@@ -153,7 +153,7 @@ def get_current_job(connection: Redis | None = None, job_class: Job | None = Non
         warnings.warn('connection argument for get_current_job is deprecated.', DeprecationWarning)
     if job_class:
         warnings.warn('job_class argument for get_current_job is deprecated.', DeprecationWarning)
-    return _job_stack.top
+    return _current_job.get()
 
 
 def requeue_job(job_id: str, connection: Redis, serializer=None) -> Job:
@@ -1447,11 +1447,12 @@ class Job:
             result (Any): The job result
         """
         self.connection.persist(self.key)
-        _job_stack.push(self)
+        token = _current_job.set(self)
         try:
             self._result = self._execute()
         finally:
-            assert self is _job_stack.pop()
+            assert _current_job.get() is self
+            _current_job.reset(token)
         return self._result
 
     def process_dependencies(self, depends_on: JobDependencyType) -> None:
@@ -1934,7 +1935,7 @@ class Job:
         return all(status.decode() in allowed_statuses for status in dependencies_statuses if status)
 
 
-_job_stack = LocalStack()
+_current_job: ContextVar[Job | None] = ContextVar('current_job', default=None)
 
 
 class Retry:
