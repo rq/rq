@@ -122,6 +122,7 @@ class AsyncWorker(BaseWorker):
                     semaphore.release()
                     break
 
+                tasks_before_pop = tuple(running_tasks)
                 pop_task = asyncio.create_task(self._pop_job_id(burst, async_connection))
                 await asyncio.wait({pop_task, stop_wait_task}, return_when=asyncio.FIRST_COMPLETED)
                 if not pop_task.done():
@@ -136,6 +137,9 @@ class AsyncWorker(BaseWorker):
                 if job_id is None:
                     semaphore.release()
                     if burst:
+                        if tasks_before_pop:
+                            await asyncio.wait(tasks_before_pop, return_when=asyncio.FIRST_COMPLETED)
+                            continue
                         self.log.info('Worker %s: done, quitting', self.name)
                         break
                     continue

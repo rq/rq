@@ -60,7 +60,10 @@ async def fail_async_while_retries_remain():
     return 'succeeded after failure retry'
 
 
-async def return_retry_async():
+async def return_retry_async(retry_delay=0):
+    job = get_current_job()
+    if job.number_of_retries:
+        await asyncio.sleep(retry_delay)
     return Retry(max=1)
 
 
