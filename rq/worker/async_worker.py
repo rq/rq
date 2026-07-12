@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import signal
 import sys
 from typing import cast
@@ -14,13 +15,15 @@ from ..intermediate_queue import IntermediateQueue
 from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import format_exc_info
 from ..queue import Queue
-from ..timeouts import JobTimeoutException
+from ..timeouts import JobTimeoutException, TimerDeathPenalty
 from ..utils import as_text, get_version, now
 from .base import BaseWorker, DequeueStrategy, WorkerStatus
 
 
 class AsyncWorker(BaseWorker):
     """Proof-of-concept worker that runs coroutine jobs on an asyncio event loop."""
+
+    death_penalty_class = TimerDeathPenalty
 
     def __init__(self, *args, max_concurrency: int = 100, **kwargs):
         super().__init__(*args, **kwargs)
@@ -273,8 +276,8 @@ class AsyncWorker(BaseWorker):
                 raise
             await asyncio.to_thread(self._finalize_execution_result, job, queue, execution, result)
         except Exception:
-            exc_string = format_exc_info(sys.exc_info())
-            await asyncio.to_thread(self._finalize_execution_failure, job, queue, execution, exc_string)
+            exc_info = sys.exc_info()
+            await asyncio.to_thread(self._finalize_execution_failure, job, queue, execution, exc_info)
 
     @property
     def execution(self) -> Execution | None:
@@ -294,17 +297,22 @@ class AsyncWorker(BaseWorker):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
         job.started_at = now()
 
-    def _finalize_execution_failure(self, job: Job, queue: Queue, execution: Execution, exc_string: str):
-        """The failure half of `perform_job`, minus callbacks and exception
-        handlers (POC): sets `ended_at` before finalizing so the failure
-        result and working-time accounting see a real end timestamp.
-        """
+    def _finalize_execution_failure(self, job: Job, queue: Queue, execution: Execution, exc_info):
+        """Finalize an execution that raised, including its failure callback."""
+        job._status = JobStatus.FAILED
         self.handle_execution_ended(job, queue, job.failure_callback_timeout)
+        try:
+            if job.failure_callback and inspect.iscoroutinefunction(job.failure_callback):
+                raise TypeError('AsyncWorker does not support coroutine failure callbacks')
+            job.execute_failure_callback(self.death_penalty_class, *exc_info)
+        except Exception:
+            exc_info = sys.exc_info()
+        self.handle_exception(job, *exc_info)
         self.handle_job_failure(
             job=job,
             queue=queue,
             started_job_registry=queue.started_job_registry,
-            exc_string=exc_string,
+            exc_string=format_exc_info(exc_info),
             execution=execution,
         )
 
@@ -322,6 +330,10 @@ class AsyncWorker(BaseWorker):
             )
             return
         job._status = JobStatus.FINISHED
+        if job.success_callback and inspect.iscoroutinefunction(job.success_callback):
+            raise TypeError('AsyncWorker does not support coroutine success callbacks')
+        job.execute_success_callback(self.death_penalty_class, result)
         self.handle_job_success(
             job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution
         )
+        job.send_webhooks(JobStatus.FINISHED)

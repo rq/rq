@@ -375,6 +375,20 @@ def save_exception(job, connection, type, value, traceback):
     connection.set(f'failure_callback:{job.id}', str(value), ex=60)
 
 
+def slow_success_callback(job, connection, result):
+    # TimerDeathPenalty cannot inject until a C-blocking call returns, so this
+    # deliberately exceeds the callback's one-second timeout.
+    time.sleep(1.5)
+
+
+async def async_success_callback(job, connection, result):
+    connection.set(f'async_success_callback:{job.id}', result, ex=60)
+
+
+async def async_failure_callback(job, connection, type, value, traceback):
+    connection.set(f'async_failure_callback:{job.id}', str(value), ex=60)
+
+
 def save_result_if_not_stopped(job, connection, result=''):
     connection.set(f'stopped_callback:{job.id}', result, ex=60)
 

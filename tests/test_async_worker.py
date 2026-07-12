@@ -6,22 +6,30 @@ from unittest import skipIf
 from unittest.mock import patch
 
 from rq.command import handle_stop_job_command
-from rq.job import JobStatus, Retry
+from rq.job import Callback, JobStatus, Retry
 from rq.queue import Queue
 from rq.results import Result
 from rq.utils import current_timestamp
+from rq.webhook import Webhook
 from rq.worker import AsyncWorker, WorkerStatus
 from tests import RQTestCase, min_redis_version
 from tests.fixtures import (
+    add_meta,
+    async_failure_callback,
+    async_success_callback,
     current_job_id_after_sleep,
+    erroneous_callback,
     fail_async_while_retries_remain,
     kill_worker,
     raise_async,
     raise_timeout_async,
     return_retry_async,
+    save_exception,
+    save_result,
     say_hello,
     say_hello_async,
     sleep_async,
+    slow_success_callback,
 )
 
 
@@ -101,6 +109,75 @@ class TestAsyncWorker(RQTestCase):
         worker.refresh()
         self.assertGreater(worker.total_working_time, 0)
 
+    def test_success_callback(self):
+        job = self.queue.enqueue(say_hello_async, on_success=Callback(save_result))
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(self.connection.get(f'success_callback:{job.id}'), b'Hi there, Stranger!')
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
+    def test_failure_callback(self):
+        job = self.queue.enqueue(raise_async, on_failure=Callback(save_exception))
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(self.connection.get(f'failure_callback:{job.id}'), b'async failure')
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+
+    def test_success_callback_error_runs_failure_callback(self):
+        job = self.queue.enqueue(
+            say_hello_async,
+            on_success=Callback(erroneous_callback),
+            on_failure=Callback(save_exception),
+        )
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        callback_error = self.connection.get(f'failure_callback:{job.id}')
+        self.assertIsNotNone(callback_error)
+        self.assertIn(b'erroneous_callback', callback_error)
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+
+    def test_success_callback_timeout(self):
+        job = self.queue.enqueue(
+            say_hello_async,
+            on_success=Callback(slow_success_callback, timeout=1),
+        )
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertIn('JobTimeoutException', job.latest_result().exc_string)
+
+    def test_coroutine_callbacks_fail_clearly(self):
+        success_job = self.queue.enqueue(say_hello_async, on_success=Callback(async_success_callback))
+        failure_job = self.queue.enqueue(raise_async, on_failure=Callback(async_failure_callback))
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(success_job.get_status(), JobStatus.FAILED)
+        self.assertIn('does not support coroutine success callbacks', success_job.latest_result().exc_string)
+        self.assertEqual(failure_job.get_status(), JobStatus.FAILED)
+        self.assertIn('does not support coroutine failure callbacks', failure_job.latest_result().exc_string)
+
+    def test_success_webhook(self):
+        webhook = Webhook('http://example.com/done', JobStatus.FINISHED)
+        self.queue.enqueue(say_hello_async, webhooks=[webhook])
+
+        with patch.object(Webhook, 'send') as send:
+            AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        send.assert_called_once()
+
+    def test_custom_exception_handler(self):
+        job = self.queue.enqueue(raise_async)
+
+        AsyncWorker([self.queue], connection=self.connection, exception_handlers=[add_meta]).work(burst=True)
+
+        job.refresh()
+        self.assertTrue(job.meta['foo'])
+
     def test_timeout_fails_one_job_without_interrupting_sibling(self):
         """Only expiration by asyncio.timeout is converted to JobTimeoutException.
 
@@ -138,7 +215,11 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(worker.executions, {})
 
     def test_returned_retry(self):
-        job = self.queue.enqueue(return_retry_async)
+        job = self.queue.enqueue(
+            return_retry_async,
+            on_success=Callback(save_result),
+            on_failure=Callback(save_exception),
+        )
         worker = AsyncWorker([self.queue], connection=self.connection)
 
         worker.work(burst=True)
@@ -152,6 +233,8 @@ class TestAsyncWorker(RQTestCase):
             [Result.Type.MAX_RETRIES_EXCEEDED, Result.Type.RETRIED],
         )
         self.assertNotEqual(results[0].execution_id, results[1].execution_id)
+        self.assertIsNone(self.connection.get(f'success_callback:{job.id}'))
+        self.assertIsNone(self.connection.get(f'failure_callback:{job.id}'))
         self.assertEqual(worker.executions, {})
 
     def test_burst_runs_retry_while_sibling_is_still_running(self):
