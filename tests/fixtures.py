@@ -15,7 +15,7 @@ from multiprocessing import Process
 
 from redis import Redis
 
-from rq import Queue, get_current_job
+from rq import Queue, Retry, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
@@ -51,6 +51,17 @@ async def raise_async():
 
 async def raise_timeout_async():
     raise TimeoutError('job timeout error')
+
+
+async def fail_async_while_retries_remain():
+    job = get_current_job()
+    if job.retries_left and job.retries_left > 0:
+        raise ValueError('retry async job')
+    return 'succeeded after failure retry'
+
+
+async def return_retry_async():
+    return Retry(max=1)
 
 
 async def current_job_id_after_sleep(seconds):

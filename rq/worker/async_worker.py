@@ -267,12 +267,10 @@ class AsyncWorker(BaseWorker):
                 if timeout_context.expired():
                     raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
                 raise
-            if isinstance(result, Retry):
-                raise TypeError('AsyncWorker does not support jobs returning Retry')
-            await asyncio.to_thread(self._finish_job, job, queue, execution, result)
+            await asyncio.to_thread(self._finalize_execution_result, job, queue, execution, result)
         except Exception:
             exc_string = format_exc_info(sys.exc_info())
-            await asyncio.to_thread(self._fail_job, job, queue, execution, exc_string)
+            await asyncio.to_thread(self._finalize_execution_failure, job, queue, execution, exc_string)
 
     @property
     def execution(self) -> Execution | None:
@@ -292,7 +290,7 @@ class AsyncWorker(BaseWorker):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
         job.started_at = now()
 
-    def _fail_job(self, job: Job, queue: Queue, execution: Execution, exc_string: str):
+    def _finalize_execution_failure(self, job: Job, queue: Queue, execution: Execution, exc_string: str):
         """The failure half of `perform_job`, minus callbacks and exception
         handlers (POC): sets `ended_at` before finalizing so the failure
         result and working-time accounting see a real end timestamp.
@@ -306,10 +304,19 @@ class AsyncWorker(BaseWorker):
             execution=execution,
         )
 
-    def _finish_job(self, job: Job, queue: Queue, execution: Execution, result):
-        """Finalize a successfully performed coroutine job."""
+    def _finalize_execution_result(self, job: Job, queue: Queue, execution: Execution, result):
+        """Finalize an execution that returned a result, including Retry."""
         self.handle_execution_ended(job, queue, job.success_callback_timeout)
         job._result = result
+        if isinstance(result, Retry):
+            self.handle_job_retry(
+                job=job,
+                queue=queue,
+                retry=result,
+                started_job_registry=queue.started_job_registry,
+                execution=execution,
+            )
+            return
         job._status = JobStatus.FINISHED
         self.handle_job_success(
             job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution

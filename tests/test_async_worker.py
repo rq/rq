@@ -6,16 +6,19 @@ from unittest import skipIf
 from unittest.mock import patch
 
 from rq.command import handle_stop_job_command
-from rq.job import JobStatus
+from rq.job import JobStatus, Retry
 from rq.queue import Queue
+from rq.results import Result
 from rq.utils import current_timestamp
 from rq.worker import AsyncWorker, WorkerStatus
 from tests import RQTestCase, min_redis_version
 from tests.fixtures import (
     current_job_id_after_sleep,
+    fail_async_while_retries_remain,
     kill_worker,
     raise_async,
     raise_timeout_async,
+    return_retry_async,
     say_hello,
     say_hello_async,
     sleep_async,
@@ -118,6 +121,50 @@ class TestAsyncWorker(RQTestCase):
         exc_string = timeout_error_job.latest_result().exc_string
         self.assertIn('TimeoutError: job timeout error', exc_string)
         self.assertNotIn('JobTimeoutException', exc_string)
+        self.assertEqual(worker.executions, {})
+
+    def test_exception_retry(self):
+        job = self.queue.enqueue(fail_async_while_retries_remain, retry=Retry(max=1))
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        worker.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.retries_left, 0)
+
+        # TODO: burst currently exits when the queue is empty even if an in-flight job
+        # may requeue itself; it should drain in-flight jobs and check the queue again.
+        worker.work(burst=True)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(job.latest_result().return_value, 'succeeded after failure retry')
+        # Exception retries do not create a RETRIED result; only the final execution is recorded.
+        self.assertEqual([result.type for result in job.results()], [Result.Type.SUCCESSFUL])
+        self.assertEqual(worker.executions, {})
+
+    def test_returned_retry(self):
+        job = self.queue.enqueue(return_retry_async)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        worker.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job.number_of_retries, 1)
+        self.assertEqual([result.type for result in job.results()], [Result.Type.RETRIED])
+
+        # TODO: burst currently exits when the queue is empty even if an in-flight job
+        # may requeue itself; it should drain in-flight jobs and check the queue again.
+        worker.work(burst=True)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        results = job.results()
+        self.assertEqual(
+            [result.type for result in results],
+            [Result.Type.MAX_RETRIES_EXCEEDED, Result.Type.RETRIED],
+        )
+        self.assertNotEqual(results[0].execution_id, results[1].execution_id)
         self.assertEqual(worker.executions, {})
 
     def test_heartbeat_tick_maintains_executions(self):
