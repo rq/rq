@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import signal
 import sys
+from datetime import datetime
 from typing import cast
 
 import redis.asyncio
@@ -24,6 +25,7 @@ class AsyncWorker(BaseWorker):
     """Proof-of-concept worker that runs coroutine jobs on an asyncio event loop."""
 
     death_penalty_class = TimerDeathPenalty
+    heartbeat_batch_size = 100
 
     def __init__(self, *args, max_concurrency: int = 100, **kwargs):
         super().__init__(*args, **kwargs)
@@ -248,23 +250,61 @@ class AsyncWorker(BaseWorker):
         (~job_monitoring_interval + 60) would expire out of StartedJobRegistry
         and be failed as abandoned while still running.
         """
-        if not self.executions:
+        executions = list(self.executions.values())
+        if not executions:
             with self.connection.pipeline() as pipeline:
                 self.set_state(WorkerStatus.IDLE, pipeline=pipeline)
                 self.heartbeat(pipeline=pipeline)
                 pipeline.execute()
-            return
-        # Re-assert BUSY: a tick racing an admission can land a stale IDLE
-        # write, so every tick converges the state to the truth.
-        self.set_state(WorkerStatus.BUSY)
-        # TODO: batch this into a bulk heartbeat (one pipeline for all executions)
-        # instead of one maintain_heartbeats() round trip per execution.
-        for execution in list(self.executions.values()):  # handler threads pop entries mid-pass
-            self.maintain_heartbeats(execution.job, execution)
+        else:
+            tick_now = now()
+            with self.connection.pipeline() as pipeline:
+                # A tick racing an admission can land a stale IDLE write, so
+                # every busy tick converges the worker state back to the truth.
+                # The state write may recreate the worker hash, but the following
+                # last_heartbeat HSET still returns 1 when that field was missing.
+                self.set_state(WorkerStatus.BUSY, pipeline=pipeline)
+                worker_heartbeat_index = len(pipeline)
+                self.heartbeat(self.job_monitoring_interval + 60, pipeline=pipeline)
+                results = pipeline.execute()
+                if results[worker_heartbeat_index] == 1:
+                    pipeline.hset(self.key, mapping=self.serialize())
+                    pipeline.execute()
+
+            execution_batches = [
+                executions[offset : offset + self.heartbeat_batch_size]
+                for offset in range(0, len(executions), self.heartbeat_batch_size)
+            ]
+            for execution_batch in execution_batches:
+                self._heartbeat_executions(execution_batch, tick_now)
+
+        if self.should_run_maintenance_tasks:
+            self.run_maintenance_tasks()
+
+    def _heartbeat_executions(self, executions: list[Execution], tick_now: datetime) -> None:
+        """Heartbeat one bounded batch and remove job hashes recreated by the writes."""
+        with self.connection.pipeline() as pipeline:
+            job_heartbeat_indices = []
+            for execution in executions:
+                job = execution.job
+                working_time = (tick_now - execution._started_at).total_seconds() if execution._started_at else 0.0
+                ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
+                execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
+                job_heartbeat_indices.append((len(pipeline), job.key))
+                job.heartbeat(tick_now, ttl, pipeline=pipeline, xx=True)
+
+            results = pipeline.execute()
+            # A heartbeat racing result_ttl=0 finalization can recreate a deleted
+            # job hash containing only last_heartbeat; remove those hashes again.
+            recreated_job_keys = {job_key for index, job_key in job_heartbeat_indices if results[index] == 1}
+            if recreated_job_keys:
+                for job_key in sorted(recreated_job_keys):
+                    pipeline.delete(job_key)
+                pipeline.execute()
 
     async def _run_execution(self, job: Job, queue: Queue, execution: Execution):
         try:
-            await asyncio.to_thread(self._start_job, job)
+            await asyncio.to_thread(self._start_execution, job, execution)
             timeout = None if job.timeout == -1 else job.timeout or self.queue_class.DEFAULT_TIMEOUT
             timeout_context = asyncio.timeout(timeout)
             try:
@@ -293,9 +333,11 @@ class AsyncWorker(BaseWorker):
     def get_current_job(self) -> Job | None:
         raise NotImplementedError('AsyncWorker runs multiple executions concurrently; use worker.executions')
 
-    def _start_job(self, job: Job):
+    def _start_execution(self, job: Job, execution: Execution):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
-        job.started_at = now()
+        started_at = now()
+        job.started_at = started_at
+        execution._started_at = started_at
 
     def _finalize_execution_failure(self, job: Job, queue: Queue, execution: Execution, exc_info):
         """Finalize an execution that raised, including its failure callback."""

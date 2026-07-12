@@ -31,6 +31,7 @@ class Execution:
         self.created_at = right_now
         self.last_heartbeat = right_now
         self._job: Job | None = None
+        self._started_at: datetime | None = None
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):
@@ -59,11 +60,6 @@ class Execution:
     def worker_executions_key(self) -> str:
         """Redis key of the execution index of the worker running this execution."""
         return WORKER_EXECUTIONS_KEY_TEMPLATE.format(self.worker_name)
-
-    @property
-    def working_time(self) -> float:
-        """Seconds elapsed since this execution was created."""
-        return (now() - self.created_at).total_seconds()
 
     @classmethod
     def fetch(cls, id: str, job_id: str, connection: Redis) -> Execution:

@@ -3,13 +3,13 @@ import sys
 import time
 from multiprocessing import Process
 from unittest import skipIf
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from rq.command import handle_stop_job_command
 from rq.job import Callback, JobStatus, Retry
 from rq.queue import Queue
 from rq.results import Result
-from rq.utils import current_timestamp
+from rq.utils import current_timestamp, now
 from rq.webhook import Webhook
 from rq.worker import AsyncWorker, WorkerStatus
 from tests import RQTestCase, min_redis_version
@@ -256,6 +256,8 @@ class TestAsyncWorker(RQTestCase):
         worker = AsyncWorker([self.queue], connection=self.connection)
         worker.register_birth()
         execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        worker.last_cleaned_at = now()
         registry = self.queue.started_job_registry
 
         # Simulate staleness: execution key about to expire, registry score in the past.
@@ -274,8 +276,10 @@ class TestAsyncWorker(RQTestCase):
         job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
         worker.register_birth()
+        worker.last_cleaned_at = now()
 
         execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
         worker.set_state(WorkerStatus.IDLE)
         worker._heartbeat_tick()
         self.assertEqual(worker.get_state(), WorkerStatus.BUSY)
@@ -286,6 +290,68 @@ class TestAsyncWorker(RQTestCase):
         worker.set_state(WorkerStatus.BUSY)
         worker._heartbeat_tick()
         self.assertEqual(worker.get_state(), WorkerStatus.IDLE)
+        worker.register_death()
+
+    def test_heartbeat_tick_batches_executions(self):
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        worker.heartbeat_batch_size = 2
+        worker.register_birth()
+        for _ in range(5):
+            worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        worker.last_cleaned_at = now()
+
+        with (
+            patch.object(worker.connection, 'pipeline', wraps=worker.connection.pipeline) as pipeline,
+            patch.object(worker, 'heartbeat', wraps=worker.heartbeat) as heartbeat,
+            patch.object(worker, '_heartbeat_executions', wraps=worker._heartbeat_executions) as heartbeat_batch,
+        ):
+            worker._heartbeat_tick()
+
+        self.assertEqual(pipeline.call_count, 4)
+        heartbeat.assert_called_once_with(worker.job_monitoring_interval + 60, pipeline=ANY)
+        self.assertEqual([len(call.args[0]) for call in heartbeat_batch.call_args_list], [2, 2, 1])
+        self.assertEqual(len({call.args[1] for call in heartbeat_batch.call_args_list}), 1)
+        worker.register_death()
+
+    def test_heartbeat_tick_repairs_recreated_keys_once(self):
+        first_job = self.queue.enqueue(say_hello)
+        second_job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        worker.register_birth()
+        worker.prepare_execution(first_job)
+        worker.prepare_execution(second_job)
+        worker.prepare_job_execution(first_job)
+        worker.prepare_job_execution(second_job)
+        worker.last_cleaned_at = now()
+        self.connection.delete(first_job.key, second_job.key, worker.key)
+
+        with patch.object(worker.connection, 'pipeline', wraps=worker.connection.pipeline) as pipeline:
+            worker._heartbeat_tick()
+
+        self.assertEqual(pipeline.call_count, 2)
+        self.assertFalse(self.connection.exists(first_job.key))
+        self.assertFalse(self.connection.exists(second_job.key))
+        self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
+        worker.register_death()
+
+    def test_heartbeat_tick_runs_maintenance_after_writes(self):
+        job = self.queue.enqueue(say_hello)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        worker.register_birth()
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job)
+        self.connection.zadd(self.queue.started_job_registry.key, {execution.composite_key: 1})
+
+        def assert_heartbeat_was_written():
+            score = self.connection.zscore(self.queue.started_job_registry.key, execution.composite_key)
+            self.assertGreater(score, current_timestamp())
+
+        with patch.object(worker, 'run_maintenance_tasks', side_effect=assert_heartbeat_was_written) as maintenance:
+            worker._heartbeat_tick()
+
+        maintenance.assert_called_once_with()
         worker.register_death()
 
     def test_current_job_is_local_to_each_coroutine(self):
