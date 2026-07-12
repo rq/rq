@@ -4,6 +4,7 @@ from unittest.mock import patch
 from rq import Queue, SimpleWorker
 from rq.registry import FailedJobRegistry, FinishedJobRegistry
 from rq.timeouts import (
+    JobTimeoutException,
     TimerDeathPenalty,
     UnixSignalDeathPenalty,
     get_default_death_penalty_class,
@@ -24,6 +25,16 @@ def thread_friendly_sleep_func(seconds):
 
 
 class TestTimeouts(RQTestCase):
+    def test_timer_death_penalty_does_not_mutate_exception_class(self):
+        first = TimerDeathPenalty(1, JobTimeoutException)
+        second = TimerDeathPenalty(2, JobTimeoutException)
+
+        self.assertEqual(str(JobTimeoutException('original message')), 'original message')
+        self.assertEqual(str(first._exception()), 'Task exceeded maximum timeout value (1 seconds)')
+        self.assertEqual(str(second._exception()), 'Task exceeded maximum timeout value (2 seconds)')
+        self.assertIsNot(first._exception, second._exception)
+        self.assertTrue(issubclass(first._exception, JobTimeoutException))
+
     def test_timer_death_penalty(self):
         """Ensure TimerDeathPenalty works correctly."""
         q = Queue(connection=self.connection)
