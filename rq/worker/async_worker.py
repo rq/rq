@@ -14,6 +14,7 @@ from ..intermediate_queue import IntermediateQueue
 from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import format_exc_info
 from ..queue import Queue
+from ..timeouts import JobTimeoutException
 from ..utils import as_text, get_version, now
 from .base import BaseWorker, DequeueStrategy, WorkerStatus
 
@@ -25,6 +26,8 @@ class AsyncWorker(BaseWorker):
         super().__init__(*args, **kwargs)
         # Hydration (find_by_key/all) passes prepare_for_work=False and no queues.
         if kwargs.get('prepare_for_work', True):
+            if sys.version_info < (3, 11):
+                raise RuntimeError('AsyncWorker requires Python >= 3.11')
             if len(self.queues) != 1:
                 raise ValueError('AsyncWorker only supports a single queue')
             if get_version(self.connection) < (6, 2, 0):
@@ -255,7 +258,15 @@ class AsyncWorker(BaseWorker):
     async def _run_execution(self, job: Job, queue: Queue, execution: Execution):
         try:
             await asyncio.to_thread(self._start_job, job)
-            result = await job.perform_async()
+            timeout = None if job.timeout == -1 else job.timeout or self.queue_class.DEFAULT_TIMEOUT
+            timeout_context = asyncio.timeout(timeout)
+            try:
+                async with timeout_context:
+                    result = await job.perform_async()
+            except TimeoutError as error:
+                if timeout_context.expired():
+                    raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
+                raise
             if isinstance(result, Retry):
                 raise TypeError('AsyncWorker does not support jobs returning Retry')
             await asyncio.to_thread(self._finish_job, job, queue, execution, result)

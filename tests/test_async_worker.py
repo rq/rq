@@ -1,6 +1,8 @@
 import os
+import sys
 import time
 from multiprocessing import Process
+from unittest import skipIf
 from unittest.mock import patch
 
 from rq.command import handle_stop_job_command
@@ -13,12 +15,14 @@ from tests.fixtures import (
     current_job_id_after_sleep,
     kill_worker,
     raise_async,
+    raise_timeout_async,
     say_hello,
     say_hello_async,
     sleep_async,
 )
 
 
+@skipIf(sys.version_info < (3, 11), 'AsyncWorker requires Python >= 3.11')
 @min_redis_version((6, 2, 0))
 class TestAsyncWorker(RQTestCase):
     def setUp(self):
@@ -93,6 +97,28 @@ class TestAsyncWorker(RQTestCase):
         self.assertIsNotNone(job.ended_at)
         worker.refresh()
         self.assertGreater(worker.total_working_time, 0)
+
+    def test_timeout_fails_one_job_without_interrupting_sibling(self):
+        """Only expiration by asyncio.timeout is converted to JobTimeoutException.
+
+        A TimeoutError raised by job code is a regular job failure, while an
+        unrelated sibling continues running in either case.
+        """
+        timed_out_job = self.queue.enqueue(sleep_async, 2, job_timeout=1)
+        sibling_job = self.queue.enqueue(say_hello_async)
+        timeout_error_job = self.queue.enqueue(raise_timeout_async)
+
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+        worker.work(burst=True)
+
+        self.assertEqual(timed_out_job.get_status(), JobStatus.FAILED)
+        self.assertIn('JobTimeoutException', timed_out_job.latest_result().exc_string)
+        self.assertEqual(sibling_job.get_status(), JobStatus.FINISHED)
+        # This job raised TimeoutError itself; the worker timeout did not expire.
+        exc_string = timeout_error_job.latest_result().exc_string
+        self.assertIn('TimeoutError: job timeout error', exc_string)
+        self.assertNotIn('JobTimeoutException', exc_string)
+        self.assertEqual(worker.executions, {})
 
     def test_heartbeat_tick_maintains_executions(self):
         """_heartbeat_tick refreshes the execution TTL and StartedJobRegistry
@@ -252,6 +278,11 @@ class TestAsyncWorker(RQTestCase):
     def test_old_redis_server_raises(self):
         with patch('rq.worker.async_worker.get_version', return_value=(6, 0, 0)):
             with self.assertRaises(RuntimeError):
+                AsyncWorker([self.queue], connection=self.connection)
+
+    def test_old_python_raises_for_working_instance(self):
+        with patch('rq.worker.async_worker.sys.version_info', (3, 10)):
+            with self.assertRaisesRegex(RuntimeError, 'Python >= 3.11'):
                 AsyncWorker([self.queue], connection=self.connection)
 
     def test_multiple_queues_raise(self):

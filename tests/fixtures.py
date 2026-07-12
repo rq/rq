@@ -49,6 +49,10 @@ async def raise_async():
     raise ValueError('async failure')
 
 
+async def raise_timeout_async():
+    raise TimeoutError('job timeout error')
+
+
 async def current_job_id_after_sleep(seconds):
     await asyncio.sleep(seconds)
     job = get_current_job()
