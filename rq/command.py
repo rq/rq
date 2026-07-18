@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .worker import BaseWorker
 
 from rq.exceptions import InvalidJobOperation
+from rq.executions import Execution
 from rq.job import Job
 
 PUBSUB_CHANNEL_TEMPLATE = 'rq:pubsub:%s'
@@ -20,6 +21,7 @@ def send_command(connection: 'Redis', worker_name: str, command: str, **kwargs):
     A command is just a string, available commands are:
         - `shutdown`: Shuts down a worker
         - `kill-horse`: Command for the worker to kill the current working horse
+        - `stop-execution`: A command for the worker to stop one execution of a job
         - `stop-job`: A command for the worker to stop the currently running job
 
     The command string will be parsed into a dictionary and send to a PubSub Topic.
@@ -67,6 +69,24 @@ def send_kill_horse_command(connection: 'Redis', worker_name: str):
     send_command(connection, worker_name, 'kill-horse')
 
 
+def send_stop_execution_command(connection: 'Redis', execution_id: str):
+    """
+    Instruct a worker to stop one execution of a job.
+
+    Args:
+        connection (Redis): A Redis Connection
+        execution_id (str): The Execution's composite key, formatted as `<job_id>:<execution_id>`
+    """
+    execution = Execution.from_composite_key(execution_id, connection=connection)
+    try:
+        execution.refresh()
+    except ValueError:
+        raise InvalidJobOperation('Execution is not running')
+    send_command(
+        connection, execution.worker_name, 'stop-execution', job_id=execution.job_id, execution_id=execution.id
+    )
+
+
 def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):
     """
     Instruct a worker to stop a job
@@ -89,7 +109,9 @@ def handle_command(worker: 'BaseWorker', payload: dict[Any, Any]):
         worker (Worker): The worker to use
         payload (Dict[Any, Any]): The Payload
     """
-    if payload['command'] == 'stop-job':
+    if payload['command'] == 'stop-execution':
+        handle_stop_execution_command(worker, payload)
+    elif payload['command'] == 'stop-job':
         handle_stop_job_command(worker, payload)
     elif payload['command'] == 'shutdown':
         handle_shutdown_command(worker)
@@ -125,6 +147,19 @@ def handle_kill_worker_command(worker: 'BaseWorker', payload: dict[Any, Any]):
         worker.log.info('Worker is not working, kill horse command ignored')
 
 
+def handle_stop_execution_command(worker: 'BaseWorker', payload: dict[Any, Any]):
+    """Handles stop execution command.
+
+    Args:
+        worker (Worker): The worker to use
+        payload (Dict[Any, Any]): The payload.
+    """
+    job_id = payload.get('job_id', '')
+    execution_id = payload.get('execution_id', '')
+    worker.log.debug('Received command to stop execution %s of job %s', execution_id, job_id)
+    worker.request_stop_execution(execution_id)
+
+
 def handle_stop_job_command(worker: 'BaseWorker', payload: dict[Any, Any]):
     """Handles stop job command.
 
@@ -140,4 +175,4 @@ def handle_stop_job_command(worker: 'BaseWorker', payload: dict[Any, Any]):
         worker._stopped_job_id = job_id
         worker.kill_horse()
     else:
-        worker.log.info('Not working on job %s, command ignored.', job_id)
+        worker.log.warning('Not working on job %s, command ignored.', job_id)
