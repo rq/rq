@@ -69,22 +69,20 @@ def send_kill_horse_command(connection: 'Redis', worker_name: str):
     send_command(connection, worker_name, 'kill-horse')
 
 
-def send_stop_execution_command(connection: 'Redis', execution_id: str):
+def send_stop_execution_command(connection: 'Redis', job_id: str, execution_id: str):
     """
     Instruct a worker to stop one execution of a job.
 
     Args:
         connection (Redis): A Redis Connection
-        execution_id (str): The Execution's composite key, formatted as `<job_id>:<execution_id>`
+        job_id (str): The Job ID
+        execution_id (str): The Execution ID
     """
-    execution = Execution.from_composite_key(execution_id, connection=connection)
     try:
-        execution.refresh()
+        execution = Execution.fetch(id=execution_id, job_id=job_id, connection=connection)
     except ValueError:
         raise InvalidJobOperation('Execution is not running')
-    send_command(
-        connection, execution.worker_name, 'stop-execution', job_id=execution.job_id, execution_id=execution.id
-    )
+    send_command(connection, execution.worker_name, 'stop-execution', job_id=job_id, execution_id=execution_id)
 
 
 def send_stop_job_command(connection: 'Redis', job_id: str, serializer=None):

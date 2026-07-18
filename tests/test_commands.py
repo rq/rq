@@ -142,7 +142,7 @@ class TestCommands(RQTestCase):
 
         # An error is raised if the execution doesn't exist
         with self.assertRaises(InvalidJobOperation):
-            send_stop_execution_command(connection, execution_id=f'{job.id}:nonexistent')
+            send_stop_execution_command(connection, job_id=job.id, execution_id='nonexistent')
 
         p = Process(target=start_work_burst, args=('foo', worker.name, get_connection_kwargs(connection)))
         p.start()
@@ -158,7 +158,7 @@ class TestCommands(RQTestCase):
         worker.refresh()
         self.assertEqual(worker.get_state(), WorkerStatus.BUSY)
 
-        send_stop_execution_command(connection, execution_id=execution.composite_key)
+        send_stop_execution_command(connection, job_id=job.id, execution_id=execution.id)
         time.sleep(0.1)
 
         # Job status is set appropriately
