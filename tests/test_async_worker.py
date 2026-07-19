@@ -399,6 +399,33 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(first_job.latest_result().return_value, first_job.id)
         self.assertEqual(second_job.latest_result().return_value, second_job.id)
 
+    def test_current_job_accessors(self):
+        """Scalar current-job views serve a single active execution and raise
+        when several are active."""
+        first_job = self.queue.enqueue(say_hello_async)
+        second_job = self.queue.enqueue(say_hello_async)
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+
+        self.assertIsNone(worker.get_current_job_id())
+        self.assertIsNone(worker.get_current_job())
+
+        first_execution = worker.prepare_execution(first_job)
+        self.assertEqual(worker.get_current_job_id(), first_job.id)
+        self.assertEqual(worker.get_current_job(), first_job)
+
+        second_execution = worker.prepare_execution(second_job)
+        with self.assertRaises(ValueError):
+            worker.get_current_job_id()
+        with self.assertRaises(ValueError):
+            worker.get_current_job()
+
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(first_job, pipeline=pipeline, execution=first_execution)
+            worker.cleanup_execution(second_job, pipeline=pipeline, execution=second_execution)
+            pipeline.execute()
+        self.assertIsNone(worker.get_current_job_id())
+        self.assertIsNone(worker.get_current_job())
+
     def test_stop_job_command_does_not_raise(self):
         """A raw stop-job payload resolves against worker.executions, so it
         can't kill the pub/sub thread on a multi-execution worker."""
