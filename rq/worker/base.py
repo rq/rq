@@ -1706,6 +1706,19 @@ class BaseWorker:
         """Kill the work horse process. No-op for workers without child processes."""
         pass
 
+    def request_stop_execution(self, execution_id: str):
+        """Stop one of this worker's active executions. Called from the pubsub thread.
+
+        Marks the job as intentionally stopped (so `handle_job_failure` sets it to
+        STOPPED instead of FAILED) and kills the horse running it.
+        """
+        execution = self.executions.get(execution_id)
+        if not execution:
+            self.log.warning('Not running execution %s, command ignored.', execution_id)
+            return
+        self._stopped_job_id = execution.job_id
+        self.kill_horse()
+
     def wait_for_horse(self) -> tuple[int | None, int | None, struct_rusage | None]:
         """Wait for the work horse process to complete. No-op for workers without child processes."""
         return None, None, None
