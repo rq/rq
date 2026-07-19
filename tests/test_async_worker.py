@@ -1,11 +1,13 @@
 import os
 import sys
 import time
+import zlib
 from multiprocessing import Process
 from unittest import skipIf
 from unittest.mock import ANY, patch
 
 from rq.command import handle_stop_job_command
+from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.job import Callback, JobStatus, Retry
 from rq.queue import Queue
 from rq.results import Result
@@ -14,6 +16,8 @@ from rq.webhook import Webhook
 from rq.worker import AsyncWorker, WorkerStatus
 from tests import RQTestCase, min_redis_version
 from tests.fixtures import (
+    AsyncCallableObject,
+    CallableObject,
     add_meta,
     async_failure_callback,
     async_success_callback,
@@ -24,6 +28,7 @@ from tests.fixtures import (
     raise_async,
     raise_timeout_async,
     return_retry_async,
+    return_unserializable,
     save_exception,
     save_result,
     say_hello,
@@ -108,6 +113,37 @@ class TestAsyncWorker(RQTestCase):
         self.assertIsNotNone(job.ended_at)
         worker.refresh()
         self.assertGreater(worker.total_working_time, 0)
+
+    def test_undeserializable_job_fails(self):
+        job = self.queue.enqueue(say_hello_async, on_failure=Callback(save_exception))
+        corrupt_data = job.data.replace(b'say_hello_async', b'')
+        self.connection.hset(job.key, 'data', zlib.compress(corrupt_data))
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FAILED)
+        self.assertIn(job, self.queue.failed_job_registry)
+        self.assertIn('DeserializationError', job.latest_result().exc_string)
+        self.assertIsNotNone(self.connection.get(f'failure_callback:{job.id}'))
+
+    def test_unserializable_return_value_finishes_with_placeholder(self):
+        job = self.queue.enqueue(return_unserializable)
+
+        AsyncWorker([self.queue], connection=self.connection).work(burst=True)
+
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(job.latest_result().return_value, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD)
+
+    def test_callable_object_jobs(self):
+        async_callable_job = self.queue.enqueue(AsyncCallableObject())
+        sync_callable_job = self.queue.enqueue(CallableObject())
+
+        AsyncWorker([self.queue], connection=self.connection, max_concurrency=2).work(burst=True)
+
+        self.assertEqual(async_callable_job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(async_callable_job.latest_result().return_value, 'called asynchronously')
+        self.assertEqual(sync_callable_job.get_status(), JobStatus.FAILED)
+        self.assertIn('AsyncWorker only supports async functions', sync_callable_job.latest_result().exc_string)
 
     def test_success_callback(self):
         job = self.queue.enqueue(say_hello_async, on_success=Callback(save_result))

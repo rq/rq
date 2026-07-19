@@ -67,6 +67,10 @@ async def return_retry_async(retry_delay=0):
     return Retry(max=1)
 
 
+async def return_unserializable():
+    return lambda: None  # pickle can't serialize lambdas
+
+
 async def current_job_id_after_sleep(seconds):
     await asyncio.sleep(seconds)
     job = get_current_job()
@@ -205,6 +209,11 @@ class Number:
 class CallableObject:
     def __call__(self):
         return "I'm callable"
+
+
+class AsyncCallableObject:
+    async def __call__(self):
+        return 'called asynchronously'
 
 
 class UnicodeStringObject:
