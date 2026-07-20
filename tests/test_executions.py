@@ -45,11 +45,22 @@ class TestRegistry(RQTestCase):
         self.assertEqual(execution.composite_key, composite_key)
         self.assertEqual(execution.last_heartbeat.timestamp(), created_at.timestamp())
         self.assertEqual(execution.worker_name, 'foo')
+        self.assertEqual(as_text(self.connection.hget(execution.key, 'job_id')), job.id)
+
+        # restore() reads job_id from the hash itself, not just the caller-supplied value
+        restored_execution = Execution(id=execution.id, job_id='', connection=self.connection)
+        restored_execution.restore(self.connection.hgetall(execution.key))
+        self.assertEqual(restored_execution.job_id, job.id)
 
         # Execution hashes written before worker_name existed refresh to an empty string
         self.connection.hdel(execution.key, 'worker_name')
         execution.refresh()
         self.assertEqual(execution.worker_name, '')
+
+        # Execution hashes written before job_id was serialized keep the caller-supplied value
+        self.connection.hdel(execution.key, 'job_id')
+        execution.refresh()
+        self.assertEqual(execution.job_id, job.id)
 
         execution.delete(job=job, pipeline=pipeline)
         pipeline.execute()

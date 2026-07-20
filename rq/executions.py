@@ -81,6 +81,8 @@ class Execution:
 
     def restore(self, data: dict):
         """Restore execution attributes from raw Redis hash data."""
+        # Hashes written before job_id was serialized lack the field; keep the caller-supplied value
+        self.job_id = as_text(data.get(b'job_id', b'')) or self.job_id
         self.created_at = datetime.fromtimestamp(float(data[b'created_at']), tz=timezone.utc)
         self.last_heartbeat = datetime.fromtimestamp(float(data[b'last_heartbeat']), tz=timezone.utc)
         self.worker_name = as_text(data.get(b'worker_name', b''))
@@ -124,6 +126,7 @@ class Execution:
     def serialize(self) -> dict:
         return {
             'id': self.id,
+            'job_id': self.job_id,
             'created_at': self.created_at.timestamp(),
             'last_heartbeat': self.last_heartbeat.timestamp(),
             'worker_name': self.worker_name,
