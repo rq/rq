@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from time import sleep
@@ -822,6 +823,17 @@ class TestRQCli(CLITestCase):
 
 
 class WorkerPoolCLITestCase(CLITestCase):
+    def test_config_file_logging(self):
+        """rq worker-pool -u <url> -b -c tests.config_files.dummy_logging"""
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '-c', 'tests.config_files.dummy_logging']
+        )
+        self.assert_normal_execution(result)
+        # DICT_CONFIG from the config file should have been applied
+        formats = [handler.formatter._fmt for handler in logging.getLogger().handlers if handler.formatter]
+        self.assertTrue(any('MY_LOG_FMT' in fmt for fmt in formats))
+
     def test_worker_pool_burst_and_num_workers(self):
         """rq worker-pool -u <url> -b -n 3"""
         runner = CliRunner()
