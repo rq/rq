@@ -924,15 +924,24 @@ class TestWorker(RQTestCase):
         self.assertEqual(hydrated_job, job)
         self.assertIsInstance(hydrated_job, CustomJob)
 
+        # A second execution makes the hydrated scalar view ambiguous immediately —
+        # the accessors read the index fresh, never a cached snapshot
+        second_job = queue.enqueue_call(say_hello)
+        second_execution = worker.prepare_execution(second_job)
+        with self.assertRaises(ValueError):
+            hydrated_worker.get_current_job_id()
+        with self.connection.pipeline() as pipeline:
+            worker.cleanup_execution(second_job, pipeline=pipeline, execution=second_execution)
+            pipeline.execute()
+
         with self.connection.pipeline() as pipeline:
             worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
             pipeline.execute()
         self.assertIsNone(worker.get_current_job_id())
         self.assertIsNone(worker.get_current_job())
 
-        # The hydrated view serves its cached executions until refreshed
-        self.assertEqual(hydrated_worker.get_current_job_id(), job.id)
-        hydrated_worker.get_current_executions(refresh=True)
+        # The hydrated view sees the cleanup with no refresh step
+        self.assertIsNone(hydrated_worker.get_current_job_id())
         self.assertIsNone(hydrated_worker.get_current_job())
 
     def test_custom_job_class(self):
@@ -1025,9 +1034,15 @@ class TestWorker(RQTestCase):
         # Assigning an execution registers it alongside existing ones
         worker.execution = first_execution
         second_execution = worker.prepare_execution(job)
-        self.assertIn(worker.execution, (first_execution, second_execution))
+        self.assertEqual(
+            worker.executions, {first_execution.id: first_execution, second_execution.id: second_execution}
+        )
 
-        # Clearing is ambiguous when more than one execution is active
+        # Reading and clearing are ambiguous when more than one execution is active
+        with self.assertRaises(ValueError):
+            worker.execution
+        with self.assertRaises(ValueError):
+            worker.get_current_job_id()
         with self.assertRaises(ValueError):
             worker.execution = None
 
