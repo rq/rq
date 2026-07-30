@@ -666,8 +666,10 @@ def create_cron(connection: Redis) -> CronScheduler:
     """Create a CronScheduler instance with all registered jobs"""
     cron_instance = CronScheduler(connection=connection)
 
-    # Register all previously registered jobs with the CronScheduler instance
-    for data in _job_data_registry:
+    # Snapshot and consume the registry so a second call doesn't re-register the same jobs
+    job_definitions = _job_data_registry[:]
+    _job_data_registry.clear()
+    for data in job_definitions:
         logging.debug(f'Registering job: {data["func"].__name__}')
         cron_instance.register(**data)
 
