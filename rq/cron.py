@@ -39,7 +39,11 @@ from .webhook import Webhook
 
 
 class CronJob:
-    """Represents a function to be run on a time interval"""
+    """Represents a function to be run on a time interval.
+
+    `name` identifies the logical cron job and defaults to `func_name`;
+    multiple cron jobs may share a name.
+    """
 
     def __init__(
         self,
@@ -56,6 +60,7 @@ class CronJob:
         failure_ttl: int | None = None,
         meta: dict | None = None,
         webhooks: Sequence[Webhook] | None = None,
+        name: str = '',
     ):
         if interval and cron:
             raise ValueError('Cannot specify both interval and cron parameters')
@@ -76,6 +81,7 @@ class CronJob:
         else:
             raise ValueError('Either func or func_name must be provided')
 
+        self.name: str = name or self.func_name
         self.args: tuple = args or ()
         self.kwargs: dict = kwargs or {}
         self.interval: int | None = interval
@@ -149,6 +155,7 @@ class CronJob:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
         obj = {
             'func_name': self.func_name,
+            'name': self.name,
             'queue_name': self.queue_name,
             'args': safe_json_dumps(self.args) if self.args else None,
             'kwargs': safe_json_dumps(self.kwargs) if self.kwargs else None,
@@ -202,6 +209,8 @@ class CronJob:
         job = cls(
             queue_name=data['queue_name'],
             func_name=data['func_name'],
+            # Pre-existing serialized data has no name field; fall back to func_name via __init__
+            name=data.get('name', ''),
             args=args,
             kwargs=kwargs,
             interval=data.get('interval'),
@@ -275,6 +284,7 @@ class CronScheduler:
         failure_ttl: int | None = None,
         meta: dict | None = None,
         webhooks: Sequence[Webhook] | None = None,
+        name: str = '',
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
@@ -290,6 +300,7 @@ class CronScheduler:
             failure_ttl=failure_ttl,
             meta=meta,
             webhooks=webhooks,
+            name=name,
         )
 
         self._cron_jobs.append(cron_job)
@@ -619,6 +630,7 @@ def register(
     failure_ttl: int | None = None,
     meta: dict | None = None,
     webhooks: Sequence[Webhook] | None = None,
+    name: str = '',
 ) -> dict:
     """
     Register a function to be run as a cron job by adding its definition
@@ -650,6 +662,7 @@ def register(
         'failure_ttl': failure_ttl,
         'meta': meta,
         'webhooks': webhooks,
+        'name': name,
     }
     # Add to the global registry
     _job_data_registry.append(job_data)

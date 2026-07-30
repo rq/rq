@@ -62,6 +62,25 @@ class TestCronJob(RQTestCase):
         self.assertEqual(cron_job.job_options['failure_ttl'], failure_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
 
+    def test_name(self):
+        """`name` defaults to func_name and round-trips through to_dict/from_dict"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        self.assertEqual(cron_job.name, 'tests.fixtures.say_hello')
+
+        named_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, name='greeter')
+        self.assertEqual(named_job.name, 'greeter')
+
+        data = named_job.to_dict()
+        self.assertEqual(data['name'], 'greeter')
+        restored_job = CronJob.from_dict(data)
+        self.assertEqual(restored_job.name, 'greeter')
+
+        # Pre-existing serialized data has no name field; restore falls back to func_name
+        legacy_data = cron_job.to_dict()
+        del legacy_data['name']
+        legacy_job = CronJob.from_dict(legacy_data)
+        self.assertEqual(legacy_job.name, 'tests.fixtures.say_hello')
+
     def test_cron_job_with_webhooks(self):
         """CronJob stores webhooks in job_options and validates them at registration time"""
         webhooks = [Webhook('http://example.com/done', 'finished')]
