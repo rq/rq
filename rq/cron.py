@@ -18,7 +18,13 @@ from redis import Redis
 from redis.client import Pipeline
 
 from . import cron_scheduler_registry
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
+from .defaults import (
+    DEFAULT_CRON_JOB_HISTORY_LIMIT,
+    DEFAULT_CRON_JOB_HISTORY_TTL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
+    DEFAULT_RESULT_TTL,
+)
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
@@ -26,6 +32,7 @@ from .queue import Queue
 from .serializers import resolve_serializer
 from .utils import (
     NOT_JSON_SERIALIZABLE,
+    as_text,
     decode_redis_hash,
     normalize_config_path,
     now,
@@ -107,16 +114,35 @@ class CronJob:
         # Filter out None values
         self.job_options = {k: v for k, v in self.job_options.items() if v is not None}
 
+    @property
+    def job_history_key(self) -> str:
+        """Redis key of the sorted set holding IDs of jobs spawned by this cron job"""
+        return f'rq:cron_job:{self.name}:jobs'
+
     def enqueue(self, connection: Redis) -> Job:
-        """Enqueue this job to its queue and update the next run time"""
+        """Enqueue this job to its queue, record it in the job history and update the next run time"""
         if not self.func:
             raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
 
         queue = Queue(self.queue_name, connection=connection)
-        job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options)
+        # Enqueue the job and record it in one round trip
+        with connection.pipeline() as pipeline:
+            job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options, pipeline=pipeline)
+            assert job.enqueued_at is not None  # narrows datetime | None for mypy
+            pipeline.zadd(self.job_history_key, {job.id: job.enqueued_at.timestamp()})
+            pipeline.zremrangebyrank(self.job_history_key, 0, -(DEFAULT_CRON_JOB_HISTORY_LIMIT + 1))
+            pipeline.expire(self.job_history_key, DEFAULT_CRON_JOB_HISTORY_TTL)
+            pipeline.execute()
         logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
 
         return job
+
+    def get_job_ids(self, connection: Redis) -> list[str]:
+        """Return IDs of jobs spawned by this cron job, newest first.
+
+        Ordering among jobs enqueued at the same timestamp is unspecified.
+        """
+        return [as_text(job_id) for job_id in connection.zrange(self.job_history_key, 0, -1, desc=True)]
 
     def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""

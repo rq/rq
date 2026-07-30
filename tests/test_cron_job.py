@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler
+from rq.defaults import DEFAULT_CRON_JOB_HISTORY_TTL
 from rq.utils import NOT_JSON_SERIALIZABLE
 from rq.webhook import Webhook
 from tests import RQTestCase
@@ -172,6 +174,32 @@ class TestCronJob(RQTestCase):
         self.assertEqual(job.timeout, timeout_value)
         # Verify job can be executed without TypeError
         job.perform()
+
+    def test_enqueue_records_job_history(self):
+        """enqueue() adds the spawned job to the history ZSET, queryable newest first"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        first_job = cron_job.enqueue(self.connection)
+        second_job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(cron_job.get_job_ids(self.connection), [second_job.id, first_job.id])
+
+    @patch('rq.cron.DEFAULT_CRON_JOB_HISTORY_LIMIT', 2)
+    def test_job_history_is_trimmed(self):
+        """History ZSET keeps only the newest DEFAULT_CRON_JOB_HISTORY_LIMIT entries"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        cron_job.enqueue(self.connection)
+        second_job = cron_job.enqueue(self.connection)
+        third_job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(cron_job.get_job_ids(self.connection), [third_job.id, second_job.id])
+
+    def test_job_history_ttl(self):
+        """History ZSET TTL is set on enqueue"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        cron_job.enqueue(self.connection)
+
+        ttl = self.connection.ttl(cron_job.job_history_key)
+        self.assertTrue(0 < ttl <= DEFAULT_CRON_JOB_HISTORY_TTL)
 
     def test_enqueue_with_webhooks(self):
         """Webhooks are attached to the job produced by enqueue"""
