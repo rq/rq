@@ -201,6 +201,10 @@ def worker_pool(
     settings = read_config_file(cli_config.config) if cli_config.config else {}
     # Worker specific default arguments
     queue_names: list[str] = queues or settings.get('QUEUES', ['default'])
+    dict_config = settings.get('DICT_CONFIG')
+
+    if dict_config:
+        logging.config.dictConfig(dict_config)
 
     setup_loghandlers_from_args(verbose, quiet, date_format, log_format)
 
