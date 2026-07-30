@@ -330,6 +330,17 @@ class TestCronScheduler(RQTestCase):
         finally:
             os.remove(invalid_file_path)  # Clean up temp file
 
+    def test_create_cron_consumes_registry(self):
+        """create_cron consumes the global registry, so a second call registers nothing new"""
+        cron.register(say_hello, queue_name=self.queue_name, interval=60)
+
+        first_scheduler = cron.create_cron(self.connection)
+        self.assertEqual(len(first_scheduler.get_jobs()), 1)
+        self.assertEqual(len(_job_data_registry), 0, 'Registry not consumed by create_cron')
+
+        second_scheduler = cron.create_cron(self.connection)
+        self.assertEqual(len(second_scheduler.get_jobs()), 0)
+
     @patch('rq.cron.time.sleep')
     @patch('rq.cron.CronScheduler.calculate_sleep_interval')
     @patch('rq.cron.CronScheduler.enqueue_jobs')
