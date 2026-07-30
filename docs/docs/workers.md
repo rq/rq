@@ -578,3 +578,4 @@ Options:
 * `-P` or `--path <path>`: multiple import paths are supported (e.g `rq worker --path foo --path bar`).
 * `-j` or `--job-class <path.to.Job>`: defaults to `rq.job.Job`.
 * `--exception-handler`: path to exception handler class. Multiple exception handlers are supported (e.g `rq worker-pool --exception-handler 'path.to.my.ErrorHandler' --exception-handler 'another.ErrorHandler'`).
+* `-c` or `--config <module>`: module containing RQ settings, in the same format as [`rq worker`](#using-a-config-file). `rq worker-pool` honors the connection settings (`REDIS_URL`, `REDIS_HOST`, `SENTINEL`, etc.), `QUEUES` and `DICT_CONFIG`. Command line arguments take precedence over settings read from the config file.
