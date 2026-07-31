@@ -52,8 +52,8 @@ jobs:
           - { python-version: "3.14", valkey-version: "7.2", redis-py-version: "8" }
           - { python-version: "3.13", valkey-version: "9.0", redis-py-version: "6" }
           - { python-version: "3.13", valkey-version: "8.0", redis-py-version: "8" }
-          - { python-version: "3.13", valkey-version: "7.2", redis-py-version: "5" }
-          - { python-version: "3.12", valkey-version: "9.0", redis-py-version: "5" }
+          - { python-version: "3.13", valkey-version: "7.2", redis-py-version: "5.0.1" }
+          - { python-version: "3.12", valkey-version: "9.0", redis-py-version: "5.0.1" }
           - { python-version: "3.12", valkey-version: "8.0", redis-py-version: "6" }
           - { python-version: "3.12", valkey-version: "7.2", redis-py-version: "7" }
 
