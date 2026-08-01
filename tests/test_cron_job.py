@@ -183,6 +183,11 @@ class TestCronJob(RQTestCase):
 
         self.assertEqual(cron_job.get_job_ids(self.connection), [second_job.id, first_job.id])
 
+        # start/end paginate the newest-first ordering, zrange-style inclusive
+        self.assertEqual(cron_job.get_job_ids(self.connection, start=0, end=0), [second_job.id])
+        self.assertEqual(cron_job.get_job_ids(self.connection, start=1, end=1), [first_job.id])
+        self.assertEqual(cron_job.get_job_ids(self.connection, start=2), [])
+
     @patch('rq.cron.DEFAULT_CRON_JOB_HISTORY_LIMIT', 2)
     def test_job_history_is_trimmed(self):
         """History ZSET keeps only the newest DEFAULT_CRON_JOB_HISTORY_LIMIT entries"""

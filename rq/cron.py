@@ -137,12 +137,14 @@ class CronJob:
 
         return job
 
-    def get_job_ids(self, connection: Redis) -> list[str]:
+    def get_job_ids(self, connection: Redis, start: int = 0, end: int = -1) -> list[str]:
         """Return IDs of jobs spawned by this cron job, newest first.
 
+        `start` and `end` are zero-based inclusive indexes into the newest-first
+        ordering, following `zrange` semantics (`end=-1` means the oldest entry).
         Ordering among jobs enqueued at the same timestamp is unspecified.
         """
-        return [as_text(job_id) for job_id in connection.zrange(self.job_history_key, 0, -1, desc=True)]
+        return [as_text(job_id) for job_id in connection.zrange(self.job_history_key, start, end, desc=True)]
 
     def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""
