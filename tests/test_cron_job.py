@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from rq import Queue, utils
 from rq.cron import CronJob, CronScheduler
+from rq.defaults import DEFAULT_CRON_JOB_HISTORY_TTL
 from rq.utils import NOT_JSON_SERIALIZABLE
 from rq.webhook import Webhook
 from tests import RQTestCase
@@ -61,6 +63,25 @@ class TestCronJob(RQTestCase):
         self.assertEqual(cron_job.job_options['ttl'], ttl)
         self.assertEqual(cron_job.job_options['failure_ttl'], failure_ttl)
         self.assertEqual(cron_job.job_options['meta'], meta)
+
+    def test_name(self):
+        """`name` defaults to func_name and round-trips through to_dict/from_dict"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        self.assertEqual(cron_job.name, 'tests.fixtures.say_hello')
+
+        named_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, name='greeter')
+        self.assertEqual(named_job.name, 'greeter')
+
+        data = named_job.to_dict()
+        self.assertEqual(data['name'], 'greeter')
+        restored_job = CronJob.from_dict(data)
+        self.assertEqual(restored_job.name, 'greeter')
+
+        # Pre-existing serialized data has no name field; restore falls back to func_name
+        legacy_data = cron_job.to_dict()
+        del legacy_data['name']
+        legacy_job = CronJob.from_dict(legacy_data)
+        self.assertEqual(legacy_job.name, 'tests.fixtures.say_hello')
 
     def test_cron_job_with_webhooks(self):
         """CronJob stores webhooks in job_options and validates them at registration time"""
@@ -153,6 +174,37 @@ class TestCronJob(RQTestCase):
         self.assertEqual(job.timeout, timeout_value)
         # Verify job can be executed without TypeError
         job.perform()
+
+    def test_enqueue_records_job_history(self):
+        """enqueue() adds the spawned job to the history ZSET, queryable newest first"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        first_job = cron_job.enqueue(self.connection)
+        second_job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(cron_job.get_job_ids(self.connection), [second_job.id, first_job.id])
+
+        # start/end paginate the newest-first ordering, zrange-style inclusive
+        self.assertEqual(cron_job.get_job_ids(self.connection, start=0, end=0), [second_job.id])
+        self.assertEqual(cron_job.get_job_ids(self.connection, start=1, end=1), [first_job.id])
+        self.assertEqual(cron_job.get_job_ids(self.connection, start=2), [])
+
+    @patch('rq.cron.DEFAULT_CRON_JOB_HISTORY_LIMIT', 2)
+    def test_job_history_is_trimmed(self):
+        """History ZSET keeps only the newest DEFAULT_CRON_JOB_HISTORY_LIMIT entries"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        cron_job.enqueue(self.connection)
+        second_job = cron_job.enqueue(self.connection)
+        third_job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(cron_job.get_job_ids(self.connection), [third_job.id, second_job.id])
+
+    def test_job_history_ttl(self):
+        """History ZSET TTL is set on enqueue"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60)
+        cron_job.enqueue(self.connection)
+
+        ttl = self.connection.ttl(cron_job.job_history_key)
+        self.assertTrue(0 < ttl <= DEFAULT_CRON_JOB_HISTORY_TTL)
 
     def test_enqueue_with_webhooks(self):
         """Webhooks are attached to the job produced by enqueue"""

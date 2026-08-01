@@ -55,6 +55,17 @@ Defaults to 1 YEAR in seconds
 """
 
 
+DEFAULT_CRON_JOB_HISTORY_LIMIT = 1000
+""" The maximum number of spawned job IDs to keep in a cron job's history
+"""
+
+
+DEFAULT_CRON_JOB_HISTORY_TTL = 31536000
+""" The Time To Live (TTL) in seconds to keep a cron job's history of spawned jobs.
+Refreshed on every write, so history expires if the cron job spawns no jobs for 1 YEAR
+"""
+
+
 DEFAULT_SCHEDULER_FALLBACK_PERIOD = 120
 """ The amount in seconds it will take for a new scheduler
 to pickup tasks after a scheduler has died.
