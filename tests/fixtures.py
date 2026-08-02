@@ -5,6 +5,7 @@ fixtures has a slightly different characteristics.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import signal
 import subprocess
@@ -14,7 +15,7 @@ from multiprocessing import Process
 
 from redis import Redis
 
-from rq import Queue, get_current_job
+from rq import Queue, Retry, get_current_job
 from rq.command import send_kill_horse_command, send_shutdown_command
 from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_JOB_MONITORING_INTERVAL
@@ -37,6 +38,43 @@ def say_hello(name=None):
 async def say_hello_async(name=None):
     """A async job with a single argument and a return value."""
     return say_hello(name)
+
+
+async def sleep_async(seconds, result=None):
+    await asyncio.sleep(seconds)
+    return result
+
+
+async def raise_async():
+    raise ValueError('async failure')
+
+
+async def raise_timeout_async():
+    raise TimeoutError('job timeout error')
+
+
+async def fail_async_while_retries_remain():
+    job = get_current_job()
+    if job.retries_left and job.retries_left > 0:
+        raise ValueError('retry async job')
+    return 'succeeded after failure retry'
+
+
+async def return_retry_async(retry_delay=0):
+    job = get_current_job()
+    if job.number_of_retries:
+        await asyncio.sleep(retry_delay)
+    return Retry(max=1)
+
+
+async def return_unserializable():
+    return lambda: None  # pickle can't serialize lambdas
+
+
+async def current_job_id_after_sleep(seconds):
+    await asyncio.sleep(seconds)
+    job = get_current_job()
+    return job.id if job else None
 
 
 def say_hello_unicode(name=None):
@@ -171,6 +209,11 @@ class Number:
 class CallableObject:
     def __call__(self):
         return "I'm callable"
+
+
+class AsyncCallableObject:
+    async def __call__(self):
+        return 'called asynchronously'
 
 
 class UnicodeStringObject:
@@ -339,6 +382,20 @@ def save_result(job, connection, result):
 def save_exception(job, connection, type, value, traceback):
     """Store job exception in a key"""
     connection.set(f'failure_callback:{job.id}', str(value), ex=60)
+
+
+def slow_success_callback(job, connection, result):
+    # TimerDeathPenalty cannot inject until a C-blocking call returns, so this
+    # deliberately exceeds the callback's one-second timeout.
+    time.sleep(1.5)
+
+
+async def async_success_callback(job, connection, result):
+    connection.set(f'async_success_callback:{job.id}', result, ex=60)
+
+
+async def async_failure_callback(job, connection, type, value, traceback):
+    connection.set(f'async_failure_callback:{job.id}', str(value), ex=60)
 
 
 def save_result_if_not_stopped(job, connection, result=''):

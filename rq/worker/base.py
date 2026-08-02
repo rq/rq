@@ -436,11 +436,19 @@ class BaseWorker:
 
     @property
     def execution(self) -> Execution | None:
-        """One of the worker's active executions, `None` when idle. Falls back to the
-        persisted execution index so hydrated workers (`Worker.all()`) also see it."""
-        if self.executions:
-            return next(iter(self.executions.values()))
-        executions = self.get_current_executions()
+        """The worker's active execution, `None` when idle. Hydrated workers
+        (`Worker.all()`) read the persisted execution index fresh on every access.
+        Raises `ValueError` when multiple executions are active — the scalar view
+        is ambiguous, use `worker.executions` or `get_current_executions()`."""
+        if not self.executions:
+            executions = self.get_current_executions(refresh=True)
+        else:
+            executions = list(self.executions.values())
+        if len(executions) > 1:
+            raise ValueError(
+                'worker.execution is ambiguous when multiple executions are active, '
+                'use worker.executions or get_current_executions() instead'
+            )
         return executions[0] if executions else None
 
     @execution.setter
@@ -803,7 +811,8 @@ class BaseWorker:
                 )
 
     def get_current_job_id(self) -> str | None:
-        """Job id of one of this worker's active executions, `None` when idle.
+        """Job id of this worker's active execution, `None` when idle.
+        Raises `ValueError` when multiple executions are active.
 
         Returns:
             job_id (Optional[str]): The job id
@@ -812,7 +821,8 @@ class BaseWorker:
         return execution.job_id if execution else None
 
     def get_current_job(self) -> Job | None:
-        """The job one of this worker's active executions is running, `None` when idle.
+        """The job this worker's active execution is running, `None` when idle.
+        Raises `ValueError` when multiple executions are active.
 
         Returns:
             job (Optional[Job]): The job instance.
