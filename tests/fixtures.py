@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from multiprocessing import Process
+from typing import Any
 
 from redis import Redis
 
@@ -273,10 +274,10 @@ def resume_worker(connection_kwargs: dict, interval: float = 1):
 
 
 class Serializer:
-    def loads(self):
+    def loads(self, data: bytes) -> Any:
         pass
 
-    def dumps(self):
+    def dumps(self, obj: Any) -> bytes:
         pass
 
 
