@@ -256,3 +256,41 @@ def acquire_or_refresh_lock(
     elif result == 2:
         return 'refreshed'
     return 'foreign'
+
+
+# Lua script for atomic token-checked lock release. A plain GET + DEL sequence is racy:
+# the lock can change owners between the two commands, deleting another owner's lock.
+RELEASE_LOCK_SCRIPT = """
+    -- KEYS[1] = lock key
+    -- ARGV[1] = owner token
+    -- returns 1 = deleted, 0 = not owned (absent or foreign owner, left untouched)
+    if redis.call('GET', KEYS[1]) == ARGV[1] then
+        return redis.call('DEL', KEYS[1])
+    end
+    return 0
+"""
+
+_registered_release_lock_scripts: dict[Any, Any] = {}
+
+
+def get_release_lock_script(connection):
+    """Get or create the registered Lua script for token-checked lock release."""
+    if connection not in _registered_release_lock_scripts:
+        _registered_release_lock_scripts[connection] = connection.register_script(RELEASE_LOCK_SCRIPT)
+    return _registered_release_lock_scripts[connection]
+
+
+def release_lock(connection, lock_key: str, owner_token: str) -> bool:
+    """Atomically delete a lock if it is still held by `owner_token`.
+
+    Args:
+        connection: Redis connection
+        lock_key (str): The Redis key for the lock
+        owner_token (str): Token identifying the lock owner
+
+    Returns:
+        bool: True if the lock was deleted, False if it was absent or held by
+            another owner (left untouched).
+    """
+    script = get_release_lock_script(connection)
+    return bool(script(keys=[lock_key], args=[owner_token]))

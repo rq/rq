@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.exceptions import DuplicateJobError
 from rq.job import Job, JobStatus
-from rq.scripts import acquire_or_refresh_lock, save_unique_job, schedule_unique_job
+from rq.scripts import acquire_or_refresh_lock, release_lock, save_unique_job, schedule_unique_job
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -234,3 +234,25 @@ class TestAcquireOrRefreshLock(RQTestCase):
         ttl = self.connection.ttl('lock:foreign')
         self.assertGreater(ttl, 0)
         self.assertLessEqual(ttl, 5)
+
+
+class TestReleaseLock(RQTestCase):
+    """Tests for release_lock function."""
+
+    def test_release_own_lock(self):
+        """release_lock deletes a lock holding the same token."""
+        acquire_or_refresh_lock(self.connection, 'lock:release', 'token-1', 61)
+
+        self.assertTrue(release_lock(self.connection, 'lock:release', 'token-1'))
+        self.assertFalse(self.connection.exists('lock:release'))
+
+    def test_release_foreign_lock_untouched(self):
+        """release_lock leaves a lock holding another token untouched."""
+        acquire_or_refresh_lock(self.connection, 'lock:release-foreign', 'token-1', 61)
+
+        self.assertFalse(release_lock(self.connection, 'lock:release-foreign', 'token-2'))
+        self.assertEqual(self.connection.get('lock:release-foreign'), b'token-1')
+
+    def test_release_absent_lock(self):
+        """release_lock returns False for a lock that does not exist."""
+        self.assertFalse(release_lock(self.connection, 'lock:release-absent', 'token-1'))

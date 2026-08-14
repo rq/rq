@@ -23,7 +23,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
-from .scripts import acquire_or_refresh_lock
+from .scripts import acquire_or_refresh_lock, get_acquire_or_refresh_lock_script, release_lock
 from .serializers import resolve_serializer
 from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
 
@@ -286,15 +286,33 @@ class RQScheduler:
         self._stop_requested = True
 
     def heartbeat(self):
-        """Refresh the TTL on the scheduler's metadata hash and its locks."""
+        """Refresh the TTL on the scheduler's metadata hash and the locks it owns.
+        An expired lock is re-acquired; a lock taken over by another scheduler is
+        dropped from `_acquired_locks` so its queue is no longer scheduled."""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
         self.last_heartbeat = now()
+        lock_names = sorted(self._acquired_locks)
+        lock_script = get_acquire_or_refresh_lock_script(self.connection)
         with self.connection.pipeline() as pipeline:
             pipeline.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
             pipeline.expire(self.key, self.interval + 60)
-            for name in self._acquired_locks:
-                pipeline.expire(self.get_locking_key(name), self.interval + 60)
-            pipeline.execute()
+            for name in lock_names:
+                lock_script(keys=[self.get_locking_key(name)], args=[self.name, self.interval + 60], client=pipeline)
+            results = pipeline.execute()
+
+        lost_locks = set()
+        for name, outcome in zip(lock_names, results[2:]):
+            if outcome == 0:
+                lost_locks.add(name)
+            elif outcome == 1:
+                # In heartbeat context, a fresh acquire means our lease had expired unclaimed
+                self.log.warning('Scheduler lock for %s had expired; re-acquired', name)
+        if lost_locks:
+            self.log.warning(
+                'Scheduler locks for %s were taken over by another scheduler', ', '.join(sorted(lost_locks))
+            )
+            self._acquired_locks -= lost_locks
+            self._scheduled_job_registries = []
 
     def stop(self):
         self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
@@ -303,9 +321,9 @@ class RQScheduler:
         self.register_death()
 
     def release_locks(self):
-        """Release acquired locks"""
-        keys = [self.get_locking_key(name) for name in self._acquired_locks]
-        self.connection.delete(*keys)
+        """Release locks still owned by this scheduler, leaving foreign locks untouched"""
+        for name in self._acquired_locks:
+            release_lock(self.connection, self.get_locking_key(name), self.name)
         self._acquired_locks = set()
 
     def start(self):
@@ -329,8 +347,8 @@ class RQScheduler:
             if self.should_reacquire_locks:
                 self.acquire_locks()
 
-            self.enqueue_scheduled_jobs()
             self.heartbeat()
+            self.enqueue_scheduled_jobs()
             time.sleep(self.interval)
 
 
