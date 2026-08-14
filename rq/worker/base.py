@@ -1133,9 +1133,11 @@ class BaseWorker:
                     self.log.debug('Worker %s: dequeued job %s from %s', self.name, blue(job.id), green(queue.name))
                     job.redis_server_version = self.get_redis_server_version()
                     if self.log_job_description:
-                        self.log.info('%s: %s (%s)', green(queue.name), blue(job.description), job.id)
+                        self.log.info(
+                            'Worker %s: %s: %s (%s)', self.name, green(queue.name), blue(job.description), job.id
+                        )
                     else:
-                        self.log.info('%s: %s', green(queue.name), job.id)
+                        self.log.info('Worker %s: %s: %s', self.name, green(queue.name), job.id)
 
                 break
             except DequeueTimeout:
@@ -1596,18 +1598,20 @@ class BaseWorker:
 
             return False
 
-        self.log.info('%s: %s (%s)', green(job.origin), blue('Job OK'), job.id)
+        self.log.info('Worker %s: %s: %s (%s)', self.name, green(job.origin), blue('Job OK'), job.id)
         if return_value is not None:
             self.log.debug('Worker %s: result: %r', self.name, yellow(str(return_value)))
 
         if self.log_result_lifespan:
             result_ttl = job.get_result_ttl(self.default_result_ttl)
             if result_ttl == 0:
-                self.log.info('Result discarded immediately')
+                self.log.info('Worker %s: job %s result discarded immediately', self.name, job.id)
             elif result_ttl > 0:
-                self.log.info('Result is kept for %s seconds', result_ttl)
+                self.log.info('Worker %s: job %s result is kept for %s seconds', self.name, job.id, result_ttl)
             else:
-                self.log.info('Result will never expire, clean up result key manually')
+                self.log.info(
+                    'Worker %s: job %s result will never expire, clean up result key manually', self.name, job.id
+                )
 
         return True
 
