@@ -6,13 +6,14 @@ class NoRedisConnectionException(Exception):
     pass
 
 
-# redis-py >= 8 may add RESP3 maintenance-notification handlers and derived
+# redis-py >= 8 may add maintenance-notification handlers and other derived
 # connection metadata to connection_kwargs. Those values describe the current
 # pool's internal state, and some contain locks, so RQ drops them before
 # rebuilding a Redis connection in another process.
 REDIS_RUNTIME_CONNECTION_KWARGS = (
     'maint_notifications_config',
     'maint_notifications_pool_handler',
+    'himport_registry',
     'event_dispatcher',
     'orig_host_address',
     'orig_socket_timeout',
