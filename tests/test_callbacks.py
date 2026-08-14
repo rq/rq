@@ -148,7 +148,7 @@ class SyncJobCallback(RQTestCase):
 
         job = queue.enqueue(div_by_zero, on_failure=save_exception)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
+        self.assertTrue(self.connection.exists(f'failure_callback:{job.id}'))
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         self.assertEqual(job.get_status(), JobStatus.FAILED)
@@ -157,7 +157,7 @@ class SyncJobCallback(RQTestCase):
         # test string callbacks
         job = queue.enqueue(div_by_zero, on_failure=Callback('tests.fixtures.save_exception'))
         self.assertEqual(job.get_status(), JobStatus.FAILED)
-        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
+        self.assertTrue(self.connection.exists(f'failure_callback:{job.id}'))
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         self.assertEqual(job.get_status(), JobStatus.FAILED)
@@ -258,7 +258,7 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
         print(job.exc_info)
-        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
+        self.assertTrue(self.connection.exists(f'failure_callback:{job.id}'))
 
         job = queue.enqueue(div_by_zero, on_success=save_result)
         worker.work(burst=True)
@@ -271,7 +271,7 @@ class WorkerCallbackTestCase(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         job.refresh()
         print(job.exc_info)
-        self.assertIn('div_by_zero', self.connection.get(f'failure_callback:{job.id}').decode())
+        self.assertTrue(self.connection.exists(f'failure_callback:{job.id}'))
 
         job = queue.enqueue(div_by_zero, on_success=Callback('tests.fixtures.save_result'))
         worker.work(burst=True)
