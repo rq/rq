@@ -1326,8 +1326,10 @@ class TestWorker(RQTestCase):
         w = Worker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.perform_job(job, q, w.prepare_execution(job))
-        mock_logger_info.assert_called_with('Result is kept for %s seconds', 10)
-        self.assertIn('Result is kept for %s seconds', [c[0][0] for c in mock_logger_info.call_args_list])
+        mock_logger_info.assert_called_with('Worker %s: job %s result is kept for %s seconds', w.name, job.id, 10)
+        self.assertIn(
+            'Worker %s: job %s result is kept for %s seconds', [c[0][0] for c in mock_logger_info.call_args_list]
+        )
 
     @mock.patch('rq.worker.logger.info')
     def test_log_result_lifespan_false(self, mock_logger_info):
@@ -1340,7 +1342,9 @@ class TestWorker(RQTestCase):
         w = TestWorker([q], connection=self.connection)
         job = q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.perform_job(job, q, w.prepare_execution(job))
-        self.assertNotIn('Result is kept for 10 seconds', [c[0][0] for c in mock_logger_info.call_args_list])
+        self.assertNotIn(
+            'Worker %s: job %s result is kept for %s seconds', [c[0][0] for c in mock_logger_info.call_args_list]
+        )
 
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_on_dequeue_true(self, mock_logger_info):
@@ -1349,7 +1353,7 @@ class TestWorker(RQTestCase):
         w = Worker([q], connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
-        self.assertIn('Frank', mock_logger_info.call_args[0][2])
+        self.assertIn('Frank', mock_logger_info.call_args[0][3])
 
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_on_dequeue_false(self, mock_logger_info):
@@ -1358,7 +1362,7 @@ class TestWorker(RQTestCase):
         w = Worker([q], log_job_description=False, connection=self.connection)
         q.enqueue(say_hello, args=('Frank',), result_ttl=10)
         w.dequeue_job_and_maintain_ttl(10)
-        self.assertNotIn('Frank', mock_logger_info.call_args[0][2])
+        self.assertNotIn('Frank', mock_logger_info.call_args[0][3])
 
     @mock.patch('rq.worker.logger.info')
     def test_log_job_description_on_success_true(self, mock_logger_info):
