@@ -41,17 +41,19 @@ class TestWorker(RQTestCase):
     def test_filters_non_serializable_connection_kwargs(self):
         """SpawnWorker strips connection-local runtime objects before rebuilding Redis in the child.
 
-        redis-py 8 adds an unpicklable maintenance-notification handler to connection_kwargs;
-        get_connection_kwargs (used by fork_work_horse) must drop it so the
-        kwargs can be rebuilt in the spawned process.
+        redis-py 8 adds an unpicklable maintenance-notification handler to connection_kwargs,
+        while redis-py 8.1 adds an HImportRegistry; get_connection_kwargs (used by fork_work_horse)
+        must drop both so the kwargs can be rebuilt in the spawned process.
         """
         connection = Redis()
         conn_kwargs = connection.connection_pool.connection_kwargs
         conn_kwargs['maint_notifications_pool_handler'] = object()
+        conn_kwargs['himport_registry'] = 'runtime state'
 
         redis_kwargs = get_connection_kwargs(connection)
 
         self.assertNotIn('maint_notifications_pool_handler', redis_kwargs)
+        self.assertNotIn('himport_registry', redis_kwargs)
         self.assertIn('maint_notifications_pool_handler', conn_kwargs)
 
     def test_worker_normalizes_serializer_arg_for_spawn(self):
