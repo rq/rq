@@ -23,6 +23,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
+from .scripts import acquire_or_refresh_lock
 from .serializers import resolve_serializer
 from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
 
@@ -119,17 +120,24 @@ class RQScheduler:
         return (datetime.now() - self.lock_acquisition_time).total_seconds() > DEFAULT_SCHEDULER_FALLBACK_PERIOD
 
     def acquire_locks(self, auto_start=False):
-        """Returns names of queue it successfully acquires lock on"""
-        successful_locks = set()
+        """Acquire or refresh scheduler locks, returning queue names verified as owned
+        (newly acquired or reclaimed)."""
+        verified_locks = set()
         self.log.debug('Acquiring scheduler lock for %s', ', '.join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), self.name, nx=True, ex=self.interval + 60):
+            outcome = acquire_or_refresh_lock(
+                self.connection, self.get_locking_key(name), self.name, self.interval + 60
+            )
+            if outcome == 'acquired':
                 self.log.info('Acquired scheduler lock for %s', name)
-                successful_locks.add(name)
+                verified_locks.add(name)
+            elif outcome == 'refreshed':
+                self.log.debug('Refreshed scheduler lock for %s', name)
+                verified_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
         self._scheduled_job_registries = []
-        self._acquired_locks = self._acquired_locks.union(successful_locks)
+        self._acquired_locks = verified_locks
         self.lock_acquisition_time = datetime.now()
 
         # If auto_start is requested and scheduler is not started,
@@ -138,7 +146,7 @@ class RQScheduler:
             if not self._process or not self._process.is_alive():
                 self.start()
 
-        return successful_locks
+        return verified_locks
 
     def prepare_registries(self, queue_names: Iterable[str] | None = None):
         """Prepare scheduled job registries for use"""

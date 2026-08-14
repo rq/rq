@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.exceptions import DuplicateJobError
 from rq.job import Job, JobStatus
-from rq.scripts import save_unique_job, schedule_unique_job
+from rq.scripts import acquire_or_refresh_lock, save_unique_job, schedule_unique_job
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -200,3 +200,37 @@ class TestScheduleUniqueJob(RQTestCase):
             schedule_unique_job(self.connection, queue.key, registry_key, job2, scheduled_time)
 
         self.assertIn('dup-sched-job', str(context.exception))
+
+
+class TestAcquireOrRefreshLock(RQTestCase):
+    """Tests for acquire_or_refresh_lock function."""
+
+    def test_acquire_empty_lock(self):
+        """acquire_or_refresh_lock acquires an empty lock and sets its TTL."""
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:acquire', 'token-1', 61)
+        self.assertEqual(outcome, 'acquired')
+        self.assertEqual(self.connection.get('lock:acquire'), b'token-1')
+        self.assertGreaterEqual(self.connection.ttl('lock:acquire'), 55)
+
+    def test_refresh_own_lock(self):
+        """acquire_or_refresh_lock extends the TTL of a lock holding the same token."""
+        acquire_or_refresh_lock(self.connection, 'lock:refresh', 'token-1', 61)
+        self.connection.expire('lock:refresh', 5)
+
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:refresh', 'token-1', 61)
+        self.assertEqual(outcome, 'refreshed')
+        self.assertEqual(self.connection.get('lock:refresh'), b'token-1')
+        self.assertGreaterEqual(self.connection.ttl('lock:refresh'), 55)
+
+    def test_foreign_lock_untouched(self):
+        """acquire_or_refresh_lock leaves a lock holding another token untouched."""
+        acquire_or_refresh_lock(self.connection, 'lock:foreign', 'token-1', 61)
+        self.connection.expire('lock:foreign', 5)
+
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:foreign', 'token-2', 61)
+        self.assertEqual(outcome, 'foreign')
+        self.assertEqual(self.connection.get('lock:foreign'), b'token-1')
+        # TTL is still the short one set above: not extended, not removed
+        ttl = self.connection.ttl('lock:foreign')
+        self.assertGreater(ttl, 0)
+        self.assertLessEqual(ttl, 5)

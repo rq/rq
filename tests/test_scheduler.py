@@ -241,17 +241,53 @@ class TestScheduler(RQTestCase):
 
         self.assertEqual(scheduler.acquire_locks(), {name_1})
         self.assertEqual(scheduler._acquired_locks, {name_1})
-        self.assertEqual(scheduler.acquire_locks(), set())
+        # A second call refreshes the lock held by the same scheduler
+        self.assertEqual(scheduler.acquire_locks(), {name_1})
 
-        # Only name_2 is returned since name_1 is already locked
+        # Only name_2 is returned since name_1 is locked by another scheduler
         scheduler = RQScheduler([name_1, name_2], self.connection)
         self.assertEqual(scheduler.acquire_locks(), {name_2})
         self.assertEqual(scheduler._acquired_locks, {name_2})
 
-        # When a new lock is successfully acquired, _acquired_locks is added
+        # name_2 is refreshed while name_3 is newly acquired
         scheduler._queue_names.add(name_3)
-        self.assertEqual(scheduler.acquire_locks(), {name_3})
+        self.assertEqual(scheduler.acquire_locks(), {name_2, name_3})
         self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
+
+    def test_lock_acquisition_drops_foreign_locks(self):
+        """acquire_locks() drops locks overwritten by another scheduler and leaves them untouched"""
+        name = 'lock-test-foreign'
+        scheduler = RQScheduler([name], self.connection)
+        locking_key = scheduler.get_locking_key(name)
+
+        self.assertEqual(scheduler.acquire_locks(), {name})
+        self.connection.set(locking_key, 'other-scheduler', ex=5)
+
+        self.assertEqual(scheduler.acquire_locks(), set())
+        self.assertEqual(scheduler._acquired_locks, set())
+
+        # The foreign token is still in place and its TTL was not extended or removed
+        self.assertEqual(self.connection.get(locking_key), b'other-scheduler')
+        ttl = self.connection.ttl(locking_key)
+        self.assertGreater(ttl, 0)
+        self.assertLessEqual(ttl, 5)
+
+        # With no verified locks, auto_start doesn't fork a scheduler process
+        scheduler.acquire_locks(auto_start=True)
+        self.assertIsNone(scheduler._process)
+
+    def test_lock_acquisition_refreshes_own_token(self):
+        """acquire_locks() keeps a lock still holding this scheduler's token and refreshes its TTL"""
+        name = 'lock-test-refresh'
+        scheduler = RQScheduler([name], self.connection)
+        locking_key = scheduler.get_locking_key(name)
+
+        self.assertEqual(scheduler.acquire_locks(), {name})
+        self.connection.expire(locking_key, 5)
+
+        self.assertEqual(scheduler.acquire_locks(), {name})
+        self.assertEqual(scheduler._acquired_locks, {name})
+        self.assertGreaterEqual(self.connection.ttl(locking_key), 55)
 
     def test_lock_acquisition_with_auto_start(self):
         """Test lock acquisition with auto_start=True"""
