@@ -50,11 +50,12 @@ jobs:
           - { python-version: "3.14", valkey-version: "9.0", redis-py-version: "8" }
           - { python-version: "3.14", valkey-version: "8.0", redis-py-version: "7" }
           - { python-version: "3.14", valkey-version: "7.2", redis-py-version: "8" }
-          - { python-version: "3.13", valkey-version: "9.0", redis-py-version: "6" }
+          # redis-py 6.0.0 is explicitly unsupported; use the latest 6.x release.
+          - { python-version: "3.13", valkey-version: "9.0", redis-py-version: "6.4.0" }
           - { python-version: "3.13", valkey-version: "8.0", redis-py-version: "8" }
           - { python-version: "3.13", valkey-version: "7.2", redis-py-version: "5" }
           - { python-version: "3.12", valkey-version: "9.0", redis-py-version: "5" }
-          - { python-version: "3.12", valkey-version: "8.0", redis-py-version: "6" }
+          - { python-version: "3.12", valkey-version: "8.0", redis-py-version: "6.4.0" }
           - { python-version: "3.12", valkey-version: "7.2", redis-py-version: "7" }
 
     steps:
