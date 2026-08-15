@@ -23,7 +23,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
-from .scripts import acquire_or_refresh_lock, get_acquire_or_refresh_lock_script, release_lock
+from .scripts import ACQUIRE_OR_REFRESH_LOCK_SCRIPT, acquire_or_refresh_lock, release_lock
 from .serializers import resolve_serializer
 from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
 
@@ -292,7 +292,7 @@ class RQScheduler:
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
         self.last_heartbeat = now()
         lock_names = sorted(self._acquired_locks)
-        lock_script = get_acquire_or_refresh_lock_script(self.connection)
+        lock_script = self.connection.register_script(ACQUIRE_OR_REFRESH_LOCK_SCRIPT)
         with self.connection.pipeline() as pipeline:
             pipeline.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
             pipeline.expire(self.key, self.interval + 60)

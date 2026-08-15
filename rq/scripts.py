@@ -223,15 +223,6 @@ ACQUIRE_OR_REFRESH_LOCK_SCRIPT = """
     return 0
 """
 
-_registered_lock_scripts: dict[Any, Any] = {}
-
-
-def get_acquire_or_refresh_lock_script(connection):
-    """Get or create the registered Lua script for lock acquire-or-refresh."""
-    if connection not in _registered_lock_scripts:
-        _registered_lock_scripts[connection] = connection.register_script(ACQUIRE_OR_REFRESH_LOCK_SCRIPT)
-    return _registered_lock_scripts[connection]
-
 
 def acquire_or_refresh_lock(
     connection, lock_key: str, owner_token: str, ttl: int
@@ -249,7 +240,7 @@ def acquire_or_refresh_lock(
             already held `owner_token` and its TTL was extended, `foreign` if it is
             held by another owner (left untouched).
     """
-    script = get_acquire_or_refresh_lock_script(connection)
+    script = connection.register_script(ACQUIRE_OR_REFRESH_LOCK_SCRIPT)
     result = script(keys=[lock_key], args=[owner_token, ttl])
     if result == 1:
         return 'acquired'
@@ -270,15 +261,6 @@ RELEASE_LOCK_SCRIPT = """
     return 0
 """
 
-_registered_release_lock_scripts: dict[Any, Any] = {}
-
-
-def get_release_lock_script(connection):
-    """Get or create the registered Lua script for token-checked lock release."""
-    if connection not in _registered_release_lock_scripts:
-        _registered_release_lock_scripts[connection] = connection.register_script(RELEASE_LOCK_SCRIPT)
-    return _registered_release_lock_scripts[connection]
-
 
 def release_lock(connection, lock_key: str, owner_token: str) -> bool:
     """Atomically delete a lock if it is still held by `owner_token`.
@@ -292,5 +274,5 @@ def release_lock(connection, lock_key: str, owner_token: str) -> bool:
         bool: True if the lock was deleted, False if it was absent or held by
             another owner (left untouched).
     """
-    script = get_release_lock_script(connection)
+    script = connection.register_script(RELEASE_LOCK_SCRIPT)
     return bool(script(keys=[lock_key], args=[owner_token]))
