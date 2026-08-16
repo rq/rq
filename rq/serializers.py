@@ -24,6 +24,30 @@ class DefaultSerializer:
 PickleSerializer = DefaultSerializer
 
 
+class CloudpickleSerializer:
+    """Serializer backed by the optional cloudpickle dependency."""
+
+    @staticmethod
+    def dumps(obj: Any, /) -> bytes:
+        try:
+            import cloudpickle
+        except ImportError as exc:
+            raise ImportError(
+                "The 'cloudpickle' serializer requires the 'cloudpickle' package."
+            ) from exc
+        return cloudpickle.dumps(obj)
+
+    @staticmethod
+    def loads(data: bytes, /) -> Any:
+        try:
+            import cloudpickle
+        except ImportError as exc:
+            raise ImportError(
+                "The 'cloudpickle' serializer requires the 'cloudpickle' package."
+            ) from exc
+        return cloudpickle.loads(data)
+
+
 class JSONSerializer:
     @staticmethod
     def dumps(*args, **kwargs):
@@ -37,6 +61,7 @@ class JSONSerializer:
 SERIALIZER_ALIASES: dict[str, Serializer] = {
     'json': JSONSerializer,
     'pickle': PickleSerializer,
+    'cloudpickle': CloudpickleSerializer,
 }
 
 
