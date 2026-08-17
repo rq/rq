@@ -241,17 +241,53 @@ class TestScheduler(RQTestCase):
 
         self.assertEqual(scheduler.acquire_locks(), {name_1})
         self.assertEqual(scheduler._acquired_locks, {name_1})
-        self.assertEqual(scheduler.acquire_locks(), set())
+        # A second call refreshes the lock held by the same scheduler
+        self.assertEqual(scheduler.acquire_locks(), {name_1})
 
-        # Only name_2 is returned since name_1 is already locked
+        # Only name_2 is returned since name_1 is locked by another scheduler
         scheduler = RQScheduler([name_1, name_2], self.connection)
         self.assertEqual(scheduler.acquire_locks(), {name_2})
         self.assertEqual(scheduler._acquired_locks, {name_2})
 
-        # When a new lock is successfully acquired, _acquired_locks is added
+        # name_2 is refreshed while name_3 is newly acquired
         scheduler._queue_names.add(name_3)
-        self.assertEqual(scheduler.acquire_locks(), {name_3})
+        self.assertEqual(scheduler.acquire_locks(), {name_2, name_3})
         self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
+
+    def test_lock_acquisition_drops_taken_locks(self):
+        """acquire_locks() drops locks overwritten by another scheduler and leaves them untouched"""
+        name = 'lock-test-taken'
+        scheduler = RQScheduler([name], self.connection)
+        locking_key = scheduler.get_locking_key(name)
+
+        self.assertEqual(scheduler.acquire_locks(), {name})
+        self.connection.set(locking_key, 'other-scheduler', ex=5)
+
+        self.assertEqual(scheduler.acquire_locks(), set())
+        self.assertEqual(scheduler._acquired_locks, set())
+
+        # The other scheduler's token is still in place and its TTL was not extended or removed
+        self.assertEqual(self.connection.get(locking_key), b'other-scheduler')
+        ttl = self.connection.ttl(locking_key)
+        self.assertGreater(ttl, 0)
+        self.assertLessEqual(ttl, 5)
+
+        # With no verified locks, auto_start doesn't fork a scheduler process
+        scheduler.acquire_locks(auto_start=True)
+        self.assertIsNone(scheduler._process)
+
+    def test_lock_acquisition_refreshes_own_token(self):
+        """acquire_locks() keeps a lock still holding this scheduler's token and refreshes its TTL"""
+        name = 'lock-test-refresh'
+        scheduler = RQScheduler([name], self.connection)
+        locking_key = scheduler.get_locking_key(name)
+
+        self.assertEqual(scheduler.acquire_locks(), {name})
+        self.connection.expire(locking_key, 5)
+
+        self.assertEqual(scheduler.acquire_locks(), {name})
+        self.assertEqual(scheduler._acquired_locks, {name})
+        self.assertGreaterEqual(self.connection.ttl(locking_key), 55)
 
     def test_lock_acquisition_with_auto_start(self):
         """Test lock acquisition with auto_start=True"""
@@ -368,6 +404,59 @@ class TestScheduler(RQTestCase):
         self.connection.expire(locking_key_1, 1000)
         scheduler.heartbeat()
         self.assertEqual(self.connection.ttl(locking_key_1), 61)
+
+    def test_heartbeat_updates_acquired_locks(self):
+        """heartbeat() keeps owned and expired locks but drops locks taken by another scheduler.
+        Redis-level lock effects are covered by the script tests in test_scripts.py."""
+        scheduler = RQScheduler(['hb-owned', 'hb-expired', 'hb-taken'], self.connection)
+        scheduler.acquire_locks()
+        scheduler.register_birth()
+        scheduler.prepare_registries()
+
+        self.connection.delete(scheduler.get_locking_key('hb-expired'))
+        self.connection.set(scheduler.get_locking_key('hb-taken'), 'another-scheduler', ex=5)
+
+        scheduler.heartbeat()
+        self.assertEqual(scheduler._acquired_locks, {'hb-owned', 'hb-expired'})
+        self.assertEqual(scheduler._scheduled_job_registries, [])
+
+        scheduler.release_locks()
+        scheduler.register_death()
+
+    def test_release_locks_leaves_taken_lock(self):
+        """release_locks() does not delete a lock this scheduler no longer owns"""
+        name = 'release-taken'
+        scheduler = RQScheduler([name], self.connection)
+        scheduler.acquire_locks()
+        locking_key = scheduler.get_locking_key(name)
+
+        # The lock changes owners while this scheduler still believes it owns it
+        self.connection.set(locking_key, 'another-scheduler', ex=5)
+
+        scheduler.release_locks()
+        self.assertEqual(scheduler._acquired_locks, set())
+        self.assertEqual(self.connection.get(locking_key), b'another-scheduler')
+
+    def test_work_heartbeats_before_enqueuing(self):
+        """work() verifies locks via heartbeat() before enqueuing scheduled jobs"""
+        scheduler = RQScheduler(['work-loop-order'], self.connection)
+        scheduler.acquire_locks()
+        calls = []
+
+        def stop_after_first_iteration(interval):
+            scheduler._stop_requested = True
+
+        with (
+            mock.patch.object(scheduler, 'heartbeat', side_effect=lambda: calls.append('heartbeat')),
+            mock.patch.object(scheduler, 'enqueue_scheduled_jobs', side_effect=lambda: calls.append('enqueue')),
+            mock.patch('rq.scheduler.time.sleep', side_effect=stop_after_first_iteration),
+        ):
+            scheduler.work()
+
+        self.assertEqual(calls, ['heartbeat', 'enqueue'])
+        # stop() ran: locks released and the metadata hash deleted
+        self.assertEqual(scheduler._acquired_locks, set())
+        self.assertFalse(self.connection.exists(scheduler.key))
 
     def test_enqueue_scheduled_jobs(self):
         """Scheduler can enqueue scheduled jobs"""

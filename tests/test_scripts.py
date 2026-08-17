@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from rq import Queue
 from rq.exceptions import DuplicateJobError
 from rq.job import Job, JobStatus
-from rq.scripts import save_unique_job, schedule_unique_job
+from rq.scripts import acquire_or_refresh_lock, release_lock, save_unique_job, schedule_unique_job
 from tests import RQTestCase
 from tests.fixtures import say_hello
 
@@ -200,3 +200,59 @@ class TestScheduleUniqueJob(RQTestCase):
             schedule_unique_job(self.connection, queue.key, registry_key, job2, scheduled_time)
 
         self.assertIn('dup-sched-job', str(context.exception))
+
+
+class TestAcquireOrRefreshLock(RQTestCase):
+    """Tests for acquire_or_refresh_lock function."""
+
+    def test_acquire_empty_lock(self):
+        """acquire_or_refresh_lock acquires an empty lock and sets its TTL."""
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:acquire', 'token-1', 61)
+        self.assertEqual(outcome, 'acquired')
+        self.assertEqual(self.connection.get('lock:acquire'), b'token-1')
+        self.assertGreaterEqual(self.connection.ttl('lock:acquire'), 55)
+
+    def test_refresh_own_lock(self):
+        """acquire_or_refresh_lock extends the TTL of a lock holding the same token."""
+        acquire_or_refresh_lock(self.connection, 'lock:refresh', 'token-1', 61)
+        self.connection.expire('lock:refresh', 5)
+
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:refresh', 'token-1', 61)
+        self.assertEqual(outcome, 'refreshed')
+        self.assertEqual(self.connection.get('lock:refresh'), b'token-1')
+        self.assertGreaterEqual(self.connection.ttl('lock:refresh'), 55)
+
+    def test_taken_lock_untouched(self):
+        """acquire_or_refresh_lock leaves a lock holding another token untouched."""
+        acquire_or_refresh_lock(self.connection, 'lock:taken', 'token-1', 61)
+        self.connection.expire('lock:taken', 5)
+
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:taken', 'token-2', 61)
+        self.assertEqual(outcome, 'taken')
+        self.assertEqual(self.connection.get('lock:taken'), b'token-1')
+        # TTL is still the short one set above: not extended, not removed
+        ttl = self.connection.ttl('lock:taken')
+        self.assertGreater(ttl, 0)
+        self.assertLessEqual(ttl, 5)
+
+
+class TestReleaseLock(RQTestCase):
+    """Tests for release_lock function."""
+
+    def test_release_own_lock(self):
+        """release_lock deletes a lock holding the same token."""
+        acquire_or_refresh_lock(self.connection, 'lock:release', 'token-1', 61)
+
+        self.assertTrue(release_lock(self.connection, 'lock:release', 'token-1'))
+        self.assertFalse(self.connection.exists('lock:release'))
+
+    def test_release_taken_lock_untouched(self):
+        """release_lock leaves a lock holding another token untouched."""
+        acquire_or_refresh_lock(self.connection, 'lock:release-taken', 'token-1', 61)
+
+        self.assertFalse(release_lock(self.connection, 'lock:release-taken', 'token-2'))
+        self.assertEqual(self.connection.get('lock:release-taken'), b'token-1')
+
+    def test_release_absent_lock(self):
+        """release_lock returns False for a lock that does not exist."""
+        self.assertFalse(release_lock(self.connection, 'lock:release-absent', 'token-1'))

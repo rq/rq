@@ -2,7 +2,7 @@ import calendar
 import logging
 import time
 from datetime import timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from .exceptions import DuplicateJobError
 from .logutils import blue, green
@@ -202,3 +202,75 @@ def schedule_unique_job(connection, queue_key, registry_key, job, scheduled_date
 
     logger.debug('Uniquely scheduled job %s in %s', blue(job.id), green(registry_key))
     return True
+
+
+# Lua script for atomic lock acquire-or-refresh.
+ACQUIRE_OR_REFRESH_LOCK_SCRIPT = """
+    -- KEYS[1] = lock key
+    -- ARGV[1] = owner token
+    -- ARGV[2] = TTL in seconds
+    -- returns 1 = acquired, 2 = refreshed, 0 = taken by another owner
+    local value = redis.call('GET', KEYS[1])
+    if not value then
+        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+        return 1
+    elseif value == ARGV[1] then
+        redis.call('EXPIRE', KEYS[1], ARGV[2])
+        return 2
+    end
+    return 0
+"""
+
+
+def acquire_or_refresh_lock(
+    connection, lock_key: str, owner_token: str, ttl: int
+) -> Literal['acquired', 'refreshed', 'taken']:
+    """Atomically acquire a lock or refresh its TTL if already held by `owner_token`.
+
+    Args:
+        connection: Redis connection
+        lock_key (str): The Redis key for the lock
+        owner_token (str): Token identifying the lock owner
+        ttl (int): Lock TTL in seconds
+
+    Returns:
+        str: `acquired` if the lock was empty and is now owned, `refreshed` if it
+            already held `owner_token` and its TTL was extended, `taken` if it is
+            held by another owner (left untouched).
+    """
+    script = connection.register_script(ACQUIRE_OR_REFRESH_LOCK_SCRIPT)
+    result = script(keys=[lock_key], args=[owner_token, ttl])
+    if result == 1:
+        return 'acquired'
+    elif result == 2:
+        return 'refreshed'
+    return 'taken'
+
+
+# Lua script for atomic token-checked lock release. A plain GET + DEL sequence is racy:
+# the lock can change owners between the two commands, deleting another owner's lock.
+RELEASE_LOCK_SCRIPT = """
+    -- KEYS[1] = lock key
+    -- ARGV[1] = owner token
+    -- returns 1 = deleted, 0 = not owned (absent or taken by another owner, left untouched)
+    if redis.call('GET', KEYS[1]) == ARGV[1] then
+        return redis.call('DEL', KEYS[1])
+    end
+    return 0
+"""
+
+
+def release_lock(connection, lock_key: str, owner_token: str) -> bool:
+    """Atomically delete a lock if it is still held by `owner_token`.
+
+    Args:
+        connection: Redis connection
+        lock_key (str): The Redis key for the lock
+        owner_token (str): Token identifying the lock owner
+
+    Returns:
+        bool: True if the lock was deleted, False if it was absent or held by
+            another owner (left untouched).
+    """
+    script = connection.register_script(RELEASE_LOCK_SCRIPT)
+    return bool(script(keys=[lock_key], args=[owner_token]))

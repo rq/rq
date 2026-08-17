@@ -23,6 +23,7 @@ from .job import Job
 from .logutils import setup_loghandlers
 from .queue import Queue
 from .registry import ScheduledJobRegistry
+from .scripts import ACQUIRE_OR_REFRESH_LOCK_SCRIPT, acquire_or_refresh_lock, release_lock
 from .serializers import resolve_serializer
 from .utils import current_timestamp, decode_redis_hash, now, parse_names, utcformat, utcparse
 
@@ -119,17 +120,24 @@ class RQScheduler:
         return (datetime.now() - self.lock_acquisition_time).total_seconds() > DEFAULT_SCHEDULER_FALLBACK_PERIOD
 
     def acquire_locks(self, auto_start=False):
-        """Returns names of queue it successfully acquires lock on"""
+        """Acquire or refresh scheduler locks, returning queue names verified as owned
+        (newly acquired or reclaimed)."""
         successful_locks = set()
         self.log.debug('Acquiring scheduler lock for %s', ', '.join(self._queue_names))
         for name in self._queue_names:
-            if self.connection.set(self.get_locking_key(name), self.name, nx=True, ex=self.interval + 60):
+            outcome = acquire_or_refresh_lock(
+                self.connection, self.get_locking_key(name), self.name, self.interval + 60
+            )
+            if outcome == 'acquired':
                 self.log.info('Acquired scheduler lock for %s', name)
+                successful_locks.add(name)
+            elif outcome == 'refreshed':
+                self.log.debug('Refreshed scheduler lock for %s', name)
                 successful_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
         self._scheduled_job_registries = []
-        self._acquired_locks = self._acquired_locks.union(successful_locks)
+        self._acquired_locks = successful_locks
         self.lock_acquisition_time = datetime.now()
 
         # If auto_start is requested and scheduler is not started,
@@ -257,15 +265,33 @@ class RQScheduler:
         self._stop_requested = True
 
     def heartbeat(self):
-        """Refresh the TTL on the scheduler's metadata hash and its locks."""
+        """Refresh the TTL on the scheduler's metadata hash and the locks it owns.
+        An expired lock is re-acquired; a lock taken over by another scheduler is
+        dropped from `_acquired_locks` so its queue is no longer scheduled."""
         self.log.debug('Scheduler sending heartbeat to %s', ', '.join(self.acquired_locks))
         self.last_heartbeat = now()
+        lock_names = sorted(self._acquired_locks)
+        lock_script = self.connection.register_script(ACQUIRE_OR_REFRESH_LOCK_SCRIPT)
         with self.connection.pipeline() as pipeline:
             pipeline.hset(self.key, 'last_heartbeat', utcformat(self.last_heartbeat))
             pipeline.expire(self.key, self.interval + 60)
-            for name in self._acquired_locks:
-                pipeline.expire(self.get_locking_key(name), self.interval + 60)
-            pipeline.execute()
+            for name in lock_names:
+                lock_script(keys=[self.get_locking_key(name)], args=[self.name, self.interval + 60], client=pipeline)
+            results = pipeline.execute()
+
+        lost_locks = set()
+        for name, outcome in zip(lock_names, results[2:]):
+            if outcome == 0:
+                lost_locks.add(name)
+            elif outcome == 1:
+                # In heartbeat context, a fresh acquire means our lease had expired unclaimed
+                self.log.warning('Scheduler lock for %s had expired; re-acquired', name)
+        if lost_locks:
+            self.log.warning(
+                'Scheduler locks for %s were taken over by another scheduler', ', '.join(sorted(lost_locks))
+            )
+            self._acquired_locks -= lost_locks
+            self._scheduled_job_registries = []
 
     def stop(self):
         self.log.info('Scheduler stopping, releasing locks for %s...', ', '.join(self._acquired_locks))
@@ -274,9 +300,9 @@ class RQScheduler:
         self.register_death()
 
     def release_locks(self):
-        """Release acquired locks"""
-        keys = [self.get_locking_key(name) for name in self._acquired_locks]
-        self.connection.delete(*keys)
+        """Release locks still owned by this scheduler, leaving locks held by other schedulers untouched"""
+        for name in self._acquired_locks:
+            release_lock(self.connection, self.get_locking_key(name), self.name)
         self._acquired_locks = set()
 
     def start(self):
@@ -300,8 +326,8 @@ class RQScheduler:
             if self.should_reacquire_locks:
                 self.acquire_locks()
 
-            self.enqueue_scheduled_jobs()
             self.heartbeat()
+            self.enqueue_scheduled_jobs()
             time.sleep(self.interval)
 
 
