@@ -1,3 +1,14 @@
+### RQ 2.11.0 (2026-08-17)
+* `CronJob` now keeps a history of jobs it created, accessible via `cron_job.get_job_ids()`. Thanks @selwin!
+* `RQScheduler` now acquire and refresh locks before enqueueing. Thanks @selwin!
+* Each `CronJob` now has a `name`. Thanks @selwin!
+* `rq worker-pool` now supports custom exception handlers. Thanks @njits030!
+* `rq worker-pool` now honors the `DICT_CONFIG` logging setting from config files. Thanks @razchiriac!
+* `Execution` now stores the name of the worker running it. Thanks @selwin!
+* Fixed an issue where calling `create_cron()` multiple times creates duplicate jobs. Thanks @selwin!
+* Fixed `SpawnWorker` compatibility with `redis-py` >= 8.1. Thanks @b3n4kh!
+* Worker log messages now include the worker name and job ID. Thanks @selwin!
+
 ### RQ 2.10.0 (2026-06-20)
 * Added [webhook notifications](https://python-rq.org/docs/#webhooks) to notify external end points when a job finishes or fails. Thanks @selwin!
 * RQScheduler now has a stable identity and persisted metadata. Thanks @selwin!
