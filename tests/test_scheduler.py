@@ -254,9 +254,9 @@ class TestScheduler(RQTestCase):
         self.assertEqual(scheduler.acquire_locks(), {name_2, name_3})
         self.assertEqual(scheduler._acquired_locks, {name_2, name_3})
 
-    def test_lock_acquisition_drops_foreign_locks(self):
+    def test_lock_acquisition_drops_taken_locks(self):
         """acquire_locks() drops locks overwritten by another scheduler and leaves them untouched"""
-        name = 'lock-test-foreign'
+        name = 'lock-test-taken'
         scheduler = RQScheduler([name], self.connection)
         locking_key = scheduler.get_locking_key(name)
 
@@ -266,7 +266,7 @@ class TestScheduler(RQTestCase):
         self.assertEqual(scheduler.acquire_locks(), set())
         self.assertEqual(scheduler._acquired_locks, set())
 
-        # The foreign token is still in place and its TTL was not extended or removed
+        # The other scheduler's token is still in place and its TTL was not extended or removed
         self.assertEqual(self.connection.get(locking_key), b'other-scheduler')
         ttl = self.connection.ttl(locking_key)
         self.assertGreater(ttl, 0)
@@ -424,13 +424,13 @@ class TestScheduler(RQTestCase):
         self.assertEqual(scheduler._scheduled_job_registries, [])
         self.assertGreaterEqual(self.connection.ttl(locking_key_1), 55)
 
-        # The foreign lock keeps its owner and its TTL was not extended or removed
+        # The taken lock keeps its owner and its TTL was not extended or removed
         self.assertEqual(self.connection.get(locking_key_2), b'another-scheduler')
         ttl = self.connection.ttl(locking_key_2)
         self.assertGreater(ttl, 0)
         self.assertLessEqual(ttl, 5)
 
-        # stop() deletes the owned lock but not the foreign one
+        # stop() deletes the owned lock but not the taken one
         scheduler.stop()
         self.assertFalse(self.connection.exists(locking_key_1))
         self.assertEqual(self.connection.get(locking_key_2), b'another-scheduler')
@@ -451,9 +451,9 @@ class TestScheduler(RQTestCase):
         self.assertGreaterEqual(self.connection.ttl(locking_key), 55)
         scheduler.release_locks()
 
-    def test_release_locks_leaves_foreign_lock(self):
+    def test_release_locks_leaves_taken_lock(self):
         """release_locks() does not delete a lock this scheduler no longer owns"""
-        name = 'release-foreign'
+        name = 'release-taken'
         scheduler = RQScheduler([name], self.connection)
         scheduler.acquire_locks()
         locking_key = scheduler.get_locking_key(name)

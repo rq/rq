@@ -122,7 +122,7 @@ class RQScheduler:
     def acquire_locks(self, auto_start=False):
         """Acquire or refresh scheduler locks, returning queue names verified as owned
         (newly acquired or reclaimed)."""
-        verified_locks = set()
+        successful_locks = set()
         self.log.debug('Acquiring scheduler lock for %s', ', '.join(self._queue_names))
         for name in self._queue_names:
             outcome = acquire_or_refresh_lock(
@@ -130,14 +130,14 @@ class RQScheduler:
             )
             if outcome == 'acquired':
                 self.log.info('Acquired scheduler lock for %s', name)
-                verified_locks.add(name)
+                successful_locks.add(name)
             elif outcome == 'refreshed':
                 self.log.debug('Refreshed scheduler lock for %s', name)
-                verified_locks.add(name)
+                successful_locks.add(name)
 
         # Always reset _scheduled_job_registries when acquiring locks
         self._scheduled_job_registries = []
-        self._acquired_locks = verified_locks
+        self._acquired_locks = successful_locks
         self.lock_acquisition_time = datetime.now()
 
         # If auto_start is requested and scheduler is not started,
@@ -146,7 +146,7 @@ class RQScheduler:
             if not self._process or not self._process.is_alive():
                 self.start()
 
-        return verified_locks
+        return successful_locks
 
     def prepare_registries(self, queue_names: Iterable[str] | None = None):
         """Prepare scheduled job registries for use"""
@@ -321,7 +321,7 @@ class RQScheduler:
         self.register_death()
 
     def release_locks(self):
-        """Release locks still owned by this scheduler, leaving foreign locks untouched"""
+        """Release locks still owned by this scheduler, leaving locks held by other schedulers untouched"""
         for name in self._acquired_locks:
             release_lock(self.connection, self.get_locking_key(name), self.name)
         self._acquired_locks = set()

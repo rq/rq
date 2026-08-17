@@ -222,16 +222,16 @@ class TestAcquireOrRefreshLock(RQTestCase):
         self.assertEqual(self.connection.get('lock:refresh'), b'token-1')
         self.assertGreaterEqual(self.connection.ttl('lock:refresh'), 55)
 
-    def test_foreign_lock_untouched(self):
+    def test_taken_lock_untouched(self):
         """acquire_or_refresh_lock leaves a lock holding another token untouched."""
-        acquire_or_refresh_lock(self.connection, 'lock:foreign', 'token-1', 61)
-        self.connection.expire('lock:foreign', 5)
+        acquire_or_refresh_lock(self.connection, 'lock:taken', 'token-1', 61)
+        self.connection.expire('lock:taken', 5)
 
-        outcome = acquire_or_refresh_lock(self.connection, 'lock:foreign', 'token-2', 61)
-        self.assertEqual(outcome, 'foreign')
-        self.assertEqual(self.connection.get('lock:foreign'), b'token-1')
+        outcome = acquire_or_refresh_lock(self.connection, 'lock:taken', 'token-2', 61)
+        self.assertEqual(outcome, 'taken')
+        self.assertEqual(self.connection.get('lock:taken'), b'token-1')
         # TTL is still the short one set above: not extended, not removed
-        ttl = self.connection.ttl('lock:foreign')
+        ttl = self.connection.ttl('lock:taken')
         self.assertGreater(ttl, 0)
         self.assertLessEqual(ttl, 5)
 
@@ -246,12 +246,12 @@ class TestReleaseLock(RQTestCase):
         self.assertTrue(release_lock(self.connection, 'lock:release', 'token-1'))
         self.assertFalse(self.connection.exists('lock:release'))
 
-    def test_release_foreign_lock_untouched(self):
+    def test_release_taken_lock_untouched(self):
         """release_lock leaves a lock holding another token untouched."""
-        acquire_or_refresh_lock(self.connection, 'lock:release-foreign', 'token-1', 61)
+        acquire_or_refresh_lock(self.connection, 'lock:release-taken', 'token-1', 61)
 
-        self.assertFalse(release_lock(self.connection, 'lock:release-foreign', 'token-2'))
-        self.assertEqual(self.connection.get('lock:release-foreign'), b'token-1')
+        self.assertFalse(release_lock(self.connection, 'lock:release-taken', 'token-2'))
+        self.assertEqual(self.connection.get('lock:release-taken'), b'token-1')
 
     def test_release_absent_lock(self):
         """release_lock returns False for a lock that does not exist."""
