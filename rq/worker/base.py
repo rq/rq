@@ -44,6 +44,7 @@ from ..exceptions import DequeueTimeout, DeserializationError, StopRequested
 from ..executions import WORKER_EXECUTIONS_KEY_TEMPLATE, Execution, cleanup_execution, prepare_execution
 from ..group import Group
 from ..job import Job, JobStatus, Retry
+from ..utils import as_text
 from ..job_lifecycle import call_exception_handlers, format_exc_info
 from ..logutils import blue, green, setup_loghandlers, yellow
 from ..queue import Queue
@@ -785,6 +786,26 @@ class BaseWorker:
                     job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
                 if should_enqueue_dependents:
                     queue.enqueue_dependents(job)
+                    # Same logic as handle_job_success: when a failed job's
+                    # dependencies no longer have unfinished dependents, start
+                    # their result_ttl countdown (#2452).
+                    dep_ids = list(self.connection.smembers(job.dependencies_key))
+                    for dep_id in dep_ids:
+                        dep_id_str = as_text(dep_id)
+                        dep = self.job_class.fetch(dep_id_str, connection=self.connection, serializer=self.serializer)
+                        if dep is None or dep.get_status(refresh=False) != JobStatus.FINISHED:
+                            continue
+                        remaining_dependents = self.connection.smembers(dep.dependents_key)
+                        if not remaining_dependents:
+                            dep_result_ttl = dep.get_result_ttl(self.default_result_ttl)
+                            if dep_result_ttl != 0:
+                                dep.finished_job_registry.add(dep, dep_result_ttl)
+                                dep.cleanup(dep_result_ttl, remove_from_queue=False)
+                                self.log.debug(
+                                    'Worker %s: added dependency %s to finished registry'
+                                    ' (all dependents done, after failure)',
+                                    self.name, dep.id,
+                                )
                     if job.has_rate_limit:
                         job.rate_limit_registry.release_and_enqueue(job.id)
                 elif retry and retry_interval and job.has_rate_limit:
@@ -1522,6 +1543,11 @@ class BaseWorker:
                     self.increment_total_working_time(job.ended_at - job.started_at, pipeline)  # type: ignore
 
                     result_ttl = job.get_result_ttl(self.default_result_ttl)
+                    # Check if this job still has unfinished dependents.  If so,
+                    # defer adding it to the finished_job_registry so that its
+                    # result is not garbage-collected while dependents still
+                    # need it (see #2452).
+                    has_pending_dependents = bool(job.dependent_ids)
                     if result_ttl != 0:
                         self.log.debug("Worker %s: saving job %s's successful execution result", self.name, job.id)
                         job._handle_success(
@@ -1531,6 +1557,7 @@ class BaseWorker:
                             execution_id=execution.id,
                             execution_started_at=execution.created_at,
                             execution_ended_at=job.ended_at,
+                            defer_finished_registry=has_pending_dependents,
                         )
 
                     if job.repeats_left is not None and job.repeats_left > 0:
@@ -1540,13 +1567,35 @@ class BaseWorker:
                             'Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left
                         )
                         Repeat.schedule(job, queue, pipeline=pipeline)
-                    else:
+                    elif not has_pending_dependents:
                         job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
 
                     self.log.debug('Cleaning up execution of job %s', job.id)
                     self.cleanup_execution(job, pipeline=pipeline, execution=execution)
 
                     pipeline.execute()
+
+                    # If this job was a dependent, check whether any of its
+                    # dependencies now have zero unfinished dependents.  If so,
+                    # add them to the finished_job_registry and start their
+                    # result_ttl countdown (#2452).
+                    dep_ids = list(self.connection.smembers(job.dependencies_key))
+                    for dep_id in dep_ids:
+                        dep_id_str = as_text(dep_id)
+                        dep = self.job_class.fetch(dep_id_str, connection=self.connection, serializer=self.serializer)
+                        if dep is None or dep.get_status(refresh=False) != JobStatus.FINISHED:
+                            continue
+                        remaining_dependents = self.connection.smembers(dep.dependents_key)
+                        if not remaining_dependents:
+                            dep_result_ttl = dep.get_result_ttl(self.default_result_ttl)
+                            if dep_result_ttl != 0:
+                                dep.finished_job_registry.add(dep, dep_result_ttl)
+                                dep.cleanup(dep_result_ttl, remove_from_queue=False)
+                                self.log.debug(
+                                    'Worker %s: added dependency %s to finished registry'
+                                    ' (all dependents done)',
+                                    self.name, dep.id,
+                                )
 
                     # Drain ready dependents onto their origin queues now that the
                     # deferred→ready transition has committed. Per-queue failures are
