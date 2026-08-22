@@ -17,7 +17,7 @@ from croniter import croniter
 from redis import Redis
 from redis.client import Pipeline
 
-from . import cron_scheduler_registry
+from . import cron_job_registry, cron_scheduler_registry
 from .defaults import (
     DEFAULT_CRON_JOB_HISTORY_LIMIT,
     DEFAULT_CRON_JOB_HISTORY_TTL,
@@ -43,6 +43,21 @@ from .utils import (
     validate_absolute_path,
 )
 from .webhook import Webhook
+
+
+def get_cron_job_history_key(name: str) -> str:
+    """Redis key of the sorted set holding IDs of jobs spawned by the named cron job"""
+    return f'rq:cron_job:{name}:jobs'
+
+
+def get_cron_job_ids(name: str, connection: Redis, start: int = 0, end: int = -1) -> list[str]:
+    """Return IDs of jobs spawned by the named cron job, newest first.
+
+    `start` and `end` are zero-based inclusive indexes into the newest-first
+    ordering, following `zrange` semantics (`end=-1` means the oldest entry).
+    Ordering among jobs enqueued at the same timestamp is unspecified.
+    """
+    return [as_text(job_id) for job_id in connection.zrange(get_cron_job_history_key(name), start, end, desc=True)]
 
 
 class CronJob:
@@ -117,7 +132,7 @@ class CronJob:
     @property
     def job_history_key(self) -> str:
         """Redis key of the sorted set holding IDs of jobs spawned by this cron job"""
-        return f'rq:cron_job:{self.name}:jobs'
+        return get_cron_job_history_key(self.name)
 
     def enqueue(self, connection: Redis) -> Job:
         """Enqueue this job to its queue, record it in the job history and update the next run time"""
@@ -132,6 +147,7 @@ class CronJob:
             pipeline.zadd(self.job_history_key, {job.id: job.enqueued_at.timestamp()})
             pipeline.zremrangebyrank(self.job_history_key, 0, -(DEFAULT_CRON_JOB_HISTORY_LIMIT + 1))
             pipeline.expire(self.job_history_key, DEFAULT_CRON_JOB_HISTORY_TTL)
+            cron_job_registry.add(self.name, pipeline, enqueue_timestamp=job.enqueued_at.timestamp())
             pipeline.execute()
         logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
 
@@ -144,7 +160,7 @@ class CronJob:
         ordering, following `zrange` semantics (`end=-1` means the oldest entry).
         Ordering among jobs enqueued at the same timestamp is unspecified.
         """
-        return [as_text(job_id) for job_id in connection.zrange(self.job_history_key, start, end, desc=True)]
+        return get_cron_job_ids(self.name, connection, start, end)
 
     def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""
