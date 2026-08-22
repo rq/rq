@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from rq import Queue, utils
-from rq.cron import CronJob, CronScheduler
+from rq import Queue, cron_job_registry, utils
+from rq.cron import CronJob, CronScheduler, get_cron_job_history_key, get_cron_job_ids
 from rq.defaults import DEFAULT_CRON_JOB_HISTORY_TTL
 from rq.utils import NOT_JSON_SERIALIZABLE
 from rq.webhook import Webhook
@@ -205,6 +205,25 @@ class TestCronJob(RQTestCase):
 
         ttl = self.connection.ttl(cron_job.job_history_key)
         self.assertTrue(0 < ttl <= DEFAULT_CRON_JOB_HISTORY_TTL)
+
+    def test_enqueue_records_name_in_registry(self):
+        """enqueue() records the cron job's name in the cron job registry"""
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, name='greeter')
+        job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(cron_job_registry.get_names(self.connection), ['greeter'])
+        score = self.connection.zscore(cron_job_registry.get_registry_key(), 'greeter')
+        self.assertEqual(score, job.enqueued_at.timestamp())
+
+    def test_get_cron_job_ids_by_name(self):
+        """Module-level get_cron_job_ids() reads a history from just the cron job name"""
+        self.assertEqual(get_cron_job_history_key('greeter'), 'rq:cron_job:greeter:jobs')
+
+        cron_job = CronJob(func=say_hello, queue_name=self.queue.name, interval=60, name='greeter')
+        first_job = cron_job.enqueue(self.connection)
+        second_job = cron_job.enqueue(self.connection)
+
+        self.assertEqual(get_cron_job_ids('greeter', self.connection), [second_job.id, first_job.id])
 
     def test_enqueue_with_webhooks(self):
         """Webhooks are attached to the job produced by enqueue"""
