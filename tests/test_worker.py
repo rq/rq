@@ -1278,6 +1278,34 @@ class TestWorker(RQTestCase):
             #   So before that fix the call count was 4 instead of 3
             self.assertEqual(mocked.call_count, 3)
 
+    def test_handle_job_success_watcherror_removes_execution(self):
+        """WatchError retry still removes the job from StartedJobRegistry."""
+        queue = Queue(connection=self.connection)
+        worker = Worker([queue], connection=self.connection)
+        job = queue.enqueue(say_hello)
+        job.started_at = now()
+        job.ended_at = now()
+        execution = worker.prepare_execution(job)
+        registry = StartedJobRegistry(connection=self.connection)
+        self.assertIn(job.id, registry.get_job_ids())
+
+        orig_execute = type(self.connection.pipeline()).execute
+        state = {'calls': 0}
+
+        def execute_watch_once(pipe, *args, **kwargs):
+            state['calls'] += 1
+            if state['calls'] == 1:
+                pipe.reset()
+                raise redis.exceptions.WatchError('simulated contention')
+            return orig_execute(pipe, *args, **kwargs)
+
+        with mock.patch.object(type(self.connection.pipeline()), 'execute', execute_watch_once):
+            worker.handle_job_success(job, queue, registry, execution)
+
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+        self.assertNotIn(job.id, registry.get_job_ids(cleanup=False))
+
     def test_self_modification_persistence(self):
         """Make sure that any meta modification done by
         the job itself persists completely through the

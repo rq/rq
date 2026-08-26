@@ -890,6 +890,20 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertIsNotNone(latest_result)
         self.assertTrue(latest_result.exc_string)  # explanation is written to exc_info
 
+    def test_cleanup_skips_finished_jobs(self):
+        """Finished jobs leftover in StartedJobRegistry are dropped, not abandoned."""
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        job.set_status(JobStatus.FINISHED)
+        self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
+
+        self.registry.cleanup()
+
+        self.assertNotIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
     def test_cleanup_continues_when_failure_callback_raises(self):
         """A raising failure callback must not stop the job from being moved to the
         FailedJobRegistry."""
