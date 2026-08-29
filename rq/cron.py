@@ -21,6 +21,7 @@ from . import cron_job_registry, cron_scheduler_registry
 from .defaults import (
     DEFAULT_CRON_JOB_HISTORY_LIMIT,
     DEFAULT_CRON_JOB_HISTORY_TTL,
+    DEFAULT_CRON_SCHEDULER_TTL,
     DEFAULT_LOGGING_DATE_FORMAT,
     DEFAULT_LOGGING_FORMAT,
     DEFAULT_RESULT_TTL,
@@ -420,10 +421,10 @@ class CronScheduler:
 
         try:
             while True:
-                enqueued = self.enqueue_jobs()
-                if enqueued:
-                    # Save updated job timing data to Redis
-                    self.save_jobs_data()
+                enqueued_jobs = self.enqueue_jobs()
+                if enqueued_jobs:
+                    # Persist updated job timing data to Redis
+                    self.save()
                 self.heartbeat()
                 sleep_time = self.calculate_sleep_interval()
                 if sleep_time > 0:
@@ -542,24 +543,24 @@ class CronScheduler:
 
     def save(self, pipeline: Pipeline | None = None) -> None:
         """Save CronScheduler instance to Redis hash with TTL"""
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.connection.pipeline()
         connection.hset(self.key, mapping=self.to_dict())
-        connection.expire(self.key, 60)
+        connection.expire(self.key, DEFAULT_CRON_SCHEDULER_TTL)
 
-    def save_jobs_data(self) -> None:
-        """Save cron jobs data to Redis."""
-        data = json.dumps([job.to_dict() for job in self._cron_jobs])
-        self.connection.hset(self.key, 'cron_jobs', data)
+        if pipeline is None:
+            connection.execute()
 
     def restore(self, raw_data: dict) -> None:
         """Restore CronScheduler instance from Redis hash data."""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
-        self.hostname = obj['hostname']
+        self.hostname = obj.get('hostname', '')
         self.pid = int(obj.get('pid', 0))
-        self.name = obj['name']
-        self.created_at = str_to_date(obj['created_at'])
-        self.config_file = obj['config_file']
+        self.name = obj.get('name', self.name)
+        created_at = obj.get('created_at')
+        if created_at:
+            self.created_at = str_to_date(created_at)
+        self.config_file = obj.get('config_file', '')
 
         # Restore CronJob data if available
         if obj.get('cron_jobs'):
@@ -627,20 +628,24 @@ class CronScheduler:
         cron_scheduler_registry.unregister(self, pipeline)
 
     def heartbeat(self) -> None:
-        """Send a heartbeat to update this scheduler's last seen timestamp in the registry
-        and extend the scheduler's Redis hash TTL.
+        """Update this scheduler's last seen timestamp in the registry and refresh
+        its Redis hash TTL, re-creating both if they have expired or been pruned.
         """
-        with self.connection.pipeline() as pipe:
-            pipe.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True, ch=True)
-            pipe.expire(self.key, 120)
-            results = pipe.execute()
+        with self.connection.pipeline() as pipeline:
+            pipeline.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()})
+            pipeline.expire(self.key, DEFAULT_CRON_SCHEDULER_TTL)
+            zadd_result, expire_result = pipeline.execute()
 
-            # Check zadd result (first command in pipeline)
-            zadd_result = results[0]
-            if zadd_result:
-                self.log.debug(f'CronScheduler {self.name}: heartbeat sent successfully')
-            else:
-                self.log.warning(f'CronScheduler {self.name}: heartbeat failed - scheduler not found in registry')
+        if not expire_result:
+            # expire returns 0 when the key is missing: the hash expired
+            # (e.g. the host slept past the TTL), so re-create it
+            self.save()
+
+        # zadd returns 1 if the member was newly added
+        if zadd_result:
+            self.log.info('CronScheduler %s: re-registered in scheduler registry', self.name)
+        else:
+            self.log.debug('CronScheduler %s: heartbeat sent successfully', self.name)
 
     @property
     def last_heartbeat(self) -> datetime | None:

@@ -15,6 +15,7 @@ from rq import Queue, cron, utils
 from rq.connections import get_connection_kwargs
 from rq.cron import CronJob, CronScheduler, _job_data_registry
 from rq.cron_scheduler_registry import get_keys, get_registry_key
+from rq.defaults import DEFAULT_CRON_SCHEDULER_TTL
 from rq.exceptions import SchedulerNotFound
 from rq.webhook import Webhook
 from tests import RQTestCase
@@ -628,8 +629,8 @@ class TestCronScheduler(RQTestCase):
         with self.assertRaises(ValueError):
             job_1.enqueue(self.connection)
 
-    def test_save_jobs_data_updates_timing(self):
-        """Test that save_jobs_data() updates job timing information in Redis"""
+    def test_save_persists_job_timing(self):
+        """Test that save() persists updated job timing information in Redis"""
         scheduler = CronScheduler(connection=self.connection, name='test-scheduler')
 
         # Register a job with interval
@@ -653,8 +654,8 @@ class TestCronScheduler(RQTestCase):
         job.latest_enqueue_time = last_enqueue_time
         job.next_enqueue_time = next_time
 
-        # Save only jobs data (not full scheduler state)
-        scheduler.save_jobs_data()
+        # save() persists the full scheduler state, including job timing
+        scheduler.save()
 
         # Fetch again and verify timing was updated
         fetched_scheduler = CronScheduler.fetch('test-scheduler', self.connection)
@@ -670,7 +671,15 @@ class TestCronScheduler(RQTestCase):
         self.assertEqual(updated_jobs[0].next_enqueue_time.replace(microsecond=0), next_time.replace(microsecond=0))
 
     def test_cron_scheduler_restore_edge_cases(self):
-        """Test that restore() handles missing and malformed cron_jobs data gracefully"""
+        """Test that restore() handles missing fields and malformed cron_jobs data gracefully"""
+        # Test a partial hash missing scheduler metadata fields
+        scheduler = CronScheduler(connection=self.connection, name='partial-scheduler')
+        scheduler.restore({b'cron_jobs': b'[]'})
+        self.assertEqual(scheduler.name, 'partial-scheduler')
+        self.assertEqual(scheduler.hostname, '')
+        self.assertEqual(scheduler.pid, 0)
+        self.assertEqual(len(scheduler.get_jobs()), 0)
+
         # Test missing cron_jobs field (backwards compatibility)
         data = {
             b'hostname': b'test-host',
@@ -737,10 +746,10 @@ class TestCronScheduler(RQTestCase):
         # Verify Redis hash data was saved
         self.assertTrue(self.connection.exists(scheduler.key))
 
-        # Verify TTL is set (should be 60 seconds)
+        # Verify TTL is set
         ttl = self.connection.ttl(scheduler.key)
         self.assertGreater(ttl, 0)
-        self.assertLessEqual(ttl, 60)
+        self.assertLessEqual(ttl, DEFAULT_CRON_SCHEDULER_TTL)
 
         # Register death
         scheduler.register_death()
@@ -762,9 +771,9 @@ class TestCronScheduler(RQTestCase):
         initial_score = self.connection.zscore(registry_key, scheduler.name)
         self.assertIsNotNone(initial_score)
 
-        # Verify initial TTL (should be 60 seconds from register_birth)
+        # Verify initial TTL from register_birth
         initial_ttl = self.connection.ttl(scheduler.key)
-        self.assertTrue(0 < initial_ttl <= 60)
+        self.assertTrue(0 < initial_ttl <= DEFAULT_CRON_SCHEDULER_TTL)
 
         # Wait a brief moment to ensure timestamp difference
         time.sleep(0.01)
@@ -774,21 +783,50 @@ class TestCronScheduler(RQTestCase):
         self.assertIsNotNone(new_score)
         self.assertGreater(cast(float, new_score), cast(float, initial_score))
 
-        # Verify TTL was extended to 120 seconds
+        # Verify TTL was refreshed
         new_ttl = self.connection.ttl(scheduler.key)
-        self.assertTrue(60 < new_ttl <= 120)
+        self.assertTrue(0 < new_ttl <= DEFAULT_CRON_SCHEDULER_TTL)
 
         scheduler.register_death()
 
-        # Test heartbeat on unregistered scheduler
+        # Heartbeat on an unregistered scheduler registers it and saves its hash
         unregistered_scheduler = CronScheduler(connection=self.connection, name='unregistered-scheduler')
-
-        # This should not raise an exception, but should log a warning
         unregistered_scheduler.heartbeat()
 
-        # Verify unregistered scheduler is still not in registry
         score = self.connection.zscore(registry_key, 'unregistered-scheduler')
-        self.assertIsNone(score)
+        self.assertIsNotNone(score)
+        self.assertTrue(self.connection.exists(unregistered_scheduler.key))
+
+        unregistered_scheduler.register_death()
+        self.connection.delete(unregistered_scheduler.key)
+
+    def test_heartbeat_resurrects_scheduler_after_expiry(self):
+        """Test that heartbeat() re-creates the scheduler hash and registry entry after expiry"""
+        scheduler = CronScheduler(connection=self.connection, name='resurrected-scheduler')
+        scheduler.register(say_hello, 'default', interval=60)
+        scheduler.register_birth()
+
+        # Simulate the hash expiring and the registry entry being pruned,
+        # e.g. after the host slept longer than the heartbeat TTL
+        self.connection.delete(scheduler.key)
+        self.connection.zrem(get_registry_key(), scheduler.name)
+
+        scheduler.heartbeat()
+
+        # Scheduler is visible to monitoring again, with its full state restored
+        schedulers = CronScheduler.all(self.connection)
+        scheduler_names = [found_scheduler.name for found_scheduler in schedulers]
+        self.assertIn('resurrected-scheduler', scheduler_names)
+
+        fetched_scheduler = CronScheduler.fetch('resurrected-scheduler', self.connection)
+        self.assertEqual(fetched_scheduler.hostname, scheduler.hostname)
+        self.assertEqual(fetched_scheduler.pid, scheduler.pid)
+        restored_jobs = fetched_scheduler.get_jobs()
+        self.assertEqual(len(restored_jobs), 1)
+        self.assertEqual(restored_jobs[0].interval, 60)
+
+        scheduler.register_death()
+        self.connection.delete(scheduler.key)
 
     @patch('rq.cron.CronScheduler.register_death')
     @patch('rq.cron.CronScheduler._install_signal_handlers')

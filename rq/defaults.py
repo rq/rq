@@ -66,6 +66,13 @@ Refreshed on every write, so history expires if the cron job spawns no jobs for 
 """
 
 
+DEFAULT_CRON_SCHEDULER_TTL = 120
+""" The Time To Live (TTL) in seconds for a CronScheduler's Redis hash.
+Refreshed on every heartbeat. Also used as the staleness threshold when
+pruning dead schedulers from the scheduler registry.
+"""
+
+
 DEFAULT_SCHEDULER_FALLBACK_PERIOD = 120
 """ The amount in seconds it will take for a new scheduler
 to pickup tasks after a scheduler has died.
