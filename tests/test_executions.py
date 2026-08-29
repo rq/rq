@@ -338,8 +338,9 @@ class TestRegistry(RQTestCase):
         job = self.queue.enqueue(say_hello)
         worker = Worker([self.queue])
         worker.prepare_job_execution(job)
+        execution = worker.execution
         with self.connection.pipeline() as pipeline:
-            worker.cleanup_execution(job, pipeline=pipeline)
+            worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
             pipeline.execute()
 
         self.assertEqual(worker.get_current_job_id(), None)

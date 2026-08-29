@@ -245,8 +245,6 @@ def cleanup_execution(worker: BaseWorker, job: Job, pipeline: Pipeline, executio
         execution: The execution to clean up
     """
     logger.debug('Cleaning up execution of job %s', job.id)
-    if execution is None:
-        execution = worker.execution
     if execution:
         execution.delete(job=job, pipeline=pipeline)
         worker.executions.pop(execution.id, None)

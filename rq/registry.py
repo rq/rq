@@ -293,7 +293,7 @@ class StartedJobRegistry(BaseRegistry):
                 # failed/stopped) job must not be treated as AbandonedJobError.
                 # WatchError retries in handle_job_success can leave the zset entry
                 # behind even though the job already finished; just drop it.
-                status = job.get_status()
+                status = job.get_status(refresh=False)
                 if status in {
                     JobStatus.FINISHED,
                     JobStatus.FAILED,
