@@ -14,7 +14,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
-from types import FrameType
+from types import FrameType, TracebackType
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -46,7 +46,7 @@ from ..executions import WORKER_EXECUTIONS_KEY_TEMPLATE, Execution, cleanup_exec
 from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import call_exception_handlers, format_exc_info
-from ..logutils import blue, green, setup_loghandlers, yellow
+from ..logutils import blue, green, setup_loghandlers
 from ..queue import Queue
 from ..registry import StartedJobRegistry, clean_registries
 from ..results import Result
@@ -1581,7 +1581,7 @@ class BaseWorker:
         job.heartbeat(now(), heartbeat_ttl)
 
     def _finalize_success(self, job: Job, queue: Queue, execution: Execution, return_value: Any) -> None:
-        """Terminal handling for a job that returned: Retry re-enqueues, anything else finishes."""
+        """Finalize a job that returned, re-enqueuing it when the result is a `Retry`."""
         self.handle_execution_ended(job, queue, job.success_callback_timeout)
         # Pickle the result in the same try-except block since we need
         # to use the same exc handling when pickling fails
@@ -1607,7 +1607,7 @@ class BaseWorker:
 
         self.log.info('Worker %s: %s: %s (%s)', self.name, green(job.origin), blue('Job OK'), job.id)
         if return_value is not None:
-            self.log.debug('Worker %s: result: %r', self.name, yellow(str(return_value)))
+            self.log.debug('Worker %s: result: %r', self.name, return_value)
 
         if self.log_result_lifespan:
             result_ttl = job.get_result_ttl(self.default_result_ttl)
@@ -1620,7 +1620,13 @@ class BaseWorker:
                     'Worker %s: job %s result will never expire, clean up result key manually', self.name, job.id
                 )
 
-    def _finalize_failure(self, job: Job, queue: Queue, execution: Execution, exc_info) -> None:
+    def _finalize_failure(
+        self,
+        job: Job,
+        queue: Queue,
+        execution: Execution,
+        exc_info: tuple[type[BaseException] | None, BaseException | None, TracebackType | None],
+    ) -> None:
         """Terminal handling for a job that raised, including its failure callback."""
         self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
         job._status = JobStatus.FAILED
