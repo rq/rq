@@ -17,8 +17,15 @@ from croniter import croniter
 from redis import Redis
 from redis.client import Pipeline
 
-from . import cron_scheduler_registry
-from .defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT, DEFAULT_RESULT_TTL
+from . import cron_job_registry, cron_scheduler_registry
+from .defaults import (
+    DEFAULT_CRON_JOB_HISTORY_LIMIT,
+    DEFAULT_CRON_JOB_HISTORY_TTL,
+    DEFAULT_CRON_SCHEDULER_TTL,
+    DEFAULT_LOGGING_DATE_FORMAT,
+    DEFAULT_LOGGING_FORMAT,
+    DEFAULT_RESULT_TTL,
+)
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
 from .logutils import setup_loghandlers
@@ -26,6 +33,7 @@ from .queue import Queue
 from .serializers import resolve_serializer
 from .utils import (
     NOT_JSON_SERIALIZABLE,
+    as_text,
     decode_redis_hash,
     normalize_config_path,
     now,
@@ -38,8 +46,27 @@ from .utils import (
 from .webhook import Webhook
 
 
+def get_cron_job_history_key(name: str) -> str:
+    """Redis key of the sorted set holding IDs of jobs spawned by the named cron job"""
+    return f'rq:cron_job:{name}:jobs'
+
+
+def get_cron_job_ids(name: str, connection: Redis, start: int = 0, end: int = -1) -> list[str]:
+    """Return IDs of jobs spawned by the named cron job, newest first.
+
+    `start` and `end` are zero-based inclusive indexes into the newest-first
+    ordering, following `zrange` semantics (`end=-1` means the oldest entry).
+    Ordering among jobs enqueued at the same timestamp is unspecified.
+    """
+    return [as_text(job_id) for job_id in connection.zrange(get_cron_job_history_key(name), start, end, desc=True)]
+
+
 class CronJob:
-    """Represents a function to be run on a time interval"""
+    """Represents a function to be run on a time interval.
+
+    `name` identifies the logical cron job and defaults to `func_name`;
+    multiple cron jobs may share a name.
+    """
 
     def __init__(
         self,
@@ -56,6 +83,7 @@ class CronJob:
         failure_ttl: int | None = None,
         meta: dict | None = None,
         webhooks: Sequence[Webhook] | None = None,
+        name: str = '',
     ):
         if interval and cron:
             raise ValueError('Cannot specify both interval and cron parameters')
@@ -76,6 +104,7 @@ class CronJob:
         else:
             raise ValueError('Either func or func_name must be provided')
 
+        self.name: str = name or self.func_name
         self.args: tuple = args or ()
         self.kwargs: dict = kwargs or {}
         self.interval: int | None = interval
@@ -101,16 +130,38 @@ class CronJob:
         # Filter out None values
         self.job_options = {k: v for k, v in self.job_options.items() if v is not None}
 
+    @property
+    def job_history_key(self) -> str:
+        """Redis key of the sorted set holding IDs of jobs spawned by this cron job"""
+        return get_cron_job_history_key(self.name)
+
     def enqueue(self, connection: Redis) -> Job:
-        """Enqueue this job to its queue and update the next run time"""
+        """Enqueue this job to its queue, record it in the job history and update the next run time"""
         if not self.func:
             raise ValueError('CronJob has no function to enqueue. It may have been created for monitoring purposes.')
 
         queue = Queue(self.queue_name, connection=connection)
-        job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options)
+        # Enqueue the job and record it in one round trip
+        with connection.pipeline() as pipeline:
+            job = queue.enqueue(self.func, *self.args, **self.kwargs, **self.job_options, pipeline=pipeline)
+            assert job.enqueued_at is not None  # narrows datetime | None for mypy
+            pipeline.zadd(self.job_history_key, {job.id: job.enqueued_at.timestamp()})
+            pipeline.zremrangebyrank(self.job_history_key, 0, -(DEFAULT_CRON_JOB_HISTORY_LIMIT + 1))
+            pipeline.expire(self.job_history_key, DEFAULT_CRON_JOB_HISTORY_TTL)
+            cron_job_registry.add(self.name, pipeline, enqueue_timestamp=job.enqueued_at.timestamp())
+            pipeline.execute()
         logging.getLogger(__name__).info(f'Enqueued job {self.func.__name__} to queue {self.queue_name}')
 
         return job
+
+    def get_job_ids(self, connection: Redis, start: int = 0, end: int = -1) -> list[str]:
+        """Return IDs of jobs spawned by this cron job, newest first.
+
+        `start` and `end` are zero-based inclusive indexes into the newest-first
+        ordering, following `zrange` semantics (`end=-1` means the oldest entry).
+        Ordering among jobs enqueued at the same timestamp is unspecified.
+        """
+        return get_cron_job_ids(self.name, connection, start, end)
 
     def get_next_enqueue_time(self) -> datetime:
         """Calculate the next run time based on interval or cron expression"""
@@ -149,6 +200,7 @@ class CronJob:
         """Convert CronJob instance to a dictionary for monitoring purposes"""
         obj = {
             'func_name': self.func_name,
+            'name': self.name,
             'queue_name': self.queue_name,
             'args': safe_json_dumps(self.args) if self.args else None,
             'kwargs': safe_json_dumps(self.kwargs) if self.kwargs else None,
@@ -202,6 +254,8 @@ class CronJob:
         job = cls(
             queue_name=data['queue_name'],
             func_name=data['func_name'],
+            # Pre-existing serialized data has no name field; fall back to func_name via __init__
+            name=data.get('name', ''),
             args=args,
             kwargs=kwargs,
             interval=data.get('interval'),
@@ -275,6 +329,7 @@ class CronScheduler:
         failure_ttl: int | None = None,
         meta: dict | None = None,
         webhooks: Sequence[Webhook] | None = None,
+        name: str = '',
     ) -> CronJob:
         """Register a function to be run at regular intervals"""
         cron_job = CronJob(
@@ -290,6 +345,7 @@ class CronScheduler:
             failure_ttl=failure_ttl,
             meta=meta,
             webhooks=webhooks,
+            name=name,
         )
 
         self._cron_jobs.append(cron_job)
@@ -364,10 +420,10 @@ class CronScheduler:
 
         try:
             while True:
-                enqueued = self.enqueue_jobs()
-                if enqueued:
-                    # Save updated job timing data to Redis
-                    self.save_jobs_data()
+                enqueued_jobs = self.enqueue_jobs()
+                if enqueued_jobs:
+                    # Persist updated job timing data to Redis
+                    self.save()
                 self.heartbeat()
                 sleep_time = self.calculate_sleep_interval()
                 if sleep_time > 0:
@@ -486,24 +542,24 @@ class CronScheduler:
 
     def save(self, pipeline: Pipeline | None = None) -> None:
         """Save CronScheduler instance to Redis hash with TTL"""
-        connection = pipeline if pipeline is not None else self.connection
+        connection = pipeline if pipeline is not None else self.connection.pipeline()
         connection.hset(self.key, mapping=self.to_dict())
-        connection.expire(self.key, 60)
+        connection.expire(self.key, DEFAULT_CRON_SCHEDULER_TTL)
 
-    def save_jobs_data(self) -> None:
-        """Save cron jobs data to Redis."""
-        data = json.dumps([job.to_dict() for job in self._cron_jobs])
-        self.connection.hset(self.key, 'cron_jobs', data)
+        if pipeline is None:
+            connection.execute()
 
     def restore(self, raw_data: dict) -> None:
         """Restore CronScheduler instance from Redis hash data."""
         obj = decode_redis_hash(raw_data, decode_values=True)
 
-        self.hostname = obj['hostname']
+        self.hostname = obj.get('hostname', '')
         self.pid = int(obj.get('pid', 0))
-        self.name = obj['name']
-        self.created_at = str_to_date(obj['created_at'])
-        self.config_file = obj['config_file']
+        self.name = obj.get('name', self.name)
+        created_at = obj.get('created_at')
+        if created_at:
+            self.created_at = str_to_date(created_at)
+        self.config_file = obj.get('config_file', '')
 
         # Restore CronJob data if available
         if obj.get('cron_jobs'):
@@ -571,20 +627,24 @@ class CronScheduler:
         cron_scheduler_registry.unregister(self, pipeline)
 
     def heartbeat(self) -> None:
-        """Send a heartbeat to update this scheduler's last seen timestamp in the registry
-        and extend the scheduler's Redis hash TTL.
+        """Update this scheduler's last seen timestamp in the registry and refresh
+        its Redis hash TTL, re-creating both if they have expired or been pruned.
         """
-        with self.connection.pipeline() as pipe:
-            pipe.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()}, xx=True, ch=True)
-            pipe.expire(self.key, 120)
-            results = pipe.execute()
+        with self.connection.pipeline() as pipeline:
+            pipeline.zadd(cron_scheduler_registry.get_registry_key(), {self.name: time.time()})
+            pipeline.expire(self.key, DEFAULT_CRON_SCHEDULER_TTL)
+            zadd_result, expire_result = pipeline.execute()
 
-            # Check zadd result (first command in pipeline)
-            zadd_result = results[0]
-            if zadd_result:
-                self.log.debug(f'CronScheduler {self.name}: heartbeat sent successfully')
-            else:
-                self.log.warning(f'CronScheduler {self.name}: heartbeat failed - scheduler not found in registry')
+        if not expire_result:
+            # expire returns 0 when the key is missing: the hash expired
+            # (e.g. the host slept past the TTL), so re-create it
+            self.save()
+
+        # zadd returns 1 if the member was newly added
+        if zadd_result:
+            self.log.info('CronScheduler %s: re-registered in scheduler registry', self.name)
+        else:
+            self.log.debug('CronScheduler %s: heartbeat sent successfully', self.name)
 
     @property
     def last_heartbeat(self) -> datetime | None:
@@ -619,6 +679,7 @@ def register(
     failure_ttl: int | None = None,
     meta: dict | None = None,
     webhooks: Sequence[Webhook] | None = None,
+    name: str = '',
 ) -> dict:
     """
     Register a function to be run as a cron job by adding its definition
@@ -650,6 +711,7 @@ def register(
         'failure_ttl': failure_ttl,
         'meta': meta,
         'webhooks': webhooks,
+        'name': name,
     }
     # Add to the global registry
     _job_data_registry.append(job_data)
@@ -666,8 +728,10 @@ def create_cron(connection: Redis) -> CronScheduler:
     """Create a CronScheduler instance with all registered jobs"""
     cron_instance = CronScheduler(connection=connection)
 
-    # Register all previously registered jobs with the CronScheduler instance
-    for data in _job_data_registry:
+    # Snapshot and consume the registry so a second call doesn't re-register the same jobs
+    job_definitions = _job_data_registry[:]
+    _job_data_registry.clear()
+    for data in job_definitions:
         logging.debug(f'Registering job: {data["func"].__name__}')
         cron_instance.register(**data)
 

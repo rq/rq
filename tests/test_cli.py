@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from time import sleep
@@ -30,6 +31,7 @@ class CLITestCase(RQTestCase):
         self.connection: Redis = Redis.from_url(self.redis_url)
 
     def tearDown(self):
+        super().tearDown()
         self.connection.close()
 
     def assert_normal_execution(self, result):
@@ -822,6 +824,17 @@ class TestRQCli(CLITestCase):
 
 
 class WorkerPoolCLITestCase(CLITestCase):
+    def test_config_file_logging(self):
+        """rq worker-pool -u <url> -b -c tests.config_files.dummy_logging"""
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '-c', 'tests.config_files.dummy_logging']
+        )
+        self.assert_normal_execution(result)
+        # DICT_CONFIG from the config file should have been applied
+        formats = [handler.formatter._fmt for handler in logging.getLogger().handlers if handler.formatter]
+        self.assertTrue(any('MY_LOG_FMT' in fmt for fmt in formats))
+
     def test_worker_pool_burst_and_num_workers(self):
         """rq worker-pool -u <url> -b -n 3"""
         runner = CliRunner()
@@ -894,10 +907,9 @@ class WorkerPoolCLITestCase(CLITestCase):
 
         runner = CliRunner()
         # With exception handler, job should be in failed registry with meta updated
-        result = runner.invoke(main, ['worker-pool',
-                                      '-u', self.redis_url,
-                                      '-b', '--exception-handler',
-                                      'tests.fixtures.add_meta'])
+        result = runner.invoke(
+            main, ['worker-pool', '-u', self.redis_url, '-b', '--exception-handler', 'tests.fixtures.add_meta']
+        )
         self.assert_normal_execution(result)
 
         # Job should be failed (exception handled by custom handler)
@@ -916,11 +928,19 @@ class WorkerPoolCLITestCase(CLITestCase):
         job = q.enqueue(div_by_zero)
 
         runner = CliRunner()
-        result = runner.invoke(main, [
-            'worker-pool', '-u', self.redis_url, '-b',
-            '--exception-handler', 'tests.fixtures.add_meta',
-            '--exception-handler', 'tests.fixtures.black_hole'
-        ])
+        result = runner.invoke(
+            main,
+            [
+                'worker-pool',
+                '-u',
+                self.redis_url,
+                '-b',
+                '--exception-handler',
+                'tests.fixtures.add_meta',
+                '--exception-handler',
+                'tests.fixtures.black_hole',
+            ],
+        )
         self.assert_normal_execution(result)
 
         # Job should be failed (exception handled)
@@ -941,10 +961,10 @@ class WorkerPoolCLITestCase(CLITestCase):
     def test_worker_pool_invalid_exception_handler(self):
         """rq worker-pool -u <url> -b --exception-handler <invalid>"""
         runner = CliRunner()
-        result = runner.invoke(main, [
-            'worker-pool', '-u', self.redis_url, '-b',
-            '--exception-handler', 'tests.fixtures.nonexistent_handler'
-        ])
+        result = runner.invoke(
+            main,
+            ['worker-pool', '-u', self.redis_url, '-b', '--exception-handler', 'tests.fixtures.nonexistent_handler'],
+        )
         # Should fail because handler doesn't exist
         self.assertNotEqual(result.exit_code, 0)
 

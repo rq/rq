@@ -51,12 +51,13 @@ jobs:
         include:
           - { python-version: "3.14", redis-version: 8, redis-py-version: 8 }
           - { python-version: "3.14", redis-version: 7, redis-py-version: 8 }
-          - { python-version: "3.14", redis-version: 6, redis-py-version: 6 }
+          # redis-py 6.0.0 is explicitly unsupported; use the latest 6.x release.
+          - { python-version: "3.14", redis-version: 6, redis-py-version: "6.4.0" }
           # Redis 5 predates HELLO, so it only works with redis-py 5 (RESP2)
           - { python-version: "3.14", redis-version: 5, redis-py-version: 5.0.1 }
           - { python-version: "3.13", redis-version: 8, redis-py-version: 8 }
-          - { python-version: "3.13", redis-version: 8, redis-py-version: 6 }
-          - { python-version: "3.12", redis-version: 7, redis-py-version: 6 }
+          - { python-version: "3.13", redis-version: 8, redis-py-version: "6.4.0" }
+          - { python-version: "3.12", redis-version: 7, redis-py-version: "6.4.0" }
           - { python-version: "3.13", redis-version: 7, redis-py-version: 7 }
           - { python-version: "3.12", redis-version: 8, redis-py-version: 5.0.1 }
           - { python-version: "3.11", redis-version: 6, redis-py-version: 5.0.1 }
@@ -69,7 +70,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -102,7 +103,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
 
