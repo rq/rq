@@ -177,6 +177,11 @@ class TestRegistry(RQTestCase):
         pipeline.execute()
         self.assertEqual(self.connection.zcard(registry.key), 0)
 
+        # xx=True only refreshes existing members, it never re-adds a deleted execution
+        registry.add(execution=execution, ttl=100, pipeline=pipeline, xx=True)
+        pipeline.execute()
+        self.assertEqual(self.connection.zcard(registry.key), 0)
+
     def test_ttl(self):
         """Execution registry and job execution should follow heartbeat TTL"""
         job = self.queue.enqueue(say_hello, timeout=-1)

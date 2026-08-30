@@ -9,7 +9,7 @@ from typing import cast
 
 import redis.asyncio
 
-from ..connections import get_connection_kwargs
+from ..connections import get_async_connection
 from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from ..executions import Execution
 from ..intermediate_queue import IntermediateQueue
@@ -117,7 +117,7 @@ class AsyncWorker(BaseWorker):
             except (ValueError, RuntimeError, NotImplementedError):
                 break  # work() off the main thread or unsupported platform: signals keep default behavior
 
-        async_connection = redis.asyncio.Redis(**get_connection_kwargs(self.connection))
+        async_connection = get_async_connection(self.connection)
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         stop_wait_task = asyncio.create_task(shutdown_event.wait())
         try:
@@ -282,24 +282,26 @@ class AsyncWorker(BaseWorker):
             self.run_maintenance_tasks()
 
     def _heartbeat_executions(self, executions: list[Execution], tick_now: datetime) -> None:
-        """Heartbeat one bounded batch and remove job hashes recreated by the writes."""
+        """Heartbeat one bounded batch and remove job and execution hashes recreated by the writes."""
         with self.connection.pipeline() as pipeline:
-            job_heartbeat_indices = []
+            heartbeat_indices = []
             for execution in executions:
                 job = execution.job
                 working_time = (tick_now - execution._started_at).total_seconds() if execution._started_at else 0.0
                 ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
+                heartbeat_indices.append((len(pipeline), execution.key))
                 execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
-                job_heartbeat_indices.append((len(pipeline), job.key))
+                heartbeat_indices.append((len(pipeline), job.key))
                 job.heartbeat(tick_now, ttl, pipeline=pipeline, xx=True)
 
             results = pipeline.execute()
-            # A heartbeat racing result_ttl=0 finalization can recreate a deleted
-            # job hash containing only last_heartbeat; remove those hashes again.
-            recreated_job_keys = {job_key for index, job_key in job_heartbeat_indices if results[index] == 1}
-            if recreated_job_keys:
-                for job_key in sorted(recreated_job_keys):
-                    pipeline.delete(job_key)
+            # A heartbeat racing finalization can recreate a deleted job hash
+            # (result_ttl=0) or execution hash containing only last_heartbeat;
+            # HSET returns 1 for the newly created field, so remove those hashes again.
+            recreated_keys = {key for index, key in heartbeat_indices if results[index] == 1}
+            if recreated_keys:
+                for key in sorted(recreated_keys):
+                    pipeline.delete(key)
                 pipeline.execute()
 
     async def _run_execution(self, job: Job, queue: Queue, execution: Execution):

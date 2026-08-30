@@ -8,6 +8,7 @@ from unittest.mock import ANY, patch
 
 from rq.command import handle_stop_job_command
 from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
+from rq.executions import ExecutionRegistry
 from rq.job import Callback, JobStatus, Retry
 from rq.queue import Queue
 from rq.results import Result
@@ -352,15 +353,21 @@ class TestAsyncWorker(RQTestCase):
         worker.register_death()
 
     def test_heartbeat_tick_repairs_recreated_keys_once(self):
+        """A tick racing finalization must not resurrect deleted job, execution
+        or ExecutionRegistry state, and repairs everything in one extra pipeline."""
         first_job = self.queue.enqueue(say_hello)
         second_job = self.queue.enqueue(say_hello)
         worker = AsyncWorker([self.queue], connection=self.connection)
         worker.register_birth()
-        worker.prepare_execution(first_job)
-        worker.prepare_execution(second_job)
+        first_execution = worker.prepare_execution(first_job)
+        second_execution = worker.prepare_execution(second_job)
         worker.prepare_job_execution(first_job)
         worker.prepare_job_execution(second_job)
         worker.last_cleaned_at = now()
+        with self.connection.pipeline() as cleanup_pipeline:
+            first_execution.delete(job=first_job, pipeline=cleanup_pipeline)
+            second_execution.delete(job=second_job, pipeline=cleanup_pipeline)
+            cleanup_pipeline.execute()
         self.connection.delete(first_job.key, second_job.key, worker.key)
 
         with patch.object(worker.connection, 'pipeline', wraps=worker.connection.pipeline) as pipeline:
@@ -369,6 +376,10 @@ class TestAsyncWorker(RQTestCase):
         self.assertEqual(pipeline.call_count, 2)
         self.assertFalse(self.connection.exists(first_job.key))
         self.assertFalse(self.connection.exists(second_job.key))
+        self.assertFalse(self.connection.exists(first_execution.key))
+        self.assertFalse(self.connection.exists(second_execution.key))
+        self.assertEqual(ExecutionRegistry(first_job.id, connection=self.connection).get_executions(), [])
+        self.assertEqual(ExecutionRegistry(second_job.id, connection=self.connection).get_executions(), [])
         self.assertEqual(self.connection.hget(worker.key, 'queues'), self.queue.name.encode())
         worker.register_death()
 
