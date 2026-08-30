@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import logging
 import re
@@ -17,7 +16,6 @@ from uuid import uuid4
 from redis import WatchError
 
 from .defaults import CALLBACK_TIMEOUT, UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
-from .timeouts import BaseDeathPenalty, JobTimeoutException
 from .types import FailureCallbackType, SuccessCallbackType
 
 if TYPE_CHECKING:
@@ -34,6 +32,7 @@ if TYPE_CHECKING:
         pass
 
 
+from .callbacks import Callback
 from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
@@ -1607,47 +1606,6 @@ class Job:
         assert self.rate_limit_key
         return RateLimitRegistry(key=self.rate_limit_key, connection=self.connection)
 
-    def execute_success_callback(self, death_penalty_class: type[BaseDeathPenalty], result: Any):
-        """Executes success_callback for a job.
-        with timeout .
-
-        Args:
-            death_penalty_class (Type[BaseDeathPenalty]): The penalty class to use for timeout
-            result (Any): The job's result.
-        """
-        if not self.success_callback:
-            return
-
-        self.log.debug('Job %s: running success callback...', self.id)
-        with death_penalty_class(self.success_callback_timeout, JobTimeoutException, job_id=self.id):
-            self.success_callback(self, self.connection, result)
-
-    def execute_failure_callback(self, death_penalty_class: type[BaseDeathPenalty], *exc_info):
-        """Executes failure_callback with possible timeout"""
-        if not self.failure_callback:
-            return
-
-        self.log.debug('Job %s: running failure callback...', self.id)
-        try:
-            with death_penalty_class(self.failure_callback_timeout, JobTimeoutException, job_id=self.id):
-                self.failure_callback(self, self.connection, *exc_info)
-        except Exception:  # noqa
-            self.log.exception('Job %s: error while executing failure callback', self.id)
-            raise
-
-    def execute_stopped_callback(self, death_penalty_class: type[BaseDeathPenalty]):
-        """Executes stopped_callback with possible timeout"""
-        if self.stopped_callback is None:
-            return
-
-        self.log.debug('Job %s: running stopped callback...', self.id)
-        try:
-            with death_penalty_class(self.stopped_callback_timeout, JobTimeoutException, job_id=self.id):
-                self.stopped_callback(self, self.connection)
-        except Exception:  # noqa
-            self.log.exception('Job %s: error while executing stopped callback', self.id)
-            raise
-
     def send_webhooks(self, status: str | JobStatus, *, exc_string: str | None = None) -> None:
         """Sends every webhook registered for the given terminal job status.
         `exc_string` is included in the payload of `failed` webhooks.
@@ -2003,19 +1961,3 @@ class Retry:
         number_of_intervals = len(intervals)
         index = min(number_of_intervals - 1, count)
         return intervals[index]
-
-
-class Callback:
-    def __init__(self, func: str | Callable[..., Any], timeout: Any | None = None):
-        if not isinstance(func, str) and not inspect.isfunction(func) and not inspect.isbuiltin(func):
-            raise ValueError('Callback `func` must be a string or function')
-
-        self.func = func
-        self.timeout = parse_timeout(timeout) if timeout else CALLBACK_TIMEOUT
-
-    @property
-    def name(self) -> str:
-        if isinstance(self.func, str):
-            return self.func
-        _, func_name = resolve_function_reference(self.func)
-        return func_name

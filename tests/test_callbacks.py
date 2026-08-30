@@ -2,11 +2,15 @@ from datetime import timedelta
 from unittest import mock
 
 from rq import Queue, Worker
+from rq.callbacks import execute_failure_callback, execute_stopped_callback, execute_success_callback
 from rq.job import UNEVALUATED, Callback, Job, JobStatus
 from rq.serializers import JSONSerializer
 from rq.worker import SimpleWorker
 from tests import RQTestCase
 from tests.fixtures import (
+    async_failure_callback,
+    async_stopped_callback,
+    async_success_callback,
     div_by_zero,
     erroneous_callback,
     long_process,
@@ -163,26 +167,42 @@ class SyncJobCallback(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.FAILED)
         self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
-    def test_sync_routes_callbacks_through_execute_methods(self):
+    def test_sync_routes_callbacks_through_execution_helpers(self):
         """Sync execution dispatches callbacks via execute_*_callback (gaining timeout
         wrapping), not by calling the raw callbacks directly."""
         queue = Queue(is_async=False, connection=self.connection)
 
-        with mock.patch.object(Job, 'execute_success_callback') as mocked:
+        with mock.patch('rq.queue.execute_success_callback') as mocked:
             queue.enqueue(say_hello, on_success=save_result)
         mocked.assert_called_once()
-        self.assertIs(mocked.call_args.args[0], queue.death_penalty_class)
+        self.assertIs(mocked.call_args.args[1], queue.death_penalty_class)
 
-        with mock.patch.object(Job, 'execute_failure_callback') as mocked:
+        with mock.patch('rq.queue.execute_failure_callback') as mocked:
             queue.enqueue(div_by_zero, on_failure=save_exception)
         mocked.assert_called_once()
-        self.assertIs(mocked.call_args.args[0], queue.death_penalty_class)
+        self.assertIs(mocked.call_args.args[1], queue.death_penalty_class)
 
     def test_sync_failure_callback_exception_propagates(self):
         """A raising sync failure callback propagates out, as before the refactor."""
         queue = Queue(is_async=False, connection=self.connection)
         with self.assertRaises(Exception):
             queue.enqueue(div_by_zero, on_failure=erroneous_callback)
+
+    def test_coroutine_callbacks_rejected(self):
+        """Coroutine callbacks raise TypeError instead of being called without await."""
+        queue = Queue(connection=self.connection)
+
+        job = queue.enqueue(say_hello, on_success=Callback(async_success_callback))
+        with self.assertRaises(TypeError):
+            execute_success_callback(job, SimpleWorker.death_penalty_class, None)
+
+        job = queue.enqueue(say_hello, on_failure=Callback(async_failure_callback))
+        with self.assertRaises(TypeError):
+            execute_failure_callback(job, SimpleWorker.death_penalty_class, ValueError, ValueError('x'), None)
+
+        job = queue.enqueue(long_process, on_stopped=Callback(async_stopped_callback))
+        with self.assertRaises(TypeError):
+            execute_stopped_callback(job, SimpleWorker.death_penalty_class)
 
     def test_stopped_callback(self):
         """queue.enqueue* methods with on_stopped is persisted correctly"""
@@ -191,16 +211,12 @@ class SyncJobCallback(RQTestCase):
         worker = SimpleWorker('foo', connection=connection, serializer=JSONSerializer)
 
         job = queue.enqueue(long_process, on_stopped=save_result_if_not_stopped)
-        job.execute_stopped_callback(
-            worker.death_penalty_class
-        )  # Calling execute_stopped_callback directly for coverage
+        execute_stopped_callback(job, worker.death_penalty_class)  # Calling directly for coverage
         self.assertTrue(self.connection.exists(f'stopped_callback:{job.id}'))
 
         # test string callbacks
         job = queue.enqueue(long_process, on_stopped=Callback('tests.fixtures.save_result_if_not_stopped'))
-        job.execute_stopped_callback(
-            worker.death_penalty_class
-        )  # Calling execute_stopped_callback directly for coverage
+        execute_stopped_callback(job, worker.death_penalty_class)  # Calling directly for coverage
         self.assertTrue(self.connection.exists(f'stopped_callback:{job.id}'))
 
 

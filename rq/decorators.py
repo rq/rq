@@ -9,8 +9,8 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
+from .callbacks import Callback
 from .defaults import DEFAULT_RESULT_TTL
-from .job import Callback
 from .queue import Queue
 from .webhook import Webhook
 
