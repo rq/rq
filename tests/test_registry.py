@@ -873,13 +873,13 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertNotIn(job, failed_job_registry)
         self.assertIn(job, self.registry)
 
-        with mock.patch.object(Job, 'execute_failure_callback') as mocked:
+        with mock.patch('rq.registry.execute_failure_callback') as mocked:
             mock_handler = mock.MagicMock()
             mock_handler.return_value = False
             mock_handler_no_return = mock.MagicMock()
             mock_handler_no_return.return_value = None
             self.registry.cleanup(exception_handlers=[mock_handler_no_return, mock_handler])
-            mocked.assert_called_once_with(self.queue.death_penalty_class, AbandonedJobError, ANY, None)
+            mocked.assert_called_once_with(job, self.queue.death_penalty_class, AbandonedJobError, ANY, None)
             mock_handler.assert_called_once_with(job, AbandonedJobError, ANY, None)
             mock_handler_no_return.assert_called_once_with(job, AbandonedJobError, ANY, None)
         self.assertIn(job.id, failed_job_registry)
@@ -897,7 +897,7 @@ class TestStartedJobRegistry(RQTestCase):
         job = self.queue.enqueue(say_hello)
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
 
-        with mock.patch.object(Job, 'execute_failure_callback', side_effect=Exception()):
+        with mock.patch('rq.registry.execute_failure_callback', side_effect=Exception()):
             self.registry.cleanup()
 
         self.assertIn(job.id, failed_job_registry)
@@ -922,9 +922,9 @@ class TestStartedJobRegistry(RQTestCase):
         self.connection.zadd(self.registry.key, {f'{parent_job.id}:execution': 2})
         queue.remove(parent_job.id)
 
-        with mock.patch.object(Job, 'execute_failure_callback') as mocked:
+        with mock.patch('rq.registry.execute_failure_callback') as mocked:
             self.registry.cleanup()
-            mocked.assert_called_once_with(queue.death_penalty_class, AbandonedJobError, ANY, ANY)
+            mocked.assert_called_once_with(parent_job, queue.death_penalty_class, AbandonedJobError, ANY, ANY)
 
         # check that parent job was moved to FailedJobRegistry and has correct status
         self.assertIn(parent_job, failed_job_registry)

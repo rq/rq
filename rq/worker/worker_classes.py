@@ -9,6 +9,7 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
+from ..callbacks import execute_stopped_callback
 from ..connections import get_connection_kwargs
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
@@ -153,11 +154,10 @@ class Worker(BaseWorker):
         logged and swallowed here.
         """
         self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
-        if job.stopped_callback:
-            try:
-                job.execute_stopped_callback(self.death_penalty_class)
-            except Exception:
-                self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
+        try:
+            execute_stopped_callback(job, self.death_penalty_class)
+        except Exception:
+            self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
         self.handle_job_failure(
             job, queue=queue, exc_string='Job stopped by user, work-horse terminated.', execution=execution
         )

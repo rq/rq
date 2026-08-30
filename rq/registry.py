@@ -12,6 +12,7 @@ from redis.exceptions import WatchError
 
 from rq.serializers import resolve_serializer
 
+from .callbacks import execute_failure_callback
 from .connections import get_connection_kwargs
 from .defaults import DEFAULT_FAILURE_TTL
 from .exceptions import AbandonedJobError, InvalidJobOperation, NoSuchJobError
@@ -294,7 +295,9 @@ class StartedJobRegistry(BaseRegistry):
                 # A raising failure callback must not abort the batch or stop the job from
                 # being moved to the FailedJobRegistry, so log and swallow it here.
                 try:
-                    job.execute_failure_callback(self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None)
+                    execute_failure_callback(
+                        job, self.death_penalty_class, AbandonedJobError, AbandonedJobError(), None
+                    )
                 except Exception:
                     logger.exception('%s cleanup: failure callback for job %s raised', self.__class__.__name__, job.id)
 

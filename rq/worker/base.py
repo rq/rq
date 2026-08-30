@@ -31,6 +31,7 @@ from contextlib import suppress
 import redis.exceptions
 
 from .. import worker_registration
+from ..callbacks import execute_failure_callback, execute_success_callback
 from ..command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
 from ..defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
@@ -1623,7 +1624,7 @@ class BaseWorker:
                 return True
             else:
                 job._status = JobStatus.FINISHED
-                job.execute_success_callback(self.death_penalty_class, return_value)
+                execute_success_callback(job, self.death_penalty_class, return_value)
                 self.handle_job_success(
                     job=job, queue=queue, started_job_registry=started_job_registry, execution=execution
                 )
@@ -1638,7 +1639,7 @@ class BaseWorker:
             exc_string = format_exc_info(exc_info)
 
             try:
-                job.execute_failure_callback(self.death_penalty_class, *exc_info)
+                execute_failure_callback(job, self.death_penalty_class, *exc_info)
             except:  # noqa
                 exc_info = sys.exc_info()
                 exc_string = format_exc_info(exc_info)
