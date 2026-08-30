@@ -12,7 +12,6 @@ import redis.asyncio
 from ..connections import get_async_connection
 from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from ..executions import Execution
-from ..intermediate_queue import IntermediateQueue
 from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import format_exc_info
 from ..queue import Queue
@@ -27,19 +26,23 @@ class AsyncWorker(BaseWorker):
     death_penalty_class = TimerDeathPenalty
     heartbeat_batch_size = 100
 
-    def __init__(self, *args, max_concurrency: int = 100, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, max_concurrency: int = 100, prepare_for_work: bool = True, **kwargs):
+        if max_concurrency < 1:
+            raise ValueError('max_concurrency must be at least 1')
+        super().__init__(*args, prepare_for_work=prepare_for_work, **kwargs)  # type: ignore[misc]  # *args never reaches prepare_for_work
         # Hydration (find_by_key/all) passes prepare_for_work=False and no queues.
-        if kwargs.get('prepare_for_work', True):
+        if prepare_for_work:
             if sys.version_info < (3, 11):
                 raise RuntimeError('AsyncWorker requires Python >= 3.11')
             if len(self.queues) != 1:
                 raise ValueError('AsyncWorker only supports a single queue')
             if get_version(self.connection) < (6, 2, 0):
                 raise RuntimeError('AsyncWorker requires Redis server >= 6.2 (BLMOVE)')
-        if max_concurrency < 1:
-            raise ValueError('max_concurrency must be at least 1')
         self.max_concurrency = max_concurrency
+
+    @property
+    def queue(self) -> Queue:
+        return self.queues[0]
 
     def work(
         self,
@@ -139,15 +142,13 @@ class AsyncWorker(BaseWorker):
                     break
 
                 job_id = pop_task.result()
-                if job_id is None:
+                if job_id is None:  # burst mode: queue empty
                     semaphore.release()
-                    if burst:
-                        if tasks_before_pop:
-                            await asyncio.wait(tasks_before_pop, return_when=asyncio.FIRST_COMPLETED)
-                            continue
-                        self.log.info('Worker %s: done, quitting', self.name)
-                        break
-                    continue
+                    if tasks_before_pop:
+                        await asyncio.wait(tasks_before_pop, return_when=asyncio.FIRST_COMPLETED)
+                        continue
+                    self.log.info('Worker %s: done, quitting', self.name)
+                    break
 
                 # The job is already in the intermediate queue: admit it even if
                 # shutdown was requested mid-dequeue, dropping it here would
@@ -155,7 +156,7 @@ class AsyncWorker(BaseWorker):
                 job_fetch_result = await asyncio.to_thread(
                     self.queue_class._fetch_dequeued_job,
                     self.connection,
-                    self.queues[0].key,
+                    self.queue.key,
                     job_id,
                     self.job_class,
                     self.serializer,
@@ -212,8 +213,8 @@ class AsyncWorker(BaseWorker):
         queue, where maintenance cleanup eventually fails the job as stuck
         (it is not requeued).
         """
-        queue_key = self.queues[0].key
-        intermediate_key = IntermediateQueue(queue_key, self.connection).key
+        queue_key = self.queue.key
+        intermediate_key = self.queue.intermediate_queue_key
         while True:
             try:
                 job_id = cast(
