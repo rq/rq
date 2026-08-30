@@ -25,11 +25,12 @@ if TYPE_CHECKING:
 
     from .job import Retry
 
+from .callbacks import Callback, execute_failure_callback, execute_success_callback
 from .defaults import DEFAULT_RESULT_TTL
 from .dependency import Dependency
 from .exceptions import DequeueTimeout, NoSuchJobError
 from .intermediate_queue import IntermediateQueue
-from .job import Callback, Job, JobStatus
+from .job import Job, JobStatus
 from .job_lifecycle import format_exc_info, record_job_failure
 from .logutils import blue, green
 from .rate_limit import RateLimit
@@ -1443,10 +1444,10 @@ class Queue:
                 record_job_failure(job, exc_string, pipeline)
                 pipeline.execute()
 
-            job.execute_failure_callback(self.death_penalty_class, *sys.exc_info())
+            execute_failure_callback(job, self.death_penalty_class, *sys.exc_info())
             job.send_webhooks(JobStatus.FAILED, exc_string=exc_string)
         else:
-            job.execute_success_callback(self.death_penalty_class, job.return_value())
+            execute_success_callback(job, self.death_penalty_class, job.return_value())
             job.send_webhooks(JobStatus.FINISHED)
 
         return job

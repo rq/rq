@@ -430,3 +430,15 @@ def _send_kill_horse_command(worker_name, connection_kwargs, delay=0.25):
 
 class CustomJob(Job):
     """A custom job class just to test it"""
+
+
+async def async_success_callback(job, connection, result):
+    connection.set(f'async_success_callback:{job.id}', result, ex=60)
+
+
+async def async_failure_callback(job, connection, type, value, traceback):
+    connection.set(f'async_failure_callback:{job.id}', str(value), ex=60)
+
+
+async def async_stopped_callback(job, connection):
+    connection.set(f'async_stopped_callback:{job.id}', 'stopped', ex=60)
