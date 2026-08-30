@@ -1,3 +1,7 @@
+### RQ 2.12.0 (2026-08-30)
+* Added `CronJobRegistry` so cron job histories can be monitored without an active `CronScheduler`. Thanks @selwin!
+* `CronScheduler.heartbeat()` now re-creates its Redis hash if they expire. Thanks @selwin!
+
 ### RQ 2.11.0 (2026-08-17)
 * `CronJob` now keeps a history of jobs it created, accessible via `cron_job.get_job_ids()`. Thanks @selwin!
 * `RQScheduler` now acquire and refresh locks before enqueueing. Thanks @selwin!
