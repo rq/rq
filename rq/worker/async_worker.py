@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import signal
 import sys
 from datetime import datetime
@@ -12,8 +11,7 @@ import redis.asyncio
 from ..connections import get_async_connection
 from ..defaults import DEFAULT_LOGGING_DATE_FORMAT, DEFAULT_LOGGING_FORMAT
 from ..executions import Execution
-from ..job import Job, JobStatus, Retry
-from ..job_lifecycle import format_exc_info
+from ..job import Job
 from ..queue import Queue
 from ..timeouts import JobTimeoutException, TimerDeathPenalty
 from ..utils import as_text, get_version, now
@@ -317,54 +315,13 @@ class AsyncWorker(BaseWorker):
                 if timeout_context.expired():
                     raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
                 raise
-            await asyncio.to_thread(self._finalize_execution_result, job, queue, execution, result)
+            await asyncio.to_thread(self._finalize_success, job, queue, execution, result)
         except Exception:
             exc_info = sys.exc_info()
-            await asyncio.to_thread(self._finalize_execution_failure, job, queue, execution, exc_info)
+            await asyncio.to_thread(self._finalize_failure, job, queue, execution, exc_info)
 
     def _start_execution(self, job: Job, execution: Execution):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
         started_at = now()
         job.started_at = started_at
         execution._started_at = started_at
-
-    def _finalize_execution_failure(self, job: Job, queue: Queue, execution: Execution, exc_info):
-        """Finalize an execution that raised, including its failure callback."""
-        job._status = JobStatus.FAILED
-        self.handle_execution_ended(job, queue, job.failure_callback_timeout)
-        try:
-            if job.failure_callback and inspect.iscoroutinefunction(job.failure_callback):
-                raise TypeError('AsyncWorker does not support coroutine failure callbacks')
-            job.execute_failure_callback(self.death_penalty_class, *exc_info)
-        except Exception:
-            exc_info = sys.exc_info()
-        self.handle_exception(job, *exc_info)
-        self.handle_job_failure(
-            job=job,
-            queue=queue,
-            started_job_registry=queue.started_job_registry,
-            exc_string=format_exc_info(exc_info),
-            execution=execution,
-        )
-
-    def _finalize_execution_result(self, job: Job, queue: Queue, execution: Execution, result):
-        """Finalize an execution that returned a result, including Retry."""
-        self.handle_execution_ended(job, queue, job.success_callback_timeout)
-        job._result = result
-        if isinstance(result, Retry):
-            self.handle_job_retry(
-                job=job,
-                queue=queue,
-                retry=result,
-                started_job_registry=queue.started_job_registry,
-                execution=execution,
-            )
-            return
-        job._status = JobStatus.FINISHED
-        if job.success_callback and inspect.iscoroutinefunction(job.success_callback):
-            raise TypeError('AsyncWorker does not support coroutine success callbacks')
-        job.execute_success_callback(self.death_penalty_class, result)
-        self.handle_job_success(
-            job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution
-        )
-        job.send_webhooks(JobStatus.FINISHED)

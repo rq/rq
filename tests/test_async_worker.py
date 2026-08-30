@@ -194,9 +194,9 @@ class TestAsyncWorker(RQTestCase):
         AsyncWorker([self.queue], connection=self.connection).work(burst=True)
 
         self.assertEqual(success_job.get_status(), JobStatus.FAILED)
-        self.assertIn('does not support coroutine success callbacks', success_job.latest_result().exc_string)
+        self.assertIn('Coroutine success callbacks are not supported', success_job.latest_result().exc_string)
         self.assertEqual(failure_job.get_status(), JobStatus.FAILED)
-        self.assertIn('does not support coroutine failure callbacks', failure_job.latest_result().exc_string)
+        self.assertIn('Coroutine failure callbacks are not supported', failure_job.latest_result().exc_string)
 
     def test_success_webhook(self):
         webhook = Webhook('http://example.com/done', JobStatus.FINISHED)
