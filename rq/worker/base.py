@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
 from types import FrameType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -1580,82 +1580,30 @@ class BaseWorker:
         job.ended_at = now()
         job.heartbeat(now(), heartbeat_ttl)
 
-    def perform_job(self, job: Job, queue: Queue, execution: Execution) -> bool:
-        """Performs the actual work of a job.  Will/should only be called
-        inside the work horse's process.
+    def _finalize_success(self, job: Job, queue: Queue, execution: Execution, return_value: Any) -> None:
+        """Terminal handling for a job that returned: Retry re-enqueues, anything else finishes."""
+        self.handle_execution_ended(job, queue, job.success_callback_timeout)
+        # Pickle the result in the same try-except block since we need
+        # to use the same exc handling when pickling fails
+        job._result = return_value
 
-        Args:
-            job (Job): The Job
-            queue (Queue): The Queue
-            execution (Execution): The execution running the job
-
-        Returns:
-            bool: True after finished.
-        """
-        started_job_registry = queue.started_job_registry
-        self.log.debug('Worker %s: started job registry set.', self.name)
-
-        try:
-            remove_from_intermediate_queue = len(self.queues) == 1
-            self.prepare_job_execution(job, remove_from_intermediate_queue)
-
-            job.started_at = now()
-            timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
-            with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
-                self.log.debug('Worker %s: performing job %s ...', self.name, job.id)
-                return_value = job.perform()
-                self.log.debug('Worker %s: finished performing job %s', self.name, job.id)
-
-            self.handle_execution_ended(job, queue, job.success_callback_timeout)
-            # Pickle the result in the same try-except block since we need
-            # to use the same exc handling when pickling fails
-            job._result = return_value
-
-            if isinstance(return_value, Retry):
-                # Retry the job
-                self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
-                self.handle_job_retry(
-                    job=job,
-                    queue=queue,
-                    retry=return_value,
-                    started_job_registry=started_job_registry,
-                    execution=execution,
-                )
-                return True
-            else:
-                job._status = JobStatus.FINISHED
-                execute_success_callback(job, self.death_penalty_class, return_value)
-                self.handle_job_success(
-                    job=job, queue=queue, started_job_registry=started_job_registry, execution=execution
-                )
-                job.send_webhooks(JobStatus.FINISHED)
-
-        except:  # NOQA
-            self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
-            job._status = JobStatus.FAILED
-
-            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
-            exc_info = sys.exc_info()
-            exc_string = format_exc_info(exc_info)
-
-            try:
-                execute_failure_callback(job, self.death_penalty_class, *exc_info)
-            except:  # noqa
-                exc_info = sys.exc_info()
-                exc_string = format_exc_info(exc_info)
-
-            # TODO: reversing the order of handle_job_failure() and handle_exception()
-            # causes Sentry test to fail
-            self.handle_exception(job, *exc_info)
-            self.handle_job_failure(
+        if isinstance(return_value, Retry):
+            self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
+            self.handle_job_retry(
                 job=job,
-                exc_string=exc_string,
                 queue=queue,
-                started_job_registry=started_job_registry,
+                retry=return_value,
+                started_job_registry=queue.started_job_registry,
                 execution=execution,
             )
+            return
 
-            return False
+        job._status = JobStatus.FINISHED
+        execute_success_callback(job, self.death_penalty_class, return_value)
+        self.handle_job_success(
+            job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution
+        )
+        job.send_webhooks(JobStatus.FINISHED)
 
         self.log.info('Worker %s: %s: %s (%s)', self.name, green(job.origin), blue('Job OK'), job.id)
         if return_value is not None:
@@ -1671,6 +1619,57 @@ class BaseWorker:
                 self.log.info(
                     'Worker %s: job %s result will never expire, clean up result key manually', self.name, job.id
                 )
+
+    def _finalize_failure(self, job: Job, queue: Queue, execution: Execution, exc_info) -> None:
+        """Terminal handling for a job that raised, including its failure callback."""
+        self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
+        job._status = JobStatus.FAILED
+        self.handle_execution_ended(job, queue, job.failure_callback_timeout)
+
+        try:
+            execute_failure_callback(job, self.death_penalty_class, *exc_info)
+        except:  # noqa
+            # A failing callback replaces the job's exception as the recorded failure.
+            exc_info = sys.exc_info()
+
+        # TODO: reversing the order of handle_job_failure() and handle_exception()
+        # causes Sentry test to fail
+        self.handle_exception(job, *exc_info)
+        self.handle_job_failure(
+            job=job,
+            exc_string=format_exc_info(exc_info),
+            queue=queue,
+            started_job_registry=queue.started_job_registry,
+            execution=execution,
+        )
+
+    def perform_job(self, job: Job, queue: Queue, execution: Execution) -> bool:
+        """Performs the actual work of a job.  Will/should only be called
+        inside the work horse's process.
+
+        Args:
+            job (Job): The Job
+            queue (Queue): The Queue
+            execution (Execution): The execution running the job
+
+        Returns:
+            bool: True after finished.
+        """
+        try:
+            remove_from_intermediate_queue = len(self.queues) == 1
+            self.prepare_job_execution(job, remove_from_intermediate_queue)
+
+            job.started_at = now()
+            timeout = job.timeout or self.queue_class.DEFAULT_TIMEOUT
+            with self.death_penalty_class(timeout, JobTimeoutException, job_id=job.id):
+                self.log.debug('Worker %s: performing job %s ...', self.name, job.id)
+                return_value = job.perform()
+                self.log.debug('Worker %s: finished performing job %s', self.name, job.id)
+
+            self._finalize_success(job, queue, execution, return_value)
+        except:  # NOQA
+            self._finalize_failure(job, queue, execution, sys.exc_info())
+            return False
 
         return True
 
