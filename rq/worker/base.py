@@ -1572,10 +1572,6 @@ class BaseWorker:
                     self.log.debug('Worker %s: finished handling successful execution of job %s', self.name, job.id)
                     break
                 except redis.exceptions.WatchError:
-                    # cleanup_execution() pops the in-memory execution before
-                    # execute(); put it back so a retry still zrem's StartedJobRegistry.
-                    if execution is not None:
-                        self.executions[execution.id] = execution
                     continue
 
     def handle_execution_ended(self, job: Job, queue: Queue, heartbeat_ttl: int):
