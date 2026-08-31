@@ -356,6 +356,7 @@ class AbandonedJobWebhookTestCase(RQTestCase):
 
     def test_abandoned_terminal_failure_fires_failed_webhook(self):
         job = self.queue.enqueue(say_hello, webhooks=[self.finished_webhook, self.failed_webhook])
+        job.set_status(JobStatus.STARTED)
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
 
         with patch.object(Webhook, 'send', autospec=True) as send_mock:
@@ -365,6 +366,7 @@ class AbandonedJobWebhookTestCase(RQTestCase):
     def test_abandoned_retry_does_not_fire_failed_webhook(self):
         """A job with retries left is requeued, not failed, so no webhook fires."""
         job = self.queue.enqueue(div_by_zero, 1, retry=Retry(max=1), webhooks=[self.failed_webhook])
+        job.set_status(JobStatus.STARTED)
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
 
         with patch.object(Webhook, 'send', autospec=True) as send_mock:

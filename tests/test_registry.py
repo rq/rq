@@ -865,6 +865,7 @@ class TestStartedJobRegistry(RQTestCase):
 
         failed_job_registry = FailedJobRegistry(connection=self.connection)
         job = self.queue.enqueue(say_hello)
+        job.set_status(JobStatus.STARTED)
 
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 100})
 
@@ -909,6 +910,7 @@ class TestStartedJobRegistry(RQTestCase):
         FailedJobRegistry."""
         failed_job_registry = FailedJobRegistry(connection=self.connection)
         job = self.queue.enqueue(say_hello)
+        job.set_status(JobStatus.STARTED)
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
 
         with mock.patch.object(Job, 'execute_failure_callback', side_effect=Exception()):
@@ -935,6 +937,7 @@ class TestStartedJobRegistry(RQTestCase):
 
         self.connection.zadd(self.registry.key, {f'{parent_job.id}:execution': 2})
         queue.remove(parent_job.id)
+        parent_job.set_status(JobStatus.STARTED)
 
         with mock.patch.object(Job, 'execute_failure_callback') as mocked:
             self.registry.cleanup()
