@@ -289,23 +289,9 @@ class StartedJobRegistry(BaseRegistry):
                 except NoSuchJobError:
                     continue
 
-                # A leftover StartedJobRegistry entry after a successful (or already
-                # failed/stopped) job must not be treated as AbandonedJobError.
-                # WatchError retries in handle_job_success can leave the zset entry
-                # behind even though the job already finished; just drop it.
-                status = job.get_status(refresh=False)
-                if status in {
-                    JobStatus.FINISHED,
-                    JobStatus.FAILED,
-                    JobStatus.STOPPED,
-                    JobStatus.CANCELED,
-                }:
-                    logger.debug(
-                        '%s cleanup: skipping %s with terminal status %s',
-                        self.__class__.__name__,
-                        job.id,
-                        status,
-                    )
+                # Leftover registry entries after success/failure are not abandoned
+                # jobs. Only STARTED still means the worker died mid-request.
+                if job.get_status(refresh=False) != JobStatus.STARTED:
                     continue
 
                 # No real failure traceback exists for an abandoned job (the work-horse died
