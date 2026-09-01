@@ -614,6 +614,7 @@ class TestRateLimitEnqueue(RQTestCase):
         # Simulate job1 being picked up by a worker that then dies:
         # remove from queue, add to StartedJobRegistry with an expired ttl
         self.queue.remove(job1.id)
+        job1.set_status(JobStatus.STARTED)
         started_registry = StartedJobRegistry(connection=self.connection)
         execution = Execution(id='execution', job_id=job1.id, connection=self.connection)
         with self.connection.pipeline() as pipe:
@@ -789,6 +790,7 @@ class TestRateLimitRetry(RQTestCase):
         completing (worker crash, OOM, etc.): remove job from queue and register
         an expired execution in StartedJobRegistry."""
         self.queue.remove(job.id)
+        job.set_status(JobStatus.STARTED)
         started_registry = StartedJobRegistry(connection=self.connection)
         execution = Execution(id='execution', job_id=job.id, connection=self.connection)
         with self.connection.pipeline() as pipe:

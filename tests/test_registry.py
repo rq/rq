@@ -865,6 +865,7 @@ class TestStartedJobRegistry(RQTestCase):
 
         failed_job_registry = FailedJobRegistry(connection=self.connection)
         job = self.queue.enqueue(say_hello)
+        job.set_status(JobStatus.STARTED)
 
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 100})
 
@@ -890,11 +891,26 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertIsNotNone(latest_result)
         self.assertTrue(latest_result.exc_string)  # explanation is written to exc_info
 
+    def test_cleanup_skips_finished_jobs(self):
+        """Finished jobs leftover in StartedJobRegistry are dropped, not abandoned."""
+        failed_job_registry = FailedJobRegistry(connection=self.connection)
+        job = self.queue.enqueue(say_hello)
+        job.set_status(JobStatus.FINISHED)
+        self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
+
+        self.registry.cleanup()
+
+        self.assertNotIn(job.id, failed_job_registry)
+        self.assertNotIn(job, self.registry)
+        job.refresh()
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
+
     def test_cleanup_continues_when_failure_callback_raises(self):
         """A raising failure callback must not stop the job from being moved to the
         FailedJobRegistry."""
         failed_job_registry = FailedJobRegistry(connection=self.connection)
         job = self.queue.enqueue(say_hello)
+        job.set_status(JobStatus.STARTED)
         self.connection.zadd(self.registry.key, {f'{job.id}:execution_id': 1})
 
         with mock.patch('rq.registry.execute_failure_callback', side_effect=Exception()):
@@ -921,6 +937,7 @@ class TestStartedJobRegistry(RQTestCase):
 
         self.connection.zadd(self.registry.key, {f'{parent_job.id}:execution': 2})
         queue.remove(parent_job.id)
+        parent_job.set_status(JobStatus.STARTED)
 
         with mock.patch('rq.registry.execute_failure_callback') as mocked:
             self.registry.cleanup()

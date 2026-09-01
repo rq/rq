@@ -177,6 +177,7 @@ class TestRetry(RQTestCase):
         job = queue.enqueue(say_hello, retry=Retry(max=1))
 
         # Add job to StartedJobRegistry with past expiration time
+        job.set_status(JobStatus.STARTED)
         self.connection.zadd(registry.key, {job.id: 2})
 
         registry.cleanup()
@@ -184,6 +185,7 @@ class TestRetry(RQTestCase):
         self.assertEqual(job.get_status(), JobStatus.QUEUED)
         self.assertNotIn(job, failed_job_registry)
 
+        job.set_status(JobStatus.STARTED)
         self.connection.zadd(registry.key, {job.id: 2})
         # Job goes to FailedJobRegistry because it's only retried once
         registry.cleanup()
