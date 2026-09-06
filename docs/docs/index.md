@@ -227,7 +227,7 @@ job = queue.enqueue_in(timedelta(minutes=30), my_task, job_id='scheduled-task', 
 - `unique=True` is not supported with job dependencies (`depends_on`).
 
 ### Concurrency Rate Limits
-_New in version 2.11.0._
+_New in version 3.0._
 
 Use `RateLimit` to cap how many jobs sharing a key may be queued or executing at
 the same time:
