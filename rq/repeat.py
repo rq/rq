@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING
+
+from .utils import now
 
 if TYPE_CHECKING:
     from redis.client import Pipeline
@@ -109,8 +111,11 @@ class Repeat:
             # Enqueue the job immediately
             queue._enqueue_job(job, pipeline=pipe)
         else:
-            # Schedule the job to run after the interval
-            scheduled_time = datetime.now() + timedelta(seconds=interval)
+            # Schedule the job to run after the interval. Use an aware UTC
+            # datetime: a naive one makes ScheduledJobRegistry.schedule() guess
+            # the server's offset from time.altzone whenever time.daylight is
+            # set, which is an hour off outside DST.
+            scheduled_time = now() + timedelta(seconds=interval)
             queue.schedule_job(job, scheduled_time, pipeline=pipe)
 
         # Execute the pipeline if we created it

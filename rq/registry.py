@@ -290,6 +290,11 @@ class StartedJobRegistry(BaseRegistry):
                 except NoSuchJobError:
                     continue
 
+                # Leftover registry entries after success/failure are not abandoned
+                # jobs. Only STARTED still means the worker died mid-request.
+                if job.get_status(refresh=False) != JobStatus.STARTED:
+                    continue
+
                 # No real failure traceback exists for an abandoned job (the work-horse died
                 # in another process), so pass None in the exc_info traceback slot.
                 # A raising failure callback must not abort the batch or stop the job from

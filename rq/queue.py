@@ -1723,8 +1723,8 @@ class Queue:
         Returns:
             job, queue (Tuple[Job, Queue]): A tuple of Job, Queue
         """
+        queue_keys = [queue.key for queue in queues]
         while True:
-            queue_keys = [q.key for q in queues]
             if len(queue_keys) == 1 and get_version(connection) >= (6, 2, 0):
                 result = cls.lmove(connection, queue_keys[0], timeout)
             else:
