@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import zlib
+from datetime import timedelta
 from multiprocessing import Process
 from unittest import skipIf
 from unittest.mock import ANY, patch
@@ -306,6 +307,24 @@ class TestAsyncWorker(RQTestCase):
         self.assertGreater(self.connection.ttl(execution.key), 30)
         self.assertGreater(self.connection.zscore(registry.key, execution.composite_key), current_timestamp())
         worker.register_death()
+
+    def test_admission_clears_previous_attempt_started_at(self):
+        """Admission clears a retried job's started_at before heartbeats can see it"""
+        job = self.queue.enqueue(say_hello_async, job_timeout=10)
+        job.started_at = now() - timedelta(minutes=5)
+        job.save()
+        worker = AsyncWorker([self.queue], connection=self.connection)
+        started_at_on_admission = []
+
+        def record_started_at(job):
+            started_at_on_admission.append(job.started_at)
+            return AsyncWorker.prepare_execution(worker, job)
+
+        with patch.object(worker, 'prepare_execution', side_effect=record_started_at):
+            worker.work(burst=True)
+
+        self.assertEqual(started_at_on_admission, [None])
+        self.assertEqual(job.get_status(), JobStatus.FINISHED)
 
     def test_heartbeat_tick_converges_worker_state(self):
         """Every tick writes the truthful state, healing a stale write from a

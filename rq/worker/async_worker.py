@@ -166,6 +166,8 @@ class AsyncWorker(BaseWorker):
 
                 job, queue = job_fetch_result
                 self.log.debug('Worker %s: dequeued job %s from %s', self.name, job.id, queue.name)
+                # Retried jobs keep the last attempt's started_at; heartbeats may run before _start_execution
+                job.started_at = None
                 execution = await asyncio.to_thread(self.prepare_execution, job)
                 task = asyncio.create_task(self._run_execution(job, queue, execution))
                 running_tasks.add(task)
@@ -286,7 +288,7 @@ class AsyncWorker(BaseWorker):
             heartbeat_indices = []
             for execution in executions:
                 job = execution.job
-                working_time = (tick_now - execution._started_at).total_seconds() if execution._started_at else 0.0
+                working_time = (tick_now - job.started_at).total_seconds() if job.started_at else 0.0
                 ttl = int(self.get_heartbeat_ttl(job, working_time=working_time))
                 heartbeat_indices.append((len(pipeline), execution.key))
                 execution.heartbeat(job.started_job_registry, ttl, pipeline=pipeline)
@@ -322,6 +324,4 @@ class AsyncWorker(BaseWorker):
 
     def _start_execution(self, job: Job, execution: Execution):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
-        started_at = now()
-        job.started_at = started_at
-        execution._started_at = started_at
+        job.started_at = now()
