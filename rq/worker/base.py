@@ -14,8 +14,8 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from enum import Enum
 from random import shuffle
-from types import FrameType
-from typing import TYPE_CHECKING
+from types import FrameType, TracebackType
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ from ..executions import WORKER_EXECUTIONS_KEY_TEMPLATE, Execution, cleanup_exec
 from ..group import Group
 from ..job import Job, JobStatus, Retry
 from ..job_lifecycle import call_exception_handlers, format_exc_info
-from ..logutils import blue, green, setup_loghandlers, yellow
+from ..logutils import blue, green, setup_loghandlers
 from ..queue import Queue
 from ..registry import StartedJobRegistry, clean_registries
 from ..results import Result
@@ -1580,6 +1580,75 @@ class BaseWorker:
         job.ended_at = now()
         job.heartbeat(now(), heartbeat_ttl)
 
+    def _finalize_success(self, job: Job, queue: Queue, execution: Execution, return_value: Any) -> None:
+        """Finalize a job that returned, re-enqueuing it when the result is a `Retry`."""
+        self.handle_execution_ended(job, queue, job.success_callback_timeout)
+        # Pickle the result in the same try-except block since we need
+        # to use the same exc handling when pickling fails
+        job._result = return_value
+
+        if isinstance(return_value, Retry):
+            self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
+            self.handle_job_retry(
+                job=job,
+                queue=queue,
+                retry=return_value,
+                started_job_registry=queue.started_job_registry,
+                execution=execution,
+            )
+            return
+
+        job._status = JobStatus.FINISHED
+        execute_success_callback(job, self.death_penalty_class, return_value)
+        self.handle_job_success(
+            job=job, queue=queue, started_job_registry=queue.started_job_registry, execution=execution
+        )
+        job.send_webhooks(JobStatus.FINISHED)
+
+        self.log.info('Worker %s: %s: %s (%s)', self.name, green(job.origin), blue('Job OK'), job.id)
+        if return_value is not None:
+            self.log.debug('Worker %s: result: %r', self.name, return_value)
+
+        if self.log_result_lifespan:
+            result_ttl = job.get_result_ttl(self.default_result_ttl)
+            if result_ttl == 0:
+                self.log.info('Worker %s: job %s result discarded immediately', self.name, job.id)
+            elif result_ttl > 0:
+                self.log.info('Worker %s: job %s result is kept for %s seconds', self.name, job.id, result_ttl)
+            else:
+                self.log.info(
+                    'Worker %s: job %s result will never expire, clean up result key manually', self.name, job.id
+                )
+
+    def _finalize_failure(
+        self,
+        job: Job,
+        queue: Queue,
+        execution: Execution,
+        exc_info: tuple[type[BaseException] | None, BaseException | None, TracebackType | None],
+    ) -> None:
+        """Terminal handling for a job that raised, including its failure callback."""
+        self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
+        job._status = JobStatus.FAILED
+        self.handle_execution_ended(job, queue, job.failure_callback_timeout)
+
+        try:
+            execute_failure_callback(job, self.death_penalty_class, *exc_info)
+        except:  # noqa
+            # A failing callback replaces the job's exception as the recorded failure.
+            exc_info = sys.exc_info()
+
+        # TODO: reversing the order of handle_job_failure() and handle_exception()
+        # causes Sentry test to fail
+        self.handle_exception(job, *exc_info)
+        self.handle_job_failure(
+            job=job,
+            exc_string=format_exc_info(exc_info),
+            queue=queue,
+            started_job_registry=queue.started_job_registry,
+            execution=execution,
+        )
+
     def perform_job(self, job: Job, queue: Queue, execution: Execution) -> bool:
         """Performs the actual work of a job.  Will/should only be called
         inside the work horse's process.
@@ -1592,9 +1661,6 @@ class BaseWorker:
         Returns:
             bool: True after finished.
         """
-        started_job_registry = queue.started_job_registry
-        self.log.debug('Worker %s: started job registry set.', self.name)
-
         try:
             remove_from_intermediate_queue = len(self.queues) == 1
             self.prepare_job_execution(job, remove_from_intermediate_queue)
@@ -1606,71 +1672,10 @@ class BaseWorker:
                 return_value = job.perform()
                 self.log.debug('Worker %s: finished performing job %s', self.name, job.id)
 
-            self.handle_execution_ended(job, queue, job.success_callback_timeout)
-            # Pickle the result in the same try-except block since we need
-            # to use the same exc handling when pickling fails
-            job._result = return_value
-
-            if isinstance(return_value, Retry):
-                # Retry the job
-                self.log.debug('Worker %s: job %s returns a Retry object', self.name, job.id)
-                self.handle_job_retry(
-                    job=job,
-                    queue=queue,
-                    retry=return_value,
-                    started_job_registry=started_job_registry,
-                    execution=execution,
-                )
-                return True
-            else:
-                job._status = JobStatus.FINISHED
-                execute_success_callback(job, self.death_penalty_class, return_value)
-                self.handle_job_success(
-                    job=job, queue=queue, started_job_registry=started_job_registry, execution=execution
-                )
-                job.send_webhooks(JobStatus.FINISHED)
-
+            self._finalize_success(job, queue, execution, return_value)
         except:  # NOQA
-            self.log.debug('Worker %s: job %s raised an exception.', self.name, job.id)
-            job._status = JobStatus.FAILED
-
-            self.handle_execution_ended(job, queue, job.failure_callback_timeout)
-            exc_info = sys.exc_info()
-            exc_string = format_exc_info(exc_info)
-
-            try:
-                execute_failure_callback(job, self.death_penalty_class, *exc_info)
-            except:  # noqa
-                exc_info = sys.exc_info()
-                exc_string = format_exc_info(exc_info)
-
-            # TODO: reversing the order of handle_job_failure() and handle_exception()
-            # causes Sentry test to fail
-            self.handle_exception(job, *exc_info)
-            self.handle_job_failure(
-                job=job,
-                exc_string=exc_string,
-                queue=queue,
-                started_job_registry=started_job_registry,
-                execution=execution,
-            )
-
+            self._finalize_failure(job, queue, execution, sys.exc_info())
             return False
-
-        self.log.info('Worker %s: %s: %s (%s)', self.name, green(job.origin), blue('Job OK'), job.id)
-        if return_value is not None:
-            self.log.debug('Worker %s: result: %r', self.name, yellow(str(return_value)))
-
-        if self.log_result_lifespan:
-            result_ttl = job.get_result_ttl(self.default_result_ttl)
-            if result_ttl == 0:
-                self.log.info('Worker %s: job %s result discarded immediately', self.name, job.id)
-            elif result_ttl > 0:
-                self.log.info('Worker %s: job %s result is kept for %s seconds', self.name, job.id, result_ttl)
-            else:
-                self.log.info(
-                    'Worker %s: job %s result will never expire, clean up result key manually', self.name, job.id
-                )
 
         return True
 
