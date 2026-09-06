@@ -60,11 +60,6 @@ class Execution:
         """Redis key of the execution index of the worker running this execution."""
         return WORKER_EXECUTIONS_KEY_TEMPLATE.format(self.worker_name)
 
-    @property
-    def working_time(self) -> float:
-        """Seconds elapsed since this execution was created."""
-        return (now() - self.created_at).total_seconds()
-
     @classmethod
     def fetch(cls, id: str, job_id: str, connection: Redis) -> Execution:
         """Fetch an execution from Redis."""
@@ -139,7 +134,9 @@ class Execution:
         pipeline.hset(self.key, 'last_heartbeat', self.last_heartbeat.timestamp())
         pipeline.expire(self.key, ttl)
         started_job_registry.add_execution(self, ttl=ttl, pipeline=pipeline, xx=True)
-        ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(execution=self, ttl=ttl, pipeline=pipeline)
+        ExecutionRegistry(job_id=self.job_id, connection=pipeline).add(
+            execution=self, ttl=ttl, pipeline=pipeline, xx=True
+        )
 
 
 class ExecutionRegistry(BaseRegistry):
@@ -164,19 +161,20 @@ class ExecutionRegistry(BaseRegistry):
         score = timestamp if timestamp is not None else current_timestamp()
         self.connection.zremrangebyscore(self.key, 0, score)
 
-    def add(self, execution: Execution, ttl: int, pipeline: Pipeline) -> Any:  # type: ignore
+    def add(self, execution: Execution, ttl: int, pipeline: Pipeline, xx: bool = False) -> Any:  # type: ignore
         """Register an execution to registry with expiry time of now + ttl, unless it's -1 which is set to +inf
 
         Args:
             execution (Execution): The Execution to add
             ttl (int, optional): The time to live. Defaults to 0.
             pipeline (Optional[Pipeline], optional): The Redis Pipeline. Defaults to None.
+            xx (bool, optional): Only update an existing member, never add one. Defaults to False.
 
         Returns:
             result (int): The ZADD command result
         """
         score = current_timestamp() + ttl
-        pipeline.zadd(self.key, {execution.id: score + 60})
+        pipeline.zadd(self.key, {execution.id: score + 60}, xx=xx)
         # Still unsure how to handle registry TTL, but it should be the same as job TTL
         pipeline.expire(self.key, ttl + 60)
         return

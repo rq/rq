@@ -1,4 +1,3 @@
-from datetime import timedelta
 from time import sleep
 from unittest.mock import patch
 
@@ -66,16 +65,6 @@ class TestRegistry(RQTestCase):
         pipeline.execute()
 
         self.assertFalse(self.connection.exists(execution.key))
-
-    def test_working_time(self):
-        """Execution.working_time is the seconds elapsed since created_at"""
-        job = self.queue.enqueue(say_hello)
-        pipeline = self.connection.pipeline()
-        execution = Execution.create(job=job, ttl=100, pipeline=pipeline)
-        pipeline.execute()
-
-        with patch('rq.executions.now', return_value=execution.created_at + timedelta(seconds=5)):
-            self.assertEqual(execution.working_time, 5.0)
 
     def test_worker_executions_tracking(self):
         """prepare_execution registers executions; cleanup_execution removes exactly its entry"""
@@ -185,6 +174,11 @@ class TestRegistry(RQTestCase):
         self.assertTrue(158 <= self.connection.ttl(registry.key) <= 160)
 
         execution.delete(pipeline=pipeline, job=job)
+        pipeline.execute()
+        self.assertEqual(self.connection.zcard(registry.key), 0)
+
+        # xx=True only refreshes existing members, it never re-adds a deleted execution
+        registry.add(execution=execution, ttl=100, pipeline=pipeline, xx=True)
         pipeline.execute()
         self.assertEqual(self.connection.zcard(registry.key), 0)
 
