@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import time
@@ -285,6 +286,40 @@ class TestAsyncWorker(RQTestCase):
 
         self.assertLess(time.monotonic() - started_at, 0.95)
         self.assertEqual(retry_job.get_status(), JobStatus.FAILED)
+
+    def test_burst_repops_after_task_finishing_during_empty_pop(self):
+        """A task finishing while an empty dequeue is pending may have enqueued a
+        retry, so burst mode must dequeue again instead of quitting"""
+        job = self.queue.enqueue(fail_async_while_retries_remain, retry=Retry(max=1))
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+        gate = asyncio.Event()
+        execution_tasks = []
+        run_execution = worker._run_execution
+        pop_job_id = worker._pop_job_id
+
+        async def gated_run_execution(job, queue, execution):
+            execution_tasks.append(asyncio.current_task())
+            await gate.wait()
+            await run_execution(job, queue, execution)
+
+        async def stale_pop_job_id(burst, async_connection):
+            job_id = await pop_job_id(burst, async_connection)
+            if job_id is None and not gate.is_set():
+                # Queue observed empty: let the first execution finish (enqueueing
+                # its retry) before handing the loop that stale result
+                gate.set()
+                await execution_tasks[0]
+            return job_id
+
+        with (
+            patch.object(worker, '_run_execution', gated_run_execution),
+            patch.object(worker, '_pop_job_id', stale_pop_job_id),
+        ):
+            worker.work(burst=True)
+
+        job.refresh()
+        self.assertEqual(job.get_status(refresh=False), JobStatus.FINISHED)
+        self.assertEqual(job.retries_left, 0)
 
     def test_heartbeat_tick_maintains_executions(self):
         """_heartbeat_tick refreshes the execution TTL and StartedJobRegistry

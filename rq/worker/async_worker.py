@@ -83,15 +83,14 @@ class AsyncWorker(BaseWorker):
         """Dequeues jobs and admits each as a task on the event loop, never
         holding more than `max_concurrency` executions in flight.
         """
-        semaphore = asyncio.Semaphore(self.max_concurrency)
-        running_tasks: set[asyncio.Task] = set()
+        # Retain completed tasks until admission consumes them, so an empty
+        # dequeue cannot hide retries enqueued while that dequeue was pending.
+        execution_tasks: set[asyncio.Task] = set()
         shutdown_event = asyncio.Event()
         cold_shutdown_requested = False
         admitted_jobs = 0
 
         def on_task_done(task: asyncio.Task):
-            semaphore.release()
-            running_tasks.discard(task)
             if not task.cancelled() and task.exception():
                 self.log.error('Worker %s: execution task failed', self.name, exc_info=task.exception())
 
@@ -99,12 +98,14 @@ class AsyncWorker(BaseWorker):
             nonlocal cold_shutdown_requested
             if shutdown_event.is_set():
                 self.log.warning(
-                    'Worker %s: cold shutdown, cancelling %d in-flight executions', self.name, len(running_tasks)
+                    'Worker %s: cold shutdown, cancelling %d in-flight executions',
+                    self.name,
+                    sum(not task.done() for task in execution_tasks),
                 )
                 cold_shutdown_requested = True
                 # Cancellation only interrupts the simulated asyncio.sleep; a task
                 # parked on to_thread() keeps its thread running to completion.
-                for task in tuple(running_tasks):  # snapshot: guard against mutation during iteration
+                for task in execution_tasks:
                     task.cancel()
             else:
                 self.handle_warm_shutdown_request()
@@ -123,12 +124,11 @@ class AsyncWorker(BaseWorker):
         stop_wait_task = asyncio.create_task(shutdown_event.wait())
         try:
             while not shutdown_event.is_set():
-                await semaphore.acquire()
-                if shutdown_event.is_set():
-                    semaphore.release()
-                    break
+                if len(execution_tasks) >= self.max_concurrency:
+                    done, _ = await asyncio.wait(execution_tasks, return_when=asyncio.FIRST_COMPLETED)
+                    execution_tasks.difference_update(done)
+                    continue
 
-                tasks_before_pop = tuple(running_tasks)
                 pop_task = asyncio.create_task(self._pop_job_id(burst, async_connection))
                 await asyncio.wait({pop_task, stop_wait_task}, return_when=asyncio.FIRST_COMPLETED)
                 if not pop_task.done():
@@ -136,17 +136,17 @@ class AsyncWorker(BaseWorker):
                     # cancelling is safe (see _pop_job_id for the residual race).
                     pop_task.cancel()
                     await asyncio.gather(pop_task, return_exceptions=True)
-                    semaphore.release()
                     break
 
                 job_id = pop_task.result()
                 if job_id is None:  # burst mode: queue empty
-                    semaphore.release()
-                    if tasks_before_pop:
-                        await asyncio.wait(tasks_before_pop, return_when=asyncio.FIRST_COMPLETED)
-                        continue
-                    self.log.info('Worker %s: done, quitting', self.name)
-                    break
+                    if not execution_tasks:
+                        self.log.info('Worker %s: done, quitting', self.name)
+                        break
+                    # A task finishing during the pop may have enqueued a retry or dependent
+                    done, _ = await asyncio.wait(execution_tasks, return_when=asyncio.FIRST_COMPLETED)
+                    execution_tasks.difference_update(done)
+                    continue
 
                 # The job is already in the intermediate queue: admit it even if
                 # shutdown was requested mid-dequeue, dropping it here would
@@ -161,7 +161,6 @@ class AsyncWorker(BaseWorker):
                     self.death_penalty_class,
                 )
                 if job_fetch_result is None:
-                    semaphore.release()
                     continue  # job hash vanished, dequeue again
 
                 job, queue = job_fetch_result
@@ -170,7 +169,7 @@ class AsyncWorker(BaseWorker):
                 job.started_at = None
                 execution = await asyncio.to_thread(self.prepare_execution, job)
                 task = asyncio.create_task(self._run_execution(job, queue, execution))
-                running_tasks.add(task)
+                execution_tasks.add(task)
                 task.add_done_callback(on_task_done)
                 if cold_shutdown_requested:
                     # A second signal landed between the pop and this registration,
@@ -194,9 +193,13 @@ class AsyncWorker(BaseWorker):
             # shutdown; failures are already logged by on_task_done. The
             # heartbeat is cancelled only after the drain: a worker draining
             # long executions must keep heartbeating or it looks dead.
-            if running_tasks:
-                self.log.info('Worker %s: waiting for %d in-flight executions', self.name, len(running_tasks))
-                await asyncio.gather(*running_tasks, return_exceptions=True)
+            if execution_tasks:
+                self.log.info(
+                    'Worker %s: waiting for %d in-flight executions',
+                    self.name,
+                    sum(not task.done() for task in execution_tasks),
+                )
+                await asyncio.gather(*execution_tasks, return_exceptions=True)
             heartbeat_task.cancel()
             stop_wait_task.cancel()
             await asyncio.gather(heartbeat_task, stop_wait_task, return_exceptions=True)
