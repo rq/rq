@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from unittest import mock
 
 from rq import Queue, Worker
 from rq.job import Job
@@ -194,6 +195,37 @@ class TestRepeatEnqueue(RQTestCase):
         # Check repeats_left was decremented
         job.refresh()
         self.assertEqual(job.repeats_left, 2)
+
+    def test_repeat_schedule_is_not_shifted_by_local_timezone(self):
+        """Repeat.schedule() schedules against UTC, not the server's wall clock"""
+        queue = self.queue
+        registry = ScheduledJobRegistry(queue=queue)
+
+        job = queue.enqueue(say_hello, repeat=Repeat(times=3, interval=30))
+        queue.empty()
+
+        # Simulate a server whose timezone observes DST but is currently on
+        # standard time. For a naive datetime, ScheduledJobRegistry.schedule()
+        # falls back to time.altzone whenever time.daylight is set, so it
+        # guesses an offset an hour away from the real one. An aware datetime
+        # never reaches that fallback.
+        standard_offset = int(-datetime.now().astimezone().utcoffset().total_seconds())
+        daylight = mock.patch('time.daylight', 1)
+        timezone = mock.patch('time.timezone', standard_offset)
+        altzone = mock.patch('time.altzone', standard_offset - 3600)
+
+        with daylight, timezone, altzone:
+            before_schedule = now()
+            Repeat.schedule(job, queue)
+            after_schedule = now()
+
+        scheduled_time = registry.get_scheduled_time(job.id)
+        expected_min = before_schedule + timedelta(seconds=25)
+        expected_max = after_schedule + timedelta(seconds=35)
+        self.assertTrue(
+            expected_min <= scheduled_time <= expected_max,
+            f'Job not scheduled in expected window: {expected_min} <= {scheduled_time} <= {expected_max}',
+        )
 
 
 class TestWorkerRepeat(RQTestCase):
