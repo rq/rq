@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 
 from .callbacks import Callback
-from .exceptions import DeserializationError, InvalidJobOperation, NoSuchJobError
+from .exceptions import DeserializationError, InvalidJobOperation, NoSuchGroupError, NoSuchJobError
 from .serializers import resolve_serializer
 from .types import FunctionReferenceType, JobDependencyType
 from .utils import (
@@ -1410,8 +1410,14 @@ class Job:
         if self.group_id:
             from .group import Group
 
-            group = Group.fetch(self.group_id, self.connection)
-            group.delete_job(self.id, pipeline=pipeline)
+            try:
+                group = Group.fetch(self.group_id, self.connection)
+            except NoSuchGroupError:
+                # The group set is gone once its last member is removed, so a job outliving
+                # its group is normal and must not abort the rest of this delete.
+                pass
+            else:
+                group.delete_job(self.id, pipeline=pipeline)
 
         connection.delete(self.key, self.dependents_key, self.dependencies_key)
 
