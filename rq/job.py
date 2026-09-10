@@ -1510,9 +1510,7 @@ class Job:
             raise ValueError('Cannot execute job: function is None')
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
-            loop = asyncio.new_event_loop()
-            coro_result = loop.run_until_complete(result)
-            return coro_result
+            return asyncio.run(result)
         return result
 
     def get_ttl(self, default_ttl: int | None = None) -> int | None:
