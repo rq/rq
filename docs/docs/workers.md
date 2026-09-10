@@ -352,6 +352,11 @@ A worker implementation that executes jobs in the same process, without using `f
 
 `SimpleWorker` does not provide periodic heartbeats during job execution.
 This means long-running jobs may appear to be "stuck" from monitoring tools' perspective.
+
+Because jobs run in the worker process, imported Python modules stay loaded between jobs. Source code
+changes made while a `SimpleWorker` is running are therefore not reloaded automatically; restart the
+worker to make subsequent jobs use the updated code.
+
 `SimpleWorker` is not recommended for production use unless you fully understand these limitations.
 
 Usage:
