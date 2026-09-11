@@ -498,6 +498,38 @@ class Queue:
 
         return CanceledJobRegistry(queue=self, job_class=self.job_class, serializer=self.serializer)
 
+    def purge_registries(
+        self,
+        failed: bool = False,
+        finished: bool = False,
+        canceled: bool = False,
+        delete_jobs: bool = True,
+    ) -> dict[str, int]:
+        """Removes all entries from the selected job registries of this queue.
+
+        Only registries holding jobs that will never run again are offered here. The
+        deferred, scheduled and started registries hold jobs that are still pending or
+        in flight, so they are purged through their own APIs instead.
+
+        Args:
+            failed (bool, optional): Purge the FailedJobRegistry. Defaults to False.
+            finished (bool, optional): Purge the FinishedJobRegistry. Defaults to False.
+            canceled (bool, optional): Purge the CanceledJobRegistry. Defaults to False.
+            delete_jobs (bool, optional): Whether to delete the jobs too. Defaults to True.
+
+        Returns:
+            dict[str, int]: Number of entries removed, keyed by registry name. Only the
+                selected registries are present, so selecting none returns an empty dict.
+        """
+        results: dict[str, int] = {}
+        if failed:
+            results['failed'] = self.failed_job_registry.purge(delete_jobs=delete_jobs)
+        if finished:
+            results['finished'] = self.finished_job_registry.purge(delete_jobs=delete_jobs)
+        if canceled:
+            results['canceled'] = self.canceled_job_registry.purge(delete_jobs=delete_jobs)
+        return results
+
     def remove(self, job_or_id: Job | str, pipeline: Pipeline | None = None):
         """Removes Job from queue, accepts either a Job instance or ID.
 
