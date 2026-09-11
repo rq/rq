@@ -191,6 +191,8 @@ class Job:
         self._instance: object | UnevaluatedType | None = UNEVALUATED
         self._args: tuple | list | UnevaluatedType = UNEVALUATED
         self._kwargs: dict[str, Any] | UnevaluatedType = UNEVALUATED
+        self._callback_instances: dict[str, Any] = {}
+        self._callback_instances_data: bytes | None = None
         self._success_callback_name: str | None = None
         self._success_callback: Callable[[Job, Redis, Any], Any] | UnevaluatedType = UNEVALUATED
         self._failure_callback_name: str | None = None
@@ -346,6 +348,9 @@ class Job:
                 on_success = Callback(on_success)  # backward compatibility
             job._success_callback_name = on_success.name
             job._success_callback_timeout = on_success.timeout
+            instance, _ = resolve_function_reference(on_success.func)
+            if instance is not None:
+                job._callback_instances['success'] = instance
 
         if on_failure:
             if not isinstance(on_failure, Callback):
@@ -356,6 +361,9 @@ class Job:
                 on_failure = Callback(on_failure)  # backward compatibility
             job._failure_callback_name = on_failure.name
             job._failure_callback_timeout = on_failure.timeout
+            instance, _ = resolve_function_reference(on_failure.func)
+            if instance is not None:
+                job._callback_instances['failure'] = instance
 
         if on_stopped:
             if not isinstance(on_stopped, Callback):
@@ -366,6 +374,9 @@ class Job:
                 on_stopped = Callback(on_stopped)  # backward compatibility
             job._stopped_callback_name = on_stopped.name
             job._stopped_callback_timeout = on_stopped.timeout
+            instance, _ = resolve_function_reference(on_stopped.func)
+            if instance is not None:
+                job._callback_instances['stopped'] = instance
 
         if webhooks:
             if not isinstance(webhooks, Sequence) or not all(isinstance(webhook, Webhook) for webhook in webhooks):
@@ -530,11 +541,26 @@ class Job:
 
         return import_attribute(func_name)
 
+    def _get_callback(self, name: str, callback_type: str) -> Callable[..., Any]:
+        if self._callback_instances_data is not None:
+            try:
+                self._callback_instances = self.serializer.loads(self._callback_instances_data)
+            except Exception as e:
+                raise DeserializationError() from e
+            self._callback_instances_data = None
+
+        instance = self._callback_instances.get(callback_type)
+        if instance is not None:
+            if name == '__call__' and not isinstance(instance, type):
+                return instance
+            return getattr(instance, name)
+        return import_attribute(name)
+
     @property
     def success_callback(self) -> SuccessCallbackType | None:
         if self._success_callback is UNEVALUATED:
             if self._success_callback_name:
-                self._success_callback = import_attribute(self._success_callback_name)
+                self._success_callback = self._get_callback(self._success_callback_name, 'success')
             else:
                 return None
 
@@ -551,7 +577,7 @@ class Job:
     def failure_callback(self) -> FailureCallbackType | None:
         if self._failure_callback is UNEVALUATED:
             if self._failure_callback_name:
-                self._failure_callback = import_attribute(self._failure_callback_name)
+                self._failure_callback = self._get_callback(self._failure_callback_name, 'failure')
             else:
                 return None
 
@@ -568,7 +594,7 @@ class Job:
     def stopped_callback(self) -> Callable[[Job, Redis], Any] | None:
         if self._stopped_callback is UNEVALUATED:
             if self._stopped_callback_name:
-                self._stopped_callback = import_attribute(self._stopped_callback_name)
+                self._stopped_callback = self._get_callback(self._stopped_callback_name, 'stopped')
             else:
                 self._stopped_callback = None
 
@@ -1003,6 +1029,10 @@ class Job:
         # In future versions, if a job has no status, an error should be raised
         self._status = JobStatus(as_text(obj['status'])) if obj.get('status') else JobStatus.CREATED
 
+        self._callback_instances = {}
+        self._callback_instances_data = obj.get('callback_instances')
+        self._success_callback = self._failure_callback = self._stopped_callback = UNEVALUATED
+
         if obj.get('success_callback_name'):
             self._success_callback_name = obj['success_callback_name'].decode()
 
@@ -1101,6 +1131,12 @@ class Job:
             'worker_name': self.worker_name or '',
             'group_id': self.group_id or '',
         }
+
+        callback_instances_data = self._callback_instances_data
+        if callback_instances_data is None and self._callback_instances:
+            callback_instances_data = self.serializer.dumps(self._callback_instances)
+        if callback_instances_data is not None:
+            obj['callback_instances'] = callback_instances_data
 
         if self.number_of_retries is not None:
             obj['number_of_retries'] = self.number_of_retries
