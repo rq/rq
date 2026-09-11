@@ -339,7 +339,7 @@ class Job:
         job._args = args
         job._kwargs = kwargs
 
-        if on_success:
+        if on_success is not None:
             if not isinstance(on_success, Callback):
                 warnings.warn(
                     'Passing a string or function for `on_success` is deprecated, pass `Callback` instead',
@@ -352,7 +352,7 @@ class Job:
             if instance is not None:
                 job._callback_instances['success'] = instance
 
-        if on_failure:
+        if on_failure is not None:
             if not isinstance(on_failure, Callback):
                 warnings.warn(
                     'Passing a string or function for `on_failure` is deprecated, pass `Callback` instead',
@@ -365,7 +365,7 @@ class Job:
             if instance is not None:
                 job._callback_instances['failure'] = instance
 
-        if on_stopped:
+        if on_stopped is not None:
             if not isinstance(on_stopped, Callback):
                 warnings.warn(
                     'Passing a string or function for `on_stopped` is deprecated, pass `Callback` instead',

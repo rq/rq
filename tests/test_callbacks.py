@@ -80,6 +80,24 @@ class CallbackInstanceTestCase(RQTestCase):
     def test_callable_instance_callbacks(self):
         self._assert_callback_roundtrip(CallbackRecorder('instance'), 'instance')
 
+    def test_falsey_callable_instance_callbacks(self):
+        cases = (
+            ('success', execute_success_callback, ('result',)),
+            ('failure', execute_failure_callback, (ValueError, ValueError('error'), None)),
+            ('stopped', execute_stopped_callback, ()),
+        )
+        for kind, execute, args in cases:
+            with self.subTest(kind=kind):
+                job = Job.create(
+                    say_hello,
+                    connection=self.connection,
+                    **{f'on_{kind}': CallbackRecorder(kind)},
+                )
+                job.save()
+                job = Job.fetch(job.id, connection=self.connection)
+                execute(job, SimpleWorker.death_penalty_class, *args)
+                self.assertEqual(job.meta['callback'], (kind, args))
+
     def test_callback_state_is_saved_and_refreshed(self):
         recorder = CallbackRecorder('initial')
         job = Job.create(say_hello, connection=self.connection, on_success=Callback(recorder))
