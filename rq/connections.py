@@ -1,3 +1,7 @@
+import inspect
+
+import redis.asyncio
+import redis.connection
 from redis import Connection as RedisConnection
 from redis import Redis
 
@@ -30,6 +34,33 @@ def get_connection_kwargs(connection: Redis) -> dict:
     # recognizes by identity. Pickling/repr across the process boundary creates a new object(), so
     # the child treats it as a real value and breaks; drop it so the child re-applies its default.
     return {key: value for key, value in kwargs.items() if type(value) is not object}
+
+
+def get_async_connection(connection: Redis) -> redis.asyncio.Redis:
+    """Mirror a sync Redis connection's pool as an asyncio client. The connection
+    class is mapped explicitly because SSL and unix sockets live in the class, not the kwargs.
+    """
+    sync_connection_class = connection.connection_pool.connection_class
+    if issubclass(sync_connection_class, redis.connection.UnixDomainSocketConnection):
+        async_connection_class: type[redis.asyncio.Connection] = redis.asyncio.UnixDomainSocketConnection
+    elif issubclass(sync_connection_class, redis.connection.SSLConnection):
+        async_connection_class = redis.asyncio.SSLConnection
+    else:
+        async_connection_class = redis.asyncio.Connection
+    # Sync-only objects: redis.retry.Retry is not redis.asyncio.retry.Retry and
+    # redis_connect_func is a sync callable.
+    dropped = {'retry', 'redis_connect_func'}
+    accepted = {
+        name
+        for klass in async_connection_class.__mro__
+        if klass is not object
+        for name in inspect.signature(klass).parameters
+    }
+    kwargs = {
+        key: value for key, value in get_connection_kwargs(connection).items() if key in accepted and key not in dropped
+    }
+    pool = redis.asyncio.ConnectionPool(connection_class=async_connection_class, **kwargs)
+    return redis.asyncio.Redis(connection_pool=pool)
 
 
 def parse_connection(connection: Redis) -> tuple[type[Redis], type[RedisConnection], dict]:

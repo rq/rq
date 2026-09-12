@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import re
@@ -1448,6 +1449,18 @@ class Job:
         token = _current_job.set(self)
         try:
             self._result = self._execute()
+        finally:
+            assert _current_job.get() is self
+            _current_job.reset(token)
+        return self._result
+
+    async def perform_async(self) -> Any:
+        """Performs a coroutine job on the running event loop."""
+        token = _current_job.set(self)
+        try:
+            if not inspect.iscoroutinefunction(self.func):
+                raise TypeError('AsyncWorker only supports async functions')
+            self._result = await self.func(*self.args, **self.kwargs)
         finally:
             assert _current_job.get() is self
             _current_job.reset(token)

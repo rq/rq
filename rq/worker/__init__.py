@@ -1,4 +1,5 @@
 from ..defaults import DEFAULT_RESULT_TTL
+from .async_worker import AsyncWorker
 from .base import (
     SHUTDOWN_SIGNAL,
     DequeueStrategy,
@@ -18,6 +19,7 @@ from .worker_classes import (
 )
 
 __all__ = [
+    'AsyncWorker',
     'BaseWorker',
     'DEFAULT_RESULT_TTL',
     'DequeueStrategy',

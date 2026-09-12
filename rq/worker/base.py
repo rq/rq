@@ -31,7 +31,7 @@ from contextlib import suppress
 import redis.exceptions
 
 from .. import worker_registration
-from ..callbacks import execute_failure_callback, execute_success_callback
+from ..callbacks import execute_failure_callback, execute_stopped_callback, execute_success_callback
 from ..command import PUBSUB_CHANNEL_TEMPLATE, handle_command, parse_payload
 from ..defaults import (
     DEFAULT_JOB_MONITORING_INTERVAL,
@@ -216,7 +216,7 @@ class BaseWorker:
         self._is_horse: bool = False
         self._horse_pid: int = 0
         self._stop_requested: bool = False
-        self._stopped_job_id: str | None = None
+        self._stopped_execution_ids: set[str] = set()
 
         self.log = logger
         self.log_job_description = log_job_description
@@ -437,11 +437,19 @@ class BaseWorker:
 
     @property
     def execution(self) -> Execution | None:
-        """One of the worker's active executions, `None` when idle. Falls back to the
-        persisted execution index so hydrated workers (`Worker.all()`) also see it."""
-        if self.executions:
-            return next(iter(self.executions.values()))
-        executions = self.get_current_executions()
+        """The worker's active execution, `None` when idle. Hydrated workers
+        (`Worker.all()`) read the persisted execution index fresh on every access.
+        Raises `ValueError` when multiple executions are active — the scalar view
+        is ambiguous, use `worker.executions` or `get_current_executions()`."""
+        if not self.executions:
+            executions = self.get_current_executions(refresh=True)
+        else:
+            executions = list(self.executions.values())
+        if len(executions) > 1:
+            raise ValueError(
+                'worker.execution is ambiguous when multiple executions are active, '
+                'use worker.executions or get_current_executions() instead'
+            )
         return executions[0] if executions else None
 
     @execution.setter
@@ -734,14 +742,16 @@ class BaseWorker:
                     job.origin, self.connection, job_class=self.job_class, serializer=self.serializer
                 )
 
-            # check whether a job was stopped intentionally and set the job
-            # status appropriately if it was this job.
-            job_is_stopped = self._stopped_job_id == job.id
+            # check whether this execution was stopped intentionally and set the
+            # job status appropriately if it was.
+            job_is_stopped = False
+            if execution and execution.id in self._stopped_execution_ids:
+                job_is_stopped = True
+                self._stopped_execution_ids.discard(execution.id)
             retry = job.should_retry and not job_is_stopped
 
             if job_is_stopped:
                 job.set_status(JobStatus.STOPPED, pipeline=pipeline)
-                self._stopped_job_id = None
             else:
                 # Requeue/reschedule if retry is configured, otherwise
                 if not retry:
@@ -804,7 +814,8 @@ class BaseWorker:
                 )
 
     def get_current_job_id(self) -> str | None:
-        """Job id of one of this worker's active executions, `None` when idle.
+        """Job id of this worker's active execution, `None` when idle.
+        Raises `ValueError` when multiple executions are active.
 
         Returns:
             job_id (Optional[str]): The job id
@@ -813,7 +824,8 @@ class BaseWorker:
         return execution.job_id if execution else None
 
     def get_current_job(self) -> Job | None:
-        """The job one of this worker's active executions is running, `None` when idle.
+        """The job this worker's active execution is running, `None` when idle.
+        Raises `ValueError` when multiple executions are active.
 
         Returns:
             job (Optional[Job]): The job instance.
@@ -1726,8 +1738,21 @@ class BaseWorker:
         if not execution:
             self.log.warning('Not running execution %s, command ignored.', execution_id)
             return
-        self._stopped_job_id = execution.job_id
+        self._stopped_execution_ids.add(execution.id)
         self.kill_horse()
+
+    def _handle_stopped_job(self, job: Job, queue: Queue, execution: Execution):
+        """Move a deliberately stopped job to the FailedJobRegistry.
+
+        A raising stopped callback must not prevent the job from being failed, so it is
+        logged and swallowed here.
+        """
+        self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
+        try:
+            execute_stopped_callback(job, self.death_penalty_class)
+        except Exception:
+            self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
+        self.handle_job_failure(job, queue=queue, exc_string='Job stopped by user.', execution=execution)
 
     def wait_for_horse(self) -> tuple[int | None, int | None, struct_rusage | None]:
         """Wait for the work horse process to complete. No-op for workers without child processes."""
