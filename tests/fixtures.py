@@ -41,6 +41,7 @@ async def say_hello_async(name=None):
 
 
 async def record_job_loop(state, error=None):
+    """Record the coroutine job's loop and context, optionally raising an error."""
     state['loop'] = asyncio.get_running_loop()
     state['job'] = get_current_job()
     if error is not None:
@@ -49,6 +50,7 @@ async def record_job_loop(state, error=None):
 
 
 async def leave_async_resources(state):
+    """Leave a pending task and an asynchronous generator for the job to finalize."""
     state['loop'] = asyncio.get_running_loop()
     started = asyncio.Event()
 
