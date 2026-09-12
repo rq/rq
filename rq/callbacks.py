@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from .defaults import CALLBACK_TIMEOUT
@@ -29,12 +30,18 @@ class Callback:
         return func_name
 
 
+def _is_async_callback(callback: Callable[..., Any]) -> bool:
+    while isinstance(callback, partial):
+        callback = callback.func
+    return inspect.iscoroutinefunction(callback) or inspect.iscoroutinefunction(getattr(callback, '__call__', None))
+
+
 def execute_success_callback(job: Job, death_penalty_class: type[BaseDeathPenalty], result: Any) -> None:
     """Run the job's success callback under its timeout."""
     callback = job.success_callback
     if callback is None:
         return
-    if inspect.iscoroutinefunction(callback) or inspect.iscoroutinefunction(getattr(callback, '__call__', None)):
+    if _is_async_callback(callback):
         raise TypeError('Coroutine success callbacks are not supported')
 
     job.log.debug('Job %s: running success callback...', job.id)
@@ -47,7 +54,7 @@ def execute_failure_callback(job: Job, death_penalty_class: type[BaseDeathPenalt
     callback = job.failure_callback
     if callback is None:
         return
-    if inspect.iscoroutinefunction(callback) or inspect.iscoroutinefunction(getattr(callback, '__call__', None)):
+    if _is_async_callback(callback):
         raise TypeError('Coroutine failure callbacks are not supported')
 
     job.log.debug('Job %s: running failure callback...', job.id)
@@ -64,7 +71,7 @@ def execute_stopped_callback(job: Job, death_penalty_class: type[BaseDeathPenalt
     callback = job.stopped_callback
     if callback is None:
         return
-    if inspect.iscoroutinefunction(callback) or inspect.iscoroutinefunction(getattr(callback, '__call__', None)):
+    if _is_async_callback(callback):
         raise TypeError('Coroutine stopped callbacks are not supported')
 
     job.log.debug('Job %s: running stopped callback...', job.id)

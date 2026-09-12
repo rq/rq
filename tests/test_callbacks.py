@@ -151,6 +151,16 @@ class CallbackInstanceTestCase(RQTestCase):
                 with self.assertRaises(TypeError):
                     execute(job, SimpleWorker.death_penalty_class, *args)
 
+                job = Job.create(
+                    say_hello,
+                    connection=self.connection,
+                    **{f'on_{kind}': Callback(partial(AsyncCallbackRecorder()))},
+                )
+                job.save()
+                job = Job.fetch(job.id, connection=self.connection)
+                with self.assertRaises(TypeError):
+                    execute(job, SimpleWorker.death_penalty_class, *args)
+
         job = Job.create(say_hello, connection=self.connection, on_success=Callback(partial(async_success_callback)))
         with self.assertRaises(TypeError):
             execute_success_callback(job, SimpleWorker.death_penalty_class, None)
