@@ -167,10 +167,9 @@ def handle_stop_job_command(worker: 'BaseWorker', payload: dict[Any, Any]):
     """
     job_id = payload.get('job_id')
     worker.log.debug('Received command to stop job %s', job_id)
-    if job_id and any(execution.job_id == job_id for execution in worker.executions.values()):
-        # Sets the '_stopped_job_id' so that the job failure handler knows it
-        # was intentional.
-        worker._stopped_job_id = job_id
-        worker.kill_horse()
-    else:
+    execution_ids = [execution.id for execution in list(worker.executions.values()) if execution.job_id == job_id]
+    if not execution_ids:
         worker.log.warning('Not working on job %s, command ignored.', job_id)
+        return
+    for execution_id in execution_ids:
+        worker.request_stop_execution(execution_id)

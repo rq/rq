@@ -77,6 +77,20 @@ async def current_job_id_after_sleep(seconds):
     return job.id if job else None
 
 
+async def return_on_cancel_async(seconds):
+    try:
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        return 'cancellation swallowed'
+
+
+async def raise_on_cancel_async(seconds):
+    try:
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        raise ValueError('cleanup failed')
+
+
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
     return str(say_hello(name))  # noqa

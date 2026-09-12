@@ -1,17 +1,19 @@
 import asyncio
 import os
 import sys
+import threading
 import time
 import zlib
+from collections.abc import Callable
 from datetime import timedelta
 from multiprocessing import Process
 from unittest import skipIf
 from unittest.mock import ANY, patch
 
-from rq.command import handle_stop_job_command
+from rq.command import send_command, send_stop_execution_command, send_stop_job_command
 from rq.defaults import UNSERIALIZABLE_RETURN_VALUE_PAYLOAD
 from rq.executions import ExecutionRegistry
-from rq.job import Callback, JobStatus, Retry
+from rq.job import Callback, Job, JobStatus, Retry
 from rq.queue import Queue
 from rq.results import Result
 from rq.utils import current_timestamp, now
@@ -29,11 +31,14 @@ from tests.fixtures import (
     fail_async_while_retries_remain,
     kill_worker,
     raise_async,
+    raise_on_cancel_async,
     raise_timeout_async,
+    return_on_cancel_async,
     return_retry_async,
     return_unserializable,
     save_exception,
     save_result,
+    save_result_if_not_stopped,
     say_hello,
     say_hello_async,
     sleep_async,
@@ -491,19 +496,87 @@ class TestAsyncWorker(RQTestCase):
         self.assertIsNone(worker.get_current_job_id())
         self.assertIsNone(worker.get_current_job())
 
-    def test_stop_job_command_does_not_raise(self):
-        """A raw stop-job payload resolves against worker.executions, so it
-        can't kill the pub/sub thread on a multi-execution worker."""
-        job = self.queue.enqueue(say_hello)
-        worker = AsyncWorker([self.queue], connection=self.connection)
-        execution = worker.prepare_execution(job)
+    def _work_while_executing(self, worker: AsyncWorker, func: Callable[[], None]) -> float:
+        """Runs `worker.work(burst=True)` while `func` runs on a thread, re-raising
+        the thread's error. Returns the elapsed seconds."""
+        thread_errors = []
+
+        def run_func():
+            try:
+                func()
+            except Exception as error:
+                thread_errors.append(error)
+
+        func_thread = threading.Thread(target=run_func)
+        func_thread.start()
+        started_at = time.monotonic()
         try:
-            handle_stop_job_command(worker, {'command': 'stop-job', 'job_id': job.id})
-            self.assertEqual(worker._stopped_job_id, job.id)
+            worker.work(burst=True)
         finally:
-            with self.connection.pipeline() as pipeline:
-                worker.cleanup_execution(job, pipeline=pipeline, execution=execution)
-                pipeline.execute()
+            func_thread.join()
+        if thread_errors:
+            raise thread_errors[0]
+        return time.monotonic() - started_at
+
+    def _wait_until_started(self, job: Job, timeout: float = 5) -> None:
+        deadline = time.monotonic() + timeout
+        while job.get_status() != JobStatus.STARTED:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f'job {job.id} did not start within {timeout}s')
+            time.sleep(0.05)
+
+    def test_stop_execution_command_stops_only_targeted_job(self):
+        """stop-execution cancels one coroutine, runs its stopped callback and
+        persists STOPPED, while a sibling execution finishes normally."""
+        stopped_job = self.queue.enqueue(sleep_async, 5, on_stopped=Callback(save_result_if_not_stopped))
+        sibling_job = self.queue.enqueue(sleep_async, 1)
+        worker = AsyncWorker([self.queue], connection=self.connection, max_concurrency=2)
+
+        def send_stop():
+            self._wait_until_started(stopped_job)
+            execution = stopped_job.get_executions()[0]
+            send_command(self.connection, worker.name, 'stop-execution', job_id=stopped_job.id, execution_id='nope')
+            send_stop_execution_command(self.connection, stopped_job.id, execution.id)
+
+        elapsed = self._work_while_executing(worker, send_stop)
+
+        self.assertLess(elapsed, 3)  # the 5s sleep was interrupted
+        self.assertEqual(stopped_job.get_status(), JobStatus.STOPPED)
+        self.assertIn(stopped_job, self.queue.failed_job_registry)
+        self.assertTrue(self.connection.exists(f'stopped_callback:{stopped_job.id}'))
+        self.assertEqual(sibling_job.get_status(), JobStatus.FINISHED)
+        self.assertEqual(worker.executions, {})
+        self.assertEqual(worker._stopped_execution_ids, set())
+
+    def test_stop_finalizes_job_that_swallows_cancellation(self):
+        """A job that catches the cancellation and returns is still finalized as stopped."""
+        job = self.queue.enqueue(return_on_cancel_async, 5)
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        def send_stop():
+            self._wait_until_started(job)
+            send_stop_job_command(self.connection, job.id)
+
+        self._work_while_executing(worker, send_stop)
+
+        self.assertEqual(job.get_status(), JobStatus.STOPPED)
+        self.assertEqual(worker._stopped_execution_ids, set())
+
+    def test_stop_finalizes_job_that_raises_during_cancellation(self):
+        """A job that raises from its cancellation cleanup gets the stopped
+        callback, not the failure callback."""
+        job = self.queue.enqueue(raise_on_cancel_async, 5, on_failure=Callback(save_exception))
+        worker = AsyncWorker([self.queue], connection=self.connection)
+
+        def send_stop():
+            self._wait_until_started(job)
+            send_stop_job_command(self.connection, job.id)
+
+        self._work_while_executing(worker, send_stop)
+
+        self.assertEqual(job.get_status(), JobStatus.STOPPED)
+        self.assertIn('stopped by user', job.latest_result().exc_string)
+        self.assertFalse(self.connection.exists(f'failure_callback:{job.id}'))
 
     def test_hydration_via_all_and_find_by_key(self):
         """Worker discovery constructs AsyncWorker with no queues."""

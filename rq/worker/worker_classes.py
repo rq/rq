@@ -9,7 +9,6 @@ import time
 from random import shuffle
 from typing import TYPE_CHECKING
 
-from ..callbacks import execute_stopped_callback
 from ..connections import get_connection_kwargs
 from ..defaults import DEFAULT_WORKER_TTL
 from ..exceptions import InvalidJobOperation, ShutDownImminentException
@@ -133,7 +132,7 @@ class Worker(BaseWorker):
         except InvalidJobOperation:
             return  # Job completed and its ttl has expired
 
-        if self._stopped_job_id == job.id:
+        if execution.id in self._stopped_execution_ids:
             # Work-horse killed deliberately
             self._handle_stopped_job(job, queue, execution)
         elif job_status not in [JobStatus.FINISHED, JobStatus.FAILED]:
@@ -146,21 +145,6 @@ class Worker(BaseWorker):
 
             self.handle_work_horse_killed(job, retpid, ret_val, rusage)
             self.handle_job_failure(job, queue=queue, exc_string=exc_string, execution=execution)
-
-    def _handle_stopped_job(self, job: Job, queue: Queue, execution: Execution):
-        """Move a deliberately stopped job to the FailedJobRegistry.
-
-        A raising stopped callback must not prevent the job from being failed, so it is
-        logged and swallowed here.
-        """
-        self.log.warning('Worker %s: job %s stopped by user, moving job to FailedJobRegistry', self.name, job.id)
-        try:
-            execute_stopped_callback(job, self.death_penalty_class)
-        except Exception:
-            self.log.exception('Worker %s: stopped callback for job %s raised', self.name, job.id)
-        self.handle_job_failure(
-            job, queue=queue, exc_string='Job stopped by user, work-horse terminated.', execution=execution
-        )
 
     def execute_job(self, job: Job, queue: Queue):
         """Spawns a work horse to perform the actual work and passes it a job.

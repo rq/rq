@@ -23,6 +23,7 @@ class AsyncWorker(BaseWorker):
 
     death_penalty_class = TimerDeathPenalty
     heartbeat_batch_size = 100
+    _loop: asyncio.AbstractEventLoop  # set once work() starts the event loop
 
     def __init__(self, *args, max_concurrency: int = 100, prepare_for_work: bool = True, **kwargs):
         if max_concurrency < 1:
@@ -113,6 +114,7 @@ class AsyncWorker(BaseWorker):
                 shutdown_event.set()
 
         loop = asyncio.get_running_loop()
+        self._loop = loop
         for shutdown_signal in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(shutdown_signal, request_shutdown)
@@ -205,6 +207,25 @@ class AsyncWorker(BaseWorker):
             await asyncio.gather(heartbeat_task, stop_wait_task, return_exceptions=True)
             await async_connection.aclose()  # type: ignore[attr-defined]  # types-redis stubs predate aclose
         return admitted_jobs > 0
+
+    def request_stop_execution(self, execution_id: str):
+        """Called from the pubsub thread: the stop is applied on the event loop thread.
+
+        An execution whose job task already finished is left alone, its finalization
+        may be underway. One without a task yet is marked so `_run_execution` cancels
+        the task as soon as it creates it.
+        """
+
+        def stop_execution():
+            execution = self.executions.get(execution_id)
+            if not execution or (execution._job_task and execution._job_task.done()):
+                self.log.warning('Not running execution %s, command ignored.', execution_id)
+                return
+            self._stopped_execution_ids.add(execution_id)
+            if execution._job_task:
+                execution._job_task.cancel()
+
+        self._loop.call_soon_threadsafe(stop_execution)
 
     async def _pop_job_id(self, burst: bool, async_connection: redis.asyncio.Redis) -> str | None:
         """Pops the next job id into the intermediate queue, blocking on the
@@ -313,13 +334,29 @@ class AsyncWorker(BaseWorker):
             await asyncio.to_thread(self._start_execution, job, execution)
             timeout = None if job.timeout == -1 else job.timeout or self.queue_class.DEFAULT_TIMEOUT
             timeout_context = asyncio.timeout(timeout)
+            # The job runs as its own task so a stop command can cancel the job
+            # without cancelling this task, which only a cold shutdown does.
+            execution._job_task = asyncio.create_task(job.perform_async())
+            if execution.id in self._stopped_execution_ids:
+                execution._job_task.cancel()  # stop requested before the job started
             try:
                 async with timeout_context:
-                    result = await job.perform_async()
+                    result = await execution._job_task
             except TimeoutError as error:
                 if timeout_context.expired():
                     raise JobTimeoutException(f'Task exceeded maximum timeout value ({timeout} seconds)') from error
                 raise
+            except asyncio.CancelledError:
+                if execution.id not in self._stopped_execution_ids:
+                    raise  # cold shutdown
+            except Exception:
+                if execution.id not in self._stopped_execution_ids:
+                    raise  # a regular failure
+            # A stopped job is finalized as stopped however it reacted to the
+            # cancellation: escaping, swallowing it or raising from its cleanup.
+            if execution.id in self._stopped_execution_ids:
+                await asyncio.to_thread(self._finalize_stopped, job, queue, execution)
+                return
             await asyncio.to_thread(self._finalize_success, job, queue, execution, result)
         except Exception:
             exc_info = sys.exc_info()
@@ -328,3 +365,7 @@ class AsyncWorker(BaseWorker):
     def _start_execution(self, job: Job, execution: Execution):
         self.prepare_job_execution(job, remove_from_intermediate_queue=True)
         job.started_at = now()
+
+    def _finalize_stopped(self, job: Job, queue: Queue, execution: Execution):
+        self.handle_execution_ended(job, queue, job.stopped_callback_timeout)
+        self._handle_stopped_job(job, queue, execution)

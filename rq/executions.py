@@ -8,6 +8,8 @@ from uuid import uuid4
 from redis import Redis
 
 if TYPE_CHECKING:
+    import asyncio
+
     from redis.client import Pipeline
 
     from .worker.base import BaseWorker
@@ -31,6 +33,7 @@ class Execution:
         self.created_at = right_now
         self.last_heartbeat = right_now
         self._job: Job | None = None
+        self._job_task: asyncio.Task[Any] | None = None  # AsyncWorker's in-flight job task, never persisted
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Execution):

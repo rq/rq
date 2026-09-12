@@ -1655,8 +1655,8 @@ class WorkerShutdownTestCase(TimeoutTestCase, RQTestCase):
         worker = Worker([queue], connection=self.connection)
         # erroneous_callback takes only `job`, so it raises when invoked as a stopped callback
         job = queue.enqueue(say_hello, on_stopped=erroneous_callback)
-        worker._stopped_job_id = job.id
         execution = worker.prepare_execution(job)
+        worker._stopped_execution_ids.add(execution.id)
 
         worker._handle_stopped_job(job, queue, execution)
 
