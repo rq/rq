@@ -1623,6 +1623,7 @@ class Job:
         execution_id: str | None = None,
         execution_started_at: datetime | None = None,
         execution_ended_at: datetime | None = None,
+        defer_finished_registry: bool = False,
     ):
         """Saves and cleanup job after successful execution"""
         self.log.debug('Job %s: handling success...', self.id)
@@ -1644,7 +1645,7 @@ class Job:
             execution_ended_at=execution_ended_at,
         )
 
-        if result_ttl != 0:
+        if result_ttl != 0 and not defer_finished_registry:
             finished_job_registry = self.finished_job_registry
             finished_job_registry.add(self, result_ttl, pipeline)
 
