@@ -157,13 +157,14 @@ class TestDecorator(RQTestCase):
         correct on_failure function on the job.
         """
 
-        # Only functions and builtins are supported as callback
+        # Class methods are supported as callbacks.
         @job('default', connection=self.connection, on_failure=Job.fetch)
         def foo():
             return 'Foo'
 
-        with self.assertRaises(ValueError):
-            result = foo.enqueue()
+        result = foo.enqueue()
+        result_job = Job.fetch(id=result.id, connection=self.connection)
+        self.assertEqual(result_job.failure_callback, Job.fetch)
 
         @job('default', connection=self.connection, on_failure=print)
         def hello():
@@ -178,13 +179,14 @@ class TestDecorator(RQTestCase):
         correct on_success function on the job.
         """
 
-        # Only functions and builtins are supported as callback
-        @job('default', connection=self.connection, on_failure=Job.fetch)
+        # Class methods are supported as callbacks.
+        @job('default', connection=self.connection, on_success=Job.fetch)
         def foo():
             return 'Foo'
 
-        with self.assertRaises(ValueError):
-            result = foo.enqueue()
+        result = foo.enqueue()
+        result_job = Job.fetch(id=result.id, connection=self.connection)
+        self.assertEqual(result_job.success_callback, Job.fetch)
 
         @job('default', connection=self.connection, on_success=print)
         def hello():
