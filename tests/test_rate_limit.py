@@ -827,3 +827,76 @@ class TestRateLimitRetry(RQTestCase):
         self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
         self.assertIn(job1.id, ScheduledJobRegistry(queue=self.queue).get_job_ids())
         self.assertIn(job2.id, registry.get_allowed_job_ids())
+
+
+class TestRateLimitEnqueueWithPipeline(RQTestCase):
+    """Test that enqueueing a rate-limited job honors a caller-owned pipeline."""
+
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue('default', connection=self.connection)
+
+    def test_discarded_pipeline_writes_nothing(self):
+        """A rate-limited job must not be committed when the caller drops the transaction."""
+        rate_limit = RateLimit(key='test', concurrency=5)
+
+        pipe = self.connection.pipeline()
+        job = self.queue.enqueue_call(say_hello, rate_limit=rate_limit, pipeline=pipe)
+        pipe.reset()
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(self.queue.count, 0)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(registry.get_allowed_job_count(), 0)
+        self.assertEqual(registry.get_rate_limited_job_count(), 0)
+        self.assertNotIn(b'test', self.connection.smembers(RateLimitRegistry.rl_keys_key))
+
+    def test_discarded_pipeline_matches_the_unlimited_case(self):
+        """Regression guard: a job with no rate limit already behaved this way."""
+        pipe = self.connection.pipeline()
+        job = self.queue.enqueue_call(say_hello, pipeline=pipe)
+        pipe.reset()
+
+        self.assertFalse(self.connection.exists(job.key))
+        self.assertEqual(self.queue.count, 0)
+
+    def test_executed_pipeline_commits_then_promotes(self):
+        """On EXEC the job is rate_limited; promotion runs after, so it sees committed state."""
+        rate_limit = RateLimit(key='test', concurrency=5)
+
+        pipe = self.connection.pipeline()
+        job = self.queue.enqueue_call(say_hello, rate_limit=rate_limit, pipeline=pipe)
+        pipe.execute()
+
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertEqual(job.get_status(refresh=True), JobStatus.RATE_LIMITED)
+        self.assertIn(job.id, registry.get_rate_limited_job_ids())
+        self.assertEqual(self.queue.count, 0)
+
+        self.assertEqual(registry.acquire_and_enqueue(rate_limit.concurrency), job.id)
+        self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
+        self.assertIn(job.id, self.queue.job_ids)
+
+    def test_no_pipeline_still_enqueues_immediately(self):
+        """Regression guard: the pipeline-less path promotes within the call."""
+        rate_limit = RateLimit(key='test', concurrency=5)
+
+        job = self.queue.enqueue_call(say_hello, rate_limit=rate_limit)
+
+        self.assertEqual(job.get_status(refresh=True), JobStatus.QUEUED)
+        self.assertIn(job.id, self.queue.job_ids)
+
+    def test_discarded_pipeline_leaves_an_existing_registry_untouched(self):
+        """A dropped transaction must not consume a slot another job is using."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+        existing = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertIn(existing.id, registry.get_allowed_job_ids())
+
+        pipe = self.connection.pipeline()
+        dropped = self.queue.enqueue_call(say_hello, rate_limit=rate_limit, pipeline=pipe)
+        pipe.reset()
+
+        self.assertFalse(self.connection.exists(dropped.key))
+        self.assertEqual(registry.get_allowed_job_ids(), [existing.id])
+        self.assertEqual(registry.get_rate_limited_job_count(), 0)
