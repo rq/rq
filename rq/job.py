@@ -1511,8 +1511,10 @@ class Job:
         result = self.func(*self.args, **self.kwargs)
         if asyncio.iscoroutine(result):
             loop = asyncio.new_event_loop()
-            coro_result = loop.run_until_complete(result)
-            return coro_result
+            try:
+                return loop.run_until_complete(result)
+            finally:
+                loop.close()
         return result
 
     def get_ttl(self, default_ttl: int | None = None) -> int | None:
