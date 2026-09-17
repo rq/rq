@@ -39,6 +39,10 @@ async def say_hello_async(name=None):
     return say_hello(name)
 
 
+async def raise_exc_async(*args, **kwargs):
+    raise Exception('raise_exc_async error')
+
+
 def say_hello_unicode(name=None):
     """A job with a single argument and a return value."""
     return str(say_hello(name))  # noqa

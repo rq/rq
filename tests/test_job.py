@@ -802,6 +802,14 @@ class TestJob(RQTestCase):
         for loop in created_loops:
             self.assertTrue(loop.is_closed())
 
+        raising_job = queue.enqueue(fixtures.raise_exc_async, job_id='async_job_raises')
+        with mock.patch('rq.job.asyncio.new_event_loop', side_effect=spy_new_event_loop):
+            with self.assertRaises(Exception):
+                raising_job.perform()
+
+        self.assertEqual(len(created_loops), 4)
+        self.assertTrue(created_loops[-1].is_closed())
+
     def test_get_call_string_unicode(self):
         """test call string with unicode keyword arguments"""
         queue = Queue(connection=self.connection)
