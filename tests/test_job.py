@@ -1,9 +1,11 @@
+import asyncio
 import json
 import queue
 import time
 import zlib
 from datetime import datetime, timezone
 from pickle import dumps, loads
+from unittest import mock
 from uuid import uuid4
 
 from rq.defaults import CALLBACK_TIMEOUT
@@ -777,6 +779,28 @@ class TestJob(RQTestCase):
         sync_task_result = sync_job.perform()
 
         self.assertEqual(sync_task_result, async_task_result)
+
+    def test_create_job_with_async_closes_event_loop(self):
+        """_execute() must close the event loop it creates for each async job,
+        not just await it, otherwise repeated async jobs leak one loop each."""
+        queue = Queue(connection=self.connection)
+        created_loops = []
+        real_new_event_loop = asyncio.new_event_loop
+
+        def spy_new_event_loop():
+            loop = real_new_event_loop()
+            created_loops.append(loop)
+            return loop
+
+        with mock.patch('rq.job.asyncio.new_event_loop', side_effect=spy_new_event_loop):
+            for i in range(3):
+                async_job = queue.enqueue(fixtures.say_hello_async, job_id=f'async_job_{i}')
+                result = async_job.perform()
+                self.assertEqual(result, 'Hi there, Stranger!')
+
+        self.assertEqual(len(created_loops), 3)
+        for loop in created_loops:
+            self.assertTrue(loop.is_closed())
 
     def test_get_call_string_unicode(self):
         """test call string with unicode keyword arguments"""
