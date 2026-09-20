@@ -1,3 +1,4 @@
+import asyncio
 import json
 import queue
 import time
@@ -23,6 +24,19 @@ from rq.serializers import JSONSerializer
 from rq.utils import as_text, now, utcformat
 from rq.worker import Worker
 from tests import RQTestCase, fixtures, min_redis_version
+
+
+def close_test_loop(loop):
+    """Clean up resources even when testing an implementation that leaks its loop."""
+    if not loop.is_closed():
+        tasks = asyncio.all_tasks(loop)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.run_until_complete(loop.shutdown_default_executor())
+        loop.close()
 
 
 class TestJob(RQTestCase):
@@ -777,6 +791,58 @@ class TestJob(RQTestCase):
         sync_task_result = sync_job.perform()
 
         self.assertEqual(sync_task_result, async_task_result)
+
+    def test_coroutine_job_closes_event_loop(self):
+        """Successful coroutine jobs close their event loop and restore job context."""
+        state = {}
+        job = Job.create(fixtures.record_job_loop, args=(state,), connection=self.connection)
+        try:
+            self.assertEqual(job.perform(), 42)
+            self.assertIs(state['job'], job)
+            self.assertIsNone(get_current_job())
+            self.assertTrue(state['loop'].is_closed())
+        finally:
+            close_test_loop(state['loop'])
+
+    def test_coroutine_job_closes_event_loop_on_failure(self):
+        """Failing coroutine jobs close their event loop and propagate the exception."""
+        state = {}
+        error = ValueError('job failed')
+        job = Job.create(fixtures.record_job_loop, args=(state, error), connection=self.connection)
+        try:
+            with self.assertRaises(ValueError) as raised:
+                job.perform()
+            self.assertIs(raised.exception, error)
+            self.assertIs(state['job'], job)
+            self.assertIsNone(get_current_job())
+            self.assertTrue(state['loop'].is_closed())
+        finally:
+            close_test_loop(state['loop'])
+
+    def test_coroutine_job_closes_event_loop_on_cancellation(self):
+        """Cancelled coroutine jobs close their event loop and propagate cancellation."""
+        state = {}
+        job = Job.create(fixtures.record_job_loop, args=(state, asyncio.CancelledError()), connection=self.connection)
+        try:
+            with self.assertRaises(asyncio.CancelledError):
+                job.perform()
+            self.assertIs(state['job'], job)
+            self.assertIsNone(get_current_job())
+            self.assertTrue(state['loop'].is_closed())
+        finally:
+            close_test_loop(state['loop'])
+
+    def test_coroutine_job_finalizes_async_resources(self):
+        """Coroutine jobs finalize pending tasks and asynchronous generators."""
+        state = {}
+        job = Job.create(fixtures.leave_async_resources, args=(state,), connection=self.connection)
+        try:
+            self.assertEqual(job.perform(), 42)
+            self.assertIs(state.get('task_closed'), True)
+            self.assertIs(state.get('generator_closed'), True)
+            self.assertTrue(state['task'].done())
+        finally:
+            close_test_loop(state['loop'])
 
     def test_get_call_string_unicode(self):
         """test call string with unicode keyword arguments"""
