@@ -25,6 +25,7 @@ from .defaults import (
     DEFAULT_LOGGING_DATE_FORMAT,
     DEFAULT_LOGGING_FORMAT,
     DEFAULT_RESULT_TTL,
+    RQ_KEY_PREFIX,
 )
 from .exceptions import SchedulerNotFound, StopRequested
 from .job import Job
@@ -48,7 +49,7 @@ from .webhook import Webhook
 
 def get_cron_job_history_key(name: str) -> str:
     """Redis key of the sorted set holding IDs of jobs spawned by the named cron job"""
-    return f'rq:cron_job:{name}:jobs'
+    return f'{RQ_KEY_PREFIX}:cron_job:{name}:jobs'
 
 
 def get_cron_job_ids(name: str, connection: Redis, start: int = 0, end: int = -1) -> list[str]:
@@ -526,7 +527,7 @@ class CronScheduler:
     @property
     def key(self) -> str:
         """Redis key for this CronScheduler instance"""
-        return f'rq:cron_scheduler:{self.name}'
+        return f'{RQ_KEY_PREFIX}:cron_scheduler:{self.name}'
 
     def to_dict(self) -> dict:
         """Convert CronScheduler instance to a dictionary for Redis storage"""
@@ -576,7 +577,7 @@ class CronScheduler:
     @classmethod
     def fetch(cls, name: str, connection: Redis) -> CronScheduler:
         """Fetch a CronScheduler instance from Redis by name."""
-        key = f'rq:cron_scheduler:{name}'
+        key = f'{RQ_KEY_PREFIX}:cron_scheduler:{name}'
         raw_data = connection.hgetall(key)
 
         if not raw_data:
