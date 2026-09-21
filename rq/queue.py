@@ -1249,7 +1249,7 @@ class Queue:
         # If we do not depend on an unfinished job, enqueue the job.
         if job.get_status(refresh=False) != JobStatus.DEFERRED:
             if job.has_rate_limit:
-                return self._enqueue_rate_limited_job(job, at_front=at_front)
+                return self._enqueue_rate_limited_job(job, pipeline=pipeline, at_front=at_front)
             return self._enqueue_job(job, pipeline=pipeline, at_front=at_front, unique=unique)
         return job
 
