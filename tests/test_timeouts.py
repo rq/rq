@@ -1,4 +1,6 @@
 import time
+import signal
+import unittest
 from unittest.mock import patch
 
 from rq import Queue, SimpleWorker
@@ -68,3 +70,20 @@ class TestTimeouts(RQTestCase):
         delattr(mock_signal, 'SIGALRM')
         self.assertFalse(hasattr(mock_signal, 'SIGALRM'))
         self.assertEqual(get_default_death_penalty_class(), TimerDeathPenalty)
+
+
+class TestUnixSignalDeathPenaltyRestoresHandler(unittest.TestCase):
+    def test_restores_previous_sigalrm_handler(self):
+        def previous(signum, frame):
+            return None
+
+        signal.signal(signal.SIGALRM, previous)
+        try:
+            penalty = UnixSignalDeathPenalty(30)
+            with penalty:
+                pass
+            self.assertIs(signal.getsignal(signal.SIGALRM), previous)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
