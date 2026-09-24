@@ -1,5 +1,5 @@
-import time
 import signal
+import time
 import unittest
 from unittest.mock import patch
 
