@@ -307,3 +307,35 @@ class TestDependencies(RQTestCase):
         # Verify enqueue_dependents does not enqueue the dependent
         q.enqueue_dependents(parent_job)
         self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
+
+    def test_result_ttl_deferred_when_dependents_pending(self):
+        """When a job finishes but has unfinished dependents, its result should
+        not be garbage-collected until all dependents complete (#2452).
+        """
+        q = Queue(connection=self.connection)
+
+        # Parent with short result_ttl
+        parent_job = q.enqueue(say_hello, result_ttl=1)
+        # Dependent job
+        dependent_job = q.enqueue(say_hello, depends_on=parent_job)
+
+        # Worker processes only the parent (max_jobs=1)
+        w = Worker([q], connection=self.connection)
+        w.work(burst=True, max_jobs=1)
+
+        # Parent should be finished
+        self.assertEqual(parent_job.get_status(), JobStatus.FINISHED)
+        # Dependent should still be deferred
+        self.assertEqual(dependent_job.get_status(), JobStatus.DEFERRED)
+        # Parent should NOT be in finished_job_registry yet (deferred)
+        finished_ids = parent_job.finished_job_registry.get_job_ids()
+        self.assertNotIn(parent_job.id, finished_ids)
+
+        # Now process the dependent
+        w.work(burst=True, max_jobs=1)
+
+        # After dependent finishes, parent should be added to finished_job_registry
+        finished_ids = parent_job.finished_job_registry.get_job_ids()
+        self.assertIn(parent_job.id, finished_ids)
+        # Parent result should still be accessible
+        self.assertEqual(parent_job.return_value(refresh=True), say_hello())
