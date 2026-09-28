@@ -91,7 +91,7 @@ CONTRACT = worker_contract(
                 'handle_job_success and handle_job_failure settle a job without checking that the execution is '
                 "still the job's owner: a worker whose lease expired, whose job StartedJobRegistry.cleanup gave "
                 'back and another worker took, can still mark it finished, or send it back to be retried, while '
-                'the new worker runs it'
+                'the new worker runs it (https://github.com/rq/rq/issues/2495)'
             ),
         },
     },
@@ -100,8 +100,8 @@ CONTRACT = worker_contract(
             'a lost reply to the commit that records the job finished sends the finished job down the failure '
             'path: on_failure runs and the job is retried, so its message is sent twice; an on_success callback '
             'that raises does the same; and a worker that dies once the job has started makes RQ announce '
-            'AbandonedJobError through on_failure, then run the job again. test_what_each_failure_costs pins '
-            'each history'
+            'AbandonedJobError through on_failure, then run the job again (https://github.com/rq/rq/issues/2496). '
+            'test_what_each_failure_costs pins each history'
         ),
         'a worker on two queues runs a task': (
             'a worker listening on more than one queue pops the job with LPOP, with no intermediate list: a death, '
