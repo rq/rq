@@ -86,12 +86,15 @@ installer = "uv"
 [tool.hatch.envs.test]
 dependencies = [
   "coverage",
+  # tests/due_work: the harness needs Python 3.12 or later, and is skipped below it.
+  "due-work-harness>=0.5.0; python_version>='3.12'",
   "mypy",
   "packaging",
   "psutil",
   "pytest",
   "pytest-cov",
   "ruff",
+  "time-machine>=2.10",
   "tox",
   "types-greenlet",
   "types-redis",
