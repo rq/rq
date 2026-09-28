@@ -601,6 +601,28 @@ class TestRateLimitEnqueue(RQTestCase):
         self.assertIn(job3.id, registry.get_allowed_job_ids())
         self.assertEqual(job3.get_status(), JobStatus.QUEUED)
 
+    def test_enqueue_with_pipeline(self):
+        """Enqueueing via a caller-owned pipeline buffers the job into the transaction;
+        promotion is left to a later acquire_and_enqueue."""
+        rate_limit = RateLimit(key='test', concurrency=2)
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit)  # allowed, one slot left
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+
+        # Discarding the pipeline writes nothing.
+        pipe = self.connection.pipeline()
+        job2 = self.queue.enqueue_call(say_hello, rate_limit=rate_limit, pipeline=pipe)
+        pipe.reset()
+        self.assertFalse(self.connection.exists(job2.key))
+        self.assertEqual(registry.get_allowed_job_ids(), [job1.id])
+        self.assertEqual(registry.get_rate_limited_job_count(), 0)
+
+        # Executing the pipeline commits the job as rate_limited even with a free slot.
+        pipe = self.connection.pipeline()
+        job3 = self.queue.enqueue_call(say_hello, rate_limit=rate_limit, pipeline=pipe)
+        pipe.execute()
+        self.assertEqual(job3.get_status(), JobStatus.RATE_LIMITED)
+        self.assertEqual(registry.get_rate_limited_job_ids(), [job3.id])
+
     def test_release_on_abandoned_job_cleanup(self):
         """When StartedJobRegistry cleans up an abandoned rate-limited job,
         capacity is released and the next rate_limited job is enqueued."""
