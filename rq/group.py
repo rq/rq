@@ -31,7 +31,6 @@ class Group:
         """Add jobs to the group"""
         pipeline.sadd(self.key, *[job.id for job in jobs])
         pipeline.sadd(self.REDIS_GROUP_KEY, self.name)
-        pipeline.execute()
 
     def cleanup(self):
         """Delete jobs from the group's job registry that have been deleted or expired from Redis.
