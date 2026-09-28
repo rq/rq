@@ -1,14 +1,17 @@
 import math
+import unittest
 from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
 
 import pytest
+import redis.exceptions
 
+from rq.connections import get_connection_kwargs
 from rq.defaults import DEFAULT_FAILURE_TTL
 from rq.exceptions import AbandonedJobError, InvalidJobOperation
 from rq.executions import Execution
-from rq.job import Dependency, Job, JobStatus, requeue_job
+from rq.job import Dependency, Job, JobStatus, Retry, requeue_job
 from rq.queue import Queue
 from rq.registry import (
     BaseRegistry,
@@ -22,9 +25,9 @@ from rq.registry import (
 )
 from rq.serializers import JSONSerializer
 from rq.utils import as_text, current_timestamp, now
-from rq.worker import Worker
+from rq.worker import SimpleWorker, Worker
 from tests import RQTestCase
-from tests.fixtures import div_by_zero, say_hello
+from tests.fixtures import div_by_zero, rpush, say_hello
 
 
 class CustomJob(Job):
@@ -960,6 +963,61 @@ class TestStartedJobRegistry(RQTestCase):
 
         self.assertFalse(job_not_to_be_executed.is_finished)
         self.assertNotIn(job_not_to_be_executed, finished_job_registry)
+
+    def _start(self, worker):
+        """What a worker does before running a job: dequeue it, prepare its execution, mark it started."""
+        job, _queue = worker.dequeue_job_and_maintain_ttl(None)
+        execution = worker.prepare_execution(job)
+        worker.prepare_job_execution(job, remove_from_intermediate_queue=True)
+        job.started_at = now()
+        return job, execution
+
+    # Once a job is given back and taken by another worker, the first worker's report should be refused.
+    @unittest.expectedFailure
+    def test_a_reclaimed_job_ignores_its_previous_execution(self):
+        self.queue.enqueue(say_hello, retry=Retry(max=1))
+        worker_a = SimpleWorker([self.queue], connection=self.connection)
+        job, execution_a = self._start(worker_a)
+
+        # Worker A stops heartbeating (a long pause, a partition); its lease expires, and the
+        # maintenance every worker runs gives the job back.
+        self.connection.zadd(self.registry.key, {f'{job.id}:{execution_a.id}': 1}, xx=True)
+        self.registry.cleanup()
+        worker_b = SimpleWorker([self.queue], connection=self.connection)
+        job_b, execution_b = self._start(worker_b)
+        self.assertEqual(job_b.id, job.id)
+
+        # Worker A wakes up and reports its attempt as finished.
+        worker_a.handle_execution_ended(job, self.queue, job.success_callback_timeout)
+        worker_a.handle_job_success(
+            job=job, queue=self.queue, started_job_registry=self.registry, execution=execution_a
+        )
+
+        # The job is still worker B's, which is running it.
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.STARTED)
+        self.assertIn(f'{job.id}:{execution_b.id}', self.connection.zrange(self.registry.key, 0, -1))
+
+    # A job recorded as finished should not be run again because the reply to that write was lost.
+    @unittest.expectedFailure
+    def test_a_finished_job_is_not_run_again_when_the_reply_is_lost(self):
+        key = 'due-work:runs'
+        job = self.queue.enqueue(
+            rpush, key, 'ran', get_connection_kwargs(self.connection), retry=Retry(max=1)
+        )
+        handle_job_success = SimpleWorker.handle_job_success
+
+        def reply_lost(worker, *args, **kwargs):
+            # The success commits; then the connection drops before the worker reads the answer.
+            handle_job_success(worker, *args, **kwargs)
+            raise redis.exceptions.ConnectionError('Connection closed by server.')
+
+        with mock.patch.object(SimpleWorker, 'handle_job_success', reply_lost):
+            SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+        SimpleWorker([self.queue], connection=self.connection).work(burst=True)
+
+        # The job ran once and stays finished.
+        self.assertEqual(self.connection.lrange(key, 0, -1), [b'ran'])
+        self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.FINISHED)
 
     def test_warnings_on_add_remove_and_exception(self):
         """Test backwards compatibility of the .add and .remove methods for
