@@ -995,7 +995,7 @@ class TestStartedJobRegistry(RQTestCase):
 
         # The job is still worker B's, which is running it.
         self.assertEqual(Job.fetch(job.id, connection=self.connection).get_status(), JobStatus.STARTED)
-        self.assertIn(f'{job.id}:{execution_b.id}', self.connection.zrange(self.registry.key, 0, -1))
+        self.assertIn((job.id, execution_b.id), self.registry.get_job_and_execution_ids(cleanup=False))
 
     # A job recorded as finished should not be run again because the reply to that write was lost.
     @unittest.expectedFailure

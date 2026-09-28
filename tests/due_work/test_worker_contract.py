@@ -39,6 +39,7 @@ from due_work_harness.integrations.rq import ONE_QUEUE, TWO_QUEUES, worker_contr
 from due_work_harness.integrations.task_queues import TaskOutcome
 
 from rq import Callback, Queue, Retry
+from rq.utils import get_version
 
 from . import jobs
 from .connection import CONNECTION
@@ -102,6 +103,10 @@ SINGLE_QUEUE_FINDINGS = {
     # FINDING: on_success raised after the message was sent; RQ fails the job and the retry sends it again.
     'signal receiver 1 failed': _job('finished', 2, 'failed: ReceiverFailed', SENT),
 }
+#: A single-queue worker dequeues with BLMOVE into an intermediate list from Redis 6.2 on. Before
+#: that it pops with LPOP as a multi-queue worker always does, one commit earlier, so the job is lost
+#: the same way (#2236) and the table is the two-queue one with each commit number one lower.
+HAS_BLMOVE = get_version(CONNECTION) >= (6, 2)
 TWO_QUEUE_FINDINGS = {
     # FINDING (#2236): popped with LPOP, then lost: nothing in any queue or registry points at the job.
     **{f'worker died after commit {k}': LOST for k in range(9, 14)},
@@ -112,6 +117,18 @@ TWO_QUEUE_FINDINGS = {
     'the reply to commit 14 was lost': _job('finished', 1, 'failed: ConnectionError', SENT),
     'the reply to commit 15 was lost': _job('finished', 2, 'failed: ConnectionError', SENT),
     'the reply to commit 16 was lost': _job('finished', 2, SENT, 'failed: ConnectionError', SENT),
+    'signal receiver 1 failed': _job('finished', 2, 'failed: ReceiverFailed', SENT),
+}
+
+SINGLE_QUEUE_FINDINGS_BEFORE_BLMOVE = {
+    **{f'worker died after commit {k}': LOST for k in range(8, 13)},
+    **{f'the reply to commit {k} was lost': LOST for k in range(8, 13)},
+    'worker died after commit 13': _job('finished', 1, 'failed: AbandonedJobError', SENT),
+    'worker died after commit 14': _job('finished', 2, 'failed: AbandonedJobError', SENT),
+    'worker died after external call 1': _job('finished', 2, 'failed: AbandonedJobError', SENT),
+    'the reply to commit 13 was lost': _job('finished', 1, 'failed: ConnectionError', SENT),
+    'the reply to commit 14 was lost': _job('finished', 2, 'failed: ConnectionError', SENT),
+    'the reply to commit 15 was lost': _job('finished', 2, SENT, 'failed: ConnectionError', SENT),
     'signal receiver 1 failed': _job('finished', 2, 'failed: ReceiverFailed', SENT),
 }
 
@@ -154,7 +171,9 @@ CONTRACT = worker_contract(
         ),
     },
     findings={
-        ONE_QUEUE: Findings(DELIVERED, SINGLE_QUEUE_FINDINGS),
+        ONE_QUEUE: Findings(
+            DELIVERED, SINGLE_QUEUE_FINDINGS if HAS_BLMOVE else SINGLE_QUEUE_FINDINGS_BEFORE_BLMOVE
+        ),
         TWO_QUEUES: Findings(DELIVERED, TWO_QUEUE_FINDINGS),
     },
     fixtures=('empty_redis',),
