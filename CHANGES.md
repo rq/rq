@@ -1,4 +1,5 @@
 ### RQ 3.0 (unreleased)
+* `UnixSignalDeathPenalty` restores the previous `SIGALRM` handler when the timeout block ends, instead of installing `SIG_DFL`.
 * `Job.perform()` no longer removes the job key's TTL. Job key TTL changes are now handled by workers. Thanks @selwin!
 * Refactored how job dependencies are handled. Introduced `READY_TO_ENQUEUE` job status and ReadyJobRegistry. Thanks @selwin!
 * `get_current_job()` now uses `contextvars` instead of thread-locals; gevent-based custom workers need `greenlet` >= 0.4.17. Thanks @selwin!
