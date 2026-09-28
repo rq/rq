@@ -52,7 +52,7 @@ scripts.rqworker = "rq.cli:worker" # TODO [v2]: Remove
 dev = [
   "coverage>=7.6.1",
   # tests/due_work: the harness needs Python 3.12 or later, and is skipped below it.
-  "due-work-harness>=0.3.0; python_version>='3.12'",
+  "due-work-harness>=0.5.0; python_version>='3.12'",
   "mypy>=1.18.2",
   "packaging>=24.2",
   "psutil>=7",

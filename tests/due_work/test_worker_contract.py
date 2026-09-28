@@ -24,18 +24,18 @@ integration and two real jobs defined in ``jobs.py``:
   RQ dequeues differently.
 
 What diverges is declared as a gap, a strict xfail, and
-``test_what_each_failure_costs`` pins what every history leaves.
+``SINGLE_QUEUE_FINDINGS`` and ``TWO_QUEUE_FINDINGS`` pin what every history leaves, in
+the same run as the verdict.
 
 Run it (Python 3.12 or later, and a Redis on localhost)::
 
-    pip install -e . "due-work-harness>=0.3.0" time-machine   # or: uv sync --group dev
+    pip install -e . "due-work-harness>=0.5.0" time-machine   # or: uv sync --group dev
     pytest tests/due_work
 """
 
-import pytest
 from due_work_harness import Profile, due_work_contract_suite
-from due_work_harness.crash_histories import ExternalCall, assert_pinned_outcomes
-from due_work_harness.integrations.rq import worker_contract
+from due_work_harness.crash_histories import ExternalCall, Findings
+from due_work_harness.integrations.rq import ONE_QUEUE, TWO_QUEUES, worker_contract
 from due_work_harness.integrations.task_queues import TaskOutcome
 
 from rq import Callback, Queue, Retry
@@ -73,66 +73,6 @@ def a_failing_job() -> str:
     return Queue(QUEUE, connection=CONNECTION).enqueue(jobs.call_down_service, retry=Retry(max=MAX_RETRIES)).id
 
 
-CONTRACT = worker_contract(
-    CONNECTION,
-    name='rq: the worker running a job',
-    queue=QUEUE,
-    other_queue=OTHER_QUEUE,
-    enqueue=a_message_owed,
-    effect=what_happened,
-    enqueue_failing=a_failing_job,
-    failures=lambda _job_id: jobs.outbox.failed_calls,
-    max_retries=MAX_RETRIES,
-    # EXTERNAL SEAM: the service the job sends its message to.
-    external_calls=(ExternalCall(jobs.Outbox, 'send'),),
-    gaps={
-        Profile.B: {
-            'assert_stale_token_is_rejected': (
-                'handle_job_success and handle_job_failure settle a job without checking that the execution is '
-                "still the job's owner: a worker whose lease expired, whose job StartedJobRegistry.cleanup gave "
-                'back and another worker took, can still mark it finished, or send it back to be retried, while '
-                'the new worker runs it (https://github.com/rq/rq/issues/2495)'
-            ),
-        },
-    },
-    handoff_gaps={
-        'the worker runs a task': (
-            'a lost reply to the commit that records the job finished sends the finished job down the failure '
-            'path: on_failure runs and the job is retried, so its message is sent twice; an on_success callback '
-            'that raises does the same; and a worker that dies once the job has started makes RQ announce '
-            'AbandonedJobError through on_failure, then run the job again (https://github.com/rq/rq/issues/2496). '
-            'test_what_each_failure_costs pins each history'
-        ),
-        'a worker on two queues runs a task': (
-            'a worker listening on more than one queue pops the job with LPOP, with no intermediate list: a death, '
-            'or a lost reply, between the pop and the job being marked started leaves it queued in no queue and no '
-            'registry, never run (https://github.com/rq/rq/issues/2236); the single-queue findings apply too. '
-            'test_what_each_failure_costs pins each history'
-        ),
-    },
-    fixtures=('empty_redis',),
-)
-
-
-# This is where the magic happens. The class is empty on purpose: the decorator reads CONTRACT
-# and generates its tests, bound to RQ's real SimpleWorker, StartedJobRegistry.cleanup, heartbeats
-# and Retry. No test case is written by hand; this file supplies only the jobs and how to see what
-# they did, and the guarantees and their proofs come from the harness's RQ integration.
-#
-# Three of the generated cases are how the findings were made:
-# - B-assert_stale_token_is_rejected lets a worker's lease expire, has cleanup give the job back
-#   and a second worker take it, then has the first worker report its attempt. RQ accepts it.
-# - The two handoff cases run the job through a worker once per thing that can go wrong: the
-#   worker dies after each of its Redis writes, the reply to each write is lost, the on_success
-#   callback raises. Each run is compared with a normal one. A lost reply after the job is
-#   recorded finished runs it again; a worker on two queues can lose the job outright.
-# Each is declared as a gap, so it is reported as a strict XFAIL; the day RQ holds the guarantee,
-# the case passes, and the strict marker fails the run until the gap is removed.
-@due_work_contract_suite(CONTRACT)
-class TestWorkerContract:
-    """Every case in this class is generated from CONTRACT; see the comment above."""
-
-
 def _job(status: str, sent: int, *announced: str) -> TaskOutcome:
     return TaskOutcome(status=status, effect=(sent, announced))
 
@@ -142,9 +82,10 @@ DELIVERED = _job('finished', 1, SENT)
 #: The job left its queue and nothing will ever run it.
 LOST = _job('queued', 0)
 
-# What each history leaves after RQ's recovery, pinned; every history not listed reaches DELIVERED.
-# Commit numbers count the worker's Redis writes: its registration and heartbeats come first. A
-# change in RQ's worker moves an entry, and the test names the one that moved.
+# What each history leaves after RQ's recovery, pinned in the same run as the verdict; every
+# history not listed reaches DELIVERED. Commit numbers count the worker's Redis writes: its
+# registration and heartbeats come first. A change in RQ's worker moves an entry, and the case
+# names the one that moved.
 SINGLE_QUEUE_FINDINGS = {
     # The job started, the worker died before running it: RQ reports AbandonedJobError to on_failure,
     # then the retry runs it. The customer was told it failed.
@@ -175,10 +116,65 @@ TWO_QUEUE_FINDINGS = {
 }
 
 
-@pytest.mark.parametrize(
-    ('history', 'findings'),
-    [(CONTRACT.handoffs[0], SINGLE_QUEUE_FINDINGS), (CONTRACT.handoffs[1], TWO_QUEUE_FINDINGS)],
-    ids=['one queue', 'two queues'],
+CONTRACT = worker_contract(
+    CONNECTION,
+    name='rq: the worker running a job',
+    queue=QUEUE,
+    other_queue=OTHER_QUEUE,
+    enqueue=a_message_owed,
+    effect=what_happened,
+    enqueue_failing=a_failing_job,
+    failures=lambda _job_id: jobs.outbox.failed_calls,
+    max_retries=MAX_RETRIES,
+    # EXTERNAL SEAM: the service the job sends its message to.
+    external_calls=(ExternalCall(jobs.Outbox, 'send'),),
+    gaps={
+        Profile.B: {
+            'assert_stale_token_is_rejected': (
+                'handle_job_success and handle_job_failure settle a job without checking that the execution is '
+                "still the job's owner: a worker whose lease expired, whose job StartedJobRegistry.cleanup gave "
+                'back and another worker took, can still mark it finished, or send it back to be retried, while '
+                'the new worker runs it (https://github.com/rq/rq/issues/2495)'
+            ),
+        },
+    },
+    handoff_gaps={
+        ONE_QUEUE: (
+            'a lost reply to the commit that records the job finished sends the finished job down the failure '
+            'path: on_failure runs and the job is retried, so its message is sent twice; an on_success callback '
+            'that raises does the same; and a worker that dies once the job has started makes RQ announce '
+            'AbandonedJobError through on_failure, then run the job again (https://github.com/rq/rq/issues/2496). '
+            'SINGLE_QUEUE_FINDINGS pins each history'
+        ),
+        TWO_QUEUES: (
+            'a worker listening on more than one queue pops the job with LPOP, with no intermediate list: a death, '
+            'or a lost reply, between the pop and the job being marked started leaves it queued in no queue and no '
+            'registry, never run (https://github.com/rq/rq/issues/2236); the single-queue findings apply too. '
+            'TWO_QUEUE_FINDINGS pins each history'
+        ),
+    },
+    findings={
+        ONE_QUEUE: Findings(DELIVERED, SINGLE_QUEUE_FINDINGS),
+        TWO_QUEUES: Findings(DELIVERED, TWO_QUEUE_FINDINGS),
+    },
+    fixtures=('empty_redis',),
 )
-def test_what_each_failure_costs(empty_redis, history, findings) -> None:
-    assert_pinned_outcomes(CONTRACT.handoff_delivery, history, delivered=DELIVERED, outcomes=findings)
+
+
+# This is where the magic happens. The class is empty on purpose: the decorator reads CONTRACT
+# and generates its tests, bound to RQ's real SimpleWorker, StartedJobRegistry.cleanup, heartbeats
+# and Retry. No test case is written by hand; this file supplies only the jobs and how to see what
+# they did, and the guarantees and their proofs come from the harness's RQ integration.
+#
+# Three of the generated cases are how the findings were made:
+# - B-assert_stale_token_is_rejected lets a worker's lease expire, has cleanup give the job back
+#   and a second worker take it, then has the first worker report its attempt. RQ accepts it.
+# - The two handoff cases run the job through a worker once per thing that can go wrong: the
+#   worker dies after each of its Redis writes, the reply to each write is lost, the on_success
+#   callback raises. Each run is compared with a normal one. A lost reply after the job is
+#   recorded finished runs it again; a worker on two queues can lose the job outright.
+# Each is declared as a gap, so it is reported as a strict XFAIL; the day RQ holds the guarantee,
+# the case passes, and the strict marker fails the run until the gap is removed.
+@due_work_contract_suite(CONTRACT)
+class TestWorkerContract:
+    """Every case in this class is generated from CONTRACT; see the comment above."""
