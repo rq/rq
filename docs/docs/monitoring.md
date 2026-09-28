@@ -39,6 +39,10 @@ Bricktop.18349 idle: default
 3 workers, 3 queues
 ```
 
+The finished and failed counts `rq info` reports come from each queue's job registries, which
+are separate from the queue itself. To clear them out, see
+[purging a registry](/docs/job_registries/#purging-a-registry).
+
 
 ## Querying by queue names
 

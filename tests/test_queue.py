@@ -16,7 +16,7 @@ from rq.registry import (
 from rq.serializers import JSONSerializer
 from rq.worker import Worker
 from tests import RQTestCase, min_redis_version
-from tests.fixtures import echo, say_hello
+from tests.fixtures import div_by_zero, echo, say_hello
 
 
 class MultipleDependencyJob(Job):
@@ -850,6 +850,56 @@ class TestQueue(RQTestCase):
         job = Job.fetch(job.id, connection=self.connection)
         self.assertEqual(job.retries_left, 3)
         self.assertEqual(job.retry_intervals, [5])
+
+
+class TestPurgeRegistries(RQTestCase):
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(connection=self.connection)
+
+    def populate(self):
+        """Puts one job in each of the failed, finished and canceled registries."""
+        failed = self.queue.enqueue(div_by_zero)
+        finished = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        worker.work(burst=True)
+
+        canceled = self.queue.enqueue(say_hello)
+        canceled.cancel()
+        return failed, finished, canceled
+
+    def test_purge_registries_selects_only_what_it_is_asked_for(self):
+        """Unselected registries are left untouched."""
+        _, finished, _ = self.populate()
+
+        counts = self.queue.purge_registries(failed=True, canceled=True)
+
+        self.assertEqual(counts, {'failed': 1, 'canceled': 1})
+        self.assertEqual(self.queue.finished_job_registry.get_job_ids(), [finished.id])
+        self.assertTrue(self.connection.exists(finished.key))
+
+    def test_purge_registries_without_arguments_does_nothing(self):
+        """Selecting no registry is a no-op returning an empty mapping."""
+        self.populate()
+
+        self.assertEqual(self.queue.purge_registries(), {})
+        self.assertEqual(self.queue.failed_job_registry.count, 1)
+
+    def test_purge_registries_keeps_jobs_when_asked(self):
+        """delete_jobs=False clears the indexes but leaves the jobs in place."""
+        failed, _, _ = self.populate()
+
+        self.assertEqual(self.queue.purge_registries(failed=True, delete_jobs=False), {'failed': 1})
+        self.assertTrue(self.connection.exists(failed.key))
+
+    def test_purge_registries_leaves_queued_jobs_alone(self):
+        """Purging registries never touches jobs waiting on the queue."""
+        self.populate()
+        queued = self.queue.enqueue(say_hello)
+
+        self.queue.purge_registries(failed=True, finished=True, canceled=True)
+
+        self.assertEqual(self.queue.get_job_ids(), [queued.id])
 
 
 class TestUniqueJob(RQTestCase):

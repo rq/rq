@@ -154,6 +154,88 @@ class BaseRegistry:
             job_instance.delete()
         return result
 
+    def purge(self, delete_jobs: bool = True, chunk_size: int = 1000) -> int:
+        """Removes every entry from this registry, optionally deleting the jobs themselves.
+
+        Entries are drained in chunks: each pass reads the first `chunk_size` members and
+        removes exactly those members, so every pass makes progress and the loop terminates
+        even while entries are being added concurrently.
+
+        Registry entries routinely outlive their job hash, so a missing job is not an error:
+        the entry is removed and counted either way. This is why the return value counts
+        registry entries removed rather than jobs deleted.
+
+        Unlike `count` and `get_job_ids()`, this deliberately does not run `cleanup()`.
+        Expired entries have to be purged and counted like any other, not silently dropped
+        with their job hash left behind.
+
+        Args:
+            delete_jobs (bool, optional): Whether to delete the jobs too. Defaults to True.
+            chunk_size (int, optional): How many entries to remove per round trip. Defaults to 1000.
+
+        Returns:
+            int: The number of registry entries removed.
+        """
+        if chunk_size < 1:
+            raise ValueError('chunk_size must be a positive integer')
+
+        total = 0
+        while True:
+            members = self.connection.zrange(self.key, 0, chunk_size - 1)
+            if not members:
+                break
+
+            if delete_jobs:
+                removed = self._purge_chunk(members)
+            else:
+                removed = self.connection.zrem(self.key, *members)
+
+            if not removed:
+                # Redis removed none of the members we just read, so another client is
+                # draining this registry too. Stop rather than spin on it.
+                logger.debug('%s.purge removed nothing from %s, stopping', type(self).__name__, self.key)
+                break
+
+            total += removed
+
+        return total
+
+    def _purge_chunk(self, members: Sequence[Any]) -> int:
+        """Removes `members` from the registry and deletes their jobs in one transaction.
+
+        Args:
+            members (Sequence[Any]): Raw sorted set members, as returned by `ZRANGE`.
+
+        Returns:
+            int: The number of registry entries removed.
+        """
+        # parse_job_id() decodes the member and, for StartedJobRegistry, splits the composite
+        # key. The raw members are what ZREM needs; the parsed ids are what fetch_many needs.
+        job_ids = [self.parse_job_id(member) for member in members]
+        jobs = self.job_class.fetch_many(job_ids, connection=self.connection, serializer=self.serializer)
+
+        with self.connection.pipeline() as pipeline:
+            # ZREM goes first so its reply is the authoritative count. Job.delete() below
+            # buffers a ZREM of the same member via _remove_from_registries(), which would
+            # leave a trailing ZREM reporting 0.
+            pipeline.zrem(self.key, *members)
+
+            for job in jobs:
+                if job is None:
+                    # The job hash is already gone; dropping the stale entry is the point.
+                    continue
+                try:
+                    # Jobs held by a registry are never on the queue list, and the LREM that
+                    # Job.delete() would otherwise do is O(len(queue)) per job.
+                    job.delete(pipeline=pipeline, remove_from_queue=False)
+                except Exception:
+                    # A partial Job.delete() would leave the hash behind, so delete its keys
+                    # directly instead of letting one bad job abort the whole chunk.
+                    logger.exception('%s.purge could not delete job %s', type(self).__name__, job.id)
+                    pipeline.delete(job.key, job.dependents_key, job.dependencies_key)
+
+            return pipeline.execute()[0]
+
     def get_expired_job_ids(self, timestamp: float | None = None):
         """Returns job ids whose score are less than current timestamp.
 

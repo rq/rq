@@ -39,10 +39,26 @@ def main():
 
 @main.command()
 @click.option('--all', '-a', is_flag=True, help='Empty all queues')
+@click.option('--queued', is_flag=True, help='Empty the queue itself. Implied when no registry option is given')
+@click.option('--failed', is_flag=True, help="Empty the queue's failed job registry")
+@click.option('--finished', is_flag=True, help="Empty the queue's finished job registry")
+@click.option('--canceled', is_flag=True, help="Empty the queue's canceled job registry")
+@click.option('--registries', is_flag=True, help='Empty the failed, finished and canceled job registries')
+@click.option('--keep-jobs', is_flag=True, help='Only clear registry entries, letting job data expire via its TTL')
 @click.argument('queues', nargs=-1)
 @pass_cli_config
-def empty(cli_config, all, queues, serializer, **options):
+def empty(cli_config, all, queued, failed, finished, canceled, registries, keep_jobs, queues, serializer, **options):
     """Empty given queues."""
+
+    if registries:
+        failed = finished = canceled = True
+
+    empty_registries = failed or finished or canceled
+    # Without a registry option `rq empty` keeps its original meaning: drain the queue itself.
+    empty_queue = queued or not empty_registries
+
+    if keep_jobs and not empty_registries:
+        raise click.UsageError('--keep-jobs requires one of --failed, --finished, --canceled or --registries')
 
     if all:
         queues = cli_config.queue_class.all(
@@ -64,8 +80,15 @@ def empty(cli_config, all, queues, serializer, **options):
         sys.exit(0)
 
     for queue in queues:
-        num_jobs = queue.empty()
-        click.echo(f'{num_jobs} jobs removed from {queue.name} queue')
+        if empty_queue:
+            num_jobs = queue.empty()
+            click.echo(f'{num_jobs} jobs removed from {queue.name} queue')
+        if empty_registries:
+            counts = queue.purge_registries(
+                failed=failed, finished=finished, canceled=canceled, delete_jobs=not keep_jobs
+            )
+            for registry_name, num_jobs in counts.items():
+                click.echo(f'{num_jobs} {registry_name} jobs removed from {queue.name} queue')
 
 
 @main.command()

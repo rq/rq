@@ -141,6 +141,96 @@ class TestRQCli(CLITestCase):
         self.assert_normal_execution(result)
         self.assertEqual(result.output.strip(), 'Nothing to do')
 
+    def test_empty_failed_registry(self):
+        """rq empty -u <url> --failed <queue>"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('empty-failed', connection=connection)
+        queue.enqueue(div_by_zero)
+        Worker([queue], connection=connection).work(burst=True)
+        queued_job = queue.enqueue(say_hello)
+        self.assertEqual(queue.failed_job_registry.count, 1)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, '--failed', 'empty-failed'])
+        self.assert_normal_execution(result)
+
+        self.assertIn('1 failed jobs removed from empty-failed queue', result.output)
+        self.assertEqual(queue.failed_job_registry.count, 0)
+        # A registry option must never drain the queue itself.
+        self.assertEqual(queue.get_job_ids(), [queued_job.id])
+
+    def test_empty_leaves_registries_alone_by_default(self):
+        """rq empty -u <url> <queue>"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('empty-default', connection=connection)
+        queue.enqueue(div_by_zero)
+        Worker([queue], connection=connection).work(burst=True)
+        queue.enqueue(say_hello)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, 'empty-default'])
+        self.assert_normal_execution(result)
+
+        self.assertIn('1 jobs removed from empty-default queue', result.output)
+        self.assertEqual(queue.count, 0)
+        self.assertEqual(queue.failed_job_registry.count, 1)
+
+    def test_empty_queued_and_registries(self):
+        """rq empty -u <url> --queued --registries <queue>"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('empty-both', connection=connection)
+        queue.enqueue(div_by_zero)
+        Worker([queue], connection=connection).work(burst=True)
+        queue.enqueue(say_hello)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, '--queued', '--registries', 'empty-both'])
+        self.assert_normal_execution(result)
+
+        self.assertIn('1 jobs removed from empty-both queue', result.output)
+        self.assertIn('1 failed jobs removed from empty-both queue', result.output)
+        self.assertIn('0 finished jobs removed from empty-both queue', result.output)
+        self.assertIn('0 canceled jobs removed from empty-both queue', result.output)
+        self.assertEqual(queue.count, 0)
+        self.assertEqual(queue.failed_job_registry.count, 0)
+
+    def test_empty_registries_all_queues(self):
+        """rq empty -u <url> --registries --all"""
+        connection = Redis.from_url(self.redis_url)
+        queues = [Queue(name, connection=connection) for name in ('empty-all-1', 'empty-all-2')]
+        for queue in queues:
+            queue.enqueue(div_by_zero)
+        Worker(queues, connection=connection).work(burst=True)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, '--registries', '--all'])
+        self.assert_normal_execution(result)
+
+        for queue in queues:
+            self.assertEqual(queue.failed_job_registry.count, 0)
+
+    def test_empty_failed_keep_jobs(self):
+        """rq empty -u <url> --failed --keep-jobs <queue>"""
+        connection = Redis.from_url(self.redis_url)
+        queue = Queue('empty-keep', connection=connection)
+        job = queue.enqueue(div_by_zero)
+        Worker([queue], connection=connection).work(burst=True)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, '--failed', '--keep-jobs', 'empty-keep'])
+        self.assert_normal_execution(result)
+
+        self.assertEqual(queue.failed_job_registry.count, 0)
+        self.assertTrue(Job.exists(job.id, connection=connection))
+
+    def test_empty_keep_jobs_without_a_registry_is_a_usage_error(self):
+        """rq empty -u <url> --keep-jobs <queue>"""
+        runner = CliRunner()
+        result = runner.invoke(main, ['empty', '-u', self.redis_url, '--keep-jobs', 'empty-keep'])
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn('--keep-jobs requires one of', result.output)
+
     def test_requeue(self):
         """rq requeue -u <url> --all"""
         connection = Redis.from_url(self.redis_url)

@@ -2,6 +2,7 @@ import math
 from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
+from uuid import uuid4
 
 import pytest
 
@@ -969,3 +970,138 @@ class TestStartedJobRegistry(RQTestCase):
 
         with pytest.raises(NotImplementedError):
             self.registry.remove('job_id')
+
+
+class TestPurge(RQTestCase):
+    def setUp(self):
+        super().setUp()
+        self.queue = Queue(connection=self.connection)
+        self.registry = FailedJobRegistry(queue=self.queue)
+
+    def enqueue_failed_jobs(self, count: int) -> list[Job]:
+        """Runs `count` failing jobs through a worker so they land in FailedJobRegistry."""
+        jobs = [self.queue.enqueue(div_by_zero) for _ in range(count)]
+        Worker([self.queue], connection=self.connection).work(burst=True)
+        return jobs
+
+    def test_purge_empty_registry(self):
+        """Purging an empty registry removes nothing."""
+        self.assertEqual(self.registry.purge(), 0)
+
+    def test_purge_rejects_non_positive_chunk_size(self):
+        """purge() requires a positive chunk size."""
+        for chunk_size in (0, -1):
+            with self.assertRaises(ValueError):
+                self.registry.purge(chunk_size=chunk_size)
+
+    def test_purge_deletes_jobs(self):
+        """Purging a registry removes its entries and deletes the jobs."""
+        jobs = self.enqueue_failed_jobs(3)
+
+        self.assertEqual(self.registry.purge(), 3)
+
+        self.assertEqual(self.registry.get_job_ids(), [])
+        for job in jobs:
+            self.assertFalse(self.connection.exists(job.key))
+
+    def test_purge_keeps_jobs_when_delete_jobs_is_false(self):
+        """purge(delete_jobs=False) clears the index but leaves the jobs alone."""
+        jobs = self.enqueue_failed_jobs(3)
+
+        self.assertEqual(self.registry.purge(delete_jobs=False), 3)
+
+        self.assertEqual(self.registry.get_job_ids(), [])
+        for job in jobs:
+            self.assertTrue(self.connection.exists(job.key))
+
+    def test_purge_counts_entries_not_jobs(self):
+        """Entries whose job is already gone are still removed and counted."""
+        job = self.enqueue_failed_jobs(1)[0]
+        self.connection.delete(job.key)
+        self.connection.zadd(self.registry.key, {'nonexistent': 1})
+
+        self.assertEqual(self.registry.purge(), 2)
+        self.assertEqual(self.connection.zcard(self.registry.key), 0)
+
+    def test_purge_does_not_run_cleanup(self):
+        """Expired entries are purged and counted, not silently dropped by cleanup()."""
+        job = self.enqueue_failed_jobs(1)[0]
+        # A score in the past is what cleanup() would ZREMRANGEBYSCORE away, leaving the
+        # job hash behind and uncounted.
+        self.connection.zadd(self.registry.key, {job.id: 1})
+
+        self.assertEqual(self.registry.purge(), 1)
+        self.assertFalse(self.connection.exists(job.key))
+
+    def test_purge_in_chunks(self):
+        """A registry larger than chunk_size is drained over several passes."""
+        self.connection.zadd(self.registry.key, {f'job-{i}': i for i in range(25)})
+
+        self.assertEqual(self.registry.purge(delete_jobs=False, chunk_size=10), 25)
+        self.assertEqual(self.connection.zcard(self.registry.key), 0)
+
+    def test_purge_does_not_touch_the_queue(self):
+        """Purging skips the O(len(queue)) LREM, since these jobs aren't on the queue."""
+        self.enqueue_failed_jobs(1)
+        queued_job = self.queue.enqueue(say_hello)
+
+        with mock.patch.object(Queue, 'remove') as remove:
+            self.registry.purge()
+
+        remove.assert_not_called()
+        self.assertEqual(self.queue.get_job_ids(), [queued_job.id])
+
+    def test_purge_continues_when_a_job_cannot_be_deleted(self):
+        """One job failing to delete doesn't abort the chunk or orphan its hash."""
+        jobs = self.enqueue_failed_jobs(3)
+
+        with mock.patch.object(Job, 'delete', side_effect=Exception('boom')):
+            self.assertEqual(self.registry.purge(), 3)
+
+        self.assertEqual(self.connection.zcard(self.registry.key), 0)
+        for job in jobs:
+            self.assertFalse(self.connection.exists(job.key))
+
+    def test_purge_started_registry_parses_composite_keys(self):
+        """StartedJobRegistry members are {job_id}:{execution_id} and still resolve."""
+        registry = StartedJobRegistry(queue=self.queue)
+        job = self.queue.enqueue(say_hello)
+        self.connection.zadd(registry.key, {f'{job.id}:{uuid4().hex}': 1})
+
+        self.assertEqual(registry.purge(), 1)
+        self.assertEqual(self.connection.zcard(registry.key), 0)
+        self.assertFalse(self.connection.exists(job.key))
+
+    def test_purge_with_serializer(self):
+        """purge() threads the registry's serializer through to the bulk job fetch."""
+        queue = Queue(connection=self.connection, serializer=JSONSerializer)
+        queue.enqueue(div_by_zero)
+        Worker([queue], connection=self.connection, serializer=JSONSerializer).work(burst=True)
+        registry = FailedJobRegistry(queue=queue)
+
+        self.assertEqual(registry.purge(), 1)
+        self.assertEqual(registry.get_job_ids(), [])
+
+    def test_purge_finished_registry(self):
+        """FinishedJobRegistry can be purged."""
+        job = self.queue.enqueue(say_hello)
+        worker = Worker([self.queue], connection=self.connection)
+        worker.perform_job(job, self.queue, worker.prepare_execution(job))
+        registry = FinishedJobRegistry(queue=self.queue)
+        self.assertEqual(registry.get_job_ids(), [job.id])
+
+        self.assertEqual(registry.purge(), 1)
+        self.assertEqual(registry.get_job_ids(), [])
+        self.assertFalse(self.connection.exists(job.key))
+
+    def test_purge_canceled_registry(self):
+        """CanceledJobRegistry can be purged despite having no expiry semantics."""
+        jobs = [self.queue.enqueue(say_hello) for _ in range(3)]
+        for job in jobs:
+            job.cancel()
+        registry = CanceledJobRegistry(queue=self.queue)
+
+        self.assertEqual(registry.purge(), 3)
+        self.assertEqual(self.connection.zcard(registry.key), 0)
+        for job in jobs:
+            self.assertFalse(self.connection.exists(job.key))

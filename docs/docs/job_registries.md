@@ -90,3 +90,62 @@ for job_id in registry.get_job_ids():
 for job_id in registry.get_job_ids():
     registry.remove(job_id, delete_job=True)
 ```
+
+## Purging a Registry
+
+To clear out a whole registry at once, use `registry.purge()`. It removes every entry and
+deletes the jobs themselves, working in chunks so that a large registry doesn't have to be
+loaded into memory. It returns the number of registry entries it removed.
+
+```python
+from redis import Redis
+from rq import Queue
+
+redis = Redis()
+queue = Queue(connection=redis)
+
+# Delete every failed job of this queue
+queue.failed_job_registry.purge()
+
+# Clear the registry but leave the job data to expire through its own TTL.
+# Much faster on a very large registry, since the jobs are never fetched.
+queue.failed_job_registry.purge(delete_jobs=False)
+```
+
+`Queue.purge_registries()` does the same for several registries in one call, returning the
+number of entries removed from each:
+
+```python
+queue.purge_registries(failed=True, finished=True)
+# {'failed': 373, 'finished': 12}
+```
+
+Only the registries holding jobs that will never run again can be purged this way: `failed`,
+`finished` and `canceled`. Deferred and scheduled jobs are still waiting to run, and started
+jobs may be executing right now, so those registries are left out on purpose.
+
+### Purging Registries via CLI
+
+The same thing from the command line, through `rq empty`:
+
+```console
+# Delete every failed job of the myqueue queue
+rq empty --failed myqueue
+
+# Clear the failed, finished and canceled registries of two queues
+rq empty --registries myqueue myotherqueue
+
+# ...of every queue
+rq empty --registries --all
+
+# Clear the registry entries but leave the job data to expire through its own TTL
+rq empty --failed --keep-jobs myqueue
+```
+
+Without any of these options `rq empty` behaves as it always has and empties the queue itself,
+leaving the registries alone. The two can be combined:
+
+```console
+# Empty the queue AND its failed, finished and canceled registries
+rq empty --queued --registries myqueue
+```
