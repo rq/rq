@@ -1,4 +1,8 @@
 """Tests for RQ_KEY_PREFIX environment variable support."""
+
+import os
+import subprocess
+import sys
 from unittest.mock import patch
 
 from rq import Queue
@@ -29,3 +33,20 @@ class TestKeyPrefix(RQTestCase):
     def test_cron_scheduler_registry_key_uses_prefix(self):
         with patch('rq.cron_scheduler_registry.RQ_KEY_PREFIX', 'myapp'):
             self.assertEqual(get_registry_key(), 'myapp:cron_schedulers')
+
+    def test_hash_tag_prefix_builds_keys(self):
+        """A Redis Cluster hash tag prefix like `{rq}` must not be read as a format placeholder."""
+        script = (
+            'from rq.executions import Execution, ExecutionRegistry\n'
+            'from rq.registry import FailedJobRegistry, StartedJobRegistry\n'
+            'print(StartedJobRegistry("default", connection=None).key)\n'
+            'print(FailedJobRegistry("default", connection=None).key)\n'
+            'print(ExecutionRegistry("job1", connection=None).key)\n'
+            'print(Execution("e1", "job1", connection=None, worker_name="w1").worker_executions_key)\n'
+        )
+        env = {**os.environ, 'RQ_KEY_PREFIX': '{rq}'}
+        output = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True, check=True)
+        self.assertEqual(
+            output.stdout.splitlines(),
+            ['{rq}:wip:default', '{rq}:failed:default', '{rq}:executions:job1', '{rq}:worker:w1:executions'],
+        )
