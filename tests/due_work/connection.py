@@ -1,6 +1,4 @@
-import os
+from tests import find_empty_redis_database
 
-from redis import Redis
-
-#: The contract's own Redis database, emptied around every case.
-CONNECTION = Redis(db=int(os.environ.get('RQ_DUE_WORK_REDIS_DB', '15')))
+#: The contract's own Redis database: one that was empty when it was picked, emptied around every case.
+CONNECTION = find_empty_redis_database()

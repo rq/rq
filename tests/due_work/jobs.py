@@ -29,13 +29,13 @@ def send_message(message: str) -> str:
 
 
 def announce_success(job, connection, result) -> None:
-    outbox.announced.append(f"sent {result!r}")
+    outbox.announced.append(f'sent {result!r}')
 
 
 def announce_failure(job, connection, exc_type, exc_value, traceback) -> None:
-    outbox.announced.append(f"failed: {exc_type.__name__}")
+    outbox.announced.append(f'failed: {exc_type.__name__}')
 
 
 def call_down_service() -> None:
     outbox.failed_calls += 1
-    raise ConnectionError("the service is down")
+    raise ConnectionError('the service is down')

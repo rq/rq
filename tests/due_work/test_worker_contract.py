@@ -171,9 +171,7 @@ CONTRACT = worker_contract(
         ),
     },
     findings={
-        ONE_QUEUE: Findings(
-            DELIVERED, SINGLE_QUEUE_FINDINGS if HAS_BLMOVE else SINGLE_QUEUE_FINDINGS_BEFORE_BLMOVE
-        ),
+        ONE_QUEUE: Findings(DELIVERED, SINGLE_QUEUE_FINDINGS if HAS_BLMOVE else SINGLE_QUEUE_FINDINGS_BEFORE_BLMOVE),
         TWO_QUEUES: Findings(DELIVERED, TWO_QUEUE_FINDINGS),
     },
     fixtures=('empty_redis',),

@@ -1,5 +1,4 @@
 import math
-import unittest
 from datetime import timedelta
 from unittest import mock
 from unittest.mock import ANY
@@ -973,7 +972,7 @@ class TestStartedJobRegistry(RQTestCase):
         return job, execution
 
     # Once a job is given back and taken by another worker, the first worker's report should be refused.
-    @unittest.expectedFailure
+    @pytest.mark.xfail(raises=AssertionError, strict=True)
     def test_a_reclaimed_job_ignores_its_previous_execution(self):
         self.queue.enqueue(say_hello, retry=Retry(max=1))
         worker_a = SimpleWorker([self.queue], connection=self.connection)
@@ -998,12 +997,10 @@ class TestStartedJobRegistry(RQTestCase):
         self.assertIn((job.id, execution_b.id), self.registry.get_job_and_execution_ids(cleanup=False))
 
     # A job recorded as finished should not be run again because the reply to that write was lost.
-    @unittest.expectedFailure
+    @pytest.mark.xfail(raises=AssertionError, strict=True)
     def test_a_finished_job_is_not_run_again_when_the_reply_is_lost(self):
         key = 'due-work:runs'
-        job = self.queue.enqueue(
-            rpush, key, 'ran', get_connection_kwargs(self.connection), retry=Retry(max=1)
-        )
+        job = self.queue.enqueue(rpush, key, 'ran', get_connection_kwargs(self.connection), retry=Retry(max=1))
         handle_job_success = SimpleWorker.handle_job_success
 
         def reply_lost(worker, *args, **kwargs):
