@@ -14,10 +14,6 @@ from .serializers import resolve_serializer
 from .utils import decode_redis_hash, now
 
 
-def get_key(job_id):
-    return f'{RQ_KEY_PREFIX}:results:{job_id}'
-
-
 class Result:
     class Type(Enum):
         SUCCESSFUL = 1

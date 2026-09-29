@@ -8,7 +8,7 @@ from unittest.mock import patch
 from rq import Queue
 from rq.cron_scheduler_registry import get_registry_key
 from rq.defaults import RQ_KEY_PREFIX
-from rq.results import get_key as get_result_key
+from rq.results import Result
 from rq.worker_registration import REDIS_WORKER_KEYS, WORKERS_BY_QUEUE_KEY
 from tests import RQTestCase
 
@@ -23,7 +23,7 @@ class TestKeyPrefix(RQTestCase):
 
     def test_results_key_uses_prefix(self):
         with patch('rq.results.RQ_KEY_PREFIX', 'myapp'):
-            self.assertEqual(get_result_key('abc123'), 'myapp:results:abc123')
+            self.assertEqual(Result.get_key('abc123'), 'myapp:results:abc123')
 
     def test_queue_registry_cleaning_key_uses_prefix(self):
         q = Queue('default', connection=self.connection)
