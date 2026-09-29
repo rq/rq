@@ -984,7 +984,9 @@ class TestStartedJobRegistry(RQTestCase):
         self.registry.cleanup()
         worker_b = SimpleWorker([self.queue], connection=self.connection)
         job_b, execution_b = self._start(worker_b)
-        self.assertEqual(job_b.id, job.id)
+        if job_b.id != job.id:
+            # Not an AssertionError, so it is a failure of the test's setup and not the expected one.
+            pytest.fail('worker B did not take the job that the cleanup gave back')
 
         # Worker A wakes up and reports its attempt as finished.
         worker_a.handle_execution_ended(job, self.queue, job.success_callback_timeout)
