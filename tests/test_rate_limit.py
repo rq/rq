@@ -6,6 +6,7 @@ from rq.job import Job, JobStatus, Retry
 from rq.queue import Queue
 from rq.rate_limit import RateLimit, RateLimitRegistry
 from rq.registry import ScheduledJobRegistry, StartedJobRegistry
+from rq.repeat import Repeat
 from rq.scheduler import RQScheduler
 from rq.worker import SimpleWorker
 from tests import RQTestCase
@@ -802,6 +803,38 @@ class TestRateLimitRetry(RQTestCase):
         # job1 terminally failed, slot released; job2 promoted to allowed.
         self.assertEqual(job1.get_status(), JobStatus.FAILED)
         self.assertIn(job1.id, self.queue.failed_job_registry.get_job_ids())
+        self.assertEqual(job2.get_status(), JobStatus.QUEUED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertNotIn(job1.id, registry.get_allowed_job_ids())
+        self.assertIn(job2.id, registry.get_allowed_job_ids())
+
+    def test_repeat_slot_management(self):
+        """Immediate repeats keep the allowed slot (otherwise a rate_limited
+        same-key job would promote and exceed the cap), delayed repeats release it."""
+        rate_limit = RateLimit(key='test', concurrency=1)
+
+        # Immediate repeat: job1 is requeued on its slot, job2 stays rate_limited.
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit, repeat=Repeat(times=1))
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        self.assertEqual(job1.get_status(), JobStatus.QUEUED)
+        self.assertEqual(job2.get_status(), JobStatus.RATE_LIMITED)
+        registry = RateLimitRegistry(key='test', connection=self.connection)
+        self.assertIn(job1.id, registry.get_allowed_job_ids())
+        self.assertEqual(registry.get_allowed_job_count(), 1)
+
+        self.connection.flushdb()
+
+        # Delayed repeat: job1 is scheduled, slot freed, job2 promoted.
+        job1 = self.queue.enqueue(say_hello, rate_limit=rate_limit, repeat=Repeat(times=1, interval=30))
+        job2 = self.queue.enqueue(say_hello, rate_limit=rate_limit)
+        worker = SimpleWorker([self.queue], connection=self.connection)
+        worker.work(max_jobs=1)
+
+        self.assertEqual(job1.get_status(), JobStatus.SCHEDULED)
+        self.assertIn(job1.id, ScheduledJobRegistry(queue=self.queue).get_job_ids())
         self.assertEqual(job2.get_status(), JobStatus.QUEUED)
         registry = RateLimitRegistry(key='test', connection=self.connection)
         self.assertNotIn(job1.id, registry.get_allowed_job_ids())

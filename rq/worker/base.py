@@ -1534,13 +1534,15 @@ class BaseWorker:
                             execution_ended_at=job.ended_at,
                         )
 
+                    immediate_repeat = False
                     if job.repeats_left is not None and job.repeats_left > 0:
                         from ..repeat import Repeat
 
                         self.log.info(
                             'Worker %s: job %s scheduled to repeat (%s left)', self.name, job.id, job.repeats_left
                         )
-                        Repeat.schedule(job, queue, pipeline=pipeline)
+                        scheduled_time = Repeat.schedule(job, queue, pipeline=pipeline)
+                        immediate_repeat = not scheduled_time
                     else:
                         job.cleanup(result_ttl, pipeline=pipeline, remove_from_queue=False)
 
@@ -1554,7 +1556,8 @@ class BaseWorker:
                     # logged and left for ReadyJobRegistry.cleanup() to recover.
                     queue.enqueue_ready_jobs_by_queue(dependent_job_ids_by_queue)
 
-                    if job.has_rate_limit:
+                    # An immediate repeat reruns on its slot; delayed repeats re-acquire one when due.
+                    if job.has_rate_limit and not immediate_repeat:
                         job.rate_limit_registry.release_and_enqueue(job.id)
 
                     assert job.started_at
