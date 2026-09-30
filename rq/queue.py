@@ -1134,7 +1134,7 @@ class Queue:
             on_stopped,
             rate_limit,
             pipeline,
-            unique,  # Not used for scheduled jobs, but parsed for consistency
+            unique,
             args,
             kwargs,
             webhooks,
@@ -1162,7 +1162,7 @@ class Queue:
         )
         if at_front:
             job.enqueue_at_front = True
-        return self.schedule_job(job, datetime, pipeline=pipeline)
+        return self.schedule_job(job, datetime, pipeline=pipeline, unique=unique)
 
     def schedule_job(self, job: Job, datetime: datetime, pipeline: Pipeline | None = None, unique: bool = False) -> Job:
         """Puts job on ScheduledJobRegistry
